@@ -1,4 +1,4 @@
-# Version stamp package
+# Version stamping package
 
 A simple package for auto increasing version numbers of any application agnostic to language or architecture. This package comes with three utilities:
 
