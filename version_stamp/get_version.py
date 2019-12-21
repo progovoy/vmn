@@ -82,6 +82,8 @@ def get_version(repos_path, app_name):
     repos_path = os.path.abspath(repos_path)
 
     versions_client = hglib.open('{0}/{1}'.format(repos_path, 'versions'))
+    versions_client.revert([], all=True)
+    versions_client.pull(update=True)
 
     return _find_version(versions_client, app_name)
 
