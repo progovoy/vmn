@@ -821,9 +821,8 @@ def run_with_mercurial_be(**params):
     except hglib.error.ServerError as exc:
         LOGGER.exception(
             'versions repository path: {0} is '
-            'not a functional mercurial repository. Exiting!\nReason:\n'.format(
-                versions_repo_path
-            )
+            'not a functional mercurial repository. '
+            'Exiting!\nReason:\n'.format(versions_repo_path)
         )
 
         raise exc
