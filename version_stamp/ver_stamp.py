@@ -394,6 +394,7 @@ class MercurialVersionsBackend(VersionsBackend):
         if deprecated_hist_file:
             new_changesets = {}
             for tag in hist_changesets:
+                new_changesets[tag] = {}
                 for k, v in hist_changesets[tag].items():
                     if 'hash' in v:
                         new_changesets[tag][k] = v
