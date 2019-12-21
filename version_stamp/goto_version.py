@@ -302,7 +302,7 @@ def _pull_repo(args):
             client.close()
 
             repo_type = 'mercurial'
-        except hglib.error.ServerError as exc:
+        except hglib.error.ServerError:
             LOGGER.exception(
                 'The repository: {0} is '
                 'neither a git or a mercurial repository. Skipping it!'
