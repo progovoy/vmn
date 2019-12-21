@@ -2,17 +2,17 @@ import setuptools
 
 from version_stamp import __version__
 
-description = 'Stamping infrastructure'
+description = 'Stamping utility'
 
 install_requires=['python-hglib>=2.6', 'lockfile', 'GitPython>=2.1.11']
 
 setuptools.setup(
     name='version_stamp',
     version=__version__,
-    author="ET",
+    author="Pavel Rogovoy",
     author_email='pavelr@final.israel',
     description=description,
-    long_description=open('README.md').read(),
+    long_description=description,
     python_requires='>=3.5.0',
     url="https://github.com/final-israel/ver_stamp",
     install_requires=install_requires,
