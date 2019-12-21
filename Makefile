@@ -9,7 +9,7 @@ _build:
 
 _publish: clean
 	@echo "Publishing"
-	cp ${PWD}/../versions/applications/ver_stamp/version.py ${PWD}/version_stamp/
+	cp ${PWD}/../versions/ver_stamp/version.py ${PWD}/version_stamp/
 	python3 setup.py sdist bdist_wheel
 	twine upload ${PWD}/dist/*
 	git checkout -- ${PWD}/version_stamp/version.py
@@ -18,34 +18,34 @@ major: check _major _build _publish
 
 _major:
 	@echo "Major Release"
-	$(eval VERSION := $(shell ver_stamp \
+	$(eval VERSION := $(shell ver-stamp \
 	--repos_path ${PWD}/../ \
-	--app_version_file ${PWD}/../versions/applications/ver_stamp/version.py \
+	--app_version_file ${PWD}/../versions/ver_stamp/version.py \
 	--release_mode major --app_name ${NAME}))
 
 minor: check _minor _build _publish
 
 _minor:
 	@echo "Minor Release"
-	$(eval VERSION := $(shell ver_stamp \
+	$(eval VERSION := $(shell ver-stamp \
 	--repos_path ${PWD}/../ \
-	--app_version_file ${PWD}/../versions/applications/ver_stamp/version.py \
+	--app_version_file ${PWD}/../versions/ver_stamp/version.py \
 	--release_mode minor --app_name ${NAME}))
 
 patch: check _patch _build _publish
 
 _patch:
 	@echo "Patch Release"
-	$(eval VERSION := $(shell ver_stamp \
+	$(eval VERSION := $(shell ver-stamp \
 	--repos_path ${PWD}/../ \
-	--app_version_file ${PWD}/../versions/applications/ver_stamp/version.py \
+	--app_version_file ${PWD}/../versions/ver_stamp/version.py \
 	--release_mode patch --app_name ${NAME}))
 
 _debug:
 	@echo "Debug Release"
-	$(eval VERSION := $(shell ver_stamp \
+	$(eval VERSION := $(shell ver-stamp \
 	--repos_path ${PWD}/../ \
-	--app_version_file ${PWD}/../versions/applications/ver_stamp/version.py \
+	--app_version_file ${PWD}/../versions/ver_stamp/version.py \
 	--release_mode debug --app_name ${NAME}))
 
 check: check-local
