@@ -34,7 +34,14 @@ def goto_version(repos_path, app_name, app_version, git_remote,
 
     versions_client = hglib.open('{0}/{1}'.format(repos_path, 'versions'))
     versions_client.revert([], all=True)
-    versions_client.pull(update=True, branch='default')
+    try:
+        versions_client.pull(update=True, branch='default')
+    except Exception as exc:
+        LOGGER.exception(
+            'Failed to pull from versions at {0}'.format(repos_path)
+        )
+
+        raise exc
 
     root = versions_client.root().decode()
     tags = versions_client.tags()
@@ -44,7 +51,7 @@ def goto_version(repos_path, app_name, app_version, git_remote,
     app_tag_index = None
 
     for idx, tag in enumerate(tags):
-        if not tag[0].decode().startswith(app_name):
+        if not tag[0].decode().startswith('{0}_'.format(app_name)):
             continue
 
         if tip_app_tag is None:
@@ -229,27 +236,31 @@ def _git_pull(cur_path, repo, changesets):
     except TypeError:
         err = 'Failed to retrieve active_branch. Probably in detached ' \
               'head in {0}'.format(cur_path)
-        LOGGER.exception('{0}. Will abort operation'.format(err))
+        LOGGER.exception('{0}'.format(err))
 
-        return {'repo': repo, 'status': 1, 'description': err}
+        if changesets is not None:
+            return {'repo': repo, 'status': 1, 'description': err}
+        else:
+            cur_branch = 'master'
+            client.git.checkout(cur_branch)
     finally:
         client.close()
 
     try:
-        commits_ahead = client.iter_commits(
-            'origin/{0}..{0}'.format(cur_branch.name)
+        outgoing = list(client.iter_commits(
+            'origin/{0}..{0}'.format(cur_branch))
         )
 
-        if sum(1 for c in commits_ahead):
+        if len(outgoing) > 0:
             err = 'Outgoing changes in {0}. Aborting'.format(cur_path)
             LOGGER.info('{0}. Will abort operation'.format(err))
             return {'repo': repo, 'status': 1, 'description': err}
 
         LOGGER.info('Pulling from {0}'.format(repo))
         remote = client.remote(name='origin')
-        remote.pull()
+        remote.pull(refspec=cur_branch)
 
-        if repo in changesets:
+        if changesets is not None and repo in changesets:
             client.git.checkout(changesets[repo]['hash'])
 
             LOGGER.info('Checked out {0} to {1}'.format(
@@ -279,9 +290,33 @@ def _pull_repo(args):
 
     cur_path = '{0}/{1}'.format(repos_path, repo)
 
-    if changesets[repo]['vcs_type'] == 'mercurial':
+    repo_type = None
+    try:
+        client = git.Repo(cur_path)
+        client.close()
+
+        repo_type = 'git'
+    except git.exc.InvalidGitRepositoryError:
+        try:
+            client = hglib.open(cur_path)
+            client.close()
+
+            repo_type = 'mercurial'
+        except hglib.error.ServerError as exc:
+            LOGGER.exception(
+                'The repository: {0} is '
+                'neither a git or a mercurial repository. Skipping it!'
+                '\nReason:\n'.format(cur_path)
+            )
+
+            return {
+                'repo': repo, 'status': 0,
+                'description': 'The repository is neither git or mercurial'
+            }
+
+    if repo_type == 'mercurial':
         return _mercurial_pull(cur_path, repo, changesets)
-    elif changesets[repo]['vcs_type'] == 'git':
+    elif repo_type == 'git':
         return _git_pull(cur_path, repo, changesets)
 
 
