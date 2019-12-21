@@ -809,9 +809,24 @@ def get_version(versions_be_ifc, current_changesets, extra_info=False):
 
 def run_with_mercurial_be(**params):
     versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
-    if versions_repo_path is None:
+    if versions_repo_path is not None:
+        versions_repo_path = os.path.abspath(versions_repo_path)
+    else:
         versions_repo_path = os.path.join(params['repos_path'], 'versions')
         versions_repo_path = os.path.abspath(versions_repo_path)
+
+    try:
+        client = hglib.open(versions_repo_path)
+        client.close()
+    except hglib.error.ServerError as exc:
+        LOGGER.exception(
+            'versions repository path: {0} is '
+            'not a functional mercurial repository. Exiting!\nReason:\n'.format(
+                versions_repo_path
+            )
+        )
+
+        raise exc
 
     lock = LockFile(os.path.join(versions_repo_path, 'ver.lock'))
     with lock:
