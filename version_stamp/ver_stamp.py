@@ -811,6 +811,7 @@ def run_with_mercurial_be(**params):
     versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
     if versions_repo_path is None:
         versions_repo_path = os.path.join(params['repos_path'], 'versions')
+        versions_repo_path = os.path.abspath(versions_repo_path)
 
     lock = LockFile(os.path.join(versions_repo_path, 'ver.lock'))
     with lock:
