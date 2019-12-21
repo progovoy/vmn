@@ -824,12 +824,57 @@ class MercurialBackend(VersionControlBackend):
         return self._be.tags()
 
 
+class GitBackend(VersionControlBackend):
+    def __init__(self, repo_path):
+        VersionControlBackend.__init__(self, repo_path)
+
+        self._be = git.Repo(repo_path)
+        self._be.head.reset(working_tree=True)
+        self._origin = self._be.remote(name='origin')
+        self._origin.pull()
+
+    def __del__(self):
+        self._be.close()
+
+    def tag(self, tag, user):
+        self._be.tag(tag)
+
+    def push(self):
+        self._origin.push()
+
+    def commit(self, message, user, include=None):
+        if include is not None:
+            self._be.index.add(include)
+
+        self._be.index.commit(message=message, author=user)
+
+    def root(self):
+        return self._be.common_dir
+
+    def status(self, commit):
+        return self._be.index.diff(self._be.head.commit)
+
+    def tags(self):
+        return self._be.tags()
+
+
 class MercurialVersionsStamper(VersionControlStamper):
     def __init__(self, conf=None):
         VersionControlStamper.__init__(self, conf)
 
     def allocate_backend(self):
         self._backend = MercurialBackend(self._versions_repo_path)
+
+    def deallocate_backend(self):
+        del self._backend
+
+
+class GitVersionsStamper(VersionControlStamper):
+    def __init__(self, conf=None):
+        VersionControlStamper.__init__(self, conf)
+
+    def allocate_backend(self):
+        self._backend = GitBackend(self._versions_repo_path)
 
     def deallocate_backend(self):
         del self._backend
