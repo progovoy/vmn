@@ -199,8 +199,15 @@ def session_uuid():
     return uuid.uuid4()
 
 
+@pytest.fixture(scope='session')
+def ver_stamp_env():
+    try:
+        del os.environ['VER_STAMP_VERSIONS_PATH']
+    except:
+        pass
+
 @pytest.fixture(scope='function')
-def app_layout(tmpdir):
+def app_layout(tmpdir, ver_stamp_env):
     versions = tmpdir.mkdir('versions')
     remote_versions = tmpdir.mkdir('remote_versions')
     app_layout = MercurialAppLayoutFixture(versions, remote_versions)
