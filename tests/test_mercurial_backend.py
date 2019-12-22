@@ -9,10 +9,9 @@ import pathlib
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import ver_stamp
 
-
 def test_wrong_parameters(app_layout):
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -29,7 +28,7 @@ def test_wrong_parameters(app_layout):
         assert exc.__str__() == expected
 
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -46,7 +45,7 @@ def test_wrong_parameters(app_layout):
         assert exc.__str__() == expected
 
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -62,7 +61,7 @@ def test_wrong_parameters(app_layout):
         assert exc.__str__() == expected
 
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -80,7 +79,7 @@ def test_wrong_parameters(app_layout):
         assert exc.__str__() == expected
 
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -99,7 +98,7 @@ def test_wrong_parameters(app_layout):
         assert exc.__str__() == expected
 
     try:
-        ver_stamp.run_with_mercurial_be(
+        ver_stamp.run_stamper(
             repos_path='{0}/'.format(
                 app_layout.versions_base_dir
             ),
@@ -168,16 +167,16 @@ def test_stamp_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
-    mbe.allocate_backend()
+    be = app_layout.be_class(params)
+    be.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
     )
 
-    current_version = mbe.stamp_app_version(changesets)
+    current_version = be.stamp_app_version(changesets)
     assert current_version == '0.0.1.0'
 
 
@@ -198,13 +197,13 @@ def test_stamp_main_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         app_name='test_app1',
         release_mode='patch',
         main_system_name='MainSystem'
     )
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -227,13 +226,13 @@ def test_stamp_main_version(app_layout):
         repo_name='repo1', file_relative_path='a/b/c.txt', content='hello3'
     )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         app_name='test_app2',
         release_mode='patch',
         main_system_name='MainSystem'
     )
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -252,13 +251,13 @@ def test_stamp_main_version(app_layout):
     mbe.publish(current_version, formatted_main_ver)
     mbe.deallocate_backend()
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         app_name='test_app1',
         release_mode='patch',
         main_system_name='MainSystem'
     )
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -291,10 +290,10 @@ def test_starting_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch', '1.9.5.0')
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -323,9 +322,9 @@ def test_find_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -342,9 +341,9 @@ def test_find_version(app_layout):
 
     release_modes = ('patch', 'minor', 'major', 'micro')
     for release_mode in release_modes:
-        params = app_layout.get_mercurial_be_params(
+        params = app_layout.get_be_params(
             'test_app1', release_mode)
-        mbe = ver_stamp.MercurialVersionsStamper(params)
+        mbe = app_layout.be_class(params)
         mbe.allocate_backend()
         changesets = ver_stamp.HostState.get_current_changeset(
             app_layout.versions_base_dir
@@ -360,9 +359,9 @@ def test_find_version(app_layout):
         repo_name='repo1', file_relative_path='a/b/c.txt', content='xxx'
     )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -390,9 +389,9 @@ def test_output(app_layout):
             content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -419,8 +418,8 @@ def test_find_recurring_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params('test_app1', 'patch')
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    params = app_layout.get_be_params('test_app1', 'patch')
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -434,7 +433,7 @@ def test_find_recurring_version(app_layout):
 
     app_layout.remove_app_version_file(params['app_version_file'])
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -461,7 +460,7 @@ def test_version_info(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
     dir_path = os.path.dirname(params['app_version_file'])
     pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -470,7 +469,7 @@ def test_version_info(app_layout):
         custom_repos=('repo1',)
     )
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -500,18 +499,18 @@ def test_version_info(app_layout):
 
 
 def test_version_template(app_layout):
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == '1.0.3'
 
-    params = app_layout.get_mercurial_be_params(
+    params = app_layout.get_be_params(
         'test_app1', 'patch', version_template='ap{0}xx{0}XX{1}AC@{0}{2}{3}C')
 
-    mbe = ver_stamp.MercurialVersionsStamper(params)
+    mbe = app_layout.be_class(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == 'ap1xxXX0AC@36C'

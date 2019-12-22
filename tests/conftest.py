@@ -9,6 +9,9 @@ import shutil
 import json
 from git import Repo
 
+sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
+import ver_stamp
+
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
 format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
@@ -21,27 +24,24 @@ cons_handler.setFormatter(formatter)
 LOGGER.addHandler(cons_handler)
 
 
-# A class for simulating mercurial backend
-class MercurialAppLayoutFixture(object):
-    def __init__(self, versions, remote_versions):
+class FSAppLayoutFixture(object):
+    def __init__(self, versions, remote_versions, be_type):
         self.versions_root_path = versions.strpath
-        self.remote_versions_root_path = remote_versions.strpath
         self.versions_base_dir = versions.dirname
-
-        client = hglib.init(
-            dest=self.remote_versions_root_path
-        )
-        client.close()
-
-        self._mercurial_backend = hglib.clone(
-            '{0}'.format(self.remote_versions_root_path),
-            '{0}'.format(self.versions_root_path)
-        )
-
         self._repos = {}
 
+        if be_type == 'mercurial':
+            self._versions_backend = MercurialBackend(
+                remote_versions.strpath,
+                versions.strpath
+            )
+
+            self.be_class = ver_stamp.MercurialVersionsStamper
+        else:
+            self.be_class = ver_stamp.GitVersionsStamper
+
     def __del__(self):
-        self._mercurial_backend.close()
+        del self._versions_backend
 
         for val in self._repos.values():
             shutil.rmtree(val['path'])
@@ -128,11 +128,7 @@ class MercurialAppLayoutFixture(object):
         return self._repos[repo_name]['changesets']
 
     def remove_app_version_file(self, app_version_file_path):
-        client = hglib.open(self.versions_root_path)
-        client.remove(app_version_file_path.encode('utf8'))
-        client.commit('Manualy removed file {0}'.format(app_version_file_path))
-        client.push()
-        client.close()
+        self._versions_backend.remove_app_version_file(app_version_file_path)
 
     def add_version_info_file(
             self,
@@ -148,24 +144,14 @@ class MercurialAppLayoutFixture(object):
             if custom_repos is not None:
                 f.write('repos = {0}\n'.format(json.dumps(custom_repos)))
 
-        client = hglib.open(self.versions_root_path)
+        self._versions_backend.add_version_info_file(version_info_file_path)
 
-        client.add(version_info_file_path)
-        client.commit(
-            message='Manually add version_info file',
-            user='version_manager',
-            include=version_info_file_path,
-        )
-
-        client.push()
-        client.close()
-
-    def get_mercurial_be_params(self,
-                                 app_name,
-                                 release_mode='debug',
-                                 starting_version='0.0.0.0',
-                                 main_system_name=None,
-                                 version_template='{0}.{1}.{2}'):
+    def get_be_params(self,
+                     app_name,
+                     release_mode='debug',
+                     starting_version='0.0.0.0',
+                     main_system_name=None,
+                     version_template='{0}.{1}.{2}'):
         params = {
             'repos_path': self.versions_base_dir,
             'release_mode': release_mode,
@@ -194,6 +180,56 @@ class MercurialAppLayoutFixture(object):
         return params
 
 
+class VersionControlBackend(object):
+    def __init__(self, remote_versions_root_path, versions_root_path):
+        self.remote_versions_root_path = remote_versions_root_path
+        self.versions_root_path = versions_root_path
+
+    def __del__(self):
+        pass
+
+
+class MercurialBackend(VersionControlBackend):
+    def __init__(self, remote_versions_root_path, versions_root_path):
+        VersionControlBackend.__init__(
+            self, remote_versions_root_path, versions_root_path
+        )
+
+        client = hglib.init(
+            dest=self.remote_versions_root_path
+        )
+        client.close()
+
+        self._mercurial_backend = hglib.clone(
+            '{0}'.format(self.remote_versions_root_path),
+            '{0}'.format(self.versions_root_path)
+        )
+
+    def __del__(self):
+        self._mercurial_backend.close()
+        VersionControlBackend.__del__(self)
+
+    def remove_app_version_file(self, app_version_file_path):
+        client = hglib.open(self.versions_root_path)
+        client.remove(app_version_file_path.encode('utf8'))
+        client.commit('Manualy removed file {0}'.format(app_version_file_path))
+        client.push()
+        client.close()
+
+    def add_version_info_file(self, version_info_file_path):
+        client = hglib.open(self.versions_root_path)
+
+        client.add(version_info_file_path)
+        client.commit(
+            message='Manually add version_info file',
+            user='version_manager',
+            include=version_info_file_path,
+        )
+
+        client.push()
+        client.close()
+
+
 @pytest.fixture(scope='session')
 def session_uuid():
     return uuid.uuid4()
@@ -206,11 +242,17 @@ def ver_stamp_env():
     except:
         pass
 
+
+def pytest_generate_tests(metafunc):
+    if "app_layout" in metafunc.fixturenames:
+        metafunc.parametrize("app_layout", ["mercurial"], indirect=True)
+
+
 @pytest.fixture(scope='function')
-def app_layout(tmpdir, ver_stamp_env):
+def app_layout(request, tmpdir, ver_stamp_env):
     versions = tmpdir.mkdir('versions')
     remote_versions = tmpdir.mkdir('remote_versions')
-    app_layout = MercurialAppLayoutFixture(versions, remote_versions)
+    app_layout = FSAppLayoutFixture(versions, remote_versions, request.param)
 
     yield app_layout
 

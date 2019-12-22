@@ -899,7 +899,7 @@ def get_version(versions_be_ifc, current_changesets, extra_info=False):
     return versions_be_ifc.get_be_formatted_version(current_version)
 
 
-def run_with_mercurial_be(**params):
+def run_stamper(**params):
     versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
     if versions_repo_path is not None:
         versions_repo_path = os.path.abspath(versions_repo_path)
@@ -907,17 +907,26 @@ def run_with_mercurial_be(**params):
         versions_repo_path = os.path.join(params['repos_path'], 'versions')
         versions_repo_path = os.path.abspath(versions_repo_path)
 
+    versions_be_type = None
     try:
-        client = hglib.open(versions_repo_path)
+        client = git.Repo(versions_repo_path)
         client.close()
-    except hglib.error.ServerError as exc:
-        LOGGER.exception(
-            'versions repository path: {0} is '
-            'not a functional mercurial repository. '
-            'Exiting!\nReason:\n'.format(versions_repo_path)
-        )
 
-        raise exc
+        versions_be_type = 'git'
+    except git.exc.InvalidGitRepositoryError:
+        try:
+            client = hglib.open(versions_repo_path)
+            client.close()
+
+            versions_be_type = 'mercurial'
+        except hglib.error.ServerError as exc:
+            LOGGER.exception(
+                'versions repository path: {0} is '
+                'not a functional mercurial repository. '
+                'Exiting!\nReason:\n'.format(versions_repo_path)
+            )
+
+            raise exc
 
     lock = LockFile(os.path.join(versions_repo_path, 'ver.lock'))
     with lock:
@@ -965,13 +974,17 @@ def run_with_mercurial_be(**params):
 
         extra_info = params['extra_build_info']
 
-        mbe = MercurialVersionsStamper(params)
-        mbe.allocate_backend()
+        if versions_be_type == 'mercurial':
+            be = MercurialVersionsStamper(params)
+        else:
+            be = GitVersionsStamper(params)
+
+        be.allocate_backend()
         changesets = HostState.get_current_changeset(params['repos_path'])
 
-        print(get_version(mbe, changesets, extra_info), file=sys.stdout)
+        print(get_version(be, changesets, extra_info), file=sys.stdout)
 
-        mbe.deallocate_backend()
+        be.deallocate_backend()
 
     LOGGER.error('Released locked: {0}'.format(lock.path))
     return 0
@@ -1038,7 +1051,7 @@ def main():
     args = parser.parse_args(args)
     params = copy.deepcopy(vars(args))
 
-    return run_with_mercurial_be(**params)
+    return run_stamper(**params)
 
 
 if __name__ == '__main__':
