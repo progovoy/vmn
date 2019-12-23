@@ -90,11 +90,16 @@ class HostState(object):
             return None
 
         revision = client.parents()
-        client.close()
         if revision is None:
-            return None
+            revision = client.log()
+
+            if revision is None:
+                client.close()
+                return None
 
         changeset = revision[0][1]
+
+        client.close()
         return changeset.decode('utf-8')
 
     @staticmethod
@@ -121,7 +126,7 @@ class HostState(object):
         changesets = {}
         for repo in repos:
             cur_path = os.path.join(repos_path, repo)
-            if not os.path.exists(cur_path) or repo == 'versions':
+            if not os.path.exists(cur_path) or repo == 'versions' or repo == 'remote_versions':
                 continue
 
             changeset = HostState.get_changeset(cur_path)
@@ -261,108 +266,14 @@ class VersionControlStamper(VersionsStamper):
         raise NotImplementedError('Please implement this method')
 
     def find_version(self, changesets_dict):
-        root = self._backend.root()
-        tags = self._backend.tags()
-        current_changesets = {}
-        hist_changesets = {}
-
-        tag_ver = None
-        ver_path = None
-
-        # Find the first tag with app_name and its version file path
-        for tag in tags:
-            # Find the last occurance of _ on the tag and extract an
-            # app name from it
-            tmp = tag[0].decode()
-            tmp = tmp[:tmp.rfind('_')]
-            if not tmp == self._app_name:
-                continue
-
-            for path in self._backend.status(commit=tag[0]):
-                if not path[1].decode().endswith(os.sep + 'version.py'):
-                    continue
-
-                ver_path = path
-                break
-
-            if ver_path is None:
-                continue
-
-            tag_ver = tag[0].decode().split('{0}_'.format(self._app_name))[1]
-            break
-
-        # We probably have a new application
-        if ver_path is None:
-            return None
-
+        tag_ver, latest_revs, history_revs = self._get_app_changesets()
         if tag_ver is None:
-            raise RuntimeError(
-                "CRITICAL: Version file path: {0} found but "
-                "app tag not found. This requires manual "
-                "intervention. Probably someone removed app's "
-                "tag".format(ver_path)
-            )
-
-        app_ver_path = os.path.join(root, *(ver_path[1].decode().split('/')))
-        app_ver_dir_path = os.path.dirname(app_ver_path)
-        app_hist_ver_path = os.path.join(app_ver_dir_path,
-                                         '_version_history.py')
-
-        loader = importlib.machinery.SourceFileLoader(
-            'version', app_ver_path)
-        mod_ver = types.ModuleType(loader.name)
-        try:
-            loader.exec_module(mod_ver)
-        except FileNotFoundError:
-            # Means that this service has been removed once and now
-            # it is back
-            LOGGER.info(
-                'Service {0} was deleted and now '
-                'it is back'.format(self._app_name)
-            )
-            self._starting_version = tag_ver
-
             return None
 
-        try:
-            current_changesets = mod_ver.changesets
-        except AttributeError:
-            pass
-
-        deprecated_version_file = False
-        for k, v in current_changesets.items():
-            if 'hash' not in v:
-                deprecated_version_file = True
-
-        if deprecated_version_file:
-            new_changesets = {}
-            for k, v in current_changesets.items():
-                if 'hash' in v:
-                    new_changesets[k] = v
-                    continue
-
-                new_changesets[k] = {'hash': v, 'vcs_type': 'mercurial'}
-
-            self._write_new_app_version_file(
-                deprecated=mod_ver,
-                changesets=new_changesets
-            )
-
-        loader = importlib.machinery.SourceFileLoader(
-            'version', app_ver_path)
-        mod_ver = types.ModuleType(loader.name)
-        loader.exec_module(mod_ver)
-        try:
-            current_changesets = mod_ver.changesets
-        except AttributeError:
-            pass
-
-        # From now on we will try to find any existing version of
-        # the application in our local repositories.
-        # Means that if any previous version of the application will match
-        # our local repository, we will return this version
+        # Try to find any version of the application matching the
+        # repositories local state
         found = True
-        for k, v in current_changesets.items():
+        for k, v in latest_revs.items():
             if k not in changesets_dict:
                 found = False
                 break
@@ -370,60 +281,16 @@ class VersionControlStamper(VersionsStamper):
                 found = False
                 break
 
-        if found and current_changesets:
+        if found and latest_revs:
             return tag_ver
 
-        if os.path.isfile(app_hist_ver_path):
-            loader = importlib.machinery.SourceFileLoader(
-                '_version_history', app_hist_ver_path)
-            mod_ver = types.ModuleType(loader.name)
-            loader.exec_module(mod_ver)
-
-            try:
-                hist_changesets = mod_ver.changesets
-            except AttributeError:
-                pass
-
         # If the history is empty - bye bye
-        if not hist_changesets:
+        if not history_revs:
             return None
 
-        deprecated_hist_file = False
-        for tag in hist_changesets:
-            for k, v in hist_changesets[tag].items():
-                if 'hash' not in v:
-                    deprecated_hist_file = True
-
-        if deprecated_hist_file:
-            new_changesets = {}
-            for tag in hist_changesets:
-                new_changesets[tag] = {}
-                for k, v in hist_changesets[tag].items():
-                    if 'hash' in v:
-                        new_changesets[tag][k] = v
-                        continue
-
-                    new_changesets[tag][k] = {'hash': v,
-                                              'vcs_type': 'mercurial'}
-
-            self._write_new_app_hist_version_file(
-                changesets=new_changesets,
-                path=app_hist_ver_path
-            )
-
-            loader = importlib.machinery.SourceFileLoader(
-                '_version_history', app_hist_ver_path)
-            mod_ver = types.ModuleType(loader.name)
-            loader.exec_module(mod_ver)
-
-            try:
-                hist_changesets = mod_ver.changesets
-            except AttributeError:
-                pass
-
-        for tag in hist_changesets:
+        for tag in history_revs:
             found = True
-            for k, v in hist_changesets[tag].items():
+            for k, v in history_revs[tag].items():
                 if k not in changesets_dict:
                     found = False
                     break
@@ -431,7 +298,7 @@ class VersionControlStamper(VersionsStamper):
                     found = False
                     break
 
-            if found and hist_changesets[tag]:
+            if found and history_revs[tag]:
                 return tag
 
         return None
@@ -450,7 +317,7 @@ class VersionControlStamper(VersionsStamper):
         self._backend.commit(
             message=commit_msg,
             user='version_manager',
-            include=path.encode(),
+            include=[path],
         )
 
     def _write_new_app_version_file(self, deprecated, changesets):
@@ -476,7 +343,7 @@ class VersionControlStamper(VersionsStamper):
         self._backend.commit(
             message=commit_msg,
             user='version_manager',
-            include=self._app_version_file.encode(),
+            include=[self._app_version_file],
         )
 
     def _write_app_version_file(self, version, changesets, release_mode, info):
@@ -523,7 +390,7 @@ class VersionControlStamper(VersionsStamper):
             self._backend.commit(
                 message=commit_msg,
                 user='version_manager',
-                include=self._app_version_file.encode(),
+                include=[self._app_version_file],
             )
 
         hist_version_file = os.path.join(dir_path, '_version_history.py')
@@ -538,7 +405,7 @@ class VersionControlStamper(VersionsStamper):
                     self._app_name
                 ),
                 user='version_manager',
-                include=hist_version_file.encode(),
+                include=[hist_version_file],
             )
 
         custom_major = None
@@ -649,7 +516,7 @@ class VersionControlStamper(VersionsStamper):
             with open(self._main_version_file, 'w+') as f:
                 f.write('# Autogenerated by version stamper. Do not edit\n')
                 f.write('name = "{0}"\n'.format(self._main_system_name))
-                f.write('build_num = "{0}"\n'.format('1'))
+                f.write('build_num = "{0}"\n'.format('0'))
                 f.write('version = "{0}"\n'.format('0.0.0'))
                 f.write('services = {}\n')
                 f.write('external_services = {}\n')
@@ -658,7 +525,7 @@ class VersionControlStamper(VersionsStamper):
                 message='{0}: add first main version file'.format(
                     self._main_system_name),
                 user='version_manager',
-                include=self._main_version_file.encode(),
+                include=[self._main_version_file],
             )
 
         hist_version_file = os.path.join(dir_path, '_main_version_history.py')
@@ -673,7 +540,7 @@ class VersionControlStamper(VersionsStamper):
                 message='{0}: add first main history version file'.format(
                     self._main_system_name),
                 user='version_manager',
-                include=hist_version_file.encode(),
+                include=[hist_version_file],
             )
 
         loader = importlib.machinery.SourceFileLoader(
@@ -691,8 +558,9 @@ class VersionControlStamper(VersionsStamper):
         hist_services = mod_ver.services
         hist_external_services = mod_ver.external_services
 
-        formatted_main_ver, main_ver = \
-            gen_main_version(main_ver_mod, self._release_mode)
+        formatted_main_ver, main_ver = gen_main_version(
+            main_ver_mod, self._release_mode
+        )
 
         if self._release_mode == 'debug':
             return formatted_main_ver
@@ -769,21 +637,168 @@ class VersionControlStamper(VersionsStamper):
 
             return
 
+        version_files = [self._app_version_file]
+        if self._main_version_file is not None:
+            version_files.append(self._main_version_file)
+
         self._backend.commit(
             message='{0}: update to version {1}'.format(
                 self._app_name, app_version),
-            user='version_manager'
+            user='version_manager',
+            include=version_files
         )
 
-        tags = ['{0}_{1}'.format(self._app_name, app_version).encode()]
+        tags = ['{0}_{1}'.format(self._app_name, app_version)]
         if main_version is not None:
             tags.append(
-                '{0}_{1}'.format(self._main_system_name, main_version).encode()
+                '{0}_{1}'.format(self._main_system_name, main_version)
             )
 
         self._backend.tag(tags, user='version_manager')
 
         self._backend.push()
+
+    def _get_app_changesets(self):
+        root = self._backend.root()
+        tags = self._backend.tags()
+        hist_changesets = {}
+        current_changesets = {}
+
+        tag_ver = None
+        ver_path = None
+
+        # Find the first tag with app_name and its version file path
+        for tag in tags:
+            # Find the last occurrence of _ on the tag and extract an
+            # app name from it
+            tmp = tag[:tag.rfind('_')]
+            if not tmp == self._app_name:
+                continue
+
+            for path in self._backend.status(tag=tag):
+                if not path.endswith(os.sep + 'version.py'):
+                    continue
+
+                ver_path = path
+                break
+
+            if ver_path is None:
+                continue
+
+            tag_ver = tag.split('{0}_'.format(self._app_name))[1]
+            break
+
+        # We probably have a new application
+        if ver_path is None:
+            return None, None, None
+
+        if tag_ver is None:
+            raise RuntimeError(
+                "CRITICAL: Version file path: {0} found but "
+                "app tag not found or is corrupted. This requires manual "
+                "intervention. Probably someone removed app's "
+                "tag or changed it".format(ver_path)
+            )
+
+        app_ver_path = os.path.join(root, *(ver_path.split('/')))
+        app_ver_dir_path = os.path.dirname(app_ver_path)
+        app_hist_ver_path = os.path.join(app_ver_dir_path,
+                                         '_version_history.py')
+
+        loader = importlib.machinery.SourceFileLoader(
+            'version', app_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        try:
+            loader.exec_module(mod_ver)
+        except FileNotFoundError:
+            # Version file was removed after it was tagged in the latest tag.
+            # Means that it was removed once and now it is back
+            LOGGER.info(
+                'Service {0} was deleted and now '
+                'it is back'.format(self._app_name)
+            )
+            self._starting_version = tag_ver
+
+            return None, None, None
+
+        try:
+            current_changesets = mod_ver.changesets
+        except AttributeError:
+            pass
+
+        deprecated_version_file = False
+        for k, v in current_changesets.items():
+            if 'hash' not in v:
+                deprecated_version_file = True
+
+        if deprecated_version_file:
+            new_changesets = {}
+            for k, v in current_changesets.items():
+                if 'hash' in v:
+                    new_changesets[k] = v
+                    continue
+
+                new_changesets[k] = {'hash': v, 'vcs_type': 'mercurial'}
+
+            self._write_new_app_version_file(
+                deprecated=mod_ver,
+                changesets=new_changesets
+            )
+
+        loader = importlib.machinery.SourceFileLoader(
+            'version', app_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        loader.exec_module(mod_ver)
+        try:
+            current_changesets = mod_ver.changesets
+        except AttributeError:
+            pass
+
+        if os.path.isfile(app_hist_ver_path):
+            loader = importlib.machinery.SourceFileLoader(
+                '_version_history', app_hist_ver_path)
+            mod_ver = types.ModuleType(loader.name)
+            loader.exec_module(mod_ver)
+
+            try:
+                hist_changesets = mod_ver.changesets
+            except AttributeError:
+                pass
+
+        deprecated_hist_file = False
+        for tag in hist_changesets:
+            for k, v in hist_changesets[tag].items():
+                if 'hash' not in v:
+                    deprecated_hist_file = True
+
+        if deprecated_hist_file:
+            new_changesets = {}
+            for tag in hist_changesets:
+                new_changesets[tag] = {}
+                for k, v in hist_changesets[tag].items():
+                    if 'hash' in v:
+                        new_changesets[tag][k] = v
+                        continue
+
+                    new_changesets[tag][k] = {'hash': v,
+                                              'vcs_type': 'mercurial'}
+
+            self._write_new_app_hist_version_file(
+                changesets=new_changesets,
+                path=app_hist_ver_path
+            )
+
+            loader = importlib.machinery.SourceFileLoader(
+                '_version_history', app_hist_ver_path)
+            mod_ver = types.ModuleType(loader.name)
+            loader.exec_module(mod_ver)
+
+            try:
+                hist_changesets = mod_ver.changesets
+            except AttributeError:
+                pass
+
+        return tag_ver, current_changesets, hist_changesets
 
 
 class VersionControlBackend(object):
@@ -802,26 +817,40 @@ class MercurialBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def tag(self, tag, user):
-        self._be.tag(tag, user=user)
+    def tag(self, tags, user):
+        for tag in tags:
+            self._be.tag(tag.encode(), user=user)
 
     def push(self):
         self._be.push()
 
     def commit(self, message, user, include=None):
         if include is not None:
-            self._be.add(include)
+            for file in include:
+                self._be.add(file.encode())
 
         self._be.commit(message=message, user=user)
 
     def root(self):
         return self._be.root().decode()
 
-    def status(self, commit):
-        return self._be.status(change=commit)
+    def status(self, tag):
+        status = self._be.status(change=tag)
+
+        paths = []
+        for item in status:
+            paths.append(item[1].decode())
+
+        return paths
 
     def tags(self):
-        return self._be.tags()
+        tags = []
+        _tags = self._be.tags()
+
+        for tag in _tags:
+            tags.append(tag[0].decode())
+
+        return tags
 
 
 class GitBackend(VersionControlBackend):
@@ -836,26 +865,47 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def tag(self, tag, user):
-        self._be.tag(tag)
+    def tag(self, tags, user):
+        for item in tags:
+            new_tag = self._be.create_tag(
+                item,
+                message='Automatic tag "{0}"'.format(item)
+            )
+
+            self._origin.push(new_tag)
 
     def push(self):
         self._origin.push()
 
     def commit(self, message, user, include=None):
         if include is not None:
-            self._be.index.add(include)
+            for file in include:
+                self._be.index.add(file)
 
-        self._be.index.commit(message=message, author=user)
+        self._be.index.commit(message=message)
 
     def root(self):
-        return self._be.common_dir
+        return self._be.working_dir
 
-    def status(self, commit):
-        return self._be.index.diff(self._be.head.commit)
+    def status(self, tag):
+        found_tag = None
+        for _tag in self._be.tags:
+            if _tag.name != tag:
+                continue
+
+            found_tag = _tag
+            break
+
+        return list(found_tag.commit.stats.files)
 
     def tags(self):
-        return self._be.tags()
+        tags = []
+        _tags = self._be.tags
+
+        for tag in _tags:
+            tags.append(tag.name)
+
+        return tags
 
 
 class MercurialVersionsStamper(VersionControlStamper):
@@ -976,7 +1026,7 @@ def run_stamper(**params):
 
         if versions_be_type == 'mercurial':
             be = MercurialVersionsStamper(params)
-        else:
+        elif versions_be_type == 'git':
             be = GitVersionsStamper(params)
 
         be.allocate_backend()

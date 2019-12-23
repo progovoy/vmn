@@ -9,6 +9,7 @@ import pathlib
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import ver_stamp
 
+
 def test_wrong_parameters(app_layout):
     try:
         ver_stamp.run_stamper(
@@ -465,7 +466,7 @@ def test_version_info(app_layout):
     dir_path = os.path.dirname(params['app_version_file'])
     pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
     app_layout.add_version_info_file(
-        '{0}/version_info.py'.format(dir_path).encode(),
+        '{0}/version_info.py'.format(dir_path),
         custom_repos=('repo1',)
     )
 

@@ -37,7 +37,12 @@ class FSAppLayoutFixture(object):
             )
 
             self.be_class = ver_stamp.MercurialVersionsStamper
-        else:
+        elif be_type == 'git':
+            self._versions_backend = GitBackend(
+                remote_versions.strpath,
+                versions.strpath
+            )
+
             self.be_class = ver_stamp.GitVersionsStamper
 
     def __del__(self):
@@ -204,6 +209,20 @@ class MercurialBackend(VersionControlBackend):
             '{0}'.format(self.remote_versions_root_path),
             '{0}'.format(self.versions_root_path)
         )
+        self._mercurial_backend.close()
+
+        with open(os.path.join(versions_root_path, 'init.txt'), 'w+') as f:
+            f.write('# init\n')
+
+        self._mercurial_backend = hglib.open(
+            '{0}'.format(self.versions_root_path)
+        )
+        path = os.path.join(versions_root_path, 'init.txt').encode()
+        self._mercurial_backend.add(path)
+        self._mercurial_backend.commit(
+            message='first commit', user='version_manager', include=path
+        )
+        self._mercurial_backend.push()
 
     def __del__(self):
         self._mercurial_backend.close()
@@ -219,14 +238,69 @@ class MercurialBackend(VersionControlBackend):
     def add_version_info_file(self, version_info_file_path):
         client = hglib.open(self.versions_root_path)
 
-        client.add(version_info_file_path)
+        client.add(version_info_file_path.encode())
         client.commit(
             message='Manually add version_info file',
             user='version_manager',
-            include=version_info_file_path,
+            include=version_info_file_path.encode(),
         )
 
         client.push()
+        client.close()
+
+
+class GitBackend(VersionControlBackend):
+    def __init__(self, remote_versions_root_path, versions_root_path):
+        VersionControlBackend.__init__(
+            self, remote_versions_root_path, versions_root_path
+        )
+
+        client = Repo.init(self.remote_versions_root_path, bare=True)
+        client.close()
+
+        self._git_backend = Repo.clone_from(
+            '{0}'.format(self.remote_versions_root_path),
+            '{0}'.format(self.versions_root_path)
+        )
+
+        with open(os.path.join(versions_root_path, 'init.txt'), 'w+') as f:
+            f.write('# init\n')
+
+        self._git_backend.index.add(
+            os.path.join(versions_root_path, 'init.txt')
+        )
+        self._git_backend.index.commit('first commit')
+
+        self._origin = self._git_backend.remote(name='origin')
+        self._origin.push()
+
+    def __del__(self):
+        self._git_backend.close()
+        VersionControlBackend.__del__(self)
+
+    def remove_app_version_file(self, app_version_file_path):
+        client = Repo(self.versions_root_path)
+        client.index.remove(app_version_file_path, working_tree=True)
+        client.index.commit(
+            'Manualy removed file {0}'.format(app_version_file_path)
+        )
+
+        origin = client.remote(name='origin')
+        origin.push()
+
+        client.close()
+
+    def add_version_info_file(self, version_info_file_path):
+        client = Repo(self.versions_root_path)
+
+        client.index.add(version_info_file_path)
+        client.index.commit(
+            message='Manually add version_info file',
+        )
+
+        origin = client.remote(name='origin')
+        origin.push()
+
         client.close()
 
 
@@ -245,7 +319,7 @@ def ver_stamp_env():
 
 def pytest_generate_tests(metafunc):
     if "app_layout" in metafunc.fixturenames:
-        metafunc.parametrize("app_layout", ["mercurial"], indirect=True)
+        metafunc.parametrize("app_layout", ["git", "mercurial"], indirect=True)
 
 
 @pytest.fixture(scope='function')
