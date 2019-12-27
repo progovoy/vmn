@@ -126,7 +126,8 @@ class HostState(object):
         changesets = {}
         for repo in repos:
             cur_path = os.path.join(repos_path, repo)
-            if not os.path.exists(cur_path) or repo == 'versions' or repo == 'remote_versions':
+            if not os.path.exists(cur_path) or repo == 'versions' or \
+                    repo == 'remote_versions':
                 continue
 
             changeset = HostState.get_changeset(cur_path)
