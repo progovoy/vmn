@@ -11,6 +11,9 @@ import types
 import re
 from multiprocessing import Pool
 
+sys.path.append('{0}/'.format(os.path.dirname(__file__)))
+import stamp_utils
+
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
 format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
@@ -28,22 +31,14 @@ def goto_version(repos_path, app_name, app_version, git_remote,
     if app_name is None:
         _goto_version(
             repos_path,
-            {'git': git_remote, 'mercurial': mercurial_remote}
+            {'git': git_remote, 'mercurial': mercurial_remote},
         )
         return
 
-    versions_client = hglib.open('{0}/{1}'.format(repos_path, 'versions'))
-    versions_client.revert([], all=True)
-    try:
-        versions_client.pull(update=True, branch='default')
-    except Exception as exc:
-        LOGGER.exception(
-            'Failed to pull from versions at {0}'.format(repos_path)
-        )
+    versions_path = stamp_utils.get_versions_repo_path(repos_path)
+    versions_client, _ = stamp_utils.get_client(versions_path)
 
-        raise exc
-
-    root = versions_client.root().decode()
+    root = versions_client.root()
     tags = versions_client.tags()
     tip_app_tag = None
     tip_app_tag_index = None
@@ -51,14 +46,14 @@ def goto_version(repos_path, app_name, app_version, git_remote,
     app_tag_index = None
 
     for idx, tag in enumerate(tags):
-        if not tag[0].decode().startswith('{0}_'.format(app_name)):
+        if not tag.startswith('{0}_'.format(app_name)):
             continue
 
         if tip_app_tag is None:
             tip_app_tag = tag
             tip_app_tag_index = idx
 
-        tag_ver = tag[0].decode().split('{0}_'.format(app_name))[1]
+        tag_ver = tag.split('{0}_'.format(app_name))[1]
         if app_version == tag_ver:
             app_tag = tag
             app_tag_index = idx
@@ -71,18 +66,18 @@ def goto_version(repos_path, app_name, app_version, git_remote,
         return 1
 
     app_ver_path = None
-    paths = versions_client.status(change=tip_app_tag[0])
+    paths = versions_client.status(tag=tip_app_tag)
     for path in paths:
-        if not path[1].decode().endswith('/main_version.py'):
+        if not path.endswith('/main_version.py'):
             continue
 
         # Retrieve the tag of the service
         app_tag = tags[app_tag_index - 1]
-        res = re.search('(.+)_(.+)', app_tag[0].decode())
+        res = re.search('(.+)_(.+)', app_tag)
         app_name = res.groups()[0]
         app_version = res.groups()[1]
 
-        main_ver_path = '{0}/{1}'.format(root, path[1].decode())
+        main_ver_path = '{0}/{1}'.format(root, path)
 
         loader = importlib.machinery.SourceFileLoader(
             'main_version', main_ver_path)
@@ -95,10 +90,10 @@ def goto_version(repos_path, app_name, app_version, git_remote,
 
     for path in paths:
         if app_ver_path is None:
-            if not path[1].decode().endswith('/version.py'):
+            if not path.endswith('/version.py'):
                 continue
 
-            app_ver_path = '{0}/{1}'.format(root, path[1].decode())
+            app_ver_path = '{0}/{1}'.format(root, path)
 
         app_ver_dir_path = os.path.dirname(app_ver_path)
 
@@ -142,147 +137,21 @@ def goto_version(repos_path, app_name, app_version, git_remote,
             {'git': git_remote, 'mercurial': mercurial_remote},
             hist_changesets[app_version],
         )
+
         return 0
 
     LOGGER.info('App: {0} with version: {1} was not found'.format(
         app_name, app_version
     ))
+
     return 1
-
-
-def _mercurial_pull(cur_path, repo, changesets):
-    client = None
-    try:
-        client = hglib.open(cur_path)
-        diff = client.diff()
-        if diff != b'':
-            err = 'Pending changes in {0}. Aborting'.format(cur_path)
-            LOGGER.info('{0}. Will abort operation'.format(err))
-            return {'repo': repo, 'status': 1, 'description': err}
-
-    except hglib.error.ServerError as exc:
-        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
-            cur_path, exc)
-        )
-        return {'repo': repo, 'status': 0, 'description': None}
-    finally:
-        if client is not None:
-            client.close()
-
-    try:
-        sum = client.summary()
-        cur_branch = sum['branch'.encode('utf-8')].decode()
-        out = client.outgoing(branch=cur_branch)
-        if out:
-            err = 'Outgoing changes in {0}. Aborting'.format(cur_path)
-            LOGGER.info('{0}. Will abort operation'.format(err))
-            return {'repo': repo, 'status': 1, 'description': err}
-
-        LOGGER.info('Pulling from {0}'.format(repo))
-        client.pull(update=True)
-
-        # If no changesets were given - update to default
-        if changesets is None:
-            heads = client.heads()
-            tip_changeset = None
-            for head in heads:
-                if head[3] != b'default':
-                    continue
-
-                tip_changeset = head[1]
-                break
-
-            client.update(rev=tip_changeset)
-            LOGGER.info('Updated {0} to {1} tip'.format(repo, tip_changeset))
-        elif repo in changesets:
-            client.update(rev=changesets[repo]['hash'])
-
-            LOGGER.info('Updated {0} to {1}'.format(
-                repo, changesets[repo]['hash']))
-
-        return {'repo': repo, 'status': 0, 'description': None}
-    except Exception as exc:
-        LOGGER.exception(
-            'Aborting directory {0} '
-            'PLEASE FIX. Reason:\n{1}\n'.format(cur_path, exc)
-        )
-
-        return {'repo': repo, 'status': 1, 'description': None}
-    finally:
-        client.close()
-
-
-def _git_pull(cur_path, repo, changesets):
-    client = None
-    try:
-        client = git.Repo(cur_path)
-        if client.is_dirty():
-            err = 'Pending changes in {0}. Aborting'.format(cur_path)
-            LOGGER.info('{0}. Will abort operation'.format(err))
-
-            return {'repo': repo, 'status': 1, 'description': err}
-
-    except Exception as exc:
-        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
-            cur_path, exc)
-        )
-        return {'repo': repo, 'status': 0, 'description': None}
-    finally:
-        if client is not None:
-            client.close()
-
-    try:
-        cur_branch = client.active_branch
-    except TypeError:
-        err = 'Failed to retrieve active_branch. Probably in detached ' \
-              'head in {0}'.format(cur_path)
-        LOGGER.exception('{0}'.format(err))
-
-        if changesets is not None:
-            return {'repo': repo, 'status': 1, 'description': err}
-        else:
-            cur_branch = 'master'
-            client.git.checkout(cur_branch)
-    finally:
-        client.close()
-
-    try:
-        outgoing = list(client.iter_commits(
-            'origin/{0}..{0}'.format(cur_branch))
-        )
-
-        if len(outgoing) > 0:
-            err = 'Outgoing changes in {0}. Aborting'.format(cur_path)
-            LOGGER.info('{0}. Will abort operation'.format(err))
-            return {'repo': repo, 'status': 1, 'description': err}
-
-        LOGGER.info('Pulling from {0}'.format(repo))
-        remote = client.remote(name='origin')
-        remote.pull(refspec=cur_branch)
-
-        if changesets is not None and repo in changesets:
-            client.git.checkout(changesets[repo]['hash'])
-
-            LOGGER.info('Checked out {0} to {1}'.format(
-                repo, changesets[repo]['hash']))
-
-        return {'repo': repo, 'status': 0, 'description': None}
-    except Exception as exc:
-        LOGGER.exception(
-            'Aborting directory {0} '
-            'PLEASE FIX. Reason:\n{1}\n'.format(cur_path, exc)
-        )
-
-        return {'repo': repo, 'status': 1, 'description': None}
-    finally:
-        client.close()
 
 
 def _pull_repo(args):
     repos_path, repo, changesets = args
     if changesets is not None and repo not in changesets:
         LOGGER.debug('Nothing to do for repo {0} because our application does '
-                    'not depend on it'.format(repo))
+                     'not depend on it'.format(repo))
         return {'repo': repo, 'status': 0, 'description': None}
 
     if repo == 'versions':
@@ -290,64 +159,58 @@ def _pull_repo(args):
 
     cur_path = '{0}/{1}'.format(repos_path, repo)
 
-    repo_type = None
+    client = None
     try:
-        client = git.Repo(cur_path)
-        client.close()
-
-        repo_type = 'git'
-    except git.exc.InvalidGitRepositoryError:
-        try:
-            client = hglib.open(cur_path)
-            client.close()
-
-            repo_type = 'mercurial'
-        except hglib.error.ServerError:
-            LOGGER.exception(
-                'The repository: {0} is '
-                'neither a git or a mercurial repository. Skipping it!'
-                '\nReason:\n'.format(cur_path)
-            )
-
-            return {
-                'repo': repo, 'status': 0,
-                'description': 'The repository is neither git or mercurial'
-            }
-
-    if repo_type == 'mercurial':
-        return _mercurial_pull(cur_path, repo, changesets)
-    elif repo_type == 'git':
-        return _git_pull(cur_path, repo, changesets)
-
-
-def _mercurial_clone(repos_path, repo, remote):
-    LOGGER.info('Cloning {0}..'.format(repo))
-
-    try:
-        hglib.clone(
-            '{0}/{1}'.format(remote, repo),
-            '{0}/{1}'.format(repos_path, repo)
-        )
+        client, err = stamp_utils.get_client(cur_path)
+        if client is None:
+            return {'repo': repo, 'status': 0, 'description': err}
     except Exception as exc:
-        err = 'Failed to clone {0} repository. ' \
-              'Description: {1}'.format(repo, exc.args)
-        return {'repo': repo, 'status': 1, 'description': err}
+        LOGGER.exception(
+            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'Reason:\n{1}\n'.format(cur_path, exc)
+        )
 
-    return {'repo': repo, 'status': 0, 'description': None}
-
-
-def _git_clone(repos_path, repo, remote):
-    LOGGER.info('Cloning {0}..'.format(repo))
+        return {'repo': repo, 'status': 1, 'description': None}
 
     try:
-        git.Repo().clone_from(
-            '{0}/{1}'.format(remote, repo),
-            '{0}/{1}'.format(repos_path, repo)
-        )
+        err = client.check_for_pending_changes()
+        if err:
+            LOGGER.info('{0}. Aborting pull operation '.format(err))
+            return {'repo': repo, 'status': 1, 'description': err}
+
     except Exception as exc:
-        err = 'Failed to clone {0} repository. ' \
-              'Description: {1}'.format(repo, exc.args)
-        return {'repo': repo, 'status': 1, 'description': err}
+        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
+            cur_path, exc)
+        )
+        return {'repo': repo, 'status': 0, 'description': None}
+
+    try:
+        err = client.check_for_outgoing_changes()
+        if err:
+            LOGGER.info('{0}. Aborting pull operation'.format(err))
+            return {'repo': repo, 'status': 1, 'description': err}
+
+        LOGGER.info('Pulling from {0}'.format(repo))
+        # If no changesets were given - update to master
+        if changesets is None:
+            rev = client.checkout_master()
+            client.pull()
+
+            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
+        elif repo in changesets:
+            client.pull()
+
+            rev = changesets[repo]['hash']
+            client.checkout(rev=rev)
+
+            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
+    except Exception as exc:
+        LOGGER.exception(
+            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'Reason:\n{1}\n'.format(cur_path, exc)
+        )
+
+        return {'repo': repo, 'status': 1, 'description': None}
 
     return {'repo': repo, 'status': 0, 'description': None}
 
@@ -365,10 +228,18 @@ def _clone_repo(args):
         return {'repo': repo, 'status': 1,
                 'description': 'remote is None. Will not clone'}
 
-    if vcs_type == 'mercurial':
-        return _mercurial_clone(repos_path, repo, remote)
-    elif vcs_type == 'git':
-        return _git_clone(repos_path, repo, remote)
+    LOGGER.info('Cloning {0}..'.format(repo))
+    try:
+        if vcs_type == 'mercurial':
+            stamp_utils.MercurialBackend.clone(repos_path, repo, remote)
+        elif vcs_type == 'git':
+            stamp_utils.GitBackend.clone(repos_path, repo, remote)
+    except Exception as exc:
+        err = 'Failed to clone {0} repository. ' \
+              'Description: {1}'.format(repo, exc.args)
+        return {'repo': repo, 'status': 1, 'description': err}
+
+    return {'repo': repo, 'status': 0, 'description': None}
 
 
 def _goto_version(repos_path, remotes, changesets=None):

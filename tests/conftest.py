@@ -11,6 +11,7 @@ from git import Repo
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import ver_stamp
+import stamp_utils
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
@@ -36,14 +37,14 @@ class FSAppLayoutFixture(object):
                 versions.strpath
             )
 
-            self.be_class = ver_stamp.MercurialVersionsStamper
+            self.be_class = ver_stamp.VersionControlStamper
         elif be_type == 'git':
             self._versions_backend = GitBackend(
                 remote_versions.strpath,
                 versions.strpath
             )
 
-            self.be_class = ver_stamp.GitVersionsStamper
+            self.be_class = ver_stamp.VersionControlStamper
 
     def __del__(self):
         del self._versions_backend
@@ -181,6 +182,9 @@ class FSAppLayoutFixture(object):
                 main_system_name,
                 app_name
             )
+
+        ver_path = stamp_utils.get_versions_repo_path(params['repos_path'])
+        params['versions_repo_path'] = ver_path
 
         return params
 

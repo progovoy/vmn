@@ -9,81 +9,83 @@ import importlib.machinery
 import types
 
 sys.path.append('{0}/'.format(os.path.dirname(__file__)))
-from ver_stamp import VersionsBackend
+from ver_stamp import IVersionsStamper
+import stamp_utils
 
 LOGGER = logging.getLogger()
 
 
 def _find_version(versrions_client, name):
     tags = versrions_client.tags()
-    root = versrions_client.root().decode()
+    root = versrions_client.root()
 
     for tag in tags:
-        if not tag[0].decode().startswith(name):
+        if not tag.startswith(name):
             continue
 
-        ver = tag[0].decode().split('{0}_'.format(name))
-        if len(ver) == 2:
-            ver_path = None
-            for path in versrions_client.status(change=tag[0]):
-                if not path[1].decode().endswith(os.sep + 'version.py'):
-                    continue
+        ver = tag.split('{0}_'.format(name))
+        if len(ver) != 2:
+            continue
 
-                ver_path = path
-                break
+        ver_path = None
+        for path in versrions_client.status(tag=tag):
+            if not path.endswith(os.sep + 'version.py'):
+                continue
 
-            if ver_path is None:
-                raise RuntimeError(
-                    'version.py not found for tag {0}. '
-                    'This means that when tagged version.py was '
-                    'not changed and this is currently not '
-                    'supported'.format(tag[0])
-                )
+            ver_path = path
+            break
 
-            app_ver_path = os.path.join(
-                root, *(ver_path[1].decode().split('/'))
+        if ver_path is None:
+            raise RuntimeError(
+                'version.py not found for tag {0}. This can be due to a '
+                'manual tagging in versions repository. This is not '
+                'recommended! Now you can remove all the manual tags '
+                'from the versions repository'.format(tag)
             )
 
-            loader = importlib.machinery.SourceFileLoader(
-                'version', app_ver_path)
-            mod_ver = types.ModuleType(loader.name)
-            try:
-                loader.exec_module(mod_ver)
-            except FileNotFoundError:
-                raise RuntimeError(
-                    'version.py file not found for tag {0}. '
-                    'Check how this file might have been '
-                    'removed'.format(tag[0])
-                )
+        app_ver_path = os.path.join(
+            root, *(ver_path.split('/'))
+        )
 
-            template = None
-            try:
-                template = mod_ver.template
-            except AttributeError:
-                pass
+        loader = importlib.machinery.SourceFileLoader(
+            'version', app_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        try:
+            loader.exec_module(mod_ver)
+        except FileNotFoundError:
+            raise RuntimeError(
+                'version.py file not found for tag {0}. '
+                'Check how this file might have been '
+                'removed'.format(tag[0])
+            )
 
-            if template is not None:
-                ver_format, octats_count = VersionsBackend.parse_template(
-                    template
-                )
+        template = None
+        try:
+            template = mod_ver.template
+        except AttributeError:
+            pass
 
-                return VersionsBackend.get_formatted_version(
-                    ver[1], ver_format, octats_count
-                )
-            else:
-                return ver[1]
+        if template is not None:
+            ver_format, octats_count = IVersionsStamper.parse_template(
+                template
+            )
+
+            return IVersionsStamper.get_formatted_version(
+                ver[1], ver_format, octats_count
+            )
         else:
-            continue
+            return ver[1]
 
     return None
 
 
 def get_version(repos_path, app_name):
-    repos_path = os.path.abspath(repos_path)
-
-    versions_client = hglib.open('{0}/{1}'.format(repos_path, 'versions'))
-    versions_client.revert([], all=True)
-    versions_client.pull(update=True)
+    versions_path = stamp_utils.get_versions_repo_path(repos_path)
+    versions_client, _ = stamp_utils.get_client(
+        versions_path,
+        revert=True,
+        pull=True
+    )
 
     return _find_version(versions_client, app_name)
 

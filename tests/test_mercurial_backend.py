@@ -171,7 +171,7 @@ def test_stamp_version(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    be = app_layout.be_class(params)
+    be = ver_stamp.VersionControlStamper(params)
     be.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -204,7 +204,7 @@ def test_stamp_main_version(app_layout):
         main_system_name='MainSystem'
     )
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -233,7 +233,7 @@ def test_stamp_main_version(app_layout):
         main_system_name='MainSystem'
     )
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -258,7 +258,7 @@ def test_stamp_main_version(app_layout):
         main_system_name='MainSystem'
     )
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -291,10 +291,9 @@ def test_starting_version(app_layout):
             repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
         )
 
-    params = app_layout.get_be_params(
-        'test_app1', 'patch', '1.9.5.0')
+    params = app_layout.get_be_params('test_app1', 'patch', '1.9.5.0')
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -325,7 +324,7 @@ def test_find_version(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -344,7 +343,7 @@ def test_find_version(app_layout):
     for release_mode in release_modes:
         params = app_layout.get_be_params(
             'test_app1', release_mode)
-        mbe = app_layout.be_class(params)
+        mbe = ver_stamp.VersionControlStamper(params)
         mbe.allocate_backend()
         changesets = ver_stamp.HostState.get_current_changeset(
             app_layout.versions_base_dir
@@ -362,7 +361,7 @@ def test_find_version(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -392,7 +391,7 @@ def test_output(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -420,7 +419,7 @@ def test_find_recurring_version(app_layout):
         )
 
     params = app_layout.get_be_params('test_app1', 'patch')
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -434,7 +433,7 @@ def test_find_recurring_version(app_layout):
 
     app_layout.remove_app_version_file(params['app_version_file'])
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -470,7 +469,7 @@ def test_version_info(app_layout):
         custom_repos=('repo2',)
     )
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     changesets = ver_stamp.HostState.get_current_changeset(
         app_layout.versions_base_dir
@@ -518,7 +517,7 @@ def test_version_template(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == '1.0.3'
@@ -526,7 +525,7 @@ def test_version_template(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch', version_template='ap{0}xx{0}XX{1}AC@{0}{2}{3}C')
 
-    mbe = app_layout.be_class(params)
+    mbe = ver_stamp.VersionControlStamper(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == 'ap1xxXX0AC@36C'
