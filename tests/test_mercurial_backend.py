@@ -467,7 +467,7 @@ def test_version_info(app_layout):
     pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
     app_layout.add_version_info_file(
         '{0}/version_info.py'.format(dir_path),
-        custom_repos=('repo1',)
+        custom_repos=('repo2',)
     )
 
     mbe = app_layout.be_class(params)
@@ -484,18 +484,33 @@ def test_version_info(app_layout):
 
     repo_changeset = None
     for k,v in changesets.items():
-        if k != 'repo1':
+        if k != 'repo2':
             continue
 
         repo_changeset = v['hash']
         break
 
-    assert 'repo1' in ver.changesets
+    assert 'repo2' in ver.changesets
     assert len(ver.changesets.keys()) == 1
-    assert ver.changesets['repo1']['hash'] == repo_changeset
+    assert ver.changesets['repo2']['hash'] == repo_changeset
     assert ver._version == current_version
 
     mbe.publish(current_version)
+
+    app_layout.write_file(
+        repo_name='repo1', file_relative_path='a/b/D.txt', content='hello'
+    )
+
+    changesets = ver_stamp.HostState.get_current_changeset(
+        app_layout.versions_base_dir
+    )
+
+    found_version = mbe.find_version(changesets)
+    assert found_version == current_version
+
+    found_version = mbe.find_version({})
+    assert found_version == None
+
     mbe.deallocate_backend()
 
 
