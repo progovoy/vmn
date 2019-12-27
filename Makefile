@@ -1,4 +1,4 @@
-NAME=ver_stamp_py3
+NAME=ver_stamp
 
 .PHONY: build _build check-local dist check docs major _major minor _minor patch _patch _debug _publish check-local
 
