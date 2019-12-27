@@ -14,21 +14,20 @@ A simple package for auto increasing version numbers of any application agnostic
 <u>First thing first</u>
 
 ```sh
-apt install mercurial
 mkdir remote_versions
 cd remote_versions
-hg init
+git init
 cd ..
-hg clone ./remote_versions/ ./versions
+git clone ./remote_versions/ ./versions
 
 export VER_STAMP_VERSIONS_PATH=${PWD}/versions
 ```
 
-Basicaly we've created a versions repository where all of `our_project` versioning history will be saved. There is a WIP to move to a git solution. But the concept will stay exactly the same
+We've created a `versions` repository where all of `our_project` versioning history will be saved.
 
 ### ver-stamp
 
-Let's say that we have our project stored at a `git` repository called `our_project` and it's path is `/path/to/our_repos/our_project`
+Say that we have our project stored at a `git` repository called `our_project` and it's path is `/path/to/our_repos/our_project`
 
 * Run the following command:
 
@@ -174,4 +173,3 @@ If you want to contribute to version-stamp development:
 This project is just a small side project that I've started, decided to share it. We'll see if it will ramp up.
 
 We will thank you for every contribution :)
-
