@@ -46,7 +46,7 @@ The `ver-stamp` tool will create the `version.py` file inside the `versions` rep
 
 **Illustration:**
 
-![ver_stamp](https://user-images.githubusercontent.com/5350434/55154276-09d0d480-515d-11e9-8add-f2cb42da3666.jpg)
+![ver_stamp](https://user-images.githubusercontent.com/5350434/71528249-ab04db00-28e7-11ea-9226-c3c50aa49b62.jpg)
 
 
 A typical contents of the `version.py` file would be:
