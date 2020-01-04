@@ -286,7 +286,7 @@ def get_client(path, revert=False, pull=False):
             client.close()
 
             be_type = 'mercurial'
-        except hglib.error.ServerError as exc:
+        except hglib.error.ServerError:
             err = 'versions repository path: {0} is not a functional git ' \
                   'or mercurial repository.'.format(path)
             return None, err
