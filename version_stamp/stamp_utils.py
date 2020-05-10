@@ -4,6 +4,7 @@ import os
 import hglib
 import git
 import logging
+from pathlib import Path
 
 
 class VersionControlBackend(object):
@@ -44,6 +45,9 @@ class VersionControlBackend(object):
         raise NotImplementedError()
 
     def checkout(self, rev):
+        raise NotImplementedError()
+
+    def parents(self):
         raise NotImplementedError()
 
 
@@ -134,6 +138,11 @@ class MercurialBackend(VersionControlBackend):
     def checkout(self, rev):
         self._be.update(rev=rev)
 
+    def parents(self):
+        parents = []
+        for p in self._be.parents():
+            parents.append(p.rev)
+
     @staticmethod
     def clone(repos_path, repo, remote):
         hglib.clone(
@@ -146,7 +155,7 @@ class GitBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
         VersionControlBackend.__init__(self)
 
-        self._be = git.Repo(repo_path)
+        self._be = git.Repo(repo_path, search_parent_directories=True)
         self._origin = self._be.remote(name='origin')
 
         if len(self._be.heads) == 0:
@@ -241,6 +250,13 @@ class GitBackend(VersionControlBackend):
     def checkout(self, rev):
         self._be.git.checkout(rev)
 
+    def parents(self):
+        parents = []
+        for p in self._be.head.commit.parents:
+            parents.append(p.hexsha)
+
+        return tuple(parents)
+
     @staticmethod
     def clone(repos_path, repo, remote):
         git.Repo().clone_from(
@@ -249,9 +265,71 @@ class GitBackend(VersionControlBackend):
         )
 
 
+class HostState(object):
+    @staticmethod
+    def _get_mercurial_changeset(path):
+        try:
+            client = hglib.open(path)
+        except hglib.error.ServerError as exc:
+            logging.getLogger().error('Skipping "{0}" directory reason:\n{1}\n'.format(
+                path, exc)
+            )
+            return None
+
+        revision = client.parents()
+        if revision is None:
+            revision = client.log()
+
+            if revision is None:
+                client.close()
+                return None
+
+        changeset = revision[0][1]
+
+        client.close()
+        return changeset.decode('utf-8')
+
+    @staticmethod
+    def get_changeset(path):
+        try:
+            client = git.Repo(path, search_parent_directories=True)
+        except git.exc.InvalidGitRepositoryError:
+            return HostState._get_mercurial_changeset(path), 'mercurial'
+
+        try:
+            hash = client.head.commit.hexsha
+        except Exception:
+            return None
+        finally:
+            client.close()
+
+        return hash, 'git'
+
+    @staticmethod
+    def get_current_changeset(paths):
+        changesets = {}
+        for path,lst in paths.items():
+            repos = [
+                name for name in lst
+                if os.path.isdir(os.path.join(path, name))
+            ]
+
+            for repo in repos:
+                changeset = HostState.get_changeset(os.path.join(path, repo))
+                if changeset is None:
+                    continue
+
+                changesets[repo] = {
+                    'hash': changeset[0],
+                    'vcs_type': changeset[1],
+                }
+
+        return changesets
+
+
 def init_stamp_logger():
-    LOGGER = logging.getLogger()
-    LOGGER.setLevel(logging.DEBUG)
+    LOGGER = logging.getLogger('vmn')
+    LOGGER.setLevel(logging.ERROR)
     format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
              '%(message)s'
 
@@ -261,14 +339,16 @@ def init_stamp_logger():
     cons_handler.setFormatter(formatter)
     LOGGER.addHandler(cons_handler)
 
+    return LOGGER
 
-def get_versions_repo_path(repos_path):
+
+def get_versions_repo_path(root_path):
     versions_repo_path = os.getenv('VER_STAMP_VERSIONS_PATH', None)
     if versions_repo_path is not None:
         versions_repo_path = os.path.abspath(versions_repo_path)
     else:
-        versions_repo_path = os.path.join(repos_path, 'versions')
-        versions_repo_path = os.path.abspath(versions_repo_path)
+        versions_repo_path = os.path.abspath('{0}/.vmn/versions'.format(root_path))
+        Path(versions_repo_path).mkdir(parents=True, exist_ok=True)
 
     return versions_repo_path
 
@@ -276,7 +356,7 @@ def get_versions_repo_path(repos_path):
 def get_client(path, revert=False, pull=False):
     be_type = None
     try:
-        client = git.Repo(path)
+        client = git.Repo(path, search_parent_directories=True)
         client.close()
 
         be_type = 'git'
@@ -287,7 +367,7 @@ def get_client(path, revert=False, pull=False):
 
             be_type = 'mercurial'
         except hglib.error.ServerError:
-            err = 'versions repository path: {0} is not a functional git ' \
+            err = 'repository path: {0} is not a functional git ' \
                   'or mercurial repository.'.format(path)
             return None, err
 
