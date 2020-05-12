@@ -329,7 +329,7 @@ class HostState(object):
 
 def init_stamp_logger():
     LOGGER = logging.getLogger('vmn')
-    LOGGER.setLevel(logging.ERROR)
+    LOGGER.setLevel(logging.DEBUG)
     format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
              '%(message)s'
 
