@@ -280,14 +280,32 @@ class VersionControlStamper(IVersionsStamper):
     def _get_underlying_services(self):
         path = os.path.join(
             self._backend.root(),
-            self._main_system_name
+            '.vmn',
+            self._main_system_name,
         )
 
         underlying_apps = {}
-        for dir in os.listdir(path):
-            with open(self._app_version_file) as f:
+        if os.path.isfile(self._main_version_file):
+            with open(self._main_version_file, 'r') as f:
                 data = yaml.safe_load(f)
-                underlying_apps['{0}/{1}'.format(path, dir)] = data['_version']
+                underlying_apps = data['services']
+
+        for item in os.listdir(path):
+            cur_path = os.path.join(path, item, 'ver.yml')
+            if os.path.isfile(cur_path):
+                with open(cur_path) as f:
+                    data = yaml.safe_load(f)
+                    if data['name'] not in underlying_apps:
+                        LOGGER.info(
+                            'Adding {0} with version {1} as an underlying '
+                            ' service for {2}'.format(
+                                self._name,
+                                data['_version'],
+                                self._main_system_name
+                            )
+                        )
+
+                    underlying_apps[data['name']] = data['_version']
 
         return underlying_apps
 
