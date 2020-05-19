@@ -50,6 +50,12 @@ class VersionControlBackend(object):
     def parents(self):
         raise NotImplementedError()
 
+    def remote(self):
+        raise NotImplementedError()
+
+    def changeset(self):
+        raise NotImplementedError()
+
 
 class MercurialBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
@@ -140,8 +146,39 @@ class MercurialBackend(VersionControlBackend):
 
     def parents(self):
         parents = []
-        for p in self._be.parents():
-            parents.append(p.rev)
+        for p in self._be.parents(rev=self.changeset()):
+            parents.append(p[1].decode('utf-8'))
+
+        # check if tag commit
+        if len(parents) == 1:
+            desc = self._be.log()[0].desc.decode('utf-8')
+            if desc.startswith('Added tag '):
+                parent = parents[0]
+                parents = []
+                for p in self._be.parents(rev=parent):
+                    parents.append(p[1].decode('utf-8'))
+
+        return tuple(parents)
+
+    def remote(self):
+        remotes = []
+        for k, remote in self._be.paths().items():
+            remotes.append(remote.decode('utf-8'))
+
+        return os.path.relpath(remotes[0], self.root())
+
+    def changeset(self):
+        revision = self._be.parents()
+        if revision is None:
+            revision = self._be.log()
+
+            if revision is None:
+                self._be.close()
+                return None
+
+        changeset = revision[0][1]
+
+        return changeset
 
     @staticmethod
     def clone(repos_path, repo, remote):
@@ -212,7 +249,7 @@ class GitBackend(VersionControlBackend):
             found_tag = _tag
             break
 
-        return list(found_tag.commit.stats.files)
+        return tuple(found_tag.commit.stats.files)
 
     def tags(self):
         tags = []
@@ -232,7 +269,7 @@ class GitBackend(VersionControlBackend):
 
     def check_for_outgoing_changes(self):
         for branch in self._be.branches:
-            outgoing = list(self._be.iter_commits(
+            outgoing = tuple(self._be.iter_commits(
                 'origin/{0}..{0}'.format(branch))
             )
 
@@ -257,6 +294,12 @@ class GitBackend(VersionControlBackend):
 
         return tuple(parents)
 
+    def remote(self):
+        return tuple(self._origin.urls)[0]
+
+    def changeset(self):
+        return self._be.head.commit.hexsha
+
     @staticmethod
     def clone(repos_path, repo, remote):
         git.Repo().clone_from(
@@ -271,7 +314,7 @@ class HostState(object):
         try:
             client = hglib.open(path)
         except hglib.error.ServerError as exc:
-            logging.getLogger().error('Skipping "{0}" directory reason:\n{1}\n'.format(
+            logging.getLogger().info('Skipping "{0}" directory reason:\n{1}\n'.format(
                 path, exc)
             )
             return None
@@ -285,25 +328,52 @@ class HostState(object):
                 return None
 
         changeset = revision[0][1]
+        try:
+            remotes = []
+            for k, remote in client.paths().items():
+                remotes.append(remote.decode('utf-8'))
+
+            remote = remotes[0]
+        except Exception as exc:
+            logging.getLogger().info(
+                'Skipping "{0}" directory reason:\n{1}\n'.format(
+                    path, exc)
+            )
+            client.close()
+            return None
 
         client.close()
-        return changeset.decode('utf-8')
+        return changeset.decode('utf-8'), remote
 
     @staticmethod
     def get_changeset(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError:
-            return HostState._get_mercurial_changeset(path), 'mercurial'
+        except git.exc.InvalidGitRepositoryError as exc:
+            ret = HostState._get_mercurial_changeset(path)
+            if ret is None:
+                logging.getLogger().info(
+                    'Skipping "{0}" directory reason:\n{1}\n'.format(
+                        path, exc)
+                )
+
+                return None
+
+            return (*ret, 'mercurial')
 
         try:
             hash = client.head.commit.hexsha
-        except Exception:
+            remote = tuple(client.remote('origin').urls)[0]
+        except Exception as exc:
+            logging.getLogger().info(
+                'Skipping "{0}" directory reason:\n{1}\n'.format(
+                    path, exc)
+            )
             return None
         finally:
             client.close()
 
-        return hash, 'git'
+        return hash, remote, 'git'
 
     @staticmethod
     def get_current_changeset(paths):
@@ -321,7 +391,8 @@ class HostState(object):
 
                 changesets[repo] = {
                     'hash': changeset[0],
-                    'vcs_type': changeset[1],
+                    'remote': changeset[1],
+                    'vcs_type': changeset[2],
                 }
 
         return changesets
