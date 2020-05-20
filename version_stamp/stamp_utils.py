@@ -387,7 +387,7 @@ class HostState(object):
         return hash, remote, 'git'
 
     @staticmethod
-    def get_current_changeset(paths):
+    def get_current_changeset(paths, root):
         changesets = {}
         for path,lst in paths.items():
             repos = [
@@ -396,11 +396,12 @@ class HostState(object):
             ]
 
             for repo in repos:
-                changeset = HostState.get_changeset(os.path.join(path, repo))
+                joined_path = os.path.join(path, repo)
+                changeset = HostState.get_changeset(joined_path)
                 if changeset is None:
                     continue
 
-                changesets[repo] = {
+                changesets[os.path.relpath(joined_path, root)] = {
                     'hash': changeset[0],
                     'remote': changeset[1],
                     'vcs_type': changeset[2],
