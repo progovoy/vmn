@@ -583,7 +583,8 @@ class VersionControlStamper(IVersionsStamper):
         return version, current_changesets, hist_changesets
 
 
-def get_version(versions_be_ifc, current_changesets, params):
+def get_version(versions_be_ifc, params):
+    current_changesets = params['changesets']
     ver = versions_be_ifc.find_version(current_changesets)
     if ver is not None:
         # Good we have found an existing version matching
@@ -686,64 +687,7 @@ def stamp(params):
         LOGGER.info('{0}. Exiting'.format(err))
         return
 
-    root_path = os.path.join(be.root())
-    app_path = os.path.join(
-        root_path,
-        '.vmn',
-        params['name'],
-        'ver.yml'
-    )
-    app_dir_path = os.path.dirname(app_path)
-    params['root_path'] = root_path
-    params['app_path'] = app_path
-    params['repo_name'] = os.path.basename(root_path)
-
-    main_system_name = params['name'].split('/')
-    if len(main_system_name) == 1:
-        main_system_name = None
-    else:
-        main_system_name = '/'.join(main_system_name[:-1])
-
-    main_version_file = None
-    if main_system_name is not None:
-        main_version_file = os.path.join(
-            root_path,
-            '.vmn',
-            main_system_name,
-            'root_ver.yml'
-        )
-
-    params['main_system_name'] = main_system_name
-    params['main_version_file'] = main_version_file
-
-    if not os.path.isfile(app_path):
-        pathlib.Path(app_dir_path).mkdir(parents=True, exist_ok=True)
-        default_repos_path = os.path.join(root_path, '../')
-        changesets = HostState.get_current_changeset(
-            {default_repos_path: os.listdir(default_repos_path)}
-        )
-        params['version_template'] = '{0}.{1}.{2}'
-        params['root_version_template'] = '{0}.{1}.{2}'
-        params["extra_info"] = False
-    else:
-        with open(app_path) as f:
-            data = yaml.safe_load(f)
-            params['version_template'] = data["conf"]["template"]
-            params["extra_info"] = data["conf"]["extra_info"]
-
-            params['root_version_template'] = None
-            if main_version_file is not None and os.path.isfile(main_version_file):
-                with open(main_version_file) as root_f:
-                    root_data = yaml.safe_load(root_f)
-                    params['root_version_template'] = root_data["conf"]["template"]
-
-            deps = {}
-            for rel_path, dep in data["conf"]["deps"].items():
-                deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
-
-            changesets = HostState.get_current_changeset(deps)
-
-    lock = LockFile(os.path.join(root_path, 'vmn.lock'))
+    lock = LockFile(os.path.join(params['root_path'], 'vmn.lock'))
     with lock:
         LOGGER.info('Locked: {0}'.format(lock.path))
 
@@ -751,7 +695,7 @@ def stamp(params):
 
         be.allocate_backend()
 
-        version = get_version(be, changesets, params)
+        version = get_version(be, params)
         LOGGER.info(version)
 
         be.deallocate_backend()
@@ -761,9 +705,385 @@ def stamp(params):
     return 0
 
 
-def _enhance_params(params):
+def goto_version(params, version):
+    be, err = stamp_utils.get_client(CWD)
+    if err:
+        LOGGER.error('{0}. Exiting'.format(err))
+        return
+
+    if not os.path.isdir('{0}/.vmn'.format(be.root())):
+        LOGGER.info('vmn tracking is not yet initialized')
+        return
+
+    err = be.check_for_pending_changes()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return
+
+    err = be.check_for_outgoing_changes()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return
+
+    with open(params['app_path']) as f:
+        data = yaml.safe_load(f)
+        deps = {}
+        for rel_path, dep in data["conf"]["deps"].items():
+            deps[os.path.join(params['root_path'], rel_path)] = dep
+
+    if version is None:
+        for path, dep in deps:
+            _goto_version(path, dep)
+
+    root = versions_client.root()
+    tags = versions_client.tags()
+    tip_app_tag = None
+    tip_app_tag_index = None
+    app_tag = None
+    app_tag_index = None
+
+    for idx, tag in enumerate(tags):
+        if not tag.startswith('{0}_'.format(app_name)):
+            continue
+
+        if tip_app_tag is None:
+            tip_app_tag = tag
+            tip_app_tag_index = idx
+
+        tag_ver = tag.split('{0}_'.format(app_name))[1]
+        if app_version == tag_ver:
+            app_tag = tag
+            app_tag_index = idx
+            break
+
+    if app_tag is None:
+        LOGGER.info('Tag with app: {0} with version: {1} was not found'.format(
+            app_name, app_version
+        ))
+        return 1
+
+    app_ver_path = None
+    paths = versions_client.status(tag=tip_app_tag)
+    for path in paths:
+        if not path.endswith('/main_version.py'):
+            continue
+
+        # Retrieve the tag of the service
+        app_tag = tags[app_tag_index - 1]
+        res = re.search('(.+)_(.+)', app_tag)
+        app_name = res.groups()[0]
+        app_version = res.groups()[1]
+
+        main_ver_path = '{0}/{1}'.format(root, path)
+
+        loader = importlib.machinery.SourceFileLoader(
+            'main_version', main_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        loader.exec_module(mod_ver)
+        services = mod_ver.services
+        app_ver_path = '{0}/{1}'.format(root, services[app_name]['path'])
+
+        break
+
+    for path in paths:
+        if app_ver_path is None:
+            if not path.endswith('/version.py'):
+                continue
+
+            app_ver_path = '{0}/{1}'.format(root, path)
+
+        app_ver_dir_path = os.path.dirname(app_ver_path)
+
+        loader = importlib.machinery.SourceFileLoader(
+            'version', app_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        loader.exec_module(mod_ver)
+        current_changesets = mod_ver.changesets
+
+        if tip_app_tag_index == app_tag_index:
+            _goto_version(
+                repos_path,
+                {'git': git_remote, 'mercurial': mercurial_remote},
+                current_changesets,
+            )
+            return 0
+
+        app_hist_ver_path = '{0}/{1}'.format(
+            app_ver_dir_path, '_version_history.py')
+
+        if not os.path.isfile(app_hist_ver_path):
+            LOGGER.error(
+                'Missing history version file: {0}'.format(app_hist_ver_path)
+            )
+            return 1
+
+        loader = importlib.machinery.SourceFileLoader(
+            '_version_history', app_hist_ver_path)
+        mod_ver = types.ModuleType(loader.name)
+        loader.exec_module(mod_ver)
+        hist_changesets = mod_ver.changesets
+
+        if app_version not in hist_changesets:
+            LOGGER.info(
+                'App: {0} with version: {1} was not found in hist file'.format(
+                    app_name, app_version))
+            return 1
+
+        _goto_version(
+            repos_path,
+            {'git': git_remote, 'mercurial': mercurial_remote},
+            hist_changesets[app_version],
+        )
+
+        return 0
+
+    LOGGER.info('App: {0} with version: {1} was not found'.format(
+        app_name, app_version
+    ))
+
+    return 1
+
+
+def _pull_repo(args):
+    repos_path, repo, changesets = args
+    if changesets is not None and repo not in changesets:
+        LOGGER.debug('Nothing to do for repo {0} because our application does '
+                     'not depend on it'.format(repo))
+        return {'repo': repo, 'status': 0, 'description': None}
+
+    if repo == 'versions':
+        return {'repo': repo, 'status': 0, 'description': None}
+
+    cur_path = '{0}/{1}'.format(repos_path, repo)
+
+    client = None
+    try:
+        client, err = stamp_utils.get_client(cur_path)
+        if client is None:
+            return {'repo': repo, 'status': 0, 'description': err}
+    except Exception as exc:
+        LOGGER.exception(
+            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'Reason:\n{1}\n'.format(cur_path, exc)
+        )
+
+        return {'repo': repo, 'status': 1, 'description': None}
+
+    try:
+        err = client.check_for_pending_changes()
+        if err:
+            LOGGER.info('{0}. Aborting pull operation '.format(err))
+            return {'repo': repo, 'status': 1, 'description': err}
+
+    except Exception as exc:
+        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
+            cur_path, exc)
+        )
+        return {'repo': repo, 'status': 0, 'description': None}
+
+    try:
+        err = client.check_for_outgoing_changes()
+        if err:
+            LOGGER.info('{0}. Aborting pull operation'.format(err))
+            return {'repo': repo, 'status': 1, 'description': err}
+
+        LOGGER.info('Pulling from {0}'.format(repo))
+        # If no changesets were given - update to master
+        if changesets is None:
+            rev = client.checkout_master()
+            client.pull()
+
+            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
+        elif repo in changesets:
+            client.pull()
+
+            rev = changesets[repo]['hash']
+            client.checkout(rev=rev)
+
+            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
+    except Exception as exc:
+        LOGGER.exception(
+            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'Reason:\n{1}\n'.format(cur_path, exc)
+        )
+
+        return {'repo': repo, 'status': 1, 'description': None}
+
+    return {'repo': repo, 'status': 0, 'description': None}
+
+
+def _clone_repo(args):
+    repos_path, repo, remote, vcs_type = args
+
+    dirs = [name for name in os.listdir(repos_path)
+            if os.path.isdir(os.path.join(repos_path, name))]
+
+    if repo in dirs:
+        return {'repo': repo, 'status': 0, 'description': None}
+
+    if remote is None:
+        return {'repo': repo, 'status': 1,
+                'description': 'remote is None. Will not clone'}
+
+    LOGGER.info('Cloning {0}..'.format(repo))
+    try:
+        if vcs_type == 'mercurial':
+            stamp_utils.MercurialBackend.clone(repos_path, repo, remote)
+        elif vcs_type == 'git':
+            stamp_utils.GitBackend.clone(repos_path, repo, remote)
+    except Exception as exc:
+        err = 'Failed to clone {0} repository. ' \
+              'Description: {1}'.format(repo, exc.args)
+        return {'repo': repo, 'status': 1, 'description': err}
+
+    return {'repo': repo, 'status': 0, 'description': None}
+
+
+def _goto_version(repos_path, remotes, changesets=None):
+    repos_path = os.path.abspath(repos_path)
+    args = [[repos_path, name, changesets] for name in os.listdir(repos_path)
+             if os.path.isdir(os.path.join(repos_path, name))]
+
+    with Pool(min(len(args), 20)) as p:
+        results = p.map(_pull_repo, args)
+
+    err = False
+    for res in results:
+        if res['status'] == 1:
+            err = True
+            if res['repo'] is None and res['description'] is None:
+                continue
+
+            msg = 'Failed to pull '
+            if res['repo'] is not None:
+                msg += 'from {0} '.format(res['repo'])
+            if res['description'] is not None:
+                msg += 'because {0}'.format(res['description'])
+
+            LOGGER.warning(msg)
+
+    if err:
+        raise RuntimeError(
+            'Failed to pull all the required repos. See log above'
+        )
+
+    if changesets is None:
+        return
+
+    args = [[repos_path, name, remotes[changesets[name]['vcs_type']],
+             changesets[name]['vcs_type']] for name in changesets.keys()]
+
+    with Pool(min(len(args), 10)) as p:
+        results = p.map(_clone_repo, args)
+
+    err = False
+    for res in results:
+        if res['status'] == 1:
+            err = True
+            if res['repo'] is None and res['description'] is None:
+                continue
+
+            msg = 'Failed to clone '
+            if res['repo'] is not None:
+                msg += 'from {0} '.format(res['repo'])
+            if res['description'] is not None:
+                msg += 'because {0}'.format(res['description'])
+
+            LOGGER.warning(msg)
+
+    if err:
+        raise RuntimeError(
+            'Failed to clone all the required repos. See log above'
+        )
+
+
+def _build_world(params):
+    if 'name' not in params:
+        return
+
     params['name'] = os.path.split(params['name'])
     params['name'] = os.path.join(*params['name'])
+
+    be, err = stamp_utils.get_client(CWD)
+    if err:
+        LOGGER.error('{0}. Exiting'.format(err))
+        return
+
+    root_path = os.path.join(be.root())
+    app_path = os.path.join(
+        root_path,
+        '.vmn',
+        params['name'],
+        'ver.yml'
+    )
+    hist_path = os.path.join(
+        root_path,
+        '.vmn',
+        params['name'],
+        '_history.yml'
+    )
+    params['root_path'] = root_path
+    params['app_path'] = app_path
+    params['hist_path'] = hist_path
+    params['repo_name'] = os.path.basename(root_path)
+
+    main_system_name = params['name'].split('/')
+    if len(main_system_name) == 1:
+        main_system_name = None
+    else:
+        main_system_name = '/'.join(main_system_name[:-1])
+
+    main_version_file = None
+    root_hist_path = None
+    if main_system_name is not None:
+        main_version_file = os.path.join(
+            root_path,
+            '.vmn',
+            main_system_name,
+            'root_ver.yml'
+        )
+        root_hist_path = os.path.join(
+            root_path,
+            '.vmn',
+            main_system_name,
+            '_root_history.yml'
+        )
+
+    params['main_system_name'] = main_system_name
+    params['main_version_file'] = main_version_file
+    params['root_hist_path'] = root_hist_path
+
+    default_repos_path = os.path.join(root_path, '../')
+    changesets = HostState.get_current_changeset(
+        {default_repos_path: os.listdir(default_repos_path)}
+    )
+    params['version_template'] = '{0}.{1}.{2}'
+    params['root_version_template'] = '{0}.{1}.{2}'
+    params["extra_info"] = False
+    params['changesets'] = changesets
+
+    if not os.path.isfile(app_path):
+        return
+
+    with open(app_path, 'r') as f:
+        data = yaml.safe_load(f)
+        params['version_template'] = data["conf"]["template"]
+        params["extra_info"] = data["conf"]["extra_info"]
+
+        params['root_version_template'] = None
+        if main_version_file is not None and os.path.isfile(
+                main_version_file):
+            with open(main_version_file) as root_f:
+                root_data = yaml.safe_load(root_f)
+                params['root_version_template'] = root_data["conf"][
+                    "template"]
+
+        deps = {}
+        for rel_path, dep in data["conf"]["deps"].items():
+            deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
+
+        changesets = HostState.get_current_changeset(deps)
+        params['changesets'] = changesets
 
 
 def main(command_line=None):
@@ -794,15 +1114,29 @@ def main(command_line=None):
         'name', help="The application's name"
     )
 
+    pgoto = subprasers.add_parser('goto', help='go to version')
+    pgoto.add_argument(
+        'name',
+        help="The application's name"
+    )
+    pgoto.add_argument(
+        'version',
+        default=None,
+        help="The version to go to"
+    )
+
     args = parser.parse_args(command_line)
     params = copy.deepcopy(vars(args))
+    _build_world(params)
+
     if args.command == 'init':
         init()
     if args.command == 'show':
         show(args.name)
     elif args.command == 'stamp':
-        _enhance_params(params)
         stamp(params)
+    elif args.command == 'goto':
+        goto_version(params, args.version)
 
 
 if __name__ == '__main__':
