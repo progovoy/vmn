@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 class VersionControlBackend(object):
-    def __init__(self):
+    def __init__(self, type):
+        self._type = type
         pass
 
     def __del__(self):
@@ -56,10 +57,13 @@ class VersionControlBackend(object):
     def changeset(self):
         raise NotImplementedError()
 
+    def type(self):
+        return self._type
+
 
 class MercurialBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
-        VersionControlBackend.__init__(self)
+        VersionControlBackend.__init__(self, 'mercurial')
 
         self._be = hglib.open(repo_path)
 
@@ -165,7 +169,10 @@ class MercurialBackend(VersionControlBackend):
         for k, remote in self._be.paths().items():
             remotes.append(remote.decode('utf-8'))
 
-        return os.path.relpath(remotes[0], self.root())
+        if os.path.isdir(remotes[0]):
+            return os.path.relpath(remotes[0], self.root())
+
+        return remotes[0]
 
     def changeset(self):
         revision = self._be.parents()
@@ -190,7 +197,7 @@ class MercurialBackend(VersionControlBackend):
 
 class GitBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
-        VersionControlBackend.__init__(self)
+        VersionControlBackend.__init__(self, 'git')
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self._origin = self._be.remote(name='origin')
@@ -333,7 +340,11 @@ class HostState(object):
             for k, remote in client.paths().items():
                 remotes.append(remote.decode('utf-8'))
 
-            remote = remotes[0]
+            if os.path.isdir(remotes[0]):
+                remote = os.path.relpath(remotes[0], client.root().decode())
+            else:
+                remote = remotes[0]
+
         except Exception as exc:
             logging.getLogger().info(
                 'Skipping "{0}" directory reason:\n{1}\n'.format(
