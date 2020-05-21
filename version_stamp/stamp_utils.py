@@ -173,10 +173,11 @@ class MercurialBackend(VersionControlBackend):
         for k, remote in self._be.paths().items():
             remotes.append(remote.decode('utf-8'))
 
-        if os.path.isdir(remotes[0]):
-            return os.path.relpath(remotes[0], self.root())
+        remote = remotes[0]
+        if os.path.isdir(remote):
+            remote = os.path.relpath(remote, self.root())
 
-        return remotes[0]
+        return remote
 
     def changeset(self):
         revision = self._be.parents()
@@ -306,7 +307,12 @@ class GitBackend(VersionControlBackend):
         return tuple(parents)
 
     def remote(self):
-        return tuple(self._origin.urls)[0]
+        remote = tuple(self._origin.urls)[0]
+
+        if os.path.isdir(remote):
+            remote = os.path.relpath(remote, self.root())
+
+        return remote
 
     def changeset(self):
         return self._be.head.commit.hexsha
@@ -379,6 +385,8 @@ class HostState(object):
         try:
             hash = client.head.commit.hexsha
             remote = tuple(client.remote('origin').urls)[0]
+            if os.path.isdir(remote):
+                remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:
             logging.getLogger().info(
                 'Skipping "{0}" directory reason:\n{1}\n'.format(
