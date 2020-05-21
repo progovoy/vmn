@@ -174,8 +174,7 @@ class VersionControlStamper(IVersionsStamper):
         self._app_path = conf['app_path']
 
         app_dir = os.path.dirname(self._app_path)
-        self._app_index_path = \
-            os.path.join(app_dir, '_index.yml')
+        self._app_index_path = conf['app_index_path']
         self._repo_name = '.'
 
         self._root_app_name = conf['root_app_name']
@@ -681,55 +680,31 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return
 
-    with open(params['app_path']) as f:
-        data = yaml.safe_load(f)
-        deps = data["changesets"]
+    if not os.path.isfile(params['app_path']):
+        LOGGER.error('No such app: {0}'.format(params['name']))
+        return 1
 
     if version is None:
-        _goto_version(deps, params['root_path'])
+        with open(params['app_path']) as f:
+            data = yaml.safe_load(f)
+            deps = data["changesets"]
+            _goto_version(deps, params['root_path'])
+    else:
+        with open(params['app_index_path'], 'r') as f:
+            data = yaml.safe_load(f)
+            if version not in data:
+                LOGGER.error(
+                    'App: {0} with version: {1} was '
+                    'not found'.format(
+                        params['name'], version
+                    )
+                )
+                return 1
+
+            deps = data[version]["changesets"]
+            _goto_version(deps, params['root_path'])
 
         return 0
-
-        if tip_app_tag_index == app_tag_index:
-            _goto_version(
-                repos_path,
-                {'git': git_remote, 'mercurial': mercurial_remote},
-                current_changesets,
-            )
-            return 0
-
-        app_hist_ver_path = '{0}/{1}'.format(
-            app_ver_dir_path, '_index.yml')
-
-        if not os.path.isfile(app_hist_ver_path):
-            LOGGER.error(
-                'Missing history version file: {0}'.format(app_hist_ver_path)
-            )
-            return 1
-
-        loader = importlib.machinery.SourceFileLoader(
-            '_version_history', app_hist_ver_path)
-        mod_ver = types.ModuleType(loader.name)
-        loader.exec_module(mod_ver)
-        hist_changesets = mod_ver.changesets
-
-        if app_version not in hist_changesets:
-            LOGGER.info(
-                'App: {0} with version: {1} was not found in hist file'.format(
-                    app_name, app_version))
-            return 1
-
-        _goto_version(
-            repos_path,
-            {'git': git_remote, 'mercurial': mercurial_remote},
-            hist_changesets[app_version],
-        )
-
-        return 0
-
-    LOGGER.info('App: {0} with version: {1} was not found'.format(
-        app_name, app_version
-    ))
 
     return 1
 
@@ -769,11 +744,17 @@ def _pull_repo(args):
             return {'repo': rel_path, 'status': 1, 'description': err}
 
         LOGGER.info('Pulling from {0}'.format(rel_path))
+        if changeset is None:
+            rev = client.checkout_master()
+            client.pull()
 
-        client.pull()
-        client.checkout(rev=changeset)
+            LOGGER.info('Updated {0} to {1}'.format(rel_path, rev))
+        else:
+            client.pull()
+            rev = changeset
+            client.checkout(rev=rev)
 
-        LOGGER.info('Updated {0} to {1}'.format(rel_path, changeset))
+            LOGGER.info('Updated {0} to {1}'.format(rel_path, rev))
     except Exception as exc:
         LOGGER.exception(
             'PLEASE FIX!\nAborting pull operation because directory {0} '
@@ -805,8 +786,12 @@ def _clone_repo(args):
 def _goto_version(deps, root):
     args = []
     for rel_path, v in deps.items():
-        args.append((os.path.join(root, rel_path), rel_path, v['remote'],
-                     v['vcs_type']))
+        args.append((
+            os.path.join(root, rel_path),
+            rel_path,
+            v['remote'],
+            v['vcs_type']
+        ))
     with Pool(min(len(args), 10)) as p:
         results = p.map(_clone_repo, args)
 
@@ -821,11 +806,15 @@ def _goto_version(deps, root):
             if res['description'] is not None:
                 msg += 'because {0}'.format(res['description'])
 
-            LOGGER.debug(msg)
+            LOGGER.info(msg)
 
     args = []
     for rel_path, v in deps.items():
-        args.append((os.path.join(root, rel_path), rel_path, v['hash']))
+        args.append((
+            os.path.join(root, rel_path),
+            rel_path,
+            v['hash']
+        ))
 
     with Pool(min(len(args), 20)) as p:
         results = p.map(_pull_repo, args)
@@ -878,6 +867,8 @@ def _build_world(params):
     )
     params['root_path'] = root_path
     params['app_path'] = app_path
+    app_dir = os.path.dirname(params['app_path'])
+    params['app_index_path'] = os.path.join(app_dir, '_index.yml')
     params['hist_path'] = hist_path
     params['repo_name'] = os.path.basename(root_path)
 
