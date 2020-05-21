@@ -195,58 +195,36 @@ class VersionControlStamper(IVersionsStamper):
         del self._backend
 
     def find_version(self, changesets_dict):
-        version, latest_revs, history_revs = self._get_app_changesets()
-        if version is None:
+        history_revs = self._get_app_changesets()
+        if history_revs is None:
             return None
 
         # Try to find any version of the application matching the
         # repositories local state
-        found = True
-        for k, v in latest_revs.items():
-            if k not in changesets_dict:
-                found = False
-                break
-            if self._repo_name == k:
-                parents = self._backend.parents()
-                if len(parents) > 1:
-                    if changesets_dict[k]['hash'] in parents:
-                        raise RuntimeError(
-                            'Somehow vmn has stamped on a '
-                            'merge commit.FIX!'
-                        )
-
-                if v['hash'] != parents[0]:
-                    found = False
-                    break
-            elif v['hash'] != changesets_dict[k]['hash']:
-                found = False
-                break
-
-        if found and latest_revs:
-            return version
-
-        # If in repo and not on latest tag - version not found.
-        # This is because there is no way of finding
-        # current changeset in self._repo_name's versions history
-        if self._repo_name in latest_revs:
-            return None
-
-        # If the history is empty - version not found
-        if not history_revs:
-            return None
-
-        for tag in history_revs:
+        for version in history_revs:
             found = True
-            for k, v in history_revs[tag].items():
+            for k, v in history_revs[version]['changesets'].items():
                 if k not in changesets_dict:
                     found = False
                     break
-                if v['hash'] != changesets_dict[k]['hash']:
+                if self._repo_name == k:
+                    parents = self._backend.parents()
+                    if len(parents) > 1:
+                        if changesets_dict[k]['hash'] in parents:
+                            raise RuntimeError(
+                                'Somehow vmn has stamped on a '
+                                'merge commit.FIX!'
+                            )
+
+                    if v['hash'] != parents[0]:
+                        found = False
+                        break
+                elif v['hash'] != changesets_dict[k]['hash']:
                     found = False
                     break
 
-            if found and history_revs[tag]:
-                return tag
+            if found:
+                return version
 
         return None
 
@@ -548,18 +526,17 @@ class VersionControlStamper(IVersionsStamper):
     def _get_app_changesets(self):
         hist_changesets = {}
         if not os.path.isfile(self._app_path):
-            return None, None, None
-
-        with open(self._app_path, 'r') as f:
-            data = yaml.safe_load(f)
-            current_changesets = data['changesets']
-            version = data['_version']
+            return None
 
         if os.path.isfile(self._app_index_path):
             with open(self._app_index_path, 'r') as f:
                 hist_changesets = yaml.safe_load(f)
 
-        return version, current_changesets, hist_changesets
+        hist_changesets.pop('0.0.0.0')
+        if not hist_changesets:
+            return None
+
+        return hist_changesets
 
 
 def get_version(versions_be_ifc, params):
