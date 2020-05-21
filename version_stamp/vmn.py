@@ -688,78 +688,12 @@ def goto_version(params, version):
 
     with open(params['app_path']) as f:
         data = yaml.safe_load(f)
-        deps = {}
-        for rel_path, dep in data["conf"]["deps"].items():
-            deps[os.path.join(params['root_path'], rel_path)] = dep
+        deps = data["changesets"]
 
     if version is None:
-        for path, dep in deps:
-            _goto_version(path, dep)
+        _goto_version(deps, params['root_path'])
 
-    root = versions_client.root()
-    tags = versions_client.tags()
-    tip_app_tag = None
-    tip_app_tag_index = None
-    app_tag = None
-    app_tag_index = None
-
-    for idx, tag in enumerate(tags):
-        if not tag.startswith('{0}_'.format(app_name)):
-            continue
-
-        if tip_app_tag is None:
-            tip_app_tag = tag
-            tip_app_tag_index = idx
-
-        tag_ver = tag.split('{0}_'.format(app_name))[1]
-        if app_version == tag_ver:
-            app_tag = tag
-            app_tag_index = idx
-            break
-
-    if app_tag is None:
-        LOGGER.info('Tag with app: {0} with version: {1} was not found'.format(
-            app_name, app_version
-        ))
-        return 1
-
-    app_ver_path = None
-    paths = versions_client.status(tag=tip_app_tag)
-    for path in paths:
-        if not path.endswith('/main_version.py'):
-            continue
-
-        # Retrieve the tag of the service
-        app_tag = tags[app_tag_index - 1]
-        res = re.search('(.+)_(.+)', app_tag)
-        app_name = res.groups()[0]
-        app_version = res.groups()[1]
-
-        main_ver_path = '{0}/{1}'.format(root, path)
-
-        loader = importlib.machinery.SourceFileLoader(
-            'main_version', main_ver_path)
-        mod_ver = types.ModuleType(loader.name)
-        loader.exec_module(mod_ver)
-        services = mod_ver.services
-        app_ver_path = '{0}/{1}'.format(root, services[app_name]['path'])
-
-        break
-
-    for path in paths:
-        if app_ver_path is None:
-            if not path.endswith('/version.py'):
-                continue
-
-            app_ver_path = '{0}/{1}'.format(root, path)
-
-        app_ver_dir_path = os.path.dirname(app_ver_path)
-
-        loader = importlib.machinery.SourceFileLoader(
-            'version', app_ver_path)
-        mod_ver = types.ModuleType(loader.name)
-        loader.exec_module(mod_ver)
-        current_changesets = mod_ver.changesets
+        return 0
 
         if tip_app_tag_index == app_tag_index:
             _goto_version(
@@ -806,104 +740,97 @@ def goto_version(params, version):
 
 
 def _pull_repo(args):
-    repos_path, repo, changesets = args
-    if changesets is not None and repo not in changesets:
-        LOGGER.debug('Nothing to do for repo {0} because our application does '
-                     'not depend on it'.format(repo))
-        return {'repo': repo, 'status': 0, 'description': None}
-
-    if repo == 'versions':
-        return {'repo': repo, 'status': 0, 'description': None}
-
-    cur_path = '{0}/{1}'.format(repos_path, repo)
+    path, rel_path, changeset = args
 
     client = None
     try:
-        client, err = stamp_utils.get_client(cur_path)
+        client, err = stamp_utils.get_client(path)
         if client is None:
-            return {'repo': repo, 'status': 0, 'description': err}
+            return {'repo': rel_path, 'status': 0, 'description': err}
     except Exception as exc:
         LOGGER.exception(
             'PLEASE FIX!\nAborting pull operation because directory {0} '
-            'Reason:\n{1}\n'.format(cur_path, exc)
+            'Reason:\n{1}\n'.format(path, exc)
         )
 
-        return {'repo': repo, 'status': 1, 'description': None}
+        return {'repo': rel_path, 'status': 1, 'description': None}
 
     try:
         err = client.check_for_pending_changes()
         if err:
             LOGGER.info('{0}. Aborting pull operation '.format(err))
-            return {'repo': repo, 'status': 1, 'description': err}
+            return {'repo': rel_path, 'status': 1, 'description': err}
 
     except Exception as exc:
         LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
-            cur_path, exc)
+            path, exc)
         )
-        return {'repo': repo, 'status': 0, 'description': None}
+        return {'repo': rel_path, 'status': 0, 'description': None}
 
     try:
         err = client.check_for_outgoing_changes()
         if err:
             LOGGER.info('{0}. Aborting pull operation'.format(err))
-            return {'repo': repo, 'status': 1, 'description': err}
+            return {'repo': rel_path, 'status': 1, 'description': err}
 
-        LOGGER.info('Pulling from {0}'.format(repo))
-        # If no changesets were given - update to master
-        if changesets is None:
-            rev = client.checkout_master()
-            client.pull()
+        LOGGER.info('Pulling from {0}'.format(rel_path))
 
-            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
-        elif repo in changesets:
-            client.pull()
+        client.pull()
+        client.checkout(rev=changeset)
 
-            rev = changesets[repo]['hash']
-            client.checkout(rev=rev)
-
-            LOGGER.info('Updated {0} to {1}'.format(repo, rev))
+        LOGGER.info('Updated {0} to {1}'.format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
             'PLEASE FIX!\nAborting pull operation because directory {0} '
-            'Reason:\n{1}\n'.format(cur_path, exc)
+            'Reason:\n{1}\n'.format(path, exc)
         )
 
-        return {'repo': repo, 'status': 1, 'description': None}
+        return {'repo': rel_path, 'status': 1, 'description': None}
 
-    return {'repo': repo, 'status': 0, 'description': None}
+    return {'repo': rel_path, 'status': 0, 'description': None}
 
 
 def _clone_repo(args):
-    repos_path, repo, remote, vcs_type = args
+    path, rel_path, remote, vcs_type = args
 
-    dirs = [name for name in os.listdir(repos_path)
-            if os.path.isdir(os.path.join(repos_path, name))]
-
-    if repo in dirs:
-        return {'repo': repo, 'status': 0, 'description': None}
-
-    if remote is None:
-        return {'repo': repo, 'status': 1,
-                'description': 'remote is None. Will not clone'}
-
-    LOGGER.info('Cloning {0}..'.format(repo))
+    LOGGER.info('Cloning {0}..'.format(rel_path))
     try:
         if vcs_type == 'mercurial':
-            stamp_utils.MercurialBackend.clone(repos_path, repo, remote)
+            stamp_utils.MercurialBackend.clone(path, remote)
         elif vcs_type == 'git':
-            stamp_utils.GitBackend.clone(repos_path, repo, remote)
+            stamp_utils.GitBackend.clone(path, remote)
     except Exception as exc:
         err = 'Failed to clone {0} repository. ' \
-              'Description: {1}'.format(repo, exc.args)
-        return {'repo': repo, 'status': 1, 'description': err}
+              'Description: {1}'.format(rel_path, exc.args)
+        return {'repo': rel_path, 'status': 1, 'description': err}
 
-    return {'repo': repo, 'status': 0, 'description': None}
+    return {'repo': rel_path, 'status': 0, 'description': None}
 
 
-def _goto_version(repos_path, remotes, changesets=None):
-    repos_path = os.path.abspath(repos_path)
-    args = [[repos_path, name, changesets] for name in os.listdir(repos_path)
-             if os.path.isdir(os.path.join(repos_path, name))]
+def _goto_version(deps, root):
+    args = []
+    for rel_path, v in deps.items():
+        args.append((os.path.join(root, rel_path), rel_path, v['remote'],
+                     v['vcs_type']))
+    with Pool(min(len(args), 10)) as p:
+        results = p.map(_clone_repo, args)
+
+    for res in results:
+        if res['status'] == 1:
+            if res['repo'] is None and res['description'] is None:
+                continue
+
+            msg = 'Failed to clone '
+            if res['repo'] is not None:
+                msg += 'from {0} '.format(res['repo'])
+            if res['description'] is not None:
+                msg += 'because {0}'.format(res['description'])
+
+            LOGGER.debug(msg)
+
+    args = []
+    for rel_path, v in deps.items():
+        args.append((os.path.join(root, rel_path), rel_path, v['hash']))
 
     with Pool(min(len(args), 20)) as p:
         results = p.map(_pull_repo, args)
@@ -926,35 +853,6 @@ def _goto_version(repos_path, remotes, changesets=None):
     if err:
         raise RuntimeError(
             'Failed to pull all the required repos. See log above'
-        )
-
-    if changesets is None:
-        return
-
-    args = [[repos_path, name, remotes[changesets[name]['vcs_type']],
-             changesets[name]['vcs_type']] for name in changesets.keys()]
-
-    with Pool(min(len(args), 10)) as p:
-        results = p.map(_clone_repo, args)
-
-    err = False
-    for res in results:
-        if res['status'] == 1:
-            err = True
-            if res['repo'] is None and res['description'] is None:
-                continue
-
-            msg = 'Failed to clone '
-            if res['repo'] is not None:
-                msg += 'from {0} '.format(res['repo'])
-            if res['description'] is not None:
-                msg += 'because {0}'.format(res['description'])
-
-            LOGGER.warning(msg)
-
-    if err:
-        raise RuntimeError(
-            'Failed to clone all the required repos. See log above'
         )
 
 
@@ -1082,8 +980,9 @@ def main(command_line=None):
         help="The application's name"
     )
     pgoto.add_argument(
-        'version',
+        '-v', '--version',
         default=None,
+        required=False,
         help="The version to go to"
     )
 

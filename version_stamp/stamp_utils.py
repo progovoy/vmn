@@ -192,10 +192,10 @@ class MercurialBackend(VersionControlBackend):
         return changeset
 
     @staticmethod
-    def clone(repos_path, repo, remote):
+    def clone(path, remote):
         hglib.clone(
-            '{0}/{1}'.format(remote, repo),
-            '{0}/{1}'.format(repos_path, repo)
+            '{0}'.format(remote),
+            '{0}'.format(path)
         )
 
 
@@ -312,10 +312,10 @@ class GitBackend(VersionControlBackend):
         return self._be.head.commit.hexsha
 
     @staticmethod
-    def clone(repos_path, repo, remote):
+    def clone(path, remote):
         git.Repo().clone_from(
-            '{0}/{1}'.format(remote, repo),
-            '{0}/{1}'.format(repos_path, repo)
+            '{0}'.format(remote),
+            '{0}'.format(path)
         )
 
 
