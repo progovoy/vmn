@@ -186,7 +186,7 @@ class VersionControlStamper(IVersionsStamper):
         if self._root_app_path is not None:
             root_ver_path = os.path.dirname(self._root_app_path)
             self._root_index_path = \
-                os.path.join(root_ver_path, '_root_history.yml')
+                os.path.join(root_ver_path, '_root_index.yml')
 
     def allocate_backend(self):
         self._backend, _ = stamp_utils.get_client(self._root_path)
@@ -414,6 +414,9 @@ class VersionControlStamper(IVersionsStamper):
             data[old_version] = {
                 'changesets': old_changesets
             }
+            data[current_version] = {
+                'changesets': changesets_to_file
+            }
             yaml.dump(data, f, sort_keys=False)
             f.truncate()
 
@@ -454,6 +457,15 @@ class VersionControlStamper(IVersionsStamper):
 
         self._write_root_version_file(version=root_version)
 
+        services = None
+        external_services = None
+        with open(self._root_app_path) as f:
+            data = yaml.safe_load(f)
+            services = copy.deepcopy(data['services'])
+            external_services = copy.deepcopy(
+                data['conf']['external_services']
+            )
+
         with open(self._root_index_path, 'r+') as f:
             data = yaml.safe_load(f)
             f.seek(0)
@@ -461,6 +473,10 @@ class VersionControlStamper(IVersionsStamper):
             data[old_version] = {
                 'services': old_services,
                 'external_services': old_external_services
+            }
+            data[root_version] = {
+                'services': services,
+                'external_services': external_services
             }
 
             yaml.dump(data, f, sort_keys=False)
@@ -907,7 +923,7 @@ def _build_world(params):
             root_path,
             '.vmn',
             root_app_name,
-            '_root_history.yml'
+            '_root_index.yml'
         )
 
     params['root_app_name'] = root_app_name
