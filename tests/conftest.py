@@ -156,30 +156,30 @@ class FSAppLayoutFixture(object):
                      app_name,
                      release_mode='debug',
                      starting_version='0.0.0.0',
-                     main_system_name=None,
+                     root_app_name=None,
                      version_template='{0}.{1}.{2}'):
         params = {
             'repos_path': self.versions_base_dir,
             'release_mode': release_mode,
             'app_name': app_name,
             'starting_version': starting_version,
-            'main_system_name': main_system_name,
+            'root_app_name': root_app_name,
             'version_template': version_template,
         }
 
-        if main_system_name is None:
+        if root_app_name is None:
             params['app_version_file'] = '{0}/apps/{1}/version.py'.format(
                 self.versions_root_path,
                 app_name
             )
         else:
-            params['main_version_file'] = '{0}/apps/{1}/main_version.py'.format(
+            params['root_app_path'] = '{0}/apps/{1}/main_version.py'.format(
                 self.versions_root_path,
-                main_system_name
+                root_app_name
             )
             params['app_version_file'] = '{0}/apps/{1}/{2}/version.py'.format(
                 self.versions_root_path,
-                main_system_name,
+                root_app_name,
                 app_name
             )
 

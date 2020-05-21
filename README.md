@@ -115,7 +115,7 @@ Run:
 ver-stamp --repos_path ${REPOS_PATH} \
 --app_version_file ${VERSIONS_PATH}/our_system/project_a/version.py \
 --app_name project_a \
---main_version_file ${VERSIONS_PATH}/our_system/main_version.py \
+--root_app_path ${VERSIONS_PATH}/our_system/main_version.py \
 --release_mode patch
 ```
 

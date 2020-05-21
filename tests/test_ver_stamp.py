@@ -19,8 +19,8 @@ def test_wrong_parameters(app_layout):
             app_version_file='/tmp/version.py',
             release_mode='debug',
             app_name='xxx',
-            main_version_file='xxx',
-            main_system_name=None,
+            root_app_path='xxx',
+            root_app_name=None,
         )
 
     except RuntimeError as exc:
@@ -36,8 +36,8 @@ def test_wrong_parameters(app_layout):
             app_version_file='something that is not None',
             release_mode='debug',
             app_name='xxx',
-            main_version_file=None,
-            main_system_name='Name',
+            root_app_path=None,
+            root_app_name='Name',
         )
 
     except RuntimeError as exc:
@@ -53,8 +53,8 @@ def test_wrong_parameters(app_layout):
             app_version_file='/tmp/dir/version.py',
             release_mode='debug',
             app_name='xxx',
-            main_system_name=None,
-            main_version_file=None,
+            root_app_name=None,
+            root_app_path=None,
         )
 
     except RuntimeError as exc:
@@ -71,8 +71,8 @@ def test_wrong_parameters(app_layout):
             ),
             release_mode='debug',
             app_name='xxx',
-            main_system_name=None,
-            main_version_file=None,
+            root_app_name=None,
+            root_app_path=None,
         )
 
     except RuntimeError as exc:
@@ -89,10 +89,10 @@ def test_wrong_parameters(app_layout):
             ),
             release_mode='debug',
             app_name='xxx',
-            main_version_file='/tmp/a/dir/main_version.py'.format(
+            root_app_path='/tmp/a/dir/main_version.py'.format(
                 app_layout.versions_base_dir
             ),
-            main_system_name='MainName',
+            root_app_name='MainName',
         )
     except RuntimeError as exc:
         expected = 'Main app version file must be within versions repository'
@@ -108,10 +108,10 @@ def test_wrong_parameters(app_layout):
             ),
             release_mode='debug',
             app_name='xxx',
-            main_version_file='{0}/versions/a/dir/wrong_name.py'.format(
+            root_app_path='{0}/versions/a/dir/wrong_name.py'.format(
                 app_layout.versions_base_dir
             ),
-            main_system_name='MainName',
+            root_app_name='MainName',
         )
 
     except RuntimeError as exc:
@@ -201,7 +201,7 @@ def test_stamp_main_version(app_layout):
     params = app_layout.get_be_params(
         app_name='test_app1',
         release_mode='patch',
-        main_system_name='MainSystem'
+        root_app_name='MainSystem'
     )
 
     mbe = ver_stamp.VersionControlStamper(params)
@@ -230,7 +230,7 @@ def test_stamp_main_version(app_layout):
     params = app_layout.get_be_params(
         app_name='test_app2',
         release_mode='patch',
-        main_system_name='MainSystem'
+        root_app_name='MainSystem'
     )
 
     mbe = ver_stamp.VersionControlStamper(params)
@@ -255,7 +255,7 @@ def test_stamp_main_version(app_layout):
     params = app_layout.get_be_params(
         app_name='test_app1',
         release_mode='patch',
-        main_system_name='MainSystem'
+        root_app_name='MainSystem'
     )
 
     mbe = ver_stamp.VersionControlStamper(params)
