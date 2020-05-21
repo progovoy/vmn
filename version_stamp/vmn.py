@@ -176,7 +176,7 @@ class VersionControlStamper(IVersionsStamper):
         self._app_path = os.path.dirname(self._app_version_file)
         self._app_version_history_path = \
             os.path.join(self._app_path, '_history.yml')
-        self._repo_name = conf['repo_name']
+        self._repo_name = '.'
 
         self._main_system_name = conf['main_system_name']
         self._main_version_file = conf['main_version_file']

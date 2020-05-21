@@ -155,8 +155,12 @@ class MercurialBackend(VersionControlBackend):
 
         # check if tag commit
         if len(parents) == 1:
-            desc = self._be.log()[0].desc.decode('utf-8')
-            if desc.startswith('Added tag '):
+            for log in self._be.log():
+                desc = log.desc.decode('utf-8')
+
+                if not desc.startswith('Added tag '):
+                    break
+
                 parent = parents[0]
                 parents = []
                 for p in self._be.parents(rev=parent):
