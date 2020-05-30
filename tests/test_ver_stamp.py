@@ -5,126 +5,22 @@ import os
 import importlib.machinery
 import types
 import pathlib
+import copy
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
-import ver_stamp
-
-
-def test_wrong_parameters(app_layout):
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='/tmp/version.py',
-            release_mode='debug',
-            app_name='xxx',
-            root_app_path='xxx',
-            root_app_name=None,
-        )
-
-    except RuntimeError as exc:
-        expected = 'Main system name was not specified but its ' \
-                   'main_version file was specified "'
-        assert exc.__str__() == expected
-
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='something that is not None',
-            release_mode='debug',
-            app_name='xxx',
-            root_app_path=None,
-            root_app_name='Name',
-        )
-
-    except RuntimeError as exc:
-        expected = 'Main system name was specified but main ' \
-                   'version file path was not'
-        assert exc.__str__() == expected
-
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='/tmp/dir/version.py',
-            release_mode='debug',
-            app_name='xxx',
-            root_app_name=None,
-            root_app_path=None,
-        )
-
-    except RuntimeError as exc:
-        expected = 'App version file must be within versions repository'
-        assert exc.__str__() == expected
-
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='{0}/versions/a/dir/wrong_name.py'.format(
-                app_layout.versions_base_dir
-            ),
-            release_mode='debug',
-            app_name='xxx',
-            root_app_name=None,
-            root_app_path=None,
-        )
-
-    except RuntimeError as exc:
-        expected = 'App version file must be named "version.py"'
-        assert exc.__str__() == expected
-
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='{0}/versions/a/dir/version.py'.format(
-                app_layout.versions_base_dir
-            ),
-            release_mode='debug',
-            app_name='xxx',
-            root_app_path='/tmp/a/dir/main_version.py'.format(
-                app_layout.versions_base_dir
-            ),
-            root_app_name='MainName',
-        )
-    except RuntimeError as exc:
-        expected = 'Main app version file must be within versions repository'
-        assert exc.__str__() == expected
-
-    try:
-        ver_stamp.run_stamper(
-            repos_path='{0}/'.format(
-                app_layout.versions_base_dir
-            ),
-            app_version_file='{0}/versions/a/dir/version.py'.format(
-                app_layout.versions_base_dir
-            ),
-            release_mode='debug',
-            app_name='xxx',
-            root_app_path='{0}/versions/a/dir/wrong_name.py'.format(
-                app_layout.versions_base_dir
-            ),
-            root_app_name='MainName',
-        )
-
-    except RuntimeError as exc:
-        expected = 'Main version file must be named "main_version.py"'
-        assert exc.__str__() == expected
+import vmn
+from stamp_utils import HostState
 
 
 def test_get_current_changesets(app_layout):
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
-    )
+    params = copy.deepcopy(app_layout.params)
+    vmn.init(params)
+    vmn.build_world(params)
+    params['release_mode'] = 'patch'
+    vmn.stamp(params)
+    vmn.build_world(params)
 
-    assert len(changesets) == 0
+    assert len(changesets) == 1
 
     current_changesets = {}
     for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
@@ -145,9 +41,12 @@ def test_get_current_changesets(app_layout):
         current_changesets[repo[0]] = \
             app_layout.get_changesets(repo_name=repo[0])
 
-    changesets = ver_stamp.HostState.get_current_changeset(
-            app_layout.versions_base_dir
-    )
+    params = copy.deepcopy(app_layout.params)
+    vmn.init(params)
+    vmn.stamp(params)
+
+    vmn.build_world(params)
+    changesets = params['changesets']
 
     for k,v in changesets.items():
         assert k in current_changesets
@@ -171,10 +70,10 @@ def test_stamp_version(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    be = ver_stamp.VersionControlStamper(params)
+    be = vmn.VersionControlStamper(params)
     be.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     current_version = be.stamp_app_version(changesets)
@@ -204,10 +103,10 @@ def test_stamp_main_version(app_layout):
         root_app_name='MainSystem'
     )
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     current_version = mbe.stamp_app_version(changesets)
@@ -233,10 +132,10 @@ def test_stamp_main_version(app_layout):
         root_app_name='MainSystem'
     )
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     current_version = mbe.stamp_app_version(changesets)
@@ -258,10 +157,10 @@ def test_stamp_main_version(app_layout):
         root_app_name='MainSystem'
     )
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     current_version = mbe.stamp_app_version(changesets)
@@ -293,10 +192,10 @@ def test_starting_version(app_layout):
 
     params = app_layout.get_be_params('test_app1', 'patch', '1.9.5.0')
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     assert mbe._starting_version == '1.9.5.0'
@@ -324,10 +223,10 @@ def test_find_version(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     ver = mbe.find_version(changesets)
@@ -343,10 +242,10 @@ def test_find_version(app_layout):
     for release_mode in release_modes:
         params = app_layout.get_be_params(
             'test_app1', release_mode)
-        mbe = ver_stamp.VersionControlStamper(params)
+        mbe = vmn.VersionControlStamper(params)
         mbe.allocate_backend()
-        changesets = ver_stamp.HostState.get_current_changeset(
-            app_layout.versions_base_dir
+        changesets = HostState.get_current_changeset(
+            app_layout.base_dir
         )
 
         ver = mbe.find_version(changesets)
@@ -361,10 +260,10 @@ def test_find_version(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     ver = mbe.find_version(changesets)
@@ -391,16 +290,16 @@ def test_output(app_layout):
 
     params = app_layout.get_be_params(
         'test_app1', 'patch')
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
-    output = ver_stamp.get_version(mbe, changesets)
+    output = vmn.get_version(mbe, changesets)
     assert output == '0.0.1'
 
-    output = ver_stamp.get_version(mbe, changesets)
+    output = vmn.get_version(mbe, changesets)
     assert output == '0.0.1'
 
 
@@ -419,10 +318,10 @@ def test_find_recurring_version(app_layout):
         )
 
     params = app_layout.get_be_params('test_app1', 'patch')
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     assert mbe._starting_version == '0.0.0.0'
@@ -433,10 +332,10 @@ def test_find_recurring_version(app_layout):
 
     app_layout.remove_app_version_file(params['app_version_file'])
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     ver = mbe.find_version(changesets)
@@ -464,15 +363,15 @@ def test_version_info(app_layout):
         'test_app1', 'patch')
     dir_path = os.path.dirname(params['app_version_file'])
     pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
-    app_layout.add_version_info_file(
+    app_layout.write_conf(
         '{0}/version_info.py'.format(dir_path),
         custom_repos=('repo2',)
     )
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     current_version = mbe.stamp_app_version(changesets)
@@ -500,8 +399,8 @@ def test_version_info(app_layout):
         repo_name='repo1', file_relative_path='a/b/D.txt', content='hello'
     )
 
-    changesets = ver_stamp.HostState.get_current_changeset(
-        app_layout.versions_base_dir
+    changesets = HostState.get_current_changeset(
+        app_layout.base_dir
     )
 
     found_version = mbe.find_version(changesets)
@@ -517,7 +416,7 @@ def test_version_template(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch')
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == '1.0.3'
@@ -525,7 +424,7 @@ def test_version_template(app_layout):
     params = app_layout.get_be_params(
         'test_app1', 'patch', version_template='ap{0}xx{0}XX{1}AC@{0}{2}{3}C')
 
-    mbe = ver_stamp.VersionControlStamper(params)
+    mbe = vmn.VersionControlStamper(params)
     mbe.allocate_backend()
     ver = mbe.get_be_formatted_version('1.0.3.6')
     assert ver == 'ap1xxXX0AC@36C'

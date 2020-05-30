@@ -19,7 +19,6 @@ import stamp_utils
 from stamp_utils import HostState
 
 LOGGER = stamp_utils.init_stamp_logger()
-CWD = os.getcwd()
 
 
 def gen_main_version(main_ver_mod, release_mode):
@@ -558,13 +557,13 @@ def get_version(versions_be_ifc, params):
     return versions_be_ifc.get_be_formatted_version(current_version)
 
 
-def init():
-    be, err = stamp_utils.get_client(CWD)
+def init(params):
+    be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return
 
-    if os.path.isdir('{0}/.vmn'.format(be.root())):
+    if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is already initialized')
         return
 
@@ -580,7 +579,7 @@ def init():
 
     changeset = be.changeset()
 
-    vmn_path = '{0}/.vmn/'.format(be.root())
+    vmn_path = '{0}/.vmn/'.format(params['root_path'])
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
     vmn_unique_path = '{0}/{1}'.format(
         vmn_path,
@@ -596,25 +595,19 @@ def init():
     be.push()
 
 
-def show(name):
-    be, err = stamp_utils.get_client(CWD)
+def show(params):
+    be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return
 
-    if not os.path.isdir('{0}/.vmn'.format(be.root())):
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
         return
 
-    root_path = os.path.join(be.root())
-    app_path = os.path.join(
-        root_path,
-        '.vmn',
-        name,
-        'ver.yml'
-    )
+    app_path = params['app_path']
     if not os.path.isfile(app_path):
-        LOGGER.error('No ver.yml file under {0}'.format(name))
+        LOGGER.error('No ver.yml file under {0}'.format(params['name']))
         return
 
     with open(app_path) as f:
@@ -623,12 +616,12 @@ def show(name):
 
 
 def stamp(params):
-    be, err = stamp_utils.get_client(CWD)
+    be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return
 
-    if not os.path.isdir('{0}/.vmn'.format(be.root())):
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
         return
 
@@ -661,12 +654,12 @@ def stamp(params):
 
 
 def goto_version(params, version):
-    be, err = stamp_utils.get_client(CWD)
+    be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return
 
-    if not os.path.isdir('{0}/.vmn'.format(be.root())):
+    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
         return
 
@@ -840,14 +833,14 @@ def _goto_version(deps, root):
         )
 
 
-def _build_world(params):
+def build_world(params):
     if 'name' not in params:
         return
 
     params['name'] = os.path.split(params['name'])
     params['name'] = os.path.join(*params['name'])
 
-    be, err = stamp_utils.get_client(CWD)
+    be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return
@@ -974,12 +967,13 @@ def main(command_line=None):
 
     args = parser.parse_args(command_line)
     params = copy.deepcopy(vars(args))
-    _build_world(params)
+    params['working_dir'] = os.getcwd()
+    build_world(params)
 
     if args.command == 'init':
-        init()
+        init(params)
     if args.command == 'show':
-        show(args.name)
+        show(params)
     elif args.command == 'stamp':
         stamp(params)
     elif args.command == 'goto':

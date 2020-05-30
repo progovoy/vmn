@@ -10,7 +10,7 @@ import json
 from git import Repo
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
-import ver_stamp
+import vmn
 import stamp_utils
 
 LOGGER = logging.getLogger()
@@ -26,34 +26,38 @@ LOGGER.addHandler(cons_handler)
 
 
 class FSAppLayoutFixture(object):
-    def __init__(self, versions, remote_versions, be_type):
-        self.versions_root_path = versions.strpath
-        self.versions_base_dir = versions.dirname
+    def __init__(self, tmpdir, be_type):
+        test_app = tmpdir.mkdir('test_repo')
+        test_app_remote = tmpdir.mkdir('test_repo_remote')
+        self.base_dir = test_app.dirname
+
         self._repos = {}
 
         if be_type == 'mercurial':
-            self._versions_backend = MercurialBackend(
-                remote_versions.strpath,
-                versions.strpath
+            self._app_backend = MercurialBackend(
+                test_app_remote.strpath,
+                test_app.strpath
             )
-
-            self.be_class = ver_stamp.VersionControlStamper
         elif be_type == 'git':
-            self._versions_backend = GitBackend(
-                remote_versions.strpath,
-                versions.strpath
+            self._app_backend = GitBackend(
+                test_app_remote.strpath,
+                test_app.strpath
             )
 
-            self.be_class = ver_stamp.VersionControlStamper
+        self.params = {
+            'name': 'test_app',
+            'working_dir': test_app.strpath
+        }
+        vmn.build_world(self.params)
 
     def __del__(self):
-        del self._versions_backend
+        del self._app_backend
 
         for val in self._repos.values():
             shutil.rmtree(val['path'])
 
     def create_repo(self, repo_name, repo_type):
-        path = os.path.join(self.versions_base_dir, repo_name)
+        path = os.path.join(self.base_dir, repo_name)
 
         if repo_type == 'mercurial':
             client = hglib.init(dest=path)
@@ -134,13 +138,13 @@ class FSAppLayoutFixture(object):
         return self._repos[repo_name]['changesets']
 
     def remove_app_version_file(self, app_version_file_path):
-        self._versions_backend.remove_app_version_file(app_version_file_path)
+        self._app_backend.remove_app_version_file(app_version_file_path)
 
-    def add_version_info_file(
+    def write_conf(
             self,
-            version_info_file_path,
-            custom_version=None,
-            custom_repos=None):
+            template='{0}.{1}.{2}',
+            deps={self.params['changesets']}
+    ):
         if custom_repos is None and custom_version is None:
             return
 
@@ -150,7 +154,7 @@ class FSAppLayoutFixture(object):
             if custom_repos is not None:
                 f.write('repos = {0}\n'.format(json.dumps(custom_repos)))
 
-        self._versions_backend.add_version_info_file(version_info_file_path)
+        self._app_backend.add_version_info_file(version_info_file_path)
 
     def get_be_params(self,
                      app_name,
@@ -159,7 +163,7 @@ class FSAppLayoutFixture(object):
                      root_app_name=None,
                      version_template='{0}.{1}.{2}'):
         params = {
-            'repos_path': self.versions_base_dir,
+            'repos_path': self.base_dir,
             'release_mode': release_mode,
             'app_name': app_name,
             'starting_version': starting_version,
@@ -328,9 +332,7 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture(scope='function')
 def app_layout(request, tmpdir, ver_stamp_env):
-    versions = tmpdir.mkdir('versions')
-    remote_versions = tmpdir.mkdir('remote_versions')
-    app_layout = FSAppLayoutFixture(versions, remote_versions, request.param)
+    app_layout = FSAppLayoutFixture(tmpdir, request.param)
 
     yield app_layout
 
