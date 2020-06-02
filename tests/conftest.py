@@ -56,23 +56,28 @@ class FSAppLayoutFixture(object):
         path = os.path.join(self.base_dir, repo_name)
 
         if repo_type == 'mercurial':
-            client = hglib.init(dest=path)
-            client.close()
+            be = self._app_backend = MercurialBackend(
+                '{0}_remote'.format(path),
+                path
+            )
         elif repo_type == 'git':
-            repo = Repo.init(path=path)
-            repo.close()
+            be = self._app_backend = GitBackend(
+                '{0}_remote'.format(path),
+                path
+            )
         else:
             raise RuntimeError('Unknown repository type provided')
 
         self._repos[repo_name] = {
             'path': path,
             'type': repo_type,
+            'remote': '{0}_remote'.format(path),
+            '_be': be
         }
 
         self.write_file(
             repo_name=repo_name, file_relative_path='a/b/c.txt', content='hello'
         )
-
 
     def write_file(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:
