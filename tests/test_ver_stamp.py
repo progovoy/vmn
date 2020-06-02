@@ -6,21 +6,73 @@ import importlib.machinery
 import types
 import pathlib
 import copy
+import yaml
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import vmn
 from stamp_utils import HostState
 
 
-def test_get_current_changesets(app_layout):
+def test_basic_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['changesets']) == 1
     vmn.init(params)
-    vmn.build_world(params)
+
     params['release_mode'] = 'patch'
     vmn.stamp(params)
-    vmn.build_world(params)
 
-    assert len(changesets) == 1
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.1'
+
+
+def test_multi_repo_dependency(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['changesets']) == 1
+    vmn.init(params)
+
+    params['release_mode'] = 'patch'
+    vmn.stamp(params)
+
+    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
+        app_layout.create_repo(
+            repo_name=repo[0], repo_type=repo[1]
+        )
+
+    app_layout.write_conf(
+        '{0}.{1}.{2}',
+        {
+            '../': {
+                'test_repo': {
+                    'vcs_type': 'FIXIXI',
+                    'remote': 'FIX'
+                },
+                'repo1': {
+                    'vcs_type': 'mercurial',
+                    'remote': 'FIX'
+                },
+                'repo2': {
+                    'vcs_type': 'git',
+                    'remote': 'FIX'
+                },
+            }
+        },
+        False
+    )
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.2'
+
+
+def test_dasdasdasdas():
+    assert len(params['changesets']) == 1
 
     current_changesets = {}
     for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
