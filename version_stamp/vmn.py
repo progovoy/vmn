@@ -848,15 +848,17 @@ def build_world(name, working_dir):
         'working_dir': working_dir,
     }
 
-    params['name'] = os.path.split(params['name'])
-    params['name'] = os.path.join(*params['name'])
-
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return None
 
     root_path = os.path.join(be.root())
+    params['root_path'] = root_path
+
+    if name is None:
+        return params
+
     app_path = os.path.join(
         root_path,
         '.vmn',
@@ -875,7 +877,6 @@ def build_world(name, working_dir):
         params['name'],
         '_index.yml'
     )
-    params['root_path'] = root_path
     params['app_path'] = app_path
     params['app_conf_path'] = app_conf_path
     app_dir = os.path.dirname(params['app_path'])
@@ -986,7 +987,10 @@ def main(command_line=None):
     )
 
     args = parser.parse_args(command_line)
-    params = build_world(args.name, os.getcwd())
+    if 'name' in args:
+        params = build_world(args.name, os.getcwd())
+    else:
+        params = build_world(None, os.getcwd())
 
     if args.command == 'init':
         init(params)
