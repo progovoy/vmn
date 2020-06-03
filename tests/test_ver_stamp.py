@@ -73,100 +73,35 @@ def test_multi_repo_dependency(app_layout):
 
 
 def test_basic_root_stamp(app_layout):
-    strings = time.strftime("%y,%m")
-    strings = strings.split(',')
-    tmp_date_ver = '{0}.{1}'.format(strings[0], strings[1])
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world('root_app/app1', params['working_dir'])
+    assert len(params['changesets']) == 1
+    vmn.init(params)
 
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
+    params['release_mode'] = 'patch'
+    vmn.stamp(params)
 
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.1'
 
-    params = app_layout.get_be_params(
-        app_name='test_app1',
-        release_mode='patch',
-        root_app_name='MainSystem'
-    )
+    with open(params['root_app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == 1
 
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
+    app2_params = vmn.build_world('root_app/app2', params['working_dir'])
+    assert len(app2_params['changesets']) == 1
 
-    current_version = mbe.stamp_app_version(changesets)
+    app2_params['release_mode'] = 'minor'
+    vmn.stamp(app2_params)
 
-    assert current_version == '0.0.1.0'
+    with open(app2_params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.1.0'
 
-    formatted_main_ver = mbe.stamp_main_system_version(
-        current_version
-    )
-
-    assert formatted_main_ver == '{0}.1'.format(tmp_date_ver)
-
-    mbe.publish(current_version, formatted_main_ver)
-    mbe.deallocate_backend()
-
-    app_layout.write_file(
-        repo_name='repo1', file_relative_path='a/b/c.txt', content='hello3'
-    )
-
-    params = app_layout.get_be_params(
-        app_name='test_app2',
-        release_mode='patch',
-        root_app_name='MainSystem'
-    )
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    current_version = mbe.stamp_app_version(changesets)
-
-    assert current_version == '0.0.1.0'
-
-    formatted_main_ver = mbe.stamp_main_system_version(
-        current_version
-    )
-
-    assert formatted_main_ver == '{0}.2'.format(tmp_date_ver)
-
-    mbe.publish(current_version, formatted_main_ver)
-    mbe.deallocate_backend()
-
-    params = app_layout.get_be_params(
-        app_name='test_app1',
-        release_mode='patch',
-        root_app_name='MainSystem'
-    )
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    current_version = mbe.stamp_app_version(changesets)
-
-    assert current_version == '0.0.2.0'
-
-    formatted_main_ver = mbe.stamp_main_system_version(
-        current_version
-    )
-
-    assert formatted_main_ver == '{0}.3'.format(tmp_date_ver)
-
-    mbe.publish(current_version, formatted_main_ver)
-    mbe.deallocate_backend()
+    with open(app2_params['root_app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == 2
 
 
 def test_starting_version(app_layout):
