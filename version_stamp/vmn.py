@@ -997,6 +997,7 @@ def main(command_line=None):
     if args.command == 'show':
         show(params)
     elif args.command == 'stamp':
+        params['release_mode'] = args.release_mode
         stamp(params)
     elif args.command == 'goto':
         goto_version(params, args.version)
