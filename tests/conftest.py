@@ -30,6 +30,7 @@ class FSAppLayoutFixture(object):
         test_app = tmpdir.mkdir('test_repo')
         test_app_remote = tmpdir.mkdir('test_repo_remote')
         self.base_dir = test_app.dirname
+        self.be_type = be_type
 
         self._repos = {}
 
@@ -56,12 +57,12 @@ class FSAppLayoutFixture(object):
         path = os.path.join(self.base_dir, repo_name)
 
         if repo_type == 'mercurial':
-            be = self._app_backend = MercurialBackend(
+            be = MercurialBackend(
                 '{0}_remote'.format(path),
                 path
             )
         elif repo_type == 'git':
-            be = self._app_backend = GitBackend(
+            be = GitBackend(
                 '{0}_remote'.format(path),
                 path
             )
@@ -78,6 +79,8 @@ class FSAppLayoutFixture(object):
         self.write_file(
             repo_name=repo_name, file_relative_path='a/b/c.txt', content='hello'
         )
+
+        return be
 
     def write_file(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:
@@ -239,6 +242,8 @@ class MercurialBackend(VersionControlBackend):
         )
         self._mercurial_backend.push()
 
+        self.be = stamp_utils.MercurialBackend(versions_root_path)
+
     def __del__(self):
         self._mercurial_backend.close()
         VersionControlBackend.__del__(self)
@@ -288,6 +293,8 @@ class GitBackend(VersionControlBackend):
 
         self._origin = self._git_backend.remote(name='origin')
         self._origin.push()
+
+        self.be = stamp_utils.GitBackend(versions_root_path)
 
     def __del__(self):
         self._git_backend.close()

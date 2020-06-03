@@ -36,31 +36,29 @@ def test_multi_repo_dependency(app_layout):
     params['release_mode'] = 'patch'
     vmn.stamp(params)
 
+    conf = {
+        'template': '{0}.{1}.{2}',
+        'deps': {'../': {
+            'test_repo': {
+                'vcs_type': app_layout.be_type,
+                'remote': app_layout._app_backend.be.remote(),
+            }
+        }},
+        'extra_info': False
+    }
     for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
+        be = app_layout.create_repo(
             repo_name=repo[0], repo_type=repo[1]
         )
 
-    app_layout.write_conf(
-        '{0}.{1}.{2}',
-        {
-            '../': {
-                'test_repo': {
-                    'vcs_type': 'FIXIXI',
-                    'remote': 'FIX'
-                },
-                'repo1': {
-                    'vcs_type': 'mercurial',
-                    'remote': 'FIX'
-                },
-                'repo2': {
-                    'vcs_type': 'git',
-                    'remote': 'FIX'
-                },
+        conf['deps']['../'].update({
+            repo[0]: {
+                'vcs_type': repo[1],
+                'remote': be.be.remote(),
             }
-        },
-        False
-    )
+        })
+
+    app_layout.write_conf(**conf)
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
@@ -69,70 +67,12 @@ def test_multi_repo_dependency(app_layout):
     with open(params['app_path'], 'r') as f:
         data = yaml.safe_load(f)
         assert data['version'] == '0.0.2'
+        assert '.' in data['changesets']
+        assert '../repo1' in data['changesets']
+        assert '../repo2' in data['changesets']
 
 
-def test_dasdasdasdas():
-    assert len(params['changesets']) == 1
-
-    current_changesets = {}
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
-
-        current_changesets[repo[0]] = \
-            app_layout.get_changesets(repo_name=repo[0])
-
-        current_changesets[repo[0]] = \
-            app_layout.get_changesets(repo_name=repo[0])
-
-    params = copy.deepcopy(app_layout.params)
-    vmn.init(params)
-    vmn.stamp(params)
-
-    vmn.build_world(params)
-    changesets = params['changesets']
-
-    for k,v in changesets.items():
-        assert k in current_changesets
-        assert current_changesets[k]['hash'] == v['hash']
-        assert current_changesets[k]['vcs_type'] == v['vcs_type']
-
-
-def test_stamp_version(app_layout):
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-
-    be = vmn.VersionControlStamper(params)
-    be.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    current_version = be.stamp_app_version(changesets)
-    assert current_version == '0.0.1.0'
-
-
-def test_stamp_main_version(app_layout):
+def test_basic_root_stamp(app_layout):
     strings = time.strftime("%y,%m")
     strings = strings.split(',')
     tmp_date_ver = '{0}.{1}'.format(strings[0], strings[1])
