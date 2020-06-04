@@ -468,7 +468,8 @@ class VersionControlStamper(IVersionsStamper):
 
         version_files = [
             self._app_path,
-            self._app_index_path
+            self._app_index_path,
+            self._app_conf_path
         ]
         if self._root_app_name is not None:
             version_files.append(self._root_app_path)
