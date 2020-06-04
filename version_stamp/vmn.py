@@ -468,7 +468,8 @@ class VersionControlStamper(IVersionsStamper):
 
         version_files = [
             self._app_path,
-            self._app_index_path
+            self._app_index_path,
+            self._app_conf_path
         ]
         if self._root_app_name is not None:
             version_files.append(self._root_app_path)
@@ -673,28 +674,25 @@ def goto_version(params, version):
         return 1
 
     if version is None:
-        with open(params['app_path']) as f:
-            data = yaml.safe_load(f)
-            deps = data["changesets"]
-            _goto_version(deps, params['root_path'])
-    else:
-        with open(params['app_index_path'], 'r') as f:
-            data = yaml.safe_load(f)
-            if version not in data:
-                LOGGER.error(
-                    'App: {0} with version: {1} was '
-                    'not found'.format(
-                        params['name'], version
-                    )
+        raise NotImplementedError('Implement None version')
+
+    tag_name = params['tag_name']
+
+    with open(params['app_index_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        if version not in data:
+            LOGGER.error(
+                'App: {0} with version: {1} was '
+                'not found'.format(
+                    params['name'], version
                 )
-                return 1
+            )
+            return 1
 
-            deps = data[version]["changesets"]
-            _goto_version(deps, params['root_path'])
+        deps = data[version]["changesets"]
+        _goto_version(tag_name, deps, params['root_path'])
 
-        return 0
-
-    return 1
+    return 0
 
 
 def _pull_repo(args):
@@ -771,8 +769,9 @@ def _clone_repo(args):
     return {'repo': rel_path, 'status': 0, 'description': None}
 
 
-def _goto_version(deps, root):
+def _goto_version(tag_name, deps, root):
     args = []
+
     for rel_path, v in deps.items():
         args.append((
             os.path.join(root, rel_path),
@@ -798,10 +797,14 @@ def _goto_version(deps, root):
 
     args = []
     for rel_path, v in deps.items():
+        rev = v['hash']
+        if rel_path == '.':
+            rev = tag_name
+
         args.append((
             os.path.join(root, rel_path),
             rel_path,
-            v['hash']
+            rev
         ))
 
     with Pool(min(len(args), 20)) as p:
@@ -977,6 +980,9 @@ def main(command_line=None):
         params['release_mode'] = args.release_mode
         stamp(params)
     elif args.command == 'goto':
+        tag_name = params['name'].replace('/', '-')
+        tag_name = '{0}_{1}'.format(tag_name, args.version)
+        params['tag_name'] = tag_name
         goto_version(params, args.version)
 
 

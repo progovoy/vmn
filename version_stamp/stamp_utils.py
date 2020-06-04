@@ -60,6 +60,9 @@ class VersionControlBackend(object):
     def type(self):
         return self._type
 
+    def read_from_rev(self, tag_name, rel_path):
+        raise NotImplementedError()
+
 
 class MercurialBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
@@ -192,6 +195,9 @@ class MercurialBackend(VersionControlBackend):
 
         return changeset
 
+    def read_from_rev(self, tag_name, rel_path):
+        raise NotImplementedError()
+
     @staticmethod
     def clone(path, remote):
         hglib.clone(
@@ -316,6 +322,12 @@ class GitBackend(VersionControlBackend):
 
     def changeset(self):
         return self._be.head.commit.hexsha
+
+    def read_from_rev(self, tag_name, rel_path):
+        tt = git.Repo(self.root(), search_parent_directories=True)
+        for tag in self._be.tags:
+            a = self._be.commit(tag_name).tree.blobs[rel_path].data_stream.read()
+            pass
 
     @staticmethod
     def clone(path, remote):

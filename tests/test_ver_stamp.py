@@ -25,7 +25,15 @@ def test_basic_stamp(app_layout):
     with open(params['app_path'], 'r') as f:
         data = yaml.safe_load(f)
         assert data['version'] == '0.0.1'
+        _version = data['_version']
+        assert _version == '0.0.1.0'
 
+    tag_name = params['name'].replace('/', '-')
+    tag_name = '{0}_{1}'.format(tag_name, _version)
+
+    app_layout._app_backend.be.read_from_rev(
+        tag_name, '.vmn/{0}/_index.yml'.format(params['name'])
+    )
 
 def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
