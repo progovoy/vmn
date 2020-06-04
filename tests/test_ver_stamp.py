@@ -189,146 +189,20 @@ def test_find_version(app_layout):
     assert current_version == '0.0.2.0'
 
 
-def test_output(app_layout):
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt',
-            content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt',
-            content='hello2'
-        )
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    output = vmn.get_version(mbe, changesets)
-    assert output == '0.0.1'
-
-    output = vmn.get_version(mbe, changesets)
-    assert output == '0.0.1'
-
-
-@pytest.mark.skip(reason="Probably thi feature is no longer needed")
-def test_find_recurring_version(app_layout):
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
-
-    params = app_layout.get_be_params('test_app1', 'patch')
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    assert mbe._starting_version == '0.0.0.0'
-
-    current_version = mbe.stamp_app_version(changesets)
-    mbe.publish(current_version)
-    mbe.deallocate_backend()
-
-    app_layout.remove_app_version_file(params['app_version_file'])
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    ver = mbe.find_version(changesets)
-    assert ver is None
-    assert mbe._starting_version == '0.0.1.0'
-
-    current_version = mbe.stamp_app_version(changesets)
-    assert current_version == '0.0.2.0'
-
-
-def test_version_info(app_layout):
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-    dir_path = os.path.dirname(params['app_version_file'])
-    pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
-    app_layout.write_conf(
-        '{0}/version_info.py'.format(dir_path),
-        custom_repos=('repo2',)
-    )
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    current_version = mbe.stamp_app_version(changesets)
-    loader = importlib.machinery.SourceFileLoader(
-        'version', params['app_version_file'])
-    ver = types.ModuleType(loader.name)
-    loader.exec_module(ver)
-
-    repo_changeset = None
-    for k,v in changesets.items():
-        if k != 'repo2':
-            continue
-
-        repo_changeset = v['hash']
-        break
-
-    assert 'repo2' in ver.changesets
-    assert len(ver.changesets.keys()) == 1
-    assert ver.changesets['repo2']['hash'] == repo_changeset
-    assert ver._version == current_version
-
-    mbe.publish(current_version)
-
-    app_layout.write_file(
-        repo_name='repo1', file_relative_path='a/b/D.txt', content='hello'
-    )
-
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    found_version = mbe.find_version(changesets)
-    assert found_version == current_version
-
-    found_version = mbe.find_version({})
-    assert found_version == None
-
-    mbe.deallocate_backend()
-
-
 def test_version_template(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['changesets']) == 1
+    vmn.init(params)
+
+    params['release_mode'] = 'minor'
+    params['starting_version'] = '1.2.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '1.3.0'
+
     params = app_layout.get_be_params(
         'test_app1', 'patch')
 
