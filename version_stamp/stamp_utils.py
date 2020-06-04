@@ -425,8 +425,7 @@ class HostState(object):
 def init_stamp_logger():
     LOGGER = logging.getLogger('vmn')
     LOGGER.setLevel(logging.DEBUG)
-    format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
-             '%(message)s'
+    format = '[%(levelname)s] %(message)s'
 
     formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
 
