@@ -14,6 +14,7 @@ CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
 sys.path.append(CUR_PATH)
 import stamp_utils
 from stamp_utils import HostState
+from version_stamp import version as __version__
 
 LOGGER = stamp_utils.init_stamp_logger()
 
@@ -945,6 +946,11 @@ def build_world(name, working_dir):
 
 def main(command_line=None):
     parser = argparse.ArgumentParser('vmn')
+    parser.add_argument(
+        '--version', '-v',
+        action='version',
+        version=__version__.version
+    )
 
     subprasers = parser.add_subparsers(dest='command')
     subprasers.add_parser(
