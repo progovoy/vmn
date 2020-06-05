@@ -8,7 +8,8 @@ python:
   - "nightly"  # nightly build
 # command to install dependencies
 install:
-  - pip install -r requirements.txt
+  - apt install mercurial
+  - pip install -e .
 # command to run tests
 script:
   - tests/run_pytest.sh
