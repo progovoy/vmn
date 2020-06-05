@@ -32,8 +32,6 @@ class FSAppLayoutFixture(object):
         self.base_dir = test_app.dirname
         self.be_type = be_type
 
-        self._repos = {}
-
         if be_type == 'mercurial':
             self._app_backend = MercurialBackend(
                 test_app_remote.strpath,
@@ -44,6 +42,15 @@ class FSAppLayoutFixture(object):
                 test_app_remote.strpath,
                 test_app.strpath
             )
+
+        self._repos = {
+            'test_repo': {
+                'path': test_app.strpath,
+                'type': be_type,
+                'remote': test_app_remote.strpath,
+                '_be': self._app_backend
+            }
+        }
 
         self.params = vmn.build_world('test_app', test_app.strpath)
 
@@ -105,14 +112,17 @@ class FSAppLayoutFixture(object):
                     'hash': client.log(branch='default')[0][1].decode('utf-8'),
                     'vcs_type': 'mercurial'
                 }
+
+                client.push()
             else:
                 client = Repo(self._repos[repo_name]['path'])
-                client.index.add([self._repos[repo_name]['path']])
+                client.index.add([path])
                 client.index.commit('Added file {0}'.format(path))
                 self._repos[repo_name]['changesets'] = {
                     'hash': client.head.commit.hexsha,
                     'vcs_type': 'git'
                 }
+                client.remote(name='origin').push()
         else:
             with open(path, 'w') as f:
                 f.write(content)
@@ -164,49 +174,13 @@ class FSAppLayoutFixture(object):
             yaml.dump(data, f, sort_keys=False)
             f.truncate()
 
-        self._app_backend.add_version_info_file(self.params['app_conf_path'])
-
-    def get_be_params(self,
-                     app_name,
-                     release_mode='debug',
-                     starting_version='0.0.0.0',
-                     root_app_name=None,
-                     version_template='{0}.{1}.{2}'):
-        params = {
-            'repos_path': self.base_dir,
-            'release_mode': release_mode,
-            'app_name': app_name,
-            'starting_version': starting_version,
-            'root_app_name': root_app_name,
-            'version_template': version_template,
-        }
-
-        if root_app_name is None:
-            params['app_version_file'] = '{0}/apps/{1}/version.py'.format(
-                self.versions_root_path,
-                app_name
-            )
-        else:
-            params['root_app_path'] = '{0}/apps/{1}/main_version.py'.format(
-                self.versions_root_path,
-                root_app_name
-            )
-            params['app_version_file'] = '{0}/apps/{1}/{2}/version.py'.format(
-                self.versions_root_path,
-                root_app_name,
-                app_name
-            )
-
-        ver_path = stamp_utils.get_versions_repo_path(params['repos_path'])
-        params['versions_repo_path'] = ver_path
-
-        return params
+        self._app_backend.add_conf_file(self.params['app_conf_path'])
 
 
 class VersionControlBackend(object):
     def __init__(self, remote_versions_root_path, versions_root_path):
         self.remote_versions_root_path = remote_versions_root_path
-        self.versions_root_path = versions_root_path
+        self.root_path = versions_root_path
 
     def __del__(self):
         pass
@@ -225,7 +199,7 @@ class MercurialBackend(VersionControlBackend):
 
         self._mercurial_backend = hglib.clone(
             '{0}'.format(self.remote_versions_root_path),
-            '{0}'.format(self.versions_root_path)
+            '{0}'.format(self.root_path)
         )
         self._mercurial_backend.close()
 
@@ -233,7 +207,7 @@ class MercurialBackend(VersionControlBackend):
             f.write('# init\n')
 
         self._mercurial_backend = hglib.open(
-            '{0}'.format(self.versions_root_path)
+            '{0}'.format(self.root_path)
         )
         path = os.path.join(versions_root_path, 'init.txt').encode()
         self._mercurial_backend.add(path)
@@ -249,14 +223,14 @@ class MercurialBackend(VersionControlBackend):
         VersionControlBackend.__del__(self)
 
     def remove_app_version_file(self, app_version_file_path):
-        client = hglib.open(self.versions_root_path)
+        client = hglib.open(self.root_path)
         client.remove(app_version_file_path.encode('utf8'))
         client.commit('Manualy removed file {0}'.format(app_version_file_path))
         client.push()
         client.close()
 
-    def add_version_info_file(self, version_info_file_path):
-        client = hglib.open(self.versions_root_path)
+    def add_conf_file(self, version_info_file_path):
+        client = hglib.open(self.root_path)
 
         client.add(version_info_file_path.encode())
         client.commit(
@@ -280,7 +254,7 @@ class GitBackend(VersionControlBackend):
 
         self._git_backend = Repo.clone_from(
             '{0}'.format(self.remote_versions_root_path),
-            '{0}'.format(self.versions_root_path)
+            '{0}'.format(self.root_path)
         )
 
         with open(os.path.join(versions_root_path, 'init.txt'), 'w+') as f:
@@ -301,7 +275,7 @@ class GitBackend(VersionControlBackend):
         VersionControlBackend.__del__(self)
 
     def remove_app_version_file(self, app_version_file_path):
-        client = Repo(self.versions_root_path)
+        client = Repo(self.root_path)
         client.index.remove(app_version_file_path, working_tree=True)
         client.index.commit(
             'Manualy removed file {0}'.format(app_version_file_path)
@@ -312,8 +286,8 @@ class GitBackend(VersionControlBackend):
 
         client.close()
 
-    def add_version_info_file(self, conf_path):
-        client = Repo(self.versions_root_path)
+    def add_conf_file(self, conf_path):
+        client = Repo(self.root_path)
 
         client.index.add(conf_path)
         client.index.commit(

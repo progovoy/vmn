@@ -694,28 +694,42 @@ def goto_version(params, version):
         return 1
 
     if version is None:
-        with open(params['app_path']) as f:
+        with open(params['app_path'], 'r') as f:
             data = yaml.safe_load(f)
             deps = data["changesets"]
+            deps.pop('.')
+            if deps:
+                for rel_path, v in deps.items():
+                    v['hash'] = None
+
+                _goto_version(deps, params['root_path'])
+            else:
+                be.checkout_branch()
+
+            return 0
+
+    tag_name = params['name'].replace('/', '-')
+    tag_name = '{0}_{1}'.format(tag_name, version)
+    try:
+        be.checkout(tag=tag_name)
+    except Exception as exc:
+        LOGGER.error(
+            'App: {0} with version: {1} was '
+            'not found'.format(
+                params['name'], version
+            )
+        )
+
+        return 1
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        deps = data["changesets"]
+        deps.pop('.')
+        if deps:
             _goto_version(deps, params['root_path'])
-    else:
-        with open(params['app_index_path'], 'r') as f:
-            data = yaml.safe_load(f)
-            if version not in data:
-                LOGGER.error(
-                    'App: {0} with version: {1} was '
-                    'not found'.format(
-                        params['name'], version
-                    )
-                )
-                return 1
 
-            deps = data[version]["changesets"]
-            _goto_version(deps, params['root_path'])
-
-        return 0
-
-    return 1
+    return 0
 
 
 def _pull_repo(args):
@@ -754,21 +768,26 @@ def _pull_repo(args):
 
         LOGGER.info('Pulling from {0}'.format(rel_path))
         if changeset is None:
-            rev = client.checkout_master()
             client.pull()
+            rev = client.checkout_branch()
 
             LOGGER.info('Updated {0} to {1}'.format(rel_path, rev))
         else:
+            cur_changeset = client.changeset()
             client.pull()
-            rev = changeset
-            client.checkout(rev=rev)
+            client.checkout(rev=changeset)
 
-            LOGGER.info('Updated {0} to {1}'.format(rel_path, rev))
+            LOGGER.info('Updated {0} to {1}'.format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
             'PLEASE FIX!\nAborting pull operation because directory {0} '
             'Reason:\n{1}\n'.format(path, exc)
         )
+
+        try:
+            client.checkout(rev=cur_changeset)
+        except Exception as exc:
+            LOGGER.exception('PLEASE FIX!')
 
         return {'repo': rel_path, 'status': 1, 'description': None}
 

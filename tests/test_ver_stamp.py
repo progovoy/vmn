@@ -169,3 +169,43 @@ def test_version_template(app_layout):
         octats
     )
     assert formated_version == 'ap2xx2XX0AC@296C'
+
+
+def test_basic_goto(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['user_repos_details']) == 1
+    vmn.init(params)
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.1'
+
+    app_layout.write_file('test_repo', 'a.yxy', 'msg')
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '1.0.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.2'
+
+    c1 = app_layout._app_backend.be.changeset()
+    assert vmn.goto_version(params, '1.0.1.0') == 1
+    assert vmn.goto_version(params, '0.0.1.0') == 0
+    c2 = app_layout._app_backend.be.changeset()
+    assert c1 != c2
+    assert vmn.goto_version(params, '0.0.2.0') == 0
+    c3 = app_layout._app_backend.be.changeset()
+    assert c1 == c3
+
+    assert vmn.goto_version(params, None) == 0
+    c4 = app_layout._app_backend.be.changeset()
+    assert c1 == c4

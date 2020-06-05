@@ -42,10 +42,10 @@ class VersionControlBackend(object):
     def check_for_outgoing_changes(self):
         raise NotImplementedError()
 
-    def checkout_master(self, branch='master'):
+    def checkout_branch(self):
         raise NotImplementedError()
 
-    def checkout(self, rev):
+    def checkout(self, rev=None, tag=None):
         raise NotImplementedError()
 
     def parents(self):
@@ -54,7 +54,7 @@ class VersionControlBackend(object):
     def remote(self):
         raise NotImplementedError()
 
-    def changeset(self):
+    def changeset(self, short=False):
         raise NotImplementedError()
 
     def type(self):
@@ -131,7 +131,8 @@ class MercurialBackend(VersionControlBackend):
 
         return None
 
-    def checkout_master(self, branch='default'):
+    def checkout_branch(self):
+        branch = self._be.branch()
         heads = self._be.heads()
         tip_changeset = None
         for head in heads:
@@ -145,8 +146,23 @@ class MercurialBackend(VersionControlBackend):
 
         return tip_changeset
 
-    def checkout(self, rev):
-        self._be.update(rev=rev)
+    def checkout(self, rev=None, tag=None):
+        if tag is not None:
+            _tags = self._be.tags()
+
+            found = False
+            changeset = self.changeset(short=True)
+            for _tag in _tags:
+                if _tag[0].decode() == tag:
+                    self._be.update(rev=_tag[1])
+                    found = True
+
+            if not found:
+                raise RuntimeError('{0} tag not found'.format(tag))
+
+            self._be.update(rev=int(changeset) + 1)
+        else:
+            self._be.update(rev=rev)
 
     def parents(self):
         parents = []
@@ -179,7 +195,7 @@ class MercurialBackend(VersionControlBackend):
 
         return remote
 
-    def changeset(self):
+    def changeset(self, short=False):
         revision = self._be.parents()
         if revision is None:
             revision = self._be.log()
@@ -188,7 +204,10 @@ class MercurialBackend(VersionControlBackend):
                 self._be.close()
                 return None
 
-        changeset = revision[0][1]
+        if short:
+            changeset = revision[0][0].decode()
+        else:
+            changeset = revision[0][1].decode()
 
         return changeset
 
@@ -291,12 +310,18 @@ class GitBackend(VersionControlBackend):
 
         return None
 
-    def checkout_master(self, branch='master'):
-        self.checkout(branch)
+    def checkout_branch(self):
+        try:
+            self.checkout(self._be.active_branch.name)
+        except:
+            self.checkout(rev='master')
 
-        return branch
+        return self._be.active_branch.commit.hexsha
 
-    def checkout(self, rev):
+    def checkout(self, rev=None, tag=None):
+        if tag is not None:
+            rev = tag
+
         self._be.git.checkout(rev)
 
     def parents(self):
@@ -314,7 +339,7 @@ class GitBackend(VersionControlBackend):
 
         return remote
 
-    def changeset(self):
+    def changeset(self, short=False):
         return self._be.head.commit.hexsha
 
     @staticmethod
