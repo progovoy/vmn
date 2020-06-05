@@ -969,14 +969,14 @@ def main(command_line=None):
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
-        choices=['major', 'minor', 'patch', 'micro', 'debug'],
+        choices=['major', 'minor', 'patch', 'micro'],
         default='debug',
         required=True,
-        help='major / minor / patch / micro / debug'
+        help='major / minor / patch / micro'
     )
 
     pstamp.add_argument(
-        '-s', '--starting_version',
+        '-s', '--starting-version',
         default='0.0.0.0',
         required=False,
         help='Starting version'
