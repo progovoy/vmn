@@ -7,9 +7,8 @@ A simple package for auto increasing version numbers of any application agnostic
 
 ## Usage
 
-<u>First thing first</u>
-cd to your repository
 ```sh
+cd to/your/repository
 vmn -h
 
 vmn init
