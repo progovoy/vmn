@@ -171,7 +171,7 @@ def test_version_template(app_layout):
     assert formated_version == 'ap2xx2XX0AC@296C'
 
 
-@pytest.skip('broken mercurial')
+@pytest.mark.skip(reason="broken mercurial")
 def test_basic_goto(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
