@@ -18,23 +18,23 @@ major: check _major _build _publish
 
 _major:
 	@echo "Major Release"
-	$(eval VERSION := $(shell vmn stamp -r major {NAME}))
+	$(eval VERSION := $(shell vmn stamp -r major ${NAME}))
 
 minor: check _minor _build _publish
 
 _minor:
 	@echo "Minor Release"
-	$(eval VERSION := $(shell vmn stamp -r minor {NAME}))
+	$(eval VERSION := $(shell vmn stamp -r minor ${NAME}))
 
 patch: check _patch _build _publish
 
 _patch:
 	@echo "Patch Release"
-	$(eval VERSION := $(shell vmn stamp -r patch {NAME}))
+	$(eval VERSION := $(shell vmn stamp -r patch ${NAME}))
 
 _debug:
 	@echo "Debug Release"
-	$(eval VERSION := $(shell vmn stamp -r debug {NAME}))
+	$(eval VERSION := $(shell vmn show ${NAME}))
 
 check: check-local
 
