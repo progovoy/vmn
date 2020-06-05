@@ -4,7 +4,12 @@ from version_stamp import __version__
 
 description = 'Stamping utility'
 
-install_requires=['python-hglib>=2.6', 'lockfile', 'GitPython>=2.1.11']
+install_requires=[
+    'python-hglib>=2.6.1',
+    'lockfile>=0.12.2',
+    'GitPython>=3.1.3',
+    'PyYAML>=5.3.1',
+]
 
 setuptools.setup(
     name='vmn',
