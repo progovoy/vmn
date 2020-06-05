@@ -500,7 +500,7 @@ class VersionControlStamper(IVersionsStamper):
         self._backend.commit(
             message='{0}: update to version {1}'.format(
                 self._name, app_version),
-            user='version_manager',
+            user='vmn',
             include=version_files
         )
 
@@ -521,7 +521,7 @@ class VersionControlStamper(IVersionsStamper):
                 )
 
         try:
-            self._backend.tag(tags, user='version_manager')
+            self._backend.tag(tags, user='vmn')
         except Exception:
             LOGGER.exception('Failed to tag')
             raise RuntimeError()

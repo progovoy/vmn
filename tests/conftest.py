@@ -212,7 +212,7 @@ class MercurialBackend(VersionControlBackend):
         path = os.path.join(versions_root_path, 'init.txt').encode()
         self._mercurial_backend.add(path)
         self._mercurial_backend.commit(
-            message='first commit', user='version_manager', include=path
+            message='first commit', user='vmn', include=path
         )
         self._mercurial_backend.push()
 
@@ -235,7 +235,7 @@ class MercurialBackend(VersionControlBackend):
         client.add(version_info_file_path.encode())
         client.commit(
             message='Manually add version_info file',
-            user='version_manager',
+            user='vmn',
             include=version_info_file_path.encode(),
         )
 
