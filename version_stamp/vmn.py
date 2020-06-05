@@ -988,14 +988,14 @@ def main(command_line=None):
 
     pgoto = subprasers.add_parser('goto', help='go to version')
     pgoto.add_argument(
-        'name',
-        help="The application's name"
-    )
-    pgoto.add_argument(
         '-v', '--version',
         default=None,
         required=False,
         help="The version to go to"
+    )
+    pgoto.add_argument(
+        'name',
+        help="The application's name"
     )
 
     args = parser.parse_args(command_line)
