@@ -367,7 +367,7 @@ class HostState(object):
         return changeset.decode('utf-8'), remote
 
     @staticmethod
-    def get_changeset(path):
+    def get_repo_details(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
@@ -399,8 +399,8 @@ class HostState(object):
         return hash, remote, 'git'
 
     @staticmethod
-    def get_current_changeset(paths, root):
-        changesets = {}
+    def get_user_repo_details(paths, root):
+        user_repos_details = {}
         for path,lst in paths.items():
             repos = [
                 name for name in lst
@@ -409,17 +409,17 @@ class HostState(object):
 
             for repo in repos:
                 joined_path = os.path.join(path, repo)
-                changeset = HostState.get_changeset(joined_path)
-                if changeset is None:
+                details = HostState.get_repo_details(joined_path)
+                if details is None:
                     continue
 
-                changesets[os.path.relpath(joined_path, root)] = {
-                    'hash': changeset[0],
-                    'remote': changeset[1],
-                    'vcs_type': changeset[2],
+                user_repos_details[os.path.relpath(joined_path, root)] = {
+                    'hash': details[0],
+                    'remote': details[1],
+                    'vcs_type': details[2],
                 }
 
-        return changesets
+        return user_repos_details
 
 
 def init_stamp_logger():

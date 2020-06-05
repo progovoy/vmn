@@ -1,10 +1,6 @@
 import pytest
-import time
 import sys
 import os
-import importlib.machinery
-import types
-import pathlib
 import copy
 import yaml
 
@@ -16,11 +12,21 @@ from stamp_utils import HostState
 def test_basic_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['changesets']) == 1
+    assert len(params['user_repos_details']) == 1
     vmn.init(params)
 
+    params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.1'
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
     with open(params['app_path'], 'r') as f:
@@ -31,7 +37,7 @@ def test_basic_stamp(app_layout):
 def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['changesets']) == 1
+    assert len(params['user_repos_details']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'patch'
@@ -74,11 +80,18 @@ def test_multi_repo_dependency(app_layout):
         assert '../repo1' in data['changesets']
         assert '../repo2' in data['changesets']
 
+    with open(params['app_conf_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert '../' in data['conf']['deps']
+        assert 'test_repo' in data['conf']['deps']['../']
+        assert 'repo1' in data['conf']['deps']['../']
+        assert 'repo2' in data['conf']['deps']['../']
+
 
 def test_basic_root_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world('root_app/app1', params['working_dir'])
-    assert len(params['changesets']) == 1
+    assert len(params['user_repos_details']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'patch'
@@ -94,7 +107,7 @@ def test_basic_root_stamp(app_layout):
         assert data['version'] == 1
 
     app2_params = vmn.build_world('root_app/app2', params['working_dir'])
-    assert len(app2_params['changesets']) == 1
+    assert len(app2_params['user_repos_details']) == 1
 
     app2_params['release_mode'] = 'minor'
     app2_params['starting_version'] = '0.0.0.0'
@@ -112,7 +125,7 @@ def test_basic_root_stamp(app_layout):
 def test_starting_version(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['changesets']) == 1
+    assert len(params['user_repos_details']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'minor'
@@ -122,99 +135,37 @@ def test_starting_version(app_layout):
     with open(params['app_path'], 'r') as f:
         data = yaml.safe_load(f)
         assert data['version'] == '1.3.0'
-
-
-def test_find_version(app_layout):
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
-        app_layout.create_repo(
-            repo_name=repo[0], repo_type=repo[1]
-        )
-
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello'
-        )
-        app_layout.write_file(
-            repo_name=repo[0], file_relative_path='a/b/c.txt', content='hello2'
-        )
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    ver = mbe.find_version(changesets)
-    assert ver is None
-
-    current_version = mbe.stamp_app_version(changesets)
-    assert current_version == '0.0.1.0'
-
-    mbe.publish(current_version)
-    mbe.deallocate_backend()
-
-    release_modes = ('patch', 'minor', 'major', 'micro')
-    for release_mode in release_modes:
-        params = app_layout.get_be_params(
-            'test_app1', release_mode)
-        mbe = vmn.VersionControlStamper(params)
-        mbe.allocate_backend()
-        changesets = HostState.get_current_changeset(
-            app_layout.base_dir
-        )
-
-        ver = mbe.find_version(changesets)
-        assert ver == '0.0.1.0'
-
-        mbe.deallocate_backend()
-
-    # Add a change
-    app_layout.write_file(
-        repo_name='repo1', file_relative_path='a/b/c.txt', content='xxx'
-    )
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    changesets = HostState.get_current_changeset(
-        app_layout.base_dir
-    )
-
-    ver = mbe.find_version(changesets)
-    assert ver is None
-
-    current_version = mbe.stamp_app_version(changesets)
-    assert current_version == '0.0.2.0'
 
 
 def test_version_template(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['changesets']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'minor'
     params['starting_version'] = '1.2.0.0'
     vmn.stamp(params)
 
+    configured_template = None
+    with open(params['app_conf_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        configured_template = data['conf']['template']
+
     with open(params['app_path'], 'r') as f:
         data = yaml.safe_load(f)
-        assert data['version'] == '1.3.0'
+        _, octats = vmn.IVersionsStamper.parse_template(configured_template)
+        formated_version = vmn.IVersionsStamper.get_formatted_version(
+            '1.3.0.0',
+            configured_template,
+            octats
+        )
+        assert data['version'] == formated_version
 
-    params = app_layout.get_be_params(
-        'test_app1', 'patch')
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    ver = mbe.get_be_formatted_version('1.0.3.6')
-    assert ver == '1.0.3'
-
-    params = app_layout.get_be_params(
-        'test_app1', 'patch', version_template='ap{0}xx{0}XX{1}AC@{0}{2}{3}C')
-
-    mbe = vmn.VersionControlStamper(params)
-    mbe.allocate_backend()
-    ver = mbe.get_be_formatted_version('1.0.3.6')
-    assert ver == 'ap1xxXX0AC@36C'
+    template = 'ap{0}xx{0}XX{1}AC@{0}{2}{3}C'
+    _, octats = vmn.IVersionsStamper.parse_template(template)
+    formated_version = vmn.IVersionsStamper.get_formatted_version(
+        '2.0.9.6',
+        template,
+        octats
+    )
+    assert formated_version == 'ap2xx2XX0AC@296C'
