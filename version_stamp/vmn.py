@@ -712,7 +712,7 @@ def goto_version(params, version):
     tag_name = '{0}_{1}'.format(tag_name, version)
     try:
         be.checkout(tag=tag_name)
-    except Exception as exc:
+    except Exception:
         LOGGER.error(
             'App: {0} with version: {1} was '
             'not found'.format(
@@ -786,7 +786,7 @@ def _pull_repo(args):
 
         try:
             client.checkout(rev=cur_changeset)
-        except Exception as exc:
+        except Exception:
             LOGGER.exception('PLEASE FIX!')
 
         return {'repo': rel_path, 'status': 1, 'description': None}
