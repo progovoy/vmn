@@ -13,6 +13,8 @@ _publish: clean
 	python3 setup.py sdist bdist_wheel
 	twine upload ${PWD}/dist/*
 	git checkout -- ${PWD}/version_stamp/version.py
+	rm -rf ${PWD}/dist
+	rm -rf ${PWD}/build
 
 major: check _major _build _publish
 
@@ -54,5 +56,6 @@ check-local:
 	@echo "-------------------------------------------------------------"
 
 clean:
+	git checkout -- ${PWD}/version_stamp/version.py
 	rm -rf ${PWD}/dist
 	rm -rf ${PWD}/build
