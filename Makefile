@@ -45,9 +45,9 @@ check-local:
 	@echo "-------------------------------------------------------------"
 	@echo "-~      Running static checks                              --"
 	@echo "-------------------------------------------------------------"
-	#PYTHONPATH=${PWD} flake8 --version
-	#PYTHONPATH=${PWD} flake8 --exclude version.py \
-	#--ignore E402,E722,E123,E126,E125,E127,E128,E129,W503,W504 ${PWD}/version_stamp/
+	PYTHONPATH=${PWD} flake8 --version
+	PYTHONPATH=${PWD} flake8 --exclude version.py \
+	--ignore E402,E722,E123,E126,E125,E127,E128,E129,W503,W504 ${PWD}/version_stamp/
 	@echo "-------------------------------------------------------------"
 	@echo "-~      Running unit tests                                 --"
 	${PWD}/tests/run_pytest.sh

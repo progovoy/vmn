@@ -72,7 +72,6 @@ class IVersionsStamper(object):
         self._version_template, self._version_template_octats_count = \
             IVersionsStamper.parse_template(conf['version_template'])
 
-
     @staticmethod
     def parse_template(template):
         placeholders = (
@@ -166,7 +165,6 @@ class VersionControlStamper(IVersionsStamper):
         self._app_path = conf['app_path']
         self._app_conf_path = conf['app_conf_path']
 
-        app_dir = os.path.dirname(self._app_path)
         self._app_index_path = conf['app_index_path']
         self._repo_name = '.'
 
@@ -514,7 +512,9 @@ class VersionControlStamper(IVersionsStamper):
         if main_version is not None:
             s = os.path.split(self._root_app_name)
             if not s[0]:
-                tags.append('{0}_{1}'.format(self._root_app_name, main_version))
+                tags.append('{0}_{1}'.format(
+                    self._root_app_name, main_version)
+                )
             else:
                 tags.append(
                     '{0}_{1}'.format('-'.join(s), main_version)
@@ -522,7 +522,7 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             self._backend.tag(tags, user='version_manager')
-        except Exception as exc:
+        except Exception:
             LOGGER.exception('Failed to tag')
             raise RuntimeError()
 
@@ -938,7 +938,9 @@ def build_world(name, working_dir):
         for rel_path, dep in data["conf"]["deps"].items():
             deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
 
-        user_repos_details.update(HostState.get_user_repo_details(deps, root_path))
+        user_repos_details.update(
+            HostState.get_user_repo_details(deps, root_path)
+        )
         params['user_repos_details'] = user_repos_details
 
     return params

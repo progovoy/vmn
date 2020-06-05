@@ -331,8 +331,9 @@ class HostState(object):
         try:
             client = hglib.open(path)
         except hglib.error.ServerError as exc:
-            logging.getLogger().info('Skipping "{0}" directory reason:\n{1}\n'.format(
-                path, exc)
+            logging.getLogger().info(
+                'Skipping "{0}" directory '
+                'reason:\n{1}\n'.format(path, exc)
             )
             return None
 
@@ -401,7 +402,7 @@ class HostState(object):
     @staticmethod
     def get_user_repo_details(paths, root):
         user_repos_details = {}
-        for path,lst in paths.items():
+        for path, lst in paths.items():
             repos = [
                 name for name in lst
                 if os.path.isdir(os.path.join(path, name))
@@ -441,7 +442,9 @@ def get_versions_repo_path(root_path):
     if versions_repo_path is not None:
         versions_repo_path = os.path.abspath(versions_repo_path)
     else:
-        versions_repo_path = os.path.abspath('{0}/.vmn/versions'.format(root_path))
+        versions_repo_path = os.path.abspath(
+            '{0}/.vmn/versions'.format(root_path)
+        )
         Path(versions_repo_path).mkdir(parents=True, exist_ok=True)
 
     return versions_repo_path
