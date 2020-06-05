@@ -1,6 +1,6 @@
 import setuptools
 
-from version_stamp import __version__
+from version_stamp import version
 
 description = 'Stamping utility'
 
@@ -13,7 +13,7 @@ install_requires=[
 
 setuptools.setup(
     name='vmn',
-    version=__version__,
+    version=version.version,
     author="Pavel Rogovoy",
     author_email='pavelr@final.israel',
     description=description,
