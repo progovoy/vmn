@@ -610,6 +610,8 @@ def init(params):
 
     be.push()
 
+    LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
+
 
 def show(params):
     be, err = stamp_utils.get_client(params['working_dir'])
