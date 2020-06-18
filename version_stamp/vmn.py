@@ -1018,12 +1018,16 @@ def main(command_line=None):
         'name',
         help="The application's name"
     )
+    
+    cwd = os.getcwd()
+    if 'VMN_WORKING_DIR' in os.environ:
+        cwd = os.environ['VMN_WORKING_DIR']
 
     args = parser.parse_args(command_line)
     if 'name' in args:
-        params = build_world(args.name, os.getcwd())
+        params = build_world(args.name, cwd)
     else:
-        params = build_world(None, os.getcwd())
+        params = build_world(None, cwd)
 
     if args.command == 'init':
         init(params)
