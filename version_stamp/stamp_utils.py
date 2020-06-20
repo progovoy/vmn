@@ -265,8 +265,8 @@ class GitBackend(VersionControlBackend):
         if include is not None:
             for file in include:
                 self._be.index.add(file)
-
-        self._be.index.commit(message=message)
+        author = git.Actor(user, user)
+        self._be.index.commit(message=message, author=author)
 
     def root(self):
         return self._be.working_dir
