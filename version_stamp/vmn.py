@@ -577,21 +577,21 @@ def init(params):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
-        return
+        return err
 
     if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is already initialized')
-        return
+        return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     err = be.check_for_outgoing_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     changeset = be.changeset()
 
@@ -612,46 +612,50 @@ def init(params):
 
     LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
 
+    return None
+
 
 def show(params):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
-        return
+        return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
-        return
+        return err
 
     app_path = params['app_path']
     if not os.path.isfile(app_path):
         LOGGER.error('No ver.yml file under {0}'.format(params['name']))
-        return
+        return err
 
     with open(app_path) as f:
         data = yaml.safe_load(f)
         print(data['version'])
+
+    return None
 
 
 def stamp(params):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
-        return
+        return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
-        return
+        return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     err = be.check_for_outgoing_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     lock = LockFile(os.path.join(params['root_path'], 'vmn.lock'))
     with lock:
@@ -668,28 +672,28 @@ def stamp(params):
 
     LOGGER.info('Released locked: {0}'.format(lock.path))
 
-    return 0
+    return None
 
 
 def goto_version(params, version):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
-        return
+        return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
-        return
+        return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     err = be.check_for_outgoing_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
-        return
+        return err
 
     if not os.path.isfile(params['app_path']):
         LOGGER.error('No such app: {0}'.format(params['name']))
@@ -731,7 +735,7 @@ def goto_version(params, version):
         if deps:
             _goto_version(deps, params['root_path'])
 
-    return 0
+    return None
 
 
 def _pull_repo(args):
@@ -1029,17 +1033,24 @@ def main(command_line=None):
     else:
         params = build_world(None, cwd)
 
+    err = 0
     if args.command == 'init':
-        init(params)
+        err = init(params)
     if args.command == 'show':
-        show(params)
+        err = show(params)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
-        stamp(params)
+        err = stamp(params)
     elif args.command == 'goto':
-        goto_version(params, args.version)
+        err = goto_version(params, args.version)
+
+    return err
 
 
 if __name__ == '__main__':
-    main()
+    err = main()
+    if err:
+        sys.exit(1)
+
+    sys.exit(0)
