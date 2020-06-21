@@ -1018,7 +1018,7 @@ def main(command_line=None):
         'name',
         help="The application's name"
     )
-    
+
     cwd = os.getcwd()
     if 'VMN_WORKING_DIR' in os.environ:
         cwd = os.environ['VMN_WORKING_DIR']
