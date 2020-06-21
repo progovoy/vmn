@@ -145,7 +145,7 @@ class IVersionsStamper(object):
     def deallocate_backend(self):
         raise NotImplementedError('Please implement this method')
 
-    def find_version(self, current_changesets):
+    def find_matching_version(self, current_changesets):
         raise NotImplementedError('Please implement this method')
 
     def stamp_app_version(self, current_changesets):
@@ -184,7 +184,7 @@ class VersionControlStamper(IVersionsStamper):
     def deallocate_backend(self):
         del self._backend
 
-    def find_version(self, user_repo_details):
+    def find_matching_version(self, user_repo_details):
         history_revs = self._get_app_changesets()
         if history_revs is None:
             return None
@@ -555,7 +555,7 @@ class VersionControlStamper(IVersionsStamper):
 
 def get_version(versions_be_ifc, params):
     user_repo_details = params['user_repos_details']
-    ver = versions_be_ifc.find_version(user_repo_details)
+    ver = versions_be_ifc.find_matching_version(user_repo_details)
     if ver is not None:
         # Good we have found an existing version matching
         # the user_repo_details
