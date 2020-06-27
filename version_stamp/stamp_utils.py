@@ -226,17 +226,6 @@ class GitBackend(VersionControlBackend):
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self._origin = self._be.remote(name='origin')
 
-        if len(self._be.heads) == 0:
-            with open(os.path.join(repo_path, 'init.txt'), 'w+') as f:
-                f.write('# init\n')
-
-            self._be.index.add(
-                os.path.join(repo_path, 'init.txt')
-            )
-            self._be.index.commit('first commit')
-
-            self._origin.push()
-
         if revert:
             self._be.head.reset(working_tree=True)
         if pull:
