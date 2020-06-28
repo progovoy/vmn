@@ -195,21 +195,21 @@ class MercurialBackend(VersionControlBackend):
 
         return remote
 
+    def last_user_changeset(self):
+        rev = self._be.tip()
+        while True:
+            if rev.author.decode() == 'vmn' and rev.desc.decode() != 'Initialized vmn tracking':
+                rev = self._be.parents(rev[1].decode())[0]
+                continue
+
+            return rev[1].decode()
+
     def changeset(self, short=False):
-        revision = self._be.parents()
-        if revision is None:
-            revision = self._be.log()
-
-            if revision is None:
-                self._be.close()
-                return None
-
+        tip = self._be.tip()
         if short:
-            changeset = revision[0][0].decode()
-        else:
-            changeset = revision[0][1].decode()
+            return self._be.tip()[0].decode()
 
-        return changeset
+        return tip[1].decode()
 
     @staticmethod
     def clone(path, remote):
@@ -313,10 +313,21 @@ class GitBackend(VersionControlBackend):
 
         self._be.git.checkout(rev)
 
+    def last_user_changeset(self):
+        for p in self._be.iter_commits():
+            if p.author.name == 'vmn':
+                if p.message != 'Initialized vmn tracking':
+                    continue
+
+            return p.hexsha
+
     def parents(self):
         parents = []
         for p in self._be.head.commit.parents:
             parents.append(p.hexsha)
+
+        for p in self._be.iter_commits():
+            p.author.name == 'vmn'
 
         return tuple(parents)
 

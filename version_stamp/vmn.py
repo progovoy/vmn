@@ -197,16 +197,12 @@ class VersionControlStamper(IVersionsStamper):
                 if k not in user_repo_details:
                     found = False
                     break
-                if self._repo_name == k:
-                    parents = self._backend.parents()
-                    if len(parents) > 1:
-                        if user_repo_details[k]['hash'] in parents:
-                            raise RuntimeError(
-                                'Somehow vmn has stamped on a '
-                                'merge commit.FIX!'
-                            )
 
-                    if v['hash'] != parents[0]:
+                # when k is the "main repo" repo
+                if self._repo_name == k:
+                    user_changeset = self._backend.last_user_changeset()
+
+                    if v['hash'] != user_changeset:
                         found = False
                         break
                 elif v['hash'] != user_repo_details[k]['hash']:

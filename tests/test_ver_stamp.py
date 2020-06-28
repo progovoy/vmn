@@ -33,6 +33,27 @@ def test_basic_stamp(app_layout):
         data = yaml.safe_load(f)
         assert data['version'] == '0.0.1'
 
+    old_name = params['name']
+    params['name'] = '{0}_{1}'.format(params['name'], '2')
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '1.0.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '1.0.1'
+
+    params['name'] = old_name
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '1.0.0.0'
+    vmn.stamp(params)
+
+    with open(params['app_path'], 'r') as f:
+        data = yaml.safe_load(f)
+        assert data['version'] == '0.0.1'
+
 
 def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
