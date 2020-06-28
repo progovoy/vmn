@@ -197,12 +197,11 @@ class MercurialBackend(VersionControlBackend):
 
     def last_user_changeset(self):
         rev = self._be.tip()
-        while True:
-            if rev.author.decode() == 'vmn' and rev.desc.decode() != 'Initialized vmn tracking':
+        while rev.author.decode() == 'vmn':
+            if rev.desc.decode() != 'Initialized vmn tracking':
                 rev = self._be.parents(rev[1].decode())[0]
-                continue
 
-            return rev[1].decode()
+        return rev[1].decode()
 
     def changeset(self, short=False):
         tip = self._be.tip()
