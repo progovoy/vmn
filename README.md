@@ -1,4 +1,4 @@
-# Version MaNaging package - VMN &nbsp;&nbsp;&nbsp;&nbsp;&nbsp ![plusonelogo3](https://user-images.githubusercontent.com/5350434/85959337-8677e180-b9a4-11ea-817a-79dbf057de30.png)
+# Version MaNaging package - VMN &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ![plusonelogo3](https://user-images.githubusercontent.com/5350434/85959337-8677e180-b9a4-11ea-817a-79dbf057de30.png)
 
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
 
