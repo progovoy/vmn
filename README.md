@@ -2,7 +2,6 @@
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
   <h1 align="center">Version MaNaging package - VMN</h1>
-  <br>
 </p>
 
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
