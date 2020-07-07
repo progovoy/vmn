@@ -518,11 +518,11 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             self._backend.tag(tags, user='vmn')
+            self._backend.push()
         except Exception:
-            LOGGER.exception('Failed to tag')
-            raise RuntimeError()
-
-        self._backend.push()
+            LOGGER.exception()
+            self._backend.revert_vmn_changes()
+            raise RuntimeError('Failed to publish')
 
     def _delete_dangling_tags(self):
         tags = self._backend.tags()
@@ -661,7 +661,12 @@ def stamp(params):
 
         be.allocate_backend()
 
-        version = get_version(be, params)
+        try:
+            version = get_version(be, params)
+        except Exception:
+            LOGGER.exception()
+            return 1
+
         LOGGER.info(version)
 
         be.deallocate_backend()
