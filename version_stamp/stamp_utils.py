@@ -56,10 +56,12 @@ class VersionControlBackend(object):
 
     def changeset(self, short=False):
         raise NotImplementedError()
+       
+    def revert_vmn_changes(self):
+        raise NotImplementedError()
 
     def type(self):
-        return self._type
-
+        return self._type   
 
 class MercurialBackend(VersionControlBackend):
     def __init__(self, repo_path, revert=False, pull=False):
@@ -211,6 +213,10 @@ class MercurialBackend(VersionControlBackend):
             return self._be.tip()[0].decode()
 
         return tip[1].decode()
+    
+    def revert_vmn_changes(self):
+        # TODO: implement
+        return
 
     @staticmethod
     def clone(path, remote):
@@ -342,6 +348,9 @@ class GitBackend(VersionControlBackend):
 
     def changeset(self, short=False):
         return self._be.head.commit.hexsha
+    
+    def revert_vmn_changes(self):
+        self._be.git.reset('--hard','HEAD~1')
 
     @staticmethod
     def clone(path, remote):
