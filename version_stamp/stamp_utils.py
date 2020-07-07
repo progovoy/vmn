@@ -57,7 +57,7 @@ class VersionControlBackend(object):
     def changeset(self, short=False):
         raise NotImplementedError()
        
-    def revert_vmn_changes(self):
+    def revert_vmn_changes(self, tags):
         raise NotImplementedError()
 
     def type(self):
@@ -214,7 +214,7 @@ class MercurialBackend(VersionControlBackend):
 
         return tip[1].decode()
     
-    def revert_vmn_changes(self):
+    def revert_vmn_changes(self, tags):
         # TODO: implement
         return
 
@@ -349,8 +349,10 @@ class GitBackend(VersionControlBackend):
     def changeset(self, short=False):
         return self._be.head.commit.hexsha
     
-    def revert_vmn_changes(self):
+    def revert_vmn_changes(self, tags):
         self._be.git.reset('--hard','HEAD~1')
+        for tag in tags:
+            self._be.delete_tag(tag)
 
     @staticmethod
     def clone(path, remote):
