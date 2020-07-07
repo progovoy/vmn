@@ -521,6 +521,7 @@ class VersionControlStamper(IVersionsStamper):
             self._backend.push()
         except Exception:
             LOGGER.exception()
+            LOGGER.info('Reverting vmn changes for tags: {0}'.format(tags))
             self._backend.revert_vmn_changes(tags)
             raise RuntimeError('Failed to publish')
 
