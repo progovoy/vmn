@@ -665,6 +665,8 @@ def stamp(params):
             version = get_version(be, params)
         except Exception:
             LOGGER.exception()
+            be.deallocate_backend()
+
             return 1
 
         LOGGER.info(version)
