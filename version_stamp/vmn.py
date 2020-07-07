@@ -521,7 +521,7 @@ class VersionControlStamper(IVersionsStamper):
             self._backend.push()
         except Exception:
             LOGGER.exception()
-            self._backend.revert_vmn_changes()
+            self._backend.revert_vmn_changes(tags)
             raise RuntimeError('Failed to publish')
 
     def _delete_dangling_tags(self):
