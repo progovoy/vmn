@@ -91,3 +91,9 @@
       hash: 009ec4432257016de1ed9c082e3cbefb2ad0af2c
       remote: git@github.com:final-israel/ver_stamp.git
       vcs_type: git
+0.0.20.0:
+  changesets:
+    .:
+      hash: 6ecdaa673c9812a9eafca0fc77939f196b37d203
+      remote: git@github.com:final-israel/ver_stamp.git
+      vcs_type: git
