@@ -5,6 +5,7 @@ import hglib
 import git
 import logging
 from pathlib import Path
+from version_stamp import version
 
 
 class VersionControlBackend(object):
@@ -167,7 +168,6 @@ class MercurialBackend(VersionControlBackend):
         else:
             self._be.update(rev=rev)
 
-
     def remote(self):
         remotes = []
         for k, remote in self._be.paths().items():
@@ -244,6 +244,10 @@ class GitBackend(VersionControlBackend):
             for file in include:
                 self._be.index.add(file)
         author = git.Actor(user, user)
+
+        message = '{0}\n\n' \
+                  'vmn version: {1}'.format(message, version.version)
+
         self._be.index.commit(message=message, author=author)
 
     def root(self):
