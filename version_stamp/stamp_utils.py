@@ -322,6 +322,9 @@ class GitBackend(VersionControlBackend):
         return self._be.head.commit.hexsha
 
     def revert_vmn_changes(self, tags):
+        if self._be.active_branch.commit.author.name != 'vmn':
+            raise RuntimeError('BUG: Will not revert non-vmn commit.')
+
         self._be.git.reset('--hard', 'HEAD~1')
         for tag in tags:
             self._be.delete_tag(tag)
