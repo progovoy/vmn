@@ -109,3 +109,9 @@
       hash: 4cd4e871659a1386e7a71c203a58c7c56f04b1f9
       remote: git@github.com:final-israel/vmn.git
       vcs_type: git
+0.0.23.0:
+  changesets:
+    .:
+      hash: 76fbf799ad1daf6c983c10a79501d70381b629ec
+      remote: git@github.com:final-israel/vmn.git
+      vcs_type: git
