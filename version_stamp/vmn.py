@@ -532,7 +532,9 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
             self._backend.revert_vmn_changes(tags)
-            return 2
+            # TODO:: git revert this commit when the auto retry
+            #  feature will be stable enough
+            return 1
 
         return 0
 
