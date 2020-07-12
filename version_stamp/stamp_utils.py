@@ -5,7 +5,7 @@ import hglib
 import git
 import logging
 from pathlib import Path
-from version_stamp import version
+from version_stamp import version as version_mod
 
 
 class VersionControlBackend(object):
@@ -246,7 +246,7 @@ class GitBackend(VersionControlBackend):
         author = git.Actor(user, user)
 
         message = '{0}\n\n' \
-                  'vmn version: {1}'.format(message, version.version)
+                  'vmn version: {1}'.format(message, version_mod.version)
 
         self._be.index.commit(message=message, author=author)
 
