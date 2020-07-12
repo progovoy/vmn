@@ -167,25 +167,6 @@ class MercurialBackend(VersionControlBackend):
         else:
             self._be.update(rev=rev)
 
-    def parents(self):
-        parents = []
-        for p in self._be.parents(rev=self.changeset()):
-            parents.append(p[1].decode('utf-8'))
-
-        # check if tag commit
-        if len(parents) == 1:
-            for log in self._be.log():
-                desc = log.desc.decode('utf-8')
-
-                if not desc.startswith('Added tag '):
-                    break
-
-                parent = parents[0]
-                parents = []
-                for p in self._be.parents(rev=parent):
-                    parents.append(p[1].decode('utf-8'))
-
-        return tuple(parents)
 
     def remote(self):
         remotes = []
@@ -328,16 +309,6 @@ class GitBackend(VersionControlBackend):
                     continue
 
             return p.hexsha
-
-    def parents(self):
-        parents = []
-        for p in self._be.head.commit.parents:
-            parents.append(p.hexsha)
-
-        for p in self._be.iter_commits():
-            p.author.name == 'vmn'
-
-        return tuple(parents)
 
     def remote(self):
         remote = tuple(self._origin.urls)[0]
