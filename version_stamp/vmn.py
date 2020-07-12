@@ -9,6 +9,9 @@ import pathlib
 from lockfile import LockFile
 import time
 from multiprocessing import Pool
+import random
+import time
+
 
 CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
 sys.path.append(CUR_PATH)
@@ -598,8 +601,14 @@ def get_version(versions_be_ifc, params):
             release_mode = 'micro'
             LOGGER.warning(
                 'Failed to publish. Trying to auto-increase '
-                'from {0} to {1}'.format(starting_version, gen_app_version(starting_version, release_mode))
+                'from {0} to {1}'.format(
+                    starting_version,
+                    gen_app_version(starting_version, release_mode)
+                )
             )
+
+            time.sleep(random.randint(1, 3))
+
             continue
         else:
             break
