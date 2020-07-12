@@ -3,7 +3,7 @@ conf:
   template: '{0}.{1}.{2}'
   deps:
     ../:
-      ver_stamp:
-        remote: git@github.com:final-israel/ver_stamp.git
+      vmn:
+        remote: git@github.com:final-israel/vmn.git
         vcs_type: git
   extra_info: false
