@@ -16,7 +16,7 @@ vmn -h
 
 vmn init
 vmn stamp -r patch <app-name>
-vmn stamp -r minor <app-name> --starting-version 1.0.6.8
+vmn stamp -r minor -s 1.0.6.8 <app-name>
 vmn stamp -r major <app-name>
 vmn show <app-name>
 vmn goto -v 1.0.1.0 <app-name>
