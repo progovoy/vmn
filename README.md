@@ -15,7 +15,9 @@ cd to/your/repository
 vmn -h
 
 vmn init
+
 vmn stamp -r patch <app-name>
+// example for starting version 1.0.6.8 
 vmn stamp -r minor -s 1.0.6.8 <app-name>
 vmn stamp -r major <app-name>
 vmn show <app-name>
