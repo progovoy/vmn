@@ -240,12 +240,10 @@ class GitBackend(VersionControlBackend):
             self._origin.pull(branch)
 
     def commit(self, message, user, include=None):
-        conf_user = self._be.head.commit.author.conf_name
-
         if include is not None:
             for file in include:
                 self._be.index.add(file)
-        author = git.Actor(user, conf_user)
+        author = git.Actor(user, user)
         self._be.index.commit(message=message, author=author)
 
     def root(self):
