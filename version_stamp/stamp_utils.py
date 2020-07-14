@@ -21,7 +21,7 @@ class VersionControlBackend(object):
     def tag(self, tags, user):
         raise NotImplementedError()
 
-    def push(self):
+    def push(self, tags=[]):
         raise NotImplementedError()
 
     def pull(self):
@@ -85,7 +85,7 @@ class MercurialBackend(VersionControlBackend):
         for tag in tags:
             self._be.tag(tag.encode(), user=user)
 
-    def push(self):
+    def push(self, tags=[]):
         self._be.push()
 
     def pull(self):
@@ -235,14 +235,13 @@ class GitBackend(VersionControlBackend):
                 message='Automatic tag "{0}"'.format(item)
             )
 
-            self._origin.push(new_tag)
-
-    def push(self):
+    def push(self, tags=[]):
         self._origin.push()
+        for tag in tags:
+            self._origin.push(tag)
 
     def pull(self):
-        for branch in self._be.branches:
-            self._origin.pull(branch)
+        self._origin.pull()
 
     def commit(self, message, user, include=None):
         if include is not None:
@@ -336,7 +335,14 @@ class GitBackend(VersionControlBackend):
 
         self._be.git.reset('--hard', 'HEAD~1')
         for tag in tags:
-            self._be.delete_tag(tag)
+            try:
+                self._be.delete_tag(tag)
+            except Exception as exc:
+                logging.getLogger().exception(
+                    'Failed to remove tag {0}'.format(tag)
+                )
+
+                continue
 
     @staticmethod
     def clone(path, remote):
