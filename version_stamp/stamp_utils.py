@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from version_stamp import version as version_mod
 
-INIT_COMMIT_MESSAGE= 'Initialized vmn tracking'
+INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 
 
 class VersionControlBackend(object):
@@ -21,7 +21,7 @@ class VersionControlBackend(object):
     def tag(self, tags, user):
         raise NotImplementedError()
 
-    def push(self, tags=[]):
+    def push(self, tags=()):
         raise NotImplementedError()
 
     def pull(self):
@@ -85,7 +85,7 @@ class MercurialBackend(VersionControlBackend):
         for tag in tags:
             self._be.tag(tag.encode(), user=user)
 
-    def push(self, tags=[]):
+    def push(self, tags=()):
         self._be.push()
 
     def pull(self):
@@ -229,13 +229,13 @@ class GitBackend(VersionControlBackend):
         self._be.close()
 
     def tag(self, tags, user):
-        for item in tags:
-            new_tag = self._be.create_tag(
-                item,
-                message='Automatic tag "{0}"'.format(item)
+        for tag in tags:
+            self._be.create_tag(
+                tag,
+                message='Automatic tag "{0}"'.format(tag)
             )
 
-    def push(self, tags=[]):
+    def push(self, tags=()):
         self._origin.push()
         for tag in tags:
             self._origin.push(tag)
@@ -337,7 +337,7 @@ class GitBackend(VersionControlBackend):
         for tag in tags:
             try:
                 self._be.delete_tag(tag)
-            except Exception as exc:
+            except Exception:
                 logging.getLogger().exception(
                     'Failed to remove tag {0}'.format(tag)
                 )
