@@ -7,7 +7,6 @@ import sys
 import os
 import pathlib
 from lockfile import LockFile
-import time
 from multiprocessing import Pool
 import random
 import time
@@ -649,7 +648,7 @@ def init(params):
     Path(vmn_unique_path).touch()
 
     be.commit(
-        message='Initialized vmn tracking',
+        message=stamp_utils.INIT_COMMIT_MESSAGE,
         user='vmn',
         include=[vmn_path, vmn_unique_path]
     )

@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from version_stamp import version as version_mod
 
+INIT_COMMIT_MESSAGE= 'Initialized vmn tracking'
+
 
 class VersionControlBackend(object):
     def __init__(self, type):
@@ -93,6 +95,9 @@ class MercurialBackend(VersionControlBackend):
         if include is not None:
             for file in include:
                 self._be.add(file.encode())
+
+        message = '{0}\n\n' \
+                  'vmn version: {1}'.format(message, version_mod.version)
 
         self._be.commit(message=message, user=user)
 
@@ -182,7 +187,7 @@ class MercurialBackend(VersionControlBackend):
     def last_user_changeset(self):
         rev = self._be.tip()
         while rev.author.decode() == 'vmn':
-            if rev.desc.decode() == 'Initialized vmn tracking':
+            if rev.desc.decode().startswith(INIT_COMMIT_MESSAGE):
                 break
 
             rev = self._be.parents(rev[1].decode())[0]
@@ -309,7 +314,7 @@ class GitBackend(VersionControlBackend):
     def last_user_changeset(self):
         for p in self._be.iter_commits():
             if p.author.name == 'vmn':
-                if p.message != 'Initialized vmn tracking':
+                if not p.message.startswith(INIT_COMMIT_MESSAGE):
                     continue
 
             return p.hexsha
