@@ -665,7 +665,7 @@ def init(params):
     return None
 
 
-def show(params):
+def show(params, root):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -675,12 +675,19 @@ def show(params):
         LOGGER.error('vmn tracking is not yet initialized')
         return err
 
-    app_path = params['app_path']
-    if not os.path.isfile(app_path):
-        LOGGER.error('No ver.yml file under {0}'.format(params['name']))
+    version_file_path = params['app_path']
+    if root:
+        version_file_path = \
+            version_file_path.replace('ver.yml', 'root_ver.yml')
+
+    if not os.path.isfile(version_file_path):
+        LOGGER.error('Version file {0} was not found'.format(
+            version_file_path)
+        )
+
         return err
 
-    with open(app_path) as f:
+    with open(version_file_path) as f:
         data = yaml.safe_load(f)
         print(data['version'])
 
@@ -1048,6 +1055,8 @@ def main(command_line=None):
     pshow.add_argument(
         'name', help="The application's name"
     )
+    pshow.add_argument('--root', dest='root', action='store_true')
+    pshow.set_defaults(root=False)
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
@@ -1094,7 +1103,7 @@ def main(command_line=None):
     if args.command == 'init':
         err = init(params)
     if args.command == 'show':
-        err = show(params)
+        err = show(params, args.root)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
