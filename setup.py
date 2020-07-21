@@ -6,7 +6,7 @@ description = 'Stamping utility'
 
 install_requires=[
     'python-hglib>=2.6.1',
-    'lockfile>=0.12.2',
+    'filelock>=3.0.12',
     'GitPython>=3.1.3',
     'PyYAML>=5.3.1',
 ]
