@@ -6,7 +6,7 @@ import yaml
 import sys
 import os
 import pathlib
-from lockfile import LockFile
+from filelock import FileLock
 from multiprocessing import Pool
 import random
 import time
@@ -714,9 +714,10 @@ def stamp(params):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    lock = LockFile(os.path.join(params['root_path'], 'vmn.lock'))
+    lock_file_path = os.path.join(params['root_path'], 'vmn.lock')
+    lock = FileLock(lock_file_path)
     with lock:
-        LOGGER.info('Locked: {0}'.format(lock.path))
+        LOGGER.info('Locked: {0}'.format(lock_file_path))
 
         be = VersionControlStamper(params)
 
@@ -734,7 +735,7 @@ def stamp(params):
 
         be.deallocate_backend()
 
-    LOGGER.info('Released locked: {0}'.format(lock.path))
+    LOGGER.info('Released locked: {0}'.format(lock_file_path))
 
     return None
 
