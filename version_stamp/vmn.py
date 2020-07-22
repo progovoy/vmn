@@ -192,7 +192,8 @@ class VersionControlStamper(IVersionsStamper):
 
                 # when k is the "main repo" repo
                 if self._repo_name == k:
-                    user_changeset = self._backend.last_user_changeset()
+                    user_changeset = \
+                        self._backend.last_user_changeset()
 
                     if v['hash'] != user_changeset:
                         found = False
@@ -810,7 +811,7 @@ def goto_version(params, version):
         if deps:
             _goto_version(deps, params['root_path'])
 
-    return None
+    return 0
 
 
 def _pull_repo(args):
@@ -1059,6 +1060,7 @@ def main(command_line=None):
         'init',
         help='initialize version tracking'
     )
+
     pshow = subprasers.add_parser(
         'show',
         help='show app version'
@@ -1068,6 +1070,7 @@ def main(command_line=None):
     )
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
+
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
