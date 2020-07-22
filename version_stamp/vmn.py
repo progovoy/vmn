@@ -277,6 +277,7 @@ class VersionControlStamper(IVersionsStamper):
         ver_yml = {
             'name': self._root_app_name,
             'version': version,
+            'latest_service': self._name,
             'services': {},
             'external_services': {},
             "conf": {
@@ -546,18 +547,6 @@ class VersionControlStamper(IVersionsStamper):
     def retrieve_remote_changes(self):
         self._backend.pull()
 
-    def _delete_dangling_tags(self):
-        tags = self._backend.tags()
-
-        tags_to_delete = []
-        for tag in tags:
-            # Find the last occurrence of _ on the tag and extract an
-            # app name from it
-            tmp = tag[:tag.rfind('_')]
-            if not tmp == '-'.join(os.path.split(self._name)):
-                continue
-
-            tags_to_delete.append(tag)
 
     def _get_app_changesets(self):
         hist_changesets = {}
@@ -677,7 +666,7 @@ def init(params):
     return None
 
 
-def show(params, root):
+def show(params):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -688,9 +677,8 @@ def show(params, root):
         return err
 
     version_file_path = params['app_path']
-    if root:
-        version_file_path = \
-            version_file_path.replace('ver.yml', 'root_ver.yml')
+    if params['root']:
+        version_file_path = params['root_app_path']
 
     if not os.path.isfile(version_file_path):
         LOGGER.error('Version file {0} was not found'.format(
@@ -772,45 +760,54 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    if not os.path.isfile(params['app_path']):
-        LOGGER.error('No such app: {0}'.format(params['name']))
-        return 1
+    ver_file_path = None
+    if params['root']:
+        if not os.path.isfile(params['root_app_path']):
+            LOGGER.error('No such root app: {0}'.format(params['name']))
+            return 1
 
-    if version is None:
-        with open(params['app_path'], 'r') as f:
+        with open(params['root_app_path'], 'r') as f:
             data = yaml.safe_load(f)
-            deps = data["changesets"]
-            deps.pop('.')
-            if deps:
-                for rel_path, v in deps.items():
-                    v['hash'] = None
-
-                _goto_version(deps, params['root_path'])
-
-            be.checkout_branch()
-
-            return 0
-
-    tag_name = params['name'].replace('/', '-')
-    tag_name = '{0}_{1}'.format(tag_name, version)
-    try:
-        be.checkout(tag=tag_name)
-    except Exception:
-        LOGGER.error(
-            'App: {0} with version: {1} was '
-            'not found'.format(
-                params['name'], version
+            ver_file_path = os.path.join(
+                params['root_path'],
+                '.vmn',
+                data['latest_service'],
+                'ver.yml'
             )
-        )
+    else:
+        if not os.path.isfile(params['app_path']):
+            LOGGER.error('No such app: {0}'.format(params['name']))
+            return 1
 
-        return 1
+        ver_file_path = params['app_path']
 
-    with open(params['app_path'], 'r') as f:
+    with open(ver_file_path, 'r') as f:
         data = yaml.safe_load(f)
         deps = data["changesets"]
         deps.pop('.')
         if deps:
+            if version is None:
+                for rel_path, v in deps.items():
+                    v['hash'] = None
+
             _goto_version(deps, params['root_path'])
+
+        if version is None:
+            be.checkout_branch()
+        else:
+            tag_name = params['name'].replace('/', '-')
+            tag_name = '{0}_{1}'.format(tag_name, version)
+            try:
+                be.checkout(tag=tag_name)
+            except Exception:
+                LOGGER.error(
+                    'App: {0} with version: {1} was '
+                    'not found'.format(
+                        params['name'], version
+                    )
+                )
+
+                return 1
 
     return 0
 
@@ -951,10 +948,11 @@ def _goto_version(deps, root):
         )
 
 
-def build_world(name, working_dir):
+def build_world(name, working_dir, root=False):
     params = {
         'name': name,
         'working_dir': working_dir,
+        'root': root
     }
 
     be, err = stamp_utils.get_client(params['working_dir'])
@@ -993,11 +991,14 @@ def build_world(name, working_dir):
     params['hist_path'] = hist_path
     params['repo_name'] = os.path.basename(root_path)
 
-    root_app_name = params['name'].split('/')
-    if len(root_app_name) == 1:
-        root_app_name = None
+    if root:
+        root_app_name = name
     else:
-        root_app_name = '/'.join(root_app_name[:-1])
+        root_app_name = params['name'].split('/')
+        if len(root_app_name) == 1:
+            root_app_name = None
+        else:
+            root_app_name = '/'.join(root_app_name[:-1])
 
     root_app_path = None
     root_hist_path = None
@@ -1099,6 +1100,8 @@ def main(command_line=None):
         required=False,
         help="The version to go to"
     )
+    pgoto.add_argument('--root', dest='root', action='store_true')
+    pgoto.set_defaults(root=False)
     pgoto.add_argument(
         'name',
         help="The application's name"
@@ -1109,8 +1112,13 @@ def main(command_line=None):
         cwd = os.environ['VMN_WORKING_DIR']
 
     args = parser.parse_args(command_line)
+
+    root = False
+    if 'root' in args:
+        root = args.root
+
     if 'name' in args:
-        params = build_world(args.name, cwd)
+        params = build_world(args.name, cwd, root)
     else:
         params = build_world(None, cwd)
 
@@ -1118,7 +1126,7 @@ def main(command_line=None):
     if args.command == 'init':
         err = init(params)
     if args.command == 'show':
-        err = show(params, args.root)
+        err = show(params)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
