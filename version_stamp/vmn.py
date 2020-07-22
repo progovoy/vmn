@@ -786,8 +786,8 @@ def goto_version(params, version):
                     v['hash'] = None
 
                 _goto_version(deps, params['root_path'])
-            else:
-                be.checkout_branch()
+
+            be.checkout_branch()
 
             return 0
 
