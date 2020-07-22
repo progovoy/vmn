@@ -403,7 +403,12 @@ class VersionControlStamper(IVersionsStamper):
         # write version file
         changesets_to_file = {}
         for k in flat_dependency_repos:
-            changesets_to_file[k] = user_repo_details[k]
+            if self._repo_name == k:
+                changesets_to_file[k] = user_repo_details[k]
+                changesets_to_file[k]['hash'] = \
+                    self._backend.last_user_changeset()
+            else:
+                changesets_to_file[k] = user_repo_details[k]
 
         self._write_app_version_file(
             version=current_version,
