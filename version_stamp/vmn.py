@@ -611,13 +611,13 @@ def get_version(versions_be_ifc, params):
         if err == 1:
             override_current_version = current_version
             override_main_current_version = main_ver
-            release_mode = 'micro'
+            override_release_mode = 'micro'
 
             LOGGER.warning(
                 'Failed to publish. Trying to auto-increase '
                 'from {0} to {1}'.format(
                     current_version,
-                    gen_app_version(current_version, release_mode)
+                    gen_app_version(current_version, override_release_mode)
                 )
             )
 
