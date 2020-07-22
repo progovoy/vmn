@@ -705,7 +705,7 @@ def show(params, root):
     return None
 
 
-def stamp(params):
+def stamp(params, pull=False):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -735,6 +735,9 @@ def stamp(params):
         be.allocate_backend()
 
         try:
+            if pull:
+                be.retrieve_remote_changes()
+
             version = get_version(be, params)
         except Exception:
             LOGGER.exception('Logged Exception message:')
@@ -1079,17 +1082,17 @@ def main(command_line=None):
         required=True,
         help='major / minor / patch / micro'
     )
-
     pstamp.add_argument(
         '-s', '--starting-version',
         default='0.0.0.0',
         required=False,
         help='Starting version'
     )
-
+    pstamp.add_argument('--pull', dest='pull', action='store_true')
     pstamp.add_argument(
         'name', help="The application's name"
     )
+    pstamp.set_defaults(pull=False)
 
     pgoto = subprasers.add_parser('goto', help='go to version')
     pgoto.add_argument(
@@ -1121,7 +1124,7 @@ def main(command_line=None):
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
-        err = stamp(params)
+        err = stamp(params, args.pull)
     elif args.command == 'goto':
         err = goto_version(params, args.version)
 
