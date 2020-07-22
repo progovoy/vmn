@@ -673,7 +673,7 @@ def show(params):
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
-        return err
+        return 1
 
     version_file_path = params['app_path']
     if params['root']:
@@ -684,13 +684,13 @@ def show(params):
             version_file_path)
         )
 
-        return err
+        return 1
 
     with open(version_file_path) as f:
         data = yaml.safe_load(f)
         print(data['version'])
 
-    return None
+    return 0
 
 
 def stamp(params, pull=False):
