@@ -236,7 +236,15 @@ class GitBackend(VersionControlBackend):
             )
 
     def push(self, tags=()):
-        self._origin.push()
+        ret = self._origin.push()
+
+        if ret[0].old_commit is None:
+            raise Warning(
+                'Push has failed: {0}'.format(
+                    ret[0].summary
+                )
+            )
+
         for tag in tags:
             self._origin.push(tag)
 

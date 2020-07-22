@@ -489,14 +489,6 @@ class VersionControlStamper(IVersionsStamper):
 
     def publish(self, app_version, main_version=None):
         if self._release_mode == 'debug':
-            # TODO:: Do we still need it?
-            # We may push new files here so give it a try
-            try:
-                pass
-                self._backend.push()
-            except Exception as exc:
-                LOGGER.error(exc)
-
             return 0
 
         version_files = [
@@ -546,9 +538,8 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
             self._backend.revert_vmn_changes(tags)
-            # TODO:: git revert this commit when the auto retry
-            #  feature will be stable enough
-            return 1
+
+            return 2
 
         return 0
 
@@ -580,7 +571,10 @@ class VersionControlStamper(IVersionsStamper):
         return hist_changesets
 
 
-def get_version(versions_be_ifc, params):
+def get_version(versions_be_ifc, params, pull):
+    if pull:
+        versions_be_ifc.retrieve_remote_changes()
+
     user_repo_details = params['user_repos_details']
 
     ver = versions_be_ifc.find_matching_version(user_repo_details)
@@ -626,10 +620,12 @@ def get_version(versions_be_ifc, params):
                     gen_app_version(current_version, override_release_mode)
                 )
             )
+        elif err == 2:
+            if not pull:
+                break
 
             time.sleep(random.randint(1, 5))
-
-            continue
+            versions_be_ifc.retrieve_remote_changes()
         else:
             break
 
@@ -740,10 +736,7 @@ def stamp(params, pull=False):
         be.allocate_backend()
 
         try:
-            if pull:
-                be.retrieve_remote_changes()
-
-            version = get_version(be, params)
+            version = get_version(be, params, pull)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             be.deallocate_backend()
