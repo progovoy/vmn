@@ -547,7 +547,6 @@ class VersionControlStamper(IVersionsStamper):
     def retrieve_remote_changes(self):
         self._backend.pull()
 
-
     def _get_app_changesets(self):
         hist_changesets = {}
         if not os.path.isfile(self._app_path):
