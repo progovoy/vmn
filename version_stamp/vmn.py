@@ -1109,6 +1109,7 @@ def main(command_line=None):
     pgoto.set_defaults(root=False)
     pgoto.add_argument(
         'name',
+        required=True,
         help="The application's name"
     )
 
