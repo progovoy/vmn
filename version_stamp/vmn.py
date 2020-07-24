@@ -1110,6 +1110,8 @@ def main(command_line=None):
     if 'VMN_WORKING_DIR' in os.environ:
         cwd = os.environ['VMN_WORKING_DIR']
 
+    LOGGER.info('working dir: {0}'.format(cwd))
+
     args = parser.parse_args(command_line)
 
     root = False
