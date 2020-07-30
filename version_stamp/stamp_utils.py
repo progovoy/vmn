@@ -293,14 +293,34 @@ class GitBackend(VersionControlBackend):
         return None
 
     def check_for_outgoing_changes(self):
-        for branch in self._be.branches:
-            outgoing = tuple(self._be.iter_commits(
-                'origin/{0}..{0}'.format(branch))
-            )
+        if self._be.head.is_detached:
+            err = 'In detached head'
+            return err
 
-            if len(outgoing) > 0:
-                err = 'Outgoing changes in {0}'.format(self.root())
-                return err
+        branch_name = self._be.active_branch.name
+        try:
+            self._be.git.rev_parse(
+                '--verify', '{0}/{1}..{1}'.format(
+                    self._origin.name, branch_name
+                )
+            )
+        except Exception as exc:
+            err = 'Branch {0}/{1} does not exist. ' \
+                  'Please push or set-upstream branch to ' \
+                  '{0}/{1} of branch {1}'.format(
+                self._origin.name, branch_name
+            )
+            return err
+
+        outgoing = tuple(self._be.iter_commits(
+            '{0}/{1}..{1}'.format(self._origin.name, branch_name))
+        )
+
+        if len(outgoing) > 0:
+            err = 'Outgoing changes in {0} from branch {1}'.format(
+                self.root(), branch_name
+            )
+            return err
 
         return None
 
