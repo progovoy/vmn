@@ -54,7 +54,7 @@ fi
 
 COVERAGE=''
 if [ ${ci_coverage} = 'yes' ]; then
-        COVERAGE='--cov=vmn'
+        COVERAGE='--cov-report term --cov-report html --cov=vmn --cov=stamp_utils'
 fi
 
 SPECIFIC_TEST=''
