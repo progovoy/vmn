@@ -8,6 +8,10 @@ A simple package for auto increasing version numbers of any application agnostic
 
 `vmn` is fully compliant with https://semver.org semantics
 
+[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
+
+[![Build Status](https://travis-ci.com/final-israel/vmn.svg?branch=master)](https://travis-ci.com/final-israel/vmn)
+
 ## Usage
 
 ```sh

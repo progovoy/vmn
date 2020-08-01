@@ -10,8 +10,12 @@ python:
 before_install:
   - echo -e "[ui]\nusername=hguser" > ~/.hgrc
   - sudo apt-get -y install mercurial
+  - pip install codecov
+  - pip install pytest-coverage
 install:
   - pip install -e .
 # command to run tests
 script:
-  - tests/run_pytest.sh
+  - tests/run_pytest.sh --ci_coverage
+after_success:
+  - CODECOV_TOKEN="648eab25-7daa-445b-8bc7-d11034f464c4" codecov # submit coverage
