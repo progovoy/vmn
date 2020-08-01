@@ -304,12 +304,11 @@ class GitBackend(VersionControlBackend):
                     self._origin.name, branch_name
                 )
             )
-        except Exception as exc:
+        except Exception:
             err = 'Branch {0}/{1} does not exist. ' \
                   'Please push or set-upstream branch to ' \
                   '{0}/{1} of branch {1}'.format(
-                self._origin.name, branch_name
-            )
+                      self._origin.name, branch_name)
             return err
 
         outgoing = tuple(self._be.iter_commits(
