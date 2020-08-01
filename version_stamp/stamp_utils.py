@@ -294,13 +294,13 @@ class GitBackend(VersionControlBackend):
 
     def check_for_outgoing_changes(self):
         if self._be.head.is_detached:
-            err = 'In detached head'
+            err = 'Detached head in {0}.'.format(self.root())
             return err
 
         branch_name = self._be.active_branch.name
         try:
             self._be.git.rev_parse(
-                '--verify', '{0}/{1}..{1}'.format(
+                '--verify', '{0}/{1}'.format(
                     self._origin.name, branch_name
                 )
             )
