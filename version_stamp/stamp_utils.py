@@ -236,7 +236,10 @@ class GitBackend(VersionControlBackend):
             )
 
     def push(self, tags=()):
-        ret = self._origin.push()
+        try:
+            ret = self._origin.push(o='ci.skip')
+        except git.GitCommandError:
+            ret = self._origin.push()
 
         if ret[0].old_commit is None:
             if 'up to date' in ret[0].summary:
