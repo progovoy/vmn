@@ -1079,7 +1079,9 @@ def main(command_line=None):
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
     pshow.set_defaults(verbose=False)
-    pshow.add_argument('--raw_version', dest='raw_version', action='store_true')
+    pshow.add_argument(
+        '--raw_version', dest='raw_version', action='store_true'
+    )
     pshow.set_defaults(raw_version=False)
 
     pstamp = subprasers.add_parser('stamp', help='stamp version')
