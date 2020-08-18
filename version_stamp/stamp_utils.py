@@ -255,7 +255,10 @@ class GitBackend(VersionControlBackend):
                 )
 
         for tag in tags:
-            self._origin.push(tag)
+            try:
+                self._origin.push(tag, o='ci.skip')
+            except git.GitCommandError:
+                self._origin.push(tag)
 
     def pull(self):
         self._origin.pull()
