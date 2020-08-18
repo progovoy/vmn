@@ -239,11 +239,17 @@ class GitBackend(VersionControlBackend):
         ret = self._origin.push()
 
         if ret[0].old_commit is None:
-            raise Warning(
-                'Push has failed: {0}'.format(
-                    ret[0].summary
+            if 'up to date' in ret[0].summary:
+                logging.getLogger().warning(
+                    'GitPython library has failed to push because we are '
+                    'up to date already. How can it be? '
                 )
-            )
+            else:
+                raise Warning(
+                    'Push has failed: {0}'.format(
+                        ret[0].summary
+                    )
+                )
 
         for tag in tags:
             self._origin.push(tag)
