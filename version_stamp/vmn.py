@@ -691,6 +691,8 @@ def show(params):
         if params['verbose']:
             data['root_path'] = params['root_path']
             yaml.dump(data, sys.stdout)
+        elif params['raw_version']:
+            print(data['_version'])
         else:
             print(data['version'])
 
@@ -1077,6 +1079,8 @@ def main(command_line=None):
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
     pshow.set_defaults(verbose=False)
+    pshow.add_argument('--raw_version', dest='raw_version', action='store_true')
+    pshow.set_defaults(raw_version=False)
 
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
@@ -1132,6 +1136,7 @@ def main(command_line=None):
         err = init(params)
     if args.command == 'show':
         params['verbose'] = args.verbose
+        params['raw_version'] = args.raw_version
         err = show(params)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
