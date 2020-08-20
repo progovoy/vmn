@@ -76,9 +76,13 @@ class VersionControlBackend(object):
         return self._type
 
     @staticmethod
-    def get_tag_name(app_name, version):
+    def get_tag_name(app_name, version=None):
         app_name = app_name.replace('/', '-')
-        return '{0}_{1}'.format(app_name, version)
+
+        if version is None:
+            return '{0}'.format(app_name)
+        else:
+            return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
     def get_moving_tag_name(app_name, branch):
@@ -111,11 +115,11 @@ class GitBackend(VersionControlBackend):
 
     def validate_tag(self, tag_name):
         try:
-            tag_obj = self._be.commit(tag_name)
+            commit_tag_obj = self._be.commit(tag_name)
         except:
             return False
 
-        if tag_obj.author.name != 'vmn':
+        if commit_tag_obj.author.name != 'vmn':
             return False
 
         # TODO:: add API version check here

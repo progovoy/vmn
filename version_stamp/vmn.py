@@ -182,10 +182,14 @@ class VersionControlStamper(IVersionsStamper):
         del self._backend
 
     def find_matching_version(self, user_repo_details):
+        branch_name = self._backend.get_active_branch()
+        tag_name = \
+            stamp_utils.VersionControlBackend.get_tag_name(self._name)
+
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
-            if not tag.startswith(self._name):
+            if not tag.startswith(tag_name):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag)
@@ -208,7 +212,7 @@ class VersionControlStamper(IVersionsStamper):
                     break
 
             if found:
-                return version
+                return ver_info['stamping']['app']['_version']
 
         return None
 
@@ -382,7 +386,6 @@ class VersionControlStamper(IVersionsStamper):
             external_services = copy.deepcopy(
                 data['conf']['external_services']
             )
-
 
         if ver_info is None:
             services = {}
