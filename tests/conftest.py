@@ -32,12 +32,7 @@ class FSAppLayoutFixture(object):
         self.base_dir = test_app.dirname
         self.be_type = be_type
 
-        if be_type == 'mercurial':
-            self._app_backend = MercurialBackend(
-                test_app_remote.strpath,
-                test_app.strpath
-            )
-        elif be_type == 'git':
+        if be_type == 'git':
             self._app_backend = GitBackend(
                 test_app_remote.strpath,
                 test_app.strpath
@@ -63,12 +58,7 @@ class FSAppLayoutFixture(object):
     def create_repo(self, repo_name, repo_type):
         path = os.path.join(self.base_dir, repo_name)
 
-        if repo_type == 'mercurial':
-            be = MercurialBackend(
-                '{0}_remote'.format(path),
-                path
-            )
-        elif repo_type == 'git':
+        if repo_type == 'git':
             be = GitBackend(
                 '{0}_remote'.format(path),
                 path
@@ -104,17 +94,7 @@ class FSAppLayoutFixture(object):
             with open(path, 'w') as f:
                 f.write(content)
 
-            if self._repos[repo_name]['type'] == 'mercurial':
-                client = hglib.open(self._repos[repo_name]['path'])
-                client.add(path.encode())
-                client.commit('Added file {0}'.format(path))
-                self._repos[repo_name]['changesets'] = {
-                    'hash': client.log(branch='default')[0][1].decode('utf-8'),
-                    'vcs_type': 'mercurial'
-                }
-
-                client.push()
-            else:
+            if self._repos[repo_name]['type'] == 'git':
                 client = Repo(self._repos[repo_name]['path'])
                 client.index.add([path])
                 client.index.commit('Added file {0}'.format(path))
@@ -127,14 +107,7 @@ class FSAppLayoutFixture(object):
             with open(path, 'w') as f:
                 f.write(content)
 
-            if self._repos[repo_name]['type'] == 'mercurial':
-                client = hglib.open(self._repos[repo_name]['path'])
-                client.commit('Modified file {0}'.format(path))
-                self._repos[repo_name]['changesets'] = {
-                    'hash': client.log(branch='default')[0][1].decode('utf-8'),
-                    'vcs_type': 'mercurial'
-                }
-            else:
+            if self._repos[repo_name]['type'] == 'git':
                 client = Repo(self._repos[repo_name]['path'])
                 client.index.commit('Added file {0}'.format(path))
                 self._repos[repo_name]['changesets'] = {
@@ -184,63 +157,6 @@ class VersionControlBackend(object):
 
     def __del__(self):
         pass
-
-
-class MercurialBackend(VersionControlBackend):
-    def __init__(self, remote_versions_root_path, versions_root_path):
-        VersionControlBackend.__init__(
-            self, remote_versions_root_path, versions_root_path
-        )
-
-        client = hglib.init(
-            dest=self.remote_versions_root_path
-        )
-        client.close()
-
-        self._mercurial_backend = hglib.clone(
-            '{0}'.format(self.remote_versions_root_path),
-            '{0}'.format(self.root_path)
-        )
-        self._mercurial_backend.close()
-
-        with open(os.path.join(versions_root_path, 'init.txt'), 'w+') as f:
-            f.write('# init\n')
-
-        self._mercurial_backend = hglib.open(
-            '{0}'.format(self.root_path)
-        )
-        path = os.path.join(versions_root_path, 'init.txt').encode()
-        self._mercurial_backend.add(path)
-        self._mercurial_backend.commit(
-            message='first commit', user='vmn_test_user', include=path
-        )
-        self._mercurial_backend.push()
-
-        self.be = stamp_utils.MercurialBackend(versions_root_path)
-
-    def __del__(self):
-        self._mercurial_backend.close()
-        VersionControlBackend.__del__(self)
-
-    def remove_app_version_file(self, app_version_file_path):
-        client = hglib.open(self.root_path)
-        client.remove(app_version_file_path.encode('utf8'))
-        client.commit('Manualy removed file {0}'.format(app_version_file_path))
-        client.push()
-        client.close()
-
-    def add_conf_file(self, version_info_file_path):
-        client = hglib.open(self.root_path)
-
-        client.add(version_info_file_path.encode())
-        client.commit(
-            message='Manually add version_info file',
-            user='vmn_test_user',
-            include=version_info_file_path.encode(),
-        )
-
-        client.push()
-        client.close()
 
 
 class GitBackend(VersionControlBackend):
@@ -315,7 +231,7 @@ def ver_stamp_env():
 
 def pytest_generate_tests(metafunc):
     if "app_layout" in metafunc.fixturenames:
-        metafunc.parametrize("app_layout", ["git", "mercurial"], indirect=True)
+        metafunc.parametrize("app_layout", ["git"], indirect=True)
 
 
 @pytest.fixture(scope='function')
