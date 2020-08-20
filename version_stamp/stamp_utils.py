@@ -4,8 +4,8 @@ import os
 import hglib
 import git
 import logging
+import yaml
 from pathlib import Path
-from version_stamp import version as version_mod
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 
@@ -18,7 +18,7 @@ class VersionControlBackend(object):
     def __del__(self):
         pass
 
-    def tag(self, tags, user):
+    def tag(self, tags, user, force=False):
         raise NotImplementedError()
 
     def push(self, tags=()):
@@ -63,154 +63,27 @@ class VersionControlBackend(object):
     def revert_vmn_changes(self, tags):
         raise NotImplementedError()
 
+    def get_vmn_version_info(self, tag_name):
+        raise NotImplementedError()
+
+    def get_active_branch(self):
+        raise NotImplementedError()
+
+    def validate_tag(self, tag_name):
+        raise NotImplementedError()
+
     def type(self):
         return self._type
 
-
-class MercurialBackend(VersionControlBackend):
-    def __init__(self, repo_path, revert=False, pull=False):
-        VersionControlBackend.__init__(self, 'mercurial')
-
-        self._be = hglib.open(repo_path)
-
-        if revert:
-            self._be.revert([], all=True)
-        if pull:
-            self._be.pull(update=True)
-
-    def __del__(self):
-        self._be.close()
-
-    def tag(self, tags, user):
-        for tag in tags:
-            self._be.tag(tag.encode(), user=user)
-
-    def push(self, tags=()):
-        self._be.push()
-
-    def pull(self):
-        self._be.pull(update=True)
-
-    def commit(self, message, user, include=None):
-        if include is not None:
-            for file in include:
-                self._be.add(file.encode())
-
-        message = '{0}\n\n' \
-                  'vmn version: {1}'.format(message, version_mod.version)
-
-        self._be.commit(message=message, user=user)
-
-    def root(self):
-        return self._be.root().decode()
-
-    def status(self, tag):
-        status = self._be.status(change=tag)
-
-        paths = []
-        for item in status:
-            paths.append(item[1].decode())
-
-        return paths
-
-    def tags(self):
-        tags = []
-        _tags = self._be.tags()
-
-        for tag in _tags:
-            tags.append(tag[0].decode())
-
-        return tags
-
-    def check_for_pending_changes(self):
-        diff = self._be.diff()
-        if diff != b'':
-            err = 'Pending changes in {0}. Aborting'.format(self.root())
-            return err
-
-        return None
-
-    def check_for_outgoing_changes(self):
-        sum = self._be.summary()
-        cur_branch = sum['branch'.encode('utf-8')].decode()
-        out = self._be.outgoing(branch=cur_branch)
-        if out:
-            err = 'Outgoing changes in {0}. Aborting'.format(self.root())
-            return err
-
-        return None
-
-    def checkout_branch(self):
-        branch = self._be.branch()
-        heads = self._be.heads()
-        tip_changeset = None
-        for head in heads:
-            if head[3].decode() != branch:
-                continue
-
-            tip_changeset = head[1]
-            break
-
-        self._be.update(rev=tip_changeset)
-
-        return tip_changeset
-
-    def checkout(self, rev=None, tag=None):
-        if tag is not None:
-            _tags = self._be.tags()
-
-            found = False
-            changeset = self.changeset(short=True)
-            for _tag in _tags:
-                if _tag[0].decode() == tag:
-                    self._be.update(rev=_tag[1])
-                    found = True
-
-            if not found:
-                raise RuntimeError('{0} tag not found'.format(tag))
-
-            self._be.update(rev=int(changeset) + 1)
-        else:
-            self._be.update(rev=rev)
-
-    def remote(self):
-        remotes = []
-        for k, remote in self._be.paths().items():
-            remotes.append(remote.decode('utf-8'))
-
-        remote = remotes[0]
-        if os.path.isdir(remote):
-            remote = os.path.relpath(remote, self.root())
-
-        return remote
-
-    def last_user_changeset(self):
-        rev = self._be.tip()
-        while rev.author.decode() == 'vmn':
-            if rev.desc.decode().startswith(INIT_COMMIT_MESSAGE):
-                break
-
-            rev = self._be.parents(rev[1].decode())[0]
-
-        return rev[1].decode()
-
-    def changeset(self, short=False):
-        tip = self._be.tip()
-        if short:
-            return self._be.tip()[0].decode()
-
-        return tip[1].decode()
-
-    def revert_vmn_changes(self, tags):
-        # TODO: implement
-        return
+    @staticmethod
+    def get_tag_name(app_name, version):
+        app_name = app_name.replace('/', '-')
+        return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
-    def clone(path, remote):
-        hglib.clone(
-            '{0}'.format(remote),
-            '{0}'.format(path)
-        )
+    def get_moving_tag_name(app_name, branch):
+        app_name = app_name.replace('/', '-')
+        return '_-latest-{0}_{1}'.format(branch, app_name)
 
 
 class GitBackend(VersionControlBackend):
@@ -228,12 +101,26 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def tag(self, tags, user):
+    def tag(self, tags, user, force=False):
         for tag in tags:
             self._be.create_tag(
                 tag,
-                message='Automatic tag "{0}"'.format(tag)
+                message='Automatic tag "{0}"'.format(tag),
+                force=force
             )
+
+    def validate_tag(self, tag_name):
+        try:
+            tag_obj = self._be.commit(tag_name)
+        except:
+            return False
+
+        if tag_obj.author.name != 'vmn':
+            return False
+
+        # TODO:: add API version check here
+
+        return True
 
     def push(self, tags=()):
         try:
@@ -268,9 +155,6 @@ class GitBackend(VersionControlBackend):
             for file in include:
                 self._be.index.add(file)
         author = git.Actor(user, user)
-
-        message = '{0}\n\n' \
-                  'vmn version: {1}'.format(message, version_mod.version)
 
         self._be.index.commit(message=message, author=author)
 
@@ -343,6 +227,9 @@ class GitBackend(VersionControlBackend):
 
         return self._be.active_branch.commit.hexsha
 
+    def get_active_branch(self):
+        return self._be.active_branch.name
+
     def checkout(self, rev=None, tag=None):
         if tag is not None:
             rev = tag
@@ -382,6 +269,14 @@ class GitBackend(VersionControlBackend):
                 )
 
                 continue
+
+    def get_vmn_version_info(self, tag_name):
+        if not self.validate_tag(tag_name):
+            return None
+
+        return yaml.safe_load(
+            self._be.commit(tag_name).message
+        )
 
     @staticmethod
     def clone(path, remote):
@@ -535,9 +430,7 @@ def get_client(path, revert=False, pull=False):
             return None, err
 
     be = None
-    if be_type == 'mercurial':
-        be = MercurialBackend(path, revert, pull)
-    elif be_type == 'git':
+    if be_type == 'git':
         be = GitBackend(path, revert, pull)
 
     return be, None
