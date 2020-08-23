@@ -182,7 +182,6 @@ class VersionControlStamper(IVersionsStamper):
         del self._backend
 
     def find_matching_version(self, user_repo_details):
-        branch_name = self._backend.get_active_branch()
         tag_name = \
             stamp_utils.VersionControlBackend.get_tag_name(self._name)
 
