@@ -1017,8 +1017,11 @@ def main(command_line=None):
         root = args.root
 
     if 'name' in args:
-        if args.name.startswith('_-'):
-            raise RuntimeError('App name cannot start with ->')
+        prefix = stamp_utils.MOVING_COMMIT_PREFIX
+        if args.name.startswith(prefix):
+            raise RuntimeError(
+                'App name cannot start with {0}'.format(prefix)
+            )
 
         params = build_world(args.name, cwd, root)
     else:

@@ -8,6 +8,7 @@ import yaml
 from pathlib import Path
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
+MOVING_COMMIT_PREFIX = '_-'
 
 
 class VersionControlBackend(object):
@@ -87,7 +88,11 @@ class VersionControlBackend(object):
     @staticmethod
     def get_moving_tag_name(app_name, branch):
         app_name = app_name.replace('/', '-')
-        return '_-latest-{0}_{1}'.format(branch, app_name)
+        return '{0}latest-{1}_{2}'.format(
+            MOVING_COMMIT_PREFIX,
+            branch,
+            app_name
+        )
 
 
 class GitBackend(VersionControlBackend):
