@@ -6,7 +6,7 @@ import yaml
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import vmn
-from stamp_utils import HostState
+import stamp_utils
 
 
 def test_basic_stamp(app_layout):
@@ -20,18 +20,21 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.1'
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.1'
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
 
     old_name = params['name']
     params['name'] = '{0}_{1}'.format(params['name'], '2')
@@ -40,9 +43,11 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '1.0.1'
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.0.1'
 
     params['name'] = old_name
     params = vmn.build_world(params['name'], params['working_dir'])
@@ -50,9 +55,11 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.1'
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
 
 
 def test_multi_repo_dependency(app_layout):
@@ -75,7 +82,7 @@ def test_multi_repo_dependency(app_layout):
         }},
         'extra_info': False
     }
-    for repo in (('repo1', 'mercurial'), ('repo2', 'git')):
+    for repo in (('repo1', 'git'), ('repo2', 'git')):
         be = app_layout.create_repo(
             repo_name=repo[0], repo_type=repo[1]
         )
@@ -94,12 +101,17 @@ def test_multi_repo_dependency(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.2'
-        assert '.' in data['changesets']
-        assert '../repo1' in data['changesets']
-        assert '../repo2' in data['changesets']
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.2'
+
+    assert data['version'] == '0.0.2'
+    assert '.' in data['changesets']
+    assert '../repo1' in data['changesets']
+    assert '../repo2' in data['changesets']
 
     with open(params['app_conf_path'], 'r') as f:
         data = yaml.safe_load(f)
@@ -119,13 +131,15 @@ def test_basic_root_stamp(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.1'
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
 
-    with open(params['root_app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == 1
+    data = ver_info['stamping']['root_app']
+    assert data['version'] == 1
 
     app2_params = vmn.build_world('root_app/app2', params['working_dir'])
     assert len(app2_params['user_repos_details']) == 1
@@ -134,13 +148,13 @@ def test_basic_root_stamp(app_layout):
     app2_params['starting_version'] = '0.0.0.0'
     vmn.stamp(app2_params)
 
-    with open(app2_params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.1.0'
-
-    with open(app2_params['root_app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == 2
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        app2_params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.1.0'
+    data = ver_info['stamping']['root_app']
+    assert data['version'] == 2
 
 
 def test_starting_version(app_layout):
@@ -153,9 +167,12 @@ def test_starting_version(app_layout):
     params['starting_version'] = '1.2.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '1.3.0'
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0'
 
 
 def test_version_template(app_layout):
@@ -172,15 +189,19 @@ def test_version_template(app_layout):
         data = yaml.safe_load(f)
         configured_template = data['conf']['template']
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        _, octats = vmn.IVersionsStamper.parse_template(configured_template)
-        formated_version = vmn.IVersionsStamper.get_formatted_version(
-            '1.3.0.0',
-            configured_template,
-            octats
-        )
-        assert data['version'] == formated_version
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0'
+    _, octats = vmn.IVersionsStamper.parse_template(configured_template)
+    formated_version = vmn.IVersionsStamper.get_formatted_version(
+        '1.3.0.0',
+        configured_template,
+        octats
+    )
+    assert data['version'] == formated_version
 
     template = 'ap{0}xx{0}XX{1}AC@{0}{2}{3}C'
     _, octats = vmn.IVersionsStamper.parse_template(template)
@@ -192,7 +213,6 @@ def test_version_template(app_layout):
     assert formated_version == 'ap2xx2XX0AC@296C'
 
 
-@pytest.mark.skip(reason="broken mercurial")
 def test_basic_goto(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])

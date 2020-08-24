@@ -183,7 +183,10 @@ class VersionControlStamper(IVersionsStamper):
 
     def find_matching_version(self, user_repo_details):
         tag_name = \
-            stamp_utils.VersionControlBackend.get_tag_name(self._name)
+            stamp_utils.VersionControlBackend.get_tag_name(
+                self._name,
+                version=None
+            )
 
         # Try to find any version of the application matching the
         # user's repositories local state
