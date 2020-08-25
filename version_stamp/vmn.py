@@ -678,7 +678,7 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    err = be.check_for_outgoing_changes()
+    err = be.check_for_outgoing_changes(skip_detached_check=True)
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
         return err

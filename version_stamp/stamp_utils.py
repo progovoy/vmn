@@ -43,7 +43,7 @@ class VersionControlBackend(object):
     def check_for_pending_changes(self):
         raise NotImplementedError()
 
-    def check_for_outgoing_changes(self):
+    def check_for_outgoing_changes(self, skip_detached_check=False):
         raise NotImplementedError()
 
     def checkout_branch(self):
@@ -197,8 +197,11 @@ class GitBackend(VersionControlBackend):
 
         return None
 
-    def check_for_outgoing_changes(self):
+    def check_for_outgoing_changes(self, skip_detached_check=False):
         if self._be.head.is_detached:
+            if skip_detached_check:
+                return None
+
             err = 'Detached head in {0}.'.format(self.root())
             return err
 
