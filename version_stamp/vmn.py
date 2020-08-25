@@ -586,26 +586,33 @@ def show(params):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
 
-    version_file_path = params['app_path']
-    if params['root']:
-        version_file_path = params['root_app_path']
+    branch_name = be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = be.get_vmn_version_info(tag_name)
 
-    if not os.path.isfile(version_file_path):
-        LOGGER.error('Version file {0} was not found'.format(
-            version_file_path)
+    if ver_info is None:
+        LOGGER.error(
+            'Version file was not found '
+            'for {0}. Tag: "{1}"'.format(
+                params['name'],
+                tag_name
+            )
         )
 
         return 1
 
-    with open(version_file_path) as f:
-        data = yaml.safe_load(f)
-        if params['verbose']:
-            data['root_path'] = params['root_path']
-            yaml.dump(data, sys.stdout)
-        elif params['raw']:
-            print(data['_version'])
-        else:
-            print(data['version'])
+    data = ver_info['stamping']['app']
+    if params['root']:
+        data = ver_info['stamping']['root_app']
+
+    if params['verbose']:
+        data['root_path'] = params['root_path']
+        yaml.dump(data, sys.stdout)
+    elif params['raw']:
+        print(data['_version'])
+    else:
+        print(data['version'])
 
     return 0
 
@@ -676,55 +683,45 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    ver_file_path = None
-    if params['root']:
-        if not os.path.isfile(params['root_app_path']):
-            LOGGER.error('No such root app: {0}'.format(params['name']))
-            return 1
-
-        with open(params['root_app_path'], 'r') as f:
-            data = yaml.safe_load(f)
-            ver_file_path = os.path.join(
-                params['root_path'],
-                '.vmn',
-                data['latest_service'],
-                'ver.yml'
-            )
+    if version is None:
+        branch_name = be.get_active_branch()
+        tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+            params['name'], branch_name)
     else:
-        if not os.path.isfile(params['app_path']):
-            LOGGER.error('No such app: {0}'.format(params['name']))
-            return 1
+        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+            params['name'], version
+        )
 
-        ver_file_path = params['app_path']
+    ver_info = be.get_vmn_version_info(tag_name)
 
-    with open(ver_file_path, 'r') as f:
-        data = yaml.safe_load(f)
-        deps = data["changesets"]
-        deps.pop('.')
-        if deps:
-            if version is None:
-                for rel_path, v in deps.items():
-                    v['hash'] = None
+    if ver_info is None:
+        LOGGER.error('No such app: {0}'.format(params['name']))
+        return 1
 
-            _goto_version(deps, params['root_path'])
-
+    data = ver_info['stamping']['app']
+    deps = data["changesets"]
+    deps.pop('.')
+    if deps:
         if version is None:
-            be.checkout_branch()
-        else:
-            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-                params['name'], version
-            )
-            try:
-                be.checkout(tag=tag_name)
-            except Exception:
-                LOGGER.error(
-                    'App: {0} with version: {1} was '
-                    'not found'.format(
-                        params['name'], version
-                    )
-                )
+            for rel_path, v in deps.items():
+                v['hash'] = None
 
-                return 1
+        _goto_version(deps, params['root_path'])
+
+    if version is None:
+        be.checkout_branch()
+    else:
+        try:
+            be.checkout(tag=tag_name)
+        except Exception:
+            LOGGER.error(
+                'App: {0} with version: {1} was '
+                'not found'.format(
+                    params['name'], version
+                )
+            )
+
+            return 1
 
     return 0
 

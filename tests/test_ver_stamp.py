@@ -224,9 +224,12 @@ def test_basic_goto(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.1'
+    branch_name = app_layout._app_backend.be.get_active_branch()
+    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
+        params['name'], branch_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
 
     app_layout.write_file('test_repo', 'a.yxy', 'msg')
 
@@ -235,9 +238,9 @@ def test_basic_goto(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    with open(params['app_path'], 'r') as f:
-        data = yaml.safe_load(f)
-        assert data['version'] == '0.0.2'
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.2'
 
     c1 = app_layout._app_backend.be.changeset()
     assert vmn.goto_version(params, '1.0.1.0') == 1
