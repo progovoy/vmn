@@ -251,7 +251,9 @@ class GitBackend(VersionControlBackend):
             active_branch = self._be.active_branch.name
         else:
             if raise_on_detached_head:
-                raise RuntimeError('Active branch cannot be found in detached head')
+                raise RuntimeError(
+                    'Active branch cannot be found in detached head'
+                )
 
             out = self._be.git.branch(
                 '--contains',
