@@ -684,9 +684,10 @@ def goto_version(params, version):
         return err
 
     if version is None:
-        branch_name = be.get_active_branch()
+        branch_name = be.get_active_branch(raise_on_detached_head=False)
         tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-            params['name'], branch_name)
+            params['name'], branch_name
+        )
     else:
         tag_name = stamp_utils.VersionControlBackend.get_tag_name(
             params['name'], version

@@ -6,6 +6,7 @@ import git
 import logging
 import yaml
 from pathlib import Path
+import re
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
@@ -67,10 +68,7 @@ class VersionControlBackend(object):
     def get_vmn_version_info(self, tag_name):
         raise NotImplementedError()
 
-    def get_active_branch(self):
-        raise NotImplementedError()
-
-    def validate_tag(self, tag_name):
+    def get_active_branch(self, raise_on_detached_head=True):
         raise NotImplementedError()
 
     def type(self):
@@ -88,11 +86,26 @@ class VersionControlBackend(object):
     @staticmethod
     def get_moving_tag_name(app_name, branch):
         app_name = app_name.replace('/', '-')
-        return '{0}latest-{1}_{2}'.format(
+        return '{0}latest-{1}-_-{2}-'.format(
             MOVING_COMMIT_PREFIX,
             branch,
             app_name
         )
+
+    @staticmethod
+    def get_moving_tag_properties(tag_name):
+        groups = re.search(
+            r'{0}latest\-(.+)\-_\-(.+)\-'.format(
+                MOVING_COMMIT_PREFIX), tag_name
+        ).groups()
+
+        if len(groups) != 2:
+            return None
+
+        branch = groups[0]
+        app_name = groups[1].replace('-', '/')
+
+        return branch, app_name
 
 
 class GitBackend(VersionControlBackend):
@@ -117,19 +130,6 @@ class GitBackend(VersionControlBackend):
                 message='Automatic tag "{0}"'.format(tag),
                 force=force
             )
-
-    def validate_tag(self, tag_name):
-        try:
-            commit_tag_obj = self._be.commit(tag_name)
-        except:
-            return False
-
-        if commit_tag_obj.author.name != 'vmn':
-            return False
-
-        # TODO:: add API version check here
-
-        return True
 
     def push(self, tags=()):
         try:
@@ -181,12 +181,19 @@ class GitBackend(VersionControlBackend):
 
         return tuple(found_tag.commit.stats.files)
 
-    def tags(self):
+    def tags(self, branch=None):
         tags = []
-        _tags = self._be.tags
-
-        for tag in _tags:
-            tags.append(tag.name)
+        if branch is None:
+            _tags = self._be.tags
+            for tag in _tags:
+                tags.append(tag.name)
+        else:
+            tags = self._be.git.tag(
+                '--sort',
+                'creatordate',
+                '--merged',
+                branch
+            ).split('\n')
 
         return tags[::-1]
 
@@ -239,8 +246,35 @@ class GitBackend(VersionControlBackend):
 
         return self._be.active_branch.commit.hexsha
 
-    def get_active_branch(self):
-        return self._be.active_branch.name
+    def get_active_branch(self, raise_on_detached_head=True):
+        if not self._be.head.is_detached:
+            active_branch = self._be.active_branch.name
+        else:
+            if raise_on_detached_head:
+                raise RuntimeError('Active branch cannot be found in detached head')
+
+            out = self._be.git.branch(
+                '--contains',
+                self._be.head.commit.hexsha
+            )
+            out = out.split('\n')[1:]
+            active_branches = []
+            for item in out:
+                active_branches.append(item.strip())
+
+            if len(active_branches) > 1:
+                logging.getLogger().info(
+                    'In detached head. Commit hash: {0} is '
+                    'related to multiple branches: {1}. Using the first '
+                    'one as the active branch'.format(
+                        self._be.head.commit.hexsha,
+                        active_branches
+                    )
+                )
+
+            active_branch = active_branches[0]
+
+        return active_branch
 
     def checkout(self, rev=None, tag=None):
         if tag is not None:
@@ -283,8 +317,34 @@ class GitBackend(VersionControlBackend):
                 continue
 
     def get_vmn_version_info(self, tag_name):
-        if not self.validate_tag(tag_name):
+        commit_tag_obj = None
+        try:
+            commit_tag_obj = self._be.commit(tag_name)
+        except:
+            if not tag_name.startswith(MOVING_COMMIT_PREFIX):
+                return None
+
+            branch, app_name = \
+                VersionControlBackend.get_moving_tag_properties(tag_name)
+
+            for tag in self.tags(branch=branch):
+                if not tag.startswith(app_name):
+                    continue
+
+                commit_tag_obj = self._be.commit(tag)
+                if commit_tag_obj.author.name != 'vmn':
+                    continue
+
+                tag_name = tag
+                break
+
+        if commit_tag_obj is None:
             return None
+
+        if commit_tag_obj.author.name != 'vmn':
+            return None
+
+        # TODO:: Check API commit version
 
         return yaml.safe_load(
             self._be.commit(tag_name).message
