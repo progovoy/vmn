@@ -9,6 +9,7 @@ _build:
 
 _publish: clean
 	@echo "Publishing"
+	vmn show --verbose vmn > .vmn/vmn/ver.yml
 	python3 ${PWD}/gen_ver.py
 	python3 setup.py sdist bdist_wheel
 	twine upload ${PWD}/dist/*
