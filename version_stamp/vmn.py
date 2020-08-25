@@ -195,6 +195,9 @@ class VersionControlStamper(IVersionsStamper):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag)
+            if ver_info is None:
+                continue
+
             found = True
             for k, v in ver_info['stamping']['app']['changesets'].items():
                 if k not in user_repo_details:
