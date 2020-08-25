@@ -264,7 +264,7 @@ class VersionControlStamper(IVersionsStamper):
         if ver_info is None:
             old_version = starting_version
         else:
-            old_version = ver_info['stamping']['app']["version"]
+            old_version = ver_info['stamping']['app']["_version"]
 
         if override_current_version is None:
             override_current_version = old_version
