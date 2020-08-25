@@ -353,6 +353,7 @@ class VersionControlStamper(IVersionsStamper):
                 self._version_template_octats_count),
             '_version': current_version,
             "release_mode": self._release_mode,
+            "previous_version": old_version,
             "changesets": changesets_to_file,
             "info": info,
         }
