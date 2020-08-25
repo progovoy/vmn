@@ -351,9 +351,14 @@ class GitBackend(VersionControlBackend):
 
         # TODO:: Check API commit version
 
-        return yaml.safe_load(
+        commit_msg = yaml.safe_load(
             self._be.commit(tag_name).message
         )
+
+        if len(commit_msg) == 2:
+            return None
+
+        return commit_msg
 
     @staticmethod
     def clone(path, remote):
