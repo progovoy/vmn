@@ -611,7 +611,6 @@ def show(params):
         data = ver_info['stamping']['root_app']
 
     if params['verbose']:
-        data['root_path'] = params['root_path']
         yaml.dump(data, sys.stdout)
     elif params['raw']:
         print(data['_version'])
