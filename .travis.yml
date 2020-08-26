@@ -8,8 +8,6 @@ python:
   - "nightly"  # nightly build
 # command to install dependencies
 before_install:
-  - echo -e "[ui]\nusername=hguser" > ~/.hgrc
-  - sudo apt-get -y install mercurial
   - pip install codecov
   - pip install pytest-coverage
 install:

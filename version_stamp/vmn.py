@@ -195,6 +195,9 @@ class VersionControlStamper(IVersionsStamper):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag)
+            if ver_info is None:
+                continue
+
             found = True
             for k, v in ver_info['stamping']['app']['changesets'].items():
                 if k not in user_repo_details:
@@ -261,7 +264,7 @@ class VersionControlStamper(IVersionsStamper):
         if ver_info is None:
             old_version = starting_version
         else:
-            old_version = ver_info['stamping']['app']["version"]
+            old_version = ver_info['stamping']['app']["_version"]
 
         if override_current_version is None:
             override_current_version = old_version
@@ -353,6 +356,7 @@ class VersionControlStamper(IVersionsStamper):
                 self._version_template_octats_count),
             '_version': current_version,
             "release_mode": self._release_mode,
+            "previous_version": old_version,
             "changesets": changesets_to_file,
             "info": info,
         }
@@ -607,7 +611,6 @@ def show(params):
         data = ver_info['stamping']['root_app']
 
     if params['verbose']:
-        data['root_path'] = params['root_path']
         yaml.dump(data, sys.stdout)
     elif params['raw']:
         print(data['_version'])

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
-import hglib
 import git
-import logging
 import yaml
+import logging
 from pathlib import Path
 import re
 
@@ -38,7 +37,7 @@ class VersionControlBackend(object):
     def status(self, tag):
         raise NotImplementedError()
 
-    def tags(self):
+    def tags(self, branch=None):
         raise NotImplementedError()
 
     def check_for_pending_changes(self):
@@ -100,7 +99,7 @@ class VersionControlBackend(object):
         ).groups()
 
         if len(groups) != 2:
-            return None
+            return None, None
 
         branch = groups[0]
         app_name = groups[1].replace('-', '/')
@@ -182,11 +181,11 @@ class GitBackend(VersionControlBackend):
         return tuple(found_tag.commit.stats.files)
 
     def tags(self, branch=None):
-        tags = []
         if branch is None:
-            _tags = self._be.tags
-            for tag in _tags:
-                tags.append(tag.name)
+            tags = self._be.git.tag(
+                '--sort',
+                'creatordate',
+            ).split('\n')
         else:
             tags = self._be.git.tag(
                 '--sort',
@@ -251,7 +250,9 @@ class GitBackend(VersionControlBackend):
             active_branch = self._be.active_branch.name
         else:
             if raise_on_detached_head:
-                raise RuntimeError('Active branch cannot be found in detached head')
+                raise RuntimeError(
+                    'Active branch cannot be found in detached head'
+                )
 
             out = self._be.git.branch(
                 '--contains',
@@ -327,6 +328,9 @@ class GitBackend(VersionControlBackend):
             branch, app_name = \
                 VersionControlBackend.get_moving_tag_properties(tag_name)
 
+            if branch is None:
+                return None
+
             for tag in self.tags(branch=branch):
                 if not tag.startswith(app_name):
                     continue
@@ -346,9 +350,14 @@ class GitBackend(VersionControlBackend):
 
         # TODO:: Check API commit version
 
-        return yaml.safe_load(
+        commit_msg = yaml.safe_load(
             self._be.commit(tag_name).message
         )
+
+        if 'stamping' not in commit_msg:
+            return None
+
+        return commit_msg
 
     @staticmethod
     def clone(path, remote):
@@ -360,61 +369,16 @@ class GitBackend(VersionControlBackend):
 
 class HostState(object):
     @staticmethod
-    def _get_mercurial_changeset(path):
-        try:
-            client = hglib.open(path)
-        except hglib.error.ServerError as exc:
-            logging.getLogger().info(
-                'Skipping "{0}" directory '
-                'reason:\n{1}\n'.format(path, exc)
-            )
-            return None
-
-        revision = client.parents()
-        if revision is None:
-            revision = client.log()
-
-            if revision is None:
-                client.close()
-                return None
-
-        changeset = revision[0][1]
-        try:
-            remotes = []
-            for k, remote in client.paths().items():
-                remotes.append(remote.decode('utf-8'))
-
-            if os.path.isdir(remotes[0]):
-                remote = os.path.relpath(remotes[0], client.root().decode())
-            else:
-                remote = remotes[0]
-
-        except Exception as exc:
-            logging.getLogger().info(
-                'Skipping "{0}" directory reason:\n{1}\n'.format(
-                    path, exc)
-            )
-            client.close()
-            return None
-
-        client.close()
-        return changeset.decode('utf-8'), remote
-
-    @staticmethod
     def get_repo_details(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
-            ret = HostState._get_mercurial_changeset(path)
-            if ret is None:
-                logging.getLogger().info(
-                    'Skipping "{0}" directory reason:\n{1}\n'.format(
-                        path, exc)
-                )
+            logging.getLogger().info(
+                'Skipping "{0}" directory reason:\n{1}\n'.format(
+                    path, exc)
+            )
 
-                return None
-
-            return (*ret, 'mercurial')
+            return None
 
         try:
             hash = client.head.commit.hexsha
@@ -491,15 +455,9 @@ def get_client(path, revert=False, pull=False):
 
         be_type = 'git'
     except git.exc.InvalidGitRepositoryError:
-        try:
-            client = hglib.open(path)
-            client.close()
-
-            be_type = 'mercurial'
-        except hglib.error.ServerError:
-            err = 'repository path: {0} is not a functional git ' \
-                  'or mercurial repository.'.format(path)
-            return None, err
+        err = 'repository path: {0} is not a functional git ' \
+              'or repository.'.format(path)
+        return None, err
 
     be = None
     if be_type == 'git':

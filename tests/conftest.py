@@ -1,5 +1,4 @@
 import pytest
-import hglib
 import uuid
 import os
 import sys
