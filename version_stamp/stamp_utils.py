@@ -151,9 +151,9 @@ class GitBackend(VersionControlBackend):
 
         for tag in tags:
             try:
-                self._origin.push(tag, o='ci.skip')
+                self._origin.push(tag, force=True, o='ci.skip')
             except git.GitCommandError:
-                self._origin.push(tag)
+                self._origin.push(tag, force=True)
 
     def pull(self):
         self._origin.pull()
@@ -316,6 +316,14 @@ class GitBackend(VersionControlBackend):
                 )
 
                 continue
+
+        try:
+            self._be.git.fetch('--tags')
+        except Exception as exc:
+            logging.getLogger().warning(
+                'Failed to fetch tags'
+            )
+
 
     def get_vmn_version_info(self, tag_name):
         commit_tag_obj = None

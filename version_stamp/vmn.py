@@ -449,22 +449,26 @@ class VersionControlStamper(IVersionsStamper):
                 get_moving_tag_name(self._root_app_name, branch_name)
             moving_tags.append(latest_branch_tag_name)
 
+        all_tags = []
+        all_tags.extend(tags)
+        all_tags.extend(moving_tags)
+
         try:
             self._backend.tag(tags, user='vmn')
             self._backend.tag(moving_tags, user='vmn', force=True)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
-            self._backend.revert_vmn_changes(tags)
+            self._backend.revert_vmn_changes(all_tags)
 
             return 1
 
         try:
-            self._backend.push(tags)
+            self._backend.push(all_tags)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
-            self._backend.revert_vmn_changes(tags)
+            self._backend.revert_vmn_changes(all_tags)
 
             return 2
 
