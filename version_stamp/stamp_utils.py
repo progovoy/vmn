@@ -319,11 +319,10 @@ class GitBackend(VersionControlBackend):
 
         try:
             self._be.git.fetch('--tags')
-        except Exception as exc:
-            logging.getLogger().warning(
+        except Exception:
+            logging.getLogger().exception(
                 'Failed to fetch tags'
             )
-
 
     def get_vmn_version_info(self, tag_name):
         commit_tag_obj = None
