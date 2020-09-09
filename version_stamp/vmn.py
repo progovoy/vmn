@@ -167,12 +167,14 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, conf):
         IVersionsStamper.__init__(self, conf)
 
+        self._app_dir_path = conf['app_dir_path']
         self._app_conf_path = conf['app_conf_path']
 
         self._repo_name = '.'
 
         self._root_app_name = conf['root_app_name']
         self._root_app_conf_path = conf['root_app_conf_path']
+        self._root_app_dir_path = conf['root_app_dir_path']
         self._extra_info = conf['extra_info']
 
     def allocate_backend(self):
@@ -888,10 +890,15 @@ def build_world(name, working_dir, root=False):
     if name is None:
         return params
 
-    app_conf_path = os.path.join(
+    app_dir_path = os.path.join(
         root_path,
         '.vmn',
         params['name'],
+    )
+    params['app_dir_path'] = app_dir_path
+
+    app_conf_path = os.path.join(
+        app_dir_path,
         'conf.yml'
     )
     params['app_conf_path'] = app_conf_path
@@ -908,10 +915,15 @@ def build_world(name, working_dir, root=False):
 
     root_app_conf_path = None
     if root_app_name is not None:
-        root_app_conf_path = os.path.join(
+        root_app_dir_path = os.path.join(
             root_path,
             '.vmn',
             root_app_name,
+        )
+
+        params['root_app_dir_path'] = root_app_dir_path
+        root_app_conf_path = os.path.join(
+            root_app_dir_path,
             'root_conf.yml'
         )
 
