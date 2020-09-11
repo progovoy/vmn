@@ -10,6 +10,7 @@ from filelock import FileLock
 from multiprocessing import Pool
 import random
 import time
+import re
 from version_stamp import version as version_mod
 
 
@@ -193,7 +194,7 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
-            if not tag.startswith(tag_name):
+            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(self._name), tag):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag)
@@ -913,6 +914,7 @@ def build_world(name, working_dir, root=False):
         else:
             root_app_name = '/'.join(root_app_name[:-1])
 
+    params['root_app_dir_path'] = None
     root_app_conf_path = None
     if root_app_name is not None:
         root_app_dir_path = os.path.join(

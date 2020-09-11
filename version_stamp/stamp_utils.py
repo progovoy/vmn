@@ -339,7 +339,7 @@ class GitBackend(VersionControlBackend):
                 return None
 
             for tag in self.tags(branch=branch):
-                if not tag.startswith(app_name):
+                if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(app_name), tag):
                     continue
 
                 commit_tag_obj = self._be.commit(tag)
