@@ -88,7 +88,13 @@ class VersionControlBackend(object):
                 tag_name
             ).groups()
         except:
-            return None, None
+            try:
+                groups = re.search(
+                    r'(.+)_(\d+)',
+                    tag_name
+                ).groups()
+            except:
+                return None, None
 
         if len(groups) != 2:
             return None, None
