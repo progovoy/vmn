@@ -6,6 +6,7 @@ import yaml
 import logging
 from pathlib import Path
 import re
+from packaging import version as pversion
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
@@ -52,9 +53,6 @@ class VersionControlBackend(object):
     def checkout(self, rev=None, tag=None):
         raise NotImplementedError()
 
-    def parents(self):
-        raise NotImplementedError()
-
     def remote(self):
         raise NotImplementedError()
 
@@ -64,7 +62,7 @@ class VersionControlBackend(object):
     def revert_vmn_changes(self, tags):
         raise NotImplementedError()
 
-    def get_vmn_version_info(self, tag_name):
+    def get_vmn_version_info(self, tag_name=None, app_name=None):
         raise NotImplementedError()
 
     def get_active_branch(self, raise_on_detached_head=True):
@@ -83,28 +81,22 @@ class VersionControlBackend(object):
             return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
-    def get_moving_tag_name(app_name, branch):
-        app_name = app_name.replace('/', '-')
-        return '{0}latest-{1}-_-{2}-'.format(
-            MOVING_COMMIT_PREFIX,
-            branch,
-            app_name
-        )
-
-    @staticmethod
-    def get_moving_tag_properties(tag_name):
-        groups = re.search(
-            r'{0}latest\-(.+)\-_\-(.+)\-'.format(
-                MOVING_COMMIT_PREFIX), tag_name
-        ).groups()
+    def get_tag_properties(tag_name):
+        try:
+            groups = re.search(
+                r'(.+)_(\d+\.\d+\.\d+\.\d+)',
+                tag_name
+            ).groups()
+        except:
+            return None, None
 
         if len(groups) != 2:
             return None, None
 
-        branch = groups[0]
-        app_name = groups[1].replace('-', '/')
+        app_name = groups[0].replace('-', '/')
+        version = groups[1]
 
-        return branch, app_name
+        return app_name, version
 
 
 class GitBackend(VersionControlBackend):
@@ -180,19 +172,18 @@ class GitBackend(VersionControlBackend):
 
         return tuple(found_tag.commit.stats.files)
 
-    def tags(self, branch=None):
-        if branch is None:
-            tags = self._be.git.tag(
-                '--sort',
-                'creatordate',
-            ).split('\n')
-        else:
-            tags = self._be.git.tag(
-                '--sort',
-                'creatordate',
-                '--merged',
-                branch
-            ).split('\n')
+    def tags(self, branch=None, filter=None):
+        cmd = ['--sort', 'creatordate']
+        if filter is not None:
+            cmd.append('--list')
+            cmd.append(filter)
+        if branch is not None:
+            cmd.append('--merged')
+            cmd.append(branch)
+
+        tags = self._be.git.tag(
+            *cmd
+        ).split('\n')
 
         return tags[::-1]
 
@@ -324,30 +315,39 @@ class GitBackend(VersionControlBackend):
                 'Failed to fetch tags'
             )
 
-    def get_vmn_version_info(self, tag_name):
+    def get_vmn_version_info(self, tag_name=None, app_name=None):
+        if tag_name is None and app_name is None:
+            return None
+
         commit_tag_obj = None
-        try:
-            commit_tag_obj = self._be.commit(tag_name)
-        except:
-            if not tag_name.startswith(MOVING_COMMIT_PREFIX):
+        if tag_name is not None:
+            try:
+                commit_tag_obj = self._be.commit(tag_name)
+            except:
                 return None
+        elif app_name is not None:
+            try:
+                branch = self.get_active_branch()
+            except:
+                branch = None
 
-            branch, app_name = \
-                VersionControlBackend.get_moving_tag_properties(tag_name)
-
-            if branch is None:
-                return None
-
+            max_version = '0.0.0.0'
             for tag in self.tags(branch=branch):
-                if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(app_name), tag):
+                _app_name, version = VersionControlBackend.get_tag_properties(tag)
+                if version is None:
                     continue
 
-                commit_tag_obj = self._be.commit(tag)
-                if commit_tag_obj.author.name != 'vmn':
+                if _app_name != app_name:
                     continue
 
-                tag_name = tag
-                break
+                _commit_tag_obj = self._be.commit(tag)
+                if _commit_tag_obj.author.name != 'vmn':
+                    continue
+
+                if pversion.parse(max_version) < pversion.parse(version):
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
 
         if commit_tag_obj is None:
             return None

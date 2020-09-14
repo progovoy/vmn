@@ -20,10 +20,7 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
@@ -32,7 +29,7 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
@@ -43,9 +40,9 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(
+        app_name=params['name']
+    )
     data = ver_info['stamping']['app']
     assert data['version'] == '1.0.1'
 
@@ -55,9 +52,9 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(
+        app_name=params['name']
+    )
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
@@ -101,10 +98,7 @@ def test_multi_repo_dependency(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.2'
 
@@ -131,10 +125,7 @@ def test_basic_root_stamp(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
@@ -148,9 +139,9 @@ def test_basic_root_stamp(app_layout):
     app2_params['starting_version'] = '0.0.0.0'
     vmn.stamp(app2_params)
 
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        app2_params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(
+        app_name=app2_params['name']
+    )
     data = ver_info['stamping']['app']
     assert data['version'] == '0.1.0'
     data = ver_info['stamping']['root_app']
@@ -167,10 +158,7 @@ def test_starting_version(app_layout):
     params['starting_version'] = '1.2.0.0'
     vmn.stamp(params)
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0'
 
@@ -189,10 +177,7 @@ def test_version_template(app_layout):
         data = yaml.safe_load(f)
         configured_template = data['conf']['template']
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0'
     _, octats = vmn.IVersionsStamper.parse_template(configured_template)
@@ -224,10 +209,7 @@ def test_basic_goto(app_layout):
     params['starting_version'] = '0.0.0.0'
     vmn.stamp(params)
 
-    branch_name = app_layout._app_backend.be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
@@ -238,7 +220,7 @@ def test_basic_goto(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params)
 
-    ver_info = app_layout._app_backend.be.get_vmn_version_info(tag_name)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.2'
 

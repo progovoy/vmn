@@ -185,7 +185,7 @@ class VersionControlStamper(IVersionsStamper):
         del self._backend
 
     def find_matching_version(self, user_repo_details):
-        tag_name = \
+        app_tag_name = \
             stamp_utils.VersionControlBackend.get_tag_name(
                 self._name,
                 version=None
@@ -194,10 +194,10 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
-            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(self._name), tag):
+            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(app_tag_name), tag):
                 continue
 
-            ver_info = self._backend.get_vmn_version_info(tag)
+            ver_info = self._backend.get_vmn_version_info(tag_name=tag)
             if ver_info is None:
                 continue
 
@@ -260,10 +260,7 @@ class VersionControlStamper(IVersionsStamper):
         if override_release_mode is None:
             override_release_mode = self._release_mode
 
-        branch_name = self._backend.get_active_branch()
-        tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-            self._name, branch_name)
-        ver_info = self._backend.get_vmn_version_info(tag_name)
+        ver_info = self._backend.get_vmn_version_info(app_name=self._name)
         if ver_info is None:
             old_version = starting_version
         else:
@@ -377,10 +374,9 @@ class VersionControlStamper(IVersionsStamper):
             )
             self._write_root_conf_file(external_services={})
 
-        branch_name = self._backend.get_active_branch()
-        tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-            self._root_app_name, branch_name)
-        ver_info = self._backend.get_vmn_version_info(tag_name)
+        ver_info = self._backend.get_vmn_version_info(
+            app_name=self._root_app_name
+        )
         if ver_info is None:
             old_version = 0
         else:
@@ -438,27 +434,17 @@ class VersionControlStamper(IVersionsStamper):
             self._name, app_version)
         ]
 
-        branch_name = self._backend.get_active_branch()
-        latest_branch_tag_name = stamp_utils.VersionControlBackend.\
-            get_moving_tag_name(self._name, branch_name)
-        moving_tags = [latest_branch_tag_name]
-
         if main_version is not None:
             tags.append(
                 stamp_utils.VersionControlBackend.get_tag_name(
                     self._root_app_name, main_version)
             )
-            latest_branch_tag_name = stamp_utils.VersionControlBackend. \
-                get_moving_tag_name(self._root_app_name, branch_name)
-            moving_tags.append(latest_branch_tag_name)
 
         all_tags = []
         all_tags.extend(tags)
-        all_tags.extend(moving_tags)
 
         try:
             self._backend.tag(tags, user='vmn')
-            self._backend.tag(moving_tags, user='vmn', force=True)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             LOGGER.info('Reverting vmn changes for tags: {0} ...'.format(tags))
@@ -597,17 +583,13 @@ def show(params):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
 
-    branch_name = be.get_active_branch()
-    tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-        params['name'], branch_name)
-    ver_info = be.get_vmn_version_info(tag_name)
+    ver_info = be.get_vmn_version_info(app_name=params['name'])
 
     if ver_info is None:
         LOGGER.error(
-            'Version file was not found '
+            'Version information was not found '
             'for {0}. Tag: "{1}"'.format(
                 params['name'],
-                tag_name
             )
         )
 
@@ -693,17 +675,15 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    if version is None:
-        branch_name = be.get_active_branch(raise_on_detached_head=False)
-        tag_name = stamp_utils.VersionControlBackend.get_moving_tag_name(
-            params['name'], branch_name
-        )
-    else:
-        tag_name = stamp_utils.VersionControlBackend.get_tag_name(
-            params['name'], version
-        )
+    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        params['name'],
+        version
+    )
 
-    ver_info = be.get_vmn_version_info(tag_name)
+    if version is None:
+        ver_info = be.get_vmn_version_info(app_name=params['name'])
+    else:
+        ver_info = be.get_vmn_version_info(tag_name=tag_name)
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
