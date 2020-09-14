@@ -321,7 +321,12 @@ class GitBackend(VersionControlBackend):
                 'Failed to fetch tags'
             )
 
-    def get_vmn_version_info(self, tag_name=None, app_name=None, root_app_name=None):
+    def get_vmn_version_info(
+            self,
+            tag_name=None,
+            app_name=None,
+            root_app_name=None
+    ):
         if tag_name is None and app_name is None and root_app_name is None:
             return None
 
@@ -345,7 +350,9 @@ class GitBackend(VersionControlBackend):
 
             max_version = '0.0.0.0'
             for tag in self.tags(branch=branch):
-                _app_name, version = VersionControlBackend.get_tag_properties(tag, root=root)
+                _app_name, version = VersionControlBackend.get_tag_properties(
+                    tag, root=root
+                )
                 if version is None:
                     continue
 

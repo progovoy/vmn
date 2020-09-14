@@ -194,7 +194,10 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
-            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+$'.format(app_tag_name), tag):
+            if not re.match(
+                r'{}_\d+\.\d+\.\d+\.\d+$'.format(app_tag_name),
+                tag
+            ):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag_name=tag)
@@ -589,7 +592,7 @@ def show(params):
     if ver_info is None:
         LOGGER.error(
             'Version information was not found '
-            'for {0}. Tag: "{1}"'.format(
+            'for {0}.'.format(
                 params['name'],
             )
         )
