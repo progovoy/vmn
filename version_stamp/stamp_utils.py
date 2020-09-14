@@ -81,20 +81,20 @@ class VersionControlBackend(object):
             return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
-    def get_tag_properties(tag_name):
+    def get_tag_properties(tag_name, root=False):
         try:
-            groups = re.search(
-                r'(.+)_(\d+\.\d+\.\d+\.\d+)',
-                tag_name
-            ).groups()
-        except:
-            try:
+            if not root:
                 groups = re.search(
-                    r'(.+)_(\d+)',
+                    r'(.+)_(\d+\.\d+\.\d+\.\d+)$',
                     tag_name
                 ).groups()
-            except:
-                return None, None
+            else:
+                groups = re.search(
+                    r'(.+)_(\d+)$',
+                    tag_name
+                ).groups()
+        except:
+            return None, None
 
         if len(groups) != 2:
             return None, None
@@ -321,8 +321,8 @@ class GitBackend(VersionControlBackend):
                 'Failed to fetch tags'
             )
 
-    def get_vmn_version_info(self, tag_name=None, app_name=None):
-        if tag_name is None and app_name is None:
+    def get_vmn_version_info(self, tag_name=None, app_name=None, root_app_name=None):
+        if tag_name is None and app_name is None and root_app_name is None:
             return None
 
         commit_tag_obj = None
@@ -331,7 +331,13 @@ class GitBackend(VersionControlBackend):
                 commit_tag_obj = self._be.commit(tag_name)
             except:
                 return None
-        elif app_name is not None:
+        elif app_name is not None or root_app_name is not None:
+            used_app_name = app_name
+            root = False
+            if root_app_name is not None:
+                used_app_name = root_app_name
+                root = True
+
             try:
                 branch = self.get_active_branch()
             except:
@@ -339,11 +345,11 @@ class GitBackend(VersionControlBackend):
 
             max_version = '0.0.0.0'
             for tag in self.tags(branch=branch):
-                _app_name, version = VersionControlBackend.get_tag_properties(tag)
+                _app_name, version = VersionControlBackend.get_tag_properties(tag, root=root)
                 if version is None:
                     continue
 
-                if _app_name != app_name:
+                if _app_name != used_app_name:
                     continue
 
                 _commit_tag_obj = self._be.commit(tag)

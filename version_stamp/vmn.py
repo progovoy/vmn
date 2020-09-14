@@ -194,7 +194,7 @@ class VersionControlStamper(IVersionsStamper):
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
-            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+'.format(app_tag_name), tag):
+            if not re.match(r'{}_\d+\.\d+\.\d+\.\d+$'.format(app_tag_name), tag):
                 continue
 
             ver_info = self._backend.get_vmn_version_info(tag_name=tag)
@@ -376,7 +376,7 @@ class VersionControlStamper(IVersionsStamper):
             self._write_root_conf_file(external_services={})
 
         ver_info = self._backend.get_vmn_version_info(
-            app_name=self._root_app_name
+            root_app_name=self._root_app_name
         )
         if ver_info is None:
             old_version = 0
