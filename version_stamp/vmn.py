@@ -633,7 +633,10 @@ def stamp(params, pull=False):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    lock_file_path = os.path.join(params['root_path'], 'vmn.lock')
+    lock_file_path = os.path.join(params['root_app_dir_path'], 'vmn.lock')
+    pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
+        parents=True, exist_ok=True
+    )
     lock = FileLock(lock_file_path)
     with lock:
         LOGGER.info('Locked: {0}'.format(lock_file_path))
@@ -898,7 +901,7 @@ def build_world(name, working_dir, root=False):
         else:
             root_app_name = '/'.join(root_app_name[:-1])
 
-    params['root_app_dir_path'] = None
+    params['root_app_dir_path'] = app_dir_path
     root_app_conf_path = None
     if root_app_name is not None:
         root_app_dir_path = os.path.join(
