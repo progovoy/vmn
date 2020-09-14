@@ -557,17 +557,19 @@ def init(params):
 
     changeset = be.changeset()
 
-    vmn_path = '{0}/.vmn/'.format(params['root_path'])
+    vmn_path = os.path.join(params['root_path'], '.vmn')
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_unique_path = '{0}/{1}'.format(
-        vmn_path,
-        changeset)
+    vmn_unique_path = os.path.join(vmn_path, changeset)
     Path(vmn_unique_path).touch()
+    git_ignore_path = os.path.join(vmn_path, '.gitignore')
+
+    with open(git_ignore_path, 'w+') as f:
+        f.write('vmn.lock{0}'.format(os.linesep))
 
     be.commit(
         message=stamp_utils.INIT_COMMIT_MESSAGE,
         user='vmn',
-        include=[vmn_path, vmn_unique_path]
+        include=[vmn_path, vmn_unique_path, git_ignore_path]
     )
 
     be.push()
