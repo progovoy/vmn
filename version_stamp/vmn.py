@@ -357,6 +357,7 @@ class VersionControlStamper(IVersionsStamper):
             '_version': current_version,
             "release_mode": self._release_mode,
             "previous_version": old_version,
+            "stamped_on_branch": self._backend.get_active_branch(),
             "changesets": changesets_to_file,
             "info": info,
         }
