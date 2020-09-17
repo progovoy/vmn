@@ -52,9 +52,13 @@ Actually `vmn` uses this technique for itself.
 
 ## Advanced features
 ### Root apps
+
 `vmn` supports stamping of something called a "root app". For example:
+
 `vmn stamp --release-mode patch my_root_app/service1`
+
 `vmn stamp --release-mode patch my_root_app/service2`
+
 `vmn stamp --release-mode patch my_root_app/service3`
 
 Next we'll be able to use `show` to display everything we need:
