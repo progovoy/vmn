@@ -604,10 +604,18 @@ def show(params):
     data = ver_info['stamping']['app']
     if params['root']:
         data = ver_info['stamping']['root_app']
+        if not data:
+            LOGGER.error(
+                'App {0} does not have a root app '.format(
+                    params['name'],
+                )
+            )
+
+            return 1
 
     if params['verbose']:
         yaml.dump(data, sys.stdout)
-    elif params['raw']:
+    elif params['raw'] and not params['root']:
         print(data['_version'])
     else:
         print(data['version'])
