@@ -615,7 +615,7 @@ def show(params):
 
     if params['verbose']:
         yaml.dump(data, sys.stdout)
-    elif params['raw'] and not params['root']:
+    elif params['raw']:
         print(data['_version'])
     else:
         print(data['version'])
@@ -1048,7 +1048,13 @@ def main(command_line=None):
         err = init(params)
     if args.command == 'show':
         params['verbose'] = args.verbose
-        params['raw'] = args.raw
+
+        # root app does not have raw version number
+        if root:
+            params['raw'] = False
+        else:
+            params['raw'] = args.raw
+
         err = show(params)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
