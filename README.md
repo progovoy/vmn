@@ -48,7 +48,7 @@ It is the application's reposibility to actualy set the version number that can 
 vmn show <app-name>
 ```
 and be injected via a custom script to the application's code during its build phase.
-Actually `vmn` itself uses this technique for itself.
+Actually `vmn` uses this technique for itself.
 
 ## Advanced features
 ### Root apps
