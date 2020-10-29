@@ -130,9 +130,14 @@ class GitBackend(VersionControlBackend):
 
     def push(self, tags=()):
         try:
-            ret = self._origin.push(o='ci.skip')
-        except git.GitCommandError:
-            ret = self._origin.push()
+            ret = self._origin.push(
+                'refs/heads/{0}'.format(self.get_active_branch()),
+                o='ci.skip'
+            )
+        except Exception:
+            ret = self._origin.push(
+                'refs/heads/{0}'.format(self.get_active_branch()),
+            )
 
         if ret[0].old_commit is None:
             if 'up to date' in ret[0].summary:
@@ -149,9 +154,16 @@ class GitBackend(VersionControlBackend):
 
         for tag in tags:
             try:
-                self._origin.push(tag, force=True, o='ci.skip')
-            except git.GitCommandError:
-                self._origin.push(tag, force=True)
+                self._origin.push(
+                    'refs/tags/{0}'.format(tag),
+                    force=True,
+                    o='ci.skip'
+                )
+            except Exception:
+                self._origin.push(
+                    'refs/tags/{0}'.format(tag),
+                    force=True
+                )
 
     def pull(self):
         self._origin.pull()
