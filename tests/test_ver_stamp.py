@@ -8,6 +8,7 @@ sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import vmn
 import stamp_utils
 
+vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 def test_basic_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)

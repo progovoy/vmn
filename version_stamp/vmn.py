@@ -19,7 +19,7 @@ import stamp_utils
 from stamp_utils import HostState
 import version as version_mod
 
-LOGGER = stamp_utils.init_stamp_logger()
+LOGGER = None
 
 
 def gen_app_version(current_version, release_mode):
