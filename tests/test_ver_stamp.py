@@ -59,6 +59,42 @@ def test_basic_stamp(app_layout):
     assert data['version'] == '0.0.1'
 
 
+def test_basic_show(app_layout, capfd):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['user_repos_details']) == 1
+    vmn.init(params)
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    out, err = capfd.readouterr()
+    assert not out
+
+    params['verbose'] = False
+    params['raw'] = False
+    vmn.show(params)
+    out, err = capfd.readouterr()
+    assert '0.0.1\n' == out
+
+    params['verbose'] = False
+    params['raw'] = True
+    vmn.show(params)
+    out, err = capfd.readouterr()
+    assert '0.0.1.0\n' == out
+
+    params['verbose'] = True
+    vmn.show(params)
+    out, err = capfd.readouterr()
+    try:
+        data = yaml.safe_load(out)
+    except Exception as we:
+        assert False
+
+
 def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])

@@ -977,6 +977,12 @@ def main(command_line=None):
         action='version',
         version=version_mod.version
     )
+    parser.add_argument(
+        '--debug',
+        required=False,
+        action='store_true'
+    )
+    parser.set_defaults(debug=False)
 
     subprasers = parser.add_subparsers(dest='command')
     subprasers.add_parser(
@@ -1040,6 +1046,11 @@ def main(command_line=None):
 
     args = parser.parse_args(command_line)
 
+    global LOGGER
+    LOGGER = stamp_utils.init_stamp_logger(args.debug)
+    if args.command == 'show':
+        LOGGER.disabled = True
+
     root = False
     if 'root' in args:
         root = args.root
@@ -1067,6 +1078,7 @@ def main(command_line=None):
         else:
             params['raw'] = args.raw
 
+        LOGGER.disabled = False
         err = show(params)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode

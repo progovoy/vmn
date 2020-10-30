@@ -13,11 +13,14 @@ MOVING_COMMIT_PREFIX = '_-'
 LOGGER = None
 
 
-def init_stamp_logger():
+def init_stamp_logger(debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger('vmn')
-    LOGGER.setLevel(logging.DEBUG)
+    if debug:
+        LOGGER.setLevel(logging.DEBUG)
+    else:
+        LOGGER.setLevel(logging.WARNING)
     format = '[%(levelname)s] %(message)s'
 
     formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
@@ -434,9 +437,9 @@ class HostState(object):
         try:
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
-            LOGGER.info(
+            LOGGER.debug(
                 'Skipping "{0}" directory reason:\n{1}\n'.format(
-                    path, exc)
+                    path, exc), exc_info=exc
             )
 
             return None
@@ -447,9 +450,9 @@ class HostState(object):
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:
-            LOGGER.info(
-                'Skipping "{0}" directory reason:\n{1}\n'.format(
-                    path, exc)
+            LOGGER.debug(
+                'Skipping "{0}" directory reason:\n'.format(
+                    path), exc_info=exc
             )
             return None
         finally:
