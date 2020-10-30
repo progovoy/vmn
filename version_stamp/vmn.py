@@ -815,7 +815,7 @@ def _clone_repo(args):
             str = 'already exists and is not an empty directory.'
             if (str in exc.stderr):
                 return {'repo': rel_path, 'status': 0, 'description': None}
-        except Exception as exc:
+        except Exception:
             pass
 
         err = 'Failed to clone {0} repository. ' \
