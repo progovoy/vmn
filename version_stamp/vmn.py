@@ -687,10 +687,11 @@ def goto_version(params, version):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
-    err = be.check_for_outgoing_changes(skip_detached_check=True)
-    if err:
-        LOGGER.info('{0}. Exiting'.format(err))
-        return err
+    if not be.in_detached_head():
+        err = be.check_for_outgoing_changes()
+        if err:
+            LOGGER.info('{0}. Exiting'.format(err))
+            return err
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
         params['name'],
@@ -734,7 +735,7 @@ def goto_version(params, version):
     return 0
 
 
-def _pull_repo(args):
+def _update_repo(args):
     path, rel_path, changeset = args
 
     client = None
@@ -744,7 +745,7 @@ def _pull_repo(args):
             return {'repo': rel_path, 'status': 0, 'description': err}
     except Exception as exc:
         LOGGER.exception(
-            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'PLEASE FIX!\nAborting update operation because directory {0} '
             'Reason:\n{1}\n'.format(path, exc)
         )
 
@@ -753,36 +754,42 @@ def _pull_repo(args):
     try:
         err = client.check_for_pending_changes()
         if err:
-            LOGGER.info('{0}. Aborting pull operation '.format(err))
+            LOGGER.info('{0}. Aborting update operation '.format(err))
             return {'repo': rel_path, 'status': 1, 'description': err}
 
     except Exception as exc:
-        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(
-            path, exc)
+        LOGGER.exception(
+            'Skipping "{0}" directory reason:\n{1}\n'.format(path, exc)
         )
+
         return {'repo': rel_path, 'status': 0, 'description': None}
 
     try:
-        err = client.check_for_outgoing_changes()
-        if err:
-            LOGGER.info('{0}. Aborting pull operation'.format(err))
-            return {'repo': rel_path, 'status': 1, 'description': err}
+        if not client.in_detached_head():
+            err = client.check_for_outgoing_changes()
+            if err:
+                LOGGER.info('{0}. Aborting update operation'.format(err))
+                return {'repo': rel_path, 'status': 1, 'description': err}
 
-        LOGGER.info('Pulling from {0}'.format(rel_path))
+        LOGGER.info('Updating {0}'.format(rel_path))
         if changeset is None:
-            client.pull()
+            if not client.in_detached_head():
+                client.pull()
+
             rev = client.checkout_branch()
 
             LOGGER.info('Updated {0} to {1}'.format(rel_path, rev))
         else:
             cur_changeset = client.changeset()
-            client.pull()
+            if not client.in_detached_head():
+                client.pull()
+
             client.checkout(rev=changeset)
 
             LOGGER.info('Updated {0} to {1}'.format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
-            'PLEASE FIX!\nAborting pull operation because directory {0} '
+            'PLEASE FIX!\nAborting update operation because directory {0} '
             'Reason:\n{1}\n'.format(path, exc)
         )
 
@@ -801,11 +808,16 @@ def _clone_repo(args):
 
     LOGGER.info('Cloning {0}..'.format(rel_path))
     try:
-        if vcs_type == 'mercurial':
-            stamp_utils.MercurialBackend.clone(path, remote)
-        elif vcs_type == 'git':
+        if vcs_type == 'git':
             stamp_utils.GitBackend.clone(path, remote)
     except Exception as exc:
+        try:
+            str = 'already exists and is not an empty directory.'
+            if (str in exc.stderr):
+                return {'repo': rel_path, 'status': 0, 'description': None}
+        except Exception as exc:
+            pass
+
         err = 'Failed to clone {0} repository. ' \
               'Description: {1}'.format(rel_path, exc.args)
         return {'repo': rel_path, 'status': 1, 'description': err}
@@ -847,7 +859,7 @@ def _goto_version(deps, root):
         ))
 
     with Pool(min(len(args), 20)) as p:
-        results = p.map(_pull_repo, args)
+        results = p.map(_update_repo, args)
 
     err = False
     for res in results:
@@ -856,9 +868,9 @@ def _goto_version(deps, root):
             if res['repo'] is None and res['description'] is None:
                 continue
 
-            msg = 'Failed to pull '
+            msg = 'Failed to update '
             if res['repo'] is not None:
-                msg += 'from {0} '.format(res['repo'])
+                msg += ' {0} '.format(res['repo'])
             if res['description'] is not None:
                 msg += 'because {0}'.format(res['description'])
 
@@ -866,7 +878,8 @@ def _goto_version(deps, root):
 
     if err:
         raise RuntimeError(
-            'Failed to pull all the required repos. See log above'
+            'Failed to update one or more '
+            'of the required repos. See log above'
         )
 
 

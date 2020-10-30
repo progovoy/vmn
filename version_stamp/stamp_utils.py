@@ -41,10 +41,13 @@ class VersionControlBackend(object):
     def tags(self, branch=None):
         raise NotImplementedError()
 
+    def in_detached_head(self):
+        raise NotImplementedError()
+
     def check_for_pending_changes(self):
         raise NotImplementedError()
 
-    def check_for_outgoing_changes(self, skip_detached_check=False):
+    def check_for_outgoing_changes(self):
         raise NotImplementedError()
 
     def checkout_branch(self):
@@ -205,6 +208,9 @@ class GitBackend(VersionControlBackend):
 
         return tags[::-1]
 
+    def in_detached_head(self):
+        return self._be.head.is_detached
+
     def check_for_pending_changes(self):
         if self._be.is_dirty():
             err = 'Pending changes in {0}.'.format(self.root())
@@ -212,11 +218,8 @@ class GitBackend(VersionControlBackend):
 
         return None
 
-    def check_for_outgoing_changes(self, skip_detached_check=False):
-        if self._be.head.is_detached:
-            if skip_detached_check:
-                return None
-
+    def check_for_outgoing_changes(self):
+        if self.in_detached_head():
             err = 'Detached head in {0}.'.format(self.root())
             return err
 
@@ -255,7 +258,7 @@ class GitBackend(VersionControlBackend):
         return self._be.active_branch.commit.hexsha
 
     def get_active_branch(self, raise_on_detached_head=True):
-        if not self._be.head.is_detached:
+        if not self.in_detached_head():
             active_branch = self._be.active_branch.name
         else:
             if raise_on_detached_head:
