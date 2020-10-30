@@ -699,7 +699,9 @@ def goto_version(params, version):
 
     if version is None:
         if params['root']:
-            ver_info = be.get_vmn_version_info(root_app_name=params['root_app_name'])
+            ver_info = be.get_vmn_version_info(
+                root_app_name=params['root_app_name']
+            )
         else:
             ver_info = be.get_vmn_version_info(app_name=params['name'])
     else:
