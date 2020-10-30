@@ -1,0 +1,8 @@
+ARG distro_var
+FROM ubuntu:$distro_var
+RUN apt update && apt install -y python3-pip git
+COPY requirements.txt /var/
+RUN pip3 install -r /var/requirements.txt 
+RUN git config --global user.email "you@example.com"
+RUN git config --global user.name "Your Name"
+

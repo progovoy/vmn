@@ -11,14 +11,13 @@ from multiprocessing import Pool
 import random
 import time
 import re
-from version_stamp import version as version_mod
 
 
 CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
 sys.path.append(CUR_PATH)
 import stamp_utils
 from stamp_utils import HostState
-from version_stamp import version as __version__
+import version as version_mod
 
 LOGGER = stamp_utils.init_stamp_logger()
 
@@ -976,7 +975,7 @@ def main(command_line=None):
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version=__version__.version
+        version=version_mod.version
     )
 
     subprasers = parser.add_subparsers(dest='command')
