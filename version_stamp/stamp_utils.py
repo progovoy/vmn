@@ -85,7 +85,10 @@ class VersionControlBackend(object):
     def revert_vmn_changes(self, tags):
         raise NotImplementedError()
 
-    def get_vmn_version_info(self, tag_name=None, app_name=None, 
+    def get_vmn_version_info(
+        self, 
+        tag_name=None, 
+        app_name=None, 
         root_app_name=None):
         raise NotImplementedError()
 
