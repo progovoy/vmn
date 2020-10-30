@@ -20,7 +20,7 @@ def init_stamp_logger(debug=False):
     if debug:
         LOGGER.setLevel(logging.DEBUG)
     else:
-        LOGGER.setLevel(logging.WARNING)
+        LOGGER.setLevel(logging.INFO)
     format = '[%(levelname)s] %(message)s'
 
     formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
