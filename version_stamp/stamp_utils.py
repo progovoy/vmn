@@ -10,6 +10,22 @@ from packaging import version as pversion
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
+LOGGER = None
+
+def init_stamp_logger():
+    global LOGGER
+
+    LOGGER = logging.getLogger('vmn')
+    LOGGER.setLevel(logging.DEBUG)
+    format = '[%(levelname)s] %(message)s'
+
+    formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
+
+    cons_handler = logging.StreamHandler(sys.stdout)
+    cons_handler.setFormatter(formatter)
+    LOGGER.addHandler(cons_handler)
+
+    return LOGGER
 
 
 class VersionControlBackend(object):
@@ -144,7 +160,7 @@ class GitBackend(VersionControlBackend):
 
         if ret[0].old_commit is None:
             if 'up to date' in ret[0].summary:
-                logging.getLogger().warning(
+                LOGGER.warning(
                     'GitPython library has failed to push because we are '
                     'up to date already. How can it be? '
                 )
@@ -279,7 +295,7 @@ class GitBackend(VersionControlBackend):
                 active_branches.append(item.strip())
 
             if len(active_branches) > 1:
-                logging.getLogger().info(
+                LOGGER.info(
                     'In detached head. Commit hash: {0} is '
                     'related to multiple branches: {1}. Using the first '
                     'one as the active branch'.format(
@@ -326,7 +342,7 @@ class GitBackend(VersionControlBackend):
             try:
                 self._be.delete_tag(tag)
             except Exception:
-                logging.getLogger().exception(
+                LOGGER.exception(
                     'Failed to remove tag {0}'.format(tag)
                 )
 
@@ -335,7 +351,7 @@ class GitBackend(VersionControlBackend):
         try:
             self._be.git.fetch('--tags')
         except Exception:
-            logging.getLogger().exception(
+            LOGGER.exception(
                 'Failed to fetch tags'
             )
 
@@ -417,7 +433,7 @@ class HostState(object):
         try:
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
-            logging.getLogger().info(
+            LOGGER.info(
                 'Skipping "{0}" directory reason:\n{1}\n'.format(
                     path, exc)
             )
@@ -430,7 +446,7 @@ class HostState(object):
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:
-            logging.getLogger().info(
+            LOGGER.info(
                 'Skipping "{0}" directory reason:\n{1}\n'.format(
                     path, exc)
             )
@@ -462,20 +478,6 @@ class HostState(object):
                 }
 
         return user_repos_details
-
-
-def init_stamp_logger():
-    LOGGER = logging.getLogger('vmn')
-    LOGGER.setLevel(logging.DEBUG)
-    format = '[%(levelname)s] %(message)s'
-
-    formatter = logging.Formatter(format, '%Y-%m-%d %H:%M:%S')
-
-    cons_handler = logging.StreamHandler(sys.stdout)
-    cons_handler.setFormatter(formatter)
-    LOGGER.addHandler(cons_handler)
-
-    return LOGGER
 
 
 def get_versions_repo_path(root_path):
