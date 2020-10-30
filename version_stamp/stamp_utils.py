@@ -86,9 +86,9 @@ class VersionControlBackend(object):
         raise NotImplementedError()
 
     def get_vmn_version_info(
-        self, 
-        tag_name=None, 
-        app_name=None, 
+        self,
+        tag_name=None,
+        app_name=None,
         root_app_name=None):
         raise NotImplementedError()
 
