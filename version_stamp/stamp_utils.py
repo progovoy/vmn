@@ -12,6 +12,7 @@ INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
 LOGGER = None
 
+
 def init_stamp_logger():
     global LOGGER
 
