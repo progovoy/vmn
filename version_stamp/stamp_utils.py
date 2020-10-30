@@ -251,8 +251,9 @@ class GitBackend(VersionControlBackend):
 
     def checkout_branch(self):
         try:
-            self.checkout(self._be.active_branch.name)
-        except:
+            self.checkout(self.get_active_branch(raise_on_detached_head=False))
+        except Exception as exc:
+            logging.exception('Failed to get branch name. Trying to checkout to master')
             self.checkout(rev='master')
 
         return self._be.active_branch.commit.hexsha
