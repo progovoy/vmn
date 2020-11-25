@@ -578,7 +578,7 @@ def init(params):
     return None
 
 
-def show(params):
+def show(params, version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -588,12 +588,20 @@ def show(params):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
 
-    if params['root']:
-        ver_info = be.get_vmn_version_info(
-            root_app_name=params['root_app_name']
-        )
+    tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+        params['name'],
+        version
+    )
+
+    if version is None:
+        if params['root']:
+            ver_info = be.get_vmn_version_info(
+                root_app_name=params['root_app_name']
+            )
+        else:
+            ver_info = be.get_vmn_version_info(app_name=params['name'])
     else:
-        ver_info = be.get_vmn_version_info(app_name=params['name'])
+        ver_info = be.get_vmn_version_info(tag_name=tag_name)
 
     if ver_info is None:
         LOGGER.error(
@@ -1007,6 +1015,12 @@ def main(command_line=None):
     pshow.add_argument(
         'name', help="The application's name"
     )
+    pshow.add_argument(
+        '-v', '--version',
+        default=None,
+        required=False,
+        help="The version to show"
+    )
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1089,7 +1103,7 @@ def main(command_line=None):
             params['raw'] = args.raw
 
         LOGGER.disabled = False
-        err = show(params)
+        err = show(params, args.version)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
