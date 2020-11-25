@@ -588,7 +588,12 @@ def show(params):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
 
-    ver_info = be.get_vmn_version_info(app_name=params['name'])
+    if params['root']:
+        ver_info = be.get_vmn_version_info(
+            root_app_name=params['root_app_name']
+        )
+    else:
+        ver_info = be.get_vmn_version_info(app_name=params['name'])
 
     if ver_info is None:
         LOGGER.error(

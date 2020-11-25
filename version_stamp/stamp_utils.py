@@ -422,7 +422,7 @@ class GitBackend(VersionControlBackend):
             self._be.commit(tag_name).message
         )
 
-        if 'stamping' not in commit_msg:
+        if commit_msg is None or 'stamping' not in commit_msg:
             return None
 
         return commit_msg
