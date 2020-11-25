@@ -587,7 +587,7 @@ def show(params, version=None):
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
-    
+
     if version is not None:
         if params['root']:
             try:
@@ -600,7 +600,7 @@ def show(params, version=None):
                 return 1
         else:
             try:
-                _,_,_,_ = version.split('.')
+                _, _, _, _ = version.split('.')
             except ValueError:
                 LOGGER.error(
                     'wrong version specified: version '
@@ -724,7 +724,7 @@ def goto_version(params, version):
         if err:
             LOGGER.info('{0}. Exiting'.format(err))
             return err
-    
+
     if version is not None:
         if params['root']:
             try:
@@ -737,7 +737,7 @@ def goto_version(params, version):
                 return 1
         else:
             try:
-                _,_,_,_ = version.split('.')
+                _, _, _, _ = version.split('.')
             except ValueError:
                 LOGGER.error(
                     'wrong version specified: version '
