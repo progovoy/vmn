@@ -510,7 +510,7 @@ def get_version(versions_be_ifc, params, pull):
         if err == 1:
             override_current_version = current_version
             override_main_current_version = main_ver
-            override_release_mode = 'micro'
+            override_release_mode = params['release_mode']
 
             LOGGER.warning(
                 'Failed to publish. Trying to auto-increase '
@@ -1020,7 +1020,7 @@ def main(command_line=None):
     pstamp.add_argument(
         '-r', '--release-mode',
         choices=['major', 'minor', 'patch', 'micro'],
-        default='micro',
+        default='patch',
         required=True,
         help='major / minor / patch / micro'
     )
