@@ -144,6 +144,8 @@ class GitBackend(VersionControlBackend):
         if pull:
             self.pull()
 
+        self._be.git.fetch('--tags')
+
     def __del__(self):
         self._be.close()
 
