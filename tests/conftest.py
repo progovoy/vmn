@@ -14,6 +14,7 @@ import stamp_utils
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
+TEST_REPO_NAME = 'test_repo'
 format = '[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] ' \
          '%(message)s'
 
@@ -26,19 +27,21 @@ LOGGER.addHandler(cons_handler)
 
 class FSAppLayoutFixture(object):
     def __init__(self, tmpdir, be_type):
-        test_app = tmpdir.mkdir('test_repo')
+        test_app = tmpdir.mkdir(TEST_REPO_NAME)
         test_app_remote = tmpdir.mkdir('test_repo_remote')
         self.base_dir = test_app.dirname
         self.be_type = be_type
+        self.test_app_remote = test_app_remote.strpath
+        self.repo_path = test_app.strpath
 
         if be_type == 'git':
             self._app_backend = GitBackend(
-                test_app_remote.strpath,
-                test_app.strpath
+                self.test_app_remote,
+                self.repo_path
             )
 
         self._repos = {
-            'test_repo': {
+            TEST_REPO_NAME: {
                 'path': test_app.strpath,
                 'type': be_type,
                 'remote': test_app_remote.strpath,
@@ -78,6 +81,30 @@ class FSAppLayoutFixture(object):
 
         return be
 
+    def merge(self, from_rev, to_rev, squash=False):
+        import subprocess
+        base_cmd = [
+            'git',
+            'merge',
+        ]
+        if squash:
+            base_cmd.append('--squash')
+        base_cmd.extend([
+            from_rev,
+            to_rev
+        ])
+        LOGGER.info('going to run: {}'.format(' '.join(base_cmd)))
+        subprocess.Popen(base_cmd, cwd=self.repo_path)
+        subprocess.Popen(['git', 'commit', '-m', 'foo'], cwd=self.repo_path)
+        # from_obj = self._app_backend._git_backend.branches[from_rev]
+        # to_obj = self._app_backend._git_backend.branches[to_rev]
+        # merged = self._app_backend._git_backend.merge_base(from_obj, to_obj, squash=squash)
+        # self._app_backend._git_backend.index.merge_tree(to_obj, merged)
+        # self._app_backend._git_backend.index.commit(
+        #     'Merge {} into {}'.format(from_rev, to_rev),
+        #     parent_commits=()
+        # )
+
     def write_file(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:
             raise RuntimeError('repo {0} not found'.format(repo_name))
@@ -101,7 +128,11 @@ class FSAppLayoutFixture(object):
                     'hash': client.head.commit.hexsha,
                     'vcs_type': 'git'
                 }
-                client.remote(name='origin').push()
+                client.git.push(
+                    '--set-upstream',
+                    'origin',
+                    'refs/heads/{0}'.format(client.active_branch.name)
+                )
         else:
             with open(path, 'w') as f:
                 f.write(content)

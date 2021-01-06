@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 import copy
+import logging
 import yaml
 import sys
 import os
@@ -19,7 +20,7 @@ import stamp_utils
 from stamp_utils import HostState
 import version as version_mod
 
-LOGGER = None
+LOGGER = None  # type: logging.Logger or None
 
 
 def gen_app_version(current_version, release_mode):
