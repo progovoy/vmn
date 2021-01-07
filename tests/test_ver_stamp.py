@@ -251,7 +251,7 @@ def test_basic_goto(app_layout):
     data = ver_info['stamping']['app']
     assert data['version'] == '0.0.1'
 
-    app_layout.write_file('test_repo', 'a.yxy', 'msg')
+    app_layout.write_file_commit_and_push('test_repo', 'a.yxy', 'msg')
 
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
@@ -285,13 +285,13 @@ def test_stamp_on_branch_merge_squash(app_layout):
     params['release_mode'] = 'patch'
     params['starting_version'] = '0.0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
-    app_layout.write_file('test_repo', 'f1.file', 'msg1')
+    app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
     vmn.stamp(params)  # first stamp 0.0.1
-    app_layout.write_file('test_repo', 'f2.file', 'msg2')
+    app_layout.write_file_commit_and_push('test_repo', 'f2.file', 'msg2')
     app_layout._app_backend._origin.pull(rebase=True)
     vmn.stamp(params)  # 0.0.2
-    app_layout.write_file('test_repo', 'f3.file', 'msg3')
+    app_layout.write_file_commit_and_push('test_repo', 'f3.file', 'msg3')
     app_layout._app_backend._origin.pull(rebase=True)
     vmn.stamp(params)  # 0.0.3
     app_layout._app_backend.be.checkout('master')
@@ -304,7 +304,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
 
-    assert data['version'] == '0.0.5'
+    assert data['version'] == '0.0.4'
 
 
 def test_get_version(app_layout):
@@ -314,7 +314,7 @@ def test_get_version(app_layout):
     params['release_mode'] = 'patch'
     params['starting_version'] = '0.0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
-    app_layout.write_file('test_repo', 'f1.file', 'msg1')
+    app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
     vmn.stamp(params)  # first stamp 0.0.1
     app_layout._app_backend.be.checkout('master')
@@ -328,12 +328,67 @@ def test_get_version(app_layout):
     assert data['version'] == '0.0.2'
 
 
-def test_get_app_version_from_file(app_layout):
+def test_get_version_number_from_file(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
     vmn.init(params)
     params['release_mode'] = 'patch'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.2.0.0'
+    vmn.stamp(params)  # just to create the relative folder tree, I.E: .vmn/app_name/last_known_app_version.yml
+    ver_stamper = vmn.VersionControlStamper(params)
+    assert ver_stamper.get_version_number_from_file() == '0.2.1.0'
 
 
+def test_read_version_from_file(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    vmn.init(params)
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.1.0.0'
+    vmn.stamp(params)
+    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
+    app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
+    app_layout._app_backend._origin.pull(rebase=True)
+    vmn.stamp(params)
+    with open(file_path, 'r') as fid:
+        ver_dict = yaml.load(fid)
+    assert '0.1.2.0' == ver_dict.get('last_stamped_version')
 
+
+def test_system_backward_comp_file_vs_commit(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    vmn.init(params)
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.1.0.0'
+    vmn.stamp(params)
+    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
+    app_layout.remove_app_version_file(file_path)
+    # in this point we simulate the case were using an old vmn that searches for version numbers in commit message,
+    # but stamping with the new method (write and read from file)
+    vmn.stamp(params)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    _version = ver_info['stamping']['app']['_version']
+    assert '0.1.2.0' == _version
+    with open(file_path, 'r') as fid:
+        ver_dict = yaml.load(fid)
+    assert '0.1.2.0' == ver_dict.get('last_stamped_version')
+
+
+def test_manual_file_adjustment(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    vmn.init(params)
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.1.0.0'
+    vmn.stamp(params)
+    file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
+    app_layout.remove_app_version_file(file_path)
+    # now we want to override the version by changing the file version:
+    app_layout.write_file_commit_and_push('test_repo',
+                                          '.vmn/test_app/{}'.format(vmn.VER_FILE_NAME),
+                                          'last_stamped_version: 0.2.3.0')
+    vmn.stamp(params)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    _version = ver_info['stamping']['app']['_version']
+    assert '0.2.4.0' == _version

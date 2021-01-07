@@ -10,13 +10,14 @@ from packaging import version as pversion
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
+VMN_USER_NAME = 'vmn'
 LOGGER = None
 
 
 def init_stamp_logger(debug=False):
     global LOGGER
 
-    LOGGER = logging.getLogger('vmn')
+    LOGGER = logging.getLogger(VMN_USER_NAME)
     if debug:
         LOGGER.setLevel(logging.DEBUG)
     else:
@@ -326,7 +327,7 @@ class GitBackend(VersionControlBackend):
 
     def last_user_changeset(self):
         for p in self._be.iter_commits():
-            if p.author.name == 'vmn':
+            if p.author.name == VMN_USER_NAME:
                 if not p.message.startswith(INIT_COMMIT_MESSAGE):
                     continue
 
@@ -344,7 +345,7 @@ class GitBackend(VersionControlBackend):
         return self._be.head.commit.hexsha
 
     def revert_vmn_changes(self, tags):
-        if self._be.active_branch.commit.author.name != 'vmn':
+        if self._be.active_branch.commit.author.name != VMN_USER_NAME:
             raise RuntimeError('BUG: Will not revert non-vmn commit.')
 
         self._be.git.reset('--hard', 'HEAD~1')
@@ -387,13 +388,9 @@ class GitBackend(VersionControlBackend):
                 used_app_name = root_app_name
                 root = True
 
-            try:
-                branch = self.get_active_branch()
-            except:
-                branch = None
-
             max_version = '0.0.0.0'
-            for tag in self.tags(branch=branch):
+            formated_tag_name = VersionControlBackend.get_tag_name(used_app_name)
+            for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
                 _app_name, version = VersionControlBackend.get_tag_properties(
                     tag, root=root
                 )
@@ -404,7 +401,7 @@ class GitBackend(VersionControlBackend):
                     continue
 
                 _commit_tag_obj = self._be.commit(tag)
-                if _commit_tag_obj.author.name != 'vmn':
+                if _commit_tag_obj.author.name != VMN_USER_NAME:
                     continue
 
                 if pversion.parse(max_version) < pversion.parse(version):
@@ -415,7 +412,7 @@ class GitBackend(VersionControlBackend):
         if commit_tag_obj is None:
             return None
 
-        if commit_tag_obj.author.name != 'vmn':
+        if commit_tag_obj.author.name != VMN_USER_NAME:
             return None
 
         # TODO:: Check API commit version
