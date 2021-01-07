@@ -75,7 +75,7 @@ class FSAppLayoutFixture(object):
             '_be': be
         }
 
-        self.write_file(
+        self.write_file_commit_and_push(
             repo_name=repo_name, file_relative_path='a/b/c.txt', content='hello'
         )
 
@@ -95,18 +95,10 @@ class FSAppLayoutFixture(object):
         ])
 
         LOGGER.info('going to run: {}'.format(' '.join(base_cmd)))
-        subprocess.Popen(base_cmd, cwd=self.repo_path)
-        subprocess.Popen(['git', 'commit', '-m', 'Merge {} in {}'.format(from_rev, to_rev)], cwd=self.repo_path)
-        # from_obj = self._app_backend._git_backend.branches[from_rev]
-        # to_obj = self._app_backend._git_backend.branches[to_rev]
-        # merged = self._app_backend._git_backend.merge_base(from_obj, to_obj, squash=squash)
-        # self._app_backend._git_backend.index.merge_tree(to_obj, merged)
-        # self._app_backend._git_backend.index.commit(
-        #     'Merge {} into {}'.format(from_rev, to_rev),
-        #     parent_commits=()
-        # )
+        subprocess.call(base_cmd, cwd=self.repo_path)
+        subprocess.call(['git', 'commit', '-m', 'Merge {} in {}'.format(from_rev, to_rev)], cwd=self.repo_path)
 
-    def write_file(self, repo_name, file_relative_path, content):
+    def write_file_commit_and_push(self, repo_name, file_relative_path, content):
         if repo_name not in self._repos:
             raise RuntimeError('repo {0} not found'.format(repo_name))
 
