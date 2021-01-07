@@ -93,9 +93,10 @@ class FSAppLayoutFixture(object):
             from_rev,
             to_rev
         ])
+
         LOGGER.info('going to run: {}'.format(' '.join(base_cmd)))
         subprocess.Popen(base_cmd, cwd=self.repo_path)
-        subprocess.Popen(['git', 'commit', '-m', 'foo'], cwd=self.repo_path)
+        subprocess.Popen(['git', 'commit', '-m', 'Merge {} in {}'.format(from_rev, to_rev)], cwd=self.repo_path)
         # from_obj = self._app_backend._git_backend.branches[from_rev]
         # to_obj = self._app_backend._git_backend.branches[to_rev]
         # merged = self._app_backend._git_backend.merge_base(from_obj, to_obj, squash=squash)

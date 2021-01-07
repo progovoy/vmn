@@ -281,7 +281,6 @@ def test_stamp_on_branch_merge_squash(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     assert len(params['user_repos_details']) == 1
     vmn.init(params)
-
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['starting_version'] = '0.0.0.0'
@@ -304,6 +303,37 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
+
     assert data['version'] == '0.0.5'
+
+
+def test_get_version(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    vmn.init(params)
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    app_layout._app_backend.be.checkout(('-b', 'new_branch'))
+    app_layout.write_file('test_repo', 'f1.file', 'msg1')
+    app_layout._app_backend._origin.pull(rebase=True)
+    vmn.stamp(params)  # first stamp 0.0.1
+    app_layout._app_backend.be.checkout('master')
+    app_layout.merge(from_rev='new_branch', to_rev='master', squash=True)
+    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.be.push()
+    print(app_layout.repo_path)  #TODO remove this is a test debug print
+    vmn.stamp(params)
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.2'
+
+
+def test_get_app_version_from_file(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    vmn.init(params)
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+
 
 
