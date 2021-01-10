@@ -132,13 +132,15 @@ class IVersionsStamper(object):
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
-        # this method will write the stamped ver of an app to a file, weather the file pre exists or not
+        # this method will write the stamped ver of an app to a file,
+        # weather the file pre exists or not
         try:
             with open(file_path, 'w') as fid:
                 ver_dict = {'last_stamped_version': version_number}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
-            LOGGER.exception('there was an issue writing ver file: {}\n{}'.format(file_path, e))
+            LOGGER.exception('there was an issue writing ver file: {}'
+                             '\n{}'.format(file_path, e))
             raise IOError(e)
         except Exception as e:
             LOGGER.exception(e)
@@ -192,7 +194,8 @@ class VersionControlStamper(IVersionsStamper):
         self._root_app_conf_path = conf['root_app_conf_path']
         self._root_app_dir_path = conf['root_app_dir_path']
         self._extra_info = conf['extra_info']
-        self._version_file_path = '{}/{}'.format(self._app_dir_path, VER_FILE_NAME)
+        self._version_file_path = '{}/{}'.format(
+            self._app_dir_path, VER_FILE_NAME)
 
     def allocate_backend(self):
         self._backend, _ = stamp_utils.get_client(self._root_path)
@@ -275,15 +278,20 @@ class VersionControlStamper(IVersionsStamper):
                 ver_dict = yaml.safe_load(fid)
             return ver_dict.get('last_stamped_version')
         except FileNotFoundError as e:
-            LOGGER.info('could not find version file: {}, using other logic for stamping')
+            LOGGER.info('could not find version file: {}, using other logic '
+                        'for stamping'.format(self._version_file_path))
+            LOGGER.exception('{}'.format(e))
             return None
 
     def decide_app_version_by_source(self, starting_version: str) -> str:
         version_str_from_file = self.get_version_number_from_file()
-        ver_info_form_repo = self._backend.get_vmn_version_info(app_name=self._name)
+        ver_info_form_repo = \
+            self._backend.get_vmn_version_info(app_name=self._name)
         if version_str_from_file:  # first try to get the version from file
             return version_str_from_file
-        elif ver_info_form_repo:  # try to get the version from last commit if there isn't any file (backward comp)
+        elif ver_info_form_repo:
+            # try to get the version from last commit if
+            # there isn't any file (backward comp)
             return ver_info_form_repo['stamping']['app']["_version"]
         else:
             return starting_version  # first stamp

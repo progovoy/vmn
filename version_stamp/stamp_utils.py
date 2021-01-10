@@ -389,7 +389,8 @@ class GitBackend(VersionControlBackend):
                 root = True
 
             max_version = '0.0.0.0'
-            formated_tag_name = VersionControlBackend.get_tag_name(used_app_name)
+            formated_tag_name = VersionControlBackend.get_tag_name(
+                used_app_name)
             for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
                 _app_name, version = VersionControlBackend.get_tag_properties(
                     tag, root=root
