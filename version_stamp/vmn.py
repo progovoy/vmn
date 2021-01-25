@@ -280,7 +280,7 @@ class VersionControlStamper(IVersionsStamper):
         except FileNotFoundError as e:
             LOGGER.info('could not find version file: {}, using other logic '
                         'for stamping'.format(self._version_file_path))
-            LOGGER.exception('{}'.format(e))
+            LOGGER.debug('{}'.format(e))
             return None
 
     def decide_app_version_by_source(self, starting_version: str) -> str:

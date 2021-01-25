@@ -177,7 +177,9 @@ class GitBackend(VersionControlBackend):
                 )
             else:
                 raise Warning(
-                    'Push has failed: {0}'.format(
+                    'Push has failed: {0}\n'
+                    'please verify the next command works:\n'
+                    'git push'.format(
                         ret[0].summary
                     )
                 )
