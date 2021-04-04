@@ -18,6 +18,7 @@ A simple package for auto increasing version numbers of any application agnostic
 cd to/your/repository
 vmn -h
 
+
 ## Needed only once per repository.
 vmn init
 
