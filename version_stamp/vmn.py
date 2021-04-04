@@ -931,6 +931,8 @@ def _clone_repo(args):
 def _goto_version(deps, root):
     args = []
     for rel_path, v in deps.items():
+        if v['remote'].startswith('.'):
+            v['remote'] = os.path.join(root, v['remote'])
         args.append((
             os.path.join(root, rel_path),
             rel_path,

@@ -3,6 +3,7 @@ import sys
 import os
 import copy
 import yaml
+import shutil
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import vmn
@@ -151,6 +152,53 @@ def test_multi_repo_dependency(app_layout):
         assert 'test_repo' in data['conf']['deps']['../']
         assert 'repo1' in data['conf']['deps']['../']
         assert 'repo2' in data['conf']['deps']['../']
+
+
+def test_goto_deleted_repos(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['user_repos_details']) == 1
+    vmn.init(params)
+
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    conf = {
+        'template': '{0}.{1}.{2}',
+        'deps': {'../': {
+            'test_repo': {
+                'vcs_type': app_layout.be_type,
+                'remote': app_layout._app_backend.be.remote(),
+            }
+        }},
+        'extra_info': False
+    }
+    for repo in (('repo1', 'git'), ('repo2', 'git')):
+        be = app_layout.create_repo(
+            repo_name=repo[0], repo_type=repo[1]
+        )
+
+        conf['deps']['../'].update({
+            repo[0]: {
+                'vcs_type': repo[1],
+                'remote': be.be.remote(),
+            }
+        })
+
+    app_layout.write_conf(**conf)
+
+    params = vmn.build_world(params['name'], params['working_dir'])
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+
+    dir_path = app_layout._repos['repo2']['path']
+    shutil.rmtree(dir_path)  # deleting repo_b
+    assert vmn.goto_version(params, '0.0.2.0') == 0
 
 
 def test_basic_root_stamp(app_layout):
@@ -321,7 +369,7 @@ def test_get_version(app_layout):
     app_layout.merge(from_rev='new_branch', to_rev='master', squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
     app_layout._app_backend.be.push()
-    print(app_layout.repo_path)  #TODO remove this is a test debug print
+    print(app_layout.repo_path)  # TODO remove this is a test debug print
     vmn.stamp(params)
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
