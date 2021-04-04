@@ -431,7 +431,7 @@ class GitBackend(VersionControlBackend):
 
     @staticmethod
     def clone(path, remote):
-        git.Repo().clone_from(
+        git.Repo.clone_from(
             '{0}'.format(remote),
             '{0}'.format(path)
         )
