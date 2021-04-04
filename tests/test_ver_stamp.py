@@ -1,13 +1,13 @@
-import pytest
 import sys
 import os
 import copy
 import yaml
 import shutil
-
-sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 import vmn
 import stamp_utils
+
+sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
+
 
 vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
@@ -369,7 +369,6 @@ def test_get_version(app_layout):
     app_layout.merge(from_rev='new_branch', to_rev='master', squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
     app_layout._app_backend.be.push()
-    print(app_layout.repo_path)  # TODO remove this is a test debug print
     vmn.stamp(params)
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
