@@ -3,11 +3,11 @@ import os
 import copy
 import yaml
 import shutil
-import vmn
-import stamp_utils
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
 
+import vmn
+import stamp_utils
 
 vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 

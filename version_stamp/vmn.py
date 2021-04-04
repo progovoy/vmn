@@ -21,7 +21,7 @@ import stamp_utils
 from stamp_utils import HostState
 import version as version_mod
 
-LOGGER = None  # type: logging.Logger or None
+LOGGER = None
 
 
 def gen_app_version(current_version, release_mode):
@@ -322,10 +322,17 @@ class VersionControlStamper(IVersionsStamper):
             pathlib.Path(os.path.dirname(self._app_conf_path)).mkdir(
                 parents=True, exist_ok=True
             )
-            self._write_app_conf_file(deps={})
+            default_deps = {
+                os.path.join("../"): {
+                    os.path.basename(self._root_path): {
+                        'remote': self._backend.remote(),
+                        'vcs_type': self._backend.type()
+                    }
+                }
+            }
+            self._write_app_conf_file(deps=default_deps)
 
         flat_dependency_repos = []
-        configured_deps = {}
         with open(self._app_conf_path) as f:
             data = yaml.safe_load(f)
             configured_deps = data["conf"]["deps"]
@@ -341,29 +348,6 @@ class VersionControlStamper(IVersionsStamper):
                             self._backend.root()
                         ),
                     )
-
-        # User omitted dependencies
-        if not configured_deps:
-            flat_dependency_repos = ['.']
-            configured_deps = {
-                os.path.join("../"): {
-                    os.path.basename(self._root_path): {
-                        'remote': self._backend.remote(),
-                        'vcs_type': self._backend.type()
-                    }
-                }
-            }
-
-        if '../' not in configured_deps:
-            configured_deps['../'] = {}
-
-        base_name = os.path.basename(self._root_path)
-        if base_name not in configured_deps['../']:
-            flat_dependency_repos.append('.')
-            configured_deps['../'][base_name] = {
-                'remote': self._backend.remote(),
-                'vcs_type': self._backend.type()
-            }
 
         VersionControlStamper.write_version_to_file(
             file_path=self._version_file_path,
