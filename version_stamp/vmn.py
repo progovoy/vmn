@@ -2,7 +2,6 @@
 import argparse
 from pathlib import Path
 import copy
-import logging
 import yaml
 import sys
 import os
