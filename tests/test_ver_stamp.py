@@ -15,7 +15,7 @@ vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 def test_basic_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
@@ -41,6 +41,7 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['starting_version'] = '1.0.0.0'
+    vmn.stamp(params, init_only=True)
     vmn.stamp(params)
 
     ver_info = app_layout._app_backend.be.get_vmn_version_info(
@@ -65,7 +66,7 @@ def test_basic_stamp(app_layout):
 def test_basic_show(app_layout, capfd):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
@@ -101,7 +102,7 @@ def test_basic_show(app_layout, capfd):
 def test_multi_repo_dependency(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'patch'
@@ -157,7 +158,7 @@ def test_multi_repo_dependency(app_layout):
 def test_goto_deleted_repos(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'patch'
@@ -204,7 +205,7 @@ def test_goto_deleted_repos(app_layout):
 def test_basic_root_stamp(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world('root_app/app1', params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'patch'
@@ -219,7 +220,7 @@ def test_basic_root_stamp(app_layout):
     assert data['version'] == 1
 
     app2_params = vmn.build_world('root_app/app2', params['working_dir'])
-    assert len(app2_params['user_repos_details']) == 1
+    assert len(app2_params['actual_deps_state']) == 1
 
     app2_params['release_mode'] = 'minor'
     app2_params['starting_version'] = '0.0.0.0'
@@ -237,7 +238,7 @@ def test_basic_root_stamp(app_layout):
 def test_starting_version(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params['release_mode'] = 'minor'
@@ -287,7 +288,7 @@ def test_version_template(app_layout):
 def test_basic_goto(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
@@ -327,7 +328,7 @@ def test_basic_goto(app_layout):
 def test_stamp_on_branch_merge_squash(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
-    assert len(params['user_repos_details']) == 1
+    assert len(params['actual_deps_state']) == 1
     vmn.init(params)
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'

@@ -390,9 +390,10 @@ class GitBackend(VersionControlBackend):
                 used_app_name = root_app_name
                 root = True
 
-            max_version = '0.0.0.0'
+            max_version = None
             formated_tag_name = VersionControlBackend.get_tag_name(
-                used_app_name)
+                used_app_name
+            )
             for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
                 _app_name, version = VersionControlBackend.get_tag_properties(
                     tag, root=root
@@ -407,7 +408,11 @@ class GitBackend(VersionControlBackend):
                 if _commit_tag_obj.author.name != VMN_USER_NAME:
                     continue
 
-                if pversion.parse(max_version) < pversion.parse(version):
+                if max_version is None:
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
+                elif pversion.parse(max_version) < pversion.parse(version):
                     max_version = version
                     tag_name = tag
                     commit_tag_obj = _commit_tag_obj
@@ -467,8 +472,8 @@ class HostState(object):
         return hash, remote, 'git'
 
     @staticmethod
-    def get_user_repo_details(paths, root):
-        user_repos_details = {}
+    def get_actual_deps_state(paths, root):
+        actual_deps_state = {}
         for path, lst in paths.items():
             repos = [
                 name for name in lst
@@ -481,13 +486,13 @@ class HostState(object):
                 if details is None:
                     continue
 
-                user_repos_details[os.path.relpath(joined_path, root)] = {
+                actual_deps_state[os.path.relpath(joined_path, root)] = {
                     'hash': details[0],
                     'remote': details[1],
                     'vcs_type': details[2],
                 }
 
-        return user_repos_details
+        return actual_deps_state
 
 
 def get_versions_repo_path(root_path):
