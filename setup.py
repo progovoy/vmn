@@ -4,12 +4,8 @@ from version_stamp import version
 
 description = 'Stamping utility'
 
-install_requires=[
-    'filelock>=3.0.12',
-    'GitPython>=3.1.3',
-    'packaging>=3.1.3',
-    'PyYAML>=5.3.1',
-]
+with open('requirements.txt') as fid:
+    install_requires = fid.readlines()
 
 setuptools.setup(
     name='vmn',

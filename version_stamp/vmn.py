@@ -674,9 +674,9 @@ def show(params, version=None):
 
             return 1
 
-    if params['verbose']:
+    if params.get('verbose'):
         yaml.dump(data, sys.stdout)
-    elif params['raw']:
+    elif params.get('raw'):
         print(data['_version'])
     else:
         print(data['version'])

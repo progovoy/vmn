@@ -439,3 +439,36 @@ def test_manual_file_adjustment(app_layout):
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     _version = ver_info['stamping']['app']['_version']
     assert '0.2.4.0' == _version
+
+
+def test_basic_root_show(app_layout,capfd):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world('root_app/app1', params['working_dir'])
+    vmn.init(params)
+
+    params['release_mode'] = 'patch'
+    params['starting_version'] = '0.0.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '0.0.1'
+
+    data = ver_info['stamping']['root_app']
+    assert data['version'] == 1
+
+    app2_params = vmn.build_world('root_app/app2', params['working_dir'])
+
+    app2_params['release_mode'] = 'minor'
+    app2_params['starting_version'] = '0.0.0.0'
+    vmn.stamp(app2_params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(
+        app_name=app2_params['name']
+    )
+    data = ver_info['stamping']['app']
+    data = ver_info['stamping']['root_app']
+    params['root'] = True
+    vmn.show(params)
+    out, err = capfd.readouterr()
+    assert '2\n' == out
