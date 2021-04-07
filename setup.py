@@ -11,6 +11,9 @@ install_requires=[
     'PyYAML>=5.3.1',
 ]
 
+with open('requirements.txt') as fid:
+    install_requires = fid.readlines()
+
 setuptools.setup(
     name='vmn',
     version=version.version,
