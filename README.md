@@ -97,7 +97,7 @@ stamping:
 ```
 
 `vmn show my_root_app/service3` will output `0.0.1`
-`vmn show --root my_root_app/service3` will output `3`
+`vmn show --root my_root_app` will output `3`
 
 ### Configuration
 vmn auto generates a `conf.yml` file that can be modified later by the user. An example of `conf.yml` file:
