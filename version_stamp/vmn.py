@@ -336,7 +336,7 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.debug('{}'.format(e))
             return None
 
-    def decide_app_version_by_source(self) -> (str):
+    def decide_app_version_by_source(self) -> str:
         ver_info_form_repo = \
             self._backend.get_vmn_version_info(app_name=self._name)
         tracked = ver_info_form_repo is not None
