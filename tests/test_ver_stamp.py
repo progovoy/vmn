@@ -43,6 +43,7 @@ def test_basic_stamp(app_layout):
     params['starting_version'] = '1.0.0.0'
     vmn.stamp(params, init_only=True)
     vmn.stamp(params)
+    vmn.stamp(params)
 
     ver_info = app_layout._app_backend.be.get_vmn_version_info(
         app_name=params['name']
@@ -53,7 +54,7 @@ def test_basic_stamp(app_layout):
     params['name'] = old_name
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
-    params['starting_version'] = '1.0.0.0'
+    params['starting_version'] = '3.1.34.99'
     vmn.stamp(params)
 
     ver_info = app_layout._app_backend.be.get_vmn_version_info(
