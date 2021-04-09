@@ -18,6 +18,9 @@ def init_stamp_logger(debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
+    for handler in LOGGER.handlers:
+        LOGGER.removeHandler(handler)
+
     if debug:
         LOGGER.setLevel(logging.DEBUG)
     else:

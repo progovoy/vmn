@@ -79,10 +79,6 @@ class IVersionsStamper(object):
             )
         self.tracked = ver_info_form_repo is not None
 
-        self.matched_version = self.find_matching_version()
-        if self.matched_version == '0.0.0.0':
-            self.matched_version = None
-
         self._version_info_message = {
             'vmn_info': {
                 'description_message_version': '1',
@@ -113,7 +109,7 @@ class IVersionsStamper(object):
                 'name': self._root_app_name,
                 'version': 0,
                 'latest_service': self._name,
-                'services': {},
+                'services': {self._name: '0.0.0.0'},
                 'external_services': {},
             }
 
@@ -522,10 +518,14 @@ def get_version(versions_be_ifc, pull, init_only):
     # not tracked & init only => only init a new app
     # not tracked & not init only => init and stamp a new app
 
-    if versions_be_ifc.matched_version is not None:
+    matched_version = versions_be_ifc.find_matching_version()
+    if matched_version == '0.0.0.0':
+        matched_version = None
+
+    if matched_version is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        return versions_be_ifc.get_be_formatted_version(versions_be_ifc.matched_version)
+        return versions_be_ifc.get_be_formatted_version(matched_version)
 
     # We didn't find any existing version
     stamped = False
@@ -1066,6 +1066,7 @@ def build_world(name, working_dir, root=False):
         deps,
         root_path
     )
+    actual_deps_state['.']['hash'] = be.last_user_changeset()
     params['actual_deps_state'] = actual_deps_state
 
     if not os.path.isfile(app_conf_path):
@@ -1085,6 +1086,7 @@ def build_world(name, working_dir, root=False):
             HostState.get_actual_deps_state(deps, root_path)
         )
         params['actual_deps_state'] = actual_deps_state
+        actual_deps_state['.']['hash'] = be.last_user_changeset()
 
     return params
 
