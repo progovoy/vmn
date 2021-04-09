@@ -340,7 +340,8 @@ class VersionControlStamper(IVersionsStamper):
         ver_info_form_repo = \
             self._backend.get_vmn_version_info(app_name=self._name)
         tracked = ver_info_form_repo is not None
-        only_initialized = tracked and ver_info_form_repo['stamping']['app']['_version'] == '0.0.0.0'
+        only_initialized = tracked and \
+            ver_info_form_repo['stamping']['app']['_version'] == '0.0.0.0'
 
         if only_initialized or not tracked:
             # first stamp
