@@ -15,7 +15,7 @@ pyaml==20.4.0
 pylint==2.5.2
 pyparsing==2.4.7
 pytest==5.4.3
-PyYAML==5.3.1
+PyYAML==5.4
 six==1.15.0
 smmap==3.0.4
 toml==0.10.1
