@@ -103,37 +103,46 @@ class VersionControlBackend(object):
         return self._type
 
     @staticmethod
-    def get_tag_name(app_name, version=None):
+    def get_tag_name(app_name, version=None, mode_version=None):
         app_name = app_name.replace('/', '-')
 
         if version is None:
             return '{0}'.format(app_name)
-        else:
+        elif mode_version is None:
             return '{0}_{1}'.format(app_name, version)
+        else:
+            return '{0}_{1}_{2}'.format(app_name, version, mode_version)
 
     @staticmethod
     def get_tag_properties(tag_name, root=False):
         try:
             if not root:
                 groups = re.search(
-                    r'(.+)_(\d+\.\d+\.\d+\.\d+)$',
+                    r'(.+)_(\d+\.\d+\.\d+\.\d+)_?(.+[0-9]+)*$',
                     tag_name
                 ).groups()
+
+                if len(groups) != 3:
+                    return None, None, None
+
+                mode_version = groups[2]
             else:
                 groups = re.search(
                     r'(.+)_(\d+)$',
                     tag_name
                 ).groups()
-        except:
-            return None, None
 
-        if len(groups) != 2:
-            return None, None
+                mode_version = None
+
+                if len(groups) != 2:
+                    return None, None, None
+        except:
+            return None, None, None
 
         app_name = groups[0].replace('-', '/')
         version = groups[1]
 
-        return app_name, version
+        return app_name, version, mode_version
 
 
 class GitBackend(VersionControlBackend):
@@ -398,7 +407,7 @@ class GitBackend(VersionControlBackend):
                 used_app_name
             )
             for tag in self.tags(filter='{}_*'.format(formated_tag_name)):
-                _app_name, version = VersionControlBackend.get_tag_properties(
+                _app_name, version, mode_version = VersionControlBackend.get_tag_properties(
                     tag, root=root
                 )
                 if version is None:

@@ -57,6 +57,7 @@ class IVersionsStamper(object):
         self._app_dir_path = conf['app_dir_path']
         self._app_conf_path = conf['app_conf_path']
         self._starting_version = conf['starting_version']
+        self._mode = conf['mode']
         self._repo_name = '.'
 
         self._root_app_name = conf['root_app_name']
@@ -81,7 +82,7 @@ class IVersionsStamper(object):
 
         self._version_info_message = {
             'vmn_info': {
-                'description_message_version': '1',
+                'description_message_version': '1.1',
                 'vmn_version': version_mod.version
             },
             'stamping': {
@@ -98,6 +99,8 @@ class IVersionsStamper(object):
                     "release_mode": self._release_mode,
                     "previous_version": '0.0.0.0',
                     "stamped_on_branch": self._backend.get_active_branch(),
+                    'current_mode': 'release',
+                    'mode_count' : {},
                     "info": {},
                 },
                 'root_app': {}
@@ -285,14 +288,14 @@ class VersionControlStamper(IVersionsStamper):
         app_tag_name = \
             stamp_utils.VersionControlBackend.get_tag_name(
                 self._name,
-                version=None
+                version=None,
             )
 
         # Try to find any version of the application matching the
         # user's repositories local state
         for tag in self._backend.tags():
             if not re.match(
-                r'{}_\d+\.\d+\.\d+\.\d+$'.format(app_tag_name),
+                r'{}_(\d+\.\d+\.\d+\.\d+)_?(.+[0-9]+)*$'.format(app_tag_name),
                 tag
             ):
                 continue
@@ -319,7 +322,9 @@ class VersionControlStamper(IVersionsStamper):
                     found = False
                     break
 
-            if found:
+            if found and self._mode == 'release' and ver_info['stamping']['app']['current_mode'] != 'release':
+                return None
+            elif found:
                 return ver_info['stamping']['app']['_version']
 
         return None
@@ -369,9 +374,35 @@ class VersionControlStamper(IVersionsStamper):
 
         # TODO:: optimization find max here
 
-        current_version = gen_app_version(
-            override_current_version, override_release_mode
-        )
+        ver_info = self._backend.get_vmn_version_info(app_name=self._name)
+        if ver_info is None:
+            mode_count = \
+                self._version_info_message['stamping']['app']['mode_count']
+            current_mode = \
+                self._version_info_message['stamping']['app']['current_mode']
+        else:
+            mode_count = ver_info['stamping']['app']["mode_count"]
+            current_mode = ver_info['stamping']['app']["current_mode"]
+
+        if self._mode is None:
+            self._mode = current_mode
+
+        if self._mode not in mode_count:
+            mode_count[self._mode] = 0
+
+        mode_count[self._mode] += 1
+        if 'release' in mode_count:
+            mode_count.pop('release')
+
+        self._version_info_message['stamping']['app']['mode_count'] = mode_count
+        self._version_info_message['stamping']['app']['current_mode'] = self._mode
+
+        if current_mode == 'release':
+            current_version = gen_app_version(
+                override_current_version, override_release_mode
+            )
+        else:
+            current_version = override_current_version
 
         VersionControlStamper.write_version_to_file(
             file_path=self._version_file_path,
@@ -426,6 +457,7 @@ class VersionControlStamper(IVersionsStamper):
 
         if override_version is None:
             override_version = old_version
+
         root_version = int(override_version) + 1
 
         with open(self._root_app_conf_path) as f:
@@ -470,8 +502,14 @@ class VersionControlStamper(IVersionsStamper):
             include=version_files
         )
 
+        mode_version = None
+        if self._mode != 'release':
+            mode_version = '{0}{1}'.format(
+                self._mode,
+                self._version_info_message['stamping']['app']['mode_count'][self._mode]
+            )
         tags = [stamp_utils.VersionControlBackend.get_tag_name(
-            self._name, app_version)
+            self._name, app_version, mode_version)
         ]
 
         if main_version is not None:
@@ -551,6 +589,8 @@ def get_version(versions_be_ifc, pull, init_only):
                 override_main_current_version,
             )
 
+        # TODO:: handle case where init_only was set for an existing app
+
         err = versions_be_ifc.publish(current_version, main_ver)
         if not err:
             stamped = True
@@ -627,7 +667,7 @@ def init(params):
     return None
 
 
-def show(params, version=None):
+def show(params, version=None, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -659,7 +699,8 @@ def show(params, version=None):
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
         params['name'],
-        version
+        version,
+        mode_version
     )
 
     if version is None:
@@ -750,7 +791,7 @@ def stamp(params, pull=False, init_only=False):
     return None
 
 
-def goto_version(params, version):
+def goto_version(params, version, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -793,7 +834,8 @@ def goto_version(params, version):
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
         params['name'],
-        version
+        version,
+        mode_version
     )
 
     if version is None:
@@ -1125,6 +1167,8 @@ def main(command_line=None):
         required=False,
         help="The version to show"
     )
+    pshow.add_argument('-m', '--mode')
+    pshow.add_argument('-mv', '--mode_version', default=None)
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)
     pshow.add_argument('--verbose', dest='verbose', action='store_true')
@@ -1139,8 +1183,13 @@ def main(command_line=None):
         '-r', '--release-mode',
         choices=['major', 'minor', 'patch', 'micro'],
         default='patch',
-        required=True,
         help='major / minor / patch / micro'
+    )
+    pstamp.add_argument(
+        '-m', '--mode',
+        default=None,
+        help='Version mode. Can be anything really until you decide '
+             'to set the mode to be release again'
     )
     pstamp.add_argument(
         '-s', '--starting-version',
@@ -1163,6 +1212,8 @@ def main(command_line=None):
         required=False,
         help="The version to go to"
     )
+    pgoto.add_argument('-m', '--mode')
+    pgoto.add_argument('-mv', '--mode_version', default=None)
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
     pgoto.add_argument(
@@ -1201,6 +1252,8 @@ def main(command_line=None):
         err = init(params)
     if args.command == 'show':
         params['verbose'] = args.verbose
+        params['mode'] = args.mode
+        params['mode_version'] = args.mode_version
 
         # root app does not have raw version number
         if root:
@@ -1209,13 +1262,30 @@ def main(command_line=None):
             params['raw'] = args.raw
 
         LOGGER.disabled = False
-        err = show(params, args.version)
+        mode_version = None
+        if args.mode is not None:
+            mode_version = args.mode
+            if args.mode_version is not None:
+                mode_version = '{0}{1}'.format(
+                    mode_version,
+                    args.mode_version
+                )
+        err = show(params, args.version, mode_version)
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
+        params['mode'] = args.mode
         err = stamp(params, args.pull, args.init_only)
     elif args.command == 'goto':
-        err = goto_version(params, args.version)
+        mode_version = None
+        if args.mode is not None:
+            mode_version = args.mode
+            if args.mode_version is not None:
+                mode_version = '{0}{1}'.format(
+                    mode_version,
+                    args.mode_version
+                )
+        err = goto_version(params, args.version, mode_version)
 
     return err
 
