@@ -152,8 +152,9 @@ def test_multi_repo_dependency(app_layout):
 
     assert data['version'] == '0.0.2'
     assert '.' in data['changesets']
-    assert '../repo1' in data['changesets']
-    assert '../repo2' in data['changesets']
+    assert os.path.join('..', 'repo1') in data['changesets']
+    assert os.path.join('..', 'repo2') in data['changesets']
+
 
     with open(params['app_conf_path'], 'r') as f:
         data = yaml.safe_load(f)
@@ -195,6 +196,8 @@ def test_goto_deleted_repos(app_layout):
                 'remote': be.be.remote(),
             }
         })
+
+        be.__del__()
 
     app_layout.write_conf(**conf)
 

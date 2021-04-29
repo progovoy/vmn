@@ -212,6 +212,7 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._git_backend.close()
         VersionControlBackend.__del__(self)
+        del self.be
 
     def remove_app_version_file(self, app_version_file_path):
         client = Repo(self.root_path)
