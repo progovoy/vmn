@@ -48,12 +48,32 @@ class IVersionsStamper(object):
         self._raw_configured_deps = conf['raw_configured_deps']
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
+        self._mode_count = {}
+        self._current_mode = 'release'
 
-        ver_info_form_repo = \
+        self.ver_info_form_repo = \
             self._backend.get_vmn_version_info(
                 app_name=self._name
             )
-        self.tracked = ver_info_form_repo is not None
+        self.tracked = self.ver_info_form_repo is not None
+        if self.tracked:
+            self._mode_count = self.ver_info_form_repo['stamping']['app']["mode_count"]
+            self._current_mode = self.ver_info_form_repo['stamping']['app']["current_mode"]
+
+        if self._current_mode == 'release' and self._release_mode is None:
+            del self._backend
+
+            raise RuntimeError(
+                'When stamping from a previous release version '
+                'a release mode must be specified'
+            )
+
+        self._releasing_rc = (
+                self._current_mode != 'release' and
+                self._release_mode is None and
+                self._mode == 'release'
+        )
+        self._should_publish = True
 
         self._version_info_message = {
             'vmn_info': {
@@ -66,13 +86,13 @@ class IVersionsStamper(object):
                     'name': self._name,
                     'changesets': self.actual_deps_state,
                     'version': IVersionsStamper.get_formatted_version(
-                        '0.0.0.0',
+                        '0.0.0',
                         self._version_template,
                         self._version_template_octats_count
                     ),
-                    '_version': '0.0.0.0',
+                    '_version': '0.0.0',
                     "release_mode": self._release_mode,
-                    "previous_version": '0.0.0.0',
+                    "previous_version": '0.0.0',
                     "stamped_on_branch": self._backend.get_active_branch(),
                     "info": {},
                 },
@@ -85,7 +105,7 @@ class IVersionsStamper(object):
                 'name': self._root_app_name,
                 'version': 0,
                 'latest_service': self._name,
-                'services': {self._name: '0.0.0.0'},
+                'services': {self._name: '0.0.0'},
                 'external_services': {},
             }
 
@@ -93,50 +113,56 @@ class IVersionsStamper(object):
         del self._backend
 
     def gen_app_version(self, current_version):
-        mode_count = {}
-        current_mode = 'release'
-
-        ver_info = self._backend.get_vmn_version_info(app_name=self._name)
-        if ver_info is not None:
-            mode_count = ver_info['stamping']['app']["mode_count"]
-            current_mode = ver_info['stamping']['app']["current_mode"]
-
-        if current_mode == 'release' and self._release_mode is None:
-            raise RuntimeError(
-                'When stamping from a previous release version '
-                'a release mode must be specified'
-            )
+        major, minor, suffix = current_version.split('.')
+        patch = suffix
+        mode = self._mode
 
         # If user did not specify a change in mode,
         # stay with the previous one
-        if self._mode is None:
-            self._mode = current_mode
+        if mode is None:
+            mode = self._current_mode
 
-        major, minor, suffix = current_version.split('.')
-        if self._mode != 'release':
-            _, cur_rc = suffix.split('_')
+        if self._current_mode != 'release' and self._release_mode is None:
+            patch, cur_rc = suffix.split('_')
 
-            if self._mode not in mode_count:
-                mode_count[self._mode] = 0
-            mode_count[self._mode] += 1
+            if mode not in self._mode_count:
+                self._mode_count[mode] = 0
+            self._mode_count[mode] += 1
 
-            self._version_info_message['stamping']['app']['mode_count'] = mode_count
+            self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
+            self._version_info_message['stamping']['app']['current_mode'] = mode
+        elif self._current_mode != 'release' and self._release_mode is not None:
+            if self._mode is None or self._mode == 'release':
+                pass
+            else:
+                patch, _ = suffix.split('_')
+                self._mode_count = {
+                    self._mode: 1
+                }
+
+                self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
+                self._version_info_message['stamping']['app']['current_mode'] = self._mode
+        elif self._current_mode == 'release' and self._mode is not None and self._mode != 'release':
+            self._mode_count = {
+                self._mode: 1
+            }
+
+            self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
             self._version_info_message['stamping']['app']['current_mode'] = self._mode
-        else:
-            patch = suffix
-            if self._release_mode == 'major':
-                major = str(int(major) + 1)
-                minor = str(0)
-                patch = str(0)
-            elif self._release_mode == 'minor':
-                minor = str(int(minor) + 1)
-                patch = str(0)
-            elif self._release_mode == 'patch':
-                patch = str(int(patch) + 1)
+
+        if self._release_mode == 'major':
+            major = str(int(major) + 1)
+            minor = str(0)
+            patch = str(0)
+        elif self._release_mode == 'minor':
+            minor = str(int(minor) + 1)
+            patch = str(0)
+        elif self._release_mode == 'patch':
+            patch = str(int(patch) + 1)
 
         verstr = '{0}.{1}.{2}'.format(major, minor, patch)
-        if stamp_mode is not None:
-            verstr = '{0}_{1}-{2}'.format(verstr, stamp_mode, )
+        if self._mode is not None and self._mode != 'release':
+            verstr = '{0}_{1}-{2}'.format(verstr, self._mode, self._mode_count[self._mode])
 
         return verstr
 
@@ -320,7 +346,7 @@ class VersionControlStamper(IVersionsStamper):
         # user's repositories local state
         for tag in self._backend.tags():
             if not re.match(
-                r'{}_(\d+\.\d+\.\d+\.\d+)_?(.+[0-9]+)*$'.format(app_tag_name),
+                r'{}_(\d+\.\d+\.\d+)_?(.+[0-9]+)*$'.format(app_tag_name),
                 tag
             ):
                 continue
@@ -367,17 +393,14 @@ class VersionControlStamper(IVersionsStamper):
             return None
 
     def decide_app_version_by_source(self) -> str:
-        ver_info_form_repo = \
-            self._backend.get_vmn_version_info(app_name=self._name)
-        tracked = ver_info_form_repo is not None
-        only_initialized = tracked and \
-            ver_info_form_repo['stamping']['app']['_version'] == '0.0.0.0'
+        only_initialized = self.tracked and \
+            self.ver_info_form_repo['stamping']['app']['_version'] == '0.0.0'
 
-        if only_initialized or not tracked:
+        if only_initialized or not self.tracked:
             # first stamp
             return self._starting_version
 
-        version = ver_info_form_repo['stamping']['app']["_version"]
+        version = self.ver_info_form_repo['stamping']['app']["_version"]
         version_str_from_file = self.get_version_number_from_file()
         if version_str_from_file:
             version = version_str_from_file
@@ -389,6 +412,41 @@ class VersionControlStamper(IVersionsStamper):
             override_current_version=None,
     ):
         old_version = self.decide_app_version_by_source()
+        if self._releasing_rc:
+            self._should_publish = False
+            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+                self._name, old_version
+            )
+            if self._backend.changeset() != self._backend.changeset(tag=tag_name):
+                raise RuntimeError(
+                    'Releasing a release candidate is only possile when the repository '
+                    'state is on the exact version. Please vmn goto the version you\'d '
+                    'like to release.'
+                )
+
+            _, version, _ = \
+                stamp_utils.VersionControlBackend.get_tag_properties(
+                    tag_name
+                )
+
+            tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+                self._name, version
+            )
+
+            self._backend.tag(tag_name, force=True)
+
+            return version
+
+        matched_version = self.find_matching_version()
+        if matched_version == '0.0.0':
+            matched_version = None
+
+        if matched_version is not None:
+            # Good we have found an existing version matching
+            # the actual_deps_state
+            self._should_publish = False
+
+            return self.get_be_formatted_version(matched_version)
 
         if override_current_version is None:
             override_current_version = old_version
@@ -481,8 +539,11 @@ class VersionControlStamper(IVersionsStamper):
         return '{0}'.format(root_version)
 
     def publish(self, app_version, main_version):
+        if not self._should_publish:
+            return 0
+
         version_files = [self._app_conf_path]
-        if app_version != '0.0.0.0':
+        if app_version != '0.0.0':
             version_files.append(self._version_file_path)
         if self._root_app_name is not None:
             version_files.append(self._root_app_conf_path)
@@ -498,15 +559,9 @@ class VersionControlStamper(IVersionsStamper):
             include=version_files
         )
 
-        mode_version = None
-        if self._mode != 'release':
-            mode_version = '{0}{1}'.format(
-                self._mode,
-                self._version_info_message['stamping']['app']['mode_count'][self._mode]
-            )
         tags = [stamp_utils.VersionControlBackend.get_tag_name(
-            self._name, app_version, mode_version)
-        ]
+            self._name, app_version
+        )]
 
         if main_version is not None:
             tags.append(
@@ -553,21 +608,12 @@ def get_version(versions_be_ifc, pull, init_only):
     # not tracked & init only => only init a new app
     # not tracked & not init only => init and stamp a new app
 
-    matched_version = versions_be_ifc.find_matching_version()
-    if matched_version == '0.0.0.0':
-        matched_version = None
-
-    if matched_version is not None:
-        # Good we have found an existing version matching
-        # the actual_deps_state
-        return versions_be_ifc.get_be_formatted_version(matched_version)
-
     # We didn't find any existing version
     stamped = False
     retries = 3
     override_current_version = None
     override_main_current_version = None
-    current_version = '0.0.0.0'
+    current_version = '0.0.0'
     main_ver = None
 
     versions_be_ifc.create_config_files()
@@ -768,9 +814,10 @@ def stamp(params, pull=False, init_only=False):
 
         be = VersionControlStamper(params)
 
+        version = get_version(be, pull, init_only)
         try:
-            version = get_version(be, pull, init_only)
-        except Exception:
+            pass
+        except Exception as exc:
             LOGGER.exception('Logged Exception message:')
             del be
 
@@ -1186,7 +1233,7 @@ def main(command_line=None):
     )
     pstamp.add_argument(
         '-s', '--starting-version',
-        default='0.0.0.0',
+        default='0.0.0',
         required=False,
         help='Starting version'
     )

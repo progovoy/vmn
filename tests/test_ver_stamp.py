@@ -272,14 +272,63 @@ def test_rc_stamping(app_layout):
     assert len(params['actual_deps_state']) == 1
     vmn.init(params)
 
-    params['release_mode'] = 'minor'
     params['mode'] = 'rc'
-    params['starting_version'] = '1.2.0.0'
+    for i in range(2):
+        params['release_mode'] = 'minor'
+        params['starting_version'] = '1.2.0'
+        vmn.stamp(params)
+
+        ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+        data = ver_info['stamping']['app']
+        assert data['version'] == '1.3.0_rc-1'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+    params['mode'] = 'rc'
+    params['release_mode'] = None
+    params['starting_version'] = '1.2.0'
     vmn.stamp(params)
 
     ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
     data = ver_info['stamping']['app']
-    assert data['version'] == '1.3.0_rc.1'
+    assert data['version'] == '1.3.0_rc-2'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+    params['mode'] = 'beta'
+    params['release_mode'] = None
+    params['starting_version'] = '0.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0_beta-1'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+    params['mode'] = None
+    params['release_mode'] = None
+    params['starting_version'] = '0.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0_beta-2'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+    params['mode'] = 'release'
+    params['release_mode'] = None
+    params['starting_version'] = '0.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0'
 
 def test_version_template(app_layout):
     params = copy.deepcopy(app_layout.params)

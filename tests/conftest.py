@@ -137,6 +137,11 @@ class FSAppLayoutFixture(object):
                     'hash': client.head.commit.hexsha,
                     'vcs_type': 'git'
                 }
+                client.git.push(
+                    '--set-upstream',
+                    'origin',
+                    'refs/heads/{0}'.format(client.active_branch.name)
+                )
 
         client.close()
 

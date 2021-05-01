@@ -103,22 +103,20 @@ class VersionControlBackend(object):
         return self._type
 
     @staticmethod
-    def get_tag_name(app_name, version=None, mode_version=None):
+    def get_tag_name(app_name, version=None):
         app_name = app_name.replace('/', '-')
 
         if version is None:
             return '{0}'.format(app_name)
-        elif mode_version is None:
-            return '{0}_{1}'.format(app_name, version)
         else:
-            return '{0}_{1}_{2}'.format(app_name, version, mode_version)
+            return '{0}_{1}'.format(app_name, version)
 
     @staticmethod
     def get_tag_properties(tag_name, root=False):
         try:
             if not root:
                 groups = re.search(
-                    r'(.+)_(\d+\.\d+\.\d+\.\d+)_?(.+[0-9]+)*$',
+                    r'(.+)_(\d+\.\d+\.\d+)_?(.+-\d+)*$',
                     tag_name
                 ).groups()
 
@@ -340,12 +338,17 @@ class GitBackend(VersionControlBackend):
         self._be.git.checkout(rev)
 
     def last_user_changeset(self):
+        init_hex = None
         for p in self._be.iter_commits():
             if p.author.name == VMN_USER_NAME:
-                if not p.message.startswith(INIT_COMMIT_MESSAGE):
-                    continue
+                if p.message.startswith(INIT_COMMIT_MESSAGE):
+                    init_hex = p.hexsha
+
+                continue
 
             return p.hexsha
+
+        return init_hex
 
     def remote(self):
         remote = tuple(self._origin.urls)[0]
@@ -355,8 +358,22 @@ class GitBackend(VersionControlBackend):
 
         return remote
 
-    def changeset(self, short=False):
-        return self._be.head.commit.hexsha
+    def changeset(self, tag=None, short=False):
+        if tag is None:
+            return self._be.head.commit.hexsha
+
+        found_tag = None
+        for _tag in self._be.tags:
+            if _tag.name != tag:
+                continue
+
+            found_tag = _tag
+            break
+
+        if found_tag:
+            return found_tag.commit.hexsha
+
+        return None
 
     def revert_vmn_changes(self, tags):
         if self._be.active_branch.commit.author.name != VMN_USER_NAME:
