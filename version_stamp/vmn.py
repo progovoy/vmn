@@ -23,31 +23,6 @@ import version as version_mod
 LOGGER = stamp_utils.init_stamp_logger()
 
 
-def gen_app_version(current_version, release_mode):
-    try:
-        major, minor, patch, micro = current_version.split('.')
-    except ValueError:
-        major, minor, patch = current_version.split('.')
-        micro = str(0)
-
-    if release_mode == 'major':
-        major = str(int(major) + 1)
-        minor = str(0)
-        patch = str(0)
-        micro = str(0)
-    elif release_mode == 'minor':
-        minor = str(int(minor) + 1)
-        patch = str(0)
-        micro = str(0)
-    elif release_mode == 'patch':
-        patch = str(int(patch) + 1)
-        micro = str(0)
-    elif release_mode == 'micro':
-        micro = str(int(micro) + 1)
-
-    return '{0}.{1}.{2}.{3}'.format(major, minor, patch, micro)
-
-
 class IVersionsStamper(object):
     def __init__(self, conf):
         self._name = conf['name']
@@ -99,8 +74,6 @@ class IVersionsStamper(object):
                     "release_mode": self._release_mode,
                     "previous_version": '0.0.0.0',
                     "stamped_on_branch": self._backend.get_active_branch(),
-                    'current_mode': 'release',
-                    'mode_count' : {},
                     "info": {},
                 },
                 'root_app': {}
@@ -118,6 +91,54 @@ class IVersionsStamper(object):
 
     def __del__(self):
         del self._backend
+
+    def gen_app_version(self, current_version):
+        mode_count = {}
+        current_mode = 'release'
+
+        ver_info = self._backend.get_vmn_version_info(app_name=self._name)
+        if ver_info is not None:
+            mode_count = ver_info['stamping']['app']["mode_count"]
+            current_mode = ver_info['stamping']['app']["current_mode"]
+
+        if current_mode == 'release' and self._release_mode is None:
+            raise RuntimeError(
+                'When stamping from a previous release version '
+                'a release mode must be specified'
+            )
+
+        # If user did not specify a change in mode,
+        # stay with the previous one
+        if self._mode is None:
+            self._mode = current_mode
+
+        major, minor, suffix = current_version.split('.')
+        if self._mode != 'release':
+            _, cur_rc = suffix.split('_')
+
+            if self._mode not in mode_count:
+                mode_count[self._mode] = 0
+            mode_count[self._mode] += 1
+
+            self._version_info_message['stamping']['app']['mode_count'] = mode_count
+            self._version_info_message['stamping']['app']['current_mode'] = self._mode
+        else:
+            patch = suffix
+            if self._release_mode == 'major':
+                major = str(int(major) + 1)
+                minor = str(0)
+                patch = str(0)
+            elif self._release_mode == 'minor':
+                minor = str(int(minor) + 1)
+                patch = str(0)
+            elif self._release_mode == 'patch':
+                patch = str(int(patch) + 1)
+
+        verstr = '{0}.{1}.{2}'.format(major, minor, patch)
+        if stamp_mode is not None:
+            verstr = '{0}_{1}-{2}'.format(verstr, stamp_mode, )
+
+        return verstr
 
     @staticmethod
     def parse_template(template):
@@ -167,7 +188,13 @@ class IVersionsStamper(object):
         return ver_format, octats_count
 
     @staticmethod
-    def get_formatted_version(version, version_template, octats_count):
+    def get_formatted_version(
+            version,
+            version_template,
+            octats_count,
+            mode=None,
+            mode_count=0
+    ):
         octats = version.split('.')
         if len(octats) > 4:
             raise RuntimeError('Version is too long. Maximum is 4 octats')
@@ -175,9 +202,8 @@ class IVersionsStamper(object):
         for i in range(4 - len(octats)):
             octats.append('0')
 
-        return version_template.format(
-            *(octats[:octats_count])
-        )
+        return version_template.format(*(octats[:octats_count]))
+
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
@@ -265,7 +291,6 @@ class IVersionsStamper(object):
 
     def stamp_app_version(
             self,
-            override_release_mode=None,
             override_current_version=None,
     ):
         raise NotImplementedError('Please implement this method')
@@ -361,12 +386,8 @@ class VersionControlStamper(IVersionsStamper):
 
     def stamp_app_version(
             self,
-            override_release_mode=None,
             override_current_version=None,
     ):
-        if override_release_mode is None:
-            override_release_mode = self._release_mode
-
         old_version = self.decide_app_version_by_source()
 
         if override_current_version is None:
@@ -374,35 +395,9 @@ class VersionControlStamper(IVersionsStamper):
 
         # TODO:: optimization find max here
 
-        ver_info = self._backend.get_vmn_version_info(app_name=self._name)
-        if ver_info is None:
-            mode_count = \
-                self._version_info_message['stamping']['app']['mode_count']
-            current_mode = \
-                self._version_info_message['stamping']['app']['current_mode']
-        else:
-            mode_count = ver_info['stamping']['app']["mode_count"]
-            current_mode = ver_info['stamping']['app']["current_mode"]
-
-        if self._mode is None:
-            self._mode = current_mode
-
-        if self._mode not in mode_count:
-            mode_count[self._mode] = 0
-
-        mode_count[self._mode] += 1
-        if 'release' in mode_count:
-            mode_count.pop('release')
-
-        self._version_info_message['stamping']['app']['mode_count'] = mode_count
-        self._version_info_message['stamping']['app']['current_mode'] = self._mode
-
-        if current_mode == 'release':
-            current_version = gen_app_version(
-                override_current_version, override_release_mode
-            )
-        else:
-            current_version = override_current_version
+        current_version = self.gen_app_version(
+            override_current_version,
+        )
 
         VersionControlStamper.write_version_to_file(
             file_path=self._version_file_path,
@@ -429,7 +424,8 @@ class VersionControlStamper(IVersionsStamper):
             IVersionsStamper.get_formatted_version(
                 current_version,
                 self._version_template,
-                self._version_template_octats_count
+                self._version_template_octats_count,
+                self._mode
         )
         self._version_info_message['stamping']['app']['_version'] = \
             current_version
@@ -569,7 +565,6 @@ def get_version(versions_be_ifc, pull, init_only):
     # We didn't find any existing version
     stamped = False
     retries = 3
-    override_release_mode = None
     override_current_version = None
     override_main_current_version = None
     current_version = '0.0.0.0'
@@ -582,7 +577,6 @@ def get_version(versions_be_ifc, pull, init_only):
 
         if not init_only:
             current_version = versions_be_ifc.stamp_app_version(
-                override_release_mode,
                 override_current_version,
             )
             main_ver = versions_be_ifc.stamp_main_system_version(
@@ -599,13 +593,12 @@ def get_version(versions_be_ifc, pull, init_only):
         if err == 1:
             override_current_version = current_version
             override_main_current_version = main_ver
-            override_release_mode = versions_be_ifc._release_mode
 
             LOGGER.warning(
                 'Failed to publish. Trying to auto-increase '
                 'from {0} to {1}'.format(
                     current_version,
-                    gen_app_version(current_version, override_release_mode)
+                    versions_be_ifc.gen_app_version(current_version)
                 )
             )
         elif err == 2:
@@ -1181,9 +1174,9 @@ def main(command_line=None):
     pstamp = subprasers.add_parser('stamp', help='stamp version')
     pstamp.add_argument(
         '-r', '--release-mode',
-        choices=['major', 'minor', 'patch', 'micro'],
-        default='patch',
-        help='major / minor / patch / micro'
+        choices=['major', 'minor', 'patch'],
+        default=None,
+        help='major / minor / patch'
     )
     pstamp.add_argument(
         '-m', '--mode',

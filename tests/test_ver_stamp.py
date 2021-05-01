@@ -266,6 +266,21 @@ def test_starting_version(app_layout):
     assert data['version'] == '1.3.0'
 
 
+def test_rc_stamping(app_layout):
+    params = copy.deepcopy(app_layout.params)
+    params = vmn.build_world(params['name'], params['working_dir'])
+    assert len(params['actual_deps_state']) == 1
+    vmn.init(params)
+
+    params['release_mode'] = 'minor'
+    params['mode'] = 'rc'
+    params['starting_version'] = '1.2.0.0'
+    vmn.stamp(params)
+
+    ver_info = app_layout._app_backend.be.get_vmn_version_info(app_name=params['name'])
+    data = ver_info['stamping']['app']
+    assert data['version'] == '1.3.0_rc.1'
+
 def test_version_template(app_layout):
     params = copy.deepcopy(app_layout.params)
     params = vmn.build_world(params['name'], params['working_dir'])
