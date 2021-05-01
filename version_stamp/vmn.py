@@ -11,6 +11,7 @@ from multiprocessing import Pool
 import random
 import time
 import re
+from packaging import version as pversion
 
 
 CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
@@ -52,13 +53,13 @@ class IVersionsStamper(object):
         self._current_mode = 'release'
 
         self.ver_info_form_repo = \
-            self._backend.get_vmn_version_info(
+            self.get_vmn_version_info(
                 app_name=self._name
             )
         self.tracked = self.ver_info_form_repo is not None
         if self.tracked:
             self._mode_count = self.ver_info_form_repo['stamping']['app']["mode_count"]
-            self._current_mode = self.ver_info_form_repo['stamping']['app']["current_mode"]
+            self._current_mode = self.ver_info_form_repo['stamping']['app']["orig_current_mode"]
 
         if self._current_mode == 'release' and self._release_mode is None:
             del self._backend
@@ -85,11 +86,7 @@ class IVersionsStamper(object):
                 'app': {
                     'name': self._name,
                     'changesets': self.actual_deps_state,
-                    'version': IVersionsStamper.get_formatted_version(
-                        '0.0.0',
-                        self._version_template,
-                        self._version_template_octats_count
-                    ),
+                    'version': self.get_formatted_version('0.0.0'),
                     '_version': '0.0.0',
                     "release_mode": self._release_mode,
                     "previous_version": '0.0.0',
@@ -116,6 +113,7 @@ class IVersionsStamper(object):
         major, minor, suffix = current_version.split('.')
         patch = suffix
         mode = self._mode
+        mode_count = self._mode_count
 
         # If user did not specify a change in mode,
         # stay with the previous one
@@ -125,30 +123,27 @@ class IVersionsStamper(object):
         if self._current_mode != 'release' and self._release_mode is None:
             patch, cur_rc = suffix.split('_')
 
-            if mode not in self._mode_count:
-                self._mode_count[mode] = 0
-            self._mode_count[mode] += 1
+            if mode not in mode_count:
+                mode_count[mode] = 0
+            mode_count[mode] += 1
 
-            self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
+            self._version_info_message['stamping']['app']['mode_count'] = mode_count
             self._version_info_message['stamping']['app']['current_mode'] = mode
-        elif self._current_mode != 'release' and self._release_mode is not None:
-            if self._mode is None or self._mode == 'release':
-                pass
-            else:
-                patch, _ = suffix.split('_')
-                self._mode_count = {
-                    self._mode: 1
-                }
-
-                self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
-                self._version_info_message['stamping']['app']['current_mode'] = self._mode
-        elif self._current_mode == 'release' and self._mode is not None and self._mode != 'release':
-            self._mode_count = {
-                self._mode: 1
+        elif self._current_mode != 'release' and self._release_mode is not None and mode != 'release':
+            patch, _ = suffix.split('_')
+            mode_count = {
+                mode: 1
             }
 
-            self._version_info_message['stamping']['app']['mode_count'] = self._mode_count
-            self._version_info_message['stamping']['app']['current_mode'] = self._mode
+            self._version_info_message['stamping']['app']['mode_count'] = mode_count
+            self._version_info_message['stamping']['app']['current_mode'] = mode
+        elif self._current_mode == 'release' and mode != 'release':
+            mode_count = {
+                mode: 1
+            }
+
+            self._version_info_message['stamping']['app']['mode_count'] = mode_count
+            self._version_info_message['stamping']['app']['current_mode'] = mode
 
         if self._release_mode == 'major':
             major = str(int(major) + 1)
@@ -161,8 +156,8 @@ class IVersionsStamper(object):
             patch = str(int(patch) + 1)
 
         verstr = '{0}.{1}.{2}'.format(major, minor, patch)
-        if self._mode is not None and self._mode != 'release':
-            verstr = '{0}_{1}-{2}'.format(verstr, self._mode, self._mode_count[self._mode])
+        if mode != 'release':
+            verstr = '{0}_{1}-{2}'.format(verstr, mode, mode_count[mode])
 
         return verstr
 
@@ -213,23 +208,97 @@ class IVersionsStamper(object):
 
         return ver_format, octats_count
 
-    @staticmethod
-    def get_formatted_version(
-            version,
-            version_template,
-            octats_count,
-            mode=None,
-            mode_count=0
-    ):
+    def get_formatted_version(self, version):
         octats = version.split('.')
-        if len(octats) > 4:
-            raise RuntimeError('Version is too long. Maximum is 4 octats')
+        if len(octats) > 3:
+            raise RuntimeError('Version is too long. Maximum is 3 octats')
 
-        for i in range(4 - len(octats)):
+        for i in range(3 - len(octats)):
             octats.append('0')
 
-        return version_template.format(*(octats[:octats_count]))
+        return self._version_template.format(*(octats[:self._version_template_octats_count]))
 
+    def get_vmn_version_info(
+            self,
+            tag_name=None,
+            app_name=None,
+            root_app_name=None
+    ):
+        if tag_name is None and app_name is None and root_app_name is None:
+            return None
+
+        commit_tag_obj = None
+        if tag_name is not None:
+            try:
+                commit_tag_obj = self._backend._be.commit(tag_name)
+            except:
+                return None
+        elif app_name is not None or root_app_name is not None:
+            used_app_name = app_name
+            root = False
+            if root_app_name is not None:
+                used_app_name = root_app_name
+                root = True
+
+            max_version = None
+            formated_tag_name = stamp_utils.VersionControlBackend.get_tag_name(
+                used_app_name
+            )
+            for tag in self._backend.tags(filter='{}_*'.format(formated_tag_name)):
+                _app_name, version, mode_version = stamp_utils.VersionControlBackend.get_tag_properties(
+                    tag, root=root
+                )
+                if version is None:
+                    continue
+
+                if _app_name != used_app_name:
+                    continue
+
+                _commit_tag_obj = self._backend._be.commit(tag)
+                if _commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
+                    continue
+
+                if max_version is None:
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
+                elif pversion.parse(max_version) < pversion.parse(version):
+                    max_version = version
+                    tag_name = tag
+                    commit_tag_obj = _commit_tag_obj
+
+        if commit_tag_obj is None:
+            return None
+
+        if commit_tag_obj.author.name != stamp_utils.VMN_USER_NAME:
+            return None
+
+        # TODO:: Check API commit version
+
+        commit_msg = yaml.safe_load(
+            self._backend._be.commit(tag_name).message
+        )
+
+        if commit_msg is None or 'stamping' not in commit_msg:
+            return None
+
+        commit_msg['stamping']['app']['orig_current_mode'] = \
+            commit_msg['stamping']['app']['current_mode']
+
+        tmp_ver = tag_name.replace(
+            '{0}_'.format(commit_msg['stamping']['app']['name']),
+            ''
+        )
+        if commit_msg['stamping']['app']['_version'].startswith(tmp_ver) and \
+           commit_msg['stamping']['app']['_version'] != tmp_ver:
+           prev_ver = commit_msg['stamping']['app']['_version']
+           commit_msg['stamping']['app']['_version'] = tmp_ver
+           commit_msg['stamping']['app']['current_mode'] = 'release'
+           commit_msg['stamping']['app']['previous_version'] = prev_ver
+           commit_msg['stamping']['app']['version'] = \
+               self.get_formatted_version(tmp_ver)
+
+        return commit_msg
 
     @staticmethod
     def write_version_to_file(file_path: str, version_number: str) -> None:
@@ -265,11 +334,7 @@ class IVersionsStamper(object):
         return flat_dependency_repos
 
     def get_be_formatted_version(self, version):
-        return IVersionsStamper.get_formatted_version(
-            version,
-            self._version_template,
-            self._version_template_octats_count
-        )
+        return self.get_formatted_version(version)
 
     def find_matching_version(self):
         raise NotImplementedError('Please implement this method')
@@ -351,7 +416,7 @@ class VersionControlStamper(IVersionsStamper):
             ):
                 continue
 
-            ver_info = self._backend.get_vmn_version_info(tag_name=tag)
+            ver_info = self.get_vmn_version_info(tag_name=tag)
             if ver_info is None:
                 continue
 
@@ -433,7 +498,7 @@ class VersionControlStamper(IVersionsStamper):
                 self._name, version
             )
 
-            self._backend.tag(tag_name, force=True)
+            self._backend.tag([tag_name], user='vmn', force=True)
 
             return version
 
@@ -479,12 +544,7 @@ class VersionControlStamper(IVersionsStamper):
             info['env'] = dict(os.environ)
 
         self._version_info_message['stamping']['app']['version'] = \
-            IVersionsStamper.get_formatted_version(
-                current_version,
-                self._version_template,
-                self._version_template_octats_count,
-                self._mode
-        )
+            self.get_formatted_version(current_version)
         self._version_info_message['stamping']['app']['_version'] = \
             current_version
         self._version_info_message['stamping']['app']['previous_version'] = \
@@ -501,7 +561,7 @@ class VersionControlStamper(IVersionsStamper):
         if self._root_app_name is None:
             return None
 
-        ver_info = self._backend.get_vmn_version_info(
+        ver_info = self.get_vmn_version_info(
             root_app_name=self._root_app_name
         )
         if ver_info is None:
@@ -712,6 +772,8 @@ def show(params, version=None, mode_version=None):
         LOGGER.error('{0}. Exiting'.format(err))
         return err
 
+    vcs = VersionControlStamper(params)
+
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
         return 1
@@ -728,29 +790,28 @@ def show(params, version=None, mode_version=None):
                 return 1
         else:
             try:
-                _, _, _, _ = version.split('.')
+                _, _, _ = version.split('.')
             except ValueError:
                 LOGGER.error(
                     'wrong version specified: version '
-                    'must be of form N1.N2.N3.N4'
+                    'must be of form N1.N2.N3'
                     )
                 return 1
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
         params['name'],
         version,
-        mode_version
     )
 
     if version is None:
         if params['root']:
-            ver_info = be.get_vmn_version_info(
+            ver_info = vcs.get_vmn_version_info(
                 root_app_name=params['root_app_name']
             )
         else:
-            ver_info = be.get_vmn_version_info(app_name=params['name'])
+            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     else:
-        ver_info = be.get_vmn_version_info(tag_name=tag_name)
+        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
 
     if ver_info is None:
         LOGGER.error(
@@ -837,6 +898,8 @@ def goto_version(params, version, mode_version=None):
         LOGGER.error('{0}. Exiting'.format(err))
         return err
 
+    vcs = VersionControlStamper(params)
+
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
         return err
@@ -864,29 +927,28 @@ def goto_version(params, version, mode_version=None):
                 return 1
         else:
             try:
-                _, _, _, _ = version.split('.')
+                _, _, _ = version.split('.')
             except ValueError:
                 LOGGER.error(
                     'wrong version specified: version '
-                    'must be of form N1.N2.N3.N4'
+                    'must be of form N1.N2.N3'
                     )
                 return 1
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
         params['name'],
         version,
-        mode_version
     )
 
     if version is None:
         if params['root']:
-            ver_info = be.get_vmn_version_info(
+            ver_info = vcs.get_vmn_version_info(
                 root_app_name=params['root_app_name']
             )
         else:
-            ver_info = be.get_vmn_version_info(app_name=params['name'])
+            ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     else:
-        ver_info = be.get_vmn_version_info(tag_name=tag_name)
+        ver_info = vcs.get_vmn_version_info(tag_name=tag_name)
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
