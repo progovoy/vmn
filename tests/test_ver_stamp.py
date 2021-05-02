@@ -21,7 +21,7 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -33,7 +33,7 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '1.0.0.0'
+    params['starting_version'] = '1.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -47,7 +47,7 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '1.0.0.0'
+    params['starting_version'] = '1.0.0'
     vmn.stamp(params, init_only=True)
     vmn.stamp(params)
     vmn.stamp(params)
@@ -62,7 +62,7 @@ def test_basic_stamp(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '3.1.34.99'
+    params['starting_version'] = '3.1.34'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -81,7 +81,7 @@ def test_basic_show(app_layout, capfd):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     params = vmn.build_world(params['name'], params['working_dir'])
@@ -98,7 +98,7 @@ def test_basic_show(app_layout, capfd):
     params['raw'] = True
     vmn.show(params)
     out, err = capfd.readouterr()
-    assert '0.0.1.0\n' == out
+    assert '0.0.1\n' == out
 
     params['verbose'] = True
     vmn.show(params)
@@ -117,7 +117,7 @@ def test_multi_repo_dependency(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     conf = {
@@ -147,7 +147,7 @@ def test_multi_repo_dependency(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -178,7 +178,7 @@ def test_goto_deleted_repos(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     conf = {
@@ -210,7 +210,7 @@ def test_goto_deleted_repos(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -220,7 +220,7 @@ def test_goto_deleted_repos(app_layout):
 
     dir_path = app_layout._repos['repo2']['path']
     shutil.rmtree(dir_path)  # deleting repo_b
-    assert vmn.goto_version(params, '0.0.2.0') == 0
+    assert vmn.goto_version(params, '0.0.2') == 0
 
 
 def test_basic_root_stamp(app_layout):
@@ -231,7 +231,7 @@ def test_basic_root_stamp(app_layout):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -248,7 +248,7 @@ def test_basic_root_stamp(app_layout):
 
     app2_params['release_mode'] = 'minor'
     app2_params['mode'] = 'release'
-    app2_params['starting_version'] = '0.0.0.0'
+    app2_params['starting_version'] = '0.0.0'
     vmn.stamp(app2_params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -268,7 +268,7 @@ def test_starting_version(app_layout):
 
     params['release_mode'] = 'minor'
     params['mode'] = 'release'
-    params['starting_version'] = '1.2.0.0'
+    params['starting_version'] = '1.2.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -356,7 +356,7 @@ def test_version_template(app_layout):
 
     params['release_mode'] = 'minor'
     params['mode'] = 'release'
-    params['starting_version'] = '1.2.0.0'
+    params['starting_version'] = '1.2.0'
     vmn.stamp(params)
 
     configured_template = None
@@ -371,20 +371,20 @@ def test_version_template(app_layout):
     assert data['version'] == '1.3.0'
     _, octats = vmn.IVersionsStamper.parse_template(configured_template)
     formated_version = vmn.IVersionsStamper.get_formatted_version(
-        '1.3.0.0',
+        '1.3.0',
         configured_template,
         octats
     )
     assert data['version'] == formated_version
 
-    template = 'ap{0}xx{0}XX{1}AC@{0}{2}{3}C'
+    template = 'ap{0}xx{0}XX{1}AC@{0}{2}C'
     _, octats = vmn.IVersionsStamper.parse_template(template)
     formated_version = vmn.IVersionsStamper.get_formatted_version(
-        '2.0.9.6',
+        '2.0.9',
         template,
         octats
     )
-    assert formated_version == 'ap2xx2XX0AC@296C'
+    assert formated_version == 'ap2xx2XX0AC@29C'
 
 
 def test_basic_goto(app_layout):
@@ -396,7 +396,7 @@ def test_basic_goto(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -410,7 +410,7 @@ def test_basic_goto(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '1.0.0.0'
+    params['starting_version'] = '1.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -420,11 +420,11 @@ def test_basic_goto(app_layout):
     assert data['version'] == '0.0.2'
 
     c1 = app_layout._app_backend.be.changeset()
-    assert vmn.goto_version(params, '1.0.1.0') == 1
-    assert vmn.goto_version(params, '0.0.1.0') == 0
+    assert vmn.goto_version(params, '1.0.1') == 1
+    assert vmn.goto_version(params, '0.0.1') == 0
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
-    assert vmn.goto_version(params, '0.0.2.0') == 0
+    assert vmn.goto_version(params, '0.0.2') == 0
     c3 = app_layout._app_backend.be.changeset()
     assert c1 == c3
 
@@ -441,7 +441,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
     params = vmn.build_world(params['name'], params['working_dir'])
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
@@ -473,7 +473,7 @@ def test_get_version(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     app_layout._app_backend.be.checkout(('-b', 'new_branch'))
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
     app_layout._app_backend._origin.pull(rebase=True)
@@ -496,10 +496,10 @@ def test_get_version_number_from_file(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.2.0.0'
+    params['starting_version'] = '0.2.0'
     vmn.stamp(params)  # just to create the relative folder tree, I.E: .vmn/app_name/last_known_app_version.yml
     ver_stamper = vmn.VersionControlStamper(params)
-    assert ver_stamper.get_version_number_from_file() == '0.2.1.0'
+    assert ver_stamper.get_version_number_from_file() == '0.2.1'
 
 
 def test_read_version_from_file(app_layout):
@@ -508,7 +508,7 @@ def test_read_version_from_file(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.1.0.0'
+    params['starting_version'] = '0.1.0'
     vmn.stamp(params)
     file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
     app_layout.write_file_commit_and_push('test_repo', 'f1.file', 'msg1')
@@ -516,7 +516,7 @@ def test_read_version_from_file(app_layout):
     vmn.stamp(params)
     with open(file_path, 'r') as fid:
         ver_dict = yaml.load(fid)
-    assert '0.1.2.0' == ver_dict.get('last_stamped_version')
+    assert '0.1.2' == ver_dict.get('last_stamped_version')
 
 
 def test_system_backward_comp_file_vs_commit(app_layout):
@@ -525,7 +525,7 @@ def test_system_backward_comp_file_vs_commit(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.1.0.0'
+    params['starting_version'] = '0.1.0'
     vmn.stamp(params)
     file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
     app_layout.remove_app_version_file(file_path)
@@ -536,10 +536,10 @@ def test_system_backward_comp_file_vs_commit(app_layout):
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     del vcs
     _version = ver_info['stamping']['app']['_version']
-    assert '0.1.2.0' == _version
+    assert '0.1.2' == _version
     with open(file_path, 'r') as fid:
         ver_dict = yaml.load(fid)
-    assert '0.1.2.0' == ver_dict.get('last_stamped_version')
+    assert '0.1.2' == ver_dict.get('last_stamped_version')
 
 
 def test_manual_file_adjustment(app_layout):
@@ -548,20 +548,20 @@ def test_manual_file_adjustment(app_layout):
     vmn.init(params)
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.1.0.0'
+    params['starting_version'] = '0.1.0'
     vmn.stamp(params)
     file_path = '{}/{}'.format(params.get('app_dir_path'), vmn.VER_FILE_NAME)
     app_layout.remove_app_version_file(file_path)
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push('test_repo',
                                           '.vmn/test_app/{}'.format(vmn.VER_FILE_NAME),
-                                          'last_stamped_version: 0.2.3.0')
+                                          'last_stamped_version: 0.2.3')
     vmn.stamp(params)
     vcs = vmn.VersionControlStamper(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
     del vcs
     _version = ver_info['stamping']['app']['_version']
-    assert '0.2.4.0' == _version
+    assert '0.2.4' == _version
 
 
 def test_basic_root_show(app_layout,capfd):
@@ -571,7 +571,7 @@ def test_basic_root_show(app_layout,capfd):
 
     params['release_mode'] = 'patch'
     params['mode'] = 'release'
-    params['starting_version'] = '0.0.0.0'
+    params['starting_version'] = '0.0.0'
     vmn.stamp(params)
 
     vcs = vmn.VersionControlStamper(params)
@@ -587,7 +587,7 @@ def test_basic_root_show(app_layout,capfd):
 
     app2_params['release_mode'] = 'minor'
     app2_params['mode'] = 'release'
-    app2_params['starting_version'] = '0.0.0.0'
+    app2_params['starting_version'] = '0.0.0'
     vmn.stamp(app2_params)
 
     vcs = vmn.VersionControlStamper(params)

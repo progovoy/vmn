@@ -24,13 +24,13 @@ vmn init
 
 # Examples:
 vmn stamp --release-mode patch <app-name>
-# example for starting from version 1.0.6.8
-vmn stamp -r minor --starting-version 1.0.6.8 <app-name>
+# example for starting from version 1.6.8
+vmn stamp -r minor --starting-version 1.6.8 <app-name>
 vmn stamp -r major <app-name>
 vmn show <app-name>
 vmn show --verbose <app-name>
 
-vmn goto -v 1.0.1.0 <app-name>
+vmn goto -v 1.0.1 <app-name>
 ```
 
 ### Concurrent builds
@@ -71,13 +71,13 @@ vmn_info:
   description_message_version: '1'
   vmn_version: <the version of vmn itself that has stamped the application>
 stamping:
-  msg: 'my_root_app/service3: update to version 0.0.1.0'
+  msg: 'my_root_app/service3: update to version 0.0.1'
   app:
     name: my_root_app/service3
     version: 0.0.1
-    _version: 0.0.1.0
+    _version: 0.0.1
     release_mode: patch
-    previous_version: 0.0.0.0
+    previous_version: 0.0.0
     stamped_on_branch: master
     changesets:
       .:
@@ -90,9 +90,9 @@ stamping:
     version: 3
     latest_service: my_root_app/service3
     services:
-      my_root_app/service1: 0.0.1.0
-      my_root_app/service2: 0.0.1.0
-      my_root_app/service3: 0.0.1.0
+      my_root_app/service1: 0.0.1
+      my_root_app/service2: 0.0.1
+      my_root_app/service3: 0.0.1
     external_services: {}
 ```
 
@@ -120,7 +120,7 @@ by `vmn` and will be displayed based on the `template`. In this case the output 
 For example:
 `vmn show my_root_app/service3` will output `0.0.1`
 however running:
-`vmn show --raw my_root_app/service3` will output `0.0.1.0`
+`vmn show --raw my_root_app/service3` will output `0.0.1`
 
 #### Configuration: deps
 In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`.

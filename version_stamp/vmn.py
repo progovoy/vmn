@@ -90,6 +90,8 @@ class IVersionsStamper(object):
                     '_version': '0.0.0',
                     "release_mode": self._release_mode,
                     "previous_version": '0.0.0',
+                    'current_mode': 'release',
+                    'mode_count': {},
                     "stamped_on_branch": self._backend.get_active_branch(),
                     "info": {},
                 },
