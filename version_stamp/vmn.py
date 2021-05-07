@@ -287,9 +287,6 @@ class IVersionsStamper(object):
             # TODO: raise error here?
             return None
 
-        if formated_tag_name is not None:
-            commit_msg['debug'] = tags
-
         commit_msg['stamping']['app']['orig_current_mode'] = \
             commit_msg['stamping']['app']['current_mode']
 
@@ -776,13 +773,11 @@ def init(params):
     return None
 
 
-def show(params, version=None, mode_version=None):
+def show(vcs, params, version=None, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return err
-
-    vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
@@ -855,7 +850,7 @@ def show(params, version=None, mode_version=None):
     return 0
 
 
-def stamp(params, pull=False, init_only=False):
+def stamp(versions_be_ifc, params, pull=False, init_only=False):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -886,14 +881,11 @@ def stamp(params, pull=False, init_only=False):
     with lock:
         LOGGER.info('Locked: {0}'.format(lock_file_path))
 
-        be = VersionControlStamper(params)
-
-        version = get_version(be, pull, init_only)
+        version = get_version(versions_be_ifc, pull, init_only)
         try:
             pass
         except Exception as exc:
             LOGGER.exception('Logged Exception message:')
-            del be
 
             return 1
 
@@ -901,16 +893,12 @@ def stamp(params, pull=False, init_only=False):
 
     LOGGER.info('Released locked: {0}'.format(lock_file_path))
 
-    return be
 
-
-def goto_version(params, version, mode_version=None):
+def goto_version(vcs, params, version, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
         return err
-
-    vcs = VersionControlStamper(params)
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
@@ -1365,6 +1353,7 @@ def main(command_line=None):
     params['release_mode'] = args.release_mode
     params['starting_version'] = args.starting_version
     params['mode'] = args.mode
+    vcs = VersionControlStamper(params)
 
     err = 0
     if args.command == 'init':
@@ -1385,9 +1374,9 @@ def main(command_line=None):
                     mode_version,
                     args.mode_version
                 )
-        err = show(params, args.version, mode_version)
+        err = show(vcs, params, args.version, mode_version)
     elif args.command == 'stamp':
-        err = stamp(params, args.pull, args.init_only)
+        err = stamp(vcs, params, args.pull, args.init_only)
     elif args.command == 'goto':
         mode_version = None
         if args.mode is not None:
@@ -1397,7 +1386,7 @@ def main(command_line=None):
                     mode_version,
                     args.mode_version
                 )
-        err = goto_version(params, args.version, mode_version)
+        err = goto_version(vcs, params, args.version, mode_version)
 
     return err
 
