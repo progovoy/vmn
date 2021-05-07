@@ -733,20 +733,24 @@ def init(params):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
+        del be
         return err
 
     if os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is already initialized')
+        del be
         return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
+        del be
         return err
 
     err = be.check_for_outgoing_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
+        del be
         return err
 
     changeset = be.changeset()
@@ -767,6 +771,7 @@ def init(params):
     )
 
     be.push()
+    del be
 
     LOGGER.info('Initialized vmn tracking on {0}'.format(params['root_path']))
 
@@ -777,10 +782,12 @@ def show(vcs, params, version=None, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
+        del be
         return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.error('vmn tracking is not yet initialized')
+        del be
         return 1
 
     if version is not None:
@@ -792,6 +799,7 @@ def show(vcs, params, version=None, mode_version=None):
                     'wrong version specified: root version '
                     'must be an integer'
                     )
+                del be
                 return 1
         else:
             try:
@@ -801,6 +809,7 @@ def show(vcs, params, version=None, mode_version=None):
                     'wrong version specified: version '
                     'must be of form N1.N2.N3'
                     )
+                del be
                 return 1
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
@@ -825,6 +834,7 @@ def show(vcs, params, version=None, mode_version=None):
                 params['name'],
             )
         )
+        del be
 
         return 1
 
@@ -837,6 +847,7 @@ def show(vcs, params, version=None, mode_version=None):
                     params['name'],
                 )
             )
+            del be
 
             return 1
 
@@ -847,6 +858,8 @@ def show(vcs, params, version=None, mode_version=None):
     else:
         print(data['version'])
 
+    del be
+
     return 0
 
 
@@ -854,20 +867,24 @@ def stamp(versions_be_ifc, params, pull=False, init_only=False):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
+        del be
         return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
+        del be
         return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
+        del be
         return err
 
     err = be.check_for_outgoing_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
+        del be
         return err
 
     del be
@@ -898,21 +915,25 @@ def goto_version(vcs, params, version, mode_version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
+        del be
         return err
 
     if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
         LOGGER.info('vmn tracking is not yet initialized')
+        del be
         return err
 
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
+        del be
         return err
 
     if not be.in_detached_head():
         err = be.check_for_outgoing_changes()
         if err:
             LOGGER.info('{0}. Exiting'.format(err))
+            del be
             return err
 
     if version is not None:
@@ -924,6 +945,8 @@ def goto_version(vcs, params, version, mode_version=None):
                     'wrong version specified: root version '
                     'must be an integer'
                     )
+                del be
+
                 return 1
         else:
             try:
@@ -933,6 +956,8 @@ def goto_version(vcs, params, version, mode_version=None):
                     'wrong version specified: version '
                     'must be of form N1.N2.N3'
                     )
+                del be
+
                 return 1
 
     tag_name = stamp_utils.VersionControlBackend.get_tag_name(
@@ -952,6 +977,7 @@ def goto_version(vcs, params, version, mode_version=None):
 
     if ver_info is None:
         LOGGER.error('No such app: {0}'.format(params['name']))
+        del be
         return 1
 
     data = ver_info['stamping']['app']
@@ -976,8 +1002,11 @@ def goto_version(vcs, params, version, mode_version=None):
                     params['name'], version
                 )
             )
+            del be
 
             return 1
+
+    del be
 
     return 0
 
@@ -1353,7 +1382,6 @@ def main(command_line=None):
     params['release_mode'] = args.release_mode
     params['starting_version'] = args.starting_version
     params['mode'] = args.mode
-    vcs = VersionControlStamper(params)
 
     err = 0
     if args.command == 'init':
@@ -1374,9 +1402,13 @@ def main(command_line=None):
                     mode_version,
                     args.mode_version
                 )
+        vcs = VersionControlStamper(params)
         err = show(vcs, params, args.version, mode_version)
+        del vcs
     elif args.command == 'stamp':
+        vcs = VersionControlStamper(params)
         err = stamp(vcs, params, args.pull, args.init_only)
+        del vcs
     elif args.command == 'goto':
         mode_version = None
         if args.mode is not None:
@@ -1386,7 +1418,9 @@ def main(command_line=None):
                     mode_version,
                     args.mode_version
                 )
+        vcs = VersionControlStamper(params)
         err = goto_version(vcs, params, args.version, mode_version)
+        del vcs
 
     return err
 
