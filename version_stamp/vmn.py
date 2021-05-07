@@ -248,31 +248,6 @@ class IVersionsStamper(object):
             )
             tags = self._backend.tags(filter='{}_*'.format(formated_tag_name))
 
-            i = 0
-            while i < len(tags) - 1:
-                for k in range(i + 1, len(tags)):
-                    if self._backend._be.commit(tags[i]) != self._backend._be.commit(tags[k]):
-                        break
-
-                    _, v1, m1 = stamp_utils.VersionControlBackend.get_tag_properties(
-                        tags[i], root=root
-                    )
-                    if m1 is not None:
-                        v1 = '{0}_{1}'.format(v1, m1)
-                    _, v2, m2 = stamp_utils.VersionControlBackend.get_tag_properties(
-                        tags[k], root=root
-                    )
-                    if m2 is not None:
-                        v2 = '{0}_{1}'.format(v2, m2)
-                    if pversion.parse(v1) < pversion.parse(v2):
-                        tag = tags[i]
-                        tags[i] = tags[k]
-                        tags[k] = tag
-
-                    i = k
-
-                i += 1
-
             for tag in tags:
                 _app_name, version, mode_version = stamp_utils.VersionControlBackend.get_tag_properties(
                     tag, root=root
@@ -295,10 +270,6 @@ class IVersionsStamper(object):
                     max_version = version
                     tag_name = tag
                     commit_tag_obj = _commit_tag_obj
-
-                if commit_tag_obj.hexsha == _commit_tag_obj.hexsha:
-                    if mode_version is None:
-                        tag_name = tag
 
         if commit_tag_obj is None:
             return None
