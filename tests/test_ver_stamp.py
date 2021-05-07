@@ -89,6 +89,9 @@ def test_basic_show(app_layout, capfd):
     assert not out
 
     params['verbose'] = False
+    params['starting_version'] = '0.0.0'
+    params['mode'] = None
+    params['release_mode'] = 'patch'
     params['raw'] = False
     vmn.show(params)
     out, err = capfd.readouterr()
@@ -302,13 +305,12 @@ def test_rc_stamping(app_layout):
     params['mode'] = 'rc'
     params['release_mode'] = None
     params['starting_version'] = '1.2.0'
-    vmn.stamp(params)
+    vcs = vmn.stamp(params)
 
-    vcs = vmn.VersionControlStamper(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    del vcs
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0_rc-2'
+    del vcs
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
@@ -316,13 +318,12 @@ def test_rc_stamping(app_layout):
     params['mode'] = 'beta'
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
-    vmn.stamp(params)
+    vcs = vmn.stamp(params)
 
-    vcs = vmn.VersionControlStamper(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    del vcs
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0_beta-1'
+    del vcs
 
     app_layout.write_file_commit_and_push(
         'test_repo', 'f1.file', 'msg1'
@@ -330,24 +331,23 @@ def test_rc_stamping(app_layout):
     params['mode'] = None
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
-    vmn.stamp(params)
+    vcs = vmn.stamp(params)
 
-    vcs = vmn.VersionControlStamper(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    del vcs
+
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0_beta-2'
+    del vcs
 
     params['mode'] = 'release'
     params['release_mode'] = None
     params['starting_version'] = '0.0.0'
-    vmn.stamp(params)
-
-    vcs = vmn.VersionControlStamper(params)
+    vcs = vmn.stamp(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    del vcs
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0'
+    del vcs
+
 
 def test_version_template(app_layout):
     params = copy.deepcopy(app_layout.params)
@@ -366,25 +366,20 @@ def test_version_template(app_layout):
 
     vcs = vmn.VersionControlStamper(params)
     ver_info = vcs.get_vmn_version_info(app_name=params['name'])
-    del vcs
     data = ver_info['stamping']['app']
     assert data['version'] == '1.3.0'
-    _, octats = vmn.IVersionsStamper.parse_template(configured_template)
-    formated_version = vmn.IVersionsStamper.get_formatted_version(
-        '1.3.0',
-        configured_template,
-        octats
-    )
+    vcs._version_template, vcs._version_template_octats_count = \
+        vmn.IVersionsStamper.parse_template(configured_template)
+    formated_version = vcs.get_formatted_version('1.3.0')
     assert data['version'] == formated_version
 
     template = 'ap{0}xx{0}XX{1}AC@{0}{2}C'
-    _, octats = vmn.IVersionsStamper.parse_template(template)
-    formated_version = vmn.IVersionsStamper.get_formatted_version(
-        '2.0.9',
-        template,
-        octats
-    )
-    assert formated_version == 'ap2xx2XX0AC@29C'
+    vcs._version_template, vcs._version_template_octats_count = \
+        vmn.IVersionsStamper.parse_template(template)
+    formated_version = vcs.get_formatted_version('2.0.9')
+    assert formated_version == 'ap2xxXX0AC@9C'
+
+    del vcs
 
 
 def test_basic_goto(app_layout):

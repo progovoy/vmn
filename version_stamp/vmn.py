@@ -92,7 +92,6 @@ class IVersionsStamper(object):
                     "previous_version": '0.0.0',
                     'current_mode': 'release',
                     'mode_count': {},
-                    "stamped_on_branch": self._backend.get_active_branch(),
                     "info": {},
                 },
                 'root_app': {}
@@ -166,9 +165,9 @@ class IVersionsStamper(object):
     @staticmethod
     def parse_template(template):
         placeholders = (
-            '{0}', '{1}', '{2}', '{3}', '{NON_EXISTING_PLACEHOLDER}'
+            '{0}', '{1}', '{2}', '{NON_EXISTING_PLACEHOLDER}'
         )
-        templates = [None, None, None, None]
+        templates = [None, None, None]
 
         if len(template) > 30:
             raise RuntimeError('Template too long: max 30 chars')
@@ -201,11 +200,11 @@ class IVersionsStamper(object):
         ver_format = ''
         octats_count = 0
         templates[0] = '{0}{1}'.format(prefix, templates[0])
-        for template in templates:
-            if template is None:
+        for t in templates:
+            if t is None:
                 break
 
-            ver_format += template
+            ver_format += t
             octats_count += 1
 
         return ver_format, octats_count
@@ -226,6 +225,7 @@ class IVersionsStamper(object):
             app_name=None,
             root_app_name=None
     ):
+        formated_tag_name = None
         if tag_name is None and app_name is None and root_app_name is None:
             return None
 
@@ -246,7 +246,34 @@ class IVersionsStamper(object):
             formated_tag_name = stamp_utils.VersionControlBackend.get_tag_name(
                 used_app_name
             )
-            for tag in self._backend.tags(filter='{}_*'.format(formated_tag_name)):
+            tags = self._backend.tags(filter='{}_*'.format(formated_tag_name))
+
+            i = 0
+            while i < len(tags) - 1:
+                for k in range(i + 1, len(tags)):
+                    if self._backend._be.commit(tags[i]) != self._backend._be.commit(tags[k]):
+                        break
+
+                    _, v1, m1 = stamp_utils.VersionControlBackend.get_tag_properties(
+                        tags[i], root=root
+                    )
+                    if m1 is not None:
+                        v1 = '{0}_{1}'.format(v1, m1)
+                    _, v2, m2 = stamp_utils.VersionControlBackend.get_tag_properties(
+                        tags[k], root=root
+                    )
+                    if m2 is not None:
+                        v2 = '{0}_{1}'.format(v2, m2)
+                    if pversion.parse(v1) < pversion.parse(v2):
+                        tag = tags[i]
+                        tags[i] = tags[k]
+                        tags[k] = tag
+
+                    i = k
+
+                i += 1
+
+            for tag in tags:
                 _app_name, version, mode_version = stamp_utils.VersionControlBackend.get_tag_properties(
                     tag, root=root
                 )
@@ -269,6 +296,10 @@ class IVersionsStamper(object):
                     tag_name = tag
                     commit_tag_obj = _commit_tag_obj
 
+                if commit_tag_obj.hexsha == _commit_tag_obj.hexsha:
+                    if mode_version is None:
+                        tag_name = tag
+
         if commit_tag_obj is None:
             return None
 
@@ -282,7 +313,11 @@ class IVersionsStamper(object):
         )
 
         if commit_msg is None or 'stamping' not in commit_msg:
+            # TODO: raise error here?
             return None
+
+        if formated_tag_name is not None:
+            commit_msg['debug'] = tags
 
         commit_msg['stamping']['app']['orig_current_mode'] = \
             commit_msg['stamping']['app']['current_mode']
@@ -553,6 +588,8 @@ class VersionControlStamper(IVersionsStamper):
             old_version
         self._version_info_message['stamping']['app']['info'] = \
             info
+        self._version_info_message['stamping']['app']['stamped_on_branch'] =\
+            self._backend.get_active_branch()
 
         return current_version
 
@@ -867,11 +904,14 @@ def stamp(params, pull=False, init_only=False):
         LOGGER.info('{0}. Exiting'.format(err))
         return err
 
+    del be
+
     lock_file_path = os.path.join(params['root_app_dir_path'], 'vmn.lock')
     pathlib.Path(os.path.dirname(lock_file_path)).mkdir(
         parents=True, exist_ok=True
     )
     lock = FileLock(lock_file_path)
+
     with lock:
         LOGGER.info('Locked: {0}'.format(lock_file_path))
 
@@ -888,10 +928,9 @@ def stamp(params, pull=False, init_only=False):
 
         LOGGER.info(version)
 
-        del be
     LOGGER.info('Released locked: {0}'.format(lock_file_path))
 
-    return None
+    return be
 
 
 def goto_version(params, version, mode_version=None):
@@ -1203,6 +1242,7 @@ def build_world(name, working_dir, root=False):
     }
     params['version_template'] = '{0}.{1}.{2}'
     params["extra_info"] = False
+    # TODO: handle redundant parse template here
     IVersionsStamper.parse_template(params['version_template'])
 
     deps = {}
@@ -1351,14 +1391,14 @@ def main(command_line=None):
     else:
         params = build_world(None, cwd)
 
+    params['release_mode'] = args.release_mode
+    params['starting_version'] = args.starting_version
+    params['mode'] = args.mode
+
     err = 0
     if args.command == 'init':
         err = init(params)
     if args.command == 'show':
-        params['verbose'] = args.verbose
-        params['mode'] = args.mode
-        params['mode_version'] = args.mode_version
-
         # root app does not have raw version number
         if root:
             params['raw'] = False
@@ -1376,9 +1416,6 @@ def main(command_line=None):
                 )
         err = show(params, args.version, mode_version)
     elif args.command == 'stamp':
-        params['release_mode'] = args.release_mode
-        params['starting_version'] = args.starting_version
-        params['mode'] = args.mode
         err = stamp(params, args.pull, args.init_only)
     elif args.command == 'goto':
         mode_version = None

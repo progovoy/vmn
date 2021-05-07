@@ -5,6 +5,7 @@ import git
 import logging
 from pathlib import Path
 import re
+import time
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
@@ -60,7 +61,7 @@ class VersionControlBackend(object):
     def status(self, tag):
         raise NotImplementedError()
 
-    def tags(self, branch=None):
+    def tags(self, branch=None, filter=None):
         raise NotImplementedError()
 
     def in_detached_head(self):
@@ -153,6 +154,9 @@ class GitBackend(VersionControlBackend):
 
     def tag(self, tags, user, force=False):
         for tag in tags:
+            # This is required in order to preserver chronological order when
+            # listing tags since the taggerdate field is in seconds resolution
+            time.sleep(1.1)
             self._be.create_tag(
                 tag,
                 message='Automatic tag "{0}"'.format(tag),
@@ -224,7 +228,7 @@ class GitBackend(VersionControlBackend):
         return tuple(found_tag.commit.stats.files)
 
     def tags(self, branch=None, filter=None):
-        cmd = ['--sort', 'creatordate']
+        cmd = ['--sort', 'taggerdate']
         if filter is not None:
             cmd.append('--list')
             cmd.append(filter)
