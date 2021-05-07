@@ -88,7 +88,7 @@ class IVersionsStamper(object):
                     'changesets': self.actual_deps_state,
                     'version': self.get_formatted_version('0.0.0'),
                     '_version': '0.0.0',
-                    "release_mode": self._release_mode,
+                    'release_mode': self._release_mode,
                     "previous_version": '0.0.0',
                     'current_mode': 'release',
                     'mode_count': {},
@@ -97,6 +97,10 @@ class IVersionsStamper(object):
                 'root_app': {}
             }
         }
+
+        if self.tracked and self._release_mode is None:
+            self._version_info_message['stamping']['app']['release_mode'] = \
+                self.ver_info_form_repo['stamping']['app']['release_mode']
 
         if self._root_app_name is not None:
             self._version_info_message['stamping']['root_app'] = {
@@ -778,7 +782,7 @@ def init(params):
     return None
 
 
-def show(vcs, params, version=None, mode_version=None):
+def show(vcs, params, version=None):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -911,7 +915,7 @@ def stamp(versions_be_ifc, params, pull=False, init_only=False):
     LOGGER.info('Released locked: {0}'.format(lock_file_path))
 
 
-def goto_version(vcs, params, version, mode_version=None):
+def goto_version(vcs, params, version):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -1379,10 +1383,6 @@ def main(command_line=None):
     else:
         params = build_world(None, cwd)
 
-    params['release_mode'] = args.release_mode
-    params['starting_version'] = args.starting_version
-    params['mode'] = args.mode
-
     err = 0
     if args.command == 'init':
         err = init(params)
@@ -1393,33 +1393,44 @@ def main(command_line=None):
         else:
             params['raw'] = args.raw
 
+        params['verbose'] = args.verbose
+
         LOGGER.disabled = False
-        mode_version = None
-        if args.mode is not None:
-            mode_version = args.mode
-            if args.mode_version is not None:
-                mode_version = '{0}{1}'.format(
-                    mode_version,
-                    args.mode_version
-                )
+        version = args.version
+        if version is not None and \
+                args.mode is not None and \
+                args.mode_version is not None:
+            version = '{0}_{1}-{2}'.format(
+                version,
+                args.mode,
+                args.mode_version
+            )
+
+        # TODO: handle cmd specific params differently
+        params['release_mode'] = None
+        params['starting_version'] = '0.0.0'
+        params['mode'] = None
         vcs = VersionControlStamper(params)
-        err = show(vcs, params, args.version, mode_version)
+        err = show(vcs, params, version)
         del vcs
     elif args.command == 'stamp':
+        params['release_mode'] = args.release_mode
+        params['starting_version'] = args.starting_version
+        params['mode'] = args.mode
         vcs = VersionControlStamper(params)
         err = stamp(vcs, params, args.pull, args.init_only)
         del vcs
     elif args.command == 'goto':
-        mode_version = None
-        if args.mode is not None:
-            mode_version = args.mode
-            if args.mode_version is not None:
-                mode_version = '{0}{1}'.format(
-                    mode_version,
-                    args.mode_version
-                )
+        version = args.version
+        if args.mode is not None and args.mode_version is not None:
+            version = '{0}_{1}-{2}'.format(
+                version,
+                args.mode,
+                args.mode_version
+            )
+
         vcs = VersionControlStamper(params)
-        err = goto_version(vcs, params, args.version, mode_version)
+        err = goto_version(vcs, params, version)
         del vcs
 
     return err
