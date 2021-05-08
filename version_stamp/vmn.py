@@ -994,9 +994,9 @@ def goto_version(vcs, params, version):
 
         _goto_version(deps, params['root_path'])
 
-    if version is None:
+    if version is None and not params['deps_only']:
         be.checkout_branch()
-    else:
+    elif not params['deps_only']:
         try:
             be.checkout(tag=tag_name)
         except Exception:
@@ -1352,6 +1352,8 @@ def main(command_line=None):
     pgoto.add_argument('-mv', '--mode_version', default=None)
     pgoto.add_argument('--root', dest='root', action='store_true')
     pgoto.set_defaults(root=False)
+    pgoto.add_argument('--deps-only', dest='deps_only', action='store_true')
+    pgoto.set_defaults(deps_only=False)
     pgoto.add_argument(
         'name',
         help="The application's name"
@@ -1429,6 +1431,7 @@ def main(command_line=None):
                 args.mode_version
             )
 
+        params['deps_only'] = args.deps_only
         vcs = VersionControlStamper(params)
         err = goto_version(vcs, params, version)
         del vcs

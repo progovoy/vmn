@@ -219,6 +219,8 @@ def test_goto_deleted_repos(app_layout):
 
     dir_path = app_layout._repos['repo2']['path']
     shutil.rmtree(dir_path)  # deleting repo_b
+    params['deps_only'] = False
+    vcs = vmn.VersionControlStamper(params)
     assert vmn.goto_version(vcs, params, '0.0.2') == 0
 
 
@@ -404,6 +406,8 @@ def test_basic_goto(app_layout):
     assert data['version'] == '0.0.2'
 
     c1 = app_layout._app_backend.be.changeset()
+    params['deps_only'] = False
+    vcs = vmn.VersionControlStamper(params)
     assert vmn.goto_version(vcs, params, '1.0.1') == 1
     assert vmn.goto_version(vcs, params, '0.0.1') == 0
     c2 = app_layout._app_backend.be.changeset()
