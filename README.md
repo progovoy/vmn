@@ -23,9 +23,9 @@ vmn -h
 vmn init
 
 # Examples:
-vmn stamp --release-mode patch <app-name>
+vmn stamp -r patch <app-name>
 # example for starting from version 1.6.8
-vmn stamp -r minor --starting-version 1.6.8 <app-name>
+vmn stamp -r minor -s 1.6.8 <app-name>
 vmn stamp -r major <app-name>
 vmn show <app-name>
 vmn show --verbose <app-name>
@@ -33,8 +33,8 @@ vmn show --verbose <app-name>
 vmn goto -v 1.0.1 <app-name>
 ```
 
-### Concurrent builds
-`vmn`  supports simultaneous builds. You can safely run multiple instances of `vmn`
+### Concurrent stamps
+`vmn`  supports simultaneous stamps. You can safely run multiple instances of `vmn`
 
 
 ## Installation
@@ -56,11 +56,11 @@ Actually `vmn` uses this technique for itself.
 
 `vmn` supports stamping of something called a "root app". For example:
 
-`vmn stamp --release-mode patch my_root_app/service1`
+`vmn stamp -r patch my_root_app/service1`
 
-`vmn stamp --release-mode patch my_root_app/service2`
+`vmn stamp -r patch my_root_app/service2`
 
-`vmn stamp --release-mode patch my_root_app/service3`
+`vmn stamp -r patch my_root_app/service3`
 
 Next we'll be able to use `show` to display everything we need:
 
@@ -114,7 +114,7 @@ conf:
 ```
 
 #### Configuration: template
-The template configuration string can be customized and will be applied on the actual version of 4 octas: `x1.x2.x3.x4`
+The template configuration string can be customized and will be applied on the actual version of 3 octas: `x1.x2.x3`
 by `vmn` and will be displayed based on the `template`. In this case the output version will be `x1.x2.x3`.
 
 For example:
