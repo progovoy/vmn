@@ -714,6 +714,11 @@ def stamp(params, pull=False, init_only=False):
         LOGGER.info('vmn tracking is not yet initialized')
         return err
 
+    err = be.check_for_git_user_config()
+    if err:
+        LOGGER.info('{0}. Exiting'.format(err))
+        return err
+
     err = be.check_for_pending_changes()
     if err:
         LOGGER.info('{0}. Exiting'.format(err))
