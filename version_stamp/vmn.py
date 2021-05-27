@@ -508,7 +508,7 @@ class VersionControlStamper(IVersionsStamper):
         self._backend.pull()
 
 
-def get_version(versions_be_ifc, pull, init_only):
+def get_version(versions_be_ifc, pull, init_only, always_new):
     if pull:
         versions_be_ifc.retrieve_remote_changes()
 
@@ -524,7 +524,7 @@ def get_version(versions_be_ifc, pull, init_only):
     if matched_version == '0.0.0.0':
         matched_version = None
 
-    if matched_version is not None:
+    if (matched_version is not None) and (not always_new):
         # Good we have found an existing version matching
         # the actual_deps_state
         return versions_be_ifc.get_be_formatted_version(matched_version)
@@ -705,7 +705,7 @@ def show(params, version=None):
     return 0
 
 
-def stamp(params, pull=False, init_only=False):
+def stamp(params, pull=False, init_only=False, always_new=False):
     be, err = stamp_utils.get_client(params['working_dir'])
     if err:
         LOGGER.error('{0}. Exiting'.format(err))
@@ -741,7 +741,7 @@ def stamp(params, pull=False, init_only=False):
         be = VersionControlStamper(params)
 
         try:
-            version = get_version(be, pull, init_only)
+            version = get_version(be, pull, init_only, always_new)
         except Exception:
             LOGGER.exception('Logged Exception message:')
             del be
@@ -1161,6 +1161,8 @@ def main(command_line=None):
     pstamp.add_argument(
         'name', help="The application's name"
     )
+    pstamp.add_argument('-a', '--always-new', dest='always_new', action='store_true', default=False,
+        help='Stamp new version even when no changes.')
 
     pgoto = subprasers.add_parser('goto', help='go to version')
     pgoto.add_argument(
@@ -1219,7 +1221,7 @@ def main(command_line=None):
     elif args.command == 'stamp':
         params['release_mode'] = args.release_mode
         params['starting_version'] = args.starting_version
-        err = stamp(params, args.pull, args.init_only)
+        err = stamp(params, args.pull, args.init_only, args.always_new)
     elif args.command == 'goto':
         err = goto_version(params, args.version)
 
