@@ -437,6 +437,7 @@ class GitBackend(VersionControlBackend):
 
         # TODO:: Check API commit version
 
+        # safe_load discards any text before the YAML document (if present)
         commit_msg = yaml.safe_load(
             self._be.commit(tag_name).message
         )
