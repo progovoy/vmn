@@ -1,2 +1,4 @@
 pytest
 flake8
+wheel
+twine
