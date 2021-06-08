@@ -246,8 +246,9 @@ class GitBackend(VersionControlBackend):
 
     def check_for_git_user_config(self):
         try:
-            name = self._be.config_reader().get_value('user', 'name')
-            email = self._be.config_reader().get_value('user', 'email')
+            self._be.config_reader().get_value('user', 'name')
+            self._be.config_reader().get_value('user', 'email')
+
             return None
         except (configparser.NoSectionError, configparser.NoOptionError):
             return "git user name or email configuration is missing, can't commit"
