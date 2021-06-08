@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 import re
 from packaging import version as pversion
+import configparser
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
 MOVING_COMMIT_PREFIX = '_-'
@@ -243,6 +244,14 @@ class GitBackend(VersionControlBackend):
     def in_detached_head(self):
         return self._be.head.is_detached
 
+    def check_for_git_user_config(self):
+        try:
+            name = self._be.config_reader().get_value('user', 'name')
+            email = self._be.config_reader().get_value('user', 'email')
+            return None
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            return "git user name or email configuration is missing, can't commit"
+
     def check_for_pending_changes(self):
         if self._be.is_dirty():
             err = 'Pending changes in {0}.'.format(self.root())
@@ -428,6 +437,7 @@ class GitBackend(VersionControlBackend):
 
         # TODO:: Check API commit version
 
+        # safe_load discards any text before the YAML document (if present)
         commit_msg = yaml.safe_load(
             self._be.commit(tag_name).message
         )
