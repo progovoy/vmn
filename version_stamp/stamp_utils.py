@@ -251,7 +251,8 @@ class GitBackend(VersionControlBackend):
 
             return None
         except (configparser.NoSectionError, configparser.NoOptionError):
-            return "git user name or email configuration is missing, can't commit"
+            return "git user name or email configuration is missing, " \
+                   "can't commit"
 
     def check_for_pending_changes(self):
         if self._be.is_dirty():
