@@ -463,7 +463,7 @@ class VersionControlStamper(IVersionsStamper):
             '{0}: update to version {1}'.format(
                 self._name, app_version
             )
-        msg = '{0}: Stamping version {1}\n\n'.format(
+        msg = '{0}: Stamped version {1}\n\n'.format(
             self._name,
             app_version
         ) + yaml.dump(self._version_info_message, sort_keys=True)
