@@ -1,0 +1,23 @@
+ARG distro_var
+FROM ubuntu:focal
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN if getent group vmnuser ; then groupdel vmnuser; fi &&\
+    groupadd -g ${GROUP_ID} vmnuser &&\
+    useradd -l -u ${USER_ID} -g vmnuser vmnuser &&\
+    install -d -m 0755 -o vmnuser -g vmnuser /home/vmnuser &&\
+    chown --changes --silent --no-dereference --recursive \
+          --from=33:33 ${USER_ID}:${GROUP_ID} \
+        /home/vmnuser
+
+RUN apt update && apt install -y python3-pip git
+COPY stamp_with_previous_vmn.sh /
+
+RUN git config --global user.email "you@example.com"
+RUN git config --global user.name "Your Name"
+
+RUN pip3 install vmn
+
+USER vmnuser
