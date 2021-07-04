@@ -14,15 +14,19 @@ A simple package for auto increasing version numbers of any application agnostic
 
 ## Usage
 
+### cd into your git repository
 ```sh
 cd to/your/repository
-vmn -h
 ```
 
+### Init phase
 ```sh
 ## Needed only once per repository.
 vmn init
+```
 
+### Start stamping
+```sh
 ## Needed only once per app-name
 # will start from 0.0.0
 vmn init-app <app-name>
