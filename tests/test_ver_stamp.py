@@ -13,7 +13,7 @@ vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 def _init_vmn_in_repo():
     with vmn.VMNContextMAnagerManager(['init']) as vmn_ctx:
-        err = vmn._handle_init(vmn_ctx)
+        err = vmn.handle_init(vmn_ctx)
         assert err == 0
 
 
@@ -25,7 +25,7 @@ def _init_app(app_name, starting_version='0.0.0'):
                 app_name,
             ]
     ) as vmn_ctx:
-        err = vmn._handle_init_app(vmn_ctx)
+        err = vmn.handle_init_app(vmn_ctx)
         assert err == 0
         # TODO: why validating this?
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
@@ -37,7 +37,7 @@ def _init_app(app_name, starting_version='0.0.0'):
 
 def _release_app(app_name, version):
     with vmn.VMNContextMAnagerManager(['release', '-v', version, app_name]) as vmn_ctx:
-        err = vmn._handle_release(vmn_ctx)
+        err = vmn.handle_release(vmn_ctx)
         assert err == 0
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
@@ -58,7 +58,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
     args_list.append(app_name)
 
     with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
-        err = vmn._handle_stamp(vmn_ctx)
+        err = vmn.handle_stamp(vmn_ctx)
         assert err == 0
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
@@ -78,7 +78,7 @@ def _show(app_name, verbose=None, raw=None, root=False):
     args_list.append(app_name)
 
     with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
-        err = vmn._handle_show(vmn_ctx)
+        err = vmn.handle_show(vmn_ctx)
         assert err == 0
 
 
@@ -210,7 +210,7 @@ def test_goto_deleted_repos(app_layout):
     shutil.rmtree(dir_path)
 
     with vmn.VMNContextMAnagerManager(['goto', '-v', '0.0.2', app_layout.app_name]) as vmn_ctx:
-        err = vmn._handle_goto(vmn_ctx)
+        err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
 
@@ -318,22 +318,22 @@ def test_basic_goto(app_layout):
 
     c1 = app_layout._app_backend.be.changeset()
     with vmn.VMNContextMAnagerManager(['goto', '-v', '0.0.2', app_layout.app_name]) as vmn_ctx:
-        err = vmn._handle_goto(vmn_ctx)
+        err = vmn.handle_goto(vmn_ctx)
         assert err == 1
     with vmn.VMNContextMAnagerManager(['goto', '-v', '1.3.0', app_layout.app_name]) as vmn_ctx:
-        err = vmn._handle_goto(vmn_ctx)
+        err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
     with vmn.VMNContextMAnagerManager(['goto', '-v', '1.3.1', app_layout.app_name]) as vmn_ctx:
-        err = vmn._handle_goto(vmn_ctx)
+        err = vmn.handle_goto(vmn_ctx)
         assert err == 0
     c3 = app_layout._app_backend.be.changeset()
     assert c1 == c3
 
     with vmn.VMNContextMAnagerManager(['goto', app_layout.app_name]) as vmn_ctx:
-        err = vmn._handle_goto(vmn_ctx)
+        err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
     c4 = app_layout._app_backend.be.changeset()

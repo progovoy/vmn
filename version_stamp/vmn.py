@@ -733,7 +733,7 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.pull()
 
 
-def _handle_init(vmn_ctx):
+def handle_init(vmn_ctx):
     be = vmn_ctx.vcs.backend
 
     path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
@@ -769,7 +769,7 @@ def _handle_init(vmn_ctx):
     return 0
 
 
-def _handle_init_app(vmn_ctx):
+def handle_init_app(vmn_ctx):
     err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     if err:
         return 1
@@ -779,7 +779,7 @@ def _handle_init_app(vmn_ctx):
     return 0
 
 
-def _handle_stamp(vmn_ctx):
+def handle_stamp(vmn_ctx):
     vmn_ctx.params['release_mode'] = vmn_ctx.args.release_mode
     vmn_ctx.params['prerelease'] = vmn_ctx.args.pr
 
@@ -816,7 +816,7 @@ def _handle_stamp(vmn_ctx):
     return 0
 
 
-def _handle_release(vmn_ctx):
+def handle_release(vmn_ctx):
     err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
     if err:
         return 1
@@ -850,7 +850,7 @@ def _handle_add(vmn_ctx):
     return 0
 
 
-def _handle_show(vmn_ctx):
+def handle_show(vmn_ctx):
     # root app does not have raw version number
     if vmn_ctx.params['root']:
         vmn_ctx.params['raw'] = False
@@ -866,7 +866,7 @@ def _handle_show(vmn_ctx):
     return show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
-def _handle_goto(vmn_ctx):
+def handle_goto(vmn_ctx):
     vmn_ctx.params['deps_only'] = vmn_ctx.args.deps_only
 
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
@@ -1442,17 +1442,17 @@ def main(command_line=None):
 def vmn_run(command_line):
     with VMNContextMAnagerManager(command_line) as vmn_ctx:
         if vmn_ctx.args.command == 'init':
-            err = _handle_init(vmn_ctx)
+            err = handle_init(vmn_ctx)
         elif vmn_ctx.args.command == 'init-app':
-            err = _handle_init_app(vmn_ctx)
+            err = handle_init_app(vmn_ctx)
         elif vmn_ctx.args.command == 'show':
-            err = _handle_show(vmn_ctx)
+            err = handle_show(vmn_ctx)
         elif vmn_ctx.args.command == 'stamp':
-            err = _handle_stamp(vmn_ctx)
+            err = handle_stamp(vmn_ctx)
         elif vmn_ctx.args.command == 'goto':
-            err = _handle_goto(vmn_ctx)
+            err = handle_goto(vmn_ctx)
         elif vmn_ctx.args.command == 'release':
-            err = _handle_release(vmn_ctx)
+            err = handle_release(vmn_ctx)
 
     return err
 
