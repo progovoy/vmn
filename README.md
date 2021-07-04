@@ -24,6 +24,7 @@ vmn -h
 vmn init
 
 ## Needed only once per app-name
+# will start from 0.0.0
 vmn init-app <app-name>
 
 # will stamp 0.0.1
@@ -39,6 +40,7 @@ vmn stamp -r minor <app-name2>
 ### Release candidates
 
 ```sh
+# will start from 1.6.8
 vmn init-app -v 1.6.8 <app-name>
 
 # will stamp 2.0.0-alpha1
