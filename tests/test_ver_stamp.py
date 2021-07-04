@@ -448,6 +448,23 @@ def test_basic_root_show(app_layout, capfd):
 
 def test_backward_compatability_with_previous_vmn(app_layout):
     app_layout.stamp_with_previous_vmn()
+
+    conf = {
+        'template': '[{major}][.{minor}][.{patch}]',
+        'deps': {'../': {
+            'test_repo': {
+                'vcs_type': app_layout.be_type,
+                'remote': app_layout._app_backend.be.remote(),
+            }
+        }},
+        'extra_info': False
+    }
+
+    app_layout.write_conf(
+        f'{app_layout.repo_path}/.vmn/app1/conf.yml',
+        **conf
+    )
+
     _init_app('app1', '0.0.3')
 
     ver_info, _ = _stamp_app('app1', 'patch')

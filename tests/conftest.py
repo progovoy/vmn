@@ -103,7 +103,7 @@ class FSAppLayoutFixture(object):
         base_cmd = [
             'docker',
             'run', '-t',
-            #f'-u{os.getuid()}:{os.getgid()}',
+            f'-u{os.getuid()}:{os.getgid()}',
             '-v',
             f'{self.repo_path}:/out', '-v',
             f'{self.base_dir}:{self.base_dir}',
