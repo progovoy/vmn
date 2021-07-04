@@ -53,7 +53,7 @@ vmn stamp --pr mybeta <app-name>
 # Run release when you ready - will stamp 2.0.0 (from the same tag)
 vmn release -v 2.0.0-mybeta1 <app-name>
 ```
-### show
+### Show
 
 ```sh
 vmn show <app-name>
@@ -61,7 +61,7 @@ vmn show --verbose <app-name>
 vmn show -v 1.0.1 <app-name>
 ```
 
-### goto
+### Goto
 
 ```sh
 vmn goto -v 1.0.1 <app-name>
@@ -174,7 +174,7 @@ This feature is not very popular and may be remove / altered in the future
 
 ## Contributing
 
-If you want to contribute to version-stamp development:
+If you want to contribute to `vmn` development:
 
 1. Make a fresh fork of the repository
 
