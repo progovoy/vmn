@@ -521,7 +521,7 @@ class GitBackend(VersionControlBackend):
             app_name
         )
         app_tags = self.tags(filter=(f'{tag_formated_app_name}_*'))
-        cleaned_app_tags = []
+        cleaned_app_tag = None
         for tag in app_tags:
             match = re.search(
                 regex,
@@ -537,17 +537,19 @@ class GitBackend(VersionControlBackend):
             if gdict['app_name'] != app_name.replace('/', '-'):
                 continue
 
-            cleaned_app_tags.append(tag)
+            cleaned_app_tag = tag
+            break
 
-        if not cleaned_app_tags:
+        if cleaned_app_tag is None:
             return None
 
-        return self.get_vmn_tag_version_info(cleaned_app_tags[0])
+        return self.get_vmn_tag_version_info(cleaned_app_tag)
 
     def get_vmn_tag_version_info(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except:
+            # TODO: maybe log here?
             return None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
@@ -560,6 +562,22 @@ class GitBackend(VersionControlBackend):
         tag_msg = yaml.safe_load(
             self._be.tag(f'refs/tags/{tag_name}').object.message
         )
+
+        if type(tag_msg) is not dict and tag_msg.startswith('Automatic'):
+            # Code from vmn 0.3.9
+            # safe_load discards any text before the YAML document (if present)
+            commit_msg = yaml.safe_load(
+                self._be.commit(tag_name).message
+            )
+
+            if commit_msg is None or 'stamping' not in commit_msg:
+                return None
+
+            commit_msg['stamping']['app']["prerelease"] = 'release'
+            commit_msg['stamping']['app']["prerelease_count"] = {}
+
+            return commit_msg
+
         if not tag_msg:
             raise RuntimeError(f'Corrupted tag msg of tag {tag_name}')
 

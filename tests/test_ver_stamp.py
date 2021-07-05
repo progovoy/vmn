@@ -527,7 +527,5 @@ def test_backward_compatability_with_previous_vmn(app_layout):
         **conf
     )
 
-    _init_app('app1', '0.0.3')
-
     ver_info, _ = _stamp_app('app1', 'patch')
-    assert ver_info['stamping']['app']['_version'] == '0.0.3'
+    assert ver_info['stamping']['app']['_version'] == '0.0.4'
