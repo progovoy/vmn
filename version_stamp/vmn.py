@@ -1261,6 +1261,8 @@ def _update_repo(args):
 
 def _clone_repo(args):
     path, rel_path, remote, vcs_type = args
+    if os.path.exists(path):
+        return {'repo': rel_path, 'status': 0, 'description': None}
 
     LOGGER.info('Cloning {0}..'.format(rel_path))
     try:
