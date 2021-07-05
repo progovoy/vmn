@@ -1,6 +1,6 @@
 NAME=vmn
 
-.PHONY: build _build check-local dist check docs major _major minor _minor patch _patch _debug _publish check-local
+.PHONY: build _build check-local dist check docs major _major minor _minor patch _patch rc _rc _debug _publish check-local
 
 build: check  _debug _build
 
@@ -34,6 +34,13 @@ patch: check _patch _build _publish
 _patch:
 	@echo "Patch Release"
 	$(eval VERSION := $(shell vmn stamp -r patch ${NAME}))
+
+rc: check _rc _build _publish
+
+_rc:
+	@echo "RC Release"
+	$(eval VERSION := $(shell vmn stamp ${NAME}))
+
 
 _debug:
 	@echo "Debug Release"
