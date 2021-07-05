@@ -221,6 +221,9 @@ class VersionControlBackend(object):
 
         formatted_version = ''
         for octat in octats:
+            if gdict[octat] is None:
+                continue
+
             if f'{octat}_template' in template and template[f'{octat}_template'] is not None:
                 d = {octat: gdict[octat]}
                 formatted_version = \

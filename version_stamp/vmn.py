@@ -184,21 +184,35 @@ class IVersionsStamper(object):
 
         # TODO:: self._prerelease cannot be 'release'?
         gdict = match.groupdict()
-        major = gdict['major']
-        minor = gdict['minor']
-        patch = gdict['patch']
-        hotfix = gdict['hotfix']
+        major, minor, patch, hotfix = self._advance_version(gdict)
+
         prerelease = self._prerelease
         prerelease_count = copy.deepcopy(self._prerelease_count)
 
         # If user did not specify a change in prerelease,
         # stay with the previous one
-        if prerelease is None:
+        if prerelease is None and self._release_mode is None:
             prerelease = self._previous_prerelease
+
+        prerelease_ver, prerelease_count = \
+            self._advance_prerelease(prerelease, prerelease_count)
+
+        verstr = self.gen_vmn_version(
+            major, minor, patch,
+            hotfix,
+            prerelease_ver
+        )
+
+        return verstr, prerelease, prerelease_count
+
+    def _advance_prerelease(self, prerelease, prerelease_count):
+        #TODO: verify cases in which prerelease is release
+        if prerelease is None or prerelease.startswith('release'):
+            return None, {}
 
         counter_key = f"{prerelease}"
         # TODO: why this is needed?
-        #assert not counter_key.startswith('release')
+        # assert not counter_key.startswith('release')
         if self._previous_prerelease != 'release' and self._release_mode is None:
             if counter_key not in prerelease_count:
                 prerelease_count[counter_key] = 0
@@ -212,6 +226,16 @@ class IVersionsStamper(object):
             prerelease_count = {
                 counter_key: 1,
             }
+
+        prerelease_ver = f'{prerelease}{prerelease_count[counter_key]}'
+
+        return prerelease_ver, prerelease_count
+
+    def _advance_version(self, gdict):
+        major = gdict['major']
+        minor = gdict['minor']
+        patch = gdict['patch']
+        hotfix = gdict['hotfix']
         if self._release_mode == 'major':
             major = str(int(major) + 1)
             minor = str(0)
@@ -227,18 +251,7 @@ class IVersionsStamper(object):
         elif self._release_mode == 'hotfix':
             hotfix = str(int(hotfix) + 1)
 
-        # TODO: ugly?
-        prerelease_ver = None
-        if not prerelease.startswith('release'):
-            prerelease_ver = f'{prerelease}{prerelease_count[counter_key]}'
-
-        verstr = self.gen_vmn_version(
-            major, minor, patch,
-            hotfix,
-            prerelease_ver
-        )
-
-        return verstr, prerelease, prerelease_count
+        return major, minor, patch, hotfix
 
     def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None):
         if self._hide_zero_hotfix and hotfix == '0':

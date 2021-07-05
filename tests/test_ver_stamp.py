@@ -293,12 +293,64 @@ def test_rc_stamping(app_layout):
     data = ver_info['stamping']['app']
     assert data['_version'] == '1.3.0'
 
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode='minor',
+    )
+
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.4.0'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode='minor',
+        prerelease='rc',
+    )
+
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.5.0-rc1'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode='minor',
+        prerelease='rc',
+    )
+
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.6.0-rc1'
+
+    ver_info, _ = _stamp_app(app_layout.app_name)
+
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.6.0-rc1'
+
+    app_layout.write_file_commit_and_push(
+        'test_repo', 'f1.file', 'msg1'
+    )
+
+    ver_info, _ = _stamp_app(app_layout.app_name)
+
+    data = ver_info['stamping']['app']
+    assert data['_version'] == '1.6.0-rc2'
+
 
 def test_version_template():
     formated_version = \
         stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
             '2.0.9',
-            vmn.IVersionsStamper.parse_template("[{major}]")
+            vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]")
         )
 
     assert formated_version == '2'
