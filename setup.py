@@ -14,7 +14,7 @@ setuptools.setup(
     author_email='pavelr@final.israel',
     description=description,
     long_description=description,
-    python_requires='>=3.5.0',
+    python_requires='>=3.6.0',
     url="https://github.com/final-israel/ver_stamp",
     install_requires=install_requires,
     package_dir={'version_stamp': 'version_stamp'},
