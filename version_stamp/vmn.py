@@ -751,15 +751,8 @@ class VersionControlStamper(IVersionsStamper):
 def handle_init(vmn_ctx):
     be = vmn_ctx.vcs.backend
 
-    path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
-    file_path = None
-    for f in os.listdir(path):
-        if os.path.isfile(os.path.join(path, f)):
-            if f not in IGNORED_FILES:
-                file_path = os.path.join(path, f)
-                break
-
-    if file_path is not None and be.is_tracked(file_path):
+    path = os.path.join(vmn_ctx.params['root_path'], '.vmn', 'vmn.init')
+    if be.is_tracked(path):
         LOGGER.info('vmn tracking is already initialized')
 
         return 1
@@ -772,8 +765,8 @@ def handle_init(vmn_ctx):
 
     vmn_path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_unique_path = os.path.join(vmn_path, changeset)
-    Path(vmn_unique_path).touch()
+    vmn_init_path = os.path.join(vmn_path, 'vmn.init')
+    Path(vmn_init_path).touch()
     git_ignore_path = os.path.join(vmn_path, '.gitignore')
 
     with open(git_ignore_path, 'w+') as f:
@@ -783,7 +776,7 @@ def handle_init(vmn_ctx):
     be.commit(
         message=stamp_utils.INIT_COMMIT_MESSAGE,
         user='vmn',
-        include=[vmn_unique_path, git_ignore_path]
+        include=[vmn_init_path, git_ignore_path]
     )
     be.push()
 
@@ -806,8 +799,10 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.params['release_mode'] = vmn_ctx.args.release_mode
     vmn_ctx.params['prerelease'] = vmn_ctx.args.pr
 
-    if not os.path.isdir('{0}/.vmn'.format(vmn_ctx.params['root_path'])):
+    path = os.path.join(vmn_ctx.params['root_path'], '.vmn', 'vmn.init')
+    if not vmn_ctx.vcs.backend.is_tracked(path):
         LOGGER.info('vmn tracking is not yet initialized')
+
         return 1
 
     matched_version_info = vmn_ctx.vcs.find_matching_version()
@@ -925,8 +920,10 @@ def _safety_validation(
 
 
 def _init_app(versions_be_ifc, params, starting_version):
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+    path = os.path.join(params['root_path'], '.vmn', 'vmn.init')
+    if not versions_be_ifc.backend.is_tracked(path):
         LOGGER.info('vmn tracking is not yet initialized')
+
         return 1
 
     err = _safety_validation(versions_be_ifc)
@@ -1138,8 +1135,10 @@ def goto_version(vcs, params, version):
 
 
 def _retrieve_version_info(params, vcs, version):
-    if not os.path.isdir('{0}/.vmn'.format(params['root_path'])):
+    path = os.path.join(params['root_path'], '.vmn', 'vmn.init')
+    if not vcs.backend.is_tracked(path):
         LOGGER.info('vmn tracking is not yet initialized')
+
         return None, None
 
     err = _safety_validation(vcs, allow_detached_head=True)

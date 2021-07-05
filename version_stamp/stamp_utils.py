@@ -251,11 +251,13 @@ class GitBackend(VersionControlBackend):
         self._be.close()
 
     def is_tracked(self, path):
-        return not (
-                path in
-                [item.replace('/', os.sep)
-                 for item in self._be.untracked_files]
-        )
+        try:
+            self._be.git.execute(
+                ['git', 'ls-files', '--error-unmatch', path]
+            )
+            return True
+        except:
+            return False
 
     def tag(self, tags, messages, ref='HEAD'):
         for tag, message in zip(tags, messages):
