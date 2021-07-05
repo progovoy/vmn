@@ -357,7 +357,7 @@ def test_version_template():
     assert formated_version == '2'
 
 
-def test_basic_goto(app_layout):
+def test_basic_goto(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name, '1.2.3')
 
@@ -376,6 +376,15 @@ def test_basic_goto(app_layout):
     with vmn.VMNContextMAnagerManager(['goto', '-v', '1.3.0', app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    _, _ = _stamp_app(app_layout.app_name, 'patch')
+
+    out, err = capfd.readouterr()
+    assert '[INFO] 1.3.0\n' == out
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
