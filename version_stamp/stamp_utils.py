@@ -550,7 +550,10 @@ class GitBackend(VersionControlBackend):
             commit_tag_obj = self._be.commit(tag_name)
         except:
             # TODO: maybe log here?
-            return None
+            try:
+                commit_tag_obj = self._be.commit(f'{tag_name}.0')
+            except:
+                return None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.warning(f'Corrupted tag {tag_name}: author name is not vmn')
