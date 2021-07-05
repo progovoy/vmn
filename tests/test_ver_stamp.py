@@ -11,10 +11,10 @@ import stamp_utils
 vmn.LOGGER = stamp_utils.init_stamp_logger(True)
 
 
-def _init_vmn_in_repo():
+def _init_vmn_in_repo(expected_res=0):
     with vmn.VMNContextMAnagerManager(['init']) as vmn_ctx:
         err = vmn.handle_init(vmn_ctx)
-        assert err == 0
+        assert err == expected_res
 
 
 def _init_app(app_name, starting_version='0.0.0'):
@@ -84,6 +84,7 @@ def _show(app_name, verbose=None, raw=None, root=False):
 
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
+    _init_vmn_in_repo(1)
     _init_app(app_layout.app_name)
 
     for i in range(2):

@@ -15,6 +15,8 @@ import re
 
 CUR_PATH = '{0}/'.format(os.path.dirname(__file__))
 VER_FILE_NAME = 'last_known_app_version.yml'
+IGNORED_FILES = ['vmn.lock']
+
 sys.path.append(CUR_PATH)
 import stamp_utils
 from stamp_utils import HostState
@@ -750,7 +752,14 @@ def handle_init(vmn_ctx):
     be = vmn_ctx.vcs.backend
 
     path = os.path.join(vmn_ctx.params['root_path'], '.vmn')
-    if be.is_tracked(path):
+    file_path = None
+    for f in os.listdir(path):
+        if os.path.isfile(os.path.join(path, f)):
+            if f not in IGNORED_FILES:
+                file_path = os.path.join(path, f)
+                break
+
+    if file_path is not None and be.is_tracked(file_path):
         LOGGER.info('vmn tracking is already initialized')
 
         return 1
@@ -768,7 +777,8 @@ def handle_init(vmn_ctx):
     git_ignore_path = os.path.join(vmn_path, '.gitignore')
 
     with open(git_ignore_path, 'w+') as f:
-        f.write('vmn.lock{0}'.format(os.linesep))
+        for ignored_file in IGNORED_FILES:
+            f.write(f'{ignored_file}{os.linesep}')
 
     be.commit(
         message=stamp_utils.INIT_COMMIT_MESSAGE,
