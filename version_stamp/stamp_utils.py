@@ -550,8 +550,10 @@ class GitBackend(VersionControlBackend):
             commit_tag_obj = self._be.commit(tag_name)
         except:
             # TODO: maybe log here?
+            # Backward compatability code for vmn 0.3.9:
             try:
-                commit_tag_obj = self._be.commit(f'{tag_name}.0')
+                tag_name = f'{tag_name}.0'
+                commit_tag_obj = self._be.commit(tag_name)
             except:
                 return None
 
