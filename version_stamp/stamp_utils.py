@@ -553,7 +553,8 @@ class GitBackend(VersionControlBackend):
             return None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
-            raise RuntimeError(f'Corrupted tag {tag_name}: author name is not vmn')
+            LOGGER.warning(f'Corrupted tag {tag_name}: author name is not vmn')
+            return None
 
         # TODO:: Check API commit version
         # TODO: check if newer vmn has stamped here
@@ -579,7 +580,8 @@ class GitBackend(VersionControlBackend):
             return commit_msg
 
         if not tag_msg:
-            raise RuntimeError(f'Corrupted tag msg of tag {tag_name}')
+            LOGGER.warning(f'Corrupted tag msg of tag {tag_name}')
+            return None
 
         all_tags = {}
         found = False

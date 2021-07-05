@@ -391,12 +391,12 @@ class VersionControlStamper(IVersionsStamper):
         # user's repositories local state
         for tag in self.backend.tags(filter=f'{tag_formatted_app_name}_*'):
             ver_info = self.backend.get_vmn_tag_version_info(tag)
+            if ver_info is None:
+                continue
+
             # Can happen if app's name is a prefix of another app
             if ver_info['stamping']['app']['name'] != self._name:
                 continue
-
-            if ver_info is None:
-                raise RuntimeError(f"Failed to get information for tag {tag}")
 
             found = True
             for k, v in ver_info['stamping']['app']['changesets'].items():
