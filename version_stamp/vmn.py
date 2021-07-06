@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import version as version_mod
+from stamp_utils import HostState
+import stamp_utils
 import argparse
 import random
 import time
@@ -18,9 +21,6 @@ VER_FILE_NAME = 'last_known_app_version.yml'
 IGNORED_FILES = ['vmn.lock']
 
 sys.path.append(CUR_PATH)
-import stamp_utils
-from stamp_utils import HostState
-import version as version_mod
 
 LOGGER = stamp_utils.init_stamp_logger()
 
@@ -208,7 +208,7 @@ class IVersionsStamper(object):
         return verstr, prerelease, prerelease_count
 
     def _advance_prerelease(self, prerelease, prerelease_count):
-        #TODO: verify cases in which prerelease is release
+        # TODO: verify cases in which prerelease is release
         if prerelease is None or prerelease.startswith('release'):
             return None, {}
 
@@ -329,7 +329,7 @@ class IVersionsStamper(object):
 
             ver_conf_yml = {
                 "conf": {
-                    "template": params['template'],
+                    'template': params['template'],
                     "deps": self._raw_configured_deps,
                     "extra_info": self._extra_info,
                 },
@@ -501,7 +501,8 @@ class VersionControlStamper(IVersionsStamper):
 
         gdict = match.groupdict()
         if 'prerelease' not in gdict:
-            raise RuntimeError("Wrong version format specified. Can release only rc versions")
+            raise RuntimeError(
+                "Wrong version format specified. Can release only rc versions")
 
         props = \
             stamp_utils.VersionControlBackend.get_tag_properties(
@@ -516,10 +517,10 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         ver_info = {
-                    'stamping': {
-                        'app': copy.deepcopy(self.ver_info_form_repo['stamping']['app'])
-                    }
-                }
+            'stamping': {
+                'app': copy.deepcopy(self.ver_info_form_repo['stamping']['app'])
+            }
+        }
         ver_info['stamping']['app']['_version'] = props['version']
         ver_info['stamping']['app']['prerelease'] = 'release'
 
@@ -676,7 +677,7 @@ class VersionControlStamper(IVersionsStamper):
 
         if self._root_app_name is not None:
             tmp = self.get_files_to_add_to_index(
-                    [self._root_app_conf_path]
+                [self._root_app_conf_path]
             )
             if tmp:
                 version_files.extend(tmp)
@@ -684,7 +685,7 @@ class VersionControlStamper(IVersionsStamper):
         self.current_version_info['stamping']['msg'] = \
             '{0}: Stamped version {1}\n\n'.format(
                 self._name, app_version
-            )
+        )
         self.backend.commit(
             message=self.current_version_info['stamping']['msg'],
             user='vmn',
@@ -719,7 +720,7 @@ class VersionControlStamper(IVersionsStamper):
         all_tags.extend(tags)
 
         try:
-            #TODO: run untill prev_version = version for being able to init app multiple times
+            # TODO: run untill prev_version = version for being able to init app multiple times
             for t, m in zip(tags, msgs):
                 self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
@@ -783,7 +784,8 @@ def handle_init(vmn_ctx):
     )
     be.push()
 
-    LOGGER.info('Initialized vmn tracking on {0}'.format(vmn_ctx.params['root_path']))
+    LOGGER.info('Initialized vmn tracking on {0}'.format(
+        vmn_ctx.params['root_path']))
 
     return 0
 
@@ -793,7 +795,8 @@ def handle_init_app(vmn_ctx):
     if err:
         return 1
 
-    LOGGER.info('Initialized app tracking on {0}'.format(vmn_ctx.params['root_app_dir_path']))
+    LOGGER.info('Initialized app tracking on {0}'.format(
+        vmn_ctx.params['root_app_dir_path']))
 
     return 0
 
@@ -866,7 +869,8 @@ def _handle_add(vmn_ctx):
         return 1
 
     try:
-        raise NotImplementedError('Adding metadata to versions is not supported yet')
+        raise NotImplementedError(
+            'Adding metadata to versions is not supported yet')
     except Exception as exc:
         LOGGER.exception('Logged Exception message:')
 
@@ -883,6 +887,7 @@ def handle_show(vmn_ctx):
         vmn_ctx.params['raw'] = vmn_ctx.args.raw
 
     vmn_ctx.params['verbose'] = vmn_ctx.args.verbose
+    vmn_ctx.params['cmdline_template'] = vmn_ctx.args.template
 
     err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
     if err:
@@ -965,7 +970,8 @@ def _init_app(versions_be_ifc, params, starting_version):
             versions_be_ifc._root_app_name, root=True
         )
         if ver_info:
-            root_app_version = int(ver_info['stamping']['root_app']["version"]) + 1
+            root_app_version = int(
+                ver_info['stamping']['root_app']["version"]) + 1
             root_app = ver_info['stamping']['root_app']
             services = copy.deepcopy(root_app['services'])
 
@@ -1468,7 +1474,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
 
     with open(app_conf_path, 'r') as f:
         data = yaml.safe_load(f)
-        params['template'] = data["conf"]["template"]
+        params['template'] = data["conf"]['template']
         params["extra_info"] = data["conf"]["extra_info"]
         params['raw_configured_deps'] = data["conf"]["deps"]
 
@@ -1481,6 +1487,9 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         )
         params['actual_deps_state'] = actual_deps_state
         actual_deps_state['.']['hash'] = be.last_user_changeset()
+
+    if 'cmdline_template' in params:
+        params['template'] = params['cmdline_template']
 
     return params
 
@@ -1503,6 +1512,9 @@ def vmn_run(command_line):
             err = handle_goto(vmn_ctx)
         elif vmn_ctx.args.command == 'release':
             err = handle_release(vmn_ctx)
+        else:
+            LOGGER.info('Run vmn -h for help')
+            err = 0
 
     return err
 
@@ -1566,6 +1578,11 @@ def parse_user_commands(command_line):
         help=f"The version to show. Must be specified in the raw version format:"
              f" {stamp_utils.VMN_VERSION_FORMAT}"
 
+    )
+    pshow.add_argument(
+        '-t', '--template',
+        default=None,
+        help="The template to use in show"
     )
     pshow.add_argument('--root', dest='root', action='store_true')
     pshow.set_defaults(root=False)

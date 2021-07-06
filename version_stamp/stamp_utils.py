@@ -9,6 +9,8 @@ import time
 
 import yaml
 from packaging import version as pversion
+import version as version_mod
+
 import configparser
 
 INIT_COMMIT_MESSAGE = 'Initialized vmn tracking'
@@ -31,7 +33,7 @@ VMN_REGEX = \
     '(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?' \
     '(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?' \
     '(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$'
-#TODO: create an abstraction layer on top of tag names versus the actual Semver versions
+# TODO: create an abstraction layer on top of tag names versus the actual Semver versions
 VMN_TAG_REGEX = \
     '^(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\.' \
     '(?P<minor>0|[1-9]\d*)\.' \
@@ -562,7 +564,6 @@ class GitBackend(VersionControlBackend):
             return None
 
         # TODO:: Check API commit version
-        # TODO: check if newer vmn has stamped here
 
         # safe_load discards any text before the YAML document (if present)
         tag_msg = yaml.safe_load(
@@ -613,6 +614,10 @@ class GitBackend(VersionControlBackend):
             tag_msg['stamping'].update(
                 yaml.safe_load(all_tags['root']['message'])['stamping']
             )
+
+        if pversion.parse(tag_msg['vmn_info']['vmn_version']) > pversion.parse(version_mod.version):
+            raise RuntimeError(
+                'Refusing to operate with old vmn. Please upgrade')
 
         return tag_msg
 
