@@ -69,7 +69,7 @@ fi
 
 SKIP_TEST=''
 if [ ${skip_test} != 'none' ]; then
-	SKIP_TEST="--skiplist ${skip_test}"
+	SKIP_TEST="-k not ${skip_test}"
 fi
 
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
@@ -77,12 +77,13 @@ OUT_PATH=${base_log_dir}
 
 echo "Will run:"
 echo "pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
-${SKIP_TEST} ${module_name} | tee ${OUT_PATH}/tests_output.log"
+"${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log"
 
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
 pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
-${SKIP_TEST} ${module_name} | tee ${OUT_PATH}/tests_output.log
+"${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log
 
 RET_CODE=$?
 
 exit ${RET_CODE}
+
