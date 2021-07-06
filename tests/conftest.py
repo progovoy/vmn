@@ -1,5 +1,3 @@
-import stamp_utils
-import vmn
 import pytest
 import uuid
 import os
@@ -11,6 +9,9 @@ import yaml
 from git import Repo
 
 sys.path.append('{0}/../version_stamp'.format(os.path.dirname(__file__)))
+
+import stamp_utils
+import vmn
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)

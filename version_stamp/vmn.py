@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-import version as version_mod
-from stamp_utils import HostState
-import stamp_utils
 import argparse
 import random
 import time
@@ -21,6 +18,10 @@ VER_FILE_NAME = 'last_known_app_version.yml'
 IGNORED_FILES = ['vmn.lock']
 
 sys.path.append(CUR_PATH)
+
+import version as version_mod
+from stamp_utils import HostState
+import stamp_utils
 
 LOGGER = stamp_utils.init_stamp_logger()
 

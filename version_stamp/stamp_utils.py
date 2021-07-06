@@ -615,7 +615,10 @@ class GitBackend(VersionControlBackend):
                 yaml.safe_load(all_tags['root']['message'])['stamping']
             )
 
-        if pversion.parse(tag_msg['vmn_info']['vmn_version']) > pversion.parse(version_mod.version):
+        newer_stamping = 'vmn_info' in tag_msg and \
+                         (pversion.parse(tag_msg['vmn_info']['vmn_version']) >
+                          pversion.parse(version_mod.version))
+        if newer_stamping:
             raise RuntimeError(
                 'Refusing to operate with old vmn. Please upgrade')
 
