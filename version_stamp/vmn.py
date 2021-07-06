@@ -1095,16 +1095,15 @@ def show(vcs, params, version=None):
         return 0
 
     data = ver_info["stamping"]["app"]
-    data['version'] = \
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            data["_version"], vcs.template
-        )
+    data["version"] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+        data["_version"], vcs.template
+    )
     if params.get("verbose"):
         yaml.dump(data, sys.stdout)
     elif params.get("raw"):
         print(data["_version"])
     else:
-        print(data['version'])
+        print(data["version"])
 
     return 0
 
