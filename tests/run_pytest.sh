@@ -9,6 +9,7 @@ usage()
 cat << EOF
     Usage: run_pytest.sh [--color] [--base_log_dir (the default is /tmp)]
            [--specific_test <test_name>]
+           [--skip_test <test_name>]
            [--module_name <module_name> (the default is just the current directory)]
            [--ci_coverage] (turns on pytest coverage for codecov, pytest-coverage should be installed)
            [-h or --help for this usage message]
@@ -20,6 +21,7 @@ color='no'
 ci_coverage='no'
 base_log_dir='/tmp/'
 specific_test='none'
+skip_test='none'
 module_name=${CUR_DIR}
 
 while [ "$1" != "" ]; do
@@ -32,6 +34,9 @@ while [ "$1" != "" ]; do
                            ;;
         --specific_test )   shift
                            specific_test=$1
+                           ;;
+        --skip_test     )  shift
+                           skip_test=$1
                            ;;
         --color )          color='yes'
                            ;;
@@ -62,16 +67,21 @@ if [ ${specific_test} != 'none' ]; then
 	SPECIFIC_TEST="-k ${specific_test}"
 fi
 
+SKIP_TEST=''
+if [ ${skip_test} != 'none' ]; then
+	SKIP_TEST="--skiplist ${skip_test}"
+fi
+
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
 echo "Will run:"
 echo "pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
-${module_name} | tee ${OUT_PATH}/tests_output.log"
+${SKIP_TEST} ${module_name} | tee ${OUT_PATH}/tests_output.log"
 
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
 pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
-${module_name} | tee ${OUT_PATH}/tests_output.log
+${SKIP_TEST} ${module_name} | tee ${OUT_PATH}/tests_output.log
 
 RET_CODE=$?
 
