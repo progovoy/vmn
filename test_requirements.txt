@@ -1,4 +1,5 @@
 pytest
+black
 flake8
 wheel
 twine
