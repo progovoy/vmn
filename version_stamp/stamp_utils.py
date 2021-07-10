@@ -147,9 +147,9 @@ class VersionControlBackend(object):
         app_name = app_name.replace("/", "-")
 
         if version is None:
-            return "{0}".format(app_name)
+            return f"{app_name}"
         else:
-            return "{0}_{1}".format(app_name, version)
+            return f"{app_name}_{version}"
 
     @staticmethod
     def get_tag_properties(vmn_tag):
@@ -274,11 +274,12 @@ class GitBackend(VersionControlBackend):
     def push(self, tags=()):
         try:
             ret = self._origin.push(
-                "refs/heads/{0}".format(self.get_active_branch()), o="ci.skip"
+                f"refs/heads/{self.get_active_branch()}",
+                o="ci.skip"
             )
         except Exception:
             ret = self._origin.push(
-                "refs/heads/{0}".format(self.get_active_branch()),
+                f"refs/heads/{self.get_active_branch()}"
             )
 
         if ret[0].old_commit is None:
@@ -289,17 +290,17 @@ class GitBackend(VersionControlBackend):
                 )
             else:
                 raise Warning(
-                    "Push has failed: {0}\n"
+                    f"Push has failed: {ret[0].summary}\n"
                     "please verify the next command works:\n"
-                    "git push".format(ret[0].summary)
+                    "git push"
                 )
 
         for tag in tags:
             try:
-                self._origin.push("refs/tags/{0}".format(tag), o="ci.skip")
+                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
             except Exception:
                 self._origin.push(
-                    "refs/tags/{0}".format(tag),
+                    f"refs/tags/{tag}",
                 )
 
     def pull(self):
@@ -358,37 +359,36 @@ class GitBackend(VersionControlBackend):
 
     def check_for_pending_changes(self):
         if self._be.is_dirty():
-            err = "Pending changes in {0}.".format(self.root())
+            err = f"Pending changes in {self.root()}."
             return err
 
         return None
 
     def check_for_outgoing_changes(self):
         if self.in_detached_head():
-            err = "Detached head in {0}.".format(self.root())
+            err = f"Detached head in {self.root()}."
             return err
 
         branch_name = self._be.active_branch.name
         try:
             self._be.git.rev_parse(
-                "--verify", "{0}/{1}".format(self._origin.name, branch_name)
+                "--verify",
+                f"{self._origin.name}/{branch_name}"
             )
         except Exception:
             err = (
-                "Branch {0}/{1} does not exist. "
+                f"Branch {self._origin.name}/{branch_name} does not exist. "
                 "Please push or set-upstream branch to "
-                "{0}/{1} of branch {1}".format(self._origin.name, branch_name)
+                f"{self._origin.name}/{branch_name} of branch {branch_name}"
             )
             return err
 
         outgoing = tuple(
-            self._be.iter_commits("{0}/{1}..{1}".format(self._origin.name, branch_name))
+            self._be.iter_commits(f"{self._origin.name}/{branch_name}..{branch_name}")
         )
 
         if len(outgoing) > 0:
-            err = "Outgoing changes in {0} from branch {1}".format(
-                self.root(), branch_name
-            )
+            err = f"Outgoing changes in {self.root()} from branch {branch_name}"
             return err
 
         return None
@@ -397,7 +397,9 @@ class GitBackend(VersionControlBackend):
         try:
             self.checkout(self.get_active_branch(raise_on_detached_head=False))
         except Exception:
-            logging.exception("Failed to get branch name. Trying to checkout to master")
+            logging.info(
+                "Failed to get branch name. Trying to checkout to master")
+            LOGGER.debug("Exception info: ", exc_info=True)
             self.checkout(rev="master")
 
         return self._be.active_branch.commit.hexsha
@@ -417,11 +419,10 @@ class GitBackend(VersionControlBackend):
 
             if len(active_branches) > 1:
                 LOGGER.info(
-                    "In detached head. Commit hash: {0} is "
-                    "related to multiple branches: {1}. Using the first "
-                    "one as the active branch".format(
-                        self._be.head.commit.hexsha, active_branches
-                    )
+                    "In detached head. Commit hash: "
+                    f"{self._be.head.commit.hexsha} is "
+                    f"related to multiple branches: {active_branches}. "
+                    "Using the first one as the active branch"
                 )
 
             active_branch = active_branches[0]
@@ -481,14 +482,16 @@ class GitBackend(VersionControlBackend):
             try:
                 self._be.delete_tag(tag)
             except Exception:
-                LOGGER.exception("Failed to remove tag {0}".format(tag))
+                LOGGER.info(f"Failed to remove tag {tag}")
+                LOGGER.debug("Exception info: ", exc_info=True)
 
                 continue
 
         try:
             self._be.git.fetch("--tags")
         except Exception:
-            LOGGER.exception("Failed to fetch tags")
+            LOGGER.info("Failed to fetch tags")
+            LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_vmn_version_info(self, app_name, root=False):
         if root:
@@ -532,7 +535,7 @@ class GitBackend(VersionControlBackend):
                 return None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
-            LOGGER.warning(f"Corrupted tag {tag_name}: author name is not vmn")
+            LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
             return None
 
         # TODO:: Check API commit version
@@ -554,7 +557,7 @@ class GitBackend(VersionControlBackend):
             return commit_msg
 
         if not tag_msg:
-            LOGGER.warning(f"Corrupted tag msg of tag {tag_name}")
+            LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
             return None
 
         all_tags = {}
@@ -593,7 +596,7 @@ class GitBackend(VersionControlBackend):
 
     @staticmethod
     def clone(path, remote):
-        git.Repo.clone_from("{0}".format(remote), "{0}".format(path))
+        git.Repo.clone_from(f"{remote}", f"{path}")
 
 
 class HostState(object):
@@ -603,8 +606,8 @@ class HostState(object):
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
             LOGGER.debug(
-                'Skipping "{0}" directory reason:\n{1}\n'.format(path, exc),
-                exc_info=exc,
+                f'Skipping "{path}" directory reason:\n',
+                exc_info=True,
             )
 
             return None
@@ -616,7 +619,8 @@ class HostState(object):
                 remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:
             LOGGER.debug(
-                'Skipping "{0}" directory reason:\n'.format(path), exc_info=exc
+                f'Skipping "{path}" directory reason:\n',
+                exc_info=True
             )
             return None
         finally:
@@ -650,7 +654,7 @@ def get_versions_repo_path(root_path):
     if versions_repo_path is not None:
         versions_repo_path = os.path.abspath(versions_repo_path)
     else:
-        versions_repo_path = os.path.abspath("{0}/.vmn/versions".format(root_path))
+        versions_repo_path = os.path.abspath(f"{root_path}/.vmn/versions")
         Path(versions_repo_path).mkdir(parents=True, exist_ok=True)
 
     return versions_repo_path
@@ -664,9 +668,7 @@ def get_client(path, revert=False, pull=False):
 
         be_type = "git"
     except git.exc.InvalidGitRepositoryError:
-        err = "repository path: {0} is not a functional git " "or repository.".format(
-            path
-        )
+        err = f"repository path: {path} is not a functional git " "or repository."
         return None, err
 
     be = None

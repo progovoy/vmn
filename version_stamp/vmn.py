@@ -283,12 +283,13 @@ class IVersionsStamper(object):
                 ver_dict = {"version_to_stamp_from": version_number}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
-            LOGGER.exception(
-                "there was an issue writing ver file: {}" "\n{}".format(file_path, e)
-            )
+            LOGGER.error(
+                f"Error writing ver file: {file_path}\n")
+            LOGGER.debug("Exception info: ", exc_info=True)
+
             raise IOError(e)
         except Exception as e:
-            LOGGER.exception(e)
+            LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
     def get_deps_changesets(self):
@@ -713,8 +714,10 @@ class VersionControlStamper(IVersionsStamper):
             for t, m in zip(tags, msgs):
                 self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
-            LOGGER.exception("Logged Exception message:")
-            LOGGER.info("Reverting vmn changes for tags: {0} ...".format(tags))
+            LOGGER.debug("Logged Exception message:", exc_info=True)
+            LOGGER.info(
+                f"Reverting vmn changes for tags: {tags} ... "
+            )
             self.backend.revert_vmn_changes(all_tags)
 
             return 1
@@ -722,8 +725,8 @@ class VersionControlStamper(IVersionsStamper):
         try:
             self.backend.push(all_tags)
         except Exception:
-            LOGGER.exception("Logged Exception message:")
-            LOGGER.info("Reverting vmn changes for tags: {0} ...".format(tags))
+            LOGGER.debug("Logged Exception message:", exc_info=True)
+            LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
             self.backend.revert_vmn_changes(all_tags)
 
             return 2
@@ -773,7 +776,7 @@ def handle_init(vmn_ctx):
     )
     be.push()
 
-    LOGGER.info("Initialized vmn tracking on {0}".format(vmn_ctx.params["root_path"]))
+    LOGGER.info(f'Initialized vmn tracking on {vmn_ctx.params["root_path"]}')
 
     return 0
 
@@ -824,7 +827,7 @@ def handle_stamp(vmn_ctx):
     try:
         version = _stamp_version(vmn_ctx.vcs, vmn_ctx.args.pull)
     except Exception as exc:
-        LOGGER.exception("Logged Exception message:")
+        LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
 
@@ -841,7 +844,7 @@ def handle_release(vmn_ctx):
     try:
         LOGGER.info(vmn_ctx.vcs.release_app_version(vmn_ctx.args.version))
     except Exception as exc:
-        LOGGER.exception("Logged Exception message:")
+        LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
 
@@ -860,7 +863,7 @@ def _handle_add(vmn_ctx):
     try:
         raise NotImplementedError("Adding metadata to versions is not supported yet")
     except Exception as exc:
-        LOGGER.exception("Logged Exception message:")
+        LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
 
@@ -1206,8 +1209,8 @@ def _update_repo(args):
             return {"repo": rel_path, "status": 0, "description": err}
     except Exception as exc:
         LOGGER.exception(
-            "PLEASE FIX!\nAborting update operation because directory {0} "
-            "Reason:\n{1}\n".format(path, exc)
+            "Unexpected behaviour:\nAborting update "
+            f"operation in {path} Reason:\n"
         )
 
         return {"repo": rel_path, "status": 1, "description": None}
@@ -1219,7 +1222,8 @@ def _update_repo(args):
             return {"repo": rel_path, "status": 1, "description": err}
 
     except Exception as exc:
-        LOGGER.exception('Skipping "{0}" directory reason:\n{1}\n'.format(path, exc))
+        LOGGER.debug(f'Skipping "{path}"')
+        LOGGER.debug("Exception info: ", exc_info=True)
 
         return {"repo": rel_path, "status": 0, "description": None}
 
@@ -1248,14 +1252,14 @@ def _update_repo(args):
             LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
-            "PLEASE FIX!\nAborting update operation because directory {0} "
-            "Reason:\n{1}\n".format(path, exc)
+            f"Unexpected behaviour:\nAborting update operation in {path} "
+            "Reason:\n"
         )
 
         try:
             client.checkout(rev=cur_changeset)
         except Exception:
-            LOGGER.exception("PLEASE FIX!")
+            LOGGER.exception("Unexpected behaviour:")
 
         return {"repo": rel_path, "status": 1, "description": None}
 
