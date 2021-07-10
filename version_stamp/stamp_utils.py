@@ -274,13 +274,10 @@ class GitBackend(VersionControlBackend):
     def push(self, tags=()):
         try:
             ret = self._origin.push(
-                f"refs/heads/{self.get_active_branch()}",
-                o="ci.skip"
+                f"refs/heads/{self.get_active_branch()}", o="ci.skip"
             )
         except Exception:
-            ret = self._origin.push(
-                f"refs/heads/{self.get_active_branch()}"
-            )
+            ret = self._origin.push(f"refs/heads/{self.get_active_branch()}")
 
         if ret[0].old_commit is None:
             if "up to date" in ret[0].summary:
@@ -371,10 +368,7 @@ class GitBackend(VersionControlBackend):
 
         branch_name = self._be.active_branch.name
         try:
-            self._be.git.rev_parse(
-                "--verify",
-                f"{self._origin.name}/{branch_name}"
-            )
+            self._be.git.rev_parse("--verify", f"{self._origin.name}/{branch_name}")
         except Exception:
             err = (
                 f"Branch {self._origin.name}/{branch_name} does not exist. "
@@ -397,8 +391,7 @@ class GitBackend(VersionControlBackend):
         try:
             self.checkout(self.get_active_branch(raise_on_detached_head=False))
         except Exception:
-            logging.info(
-                "Failed to get branch name. Trying to checkout to master")
+            logging.info("Failed to get branch name. Trying to checkout to master")
             LOGGER.debug("Exception info: ", exc_info=True)
             self.checkout(rev="master")
 
@@ -618,10 +611,7 @@ class HostState(object):
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:
-            LOGGER.debug(
-                f'Skipping "{path}" directory reason:\n',
-                exc_info=True
-            )
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
         finally:
             client.close()

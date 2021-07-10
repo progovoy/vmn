@@ -283,8 +283,7 @@ class IVersionsStamper(object):
                 ver_dict = {"version_to_stamp_from": version_number}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
-            LOGGER.error(
-                f"Error writing ver file: {file_path}\n")
+            LOGGER.error(f"Error writing ver file: {file_path}\n")
             LOGGER.debug("Exception info: ", exc_info=True)
 
             raise IOError(e)
@@ -715,9 +714,7 @@ class VersionControlStamper(IVersionsStamper):
                 self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
             LOGGER.debug("Logged Exception message:", exc_info=True)
-            LOGGER.info(
-                f"Reverting vmn changes for tags: {tags} ... "
-            )
+            LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
             self.backend.revert_vmn_changes(all_tags)
 
             return 1
@@ -1209,8 +1206,7 @@ def _update_repo(args):
             return {"repo": rel_path, "status": 0, "description": err}
     except Exception as exc:
         LOGGER.exception(
-            "Unexpected behaviour:\nAborting update "
-            f"operation in {path} Reason:\n"
+            "Unexpected behaviour:\nAborting update " f"operation in {path} Reason:\n"
         )
 
         return {"repo": rel_path, "status": 1, "description": None}
@@ -1252,8 +1248,7 @@ def _update_repo(args):
             LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
-            f"Unexpected behaviour:\nAborting update operation in {path} "
-            "Reason:\n"
+            f"Unexpected behaviour:\nAborting update operation in {path} " "Reason:\n"
         )
 
         try:
