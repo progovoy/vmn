@@ -14,6 +14,6 @@ install:
   - pip install -e .
 # command to run tests
 script:
-  - tests/run_pytest.sh --ci_coverage
+  - tests/run_pytest.sh --ci_coverage --skip_test test_backward_compatability_with_previous_vmn
 after_success:
   - CODECOV_TOKEN="648eab25-7daa-445b-8bc7-d11034f464c4" codecov # submit coverage
