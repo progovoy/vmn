@@ -177,18 +177,3 @@ In `deps` you can specify other repositories as your dependencies and `vmn` will
 #### Configuration: extra_info
 Setting this to `true` will make `vmn` output lots of usefull data about the host on which `vmn` has stamped the version.
 This feature is not very popular and may be remove / altered in the future
-
-## Contributing
-
-If you want to contribute to `vmn` development:
-
-1. Make a fresh fork of the repository
-
-2. Test your work
-
-4. Pull Request
-
-This project is just a small side project that I've started, decided to share it. We'll see if it will ramp up.
-
-We will thank you for every contribution :)
-
