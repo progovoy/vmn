@@ -125,8 +125,6 @@ class IVersionsStamper(object):
         self._raw_configured_deps = conf["raw_configured_deps"]
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
-        self._prerelease_count = {}
-        self._previous_prerelease = "release"
         # TODO: refactor
         self._hide_zero_hotfix = True
 
@@ -139,14 +137,6 @@ class IVersionsStamper(object):
 
         if root_context:
             return
-
-        if self.tracked:
-            self._previous_prerelease = self.ver_info_form_repo["stamping"]["app"][
-                "prerelease"
-            ]
-            self._prerelease_count = self.ver_info_form_repo["stamping"]["app"][
-                "prerelease_count"
-            ]
 
         self.current_version_info = {
             "vmn_info": {
@@ -794,14 +784,14 @@ def handle_init(vmn_ctx):
     be = vmn_ctx.vcs.backend
 
     path = os.path.join(vmn_ctx.params["root_path"], ".vmn", "vmn.init")
-    if be.is_tracked(path):
+    if be.is_path_tracked(path):
         LOGGER.info("vmn tracking is already initialized")
 
         return 1
 
     # Backward compatability with vmn 0.3.9 code:
     file_path = backward_compatible_initialized_check(vmn_ctx.params)
-    if file_path is not None and vmn_ctx.vcs.backend.is_tracked(file_path):
+    if file_path is not None and vmn_ctx.vcs.backend.is_path_tracked(file_path):
         LOGGER.info("vmn tracking is already initialized")
 
         return 1
@@ -852,11 +842,11 @@ def handle_stamp(vmn_ctx):
         vmn_ctx.vcs.retrieve_remote_changes()
 
     path = os.path.join(vmn_ctx.params["root_path"], ".vmn", "vmn.init")
-    if not vmn_ctx.vcs.backend.is_tracked(path):
+    if not vmn_ctx.vcs.backend.is_path_tracked(path):
         # Backward compatability with vmn 0.3.9 code:
         file_path = backward_compatible_initialized_check(vmn_ctx.params)
 
-        if file_path is None or not vmn_ctx.vcs.backend.is_tracked(file_path):
+        if file_path is None or not vmn_ctx.vcs.backend.is_path_tracked(file_path):
             LOGGER.info("vmn tracking is not yet initialized")
 
             return 1
@@ -998,11 +988,11 @@ def _safety_validation(versions_be_ifc, allow_detached_head=False):
 
 def _init_app(versions_be_ifc, params, starting_version):
     path = os.path.join(params["root_path"], ".vmn", "vmn.init")
-    if not versions_be_ifc.backend.is_tracked(path):
+    if not versions_be_ifc.backend.is_path_tracked(path):
         # Backward compatability with vmn 0.3.9 code:
         file_path = backward_compatible_initialized_check(params)
 
-        if file_path is None or not versions_be_ifc.backend.is_tracked(file_path):
+        if file_path is None or not versions_be_ifc.backend.is_path_tracked(file_path):
             LOGGER.info("vmn tracking is not yet initialized")
             return 1
 
@@ -1237,11 +1227,11 @@ def goto_version(vcs, params, version):
 
 def _retrieve_version_info(params, vcs, verstr):
     path = os.path.join(params["root_path"], ".vmn", "vmn.init")
-    if not vcs.backend.is_tracked(path):
+    if not vcs.backend.is_path_tracked(path):
         # Backward compatability with vmn 0.3.9 code:
         file_path = backward_compatible_initialized_check(params)
 
-        if file_path is None or not vcs.backend.is_tracked(file_path):
+        if file_path is None or not vcs.backend.is_path_tracked(file_path):
             LOGGER.info("vmn tracking is not yet initialized")
 
             return None, None

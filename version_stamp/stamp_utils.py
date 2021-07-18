@@ -259,7 +259,7 @@ class GitBackend(VersionControlBackend):
     def __del__(self):
         self._be.close()
 
-    def is_tracked(self, path):
+    def is_path_tracked(self, path):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
             return True
