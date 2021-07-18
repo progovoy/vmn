@@ -12,7 +12,8 @@ A simple package for auto increasing version numbers of any application agnostic
 
 [![Build Status](https://travis-ci.com/final-israel/vmn.svg?branch=master)](https://travis-ci.com/final-israel/vmn)
 
-## Usage
+## Usage [for `vmn` version >= 0.4.0]
+(See "Migrating from `vmn` 0.3.9" section below) 
 
 ### cd into your git repository
 ```sh
@@ -78,6 +79,14 @@ vmn goto -v 1.0.1 <app-name>
 ```sh
 pip3 install vmn
 ```
+
+## Migrating from `vmn` 0.3.9
+Edit your app's `conf.yml` file `template` field to be in the new format:
+```yml
+"template": "[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][+{buildmetadata}][-{releasenotes}]",
+```
+
+You can omit any field that you do not desire to be displayed when executing `vmn show`
 
 ## Why `vmn` is agnostic to application language?
 It is the application's reposibility to actualy set the version number at build time. The version
