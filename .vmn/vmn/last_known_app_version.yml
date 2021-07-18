@@ -1,1 +1,5 @@
-version_to_stamp_from: 0.4.0-rc6
+version_to_stamp_from: 0.4.0
+prerelease: rc
+prerelease_count:
+  rc: 6
+
