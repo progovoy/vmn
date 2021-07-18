@@ -143,13 +143,22 @@ class VersionControlBackend(object):
         return self._type
 
     @staticmethod
-    def get_tag_formatted_app_name(app_name, version=None):
+    def get_tag_formatted_app_name(
+            app_name,
+            version=None,
+            prerelease=None,
+            prerelease_count=None
+    ):
         app_name = app_name.replace("/", "-")
 
         if version is None:
             return f"{app_name}"
         else:
-            return f"{app_name}_{version}"
+            verstr = f"{app_name}_{version}"
+            if prerelease is not None and prerelease != 'release':
+                verstr = f'{verstr}-{prerelease}{prerelease_count[prerelease]}'
+
+            return verstr
 
     @staticmethod
     def get_tag_properties(vmn_tag):

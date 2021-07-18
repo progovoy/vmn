@@ -49,7 +49,7 @@ class VMNContextMAnagerManager(object):
             initial_params["name"] = self.args.name
         if "release_mode" in self.args and self.args.release_mode:
             initial_params["release_mode"] = self.args.release_mode
-        if "pr" in self.args and self.args.pr:
+        if "pr" in self.args and self.args.pr and self.args.pr != 'release':
             initial_params["prerelease"] = self.args.pr
 
         params = build_world(
@@ -178,65 +178,94 @@ class IVersionsStamper(object):
     def __del__(self):
         del self.backend
 
-    # Note: this function generates version up until prerelease
-    def gen_app_version(self, current_version):
-        match = re.search(stamp_utils.VMN_REGEX, current_version)
+    # Note: this function generates
+    # a version (including prerelease)
+    def gen_app_version(
+            self,
+            initial_version,
+            initial_prerelease,
+            initial_prerelease_count
+    ):
+        if (initial_prerelease == "release"
+                and self._release_mode is None):
+            raise RuntimeError(
+                "When stamping from a previous release version, "
+                "a release mode must be specified"
+            )
 
-        # TODO:: self._prerelease cannot be 'release'?
+        match = re.search(stamp_utils.VMN_REGEX, initial_version)
         gdict = match.groupdict()
+        if gdict['hotfix'] is None:
+            gdict['hotfix'] = str(0)
+
+        match = re.search(
+            stamp_utils.VMN_REGEX,
+            self.ver_info_form_repo["stamping"]["app"]['_version']
+        )
+        repo_gdict = match.groupdict()
+        if repo_gdict['hotfix'] is None:
+            repo_gdict['hotfix'] = str(0)
+
         major, minor, patch, hotfix = self._advance_version(gdict)
 
         prerelease = self._prerelease
-        prerelease_count = copy.deepcopy(self._prerelease_count)
-
         # If user did not specify a change in prerelease,
         # stay with the previous one
         if prerelease is None and self._release_mode is None:
-            prerelease = self._previous_prerelease
+            prerelease = initial_prerelease
+        prerelease_count = copy.deepcopy(initial_prerelease_count)
 
-        prerelease_ver, prerelease_count = self._advance_prerelease(
+        # Continue from last stamp prerelease information as long as
+        # the last version is coherent with what is requested from
+        # the version file or manual version (not yet implemented)
+        prerelease, prerelease_count = self._advance_prerelease(
             prerelease, prerelease_count
         )
 
-        verstr = self.gen_vmn_version(major, minor, patch, hotfix, prerelease_ver)
+        verstr = self.gen_vmn_version(
+            major,
+            minor,
+            patch,
+            hotfix,
+        )
 
         return verstr, prerelease, prerelease_count
 
     def _advance_prerelease(self, prerelease, prerelease_count):
-        # TODO: verify cases in which prerelease is release
-        if prerelease is None or prerelease.startswith("release"):
+        if prerelease is None:
+            return None, {}
+        if prerelease == 'release':
+            try:
+                raise RuntimeError()
+            except RuntimeError:
+                LOGGER.error(
+                    "prerelease equals to 'release' somehow. "
+                    "Turn on debug mode to see traceback"
+                )
+                LOGGER.debug("Exception info: ", exc_info=True)
+
             return None, {}
 
+        _prerelease_count = copy.deepcopy(prerelease_count)
         counter_key = f"{prerelease}"
-        # TODO: why this is needed?
-        # assert not counter_key.startswith('release')
-        if self._previous_prerelease != "release" and self._release_mode is None:
-            if counter_key not in prerelease_count:
-                prerelease_count[counter_key] = 0
+        if counter_key not in _prerelease_count:
+            _prerelease_count[counter_key] = 0
 
-            prerelease_count[counter_key] += 1
-        elif (
-            self._previous_prerelease != "release"
-            and self._release_mode is not None
-            and prerelease != "release"
-        ):
-            prerelease_count = {
-                counter_key: 1,
-            }
-        elif self._previous_prerelease == "release" and prerelease != "release":
-            prerelease_count = {
+        _prerelease_count[counter_key] += 1
+
+        if self._release_mode is not None:
+            _prerelease_count = {
                 counter_key: 1,
             }
 
-        prerelease_ver = f"{prerelease}{prerelease_count[counter_key]}"
-
-        return prerelease_ver, prerelease_count
+        return counter_key, _prerelease_count
 
     def _advance_version(self, gdict):
         major = gdict["major"]
         minor = gdict["minor"]
         patch = gdict["patch"]
         hotfix = gdict["hotfix"]
+
         if self._release_mode == "major":
             major = str(int(major) + 1)
             minor = str(0)
@@ -254,7 +283,10 @@ class IVersionsStamper(object):
 
         return major, minor, patch, hotfix
 
-    def gen_vmn_version(self, major, minor, patch, hotfix=None, prerelease=None):
+    def gen_vmn_version(
+            self, major, minor, patch,
+            hotfix=None, prerelease=None, prerelease_count={}
+    ):
         if self._hide_zero_hotfix and hotfix == "0":
             hotfix = None
 
@@ -262,7 +294,16 @@ class IVersionsStamper(object):
         if hotfix is not None:
             vmn_version = f"{vmn_version}.{hotfix}"
         if prerelease is not None:
-            vmn_version = f"{vmn_version}-{prerelease}"
+            try:
+                assert prerelease in prerelease_count
+                vmn_version = \
+                    f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
+            except AssertionError:
+                LOGGER.error(
+                    f"{prerelease} doesn't appear in {prerelease_count} "
+                    "Turn on debug mode to see traceback"
+                )
+                LOGGER.debug("Exception info: ", exc_info=True)
 
         return vmn_version
 
@@ -275,12 +316,21 @@ class IVersionsStamper(object):
         return gdict
 
     @staticmethod
-    def write_version_to_file(file_path: str, version_number: str) -> None:
+    def write_version_to_file(
+            file_path: str,
+            version_number: str,
+            prerelease: str,
+            prerelease_count: dict,
+    ) -> None:
         # this method will write the stamped ver of an app to a file,
         # weather the file pre exists or not
         try:
             with open(file_path, "w") as fid:
-                ver_dict = {"version_to_stamp_from": version_number}
+                ver_dict = {
+                    "version_to_stamp_from": version_number,
+                    "prerelease": prerelease,
+                    "prerelease_count": prerelease_count,
+                }
                 yaml.dump(ver_dict, fid)
         except IOError as e:
             LOGGER.error(f"Error writing ver file: {file_path}\n")
@@ -311,7 +361,7 @@ class IVersionsStamper(object):
             version, self.template
         )
 
-    def find_matching_version(self):
+    def find_matching_version(self, version, prerelease, prerelease_count):
         raise NotImplementedError("Please implement this method")
 
     def create_config_files(self, params):
@@ -356,7 +406,9 @@ class IVersionsStamper(object):
 
     def stamp_app_version(
         self,
-        override_current_version=None,
+        initial_version,
+        prerelease,
+        prerelease_count,
     ):
         raise NotImplementedError("Please implement this method")
 
@@ -366,7 +418,7 @@ class IVersionsStamper(object):
     def retrieve_remote_changes(self):
         raise NotImplementedError("Please implement this method")
 
-    def publish_stamp(self, app_version, main_version):
+    def publish_stamp(self, app_version, prerelease, prerelease_count, main_version):
         raise NotImplementedError("Please implement this method")
 
 
@@ -374,50 +426,64 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, conf):
         IVersionsStamper.__init__(self, conf)
 
-    def find_matching_version(self):
+    def gen_verstr(self, current_version, prerelease, prerelease_count):
+        match = re.search(stamp_utils.VMN_REGEX, current_version)
+        gdict = match.groupdict()
+        if gdict['hotfix'] is None:
+            gdict['hotfix'] = str(0)
+        verstr = self.gen_vmn_version(
+            gdict['major'],
+            gdict['minor'],
+            gdict['patch'],
+            gdict['hotfix'],
+            prerelease,
+            prerelease_count,
+        )
+
+        return verstr
+
+    def find_matching_version(self, version, prerelease, prerelease_count):
         tag_formatted_app_name = (
             stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
                 self._name,
+                version,
+                prerelease,
+                prerelease_count,
             )
         )
 
         # Try to find any version of the application matching the
         # user's repositories local state
-        for tag in self.backend.tags(filter=f"{tag_formatted_app_name}_*"):
-            ver_info = self.backend.get_vmn_tag_version_info(tag)
-            if ver_info is None:
-                continue
+        ver_info = self.backend.get_vmn_tag_version_info(tag_formatted_app_name)
+        if ver_info is None:
+            return None
 
-            # Can happen if app's name is a prefix of another app
-            if ver_info["stamping"]["app"]["name"] != self._name:
-                continue
+        # Can happen if app's name is a prefix of another app
+        if ver_info["stamping"]["app"]["name"] != self._name:
+            return None
 
-            found = True
-            for k, v in ver_info["stamping"]["app"]["changesets"].items():
-                if (
-                    ver_info["stamping"]["app"]["_version"]
-                    == ver_info["stamping"]["app"]["previous_version"]
-                ):
+        if ver_info["stamping"]["app"]["release_mode"] == "init":
+            return None
+
+        found = True
+        for k, v in ver_info["stamping"]["app"]["changesets"].items():
+            if k not in self.actual_deps_state:
+                found = False
+                break
+
+            # when k is the "main repo" repo
+            if self._repo_name == k:
+                user_changeset = self.backend.last_user_changeset()
+
+                if v["hash"] != user_changeset:
                     found = False
                     break
+            elif v["hash"] != self.actual_deps_state[k]["hash"]:
+                found = False
+                break
 
-                if k not in self.actual_deps_state:
-                    found = False
-                    break
-
-                # when k is the "main repo" repo
-                if self._repo_name == k:
-                    user_changeset = self.backend.last_user_changeset()
-
-                    if v["hash"] != user_changeset:
-                        found = False
-                        break
-                elif v["hash"] != self.actual_deps_state[k]["hash"]:
-                    found = False
-                    break
-
-            if found:
-                return ver_info
+        if found:
+            return ver_info
 
         return None
 
@@ -426,10 +492,18 @@ class VersionControlStamper(IVersionsStamper):
         with open(version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
             if "version_to_stamp_from" in ver_dict:
-                return ver_dict["version_to_stamp_from"]
+                return (
+                    ver_dict["version_to_stamp_from"],
+                    ver_dict["prerelease"],
+                    ver_dict["prerelease_count"],
+                )
 
             # Backward compatible vmn 0.3.9 code:
-            return ver_dict["last_stamped_version"]
+            return (
+                ver_dict["last_stamped_version"],
+                'release',
+                {},
+            )
 
     def add_to_version(self):
         if not self._buildmetadata:
@@ -479,37 +553,19 @@ class VersionControlStamper(IVersionsStamper):
 
         return version
 
-    def release_app_version(self, version):
-        releasing_rc = self._previous_prerelease != "release"
-
-        if not releasing_rc:
-            raise RuntimeError("No prerelease version to release")
-
-        tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-            self._name, version
-        )
-        match = re.search(stamp_utils.VMN_TAG_REGEX, tag_name)
-        if match is None:
-            raise RuntimeError("Wrong version format specified")
-
-        gdict = match.groupdict()
-        if "prerelease" not in gdict:
-            raise RuntimeError(
-                "Wrong version format specified. Can release only rc versions"
-            )
-
+    def release_app_version(self, verstr):
+        tag_name = f'{self._name.replace("/", "-")}_{verstr}'
         props = stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
 
-        if props["hotfix"] != "0":
+        if props['hotfix'] is not None and props["hotfix"] != "0":
             props["version"] = f'{props["version"]}.{props["hotfix"]}'
 
-        release_tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-            self._name, props["version"]
-        )
+        release_tag_name = f'{self._name.replace("/", "-")}_{props["version"]}'
 
+        tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(tag_name)
         ver_info = {
             "stamping": {
-                "app": copy.deepcopy(self.ver_info_form_repo["stamping"]["app"])
+                "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"])
             }
         }
         ver_info["stamping"]["app"]["_version"] = props["version"]
@@ -527,23 +583,10 @@ class VersionControlStamper(IVersionsStamper):
 
     def stamp_app_version(
         self,
-        override_current_version=None,
+        initial_version,
+        initial_prerelease,
+        initial_prerelease_count,
     ):
-        version_to_start_from = VersionControlStamper.get_version_number_from_file(
-            self._version_file_path
-        )
-        if override_current_version is None:
-            override_current_version = version_to_start_from
-
-        # TODO: verify that can be called multiple times with same result
-        current_version, prerelease, prerelease_count = self.gen_app_version(
-            override_current_version,
-        )
-
-        VersionControlStamper.write_version_to_file(
-            file_path=self._version_file_path, version_number=current_version
-        )
-
         for repo in self._flat_configured_deps:
             if repo in self.actual_deps_state:
                 continue
@@ -554,39 +597,68 @@ class VersionControlStamper(IVersionsStamper):
                 "Please clone and rerun".format(os.path.join(self.backend.root(), repo))
             )
 
+        # TODO: verify that can be called multiple times with same result
+        current_version, prerelease, prerelease_count = \
+            self.gen_app_version(
+                initial_version,
+                initial_prerelease,
+                initial_prerelease_count,
+            )
+
+        VersionControlStamper.write_version_to_file(
+            file_path=self._version_file_path,
+            version_number=current_version,
+            prerelease=prerelease,
+            prerelease_count=prerelease_count,
+        )
+
         info = {}
         if self._extra_info:
             info["env"] = dict(os.environ)
 
         release_mode = self._release_mode
-        if release_mode is None:
+        if prerelease is not None:
             release_mode = "prerelease"
 
         self.update_stamping_info(
-            current_version,
             info,
-            version_to_start_from,
-            release_mode,
+            initial_version,
+            initial_prerelease,
+            initial_prerelease_count,
+            current_version,
             prerelease,
             prerelease_count,
+            release_mode,
         )
 
-        return current_version
+        return current_version, prerelease, prerelease_count
 
     def update_stamping_info(
         self,
-        current_version,
         info,
-        version_to_start_from,
-        release_mode,
+        initial_version,
+        initial_prerelease,
+        initial_prerelease_count,
+        current_version,
         prerelease,
         prerelease_count,
+        release_mode,
     ):
-        self.current_version_info["stamping"]["app"]["_version"] = current_version
+        verstr = self.gen_verstr(
+            current_version,
+            prerelease,
+            prerelease_count
+        )
+        self.current_version_info["stamping"]["app"]["_version"] = verstr
         self.current_version_info["stamping"]["app"]["prerelease"] = prerelease
+        initial_verstr = self.gen_verstr(
+            initial_version,
+            initial_prerelease,
+            initial_prerelease_count
+        )
         self.current_version_info["stamping"]["app"][
             "previous_version"
-        ] = version_to_start_from
+        ] = initial_verstr
         self.current_version_info["stamping"]["app"]["release_mode"] = release_mode
         self.current_version_info["stamping"]["app"]["info"] = copy.deepcopy(info)
         self.current_version_info["stamping"]["app"][
@@ -655,7 +727,13 @@ class VersionControlStamper(IVersionsStamper):
 
         return version_files
 
-    def publish_stamp(self, app_version, root_app_version):
+    def publish_stamp(
+            self,
+            app_version,
+            prerelease,
+            prerelease_count,
+            root_app_version
+    ):
         if not self._should_publish:
             return 0
 
@@ -671,9 +749,15 @@ class VersionControlStamper(IVersionsStamper):
             if tmp:
                 version_files.extend(tmp)
 
+        verstr = self.gen_verstr(
+            app_version,
+            prerelease,
+            prerelease_count
+        )
+
         self.current_version_info["stamping"][
             "msg"
-        ] = "{0}: Stamped version {1}\n\n".format(self._name, app_version)
+        ] = "{0}: Stamped version {1}\n\n".format(self._name, verstr)
         self.backend.commit(
             message=self.current_version_info["stamping"]["msg"],
             user="vmn",
@@ -685,11 +769,7 @@ class VersionControlStamper(IVersionsStamper):
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
         }
 
-        tags = [
-            stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-                self._name, app_version
-            )
-        ]
+        tags = [f'{self._name.replace("/", "-")}_{verstr}']
         msgs = [app_msg]
 
         if self._root_app_name is not None:
@@ -699,17 +779,12 @@ class VersionControlStamper(IVersionsStamper):
                 }
             }
             msgs.append(root_app_msg)
-            tags.append(
-                stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-                    self._root_app_name, root_app_version
-                )
-            )
+            tags.append(f'{self._root_app_name}_{root_app_version}')
 
         all_tags = []
         all_tags.extend(tags)
 
         try:
-            # TODO: run untill prev_version = version for being able to init app multiple times
             for t, m in zip(tags, msgs):
                 self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
@@ -779,6 +854,7 @@ def handle_init(vmn_ctx):
 
 
 def handle_init_app(vmn_ctx):
+    # TODO: validate version number is of type major.minor.patch[.hotfix]
     err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     if err:
         return 1
@@ -791,8 +867,8 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
-    vmn_ctx.params["release_mode"] = vmn_ctx.args.release_mode
-    vmn_ctx.params["prerelease"] = vmn_ctx.args.pr
+    if vmn_ctx.args.pull:
+        vmn_ctx.vcs.retrieve_remote_changes()
 
     path = os.path.join(vmn_ctx.params["root_path"], ".vmn", "vmn.init")
     if not vmn_ctx.vcs.backend.is_tracked(path):
@@ -804,7 +880,19 @@ def handle_stamp(vmn_ctx):
 
             return 1
 
-    matched_version_info = vmn_ctx.vcs.find_matching_version()
+    if not vmn_ctx.vcs.tracked:
+        raise RuntimeError("Trying to stamp an untracked app. Init app first")
+
+    initial_version, prerelease, prerelease_count = \
+        VersionControlStamper.get_version_number_from_file(
+            vmn_ctx.vcs._version_file_path
+        )
+
+    matched_version_info = vmn_ctx.vcs.find_matching_version(
+        initial_version,
+        prerelease,
+        prerelease_count,
+    )
     if matched_version_info is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
@@ -822,7 +910,13 @@ def handle_stamp(vmn_ctx):
         return 1
 
     try:
-        version = _stamp_version(vmn_ctx.vcs, vmn_ctx.args.pull)
+        version = _stamp_version(
+            vmn_ctx.vcs,
+            vmn_ctx.args.pull,
+            initial_version,
+            prerelease,
+            prerelease_count,
+        )
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -841,6 +935,7 @@ def handle_release(vmn_ctx):
     try:
         LOGGER.info(vmn_ctx.vcs.release_app_version(vmn_ctx.args.version))
     except Exception as exc:
+        LOGGER.error(f'Failed to release {vmn_ctx.args.version}')
         LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
@@ -938,7 +1033,15 @@ def _init_app(versions_be_ifc, params, starting_version):
 
     versions_be_ifc.create_config_files(params)
     VersionControlStamper.write_version_to_file(
-        file_path=versions_be_ifc._version_file_path, version_number=starting_version
+        file_path=versions_be_ifc._version_file_path,
+        version_number=starting_version,
+        prerelease='release',
+        prerelease_count={},
+    )
+
+    info = {}
+    versions_be_ifc.update_stamping_info(
+        info, starting_version, "release", {}, starting_version, "release", {}, "init",
     )
 
     root_app_version = 0
@@ -965,12 +1068,16 @@ def _init_app(versions_be_ifc, params, starting_version):
             }
         )
 
-    info = {}
-    versions_be_ifc.update_stamping_info(
-        starting_version, info, starting_version, "init", "release", {}
-    )
+        msg_root_app = versions_be_ifc.current_version_info["stamping"]["root_app"]
+        msg_app = versions_be_ifc.current_version_info["stamping"]["app"]
+        msg_root_app["services"][versions_be_ifc._name] = msg_app["_version"]
 
-    err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
+    err = versions_be_ifc.publish_stamp(
+        starting_version,
+        "release",
+        {},
+        root_app_version
+    )
     if err:
         raise RuntimeError("Failed to init app")
 
@@ -989,22 +1096,13 @@ def backward_compatible_initialized_check(params):
     return file_path
 
 
-def _stamp_version(versions_be_ifc, pull):
-    if pull:
-        versions_be_ifc.retrieve_remote_changes()
-
-    if (
-        versions_be_ifc._previous_prerelease == "release"
-        and versions_be_ifc._release_mode is None
-    ):
-        raise RuntimeError(
-            "When stamping from a previous release version "
-            "a release mode must be specified"
-        )
-
-    if not versions_be_ifc.tracked:
-        raise RuntimeError("Trying to stamp an untracked app. Init app first")
-
+def _stamp_version(
+        versions_be_ifc,
+        pull,
+        initial_version,
+        initial_prerelease,
+        initial_prerelease_count
+):
     # Here we one of the following:
     # tracked & not init only => normal stamp
     # not tracked & init only => only init a new app
@@ -1013,28 +1111,38 @@ def _stamp_version(versions_be_ifc, pull):
     # We didn't find any existing version
     stamped = False
     retries = 3
-    override_current_version = None
+    override_initial_version = initial_version
+    override_initial_prerelease = initial_prerelease
+    override_initial_prerelease_count = initial_prerelease_count
     override_main_current_version = None
-    current_version = "0.0.0"
-    main_ver = None
 
     while retries:
         retries -= 1
 
-        current_version = versions_be_ifc.stamp_app_version(
-            override_current_version,
-        )
+        current_version, prerelease, prerelease_count = \
+            versions_be_ifc.stamp_app_version(
+                override_initial_version,
+                override_initial_prerelease,
+                override_initial_prerelease_count
+            )
         main_ver = versions_be_ifc.stamp_root_app_version(
             override_main_current_version,
         )
 
-        err = versions_be_ifc.publish_stamp(current_version, main_ver)
+        err = versions_be_ifc.publish_stamp(
+            current_version,
+            prerelease,
+            prerelease_count,
+            main_ver
+        )
         if not err:
             stamped = True
             break
 
         if err == 1:
-            override_current_version = current_version
+            override_initial_version = current_version
+            override_initial_prerelease = prerelease
+            override_initial_prerelease_count = prerelease_count
             override_main_current_version = main_ver
 
             LOGGER.warning(
@@ -1055,11 +1163,17 @@ def _stamp_version(versions_be_ifc, pull):
     if not stamped:
         raise RuntimeError("Failed to stamp")
 
-    return versions_be_ifc.get_be_formatted_version(current_version)
+    verstr = versions_be_ifc.gen_verstr(
+        current_version,
+        prerelease,
+        prerelease_count
+    )
+
+    return versions_be_ifc.get_be_formatted_version(verstr)
 
 
-def show(vcs, params, version=None):
-    tag_name, ver_info = _retrieve_version_info(params, vcs, version)
+def show(vcs, params, verstr=None):
+    tag_name, ver_info = _retrieve_version_info(params, vcs, verstr)
 
     if ver_info is None:
         LOGGER.error("No such app: {0}".format(params["name"]))
@@ -1141,7 +1255,7 @@ def goto_version(vcs, params, version):
     return 0
 
 
-def _retrieve_version_info(params, vcs, version):
+def _retrieve_version_info(params, vcs, verstr):
     path = os.path.join(params["root_path"], ".vmn", "vmn.init")
     if not vcs.backend.is_tracked(path):
         # Backward compatability with vmn 0.3.9 code:
@@ -1156,39 +1270,37 @@ def _retrieve_version_info(params, vcs, version):
     if err:
         return None, None
 
-    if version is not None:
-        if params["root"]:
-            try:
-                int(version)
-            except Exception:
-                LOGGER.error(
-                    "wrong version specified: root version " "must be an integer"
-                )
+    tag_name = f'{params["name"].replace("/", "-")}'
+    if verstr is not None:
+        tag_name = f'{tag_name}_{verstr}'
 
-                return None, None
-        else:
-            match = re.search(stamp_utils.VMN_REGEX, version)
-            if match is None:
-                LOGGER.error(f"Wrong version specified: {version}")
-
-                return None, None
-
-    # TODO: get tag name from version
-    tag_name = stamp_utils.VersionControlBackend.get_tag_formatted_app_name(
-        params["name"],
-        version,
-    )
-
-    try:
-        if version is None:
+    if verstr is None:
+        try:
             ver_info = vcs.backend.get_vmn_version_info(
                 params["name"],
                 params["root"],
             )
+        except:
+            return None, None
+    else:
+        if params["root"]:
+            try:
+                int(verstr)
+                ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+            except Exception:
+                LOGGER.error(
+                    "wrong version specified: root version must be an integer"
+                )
+
+                return None, None
         else:
-            ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
-    except:
-        return None, None
+            try:
+                stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
+                ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+            except:
+                LOGGER.error(f"Wrong version specified: {verstr}")
+
+                return None, None
 
     if ver_info is None:
         return None, None

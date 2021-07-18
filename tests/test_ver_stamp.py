@@ -451,7 +451,7 @@ def test_get_version_number_from_file(app_layout):
         vmn.VersionControlStamper.get_version_number_from_file(
             params["version_file_path"]
         )
-        == "0.2.1"
+        == ('0.2.1', 'release', {})
     )
 
 
@@ -461,7 +461,8 @@ def test_read_version_from_file(app_layout):
 
     file_path = params["version_file_path"]
 
-    assert vmn.VersionControlStamper.get_version_number_from_file(file_path) == "0.2.1"
+    assert vmn.VersionControlStamper.get_version_number_from_file(file_path) == \
+           ('0.2.1', 'release', {})
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
@@ -478,11 +479,16 @@ def test_manual_file_adjustment(app_layout):
     file_path = params["version_file_path"]
 
     app_layout.remove_app_version_file(file_path)
+    verfile_manual_content = {
+        'version_to_stamp_from': '0.2.3',
+        'prerelease': 'release',
+        'prerelease_count': {}
+    }
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
         "test_repo",
         ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
-        "version_to_stamp_from: 0.2.3",
+        yaml.dump(verfile_manual_content),
     )
 
     ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -507,6 +513,32 @@ def test_basic_root_show(app_layout, capfd):
     _show("root_app", root=True)
     out, err = capfd.readouterr()
     assert "1\n" == out
+
+    _show("root_app", verbose=True, root=True)
+    out, err = capfd.readouterr()
+    out_dict = yaml.safe_load(out)
+    assert app_name == out_dict['latest_service']
+    assert len(out_dict['services']) == 2
+    assert app_name in out_dict['services']
+    assert out_dict['services'][app_name] == "0.2.1"
+
+    try:
+        _stamp_app(app_name)
+    except AssertionError:
+        out, err = capfd.readouterr()
+        pass
+
+    ver_info, _ = _stamp_app(app_name, release_mode='patch')
+    out, err = capfd.readouterr()
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.2.2"
+
+    _show("root_app", verbose=True, root=True)
+    out, err = capfd.readouterr()
+    out_dict = yaml.safe_load(out)
+    assert app_name == out_dict['latest_service']
+    assert app_name in out_dict['services']
+    assert out_dict['services'][app_name] == "0.2.2"
 
 
 def test_backward_compatability_with_previous_vmn(app_layout):
