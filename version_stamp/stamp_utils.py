@@ -144,10 +144,7 @@ class VersionControlBackend(object):
 
     @staticmethod
     def get_tag_formatted_app_name(
-            app_name,
-            version=None,
-            prerelease=None,
-            prerelease_count=None
+        app_name, version=None, prerelease=None, prerelease_count=None
     ):
         app_name = app_name.replace("/", "-")
 
@@ -155,8 +152,8 @@ class VersionControlBackend(object):
             return f"{app_name}"
         else:
             verstr = f"{app_name}_{version}"
-            if prerelease is not None and prerelease != 'release':
-                verstr = f'{verstr}-{prerelease}{prerelease_count[prerelease]}'
+            if prerelease is not None and prerelease != "release":
+                verstr = f"{verstr}-{prerelease}{prerelease_count[prerelease]}"
 
             return verstr
 

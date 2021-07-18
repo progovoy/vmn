@@ -447,12 +447,9 @@ def test_get_version_number_from_file(app_layout):
     _init_vmn_in_repo()
     _, params = _init_app(app_layout.app_name, "0.2.1")
 
-    assert (
-        vmn.VersionControlStamper.get_version_number_from_file(
-            params["version_file_path"]
-        )
-        == ('0.2.1', 'release', {})
-    )
+    assert vmn.VersionControlStamper.get_version_number_from_file(
+        params["version_file_path"]
+    ) == ("0.2.1", "release", {})
 
 
 def test_read_version_from_file(app_layout):
@@ -461,8 +458,11 @@ def test_read_version_from_file(app_layout):
 
     file_path = params["version_file_path"]
 
-    assert vmn.VersionControlStamper.get_version_number_from_file(file_path) == \
-           ('0.2.1', 'release', {})
+    assert vmn.VersionControlStamper.get_version_number_from_file(file_path) == (
+        "0.2.1",
+        "release",
+        {},
+    )
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
@@ -480,9 +480,9 @@ def test_manual_file_adjustment(app_layout):
 
     app_layout.remove_app_version_file(file_path)
     verfile_manual_content = {
-        'version_to_stamp_from': '0.2.3',
-        'prerelease': 'release',
-        'prerelease_count': {}
+        "version_to_stamp_from": "0.2.3",
+        "prerelease": "release",
+        "prerelease_count": {},
     }
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
@@ -517,10 +517,10 @@ def test_basic_root_show(app_layout, capfd):
     _show("root_app", verbose=True, root=True)
     out, err = capfd.readouterr()
     out_dict = yaml.safe_load(out)
-    assert app_name == out_dict['latest_service']
-    assert len(out_dict['services']) == 2
-    assert app_name in out_dict['services']
-    assert out_dict['services'][app_name] == "0.2.1"
+    assert app_name == out_dict["latest_service"]
+    assert len(out_dict["services"]) == 2
+    assert app_name in out_dict["services"]
+    assert out_dict["services"][app_name] == "0.2.1"
 
     try:
         _stamp_app(app_name)
@@ -528,7 +528,7 @@ def test_basic_root_show(app_layout, capfd):
         out, err = capfd.readouterr()
         pass
 
-    ver_info, _ = _stamp_app(app_name, release_mode='patch')
+    ver_info, _ = _stamp_app(app_name, release_mode="patch")
     out, err = capfd.readouterr()
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.2.2"
@@ -536,9 +536,9 @@ def test_basic_root_show(app_layout, capfd):
     _show("root_app", verbose=True, root=True)
     out, err = capfd.readouterr()
     out_dict = yaml.safe_load(out)
-    assert app_name == out_dict['latest_service']
-    assert app_name in out_dict['services']
-    assert out_dict['services'][app_name] == "0.2.2"
+    assert app_name == out_dict["latest_service"]
+    assert app_name in out_dict["services"]
+    assert out_dict["services"][app_name] == "0.2.2"
 
 
 def test_backward_compatability_with_previous_vmn(app_layout):
