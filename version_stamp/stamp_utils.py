@@ -133,7 +133,7 @@ class VersionControlBackend(object):
     def changeset(self, short=False):
         raise NotImplementedError()
 
-    def revert_vmn_changes(self, tags):
+    def revert_vmn_changes(self, tags=[]):
         raise NotImplementedError()
 
     def get_active_branch(self, raise_on_detached_head=True):
@@ -472,7 +472,7 @@ class GitBackend(VersionControlBackend):
 
         return None
 
-    def revert_vmn_changes(self, tags):
+    def revert_vmn_changes(self, tags=[]):
         if self._be.active_branch.commit.author.name != VMN_USER_NAME:
             raise RuntimeError("BUG: Will not revert non-vmn commit.")
 

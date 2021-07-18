@@ -547,6 +547,9 @@ class VersionControlStamper(IVersionsStamper):
             props["version"] = f'{props["version"]}.{props["hotfix"]}'
 
         release_tag_name = f'{self._name.replace("/", "-")}_{props["version"]}'
+        match = re.search(stamp_utils.VMN_TAG_REGEX, release_tag_name)
+        if match is None:
+            raise RuntimeError(f"Tag {release_tag_name} doesn't comply to vmn version format")
 
         tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(tag_name)
         ver_info = {
@@ -740,7 +743,17 @@ class VersionControlStamper(IVersionsStamper):
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
         }
 
-        tags = [f'{self._name.replace("/", "-")}_{verstr}']
+        tag = f'{self._name.replace("/", "-")}_{verstr}'
+        match = re.search(stamp_utils.VMN_TAG_REGEX, tag)
+        if match is None:
+            LOGGER.error(
+                f"Tag {tag} doesn't comply to vmn version format"
+                f"Reverting vmn changes ...")
+            self.backend.revert_vmn_changes()
+
+            return 3
+
+        tags = [tag]
         msgs = [app_msg]
 
         if self._root_app_name is not None:
@@ -750,7 +763,17 @@ class VersionControlStamper(IVersionsStamper):
                 }
             }
             msgs.append(root_app_msg)
-            tags.append(f"{self._root_app_name}_{root_app_version}")
+            tag = f"{self._root_app_name}_{root_app_version}"
+            match = re.search(stamp_utils.VMN_ROOT_TAG_REGEX, tag)
+            if match is None:
+                LOGGER.error(
+                    f"Tag {tag} doesn't comply to vmn version format"
+                    f"Reverting vmn changes ...")
+                self.backend.revert_vmn_changes()
+
+                return 3
+
+            tags.append(tag)
 
         all_tags = []
         all_tags.extend(tags)

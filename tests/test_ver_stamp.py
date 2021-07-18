@@ -338,6 +338,35 @@ def test_rc_stamping(app_layout):
     assert data["_version"] == "1.6.0-rc2"
 
 
+def test_rc_goto(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    try:
+        ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            release_mode="minor",
+            prerelease="rc_aaa",
+        )
+    except AssertionError:
+        pass
+
+    ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode="minor",
+        prerelease="rcaaa",
+    )
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rcaaa1"
+
+    with vmn.VMNContextMAnagerManager(
+        ["goto", "-v", "1.3.0-rcaaa1", app_layout.app_name]
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+
 def test_version_template():
     formated_version = (
         stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
