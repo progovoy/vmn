@@ -278,7 +278,7 @@ class IVersionsStamper(object):
         vmn_version = f"{major}.{minor}.{patch}"
         if hotfix is not None:
             vmn_version = f"{vmn_version}.{hotfix}"
-        if prerelease is not None:
+        if prerelease is not None and prerelease != "release":
             try:
                 assert prerelease in prerelease_count
                 vmn_version = (

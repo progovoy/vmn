@@ -94,8 +94,8 @@ def test_basic_stamp(app_layout):
     _init_app(new_name, "1.0.0")
 
     for i in range(2):
-        ver_info, _ = _stamp_app(new_name, "patch")
-        assert ver_info["stamping"]["app"]["_version"] == "1.0.1"
+        ver_info, _ = _stamp_app(new_name, "hotfix")
+        assert ver_info["stamping"]["app"]["_version"] == "1.0.0.1"
 
     ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
@@ -525,11 +525,11 @@ def test_basic_root_show(app_layout, capfd):
     try:
         _stamp_app(app_name)
     except AssertionError:
-        out, err = capfd.readouterr()
         pass
 
     ver_info, _ = _stamp_app(app_name, release_mode="patch")
     out, err = capfd.readouterr()
+    assert "[INFO] 0.2.2\n" == out
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.2.2"
 
