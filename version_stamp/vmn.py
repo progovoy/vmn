@@ -484,11 +484,18 @@ class VersionControlStamper(IVersionsStamper):
                     ver_dict["prerelease_count"],
                 )
 
-            # Backward compatible vmn 0.3.9 code:
+            # Backward compatible vmn 0.3.9 code
+            if 'prerelease' not in ver_dict:
+                return (
+                    ver_dict["last_stamped_version"],
+                    "release",
+                    {},
+                )
+
             return (
                 ver_dict["last_stamped_version"],
-                "release",
-                {},
+                ver_dict["prerelease"],
+                ver_dict["prerelease_count"],
             )
 
     def add_to_version(self):
