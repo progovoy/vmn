@@ -485,7 +485,7 @@ class VersionControlStamper(IVersionsStamper):
                 )
 
             # Backward compatible vmn 0.3.9 code
-            if 'prerelease' not in ver_dict:
+            if "prerelease" not in ver_dict:
                 return (
                     ver_dict["last_stamped_version"],
                     "release",
