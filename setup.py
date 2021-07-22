@@ -4,7 +4,7 @@ from version_stamp import version
 
 description = "Stamping utility"
 
-with open("requirements.txt") as fid:
+with open("tests/requirements.txt") as fid:
     install_requires = fid.readlines()
 
 setuptools.setup(
