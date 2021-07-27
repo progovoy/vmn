@@ -8,14 +8,14 @@ import re
 import time
 
 import yaml
-from packaging import version as pversion
-import version as version_mod
 
 import configparser
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 VMN_VERSION_FORMAT = "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}]"
+VMN_DEFAULT_TEMPLATE = "[{major}][.{minor}][.{patch}][.{hotfix}]" \
+                       "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
 
 SEMVER_REGEX = (
     "^(?P<major>0|[1-9]\d*)\."
@@ -519,7 +519,9 @@ class GitBackend(VersionControlBackend):
         if cleaned_app_tag is None:
             return None
 
-        return self.get_vmn_tag_version_info(cleaned_app_tag)
+        _, verinfo = self.get_vmn_tag_version_info(cleaned_app_tag)
+
+        return verinfo
 
     def get_vmn_tag_version_info(self, tag_name):
         try:
@@ -531,11 +533,11 @@ class GitBackend(VersionControlBackend):
                 tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(tag_name)
             except:
-                return None
+                return tag_name, None
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return None
+            return tag_name, None
 
         # TODO:: Check API commit version
 
@@ -548,16 +550,16 @@ class GitBackend(VersionControlBackend):
             commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
 
             if commit_msg is None or "stamping" not in commit_msg:
-                return None
+                return tag_name, None
 
             commit_msg["stamping"]["app"]["prerelease"] = "release"
             commit_msg["stamping"]["app"]["prerelease_count"] = {}
 
-            return commit_msg
+            return tag_name, commit_msg
 
         if not tag_msg:
             LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
-            return None
+            return tag_name, None
 
         all_tags = {}
         found = False
@@ -584,14 +586,7 @@ class GitBackend(VersionControlBackend):
                 yaml.safe_load(all_tags["root"]["message"])["stamping"]
             )
 
-        newer_stamping = "vmn_info" in tag_msg and (
-            pversion.parse(tag_msg["vmn_info"]["vmn_version"])
-            > pversion.parse(version_mod.version)
-        )
-        if newer_stamping:
-            raise RuntimeError("Refusing to operate with old vmn. Please upgrade")
-
-        return tag_msg
+        return tag_name, tag_msg
 
     @staticmethod
     def clone(path, remote):

@@ -102,7 +102,7 @@ class FSAppLayoutFixture(object):
             "-t",
             f"-u{os.getuid()}:{os.getgid()}",
             "-v",
-            f"{self.repo_path}:/out",
+            f"{self.repo_path}:/test_repo",
             "-v",
             f"{self.base_dir}:{self.base_dir}",
             "previous_vmn_stamper:latest",

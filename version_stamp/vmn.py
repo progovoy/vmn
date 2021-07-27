@@ -11,7 +11,7 @@ import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
 import re
-
+from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
@@ -120,7 +120,12 @@ class IVersionsStamper(object):
         self._extra_info = conf["extra_info"]
         self._version_file_path = conf["version_file_path"]
 
-        self.template = IVersionsStamper.parse_template(conf["template"])
+        try:
+            self.template = IVersionsStamper.parse_template(conf["template"])
+            self.bad_format_template = False
+        except:
+            self.template = stamp_utils.VMN_DEFAULT_TEMPLATE
+            self.bad_format_template = True
 
         self._raw_configured_deps = conf["raw_configured_deps"]
         self.actual_deps_state = conf["actual_deps_state"]
@@ -440,7 +445,7 @@ class VersionControlStamper(IVersionsStamper):
 
         # Try to find any version of the application matching the
         # user's repositories local state
-        ver_info = self.backend.get_vmn_tag_version_info(tag_formatted_app_name)
+        _, ver_info = self.backend.get_vmn_tag_version_info(tag_formatted_app_name)
         if ver_info is None:
             return None
 
@@ -560,7 +565,7 @@ class VersionControlStamper(IVersionsStamper):
                 f"Tag {release_tag_name} doesn't comply to vmn version format"
             )
 
-        tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(tag_name)
+        tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(tag_name)
         ver_info = {
             "stamping": {
                 "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"])
@@ -1124,6 +1129,20 @@ def _stamp_version(
     override_initial_prerelease_count = initial_prerelease_count
     override_main_current_version = None
 
+    newer_stamping = version_mod.version != "dev" and (
+            pversion.parse(versions_be_ifc.ver_info_form_repo["vmn_info"]["vmn_version"])
+            > pversion.parse(version_mod.version)
+    )
+    if newer_stamping:
+        raise RuntimeError("Refusing to stamp with old vmn. Please upgrade")
+
+    if versions_be_ifc.bad_format_template:
+        LOGGER.warning(
+            "The template in the app's config file is "
+            "in bad format. Please updae it to the new format. Example: "
+            f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
+        )
+
     while retries:
         retries -= 1
 
@@ -1290,7 +1309,7 @@ def _retrieve_version_info(params, vcs, verstr):
         if params["root"]:
             try:
                 int(verstr)
-                ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+                tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
             except Exception:
                 LOGGER.error("wrong version specified: root version must be an integer")
 
@@ -1298,7 +1317,7 @@ def _retrieve_version_info(params, vcs, verstr):
         else:
             try:
                 stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
-                ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+                tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
             except:
                 LOGGER.error(f"Wrong version specified: {verstr}")
 
@@ -1518,8 +1537,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     }
 
     params["template"] = (
-        "[{major}][.{minor}][.{patch}][.{hotfix}]"
-        "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
+        stamp_utils.VMN_DEFAULT_TEMPLATE
     )
 
     params["extra_info"] = False

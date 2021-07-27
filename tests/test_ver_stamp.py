@@ -573,20 +573,29 @@ def test_basic_root_show(app_layout, capfd):
 def test_backward_compatability_with_previous_vmn(app_layout):
     app_layout.stamp_with_previous_vmn()
 
-    conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
-                }
-            }
-        },
-        "extra_info": False,
-    }
-
-    app_layout.write_conf(f"{app_layout.repo_path}/.vmn/app1/conf.yml", **conf)
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
     ver_info, _ = _stamp_app("app1", "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.4"
+
+    with vmn.VMNContextMAnagerManager(
+        ["goto", "-v", "0.0.2", 'app1']
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    with vmn.VMNContextMAnagerManager(
+        ["goto", "-v", "0.0.3", 'app1']
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    with vmn.VMNContextMAnagerManager(
+        ["goto", "-v", "0.0.4", 'app1']
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    with vmn.VMNContextMAnagerManager(["goto", 'app1']) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
