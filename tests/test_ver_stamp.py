@@ -372,7 +372,15 @@ def test_version_template():
         stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
             "2.0.9",
             vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
-            True
+            True,
+        )
+    )
+
+    assert formated_version == "2"
+
+    formated_version = (
+        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
         )
     )
 
@@ -382,17 +390,7 @@ def test_version_template():
         stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
             "2.0.9.0",
             vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
-            True
-        )
-    )
-
-    assert formated_version == "2"
-
-    formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            "2.0.9.0",
-            vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
-            False
+            False,
         )
     )
 
@@ -600,24 +598,18 @@ def test_backward_compatability_with_previous_vmn(app_layout):
     ver_info, _ = _stamp_app("app1", "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.4"
 
-    with vmn.VMNContextMAnagerManager(
-        ["goto", "-v", "0.0.2", 'app1']
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnagerManager(["goto", "-v", "0.0.2", "app1"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
-    with vmn.VMNContextMAnagerManager(
-        ["goto", "-v", "0.0.3", 'app1']
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnagerManager(["goto", "-v", "0.0.3", "app1"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
-    with vmn.VMNContextMAnagerManager(
-        ["goto", "-v", "0.0.4", 'app1']
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnagerManager(["goto", "-v", "0.0.4", "app1"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
-    with vmn.VMNContextMAnagerManager(["goto", 'app1']) as vmn_ctx:
+    with vmn.VMNContextMAnagerManager(["goto", "app1"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0

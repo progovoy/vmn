@@ -14,8 +14,10 @@ import configparser
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 VMN_VERSION_FORMAT = "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}]"
-VMN_DEFAULT_TEMPLATE = "[{major}][.{minor}][.{patch}][.{hotfix}]" \
-                       "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
+VMN_DEFAULT_TEMPLATE = (
+    "[{major}][.{minor}][.{patch}][.{hotfix}]"
+    "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
+)
 
 SEMVER_REGEX = (
     "^(?P<major>0|[1-9]\d*)\."

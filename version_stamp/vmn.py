@@ -575,7 +575,9 @@ class VersionControlStamper(IVersionsStamper):
                 f"Tag {release_tag_name} doesn't comply to vmn version format"
             )
 
-        tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(tag_name)
+        tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(
+            tag_name
+        )
         ver_info = {
             "stamping": {
                 "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"])
@@ -1140,8 +1142,8 @@ def _stamp_version(
     override_main_current_version = None
 
     newer_stamping = version_mod.version != "dev" and (
-            pversion.parse(versions_be_ifc.ver_info_form_repo["vmn_info"]["vmn_version"])
-            > pversion.parse(version_mod.version)
+        pversion.parse(versions_be_ifc.ver_info_form_repo["vmn_info"]["vmn_version"])
+        > pversion.parse(version_mod.version)
     )
     if newer_stamping:
         raise RuntimeError("Refusing to stamp with old vmn. Please upgrade")
@@ -1546,9 +1548,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         }
     }
 
-    params["template"] = (
-        stamp_utils.VMN_DEFAULT_TEMPLATE
-    )
+    params["template"] = stamp_utils.VMN_DEFAULT_TEMPLATE
 
     params["extra_info"] = False
     # TODO: handle redundant parse template here
