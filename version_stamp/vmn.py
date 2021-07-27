@@ -49,6 +49,9 @@ class VMNContextMAnagerManager(object):
             initial_params["name"] = self.args.name
         if "release_mode" in self.args and self.args.release_mode:
             initial_params["release_mode"] = self.args.release_mode
+            # For backward compatability
+            if initial_params["release_mode"] == "micro":
+                initial_params["release_mode"] = "hotfix"
         if "pr" in self.args and self.args.pr and self.args.pr != "release":
             initial_params["prerelease"] = self.args.pr
 
@@ -131,7 +134,7 @@ class IVersionsStamper(object):
         self.actual_deps_state = conf["actual_deps_state"]
         self._flat_configured_deps = self.get_deps_changesets()
         # TODO: refactor
-        self._hide_zero_hotfix = True
+        self._hide_zero_hotfix = conf["hide_zero_hotfix"]
 
         # TODO: this is ugly
         root_context = self._root_app_name == self._name
@@ -349,7 +352,7 @@ class IVersionsStamper(object):
 
     def get_be_formatted_version(self, version):
         return stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            version, self.template
+            version, self.template, self._hide_zero_hotfix
         )
 
     def find_matching_version(self, version, prerelease, prerelease_count):
@@ -367,6 +370,7 @@ class IVersionsStamper(object):
                     "template": params["template"],
                     "deps": self._raw_configured_deps,
                     "extra_info": self._extra_info,
+                    "hide_zero_hotfix": True,
                 },
             }
 
@@ -532,7 +536,9 @@ class VersionControlStamper(IVersionsStamper):
             _,
         ) = stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
 
-        if hotfix != "0":
+        if not self._hide_zero_hotfix:
+            version = f"{version}.{hotfix}"
+        elif hotfix != "0":
             version = f"{version}.{hotfix}"
         if prerelease is not None:
             version = f"{version}-{prerelease}"
@@ -555,7 +561,11 @@ class VersionControlStamper(IVersionsStamper):
         tag_name = f'{self._name.replace("/", "-")}_{verstr}'
         props = stamp_utils.VersionControlBackend.get_tag_properties(tag_name)
 
-        if props["hotfix"] is not None and props["hotfix"] != "0":
+        should_append_hotfix = props["hotfix"] is not None
+        if should_append_hotfix and self._hide_zero_hotfix:
+            should_append_hotfix = props["hotfix"] != "0"
+
+        if should_append_hotfix:
             props["version"] = f'{props["version"]}.{props["hotfix"]}'
 
         release_tag_name = f'{self._name.replace("/", "-")}_{props["version"]}'
@@ -1233,7 +1243,7 @@ def show(vcs, params, verstr=None):
 
     data = ver_info["stamping"]["app"]
     data["version"] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-        data["_version"], vcs.template
+        data["_version"], vcs.template, vcs._hide_zero_hotfix
     )
     if params.get("verbose"):
         yaml.dump(data, sys.stdout)
@@ -1559,6 +1569,9 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         params["template"] = data["conf"]["template"]
         params["extra_info"] = data["conf"]["extra_info"]
         params["raw_configured_deps"] = data["conf"]["deps"]
+        params["hide_zero_hotfix"] = True
+        if "hide_zero_hotfix" in data["conf"]:
+            params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
 
         deps = {}
         for rel_path, dep in params["raw_configured_deps"].items():
@@ -1656,7 +1669,7 @@ def parse_user_commands(command_line):
     pstamp.add_argument(
         "-r",
         "--release-mode",
-        choices=["major", "minor", "patch", "hotfix"],
+        choices=["major", "minor", "patch", "hotfix", "micro"],
         default=None,
         help="major / minor / patch / hotfix",
     )

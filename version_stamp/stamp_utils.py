@@ -207,11 +207,11 @@ class VersionControlBackend(object):
         return ret
 
     @staticmethod
-    def get_utemplate_formatted_version(raw_vmn_version, template):
+    def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
         match = re.search(VMN_REGEX, raw_vmn_version)
 
         gdict = match.groupdict()
-        if gdict["hotfix"] == "0":
+        if gdict["hotfix"] == "0" and hide_zero_hotfix:
             gdict["hotfix"] = None
 
         octats = (
