@@ -1560,6 +1560,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     actual_deps_state = HostState.get_actual_deps_state(deps, root_path)
     actual_deps_state["."]["hash"] = be.last_user_changeset()
     params["actual_deps_state"] = actual_deps_state
+    params["hide_zero_hotfix"] = True
 
     if not os.path.isfile(app_conf_path):
         return params
@@ -1569,7 +1570,6 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         params["template"] = data["conf"]["template"]
         params["extra_info"] = data["conf"]["extra_info"]
         params["raw_configured_deps"] = data["conf"]["deps"]
-        params["hide_zero_hotfix"] = True
         if "hide_zero_hotfix" in data["conf"]:
             params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
 
