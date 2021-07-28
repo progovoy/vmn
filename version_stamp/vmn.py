@@ -487,6 +487,17 @@ class VersionControlStamper(IVersionsStamper):
         with open(version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
             if "version_to_stamp_from" in ver_dict:
+                if (
+                        "prerelease" not in ver_dict or
+                        "prerelease" not in ver_dict
+                ):
+                    # Backward for 0.4.0-rc6
+                    return (
+                        ver_dict["version_to_stamp_from"],
+                        "release",
+                        {},
+                    )
+
                 return (
                     ver_dict["version_to_stamp_from"],
                     ver_dict["prerelease"],
