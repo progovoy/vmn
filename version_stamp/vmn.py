@@ -316,6 +316,9 @@ class IVersionsStamper(object):
         prerelease: str,
         prerelease_count: dict,
     ) -> None:
+        if prerelease is None:
+            prerelease = 'release'
+
         # this method will write the stamped ver of an app to a file,
         # weather the file pre exists or not
         try:
