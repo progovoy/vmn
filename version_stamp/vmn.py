@@ -909,12 +909,15 @@ def handle_stamp(vmn_ctx):
         file_path = backward_compatible_initialized_check(vmn_ctx.params)
 
         if file_path is None or not vmn_ctx.vcs.backend.is_path_tracked(file_path):
-            LOGGER.info("vmn tracking is not yet initialized")
+            LOGGER.error(
+                "vmn tracking is not yet initialized. Run vmn init on the repository"
+            )
 
             return 1
 
     if not vmn_ctx.vcs.tracked:
-        raise RuntimeError("Trying to stamp an untracked app. Init app first")
+        LOGGER.error("Trying to stamp an untracked app. Run vmn init-app first")
+        return 1
 
     (
         initial_version,

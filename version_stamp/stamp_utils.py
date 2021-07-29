@@ -88,58 +88,9 @@ def init_stamp_logger(debug=False):
 class VersionControlBackend(object):
     def __init__(self, type):
         self._type = type
-        pass
 
     def __del__(self):
         pass
-
-    def tag(self, tags, messages, ref="HEAD"):
-        raise NotImplementedError()
-
-    def push(self, tags=()):
-        raise NotImplementedError()
-
-    def pull(self):
-        raise NotImplementedError()
-
-    def commit(self, message, user, include=None):
-        raise NotImplementedError()
-
-    def root(self):
-        raise NotImplementedError()
-
-    def status(self, tag):
-        raise NotImplementedError()
-
-    def tags(self, branch=None, filter=None):
-        raise NotImplementedError()
-
-    def in_detached_head(self):
-        raise NotImplementedError()
-
-    def check_for_pending_changes(self):
-        raise NotImplementedError()
-
-    def check_for_outgoing_changes(self):
-        raise NotImplementedError()
-
-    def checkout_branch(self):
-        raise NotImplementedError()
-
-    def checkout(self, rev=None, tag=None):
-        raise NotImplementedError()
-
-    def remote(self):
-        raise NotImplementedError()
-
-    def changeset(self, short=False):
-        raise NotImplementedError()
-
-    def revert_vmn_changes(self, tags=[]):
-        raise NotImplementedError()
-
-    def get_active_branch(self, raise_on_detached_head=True):
-        raise NotImplementedError()
 
     def type(self):
         return self._type
@@ -295,9 +246,8 @@ class GitBackend(VersionControlBackend):
                 )
             else:
                 raise Warning(
-                    f"Push has failed: {ret[0].summary}\n"
-                    "please verify the next command works:\n"
-                    "git push"
+                    f"Push has failed because: {ret[0].summary}.\n"
+                    "Please verify that 'git push' works"
                 )
 
         for tag in tags:
