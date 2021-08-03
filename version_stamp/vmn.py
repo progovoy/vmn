@@ -1201,11 +1201,12 @@ def _stamp_version(
             LOGGER.warning(
                 "Failed to publish. Trying to auto-increase "
                 "from {0} to {1}".format(
-                    current_version, versions_be_ifc.gen_app_version(
+                    current_version,
+                    versions_be_ifc.gen_app_version(
                         override_initial_version,
                         override_initial_prerelease,
                         override_initial_prerelease_count,
-                        )[0]
+                    )[0],
                 )
             )
         elif err == 2:
