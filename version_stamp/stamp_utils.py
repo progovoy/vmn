@@ -340,7 +340,7 @@ class GitBackend(VersionControlBackend):
         )
 
         if len(outgoing) > 0:
-            err = f"Outgoing changes in {self.root()} from branch {branch_name}"
+            err = f"Outgoing changes in {self.root()} from branch {branch_name} ({self._origin.name}/{branch_name}..{branch_name})"
             return err
 
         return None
