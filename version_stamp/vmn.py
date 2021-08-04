@@ -130,6 +130,12 @@ class IVersionsStamper(object):
             self.template = IVersionsStamper.parse_template(
                 stamp_utils.VMN_DEFAULT_TEMPLATE
             )
+            self.template_err_str = \
+                "Failed to parse template: " \
+                f"{conf['template']}. " \
+                f"Falling back to default one: " \
+                f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
+
             self.bad_format_template = True
 
         self._raw_configured_deps = conf["raw_configured_deps"]
@@ -304,7 +310,7 @@ class IVersionsStamper(object):
         return vmn_version
 
     @staticmethod
-    def parse_template(template: str) -> None:
+    def parse_template(template: str) -> object:
         match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
 
         gdict = match.groupdict()
@@ -1165,11 +1171,7 @@ def _stamp_version(
         raise RuntimeError("Refusing to stamp with old vmn. Please upgrade")
 
     if versions_be_ifc.bad_format_template:
-        LOGGER.warning(
-            "The template in the app's config file is "
-            "in bad format. Please updae it to the new format. Example: "
-            f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
-        )
+        LOGGER.warning(versions_be_ifc.template_err_str)
 
     while retries:
         retries -= 1
