@@ -127,7 +127,9 @@ class IVersionsStamper(object):
             self.template = IVersionsStamper.parse_template(conf["template"])
             self.bad_format_template = False
         except:
-            self.template = stamp_utils.VMN_DEFAULT_TEMPLATE
+            self.template = IVersionsStamper.parse_template(
+                stamp_utils.VMN_DEFAULT_TEMPLATE
+            )
             self.bad_format_template = True
 
         self._raw_configured_deps = conf["raw_configured_deps"]

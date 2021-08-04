@@ -590,8 +590,12 @@ def test_basic_root_show(app_layout, capfd):
     assert out_dict["services"][app_name] == "0.2.2"
 
 
-def test_backward_compatability_with_previous_vmn(app_layout):
+def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     app_layout.stamp_with_previous_vmn()
+    out, err = capfd.readouterr()
+    ver_info, _ = _stamp_app("app1", "major")
+    out, err = capfd.readouterr()
+    assert "[INFO] 0.0.3\n" == out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
