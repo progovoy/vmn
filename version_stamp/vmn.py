@@ -130,11 +130,12 @@ class IVersionsStamper(object):
             self.template = IVersionsStamper.parse_template(
                 stamp_utils.VMN_DEFAULT_TEMPLATE
             )
-            self.template_err_str = \
-                "Failed to parse template: " \
-                f"{conf['template']}. " \
-                f"Falling back to default one: " \
+            self.template_err_str = (
+                "Failed to parse template: "
+                f"{conf['template']}. "
+                f"Falling back to default one: "
                 f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
+            )
 
             self.bad_format_template = True
 
