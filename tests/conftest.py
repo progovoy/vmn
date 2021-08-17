@@ -112,49 +112,61 @@ class FSAppLayoutFixture(object):
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
 
-    def write_file_commit_and_push(self, repo_name, file_relative_path, content):
+    def revert_changes(self, repo_name):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
+        if self._repos[repo_name]["type"] != "git":
+            raise RuntimeError(
+                f"Unsupported repo type: "
+                f"{self._repos[repo_name]['type']}"
+            )
+
+        client = Repo(self._repos[repo_name]["path"])
+        client.git.reset('--hard')
+        client.close()
+
+    def write_file_commit_and_push(
+            self,
+            repo_name,
+            file_relative_path,
+            content,
+            commit=True,
+            push=True,
+    ):
+        if repo_name not in self._repos:
+            raise RuntimeError("repo {0} not found".format(repo_name))
+        if self._repos[repo_name]["type"] != "git":
+            raise RuntimeError(
+                f"Unsupported repo type: "
+                f"{self._repos[repo_name]['type']}"
+            )
 
         path = os.path.join(self._repos[repo_name]["path"], file_relative_path)
         dir_path = os.path.dirname(path)
+        pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
 
-        if not os.path.isfile(path):
-            pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
+        with open(path, "a+") as f:
+            f.write(content)
 
-            with open(path, "w") as f:
-                f.write(content)
+        if not commit:
+            return
 
-            if self._repos[repo_name]["type"] == "git":
-                client = Repo(self._repos[repo_name]["path"])
-                client.index.add([path])
-                client.index.commit("Added file {0}".format(path))
-                self._repos[repo_name]["changesets"] = {
-                    "hash": client.head.commit.hexsha,
-                    "vcs_type": "git",
-                }
-                client.git.push(
-                    "--set-upstream",
-                    "origin",
-                    "refs/heads/{0}".format(client.active_branch.name),
-                )
-        else:
-            with open(path, "w") as f:
-                f.write(content)
+        client = Repo(self._repos[repo_name]["path"])
+        client.index.add([path])
+        client.index.commit("Added file {0}".format(path))
+        self._repos[repo_name]["changesets"] = {
+            "hash": client.head.commit.hexsha,
+            "vcs_type": "git",
+        }
 
-            if self._repos[repo_name]["type"] == "git":
-                client = Repo(self._repos[repo_name]["path"])
-                client.index.add([path])
-                client.index.commit("Added file {0}".format(path))
-                self._repos[repo_name]["changesets"] = {
-                    "hash": client.head.commit.hexsha,
-                    "vcs_type": "git",
-                }
-                client.git.push(
-                    "--set-upstream",
-                    "origin",
-                    "refs/heads/{0}".format(client.active_branch.name),
-                )
+        if not push:
+            return
+
+        client.git.push(
+            "--set-upstream",
+            "origin",
+            "refs/heads/{0}".format(client.active_branch.name),
+        )
 
         client.close()
 

@@ -367,9 +367,6 @@ class IVersionsStamper(object):
             version, self.template, self._hide_zero_hotfix
         )
 
-    def find_matching_version(self, version, prerelease, prerelease_count):
-        raise NotImplementedError("Please implement this method")
-
     def create_config_files(self, params):
         # If there is no file - create it
         if not os.path.isfile(self._app_conf_path):
@@ -622,16 +619,6 @@ class VersionControlStamper(IVersionsStamper):
         initial_prerelease,
         initial_prerelease_count,
     ):
-        for repo in self._flat_configured_deps:
-            if repo in self.actual_deps_state:
-                continue
-
-            raise RuntimeError(
-                "A dependency repository was specified in "
-                "conf.yml file. However repo: {0} does not exist. "
-                "Please clone and rerun".format(os.path.join(self.backend.root(), repo))
-            )
-
         # TODO: verify that can be called multiple times with same result
         current_version, prerelease, prerelease_count = self.gen_app_version(
             initial_version,
@@ -909,9 +896,6 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
-    if vmn_ctx.args.pull:
-        vmn_ctx.vcs.retrieve_remote_changes()
-
     path = os.path.join(vmn_ctx.params["root_path"], ".vmn", "vmn.init")
     if not vmn_ctx.vcs.backend.is_path_tracked(path):
         # Backward compatability with vmn 0.3.9 code:
@@ -956,6 +940,15 @@ def handle_stamp(vmn_ctx):
     err = _safety_validation(vmn_ctx.vcs)
     if err:
         return 1
+
+    if vmn_ctx.args.pull:
+        try:
+            vmn_ctx.vcs.retrieve_remote_changes()
+        except Exception as exc:
+            LOGGER.error("Failed to pull, run with --debug for more details")
+            LOGGER.debug("Logged Exception message:", exc_info=True)
+
+            return 1
 
     try:
         version = _stamp_version(
@@ -1020,6 +1013,7 @@ def handle_show(vmn_ctx):
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
     vmn_ctx.params["cmdline_template"] = vmn_ctx.args.template
 
+    # TODO: allow here to be in dirty state
     err = _safety_validation(vmn_ctx.vcs, allow_detached_head=True)
     if err:
         return 1
@@ -1033,7 +1027,7 @@ def handle_goto(vmn_ctx):
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
-def _safety_validation(versions_be_ifc, allow_detached_head=False):
+def _safety_validation(versions_be_ifc, allow_detached_head=False, verify_repos_exist_locally=True):
     be = versions_be_ifc.backend
 
     err = be.check_for_git_user_config()
@@ -1047,17 +1041,59 @@ def _safety_validation(versions_be_ifc, allow_detached_head=False):
         LOGGER.info("{0}. Exiting".format(err))
         return err
 
-    if allow_detached_head:
-        if be.in_detached_head():
+    if be.in_detached_head():
+        if not allow_detached_head:
+            LOGGER.error('In detached head. Exiting')
+            return 1
+    else:
+        # Outgoing changes cannot be in detached head
+        err = be.check_for_outgoing_changes()
+        if err:
+            LOGGER.info("{0}. Exiting".format(err))
             return err
 
-    # TODO: think again about outgoing changes in detached head
-    err = be.check_for_outgoing_changes()
-    if err:
-        LOGGER.info("{0}. Exiting".format(err))
-        return err
+    if "name" not in versions_be_ifc.current_version_info["stamping"]["app"]:
+        return 0
 
-    return err
+    for repo in versions_be_ifc._flat_configured_deps:
+        if not verify_repos_exist_locally:
+            break
+
+        if repo in versions_be_ifc.actual_deps_state:
+            continue
+
+        LOGGER.error(
+            "A dependency repository was specified in "
+            "conf.yml file. However repo: {0} does not exist. "
+            "Please clone and rerun".format(os.path.join(
+                versions_be_ifc.backend.root(), repo
+            ))
+        )
+
+        return 1
+
+    err = 0
+    full_path = versions_be_ifc._root_path
+    for path in versions_be_ifc.actual_deps_state:
+        if path == ".":
+            continue
+
+        be, err = stamp_utils.get_client(
+            os.path.join(full_path, path)
+        )
+
+        err = be.check_for_pending_changes()
+        if err:
+            LOGGER.info("{0}. Exiting".format(err))
+            return err
+
+        if not be.in_detached_head():
+            err = be.check_for_outgoing_changes()
+            if err:
+                LOGGER.info("{0}. Exiting".format(err))
+                return err
+
+    return 0
 
 
 def _init_app(versions_be_ifc, params, starting_version):
@@ -1325,7 +1361,12 @@ def _retrieve_version_info(params, vcs, verstr):
 
             return None, None
 
-    err = _safety_validation(vcs, allow_detached_head=True)
+    # TODO:: validate this absolutely necessary here
+    err = _safety_validation(
+        vcs,
+        allow_detached_head=True,
+        verify_repos_exist_locally=False
+    )
     if err:
         return None, None
 
