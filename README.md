@@ -174,5 +174,5 @@ however running:
 In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`.
 
 #### Configuration: extra_info
-Setting this to `true` will make `vmn` output lots of usefull data about the host on which `vmn` has stamped the version.
+Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.
 This feature is not very popular and may be remove / altered in the future
