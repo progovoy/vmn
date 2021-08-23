@@ -176,6 +176,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 1
     out, err = capfd.readouterr()
     assert '[INFO] Pending changes in' in out
+    assert 'repo1' in out
     app_layout.revert_changes('repo1')
 
     app_layout.write_file_commit_and_push(
@@ -190,6 +191,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 1
     out, err = capfd.readouterr()
     assert '[INFO] Outgoing changes in' in out
+    assert 'repo1' in out
     app_layout.write_file_commit_and_push(
         "repo1",
         "f1.file",
