@@ -99,6 +99,7 @@ class FSAppLayoutFixture(object):
         base_cmd = [
             "docker",
             "run",
+            "--init",
             "-t",
             f"-u{os.getuid()}:{os.getgid()}",
             "-v",
@@ -117,28 +118,26 @@ class FSAppLayoutFixture(object):
             raise RuntimeError("repo {0} not found".format(repo_name))
         if self._repos[repo_name]["type"] != "git":
             raise RuntimeError(
-                f"Unsupported repo type: "
-                f"{self._repos[repo_name]['type']}"
+                f"Unsupported repo type: " f"{self._repos[repo_name]['type']}"
             )
 
         client = Repo(self._repos[repo_name]["path"])
-        client.git.reset('--hard')
+        client.git.reset("--hard")
         client.close()
 
     def write_file_commit_and_push(
-            self,
-            repo_name,
-            file_relative_path,
-            content,
-            commit=True,
-            push=True,
+        self,
+        repo_name,
+        file_relative_path,
+        content,
+        commit=True,
+        push=True,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
         if self._repos[repo_name]["type"] != "git":
             raise RuntimeError(
-                f"Unsupported repo type: "
-                f"{self._repos[repo_name]['type']}"
+                f"Unsupported repo type: " f"{self._repos[repo_name]['type']}"
             )
 
         path = os.path.join(self._repos[repo_name]["path"], file_relative_path)

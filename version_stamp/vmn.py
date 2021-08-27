@@ -599,7 +599,7 @@ class VersionControlStamper(IVersionsStamper):
             "stamping": {
                 "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"])
             },
-            "vmn_info": self.current_version_info["vmn_info"]
+            "vmn_info": self.current_version_info["vmn_info"],
         }
         ver_info["stamping"]["app"]["_version"] = props["version"]
         ver_info["stamping"]["app"]["prerelease"] = "release"
@@ -643,7 +643,7 @@ class VersionControlStamper(IVersionsStamper):
             release_mode = "prerelease"
 
         if prerelease is None:
-            prerelease = 'release'
+            prerelease = "release"
 
         self.update_stamping_info(
             info,
@@ -799,7 +799,7 @@ class VersionControlStamper(IVersionsStamper):
                 "stamping": {
                     "root_app": self.current_version_info["stamping"]["root_app"]
                 },
-                "vmn_info": self.current_version_info["vmn_info"]
+                "vmn_info": self.current_version_info["vmn_info"],
             }
             msgs.append(root_app_msg)
             tag = f"{self._root_app_name}_{root_app_version}"
@@ -1032,7 +1032,9 @@ def handle_goto(vmn_ctx):
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
-def _safety_validation(versions_be_ifc, allow_detached_head=False, verify_repos_exist_locally=True):
+def _safety_validation(
+    versions_be_ifc, allow_detached_head=False, verify_repos_exist_locally=True
+):
     be = versions_be_ifc.backend
 
     err = be.check_for_git_user_config()
@@ -1048,7 +1050,7 @@ def _safety_validation(versions_be_ifc, allow_detached_head=False, verify_repos_
 
     if be.in_detached_head():
         if not allow_detached_head:
-            LOGGER.error('In detached head. Exiting')
+            LOGGER.error("In detached head. Exiting")
             return 1
     else:
         # Outgoing changes cannot be in detached head
@@ -1070,9 +1072,9 @@ def _safety_validation(versions_be_ifc, allow_detached_head=False, verify_repos_
         LOGGER.error(
             "A dependency repository was specified in "
             "conf.yml file. However repo: {0} does not exist. "
-            "Please clone and rerun".format(os.path.join(
-                versions_be_ifc.backend.root(), repo
-            ))
+            "Please clone and rerun".format(
+                os.path.join(versions_be_ifc.backend.root(), repo)
+            )
         )
 
         return 1
@@ -1083,9 +1085,7 @@ def _safety_validation(versions_be_ifc, allow_detached_head=False, verify_repos_
         if path == ".":
             continue
 
-        be, err = stamp_utils.get_client(
-            os.path.join(full_path, path)
-        )
+        be, err = stamp_utils.get_client(os.path.join(full_path, path))
 
         err = be.check_for_pending_changes()
         if err:
@@ -1368,9 +1368,7 @@ def _retrieve_version_info(params, vcs, verstr):
 
     # TODO:: validate this absolutely necessary here
     err = _safety_validation(
-        vcs,
-        allow_detached_head=True,
-        verify_repos_exist_locally=False
+        vcs, allow_detached_head=True, verify_repos_exist_locally=False
     )
     if err:
         return None, None
