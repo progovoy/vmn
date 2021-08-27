@@ -313,6 +313,7 @@ def test_rc_stamping(app_layout):
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-rc1"
+    assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(
@@ -322,6 +323,7 @@ def test_rc_stamping(app_layout):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-rc2"
+    assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(
@@ -331,6 +333,7 @@ def test_rc_stamping(app_layout):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-beta1"
+    assert data["prerelease"] == "beta"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -338,11 +341,34 @@ def test_rc_stamping(app_layout):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-beta2"
+    assert data["prerelease"] == "beta"
 
     ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
+    assert data["prerelease"] == "release"
+
+    for item in ["2.0.0", "3.0.0"]:
+        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            release_mode="major",
+            prerelease="rc",
+        )
+        assert err == 0
+
+        assert "vmn_info" in ver_info
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == f"{item}-rc1"
+        assert data["prerelease"] == "rc"
+
+        ver_info, _ = _release_app(app_layout.app_name, f"{item}-rc1")
+
+        assert "vmn_info" in ver_info
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == item
+        assert data["prerelease"] == "release"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -353,7 +379,8 @@ def test_rc_stamping(app_layout):
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.4.0"
+    assert data["_version"] == "3.1.0"
+    assert data["prerelease"] == "release"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -365,7 +392,8 @@ def test_rc_stamping(app_layout):
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.5.0-rc1"
+    assert data["_version"] == "3.2.0-rc1"
+    assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -377,13 +405,15 @@ def test_rc_stamping(app_layout):
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.6.0-rc1"
+    assert data["_version"] == "3.3.0-rc1"
+    assert data["prerelease"] == "rc"
 
     err, ver_info, _ = _stamp_app(app_layout.app_name)
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.6.0-rc1"
+    assert data["_version"] == "3.3.0-rc1"
+    assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -391,7 +421,22 @@ def test_rc_stamping(app_layout):
     assert err == 0
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.6.0-rc2"
+    assert data["_version"] == "3.3.0-rc2"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode="minor",
+        prerelease="release",
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.4.0"
+    assert data["prerelease"] == "release"
+    assert not data["prerelease_count"]
 
 
 def test_rc_goto(app_layout, capfd):

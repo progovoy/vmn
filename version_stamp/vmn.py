@@ -598,7 +598,8 @@ class VersionControlStamper(IVersionsStamper):
         ver_info = {
             "stamping": {
                 "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"])
-            }
+            },
+            "vmn_info": self.current_version_info["vmn_info"]
         }
         ver_info["stamping"]["app"]["_version"] = props["version"]
         ver_info["stamping"]["app"]["prerelease"] = "release"
@@ -640,6 +641,9 @@ class VersionControlStamper(IVersionsStamper):
         release_mode = self._release_mode
         if prerelease is not None:
             release_mode = "prerelease"
+
+        if prerelease is None:
+            prerelease = 'release'
 
         self.update_stamping_info(
             info,
@@ -794,7 +798,8 @@ class VersionControlStamper(IVersionsStamper):
             root_app_msg = {
                 "stamping": {
                     "root_app": self.current_version_info["stamping"]["root_app"]
-                }
+                },
+                "vmn_info": self.current_version_info["vmn_info"]
             }
             msgs.append(root_app_msg)
             tag = f"{self._root_app_name}_{root_app_version}"
