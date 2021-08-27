@@ -424,19 +424,20 @@ def test_rc_stamping(app_layout):
     assert data["_version"] == "3.3.0-rc2"
     assert data["prerelease"] == "rc"
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+    for item in ["3.4.0", "3.5.0"]:
+        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-        prerelease="release",
-    )
-    assert err == 0
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name,
+            release_mode="minor",
+            prerelease="release",
+        )
+        assert err == 0
 
-    data = ver_info["stamping"]["app"]
-    assert data["_version"] == "3.4.0"
-    assert data["prerelease"] == "release"
-    assert not data["prerelease_count"]
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == item
+        assert data["prerelease"] == "release"
+        assert not data["prerelease_count"]
 
 
 def test_rc_goto(app_layout, capfd):
