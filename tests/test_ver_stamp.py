@@ -686,11 +686,11 @@ def test_basic_root_show(app_layout, capfd):
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.1"
 
-    try:
-        err, _, _ = _stamp_app(app_name)
-        assert err == 0
-    except AssertionError:
-        pass
+    err, _, _ = _stamp_app(app_name)
+    assert err == 1
+    out, err = capfd.readouterr()
+    assert '[ERROR] When stamping from a previous release version, ' \
+           'a release mode must be specified\n' == out
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
     assert err == 0
