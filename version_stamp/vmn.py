@@ -1646,9 +1646,7 @@ def main(command_line=None):
     try:
         return vmn_run(command_line)
     except Exception as exc:
-        LOGGER.info(
-            "vmn_run raised exception. Run vmn --debug for details"
-        )
+        LOGGER.info("vmn_run raised exception. Run vmn --debug for details")
         LOGGER.debug("Exception info: ", exc_info=True)
 
         return 1
