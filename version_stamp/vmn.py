@@ -191,10 +191,11 @@ class IVersionsStamper(object):
         self, initial_version, initial_prerelease, initial_prerelease_count
     ):
         if initial_prerelease == "release" and self._release_mode is None:
-            raise RuntimeError(
+            LOGGER.error(
                 "When stamping from a previous release version, "
                 "a release mode must be specified"
             )
+            raise RuntimeError()
 
         match = re.search(stamp_utils.VMN_REGEX, initial_version)
         gdict = match.groupdict()
@@ -571,9 +572,10 @@ class VersionControlStamper(IVersionsStamper):
         release_tag_name = f'{self._name.replace("/", "-")}_{props["version"]}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, release_tag_name)
         if match is None:
-            raise RuntimeError(
+            LOGGER.error(
                 f"Tag {release_tag_name} doesn't comply to vmn version format"
             )
+            raise RuntimeError()
 
         tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(
             tag_name
@@ -678,10 +680,11 @@ class VersionControlStamper(IVersionsStamper):
             return None
 
         if "version" not in self.ver_info_form_repo["stamping"]["root_app"]:
-            raise RuntimeError(
+            LOGGER.error(
                 f"Root app name is {self._root_app_name} and app name is {self._name}. "
                 f"However no version information for root was found"
             )
+            raise RuntimeError()
 
         old_version = self.ver_info_form_repo["stamping"]["root_app"]["version"]
 
@@ -1155,7 +1158,8 @@ def _init_app(versions_be_ifc, params, starting_version):
         starting_version, "release", {}, root_app_version
     )
     if err:
-        raise RuntimeError("Failed to init app")
+        LOGGER.error("Failed to init app")
+        raise RuntimeError()
 
     return 0
 
@@ -1193,7 +1197,8 @@ def _stamp_version(
         > pversion.parse(version_mod.version)
     )
     if newer_stamping:
-        raise RuntimeError("Refusing to stamp with old vmn. Please upgrade")
+        LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
+        raise RuntimeError()
 
     if versions_be_ifc.bad_format_template:
         LOGGER.warning(versions_be_ifc.template_err_str)
@@ -1248,7 +1253,8 @@ def _stamp_version(
             break
 
     if not stamped:
-        raise RuntimeError("Failed to stamp")
+        LOGGER.error("Failed to stamp")
+        raise RuntimeError()
 
     verstr = versions_be_ifc.gen_verstr(current_version, prerelease, prerelease_count)
 
@@ -1529,9 +1535,11 @@ def _goto_version(deps, root):
             LOGGER.warning(msg)
 
     if err:
-        raise RuntimeError(
-            "Failed to update one or more " "of the required repos. See log above"
+        LOGGER.error(
+            "Failed to update one or more "
+            "of the required repos. See log above"
         )
+        raise RuntimeError()
 
 
 def build_world(name, working_dir, root_context, release_mode, prerelease):
@@ -1665,9 +1673,11 @@ def vmn_run(command_line):
 
 def validate_app_name(args):
     if args.name.startswith("/"):
-        raise RuntimeError("App name cannot start with {0}".format("/"))
+        LOGGER.error("App name cannot start with /")
+        raise RuntimeError()
     if "-" in args.name:
-        raise RuntimeError("App name cannot contain {0}".format("-"))
+        LOGGER.error("App name cannot start with -")
+        raise RuntimeError()
 
 
 def parse_user_commands(command_line):

@@ -135,7 +135,8 @@ class VersionControlBackend(object):
 
         match = re.search(VMN_TAG_REGEX, vmn_tag)
         if match is None:
-            raise RuntimeError(f"Tag {vmn_tag} doesn't comply to vmn version format")
+            LOGGER.error(f"Tag {vmn_tag} doesn't comply to vmn version format")
+            raise RuntimeError()
 
         gdict = match.groupdict()
         ret["app_name"] = gdict["app_name"].replace("-", "/")
@@ -245,6 +246,7 @@ class GitBackend(VersionControlBackend):
                     "up to date already. How can it be? "
                 )
             else:
+                LOGGER.error("Push has failed. Please verify that 'git push' works")
                 raise Warning(
                     f"Push has failed because: {ret[0].summary}.\n"
                     "Please verify that 'git push' works"
@@ -360,7 +362,8 @@ class GitBackend(VersionControlBackend):
             active_branch = self._be.active_branch.name
         else:
             if raise_on_detached_head:
-                raise RuntimeError("Active branch cannot be found in detached head")
+                LOGGER.error("Active branch cannot be found in detached head")
+                raise RuntimeError()
 
             out = self._be.git.branch("--contains", self._be.head.commit.hexsha)
             out = out.split("\n")[1:]
@@ -426,7 +429,8 @@ class GitBackend(VersionControlBackend):
 
     def revert_vmn_changes(self, tags=[]):
         if self._be.active_branch.commit.author.name != VMN_USER_NAME:
-            raise RuntimeError("BUG: Will not revert non-vmn commit.")
+            LOGGER.error("BUG: Will not revert non-vmn commit.")
+            raise RuntimeError()
 
         self._be.git.reset("--hard", "HEAD~1")
         for tag in tags:
@@ -458,7 +462,8 @@ class GitBackend(VersionControlBackend):
         for tag in app_tags:
             match = re.search(regex, tag)
             if match is None:
-                raise RuntimeError(f"Tag {tag} doesn't comply to vmn version format")
+                LOGGER.error(f"Tag {tag} doesn't comply to vmn version format")
+                raise RuntimeError()
 
             gdict = match.groupdict()
 
