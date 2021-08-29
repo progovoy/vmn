@@ -29,6 +29,9 @@ LOGGER = stamp_utils.init_stamp_logger()
 class VMNContextMAnagerManager(object):
     def __init__(self, command_line):
         self.args = parse_user_commands(command_line)
+        global LOGGER
+        LOGGER = stamp_utils.init_stamp_logger(self.args.debug)
+
         cwd = os.getcwd()
         if "VMN_WORKING_DIR" in os.environ:
             cwd = os.environ["VMN_WORKING_DIR"]
@@ -63,6 +66,9 @@ class VMNContextMAnagerManager(object):
             initial_params["prerelease"],
         )
 
+        if params is None:
+            raise RuntimeError("params initialization failed")
+
         vmn_path = os.path.join(params["root_path"], ".vmn")
         lock_file_path = os.path.join(vmn_path, "vmn.lock")
         pathlib.Path(os.path.dirname(lock_file_path)).mkdir(parents=True, exist_ok=True)
@@ -70,9 +76,6 @@ class VMNContextMAnagerManager(object):
         self.params = params
         self.vcs = None
         self.lock_file_path = lock_file_path
-
-        global LOGGER
-        LOGGER = stamp_utils.init_stamp_logger(self.args.debug)
 
     def __enter__(self):
         self.lock.acquire()
@@ -1640,10 +1643,19 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
 
 
 def main(command_line=None):
-    return vmn_run(command_line)
+    try:
+        return vmn_run(command_line)
+    except Exception as exc:
+        LOGGER.info(
+            "vmn_run raised exception. Run vmn --debug for details"
+        )
+        LOGGER.debug("Exception info: ", exc_info=True)
+
+        return 1
 
 
 def vmn_run(command_line):
+    err = 0
     with VMNContextMAnagerManager(command_line) as vmn_ctx:
         if vmn_ctx.args.command == "init":
             err = handle_init(vmn_ctx)
