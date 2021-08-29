@@ -689,8 +689,10 @@ def test_basic_root_show(app_layout, capfd):
     err, _, _ = _stamp_app(app_name)
     assert err == 1
     out, err = capfd.readouterr()
-    assert '[ERROR] When stamping from a previous release version, ' \
-           'a release mode must be specified\n' == out
+    assert (
+        "[ERROR] When stamping from a previous release version, "
+        "a release mode must be specified\n" == out
+    )
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
     assert err == 0

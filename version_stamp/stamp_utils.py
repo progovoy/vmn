@@ -311,7 +311,9 @@ class GitBackend(VersionControlBackend):
             self._be.config_reader().get_value("user", "email")
         except (configparser.NoSectionError, configparser.NoOptionError):
             # git user name or email configuration is missing, add default override
-            self._be.git.set_persistent_git_options(c=[f'user.name="{VMN_USER_NAME}"', f'user.email="{VMN_USER_NAME}"'])
+            self._be.git.set_persistent_git_options(
+                c=[f'user.name="{VMN_USER_NAME}"', f'user.email="{VMN_USER_NAME}"']
+            )
 
     def check_for_pending_changes(self):
         if self._be.is_dirty():

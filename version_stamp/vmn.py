@@ -572,9 +572,7 @@ class VersionControlStamper(IVersionsStamper):
         release_tag_name = f'{self._name.replace("/", "-")}_{props["version"]}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, release_tag_name)
         if match is None:
-            LOGGER.error(
-                f"Tag {release_tag_name} doesn't comply to vmn version format"
-            )
+            LOGGER.error(f"Tag {release_tag_name} doesn't comply to vmn version format")
             raise RuntimeError()
 
         tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(
@@ -1532,8 +1530,7 @@ def _goto_version(deps, root):
 
     if err:
         LOGGER.error(
-            "Failed to update one or more "
-            "of the required repos. See log above"
+            "Failed to update one or more " "of the required repos. See log above"
         )
         raise RuntimeError()
 
