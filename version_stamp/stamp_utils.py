@@ -305,14 +305,13 @@ class GitBackend(VersionControlBackend):
     def in_detached_head(self):
         return self._be.head.is_detached
 
-    def check_for_git_user_config(self):
+    def add_git_user_cfg_if_missing(self):
         try:
             self._be.config_reader().get_value("user", "name")
             self._be.config_reader().get_value("user", "email")
-
-            return None
         except (configparser.NoSectionError, configparser.NoOptionError):
-            return "git user name or email configuration is missing, " "can't commit"
+            # git user name or email configuration is missing, add default override
+            self._be.git.set_persistent_git_options(c=[f'user.name="{VMN_USER_NAME}"', f'user.email="{VMN_USER_NAME}"'])
 
     def check_for_pending_changes(self):
         if self._be.is_dirty():

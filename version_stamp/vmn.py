@@ -1023,11 +1023,7 @@ def _safety_validation(
 ):
     be = versions_be_ifc.backend
 
-    err = be.check_for_git_user_config()
-    # TODO: verify err from same type across all functions
-    if err:
-        LOGGER.info("{0}. Exiting".format(err))
-        return err
+    be.add_git_user_cfg_if_missing()
 
     err = be.check_for_pending_changes()
     if err:
