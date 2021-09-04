@@ -906,9 +906,10 @@ def handle_stamp(vmn_ctx):
         return 0
 
     if 'detached' in status['state']:
-        LOGGER.error('In detached head')
+        LOGGER.error('In detached head. Will not stamp new version')
         return 1
 
+    # We didn't find any existing version
     if vmn_ctx.args.pull:
         try:
             vmn_ctx.vcs.retrieve_remote_changes()
@@ -1247,12 +1248,6 @@ def backward_compatible_initialized_check(root_path):
 def _stamp_version(
     versions_be_ifc, pull, initial_version, initial_prerelease, initial_prerelease_count
 ):
-    # Here we one of the following:
-    # tracked & not init only => normal stamp
-    # not tracked & init only => only init a new app
-    # not tracked & not init only => init and stamp a new app
-
-    # We didn't find any existing version
     stamped = False
     retries = 3
     override_initial_version = initial_version
