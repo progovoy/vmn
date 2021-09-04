@@ -1372,7 +1372,7 @@ def show(vcs, params, verstr=None):
             out = data["version"]
 
         if optional_status & status['state']:
-            out = f"{out} (dirty)"
+            out = f"{out} (dirty): {optional_status & status['state']}"
 
         print(out)
 
@@ -1388,6 +1388,9 @@ def show(vcs, params, verstr=None):
         out = data["_version"]
     else:
         out = data["version"]
+
+    if optional_status & status['state']:
+        out = f"{out} (dirty): {optional_status & status['state']}"
 
     print(out)
 
