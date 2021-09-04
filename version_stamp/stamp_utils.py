@@ -201,6 +201,7 @@ class GitBackend(VersionControlBackend):
         VersionControlBackend.__init__(self, "git")
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
+        self.add_git_user_cfg_if_missing()
         self._origin = self._be.remote(name="origin")
 
         if revert:
