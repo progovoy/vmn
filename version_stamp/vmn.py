@@ -352,7 +352,7 @@ class IVersionsStamper(object):
         try:
             data = toml.load(file_path)
             data["package"]["version"] = verstr
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 toml.dump(data, f)
         except IOError as e:
             LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
