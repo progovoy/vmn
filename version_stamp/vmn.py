@@ -11,7 +11,7 @@ import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
 import re
-import toml
+import tomlkit
 from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
@@ -350,10 +350,13 @@ class IVersionsStamper(object):
         backend_conf = self._version_backends["cargo"]
         file_path = os.path.join(self._root_path, backend_conf["path"])
         try:
-            data = toml.load(file_path)
+            with open(file_path, 'r') as f:
+                data = tomlkit.loads(f.read())
+
             data["package"]["version"] = verstr
             with open(file_path, "w") as f:
-                toml.dump(data, f)
+                data = tomlkit.dumps(data)
+                f.write(data)
         except IOError as e:
             LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
             LOGGER.debug("Exception info: ", exc_info=True)
