@@ -350,7 +350,7 @@ class IVersionsStamper(object):
         backend_conf = self._version_backends["cargo"]
         file_path = os.path.join(self._root_path, backend_conf["path"])
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 data = tomlkit.loads(f.read())
 
             data["package"]["version"] = verstr
