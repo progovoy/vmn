@@ -2,6 +2,7 @@ import sys
 import os
 import yaml
 import shutil
+import toml
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
@@ -707,6 +708,58 @@ def test_basic_root_show(app_layout, capfd):
     assert app_name == out_dict["latest_service"]
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.2"
+
+
+def test_version_backends(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "Cargo.toml",
+        toml.dumps(
+            {
+                "package": {
+                    "name": "test_app",
+                    "version": "some ignored string",
+                }
+            }
+        ),
+    )
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "version_backends": {"cargo": {"path": "Cargo.toml"}},
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    full_path = os.path.join(
+        params["root_path"],
+        params["version_backends"]["cargo"]["path"],
+    )
+
+    with open(full_path, "r") as f:
+        data = toml.load(f)
+        assert data["package"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
 
 
 def test_backward_compatability_with_previous_vmn(app_layout, capfd):

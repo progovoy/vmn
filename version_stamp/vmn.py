@@ -11,6 +11,7 @@ import pathlib
 from filelock import FileLock
 from multiprocessing import Pool
 import re
+import toml
 from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
@@ -147,6 +148,8 @@ class IVersionsStamper(object):
         self._flat_configured_deps = self.get_deps_changesets()
         # TODO: refactor
         self._hide_zero_hotfix = conf["hide_zero_hotfix"]
+
+        self._version_backends = conf["version_backends"]
 
         # TODO: this is ugly
         root_context = self._root_app_name == self._name
@@ -314,24 +317,58 @@ class IVersionsStamper(object):
 
         return vmn_version
 
-    @staticmethod
-    def parse_template(template: str) -> object:
-        match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
-
-        gdict = match.groupdict()
-
-        return gdict
-
-    @staticmethod
     def write_version_to_file(
-        file_path: str,
+        self,
         version_number: str,
         prerelease: str,
         prerelease_count: dict,
     ) -> None:
+        self._write_version_to_vmn_version_file(
+            prerelease, prerelease_count, version_number
+        )
+
+        if not self._version_backends:
+            return
+
+        verstr = self.gen_verstr(version_number, prerelease, prerelease_count)
+        verstr = self.get_be_formatted_version(verstr)
+        for backend in self._version_backends:
+            try:
+                if backend == "vmn_version_file":
+                    LOGGER.warning(
+                        "Remove vmn_version_file version backend from the configuration"
+                    )
+                    continue
+
+                handler = getattr(self, f"_write_version_to_{backend}")
+                handler(verstr)
+            except AttributeError:
+                LOGGER.warning(f"Unsupported version backend {backend}")
+                continue
+
+    def _write_version_to_cargo(self, verstr):
+        backend_conf = self._version_backends["cargo"]
+        file_path = os.path.join(self._root_path, backend_conf["path"])
+        try:
+            data = toml.load(file_path)
+            data["package"]["version"] = verstr
+            with open(file_path, 'w') as f:
+                toml.dump(data, f)
+        except IOError as e:
+            LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
+
+    def _write_version_to_vmn_version_file(
+        self, prerelease, prerelease_count, version_number
+    ):
+        file_path = self._version_file_path
         if prerelease is None:
             prerelease = "release"
-
         # this method will write the stamped ver of an app to a file,
         # weather the file pre exists or not
         try:
@@ -350,6 +387,14 @@ class IVersionsStamper(object):
         except Exception as e:
             LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
+
+    @staticmethod
+    def parse_template(template: str) -> object:
+        match = re.search(stamp_utils.VMN_TEMPLATE_REGEX, template)
+
+        gdict = match.groupdict()
+
+        return gdict
 
     def get_deps_changesets(self):
         flat_dependency_repos = []
@@ -481,7 +526,7 @@ class VersionControlStamper(IVersionsStamper):
     @staticmethod
     def get_version_number_from_file(version_file_path) -> str or None:
         if not os.path.exists(version_file_path):
-            return  (None, None, None)
+            return (None, None, None)
 
         with open(version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
@@ -616,8 +661,7 @@ class VersionControlStamper(IVersionsStamper):
             initial_prerelease_count,
         )
 
-        VersionControlStamper.write_version_to_file(
-            file_path=self._version_file_path,
+        self.write_version_to_file(
             version_number=current_version,
             prerelease=prerelease,
             prerelease_count=prerelease_count,
@@ -749,6 +793,11 @@ class VersionControlStamper(IVersionsStamper):
             ]
         )
 
+        for backend in self._version_backends:
+            backend_conf = self._version_backends[backend]
+            file_path = os.path.join(self._root_path, backend_conf["path"])
+            version_files.append(file_path)
+
         if self._root_app_name is not None:
             tmp = self.get_files_to_add_to_index([self._root_app_conf_path])
             if tmp:
@@ -835,7 +884,7 @@ class VersionControlStamper(IVersionsStamper):
 
 def handle_init(vmn_ctx):
     expected_status = {
-        'repos_exist_locally',
+        "repos_exist_locally",
     }
     try:
         status = _get_repo_status(vmn_ctx.vcs, expected_status)
@@ -880,33 +929,30 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
-    optional_status = {
-        'modified',
-        'detached'
-    }
+    optional_status = {"modified", "detached"}
     expected_status = {
-        'repos_exist_locally',
-        'repo_tracked',
-        'app_tracked',
+        "repos_exist_locally",
+        "repo_tracked",
+        "app_tracked",
     }
     try:
         status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     except:
         return 1
 
-    if 'modified' not in status['state']:
+    if "modified" not in status["state"]:
         # Good we have found an existing version matching
         # the actual_deps_state
         version = vmn_ctx.vcs.get_be_formatted_version(
-            status['matched_version_info']["stamping"]["app"]["_version"]
+            status["matched_version_info"]["stamping"]["app"]["_version"]
         )
 
         LOGGER.info(version)
 
         return 0
 
-    if 'detached' in status['state']:
-        LOGGER.error('In detached head. Will not stamp new version')
+    if "detached" in status["state"]:
+        LOGGER.error("In detached head. Will not stamp new version")
         return 1
 
     # We didn't find any existing version
@@ -947,14 +993,14 @@ def handle_stamp(vmn_ctx):
 
 def handle_release(vmn_ctx):
     expected_status = {
-        'repos_exist_locally',
-        'repo_tracked',
-        'app_tracked',
+        "repos_exist_locally",
+        "repo_tracked",
+        "app_tracked",
     }
     optional_status = {
-        'detached',
-        'modified',
-        'dirty_deps',
+        "detached",
+        "modified",
+        "dirty_deps",
     }
     try:
         status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
@@ -977,10 +1023,10 @@ def _handle_add(vmn_ctx):
     vmn_ctx.params["releasenotes"] = vmn_ctx.args.releasenotes
 
     expected_status = {
-        'repos_exist_locally',
+        "repos_exist_locally",
     }
     optional_status = {
-        'detached',
+        "detached",
     }
     try:
         status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
@@ -1024,29 +1070,31 @@ def handle_goto(vmn_ctx):
 def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
     be = versions_be_ifc.backend
     default_status = {
-        'pending': False,
-        'detached': False,
-        'outgoing': False,
-        'state': set(),
+        "pending": False,
+        "detached": False,
+        "outgoing": False,
+        "state": set(),
     }
     status = copy.deepcopy(default_status)
-    status.update({
-        'repos_exist_locally': True,
-        # TODO: rename to on_stamped_version and turn to True
-        'modified': False,
-        'dirty_deps': False,
-        'repo_tracked': True,
-        'app_tracked': True,
-        'err_msgs': {
-            'dirty_deps': '',
-            "repo_tracked": "vmn repo tracking is already initialized",
-            "app_tracked": "vmn app tracking is already initialized",
-        },
-        'repos': {},
-        'matched_version_info': None,
-        'state': {'repos_exist_locally', 'repo_tracked', 'app_tracked'},
-        'local_repos_diff': set(),
-    })
+    status.update(
+        {
+            "repos_exist_locally": True,
+            # TODO: rename to on_stamped_version and turn to True
+            "modified": False,
+            "dirty_deps": False,
+            "repo_tracked": True,
+            "app_tracked": True,
+            "err_msgs": {
+                "dirty_deps": "",
+                "repo_tracked": "vmn repo tracking is already initialized",
+                "app_tracked": "vmn app tracking is already initialized",
+            },
+            "repos": {},
+            "matched_version_info": None,
+            "state": {"repos_exist_locally", "repo_tracked", "app_tracked"},
+            "local_repos_diff": set(),
+        }
+    )
 
     path = os.path.join(versions_be_ifc._root_path, ".vmn", "vmn.init")
     if not versions_be_ifc.backend.is_path_tracked(path):
@@ -1054,35 +1102,35 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         file_path = backward_compatible_initialized_check(versions_be_ifc._root_path)
 
         if file_path is None or not versions_be_ifc.backend.is_path_tracked(file_path):
-            status['repo_tracked'] = False
-            status['err_msgs']['repo_tracked'] = \
-                "vmn tracking is not yet initialized. Run vmn init on the repository"
-            status['state'].remove('repo_tracked')
+            status["repo_tracked"] = False
+            status["err_msgs"][
+                "repo_tracked"
+            ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
+            status["state"].remove("repo_tracked")
 
     if not versions_be_ifc.tracked:
-        status['app_tracked'] = False
-        status['err_msgs']['app_tracked'] = \
-            "Untracked app. Run vmn init-app first"
-        status['state'].remove('app_tracked')
+        status["app_tracked"] = False
+        status["err_msgs"]["app_tracked"] = "Untracked app. Run vmn init-app first"
+        status["state"].remove("app_tracked")
 
     err = be.check_for_pending_changes()
     if err:
-        status['pending'] = True
-        status['err_msgs']['pending'] = err
-        status['state'].add('pending')
+        status["pending"] = True
+        status["err_msgs"]["pending"] = err
+        status["state"].add("pending")
 
     if be.in_detached_head():
-        status['detached'] = True
-        status['err_msgs']['detached'] = err
-        status['state'].add('detached')
+        status["detached"] = True
+        status["err_msgs"]["detached"] = err
+        status["state"].add("detached")
     else:
         # Outgoing changes cannot be in detached head
         # TODO: is it really?
         err = be.check_for_outgoing_changes()
         if err:
-            status['outgoing'] = True
-            status['err_msgs']['outgoing'] = err
-            status['state'].add('outgoing')
+            status["outgoing"] = True
+            status["err_msgs"]["outgoing"] = err
+            status["state"].add("outgoing")
 
     if "name" in versions_be_ifc.current_version_info["stamping"]["app"]:
         (
@@ -1098,10 +1146,10 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             prerelease_count,
         )
         if matched_version_info is None:
-            status['modified'] = True
-            status['state'].add('modified')
+            status["modified"] = True
+            status["state"].add("modified")
         else:
-            status['matched_version_info'] = matched_version_info
+            status["matched_version_info"] = matched_version_info
 
         configured_repos = set(versions_be_ifc._flat_configured_deps)
         local_repos = set(versions_be_ifc.actual_deps_state.keys())
@@ -1111,53 +1159,58 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             for path in configured_repos - local_repos:
                 paths.append(os.path.join(versions_be_ifc.backend.root(), path))
 
-            status['repos_exist_locally'] = False
-            status['err_msgs']['repos_exist_locally'] = \
-                f"Dependency repository were specified in conf.yml file. " \
+            status["repos_exist_locally"] = False
+            status["err_msgs"]["repos_exist_locally"] = (
+                f"Dependency repository were specified in conf.yml file. "
                 f"However repos: {paths} does not exist. Please clone and rerun"
-            status['local_repos_diff'] = configured_repos - local_repos
+            )
+            status["local_repos_diff"] = configured_repos - local_repos
 
         err = 0
         for repo in configured_repos & local_repos:
             if repo == ".":
                 continue
 
-            status['repos'][repo] = copy.deepcopy(default_status)
+            status["repos"][repo] = copy.deepcopy(default_status)
             full_path = os.path.join(versions_be_ifc._root_path, repo)
 
             be, err = stamp_utils.get_client(full_path)
 
             err = be.check_for_pending_changes()
             if err:
-                status['dirty_deps'] = True
-                status['err_msgs']['dirty_deps'] = f"{status['err_msgs']['dirty_deps']}\n{err}"
-                status['state'].add('dirty_deps')
-                status['repos'][repo]['pending'] = True
-                status['repos'][repo]['state'].add('pending')
+                status["dirty_deps"] = True
+                status["err_msgs"][
+                    "dirty_deps"
+                ] = f"{status['err_msgs']['dirty_deps']}\n{err}"
+                status["state"].add("dirty_deps")
+                status["repos"][repo]["pending"] = True
+                status["repos"][repo]["state"].add("pending")
 
             if not be.in_detached_head():
                 err = be.check_for_outgoing_changes()
                 if err:
-                    status['dirty_deps'] = True
-                    status['err_msgs']['dirty_deps'] = f"{status['err_msgs']['dirty_deps']}\n{err}"
-                    status['state'].add('dirty_deps')
-                    status['repos'][repo]['outgoing'] = True
-                    status['repos'][repo]['state'].add('outgoing')
+                    status["dirty_deps"] = True
+                    status["err_msgs"][
+                        "dirty_deps"
+                    ] = f"{status['err_msgs']['dirty_deps']}\n{err}"
+                    status["state"].add("dirty_deps")
+                    status["repos"][repo]["outgoing"] = True
+                    status["repos"][repo]["state"].add("outgoing")
             else:
-                status['repos'][repo]['detached'] = True
-                status['repos'][repo]['state'].add('detached')
+                status["repos"][repo]["detached"] = True
+                status["repos"][repo]["state"].add("detached")
 
-    if (expected_status & status['state']) != expected_status:
-        for msg in (expected_status - status["state"]):
-            if msg in status['err_msgs'] and status['err_msgs'][msg]:
-                LOGGER.error(status['err_msgs'][msg])
+    if (expected_status & status["state"]) != expected_status:
+        for msg in expected_status - status["state"]:
+            if msg in status["err_msgs"] and status["err_msgs"][msg]:
+                LOGGER.error(status["err_msgs"][msg])
 
         raise RuntimeError()
 
-    if ((optional_status | status['state']) - expected_status) != optional_status:
-        for msg in ((optional_status | status['state']) - expected_status):
-            if msg in status['err_msgs'] and status['err_msgs'][msg]:
-                LOGGER.error(status['err_msgs'][msg])
+    if ((optional_status | status["state"]) - expected_status) != optional_status:
+        for msg in (optional_status | status["state"]) - expected_status:
+            if msg in status["err_msgs"] and status["err_msgs"][msg]:
+                LOGGER.error(status["err_msgs"][msg])
 
         raise RuntimeError()
 
@@ -1165,19 +1218,14 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
 
 
 def _init_app(versions_be_ifc, params, starting_version):
-    expected_status = {
-        'repos_exist_locally',
-        'repo_tracked',
-        'modified'
-    }
+    expected_status = {"repos_exist_locally", "repo_tracked", "modified"}
     try:
         status = _get_repo_status(versions_be_ifc, expected_status)
     except:
         return 1
 
     versions_be_ifc.create_config_files(params)
-    VersionControlStamper.write_version_to_file(
-        file_path=versions_be_ifc._version_file_path,
+    versions_be_ifc.write_version_to_file(
         version_number=starting_version,
         prerelease="release",
         prerelease_count={},
@@ -1326,18 +1374,20 @@ def _stamp_version(
 
 def show(vcs, params, verstr=None):
     expected_status = {
-        'repos_exist_locally',
-        'repo_tracked',
-        'app_tracked',
+        "repos_exist_locally",
+        "repo_tracked",
+        "app_tracked",
     }
     optional_status = {
-        'detached',
-        'pending',
-        'outgoing',
-        'modified',
-        'dirty_deps',
+        "detached",
+        "pending",
+        "outgoing",
+        "modified",
+        "dirty_deps",
     }
-    tag_name, ver_info, status = _retrieve_version_info(params, vcs, verstr, expected_status, optional_status)
+    tag_name, ver_info, status = _retrieve_version_info(
+        params, vcs, verstr, expected_status, optional_status
+    )
 
     if ver_info is None:
         LOGGER.info("No such app: {0}".format(params["name"]))
@@ -1371,7 +1421,7 @@ def show(vcs, params, verstr=None):
         else:
             out = data["version"]
 
-        if optional_status & status['state']:
+        if optional_status & status["state"]:
             out = f"{out} (dirty): {optional_status & status['state']}"
 
         print(out)
@@ -1389,7 +1439,7 @@ def show(vcs, params, verstr=None):
     else:
         out = data["version"]
 
-    if optional_status & status['state']:
+    if optional_status & status["state"]:
         out = f"{out} (dirty): {optional_status & status['state']}"
 
     print(out)
@@ -1399,15 +1449,17 @@ def show(vcs, params, verstr=None):
 
 def goto_version(vcs, params, version):
     expected_status = {
-        'repo_tracked',
-        'app_tracked',
+        "repo_tracked",
+        "app_tracked",
     }
     optional_status = {
-        'detached',
-        'repos_exist_locally',
-        'modified',
+        "detached",
+        "repos_exist_locally",
+        "modified",
     }
-    tag_name, ver_info, _ = _retrieve_version_info(params, vcs, version, expected_status, optional_status)
+    tag_name, ver_info, _ = _retrieve_version_info(
+        params, vcs, version, expected_status, optional_status
+    )
 
     if ver_info is None:
         LOGGER.error("No such app: {0}".format(params["name"]))
@@ -1702,6 +1754,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     actual_deps_state["."]["hash"] = be.last_user_changeset()
     params["actual_deps_state"] = actual_deps_state
     params["hide_zero_hotfix"] = True
+    params["version_backends"] = {}
 
     if not os.path.isfile(app_conf_path):
         return params
@@ -1713,6 +1766,8 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         params["raw_configured_deps"] = data["conf"]["deps"]
         if "hide_zero_hotfix" in data["conf"]:
             params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
+        if "version_backends" in data["conf"]:
+            params["version_backends"] = data["conf"]["version_backends"]
 
         deps = {}
         for rel_path, dep in params["raw_configured_deps"].items():
