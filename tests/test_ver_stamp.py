@@ -127,6 +127,14 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
+    with vmn.VMNContextMAnagerManager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    _show(app_layout.app_name, raw=True)
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
 
 def test_multi_repo_dependency(app_layout, capfd):
     _init_vmn_in_repo()

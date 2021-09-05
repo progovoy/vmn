@@ -1403,6 +1403,8 @@ def show(vcs, params, verstr=None):
 
         raise RuntimeError()
 
+    dirty_states = ((optional_status & status["state"]) | {"detached"}) - {"detached"}
+
     # TODO: refactor
     if params["root"]:
         data = ver_info["stamping"]["root_app"]
@@ -1421,8 +1423,8 @@ def show(vcs, params, verstr=None):
         else:
             out = data["version"]
 
-        if optional_status & status["state"]:
-            out = f"{out} (dirty): {optional_status & status['state']}"
+        if dirty_states:
+            out = f"{out} (dirty): {dirty_states}"
 
         print(out)
 
@@ -1439,8 +1441,8 @@ def show(vcs, params, verstr=None):
     else:
         out = data["version"]
 
-    if optional_status & status["state"]:
-        out = f"{out} (dirty): {optional_status & status['state']}"
+    if dirty_states:
+        out = f"{out} (dirty): {dirty_states}"
 
     print(out)
 
