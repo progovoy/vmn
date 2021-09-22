@@ -24,7 +24,7 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "vmn = version_stamp.vmn:main",
-            "git-ver= version_stamp.vmn:main",
         ]
     },
 )
+
