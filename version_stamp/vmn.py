@@ -1438,14 +1438,17 @@ def show(vcs, params, verstr=None):
         data["_version"], vcs.template, vcs._hide_zero_hotfix
     )
     if params.get("verbose"):
+        if dirty_states:
+            data['dirty'] = dirty_states
         out = yaml.dump(data)
     elif params.get("raw"):
         out = data["_version"]
+        if dirty_states:
+            out = f"{out} (dirty): {dirty_states}"
     else:
         out = data["version"]
-
-    if dirty_states:
-        out = f"{out} (dirty): {dirty_states}"
+        if dirty_states:
+            out = f"{out} (dirty): {dirty_states}"
 
     print(out)
 

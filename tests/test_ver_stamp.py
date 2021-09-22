@@ -686,7 +686,7 @@ def test_read_version_from_file(app_layout):
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     with open(file_path, "r") as fid:
-        ver_dict = yaml.load(fid)
+        ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
     assert "0.2.1" == ver_dict["version_to_stamp_from"]
 
