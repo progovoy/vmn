@@ -123,7 +123,8 @@ def test_basic_show(app_layout, capfd):
 
     out, err = capfd.readouterr()
     try:
-        yaml.safe_load(out)
+        tmp = yaml.safe_load(out)
+        assert 'dirty' not in tmp
     except Exception:
         assert False
 
@@ -143,7 +144,10 @@ def test_basic_show(app_layout, capfd):
 
     out, err = capfd.readouterr()
     try:
-        yaml.safe_load(out)
+        tmp = yaml.safe_load(out)
+        assert 'modified' in tmp['dirty']
+        assert 'pending' in tmp['dirty']
+        assert len(tmp['dirty']) == 2
     except Exception:
         assert False
 
@@ -157,7 +161,10 @@ def test_basic_show(app_layout, capfd):
 
     out, err = capfd.readouterr()
     try:
-        yaml.safe_load(out)
+        tmp = yaml.safe_load(out)
+        assert 'modified' in tmp['dirty']
+        assert 'outgoing' in tmp['dirty']
+        assert len(tmp['dirty']) == 2
     except Exception:
         assert False
 
@@ -170,7 +177,9 @@ def test_basic_show(app_layout, capfd):
 
     out, err = capfd.readouterr()
     try:
-        yaml.safe_load(out)
+        tmp = yaml.safe_load(out)
+        assert 'modified' in tmp['dirty']
+        assert len(tmp['dirty']) == 1
     except Exception:
         assert False
 
