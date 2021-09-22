@@ -127,6 +127,53 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+        commit=False,
+    )
+    _show(app_layout.app_name, verbose=True)
+
+    out, err = capfd.readouterr()
+    try:
+        yaml.safe_load(out)
+    except Exception:
+        assert False
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+        push=False,
+    )
+    _show(app_layout.app_name, verbose=True)
+
+    out, err = capfd.readouterr()
+    try:
+        yaml.safe_load(out)
+    except Exception:
+        assert False
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+    )
+    _show(app_layout.app_name, verbose=True)
+
+    out, err = capfd.readouterr()
+    try:
+        yaml.safe_load(out)
+    except Exception:
+        assert False
+
     with vmn.VMNContextMAnagerManager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
