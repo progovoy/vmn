@@ -1916,22 +1916,6 @@ def parse_user_commands(command_line):
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
-    padd = subprasers.add_parser("add", help="add attributes to existing app version")
-    padd.add_argument(
-        "-t",
-        "--type",
-        choices=["build", "releasenotes"],
-        required=True,
-        help="build / releasenotes",
-    )
-    padd.add_argument(
-        "-v",
-        "--version",
-        required=True,
-        help=f"The version to add to in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
-    )
-    padd.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 
     return args
