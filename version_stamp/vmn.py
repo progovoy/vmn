@@ -1439,7 +1439,7 @@ def show(vcs, params, verstr=None):
     )
     if params.get("verbose"):
         if dirty_states:
-            data['dirty'] = dirty_states
+            data["dirty"] = dirty_states
         out = yaml.dump(data)
     elif params.get("raw"):
         out = data["_version"]
