@@ -812,7 +812,7 @@ class VersionControlStamper(IVersionsStamper):
             version_files.append(file_path)
 
         if self._create_verinfo_files:
-            dir_path = os.path.join(self._app_dir_path, 'verinfo')
+            dir_path = os.path.join(self._app_dir_path, "verinfo")
             Path(dir_path).mkdir(parents=True, exist_ok=True)
             path = os.path.join(dir_path, f"{verstr}.yml")
             with open(path, "w") as f:
@@ -834,7 +834,7 @@ class VersionControlStamper(IVersionsStamper):
                 version_files.extend(tmp)
 
             if self._create_verinfo_files:
-                dir_path = os.path.join(self._app_dir_path, 'root_verinfo')
+                dir_path = os.path.join(self._app_dir_path, "root_verinfo")
                 Path(dir_path).mkdir(parents=True, exist_ok=True)
                 path = os.path.join(dir_path, f"{root_app_version}.yml")
                 with open(path, "w") as f:
@@ -1405,13 +1405,13 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             LOGGER.error(
-                "When requesting show from file - a version "
-                "must be specified")
+                "When requesting show from file - a version " "must be specified"
+            )
 
             raise RuntimeError()
 
         if params["root"]:
-            dir_path = os.path.join(vcs._root_app_dir_path, 'root_verinfo')
+            dir_path = os.path.join(vcs._root_app_dir_path, "root_verinfo")
             path = os.path.join(dir_path, f"{verstr}.yml")
             with open(path, "r") as f:
                 data = yaml.safe_load(f)
@@ -1420,12 +1420,14 @@ def show(vcs, params, verstr=None):
 
             return 0
 
-        dir_path = os.path.join(vcs._app_dir_path, 'verinfo')
+        dir_path = os.path.join(vcs._app_dir_path, "verinfo")
         path = os.path.join(dir_path, f"{verstr}.yml")
         with open(path, "r") as f:
             data = yaml.safe_load(f)
             data = data["stamping"]["app"]
-            data["version"] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+            data[
+                "version"
+            ] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
                 data["_version"], vcs.template, vcs._hide_zero_hotfix
             )
             print(yaml.dump(data))
