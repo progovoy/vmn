@@ -125,23 +125,10 @@ class IVersionsStamper(object):
         self._root_app_conf_path = conf["root_app_conf_path"]
         self._root_app_dir_path = conf["root_app_dir_path"]
         self._extra_info = conf["extra_info"]
+        self._create_verinfo_files = conf["create_verinfo_files"]
         self._version_file_path = conf["version_file_path"]
 
-        try:
-            self.template = IVersionsStamper.parse_template(conf["template"])
-            self.bad_format_template = False
-        except:
-            self.template = IVersionsStamper.parse_template(
-                stamp_utils.VMN_DEFAULT_TEMPLATE
-            )
-            self.template_err_str = (
-                "Failed to parse template: "
-                f"{conf['template']}. "
-                f"Falling back to default one: "
-                f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
-            )
-
-            self.bad_format_template = True
+        self.set_template(conf["template"])
 
         self._raw_configured_deps = conf["raw_configured_deps"]
         self.actual_deps_state = conf["actual_deps_state"]
@@ -187,6 +174,23 @@ class IVersionsStamper(object):
                 "services": {},
                 "external_services": {},
             }
+
+    def set_template(self, template):
+        try:
+            self.template = IVersionsStamper.parse_template(template)
+            self.bad_format_template = False
+        except:
+            self.template = IVersionsStamper.parse_template(
+                stamp_utils.VMN_DEFAULT_TEMPLATE
+            )
+            self.template_err_str = (
+                "Failed to parse template: "
+                f"{template}. "
+                f"Falling back to default one: "
+                f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
+            )
+
+            self.bad_format_template = True
 
     def __del__(self):
         del self.backend
@@ -789,6 +793,12 @@ class VersionControlStamper(IVersionsStamper):
         if not self._should_publish:
             return 0
 
+        verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
+        app_msg = {
+            "vmn_info": self.current_version_info["vmn_info"],
+            "stamping": {"app": self.current_version_info["stamping"]["app"]},
+        }
+
         version_files = self.get_files_to_add_to_index(
             [
                 self._app_conf_path,
@@ -801,12 +811,37 @@ class VersionControlStamper(IVersionsStamper):
             file_path = os.path.join(self._root_path, backend_conf["path"])
             version_files.append(file_path)
 
+        if self._create_verinfo_files:
+            dir_path = os.path.join(self._app_dir_path, 'verinfo')
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(dir_path, f"{verstr}.yml")
+            with open(path, "w") as f:
+                data = yaml.dump(app_msg, sort_keys=True)
+                f.write(data)
+
+            version_files.append(path)
+
         if self._root_app_name is not None:
+            root_app_msg = {
+                "stamping": {
+                    "root_app": self.current_version_info["stamping"]["root_app"]
+                },
+                "vmn_info": self.current_version_info["vmn_info"],
+            }
+
             tmp = self.get_files_to_add_to_index([self._root_app_conf_path])
             if tmp:
                 version_files.extend(tmp)
 
-        verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
+            if self._create_verinfo_files:
+                dir_path = os.path.join(self._app_dir_path, 'root_verinfo')
+                Path(dir_path).mkdir(parents=True, exist_ok=True)
+                path = os.path.join(dir_path, f"{root_app_version}.yml")
+                with open(path, "w") as f:
+                    data = yaml.dump(root_app_msg, sort_keys=True)
+                    f.write(data)
+
+                version_files.append(path)
 
         self.current_version_info["stamping"][
             "msg"
@@ -816,11 +851,6 @@ class VersionControlStamper(IVersionsStamper):
             user="vmn",
             include=version_files,
         )
-
-        app_msg = {
-            "vmn_info": self.current_version_info["vmn_info"],
-            "stamping": {"app": self.current_version_info["stamping"]["app"]},
-        }
 
         tag = f'{self._name.replace("/", "-")}_{verstr}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, tag)
@@ -837,12 +867,6 @@ class VersionControlStamper(IVersionsStamper):
         msgs = [app_msg]
 
         if self._root_app_name is not None:
-            root_app_msg = {
-                "stamping": {
-                    "root_app": self.current_version_info["stamping"]["root_app"]
-                },
-                "vmn_info": self.current_version_info["vmn_info"],
-            }
             msgs.append(root_app_msg)
             tag = f"{self._root_app_name}_{root_app_version}"
             match = re.search(stamp_utils.VMN_ROOT_TAG_REGEX, tag)
@@ -1054,7 +1078,9 @@ def handle_show(vmn_ctx):
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
 
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
-    vmn_ctx.params["cmdline_template"] = vmn_ctx.args.template
+    if vmn_ctx.args.template is not None:
+        vmn_ctx.vcs.set_template(vmn_ctx.args.template)
+    vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
 
     try:
         out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
@@ -1376,6 +1402,36 @@ def _stamp_version(
 
 
 def show(vcs, params, verstr=None):
+    if params["from_file"]:
+        if verstr is None:
+            LOGGER.error(
+                "When requesting show from file - a version "
+                "must be specified")
+
+            raise RuntimeError()
+
+        if params["root"]:
+            dir_path = os.path.join(vcs._root_app_dir_path, 'root_verinfo')
+            path = os.path.join(dir_path, f"{verstr}.yml")
+            with open(path, "r") as f:
+                data = yaml.safe_load(f)
+                data = data["stamping"]["root_app"]
+                print(yaml.dump(data))
+
+            return 0
+
+        dir_path = os.path.join(vcs._app_dir_path, 'verinfo')
+        path = os.path.join(dir_path, f"{verstr}.yml")
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+            data = data["stamping"]["app"]
+            data["version"] = stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
+                data["_version"], vcs.template, vcs._hide_zero_hotfix
+            )
+            print(yaml.dump(data))
+
+        return 0
+
     expected_status = {
         "repos_exist_locally",
         "repo_tracked",
@@ -1752,7 +1808,7 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
     params["template"] = stamp_utils.VMN_DEFAULT_TEMPLATE
 
     params["extra_info"] = False
-    # TODO: handle redundant parse template here
+    params["create_verinfo_files"] = False
 
     deps = {}
     for rel_path, dep in params["raw_configured_deps"].items():
@@ -1776,6 +1832,8 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
             params["hide_zero_hotfix"] = data["conf"]["hide_zero_hotfix"]
         if "version_backends" in data["conf"]:
             params["version_backends"] = data["conf"]["version_backends"]
+        if "create_verinfo_files" in data["conf"]:
+            params["create_verinfo_files"] = data["conf"]["create_verinfo_files"]
 
         deps = {}
         for rel_path, dep in params["raw_configured_deps"].items():
@@ -1784,9 +1842,6 @@ def build_world(name, working_dir, root_context, release_mode, prerelease):
         actual_deps_state.update(HostState.get_actual_deps_state(deps, root_path))
         params["actual_deps_state"] = actual_deps_state
         actual_deps_state["."]["hash"] = be.last_user_changeset()
-
-    if "cmdline_template" in params:
-        params["template"] = params["cmdline_template"]
 
     return params
 
@@ -1878,6 +1933,8 @@ def parse_user_commands(command_line):
     pshow.set_defaults(verbose=False)
     pshow.add_argument("--raw", dest="raw", action="store_true")
     pshow.set_defaults(raw=False)
+    pshow.add_argument("--from-file", dest="from_file", action="store_true")
+    pshow.set_defaults(from_file=False)
     pstamp = subprasers.add_parser("stamp", help="stamp version")
     pstamp.add_argument(
         "-r",
