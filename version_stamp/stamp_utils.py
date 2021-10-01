@@ -3,7 +3,7 @@ import sys
 import os
 import git
 import logging
-from pathlib import Path
+import glob
 import re
 import time
 
@@ -85,7 +85,7 @@ def init_stamp_logger(debug=False):
     return LOGGER
 
 
-class VersionControlBackend(object):
+class VMNBackend(object):
     def __init__(self, type):
         self._type = type
 
@@ -94,6 +94,18 @@ class VersionControlBackend(object):
 
     def type(self):
         return self._type
+
+    def last_user_changeset(self, name):
+        return None
+
+    def remote(self):
+        return None
+
+    def root(self):
+        return None
+
+    def get_vmn_version_info(self, app_name, root=False):
+        return {}
 
     @staticmethod
     def get_tag_formatted_app_name(
@@ -195,19 +207,72 @@ class VersionControlBackend(object):
 
         return formatted_version
 
+    @staticmethod
+    def get_root_app_name_from_name(name):
+        root_app_name = name.split("/")
+        if len(root_app_name) == 1:
+            return None
 
-class GitBackend(VersionControlBackend):
-    def __init__(self, repo_path, revert=False, pull=False):
-        VersionControlBackend.__init__(self, "git")
+        return "/".join(root_app_name[:-1])
+
+
+class LocalFileBackend(VMNBackend):
+    def __init__(self, repo_path):
+        VMNBackend.__init__(self, "local_file")
+
+        if not os.path.isdir(os.path.join(repo_path, ".vmn")):
+            raise RuntimeError(
+                "LocalFile backend needs to be initialized with a local"
+                " path containing .vmn dir in it"
+            )
+
+        self.repo_path = repo_path
+
+    def __del__(self):
+        pass
+
+    def root(self):
+        return self.repo_path
+
+    def get_vmn_version_info(self, app_name, root=False):
+        if root:
+            dir_path = os.path.join(
+                self.repo_path,
+                ".vmn",
+                app_name,
+                "root_verinfo",
+            )
+            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+            if not list_of_files:
+                return None
+
+            latest_file = max(list_of_files, key=os.path.getctime)
+            with open(latest_file, "r") as f:
+                return yaml.safe_load(f)
+
+        dir_path = os.path.join(
+            self.repo_path,
+            ".vmn",
+            app_name,
+            "verinfo",
+        )
+        list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+        if not list_of_files:
+            return None
+
+        latest_file = max(list_of_files, key=os.path.getctime)
+
+        with open(latest_file, "r") as f:
+            return yaml.safe_load(f)
+
+
+class GitBackend(VMNBackend):
+    def __init__(self, repo_path):
+        VMNBackend.__init__(self, "git")
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self.add_git_user_cfg_if_missing()
         self._origin = self._be.remote(name="origin")
-
-        if revert:
-            self._be.head.reset(working_tree=True)
-        if pull:
-            self.pull()
 
         self._be.git.fetch("--tags")
 
@@ -391,10 +456,13 @@ class GitBackend(VersionControlBackend):
 
         self._be.git.checkout(rev)
 
-    def last_user_changeset(self):
+    def last_user_changeset(self, name):
         init_hex = None
         for p in self._be.iter_commits():
             if p.author.name == VMN_USER_NAME:
+                if f"{name}: Stamped initial version" in p.message:
+                    return p.hexsha
+
                 if p.message.startswith(INIT_COMMIT_MESSAGE):
                     init_hex = p.hexsha
 
@@ -456,16 +524,15 @@ class GitBackend(VersionControlBackend):
         else:
             regex = VMN_TAG_REGEX
 
-        tag_formated_app_name = VersionControlBackend.get_tag_formatted_app_name(
-            app_name
-        )
+        tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(app_name)
+
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
         for tag in app_tags:
             match = re.search(regex, tag)
             if match is None:
                 LOGGER.error(f"Tag {tag} doesn't comply to vmn version format")
-                raise RuntimeError()
+                break
 
             gdict = match.groupdict()
 
@@ -532,7 +599,7 @@ class GitBackend(VersionControlBackend):
 
             found = True
 
-            tagd = VersionControlBackend.get_tag_properties(tag)
+            tagd = VMNBackend.get_tag_properties(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 
@@ -580,7 +647,13 @@ class HostState(object):
 
     @staticmethod
     def get_actual_deps_state(paths, root):
-        actual_deps_state = {}
+        actual_deps_state = {
+            ".": {
+                "hash": None,
+                "vcs_type": None,
+                "remote": None,
+            }
+        }
         for path, lst in paths.items():
             repos = [name for name in lst if os.path.isdir(os.path.join(path, name))]
 
@@ -599,18 +672,18 @@ class HostState(object):
         return actual_deps_state
 
 
-def get_versions_repo_path(root_path):
-    versions_repo_path = os.getenv("VER_STAMP_VERSIONS_PATH", None)
-    if versions_repo_path is not None:
-        versions_repo_path = os.path.abspath(versions_repo_path)
-    else:
-        versions_repo_path = os.path.abspath(f"{root_path}/.vmn/versions")
-        Path(versions_repo_path).mkdir(parents=True, exist_ok=True)
+def get_client(path, from_file=False):
+    if from_file:
+        try:
+            be = LocalFileBackend(path)
+            return be, None
+        except RuntimeError:
+            err = (
+                f"path: {path} doesn't have .vmn dir so it cannot be "
+                f"used as local file backend"
+            )
+            return None, err
 
-    return versions_repo_path
-
-
-def get_client(path, revert=False, pull=False):
     be_type = None
     try:
         client = git.Repo(path, search_parent_directories=True)
@@ -618,11 +691,11 @@ def get_client(path, revert=False, pull=False):
 
         be_type = "git"
     except git.exc.InvalidGitRepositoryError:
-        err = f"repository path: {path} is not a functional git " "or repository."
+        err = f"repository path: {path} is not a functional git or repository.\n"
         return None, err
 
     be = None
     if be_type == "git":
-        be = GitBackend(path, revert, pull)
+        be = GitBackend(path)
 
     return be, None

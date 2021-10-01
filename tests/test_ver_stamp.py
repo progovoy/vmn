@@ -64,20 +64,24 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         return err, ver_info, vmn_ctx.params
 
 
-def _show(app_name, verbose=None, raw=None, root=False):
+def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False):
     args_list = ["show"]
     if verbose is not None:
         args_list.append("--verbose")
+    if version is not None:
+        args_list.extend(["--version", f"{version}"])
     if raw is not None:
         args_list.append("--raw")
     if root:
         args_list.append("--root")
+    if from_file:
+        args_list.append("--from-file")
 
     args_list.append(app_name)
 
     with vmn.VMNContextMAnagerManager(args_list) as vmn_ctx:
         err = vmn.handle_show(vmn_ctx)
-        assert err == 0
+        return err
 
 
 def test_basic_stamp(app_layout):
@@ -114,12 +118,14 @@ def test_basic_show(app_layout, capfd):
     out, err = capfd.readouterr()
     assert not err
 
-    _show(app_layout.app_name, raw=True)
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
 
     out, err = capfd.readouterr()
     assert "0.0.1\n" == out
 
-    _show(app_layout.app_name, verbose=True)
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
 
     out, err = capfd.readouterr()
     try:
@@ -140,7 +146,8 @@ def test_basic_show(app_layout, capfd):
         "msg1",
         commit=False,
     )
-    _show(app_layout.app_name, verbose=True)
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
 
     out, err = capfd.readouterr()
     try:
@@ -157,7 +164,8 @@ def test_basic_show(app_layout, capfd):
         "msg1",
         push=False,
     )
-    _show(app_layout.app_name, verbose=True)
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
 
     out, err = capfd.readouterr()
     try:
@@ -173,7 +181,8 @@ def test_basic_show(app_layout, capfd):
         "f1.file",
         "msg1",
     )
-    _show(app_layout.app_name, verbose=True)
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
 
     out, err = capfd.readouterr()
     try:
@@ -187,9 +196,261 @@ def test_basic_show(app_layout, capfd):
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
-    _show(app_layout.app_name, raw=True)
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
     out, err = capfd.readouterr()
     assert "0.0.1\n" == out
+
+
+def test_show_from_file(app_layout, capfd):
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name)
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, verbose=True, from_file=True)
+    assert err == 1
+    out, err = capfd.readouterr()
+    assert (
+        out == f"[INFO] Version information was not found for {app_layout.app_name}.\n"
+    )
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "create_verinfo_files": True,
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_res = yaml.safe_load(out)
+
+    err = _show(app_layout.app_name, verbose=True, from_file=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    show_file_res_empty_ver = yaml.safe_load(out)
+
+    err = _show(app_layout.app_name, version="0.0.1", verbose=True, from_file=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+
+    assert show_file_res_empty_ver == show_file_res
+
+    assert show_res == show_file_res
+
+    app_name = "root_app/app1"
+    _, params = _init_app(app_name)
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "create_verinfo_files": True,
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_name, "patch")
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 1
+
+    capfd.readouterr()
+    err = _show(app_name, verbose=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_res = yaml.safe_load(out)
+
+    err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+
+    assert show_res == show_file_res
+
+    capfd.readouterr()
+    # TODO: Improve stdout in such a case
+    err = _show(app_name, verbose=True, root=True)
+    assert err == 1
+    out, err = capfd.readouterr()
+
+    err = _show("root_app", verbose=True, root=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_root_res = yaml.safe_load(out)
+
+    err = _show(
+        "root_app",
+        version="1",
+        from_file=True,
+        verbose=True,
+        root=True,
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+
+    assert show_root_res == show_file_res
+
+    err = _show(app_name)
+    assert err == 0
+    out, err = capfd.readouterr()
+    show_minimal_res = yaml.safe_load(out)
+
+    shutil.rmtree(os.path.join(app_layout.repo_path, ".git"))
+
+    err = _show(
+        "root_app",
+        version="1",
+        from_file=True,
+        verbose=True,
+        root=True,
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+    assert show_file_res == show_root_res
+
+    err = _show(
+        app_name,
+        version="0.0.1",
+        verbose=True,
+        from_file=True,
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+    assert show_file_res == show_res
+
+    err = _show(
+        app_name,
+        version="0.0.1",
+        from_file=True,
+    )
+    assert err == 0
+    out, err = capfd.readouterr()
+    show_file = yaml.safe_load(out)
+
+    assert show_minimal_res == show_file
+
+
+def test_show_from_file_conf_changged(app_layout, capfd):
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name)
+    capfd.readouterr()
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "create_verinfo_files": True,
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    err = _show(app_layout.app_name, from_file=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.2\n" == out
+
+    err = _show(app_layout.app_name, from_file=True, raw=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert "0.0.1\n" == out
+
+    err = _show(app_layout.app_name, from_file=True, raw=True, version="0.0.2")
+    assert err == 1
+    out, err = capfd.readouterr()
+    assert (
+        f"[INFO] Version information was not found for {app_layout.app_name}.\n" == out
+    )
 
 
 def test_multi_repo_dependency(app_layout, capfd):
@@ -537,30 +798,24 @@ def test_rc_goto(app_layout, capfd):
 
 
 def test_version_template():
-    formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            "2.0.9",
-            vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
-            True,
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9",
+        vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
+        True,
     )
 
     assert formated_version == "2"
 
-    formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = (
-        stamp_utils.VersionControlBackend.get_utemplate_formatted_version(
-            "2.0.9.0",
-            vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
-            False,
-        )
+    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0",
+        vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
+        False,
     )
 
     assert formated_version == "2-0"
@@ -739,11 +994,15 @@ def test_basic_root_show(app_layout, capfd):
     _init_app(app_name, "0.2.1")
 
     capfd.readouterr()
-    _show("root_app", root=True)
+    err = _show("root_app", root=True)
+    assert err == 0
+
     out, err = capfd.readouterr()
     assert "1\n" == out
 
-    _show("root_app", verbose=True, root=True)
+    err = _show("root_app", verbose=True, root=True)
+    assert err == 0
+
     out, err = capfd.readouterr()
     out_dict = yaml.safe_load(out)
     assert app_name == out_dict["latest_service"]
@@ -766,7 +1025,9 @@ def test_basic_root_show(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.2.2"
 
-    _show("root_app", verbose=True, root=True)
+    err = _show("root_app", verbose=True, root=True)
+    assert err == 0
+
     out, err = capfd.readouterr()
     out_dict = yaml.safe_load(out)
     assert app_name == out_dict["latest_service"]
