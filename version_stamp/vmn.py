@@ -1767,7 +1767,8 @@ def build_world(name, working_dir, root_context, from_file):
     if name is None:
         return params
 
-    actual_deps_state["."]["hash"] = be.last_user_changeset(name)
+    last_user_hex = be.last_user_changeset(name)
+    actual_deps_state["."]["hash"] = last_user_hex
 
     app_dir_path = os.path.join(
         root_path,
@@ -1823,6 +1824,7 @@ def build_world(name, working_dir, root_context, from_file):
             deps[os.path.join(root_path, rel_path)] = tuple(dep.keys())
 
         actual_deps_state.update(HostState.get_actual_deps_state(deps, root_path))
+        actual_deps_state["."]["hash"] = last_user_hex
         params["actual_deps_state"] = actual_deps_state
 
     return params

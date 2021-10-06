@@ -94,7 +94,7 @@ def test_basic_stamp(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    new_name = "{0}_{1}".format(app_layout.app_name, "2")
+    new_name = f"{app_layout.app_name}_2"
     _init_app(new_name, "1.0.0")
 
     for i in range(2):
@@ -105,6 +105,27 @@ def test_basic_stamp(app_layout):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.file",
+        "msg1",
+    )
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(new_name, "hotfix")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(new_name, "hotfix")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
 
 
 def test_basic_show(app_layout, capfd):
