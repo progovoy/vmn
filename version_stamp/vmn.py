@@ -1078,6 +1078,8 @@ def handle_show(vmn_ctx):
     else:
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
 
+    vmn_ctx.params["ignore_dirty"] = vmn_ctx.args.ignore_dirty
+
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
     if vmn_ctx.args.template is not None:
         vmn_ctx.vcs.set_template(vmn_ctx.args.template)
@@ -1439,6 +1441,9 @@ def show(vcs, params, verstr=None):
             dirty_states = ((optional_status & status["state"]) | {"detached"}) - {
                 "detached"
             }
+
+            if params["ignore_dirty"]:
+                dirty_states = None
 
     if ver_info is None:
         LOGGER.info(
@@ -1919,6 +1924,8 @@ def parse_user_commands(command_line):
     pshow.set_defaults(raw=False)
     pshow.add_argument("--from-file", dest="from_file", action="store_true")
     pshow.set_defaults(from_file=False)
+    pshow.add_argument("--ignore-dirty", dest="ignore_dirty", action="store_true")
+    pshow.set_defaults(ignore_dirty=False)
     pstamp = subprasers.add_parser("stamp", help="stamp version")
     pstamp.add_argument(
         "-r",

@@ -64,7 +64,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
         return err, ver_info, vmn_ctx.params
 
 
-def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False):
+def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False, ignore_dirty=False):
     args_list = ["show"]
     if verbose is not None:
         args_list.append("--verbose")
@@ -76,6 +76,8 @@ def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=
         args_list.append("--root")
     if from_file:
         args_list.append("--from-file")
+    if ignore_dirty:
+        args_list.append("--ignore-dirty")
 
     args_list.append(app_name)
 
@@ -167,6 +169,19 @@ def test_basic_show(app_layout, capfd):
         "msg1",
         commit=False,
     )
+
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert 'dirty' in out
+
+    err = _show(app_layout.app_name, ignore_dirty=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert '0.0.1\n' == out
+
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
