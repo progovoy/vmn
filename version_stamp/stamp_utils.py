@@ -647,13 +647,7 @@ class HostState(object):
 
     @staticmethod
     def get_actual_deps_state(paths, root):
-        actual_deps_state = {
-            ".": {
-                "hash": None,
-                "vcs_type": None,
-                "remote": None,
-            }
-        }
+        actual_deps_state = {}
         for path, lst in paths.items():
             repos = [name for name in lst if os.path.isdir(os.path.join(path, name))]
 
