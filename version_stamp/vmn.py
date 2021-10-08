@@ -40,35 +40,36 @@ class VMNContextMAnagerManager(object):
         root = False
         if "root" in self.args:
             root = self.args.root
+
+        # TODO: find another way of getting the be.root() path
+        # and get rid of backend creation
         from_file = False
         if "from_file" in self.args and self.args.from_file:
             from_file = True
+        be, _ = stamp_utils.get_client(cwd, from_file)
+        if be is None:
+            raise RuntimeError("Backend creation failed")
+        root_path = be.root()
+        del be
+
         initial_params = {
             "root": root,
-            "cwd": cwd,
+            "working_dir": cwd,
             "name": None,
-            "from_file": from_file,
+            "root_path": root_path,
         }
 
         if "name" in self.args and self.args.name:
             validate_app_name(self.args)
             initial_params["name"] = self.args.name
 
-        params = build_world(
-            initial_params["name"],
-            initial_params["cwd"],
-            initial_params["root"],
-            initial_params["from_file"],
-        )
+        vmn_path = os.path.join(root_path, ".vmn")
 
-        if params is None:
-            raise RuntimeError("params initialization failed")
 
-        vmn_path = os.path.join(params["root_path"], ".vmn")
         lock_file_path = os.path.join(vmn_path, "vmn.lock")
         pathlib.Path(os.path.dirname(lock_file_path)).mkdir(parents=True, exist_ok=True)
         self.lock = FileLock(lock_file_path)
-        self.params = params
+        self.params = initial_params
         self.vcs = None
         self.lock_file_path = lock_file_path
 
@@ -91,8 +92,9 @@ class IVersionsStamper(object):
     quantity_on_hand: int = 0
     '''
     def __init__(self, conf):
-        self.backend = conf["be"]
-
+        self.backend = None
+        self.params = conf
+        self.working_dir = conf["working_dir"]
         self.root_path = conf["root_path"]
         self.repo_name = '.'
         self.name = conf["name"]
@@ -116,63 +118,21 @@ class IVersionsStamper(object):
                 },
             }
 
+        self.root_context = conf["root"]
+        self.raw_configured_deps = None
+
         if self.name is None:
             self.tracked = False
             return
 
-        self.last_user_changeset = self.backend.last_user_changeset(self.name)
-
-        if conf["from_file"]:
-            self.raw_configured_deps = {
-                os.path.join("../"): {
-                    os.path.basename(self.root_path):
-                        {
-                            "remote": None,
-                            "vcs_type": None
-                        }
-                }
-            }
-        else:
-            self.raw_configured_deps = {
-                os.path.join("../"): {
-                    os.path.basename(self.root_path):
-                        {
-                            "remote": self.backend.remote(),
-                            "vcs_type": self.backend.type()
-                        }
-                }
-            }
-
-            deps = {}
-            for rel_path, dep in self.raw_configured_deps.items():
-                deps[os.path.join(self.root_path, rel_path)] = tuple(dep.keys())
-
-            self.actual_deps_state = \
-                HostState.get_actual_deps_state(deps, self.root_path)
-
-            if self.name is not None:
-                self.actual_deps_state["."]["hash"] = self.last_user_changeset
-
         self.initialize_paths(conf)
-        self.update_attrs_from_app_conf_file(conf)
+        self.update_attrs_from_app_conf_file()
 
-        self.flat_configured_deps = self.get_deps_changesets()
-
-        # TODO: this is ugly
-        root_context = self.root_app_name == self.name
-        self.ver_info_from_repo = self.backend.get_vmn_version_info(
-            self.name, root_context
-        )
-        self.tracked = self.ver_info_from_repo is not None
-
-        if root_context:
+        if self.root_context:
             return
 
         self.current_version_info["stamping"]["app"]["name"] = \
             self.name
-        if not conf["from_file"]:
-            self.current_version_info["stamping"]["app"]["changesets"] = \
-                self.actual_deps_state
 
         if self.root_app_name is not None:
             self.current_version_info["stamping"]["root_app"] = {
@@ -182,7 +142,7 @@ class IVersionsStamper(object):
                 "external_services": {},
             }
 
-    def update_attrs_from_app_conf_file(self, conf):
+    def update_attrs_from_app_conf_file(self):
         if os.path.isfile(self.app_conf_path):
             with open(self.app_conf_path, "r") as f:
                 data = yaml.safe_load(f)
@@ -198,16 +158,6 @@ class IVersionsStamper(object):
 
                 self.set_template(self.template)
 
-                if not conf["from_file"]:
-                    deps = {}
-                    for rel_path, dep in self.raw_configured_deps.items():
-                        deps[os.path.join(self.root_path, rel_path)] = \
-                            tuple(dep.keys())
-
-                    self.actual_deps_state.update(
-                        HostState.get_actual_deps_state(deps, self.root_path)
-                    )
-                    self.actual_deps_state["."]["hash"] = self.last_user_changeset
 
     def initialize_paths(self, conf):
         self.app_dir_path = os.path.join(
@@ -219,7 +169,7 @@ class IVersionsStamper(object):
             os.path.join(self.app_dir_path, VER_FILE_NAME)
         self.app_conf_path = \
             os.path.join(self.app_dir_path, "conf.yml")
-        if conf["root"]:
+        if self.root_context:
             self.root_app_name = self.name
         else:
             self.root_app_name = \
@@ -260,7 +210,9 @@ class IVersionsStamper(object):
             self.bad_format_template = True
 
     def __del__(self):
-        del self.backend
+        if self.backend is not None:
+            del self.backend
+            self.backend = None
 
     # Note: this function generates
     # a version (including prerelease)
@@ -478,8 +430,8 @@ class IVersionsStamper(object):
             for repo in v:
                 flat_dependency_repos.append(
                     os.path.relpath(
-                        os.path.join(self.backend.root(), rel_path, repo),
-                        self.backend.root(),
+                        os.path.join(self.root_path, rel_path, repo),
+                        self.root_path,
                     ),
                 )
 
@@ -979,6 +931,10 @@ class VersionControlStamper(IVersionsStamper):
 
 
 def handle_init(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
     expected_status = {
         "repos_exist_locally",
     }
@@ -989,7 +945,7 @@ def handle_init(vmn_ctx):
 
     be = vmn_ctx.vcs.backend
 
-    vmn_path = os.path.join(vmn_ctx.params["root_path"], ".vmn")
+    vmn_path = os.path.join(vmn_ctx.vcs.root_path, ".vmn")
     Path(vmn_path).mkdir(parents=True, exist_ok=True)
     vmn_init_path = os.path.join(vmn_path, "vmn.init")
     Path(vmn_init_path).touch()
@@ -1006,12 +962,16 @@ def handle_init(vmn_ctx):
     )
     be.push()
 
-    LOGGER.info(f'Initialized vmn tracking on {vmn_ctx.params["root_path"]}')
+    LOGGER.info(f'Initialized vmn tracking on {vmn_ctx.vcs.root_path}')
 
     return 0
 
 
 def handle_init_app(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
     # TODO: validate version number is of type major.minor.patch[.hotfix]
     err = _init_app(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     if err:
@@ -1025,6 +985,10 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
@@ -1100,7 +1064,66 @@ def handle_stamp(vmn_ctx):
     return 0
 
 
+def initialize_backend_attrs(vmn_ctx):
+    vcs = vmn_ctx.vcs
+    vcs.backend, err = stamp_utils.get_client(
+        vcs.working_dir,
+    )
+    if err:
+        LOGGER.error("Failed to create backend {0}. Exiting".format(err))
+        return 1
+
+    if vcs.raw_configured_deps is None:
+        vcs.raw_configured_deps = {
+            os.path.join("../"): {
+                os.path.basename(vcs.root_path):
+                    {
+                        "remote": vcs.backend.remote(),
+                        "vcs_type": vcs.backend.type()
+                    }
+            }
+        }
+
+    if vcs.name is None:
+        return
+
+    vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
+    deps = {}
+    for rel_path, dep in vcs.raw_configured_deps.items():
+        deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
+    vcs.actual_deps_state = \
+        HostState.get_actual_deps_state(deps, vcs.root_path)
+    vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
+    vcs.current_version_info["stamping"]["app"]["changesets"] = \
+        vcs.actual_deps_state
+    vcs.flat_configured_deps = vcs.get_deps_changesets()
+    vcs.ver_info_from_repo = vcs.backend.get_vmn_version_info(
+        vcs.name, vcs.root_context
+    )
+    vcs.tracked = (vcs.ver_info_from_repo is not None)
+
+    if os.path.isfile(vcs.app_conf_path):
+        with open(vcs.app_conf_path, "r") as f:
+            data = yaml.safe_load(f)
+
+            deps = {}
+            for rel_path, dep in vcs.raw_configured_deps.items():
+                deps[os.path.join(vcs.root_path, rel_path)] = \
+                    tuple(dep.keys())
+
+            vcs.actual_deps_state.update(
+                HostState.get_actual_deps_state(deps, vcs.root_path)
+            )
+            vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
+
+    return 0
+
+
 def handle_release(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
     expected_status = {
         "repos_exist_locally",
         "repo_tracked",
@@ -1153,8 +1176,14 @@ def _handle_add(vmn_ctx):
 
 
 def handle_show(vmn_ctx):
+    vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
+    if not vmn_ctx.params["from_file"]:
+        err = initialize_backend_attrs(vmn_ctx)
+        if err:
+            return err
+
     # root app does not have raw version number
-    if vmn_ctx.params["root"]:
+    if vmn_ctx.vcs.root_context:
         vmn_ctx.params["raw"] = False
     else:
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
@@ -1173,6 +1202,10 @@ def handle_show(vmn_ctx):
 
 
 def handle_goto(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
@@ -1268,7 +1301,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         if configured_repos - local_repos:
             paths = []
             for path in configured_repos - local_repos:
-                paths.append(os.path.join(versions_be_ifc.backend.root(), path))
+                paths.append(os.path.join(versions_be_ifc.root_path, path))
 
             status["repos_exist_locally"] = False
             status["err_msgs"]["repos_exist_locally"] = (
@@ -1490,9 +1523,10 @@ def show(vcs, params, verstr=None):
     ver_info = None
     if params["from_file"]:
         if verstr is None:
-            ver_info = vcs.ver_info_from_repo
+            be = stamp_utils.LocalFileBackend(vcs.working_dir)
+            ver_info = be.get_vmn_version_info(vcs.name, vcs.root_context)
         else:
-            if params["root"]:
+            if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
                 path = os.path.join(dir_path, f"{verstr}.yml")
             else:
@@ -1532,19 +1566,19 @@ def show(vcs, params, verstr=None):
         LOGGER.info(
             "Version information was not found "
             "for {0}.".format(
-                params["name"],
+                vcs.name,
             )
         )
 
         raise RuntimeError()
 
     # TODO: refactor
-    if params["root"]:
+    if vcs.root_context:
         data = ver_info["stamping"]["root_app"]
         if not data:
             LOGGER.info(
                 "App {0} does not have a root app ".format(
-                    params["name"],
+                    vcs.name,
                 )
             )
 
@@ -1601,7 +1635,7 @@ def goto_version(vcs, params, version):
     )
 
     if ver_info is None:
-        LOGGER.error("No such app: {0}".format(params["name"]))
+        LOGGER.error("No such app: {0}".format(vcs.name))
         return 1
 
     data = ver_info["stamping"]["app"]
@@ -1612,7 +1646,7 @@ def goto_version(vcs, params, version):
             for rel_path, v in deps.items():
                 v["hash"] = None
 
-        _goto_version(deps, params["root_path"])
+        _goto_version(deps, vcs.root_path)
 
     if version is None and not params["deps_only"]:
         vcs.backend.checkout_branch()
@@ -1622,7 +1656,7 @@ def goto_version(vcs, params, version):
         except Exception:
             LOGGER.error(
                 "App: {0} with version: {1} was "
-                "not found".format(params["name"], version)
+                "not found".format(vcs.name, version)
             )
 
             return 1
@@ -1636,20 +1670,20 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
     except:
         return None, None, None
 
-    tag_name = f'{params["name"].replace("/", "-")}'
+    tag_name = f'{vcs.name.replace("/", "-")}'
     if verstr is not None:
         tag_name = f"{tag_name}_{verstr}"
 
     if verstr is None:
         try:
             ver_info = vcs.backend.get_vmn_version_info(
-                params["name"],
-                params["root"],
+                vcs.name,
+                vcs.root_context,
             )
         except:
             return None, None, None
     else:
-        if params["root"]:
+        if vcs.root_context:
             try:
                 int(verstr)
                 tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
@@ -1813,29 +1847,6 @@ def _goto_version(deps, root):
             "Failed to update one or more " "of the required repos. See log above"
         )
         raise RuntimeError()
-
-
-def build_world(name, working_dir, root_context, from_file):
-    params = {
-        "name": name,
-        "working_dir": working_dir,
-        "root": root_context,
-        "from_file": from_file,
-    }
-
-    be, err = stamp_utils.get_client(
-        params["working_dir"],
-        params["from_file"],
-    )
-    params["be"] = be
-    if err:
-        LOGGER.error("Failed to create backend {0}. Exiting".format(err))
-        return None
-
-    root_path = os.path.join(be.root())
-    params["root_path"] = root_path
-
-    return params
 
 
 def main(command_line=None):
