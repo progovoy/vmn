@@ -1865,7 +1865,7 @@ def parse_user_commands(command_line):
     pstamp.add_argument("--pull", dest="pull", action="store_true")
     pstamp.set_defaults(pull=False)
     pstamp.add_argument(
-        "--check-vmn-version", dest="check_vmn_version", action="store_true"
+        "--dont-check-vmn-version", dest="check_vmn_version", action="store_false"
     )
     pstamp.set_defaults(check_vmn_version=True)
     pstamp.add_argument("name", help="The application's name")
