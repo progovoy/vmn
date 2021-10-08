@@ -12,6 +12,7 @@ from filelock import FileLock
 from multiprocessing import Pool
 import re
 import tomlkit
+import json
 from packaging import version as pversion
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
@@ -349,6 +350,25 @@ class IVersionsStamper(object):
             except AttributeError:
                 LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
+
+    def _write_version_to_npm(self, verstr):
+        backend_conf = self.version_backends["npm"]
+        file_path = os.path.join(self.root_path, backend_conf["path"])
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+
+            data["version"] = verstr
+            with open(file_path, "w") as f:
+                json.dump(data, f, sort_keys=True)
+        except IOError as e:
+            LOGGER.error(f"Error writing npm ver file: {file_path}\n")
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
 
     def _write_version_to_cargo(self, verstr):
         backend_conf = self.version_backends["cargo"]
