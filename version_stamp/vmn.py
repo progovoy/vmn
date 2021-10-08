@@ -1085,6 +1085,7 @@ def handle_stamp(vmn_ctx):
         version = _stamp_version(
             vmn_ctx.vcs,
             vmn_ctx.args.pull,
+            vmn_ctx.args.check_vmn_version,
             initial_version,
             prerelease,
             prerelease_count,
@@ -1404,7 +1405,8 @@ def backward_compatible_initialized_check(root_path):
 
 
 def _stamp_version(
-    versions_be_ifc, pull, initial_version, initialprerelease, initialprerelease_count
+    versions_be_ifc, pull, check_vmn_version,
+        initial_version, initialprerelease, initialprerelease_count
 ):
     stamped = False
     retries = 3
@@ -1413,13 +1415,14 @@ def _stamp_version(
     override_initialprerelease_count = initialprerelease_count
     override_main_current_version = None
 
-    newer_stamping = version_mod.version != "dev" and (
-        pversion.parse(versions_be_ifc.ver_info_from_repo["vmn_info"]["vmn_version"])
-        > pversion.parse(version_mod.version)
-    )
-    if newer_stamping:
-        LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
-        raise RuntimeError()
+    if check_vmn_version:
+        newer_stamping = version_mod.version != "dev" and (
+            pversion.parse(versions_be_ifc.ver_info_from_repo["vmn_info"]["vmn_version"])
+            > pversion.parse(version_mod.version)
+        )
+        if newer_stamping:
+            LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
+            raise RuntimeError()
 
     if versions_be_ifc.bad_format_template:
         LOGGER.warning(versions_be_ifc.template_err_str)
@@ -1943,6 +1946,8 @@ def parse_user_commands(command_line):
     )
     pstamp.add_argument("--pull", dest="pull", action="store_true")
     pstamp.set_defaults(pull=False)
+    pstamp.add_argument("--dont-check-vmn-version", dest="dont_check_vmn_version", action="store_true")
+    pstamp.set_defaults(check_vmn_version=True)
     pstamp.add_argument("name", help="The application's name")
     pgoto = subprasers.add_parser("goto", help="go to version")
     pgoto.add_argument(
