@@ -3,6 +3,7 @@ import os
 import yaml
 import shutil
 import toml
+import stat
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
@@ -392,8 +393,17 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_minimal_res = yaml.safe_load(out)
 
-    del app_layout._app_backend
-    shutil.rmtree(os.path.join(app_layout.repo_path, ".git"))
+    def rmtree(top):
+        for root, dirs, files in os.walk(top, topdown=False):
+            for name in files:
+                filename = os.path.join(root, name)
+                os.chmod(filename, stat.S_IWUSR)
+                os.remove(filename)
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
+        os.rmdir(top)
+
+    rmtree(os.path.join(app_layout.repo_path, ".git"))
 
     err = _show(
         "root_app",
