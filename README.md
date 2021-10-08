@@ -12,11 +12,24 @@ A simple package for auto increasing version numbers of any application agnostic
 
 ## Supported Backends
 ### Cargo 
-Will embed Semver version string to you package.json file
-Add `version_backends": version_backends": {"cargo": {"path": "Cargo.toml"}}` to your app's conf.yml
+Will embed Semver version string to your `Cargo.toml` file along with the stamp operation (same commit).
+
+#### Configuration
+Add 
+
+`version_backends": version_backends": {"cargo": {"path": "rpath/to/Cargo.toml"}}` 
+
+to your app's conf.yml
+
 ### NPM
-Will embed Semver version string to you package.json file.
-Add `version_backends": {"npm": {"path": "rpath/to/package.json"}}` to your app's conf.yml
+Will embed Semver version string to you `package.json` file along with the stamp operation (same commit).
+
+#### Configuration
+Add 
+
+`version_backends": {"npm": {"path": "rpath/to/package.json"}}` 
+
+to your app's conf.yml
 
 ## Usage
 ### cd into your git repository
