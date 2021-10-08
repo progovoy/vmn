@@ -78,10 +78,7 @@ class FSAppLayoutFixture(object):
     def merge(self, from_rev, to_rev, squash=False):
         import subprocess
 
-        base_cmd = [
-            "git",
-            "merge",
-        ]
+        base_cmd = ["git", "merge"]
         if squash:
             base_cmd.append("--squash")
         base_cmd.extend([from_rev, to_rev])
@@ -126,12 +123,7 @@ class FSAppLayoutFixture(object):
         client.close()
 
     def write_file_commit_and_push(
-        self,
-        repo_name,
-        file_relative_path,
-        content,
-        commit=True,
-        push=True,
+        self, repo_name, file_relative_path, content, commit=True, push=True
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -266,9 +258,7 @@ class GitBackend(VersionControlBackend):
         client = Repo(self.root_path)
 
         client.index.add(conf_path)
-        client.index.commit(
-            message="Manually add config file",
-        )
+        client.index.commit(message="Manually add config file")
 
         origin = client.remote(name="origin")
         origin.push()

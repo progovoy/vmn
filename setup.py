@@ -18,12 +18,6 @@ setuptools.setup(
     url="https://github.com/final-israel/ver_stamp",
     install_requires=install_requires,
     package_dir={"version_stamp": "version_stamp"},
-    packages=[
-        "version_stamp",
-    ],
-    entry_points={
-        "console_scripts": [
-            "vmn = version_stamp.vmn:main",
-        ]
-    },
+    packages=["version_stamp"],
+    entry_points={"console_scripts": ["vmn = version_stamp.vmn:main"]},
 )

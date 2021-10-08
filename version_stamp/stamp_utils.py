@@ -236,12 +236,7 @@ class LocalFileBackend(VMNBackend):
 
     def get_vmn_version_info(self, app_name, root=False):
         if root:
-            dir_path = os.path.join(
-                self.repo_path,
-                ".vmn",
-                app_name,
-                "root_verinfo",
-            )
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
             if not list_of_files:
                 return None
@@ -250,12 +245,7 @@ class LocalFileBackend(VMNBackend):
             with open(latest_file, "r") as f:
                 return yaml.safe_load(f)
 
-        dir_path = os.path.join(
-            self.repo_path,
-            ".vmn",
-            app_name,
-            "verinfo",
-        )
+        dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
         list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
         if not list_of_files:
             return None
@@ -291,11 +281,7 @@ class GitBackend(VMNBackend):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
-            self._be.create_tag(
-                tag,
-                ref=ref,
-                message=message,
-            )
+            self._be.create_tag(tag, ref=ref, message=message)
 
     def push(self, tags=()):
         try:
@@ -322,9 +308,7 @@ class GitBackend(VMNBackend):
             try:
                 self._origin.push(f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._origin.push(
-                    f"refs/tags/{tag}",
-                )
+                self._origin.push(f"refs/tags/{tag}")
 
     def pull(self):
         self._origin.pull()
@@ -625,10 +609,7 @@ class HostState(object):
         try:
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
-            LOGGER.debug(
-                f'Skipping "{path}" directory reason:\n',
-                exc_info=True,
-            )
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
 
             return None
 

@@ -21,12 +21,7 @@ def _init_vmn_in_repo(expected_res=0):
 
 def _init_app(app_name, starting_version="0.0.0"):
     with vmn.VMNContextMAnagerManager(
-        [
-            "init-app",
-            "-v",
-            starting_version,
-            app_name,
-        ]
+        ["init-app", "-v", starting_version, app_name]
     ) as vmn_ctx:
         err = vmn.handle_init_app(vmn_ctx)
         assert err == 0
@@ -37,7 +32,7 @@ def _init_app(app_name, starting_version="0.0.0"):
 
         try:
             # Python3.9 only
-            merged_dict = (vmn_ctx.params | vmn_ctx.vcs.__dict__)
+            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
         except:
             merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
@@ -53,7 +48,7 @@ def _release_app(app_name, version):
 
         try:
             # Python3.9 only
-            merged_dict = (vmn_ctx.params | vmn_ctx.vcs.__dict__)
+            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
         except:
             merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
@@ -76,14 +71,22 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
         try:
             # Python3.9 only
-            merged_dict = (vmn_ctx.params | vmn_ctx.vcs.__dict__)
+            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
         except:
             merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
         return err, ver_info, merged_dict
 
 
-def _show(app_name, version=None, verbose=None, raw=None, root=False, from_file=False, ignore_dirty=False):
+def _show(
+    app_name,
+    version=None,
+    verbose=None,
+    raw=None,
+    root=False,
+    from_file=False,
+    ignore_dirty=False,
+):
     args_list = ["show"]
     if verbose is not None:
         args_list.append("--verbose")
@@ -127,11 +130,7 @@ def test_basic_stamp(app_layout):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.file",
-        "msg1",
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
@@ -176,30 +175,21 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.file",
-        "msg1",
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.file",
-        "msg1",
-        commit=False,
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1", commit=False)
 
     err = _show(app_layout.app_name)
     assert err == 0
 
     out, err = capfd.readouterr()
-    assert 'dirty' in out
+    assert "dirty" in out
 
     err = _show(app_layout.app_name, ignore_dirty=True)
     assert err == 0
 
     out, err = capfd.readouterr()
-    assert '0.0.1\n' == out
+    assert "0.0.1\n" == out
 
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
@@ -213,12 +203,7 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.file",
-        "msg1",
-        push=False,
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1", push=False)
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
@@ -231,11 +216,7 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.file",
-        "msg1",
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
@@ -374,13 +355,7 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_root_res = yaml.safe_load(out)
 
-    err = _show(
-        "root_app",
-        version="1",
-        from_file=True,
-        verbose=True,
-        root=True,
-    )
+    err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
     assert err == 0
 
     out, err = capfd.readouterr()
@@ -405,36 +380,21 @@ def test_show_from_file(app_layout, capfd):
 
     rmtree(os.path.join(app_layout.repo_path, ".git"))
 
-    err = _show(
-        "root_app",
-        version="1",
-        from_file=True,
-        verbose=True,
-        root=True,
-    )
+    err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
     assert err == 0
 
     out, err = capfd.readouterr()
     show_file_res = yaml.safe_load(out)
     assert show_file_res == show_root_res
 
-    err = _show(
-        app_name,
-        version="0.0.1",
-        verbose=True,
-        from_file=True,
-    )
+    err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
     out, err = capfd.readouterr()
     show_file_res = yaml.safe_load(out)
     assert show_file_res == show_res
 
-    err = _show(
-        app_name,
-        version="0.0.1",
-        from_file=True,
-    )
+    err = _show(app_name, version="0.0.1", from_file=True)
     assert err == 0
     out, err = capfd.readouterr()
     show_file = yaml.safe_load(out)
@@ -541,26 +501,12 @@ def test_multi_repo_dependency(app_layout, capfd):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
 
         conf["deps"]["../"].update(
-            {
-                repo[0]: {
-                    "vcs_type": repo[1],
-                    "remote": be.be.remote(),
-                }
-            }
+            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
 
     app_layout.write_conf(params["app_conf_path"], **conf)
-    app_layout.write_file_commit_and_push(
-        "repo1",
-        "f1.file",
-        "msg1",
-    )
-    app_layout.write_file_commit_and_push(
-        "repo1",
-        "f1.file",
-        "msg1",
-        commit=False,
-    )
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", commit=False)
 
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
@@ -570,12 +516,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert "repo1" in out
     app_layout.revert_changes("repo1")
 
-    app_layout.write_file_commit_and_push(
-        "repo1",
-        "f1.file",
-        "msg1",
-        push=False,
-    )
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", push=False)
 
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
@@ -583,11 +524,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "[ERROR] \nOutgoing changes in" in out
     assert "repo1" in out
-    app_layout.write_file_commit_and_push(
-        "repo1",
-        "f1.file",
-        "msg1",
-    )
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -629,12 +566,7 @@ def test_goto_deleted_repos(app_layout):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
 
         conf["deps"]["../"].update(
-            {
-                repo[0]: {
-                    "vcs_type": repo[1],
-                    "remote": be.be.remote(),
-                }
-            }
+            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
 
         be.__del__()
@@ -696,9 +628,7 @@ def test_rc_stamping(app_layout):
     _init_app(app_layout.app_name, "1.2.3")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-        prerelease="rc",
+        app_layout.app_name, release_mode="minor", prerelease="rc"
     )
     assert err == 0
 
@@ -707,20 +637,14 @@ def test_rc_stamping(app_layout):
     assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        prerelease="rc",
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-rc2"
     assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        prerelease="beta",
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="beta")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-beta1"
@@ -743,9 +667,7 @@ def test_rc_stamping(app_layout):
     for item in ["2.0.0", "3.0.0"]:
         app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(
-            app_layout.app_name,
-            release_mode="major",
-            prerelease="rc",
+            app_layout.app_name, release_mode="major", prerelease="rc"
         )
         assert err == 0
 
@@ -763,10 +685,7 @@ def test_rc_stamping(app_layout):
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
     assert err == 0
 
     data = ver_info["stamping"]["app"]
@@ -776,9 +695,7 @@ def test_rc_stamping(app_layout):
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-        prerelease="rc",
+        app_layout.app_name, release_mode="minor", prerelease="rc"
     )
     assert err == 0
 
@@ -789,9 +706,7 @@ def test_rc_stamping(app_layout):
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-        prerelease="rc",
+        app_layout.app_name, release_mode="minor", prerelease="rc"
     )
     assert err == 0
 
@@ -819,9 +734,7 @@ def test_rc_stamping(app_layout):
         app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
         err, ver_info, _ = _stamp_app(
-            app_layout.app_name,
-            release_mode="minor",
-            prerelease="release",
+            app_layout.app_name, release_mode="minor", prerelease="release"
         )
         assert err == 0
 
@@ -837,18 +750,14 @@ def test_rc_goto(app_layout, capfd):
 
     try:
         err, ver_info, _ = _stamp_app(
-            app_layout.app_name,
-            release_mode="minor",
-            prerelease="rc_aaa",
+            app_layout.app_name, release_mode="minor", prerelease="rc_aaa"
         )
         assert err == 0
     except AssertionError:
         pass
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-        prerelease="rcaaa",
+        app_layout.app_name, release_mode="minor", prerelease="rcaaa"
     )
     assert err == 0
 
@@ -864,9 +773,7 @@ def test_rc_goto(app_layout, capfd):
 
 def test_version_template():
     formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-        "2.0.9",
-        vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"),
-        True,
+        "2.0.9", vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"), True
     )
 
     assert formated_version == "2"
@@ -878,9 +785,7 @@ def test_version_template():
     assert formated_version == "2"
 
     formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-        "2.0.9.0",
-        vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"),
-        False,
+        "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), False
     )
 
     assert formated_version == "2-0"
@@ -1110,14 +1015,7 @@ def test_version_backends(app_layout, capfd):
     app_layout.write_file_commit_and_push(
         "test_repo",
         "Cargo.toml",
-        toml.dumps(
-            {
-                "package": {
-                    "name": "test_app",
-                    "version": "some ignored string",
-                }
-            }
-        ),
+        toml.dumps({"package": {"name": "test_app", "version": "some ignored string"}}),
     )
 
     conf = {
@@ -1140,8 +1038,7 @@ def test_version_backends(app_layout, capfd):
     assert err == 0
 
     full_path = os.path.join(
-        params["root_path"],
-        params["version_backends"]["cargo"]["path"],
+        params["root_path"], params["version_backends"]["cargo"]["path"]
     )
 
     with open(full_path, "r") as f:
