@@ -43,19 +43,19 @@ class VMNContextMAnagerManager(object):
             root = self.args.root
 
         root_path = cwd
-        '''
+        """
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
-        '''
-        exist =  \
-            os.path.exists(os.path.join(root_path, ".vmn")) or \
-            os.path.exists(os.path.join(root_path, ".git"))
+        """
+        exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
+            os.path.join(root_path, ".git")
+        )
         while not exist:
             try:
                 root_path = os.path.join(os.path.join(root_path, ".."))
-                exist = \
-                    os.path.exists(os.path.join(root_path, ".vmn")) or \
-                    os.path.exists(os.path.join(root_path, ".git"))
+                exist = os.path.exists(
+                    os.path.join(root_path, ".vmn")
+                ) or os.path.exists(os.path.join(root_path, ".git"))
             except:
                 root_path = None
                 break
@@ -63,11 +63,7 @@ class VMNContextMAnagerManager(object):
         if root_path is None:
             raise RuntimeError("Running from an unmanaged directory")
 
-        initial_params = {
-            "root": root,
-            "name": None,
-            "root_path": root_path,
-        }
+        initial_params = {"root": root, "name": None, "root_path": root_path}
 
         if "name" in self.args and self.args.name:
             validate_app_name(self.args)
