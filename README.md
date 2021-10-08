@@ -10,7 +10,26 @@ A simple package for auto increasing version numbers of any application agnostic
 
 [![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
 
-[![Build Status](https://travis-ci.com/final-israel/vmn.svg?branch=master)](https://travis-ci.com/final-israel/vmn)
+## Supported Backends
+### Cargo 
+Will embed Semver version string to your `Cargo.toml` file along with the stamp operation (same commit).
+
+#### Configuration
+Add 
+
+`version_backends": version_backends": {"cargo": {"path": "rpath/to/Cargo.toml"}}` 
+
+to your app's conf.yml
+
+### NPM
+Will embed Semver version string to you `package.json` file along with the stamp operation (same commit).
+
+#### Configuration
+Add 
+
+`version_backends": {"npm": {"path": "rpath/to/package.json"}}` 
+
+to your app's conf.yml
 
 ## Usage
 ### cd into your git repository
