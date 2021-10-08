@@ -41,20 +41,29 @@ class VMNContextMAnagerManager(object):
         if "root" in self.args:
             root = self.args.root
 
-        # TODO: find another way of getting the be.root() path,
-        # getting rid of the backend creation below
-        from_file = False
-        if "from_file" in self.args and self.args.from_file:
-            from_file = True
-        be, _ = stamp_utils.get_client(cwd, from_file)
-        if be is None:
-            raise RuntimeError("Backend creation failed")
-        root_path = be.root()
-        del be
+        root_path = cwd
+        '''
+            ".git" is the default app's backend in this case. If other backends will be added, 
+            then it can be moved to the configuration file as a default_backend or similar. 
+        '''
+        exist =  \
+            os.path.exists(os.path.join(root_path, ".vmn")) or \
+            os.path.exists(os.path.join(root_path, ".git"))
+        while not exist:
+            try:
+                root_path = os.path.join(os.path.join(root_path, ".."))
+                exist = \
+                    os.path.exists(os.path.join(root_path, ".vmn")) or \
+                    os.path.exists(os.path.join(root_path, ".git"))
+            except:
+                root_path = None
+                break
+
+        if root_path is None:
+            raise RuntimeError("Running from an unmanaged directory")
 
         initial_params = {
             "root": root,
-            "working_dir": cwd,
             "name": None,
             "root_path": root_path,
         }
@@ -94,7 +103,6 @@ class IVersionsStamper(object):
     def __init__(self, conf):
         self.backend = None
         self.params = conf
-        self.working_dir = conf["working_dir"]
         self.root_path = conf["root_path"]
         self.repo_name = "."
         self.name = conf["name"]
@@ -1000,7 +1008,7 @@ def handle_stamp(vmn_ctx):
 
 def initialize_backend_attrs(vmn_ctx):
     vcs = vmn_ctx.vcs
-    vcs.backend, err = stamp_utils.get_client(vcs.working_dir)
+    vcs.backend, err = stamp_utils.get_client(vcs.root_path)
     if err:
         LOGGER.error("Failed to create backend {0}. Exiting".format(err))
         return 1
@@ -1432,7 +1440,7 @@ def show(vcs, params, verstr=None):
     ver_info = None
     if params["from_file"]:
         if verstr is None:
-            be = stamp_utils.LocalFileBackend(vcs.working_dir)
+            be = stamp_utils.LocalFileBackend(vcs.root_path)
             ver_info = be.get_vmn_version_info(vcs.name, vcs.root_context)
         else:
             if vcs.root_context:

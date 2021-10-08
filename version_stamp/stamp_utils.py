@@ -95,15 +95,6 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
-    def last_user_changeset(self, name):
-        return None
-
-    def remote(self):
-        return None
-
-    def root(self):
-        return None
-
     def get_vmn_version_info(self, app_name, root=False):
         return {}
 
@@ -230,9 +221,6 @@ class LocalFileBackend(VMNBackend):
 
     def __del__(self):
         pass
-
-    def root(self):
-        return self.repo_path
 
     def get_vmn_version_info(self, app_name, root=False):
         if root:
