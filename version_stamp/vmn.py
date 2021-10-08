@@ -41,8 +41,8 @@ class VMNContextMAnagerManager(object):
         if "root" in self.args:
             root = self.args.root
 
-        # TODO: find another way of getting the be.root() path
-        # and get rid of backend creation
+        # TODO: find another way of getting the be.root() path,
+        # getting rid of the backend creation below
         from_file = False
         if "from_file" in self.args and self.args.from_file:
             from_file = True
