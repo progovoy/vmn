@@ -182,7 +182,7 @@ conf:
         vcs_type: git
   extra_info: false
   create_verinfo_files: false
-  create_verinfo_files: true
+  hide_zero_hotfix: true
   version_backends: 
     npm:
       path: "relative_path/to/Cargo.toml"
