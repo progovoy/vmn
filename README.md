@@ -1,35 +1,14 @@
 <p align="center">
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
-  <h1 align="center">Version MaNagment package - VMN</h1>
+  <h1 align="center">Version MaNagment package - vmn</h1>
 </p>
+
+
 
 A simple package for auto increasing version numbers of any application agnostic to language or architecture.
 
-`vmn` is fully compliant with https://semver.org semantics
-
-[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
-
-## Supported Backends
-### Cargo 
-Will embed Semver version string to your `Cargo.toml` file along with the stamp operation (same commit).
-
-#### Configuration
-Add 
-
-`version_backends": version_backends": {"cargo": {"path": "rpath/to/Cargo.toml"}}` 
-
-to your app's conf.yml
-
-### NPM
-Will embed Semver version string to you `package.json` file along with the stamp operation (same commit).
-
-#### Configuration
-Add 
-
-`version_backends": {"npm": {"path": "rpath/to/package.json"}}` 
-
-to your app's conf.yml
+`vmn` is fully compliant with `Semver` (https://semver.org) semantics
 
 ## Usage
 ### cd into your git repository
@@ -90,6 +69,13 @@ vmn show -v 1.0.1 <app-name>
 ```sh
 vmn goto -v 1.0.1 <app-name>
 ```
+
+## vmn supports embedding version information into some of the most common packaging platforms:
+
+| version-management platform | Description |  Configuration |
+| --- | --- | --- |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) Cargo | Will embed Semver version string to your `Cargo.toml` file during the `vmn stamp` command | `version_backends": version_backends": {"cargo": {"path": "rpath/to/Cargo.toml"}}` |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) npm | Will embed Semver version string to your `package.json` file during the `vmn stamp` command | ` version_backends": {"npm": {"path": "rpath/to/package.json"}}` |
 
 ## Installation
 
@@ -195,3 +181,5 @@ In `deps` you can specify other repositories as your dependencies and `vmn` will
 #### Configuration: extra_info
 Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.
 This feature is not very popular and may be remove / altered in the future
+
+[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
