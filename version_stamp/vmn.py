@@ -18,7 +18,9 @@ from packaging import version as pversion
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
-IGNORED_FILES = ["vmn.lock"]
+LOCK_FILENAME = "vmn.lock"
+
+IGNORED_FILES = [LOCK_FILENAME]
 
 sys.path.append(CUR_PATH)
 
@@ -72,7 +74,7 @@ class VMNContextMAnagerManager(object):
 
         vmn_path = os.path.join(root_path, ".vmn")
 
-        lock_file_path = os.path.join(vmn_path, "vmn.lock")
+        lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
         pathlib.Path(os.path.dirname(lock_file_path)).mkdir(parents=True, exist_ok=True)
         self.lock = FileLock(lock_file_path)
         self.params = initial_params
@@ -89,6 +91,9 @@ class VMNContextMAnagerManager(object):
             del self.vcs
 
         self.lock.release()
+
+        if os.path.exists(self.lock_file_path):
+            os.unlink(self.lock_file_path)
 
 
 class IVersionsStamper(object):
