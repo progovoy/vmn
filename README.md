@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="100" src="https://i.imgur.com/4gUaVKW.png">
+  <img width="80" src="https://i.imgur.com/4gUaVKW.png">
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
