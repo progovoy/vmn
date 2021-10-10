@@ -13,9 +13,9 @@ A simple package for auto increasing version numbers of any application agnostic
 - [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
 - [x] Bringing back the repository / repositories state to the state they were when the project was stamped (see `goto` section)
-- [x] Stamping of micro-services like project topologies (see `Root apps` section)
+- [x] Stamping of micro-services-like project topologies (see `Root apps` section)
 - [x] Stamping of a project depending on multiple git repositories (see `Configuration: deps` section)
-- [x] Version auto-embedding to supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see `Version auto-embedding` section)
+- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see `Version auto-embedding` section)
 - [ ] `WIP` Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Addition of `releasenotes` for an existing version [`Semver` extension]
 
@@ -103,13 +103,12 @@ It is the application's responsibility to actually set the version number at bui
 ```sh
 vmn show <app-name>
 ```
-and be injected via a custom script to the application's code during its build phase (see **`Version auto-embedding`** section above).
-Actually `vmn` uses this technique for itself.
+and be embedded via a custom script to the application's code during its build phase. `vmn` supports auto-embedding the version string during the `vmn stamp` phase for popular backends (see **`Version auto-embedding`** section above).
 
 ## Advanced features
 ### Root apps
 
-`vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under same solution. 
+`vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under the same solution. 
 
 ##### For example:
 
@@ -188,23 +187,17 @@ conf:
       path: "relative_path/to/Cargo.toml"
 ```
 
-#### Configuration: template
-
-The template configuration string can be customized and will be applied on the "raw" vmn version.
-`vmn` will display the version based on the `template`. In this case the output version will be `0.0`.
-
-For example:
-`vmn show my_root_app/service3` will output `0.0`
-
-however running:
-`vmn show --raw my_root_app/service3` will output `0.0.1`
 
 
-#### Configuration: deps
-In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`.
+|         Field          | Description                                                  | Example                                                      |
+| :--------------------: | ------------------------------------------------------------ | ------------------------------------------------------------ |
+|       `template`       | The template configuration string can be customized and will be applied on the "raw" vmn version.<br/>`vmn` will display the version based on the `template`. | `vmn show my_root_app/service3` will output `0.0` <br/>however running:<br/>`vmn show --raw my_root_app/service3` will output `0.0.1` |
+|         `deps`         | In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`. | See example `conf.yml` file above                            |
+|      `extra_info`      | Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.<br/>**`Note`** This feature is not very popular and may be remove / altered in the future | See example `conf.yml` file above                            |
+| `create_verinfo_files` | Tells `vmn` to create file for each stamped version. `vmn show --from-file` will work with these files instead of working with `git tags`. | See example `conf.yml` file above                            |
+|   `hide_zero_hotfix`   | Tells `vmn` to hide the fourth version octa when it is equal to zero. This way you will never see the fourth octa unless you will specifically stamp with `vmn stamp -r hotfix`. `True` by default. | See example `conf.yml` file above                            |
+|   `version_backends`   | Tells `vmn` to auto-embed the version string into one of the supported backends' files during the `vmn stamp` command. For instance, `vmn` will auto-embed the version string into `package.json` file if configured for `npm` projects. | See example `conf.yml` file above                            |
 
-#### Configuration: extra_info
-Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.
-This feature is not very popular and may be remove / altered in the future
+
 
 [![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
