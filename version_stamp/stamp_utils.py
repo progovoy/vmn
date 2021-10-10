@@ -264,12 +264,20 @@ class GitBackend(VMNBackend):
         except:
             return False
 
-    def tag(self, tags, messages, ref="HEAD"):
+    def tag(self, tags, messages, ref="HEAD", push=False):
         for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
             self._be.create_tag(tag, ref=ref, message=message)
+
+            if not push:
+                continue
+
+            try:
+                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
+            except Exception:
+                self._origin.push(f"refs/tags/{tag}")
 
     def push(self, tags=()):
         try:

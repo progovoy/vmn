@@ -659,7 +659,10 @@ class VersionControlStamper(IVersionsStamper):
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
         self.backend.tag(
-            [release_tag_name], messages, ref=self.backend.changeset(tag=tag_name)
+            [release_tag_name],
+            messages,
+            ref=self.backend.changeset(tag=tag_name),
+            push=True,
         )
 
         return props["version"]

@@ -665,6 +665,15 @@ def test_rc_stamping(app_layout):
     assert data["_version"] == "1.3.0"
     assert data["prerelease"] == "release"
 
+    tags_before = app_layout._app_backend.be.tags()
+    for t in tags_before:
+        app_layout._app_backend.be._be.delete_tag(t)
+
+    app_layout._app_backend.be._be.git.fetch("--tags")
+    tags_after = app_layout._app_backend.be.tags()
+
+    assert tags_before == tags_after
+
     for item in ["2.0.0", "3.0.0"]:
         app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(
