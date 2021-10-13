@@ -151,6 +151,7 @@ class IVersionsStamper(object):
             }
 
     def update_attrs_from_app_conf_file(self):
+        # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
             with open(self.app_conf_path, "r") as f:
                 data = yaml.safe_load(f)
