@@ -1873,6 +1873,7 @@ def parse_user_commands(command_line):
         choices=["major", "minor", "patch", "hotfix", "micro"],
         default=None,
         help="major / minor / patch / hotfix",
+        metavar='',
     )
     pstamp.add_argument(
         "--pr",
