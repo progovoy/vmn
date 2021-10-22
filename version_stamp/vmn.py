@@ -66,6 +66,8 @@ class VMNContextMAnagerManager(object):
         if root_path is None:
             raise RuntimeError("Running from an unmanaged directory")
 
+        root_path = os.path.realpath(root_path)
+
         initial_params = {"root": root, "name": None, "root_path": root_path}
 
         if "name" in self.args and self.args.name:
@@ -955,6 +957,17 @@ def handle_init_app(vmn_ctx):
     if err:
         return err
 
+    vmn_ctx.vcs.raw_configured_deps = {
+        os.path.join("../"): {
+            os.path.basename(vmn_ctx.vcs.root_path): {
+                "remote": vmn_ctx.vcs.backend.remote(),
+                "vcs_type": vmn_ctx.vcs.backend.type(),
+            }
+        }
+    }
+
+    initialize_deps_attrs(vmn_ctx.vcs)
+
     # TODO: validate version number is of type major.minor.patch[.hotfix]
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
@@ -966,9 +979,19 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
+    if vmn_ctx.vcs.raw_configured_deps is None:
+        LOGGER.error(
+            "There was a problem figuring out the"
+            " application deps. Please check the configuration file"
+        )
+
+        return 1
+
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
+
+    initialize_deps_attrs(vmn_ctx.vcs)
 
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
@@ -1048,46 +1071,27 @@ def initialize_backend_attrs(vmn_ctx):
         LOGGER.error("Failed to create backend {0}. Exiting".format(err))
         return 1
 
-    if vcs.raw_configured_deps is None:
-        vcs.raw_configured_deps = {
-            os.path.join("../"): {
-                os.path.basename(vcs.root_path): {
-                    "remote": vcs.backend.remote(),
-                    "vcs_type": vcs.backend.type(),
-                }
-            }
-        }
-
     if vcs.name is None:
-        return
+        return 0
 
-    vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
-    deps = {}
-    for rel_path, dep in vcs.raw_configured_deps.items():
-        deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
-    vcs.actual_deps_state = HostState.get_actual_deps_state(deps, vcs.root_path)
-    vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
-    vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
-    vcs.flat_configured_deps = vcs.get_deps_changesets()
     vcs.ver_info_from_repo = vcs.backend.get_vmn_version_info(
         vcs.name, vcs.root_context
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
-
-    if os.path.isfile(vcs.app_conf_path):
-        with open(vcs.app_conf_path, "r") as f:
-            data = yaml.safe_load(f)
-
-            deps = {}
-            for rel_path, dep in vcs.raw_configured_deps.items():
-                deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
-
-            vcs.actual_deps_state.update(
-                HostState.get_actual_deps_state(deps, vcs.root_path)
-            )
-            vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
+    vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
 
     return 0
+
+
+def initialize_deps_attrs(vcs):
+    deps = {}
+    for rel_path, dep in vcs.raw_configured_deps.items():
+        deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
+    vcs.actual_deps_state = \
+        HostState.get_actual_deps_state(deps, vcs.root_path)
+    vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
+    vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
+    vcs.flat_configured_deps = vcs.get_deps_changesets()
 
 
 def handle_release(vmn_ctx):
@@ -1161,9 +1165,19 @@ def handle_show(vmn_ctx):
 
 
 def handle_goto(vmn_ctx):
+    if vmn_ctx.vcs.raw_configured_deps is None:
+        LOGGER.error(
+            "There was a problem figuring out the"
+            " application deps. Please check the configuration file"
+        )
+
+        return 1
+
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
+
+    initialize_deps_attrs(vmn_ctx.vcs)
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 

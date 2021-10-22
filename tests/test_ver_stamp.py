@@ -149,6 +149,31 @@ def test_basic_stamp(app_layout):
         assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
 
 
+def test_bad_conf(app_layout, capfd):
+    _init_vmn_in_repo()
+    _, params = _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+
+    app_layout.write_file_commit_and_push("test_repo", "a/b/c/f1.file", "msg1")
+    os.environ["VMN_WORKING_DIR"] = f"{app_layout.repo_path}/a/b/c/"
+
+    conf = {
+        "conf": {
+            "template": "[{major}][.{minor}][.{patch}]",
+            "extra_info": False,
+        }
+    }
+
+    app_layout.write_conf(params["app_conf_path"], conf)
+
+    for i in range(2):
+        err, ver_info, _ = _stamp_app(app_layout.app_name, "hotfix")
+        out, err = capfd.readouterr()
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == "0.0.1.1"
+
+
 def test_basic_show(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
@@ -253,20 +278,22 @@ def test_show_from_file(app_layout, capfd):
     )
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "create_verinfo_files": True,
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf": {
+            "template": "[{major}][.{minor}][.{patch}]",
+            "create_verinfo_files": True,
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -305,20 +332,22 @@ def test_show_from_file(app_layout, capfd):
     app_name = "root_app/app1"
     _, params = _init_app(app_name)
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "create_verinfo_files": True,
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf":{
+            "template": "[{major}][.{minor}][.{patch}]",
+            "create_verinfo_files": True,
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, ver_info, params = _stamp_app(app_name, "patch")
     assert err == 0
@@ -409,20 +438,22 @@ def test_show_from_file_conf_changged(app_layout, capfd):
     capfd.readouterr()
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "create_verinfo_files": True,
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf":{
+            "template": "[{major}][.{minor}][.{patch}]",
+            "create_verinfo_files": True,
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -439,19 +470,21 @@ def test_show_from_file_conf_changged(app_layout, capfd):
     assert "0.0.1\n" == out
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf": {
+            "template": "[{major}][.{minor}][.{patch}]",
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -487,25 +520,27 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf":{
+            "template": "[{major}][.{minor}][.{patch}]",
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
     for repo in (("repo1", "git"), ("repo2", "git")):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
 
-        conf["deps"]["../"].update(
+        conf["conf"]["deps"]["../"].update(
             {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", commit=False)
 
@@ -535,7 +570,8 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert os.path.join("..", "repo1") in ver_info["stamping"]["app"]["changesets"]
     assert os.path.join("..", "repo2") in ver_info["stamping"]["app"]["changesets"]
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    # TODO: why is that?
+    app_layout.write_conf(params["app_conf_path"], conf)
     with open(params["app_conf_path"], "r") as f:
         data = yaml.safe_load(f)
         assert "../" in data["conf"]["deps"]
@@ -552,27 +588,29 @@ def test_goto_deleted_repos(app_layout):
     assert err == 0
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf":{
+            "template": "[{major}][.{minor}][.{patch}]",
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
     for repo in (("repo1", "git"), ("repo2", "git")):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
 
-        conf["deps"]["../"].update(
+        conf["conf"]["deps"]["../"].update(
             {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
 
         be.__del__()
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1029,20 +1067,22 @@ def test_version_backends_cargo(app_layout, capfd):
     )
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "version_backends": {"cargo": {"path": "Cargo.toml"}},
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf":{
+            "template": "[{major}][.{minor}][.{patch}]",
+            "version_backends": {"cargo": {"path": "Cargo.toml"}},
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1073,20 +1113,22 @@ def test_version_backends_npm(app_layout, capfd):
     )
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "version_backends": {"npm": {"path": "package.json"}},
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
+        "conf": {
+            "template": "[{major}][.{minor}][.{patch}]",
+            "version_backends": {"npm": {"path": "package.json"}},
+            "deps": {
+                "../": {
+                    "test_repo": {
+                        "vcs_type": app_layout.be_type,
+                        "remote": app_layout._app_backend.be.remote(),
+                    }
                 }
-            }
-        },
-        "extra_info": False,
+            },
+            "extra_info": False,
+        }
     }
 
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params["app_conf_path"], conf)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
