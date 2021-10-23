@@ -31,7 +31,7 @@ import stamp_utils
 LOGGER = stamp_utils.init_stamp_logger()
 
 
-class VMNContextMAnagerManager(object):
+class VMNContextMAnager(object):
     def __init__(self, command_line):
         self.args = parse_user_commands(command_line)
         global LOGGER
@@ -1565,7 +1565,7 @@ def goto_version(vcs, params, version):
     )
 
     if ver_info is None:
-        LOGGER.error("No such app: {0}".format(vcs.name))
+        LOGGER.error(f"No such app: {vcs.name}")
         return 1
 
     data = ver_info["stamping"]["app"]
@@ -1583,6 +1583,7 @@ def goto_version(vcs, params, version):
     elif not params["deps_only"]:
         try:
             vcs.backend.checkout(tag=tag_name)
+            LOGGER.info(f"You are at version {version} of {vcs.name}")
         except Exception:
             LOGGER.error(
                 "App: {0} with version: {1} was " "not found".format(vcs.name, version)
@@ -1787,7 +1788,7 @@ def main(command_line=None):
 
 def vmn_run(command_line):
     err = 0
-    with VMNContextMAnagerManager(command_line) as vmn_ctx:
+    with VMNContextMAnager(command_line) as vmn_ctx:
         if vmn_ctx.args.command == "init":
             err = handle_init(vmn_ctx)
         elif vmn_ctx.args.command == "init-app":
