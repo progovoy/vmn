@@ -1580,6 +1580,7 @@ def goto_version(vcs, params, version):
 
     if version is None and not params["deps_only"]:
         vcs.backend.checkout_branch()
+        LOGGER.info(f"You are at the latest version {data['_version']} of {vcs.name}")
     elif not params["deps_only"]:
         try:
             vcs.backend.checkout(tag=tag_name)
@@ -1780,7 +1781,7 @@ def main(command_line=None):
     try:
         return vmn_run(command_line)
     except Exception as exc:
-        LOGGER.info("vmn_run raised exception. Run vmn --debug for details")
+        LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
         LOGGER.debug("Exception info: ", exc_info=True)
 
         return 1

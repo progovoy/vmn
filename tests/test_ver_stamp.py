@@ -808,6 +808,15 @@ def test_goto_print(app_layout, capfd):
         sout, serr = capfd.readouterr()
         assert f"[INFO] You are at version 1.3.0 of {app_layout.app_name}\n" == sout
 
+    with vmn.VMNContextMAnager(
+        ["goto", app_layout.app_name]
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+        sout, serr = capfd.readouterr()
+        assert f"[INFO] You are at the latest version 2.0.0 of {app_layout.app_name}\n" == sout
+
 
 def test_version_template():
     formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
