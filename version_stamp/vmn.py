@@ -223,8 +223,9 @@ class IVersionsStamper(object):
     ):
         if initialprerelease == "release" and self.release_mode is None:
             LOGGER.error(
-                "When stamping from a previous release version, "
-                "a release mode must be specified"
+                "When not in release candidate mode, "
+                "a release mode must be specified - use "
+                "-r/--release-mode with one of major/minor/patch/hotfix"
             )
             raise RuntimeError()
 
