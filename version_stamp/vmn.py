@@ -55,7 +55,12 @@ class VMNContextMAnager(object):
         )
         while not exist:
             try:
+                prev_path = root_path
                 root_path = os.path.join(os.path.join(root_path, ".."))
+                root_path = os.path.realpath(root_path)
+                if prev_path == root_path:
+                    raise RuntimeError()
+
                 exist = os.path.exists(
                     os.path.join(root_path, ".vmn")
                 ) or os.path.exists(os.path.join(root_path, ".git"))
