@@ -133,6 +133,7 @@ def test_basic_stamp(app_layout):
 
     app_layout.write_file_commit_and_push("test_repo", "a/b/c/f1.file", "msg1")
     os.environ["VMN_WORKING_DIR"] = f"{app_layout.repo_path}/a/b/c/"
+
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
         assert err == 0
@@ -147,6 +148,8 @@ def test_basic_stamp(app_layout):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
+
+    _init_app('myapp')
 
 
 def test_basic_show(app_layout, capfd):
