@@ -236,6 +236,8 @@ def test_basic_show(app_layout, capfd):
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
+    capfd.readouterr()
+
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
@@ -1034,8 +1036,8 @@ def test_basic_root_show(app_layout, capfd):
     assert err == 1
     out, err = capfd.readouterr()
     assert (
-        "[ERROR] When stamping from a previous release version, "
-        "a release mode must be specified\n" == out
+        "[ERROR] When not in release candidate mode, a release mode must be "
+        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n" == out
     )
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
