@@ -45,7 +45,7 @@ class VMNContextMAnager(object):
         if "root" in self.args:
             root = self.args.root
 
-        root_path = cwd
+        root_path = os.path.realpath(os.path.expanduser(cwd))
         """
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
@@ -56,8 +56,7 @@ class VMNContextMAnager(object):
         while not exist:
             try:
                 prev_path = root_path
-                root_path = os.path.join(os.path.join(root_path, ".."))
-                root_path = os.path.realpath(root_path)
+                root_path = os.path.realpath(os.path.join(root_path, ".."))
                 if prev_path == root_path:
                     raise RuntimeError()
 
