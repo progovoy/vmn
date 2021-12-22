@@ -618,6 +618,49 @@ def test_basic_root_stamp(app_layout):
     data = ver_info["stamping"]["root_app"]
     assert data["version"] == 3
 
+    app_name = "root_app/app3"
+    _init_app(app_name)
+    err, ver_info, params = _stamp_app(app_name, "patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 5
+
+    app_name = "root_app/app1"
+    err, ver_info, params = _stamp_app(app_name, "major")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 1
+
+    app_name = "root_app/app2"
+    err, ver_info, params = _stamp_app(app_name, "major")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.1.0"
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 3
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "blabla")
+
+    app_name = "root_app/app1"
+    err, ver_info, params = _stamp_app(app_name, "major")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.0.0"
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 6
+
+    app_name = "root_app/app2"
+    err, ver_info, params = _stamp_app(app_name, "major")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.0.0"
+    data = ver_info["stamping"]["root_app"]
+    assert data["version"] == 7
+
 
 def test_starting_version(app_layout):
     _init_vmn_in_repo()

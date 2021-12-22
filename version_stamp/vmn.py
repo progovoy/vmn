@@ -751,7 +751,8 @@ class VersionControlStamper(IVersionsStamper):
             )
             raise RuntimeError()
 
-        old_version = self.ver_info_from_repo["stamping"]["root_app"]["version"]
+        tags = self.backend.tags(filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*')
+        old_version = tags[0].split("_")[-1]
 
         if override_version is None:
             override_version = old_version
