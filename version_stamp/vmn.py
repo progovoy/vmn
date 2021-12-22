@@ -1139,7 +1139,6 @@ def _handle_add(vmn_ctx):
 
     return 0
 
-
 def handle_show(vmn_ctx):
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
     if not vmn_ctx.params["from_file"]:
@@ -1174,6 +1173,10 @@ def handle_goto(vmn_ctx):
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+
+
+def handle_list(vmn_ctx):
+    LOGGER.info(f"Hello")
 
 
 def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
@@ -1808,6 +1811,8 @@ def vmn_run(command_line):
             err = handle_goto(vmn_ctx)
         elif vmn_ctx.args.command == "release":
             err = handle_release(vmn_ctx)
+        elif vmn_ctx.args.command == "list":
+            err = handle_list(vmn_ctx)
         else:
             LOGGER.info("Run vmn -h for help")
             err = 0
@@ -1920,9 +1925,17 @@ def parse_user_commands(command_line):
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
+    subprasers.add_parser("list", help="list versions")
+
     args = parser.parse_args(command_line)
 
+
+
+
     return args
+
+
+
 
 
 if __name__ == "__main__":
