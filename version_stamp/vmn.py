@@ -979,6 +979,8 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
+    vmn_ctx.vcs.override_root_version = vmn_ctx.args.orv
+
     # For backward compatability
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
@@ -1408,7 +1410,7 @@ def _stamp_version(
     override_initial_version = initial_version
     override_initialprerelease = initialprerelease
     override_initialprerelease_count = initialprerelease_count
-    override_main_current_version = None
+    override_main_current_version = versions_be_ifc.override_root_version
 
     if check_vmn_version:
         newer_stamping = version_mod.version != "dev" and (
@@ -1896,6 +1898,12 @@ def parse_user_commands(command_line):
         "--dont-check-vmn-version", dest="check_vmn_version", action="store_false"
     )
     pstamp.set_defaults(check_vmn_version=True)
+    pstamp.add_argument(
+        "--orv",
+        "--override-root-version",
+        default=None,
+        help="Override root version with any integer of your choice",
+    )
     pstamp.add_argument("name", help="The application's name")
     pgoto = subprasers.add_parser("goto", help="go to version")
     pgoto.add_argument(
