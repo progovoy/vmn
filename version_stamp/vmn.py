@@ -751,7 +751,9 @@ class VersionControlStamper(IVersionsStamper):
             )
             raise RuntimeError()
 
-        tags = self.backend.tags(filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*')
+        tags = self.backend.tags(
+            filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*'
+        )
         old_version = tags[0].split("_")[-1]
 
         if override_version is None:
@@ -1883,7 +1885,7 @@ def parse_user_commands(command_line):
         choices=["major", "minor", "patch", "hotfix", "micro"],
         default=None,
         help="major / minor / patch / hotfix",
-        metavar='',
+        metavar="",
     )
     pstamp.add_argument(
         "--pr",

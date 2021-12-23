@@ -149,7 +149,7 @@ def test_basic_stamp(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == "1.0.0.2"
 
-    _init_app('myapp')
+    _init_app("myapp")
 
 
 def test_basic_show(app_layout, capfd):
@@ -586,9 +586,7 @@ def test_goto_deleted_repos(app_layout):
     # deleting repo_b
     shutil.rmtree(dir_path)
 
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "0.0.2", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", "-v", "0.0.2", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
@@ -847,23 +845,22 @@ def test_goto_print(app_layout, capfd):
 
     capfd.readouterr()
 
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "1.3.0", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
         sout, serr = capfd.readouterr()
         assert f"[INFO] You are at version 1.3.0 of {app_layout.app_name}\n" == sout
 
-    with vmn.VMNContextMAnager(
-        ["goto", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
         sout, serr = capfd.readouterr()
-        assert f"[INFO] You are at the latest version 2.0.0 of {app_layout.app_name}\n" == sout
+        assert (
+            f"[INFO] You are at the latest version 2.0.0 of {app_layout.app_name}\n"
+            == sout
+        )
 
 
 def test_version_template():
@@ -901,14 +898,10 @@ def test_basic_goto(app_layout, capfd):
     assert data["_version"] == "1.3.1"
 
     c1 = app_layout._app_backend.be.changeset()
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "0.0.2", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", "-v", "0.0.2", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 1
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "1.3.0", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
@@ -924,9 +917,7 @@ def test_basic_goto(app_layout, capfd):
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "1.3.1", app_layout.app_name]
-    ) as vmn_ctx:
+    with vmn.VMNContextMAnager(["goto", "-v", "1.3.1", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
     c3 = app_layout._app_backend.be.changeset()
@@ -1080,7 +1071,8 @@ def test_basic_root_show(app_layout, capfd):
     out, err = capfd.readouterr()
     assert (
         "[ERROR] When not in release candidate mode, a release mode must be "
-        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n" == out
+        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
+        == out
     )
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
