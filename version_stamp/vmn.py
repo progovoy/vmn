@@ -222,31 +222,10 @@ class IVersionsStamper(object):
 
     # Note: this function generates
     # a version (including prerelease)
-    def gen_app_version(
+    def gen_advanced_version(
         self, initial_version, initialprerelease, initialprerelease_count
     ):
-        if initialprerelease == "release" and self.release_mode is None:
-            LOGGER.error(
-                "When not in release candidate mode, "
-                "a release mode must be specified - use "
-                "-r/--release-mode with one of major/minor/patch/hotfix"
-            )
-            raise RuntimeError()
-
-        match = re.search(stamp_utils.VMN_REGEX, initial_version)
-        gdict = match.groupdict()
-        if gdict["hotfix"] is None:
-            gdict["hotfix"] = str(0)
-
-        match = re.search(
-            stamp_utils.VMN_REGEX,
-            self.ver_info_from_repo["stamping"]["app"]["_version"],
-        )
-        repo_gdict = match.groupdict()
-        if repo_gdict["hotfix"] is None:
-            repo_gdict["hotfix"] = str(0)
-
-        major, minor, patch, hotfix = self._advance_version(gdict)
+        verstr = self._advance_version(initial_version)
 
         prerelease = self.prerelease
         # If user did not specify a change in prerelease,
@@ -261,8 +240,6 @@ class IVersionsStamper(object):
         prerelease, prerelease_count = self._advanceprerelease(
             prerelease, prerelease_count
         )
-
-        verstr = self.gen_vmn_version(major, minor, patch, hotfix)
 
         return verstr, prerelease, prerelease_count
 
@@ -293,7 +270,12 @@ class IVersionsStamper(object):
 
         return counter_key, prerelease_count
 
-    def _advance_version(self, gdict):
+    def _advance_version(self, version):
+        match = re.search(stamp_utils.VMN_REGEX, version)
+        gdict = match.groupdict()
+        if gdict["hotfix"] is None:
+            gdict["hotfix"] = str(0)
+
         major = gdict["major"]
         minor = gdict["minor"]
         patch = gdict["patch"]
@@ -314,31 +296,21 @@ class IVersionsStamper(object):
         elif self.release_mode == "hotfix":
             hotfix = str(int(hotfix) + 1)
 
-        return major, minor, patch, hotfix
+        return self.gen_vmn_version_from_raw_components(
+            major, minor, patch, hotfix
+        )
 
-    def gen_vmn_version(
-        self, major, minor, patch, hotfix=None, prerelease=None, prerelease_count={}
-    ):
+
+    def gen_vmn_version_from_raw_components(self, major, minor, patch, hotfix=None):
         if self.hide_zero_hotfix and hotfix == "0":
             hotfix = None
 
         vmn_version = f"{major}.{minor}.{patch}"
         if hotfix is not None:
             vmn_version = f"{vmn_version}.{hotfix}"
-        if prerelease is not None and prerelease != "release":
-            try:
-                assert prerelease in prerelease_count
-                vmn_version = (
-                    f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
-                )
-            except AssertionError:
-                LOGGER.error(
-                    f"{prerelease} doesn't appear in {prerelease_count} "
-                    "Turn on debug mode to see traceback"
-                )
-                LOGGER.debug("Exception info: ", exc_info=True)
 
         return vmn_version
+
 
     def write_version_to_file(
         self, version_number: str, prerelease: str, prerelease_count: dict
@@ -503,24 +475,73 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, conf):
         IVersionsStamper.__init__(self, conf)
 
+    def get_tag_formatted_app_name(
+            self,
+            app_name,
+            version,
+            prerelease=None,
+            prerelease_count=None
+    ):
+        app_name = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(app_name)
+
+        verstr = self.gen_verstr(version, prerelease, prerelease_count)
+
+        verstr = f"{app_name}_{verstr}"
+
+        match = re.search(stamp_utils.VMN_TAG_REGEX, verstr)
+        if match is None:
+            err = f"Tag {verstr} doesn't comply with: " \
+                  f"{stamp_utils.VMN_TAG_REGEX} format"
+            LOGGER.error(err)
+
+            raise RuntimeError(err)
+
+        return verstr
+
     def gen_verstr(self, current_version, prerelease, prerelease_count):
         match = re.search(stamp_utils.VMN_REGEX, current_version)
         gdict = match.groupdict()
         if gdict["hotfix"] is None:
             gdict["hotfix"] = str(0)
-        verstr = self.gen_vmn_version(
+
+        vmn_version = self.gen_vmn_version_from_raw_components(
             gdict["major"],
             gdict["minor"],
             gdict["patch"],
             gdict["hotfix"],
-            prerelease,
-            prerelease_count,
         )
 
-        return verstr
+        if prerelease is None or prerelease == "release":
+            return vmn_version
+
+        try:
+            assert prerelease in prerelease_count
+            #TODO: here try to use VMN_VERSION_FORMAT somehow
+            vmn_version = (
+                f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
+            )
+
+            match = re.search(stamp_utils.VMN_REGEX, vmn_version)
+            if match is None:
+                err = f"Tag {vmn_version} doesn't comply with: " \
+                      f"{stamp_utils.VMN_VERSION_FORMAT} format"
+                LOGGER.error(err)
+
+                raise RuntimeError(err)
+        except AssertionError:
+            LOGGER.error(
+                f"{prerelease} doesn't appear in {prerelease_count} "
+                "Turn on debug mode to see traceback"
+            )
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+        return vmn_version
 
     def find_matching_version(self, version, prerelease, prerelease_count):
-        tag_formatted_app_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(
+        if version is None:
+            return None
+
+        tag_formatted_app_name = self.get_tag_formatted_app_name(
             self.name, version, prerelease, prerelease_count
         )
 
@@ -596,7 +617,7 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         self.should_publish = False
-        tag_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(
+        tag_name = self.get_tag_formatted_app_name(
             self.name, old_version
         )
         if self.backend.changeset() != self.backend.changeset(tag=tag_name):
@@ -625,7 +646,7 @@ class VersionControlStamper(IVersionsStamper):
 
         version = f"{version}+{self.buildmetadata}"
 
-        tag_name = stamp_utils.VMNBackend.get_tag_formatted_app_name(self.name, version)
+        tag_name = self.get_tag_formatted_app_name(self.name, version)
 
         messages = [yaml.dump({"key": "TODO "}, sort_keys=True)]
 
@@ -676,8 +697,15 @@ class VersionControlStamper(IVersionsStamper):
     def stamp_app_version(
         self, initial_version, initialprerelease, initialprerelease_count
     ):
-        # TODO: verify that can be called multiple times with same result
-        current_version, prerelease, prerelease_count = self.gen_app_version(
+        if initialprerelease == "release" and self.release_mode is None:
+            LOGGER.error(
+                "When not in release candidate mode, "
+                "a release mode must be specified - use "
+                "-r/--release-mode with one of major/minor/patch/hotfix"
+            )
+            raise RuntimeError()
+
+        current_version, prerelease, prerelease_count = self.gen_advanced_version(
             initial_version, initialprerelease, initialprerelease_count
         )
 
@@ -982,6 +1010,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
     vmn_ctx.vcs.override_root_version = vmn_ctx.args.orv
+    vmn_ctx.vcs.override_version = vmn_ctx.args.ov
 
     # For backward compatability
     if vmn_ctx.vcs.release_mode == "micro":
@@ -1456,10 +1485,10 @@ def _stamp_version(
             override_main_current_version = main_ver
 
             LOGGER.warning(
-                "Failed to publish. Trying to auto-increase "
+                "Failed to publish. Will try to auto-increase "
                 "from {0} to {1}".format(
                     current_version,
-                    versions_be_ifc.gen_app_version(
+                    versions_be_ifc.gen_advanced_version(
                         override_initial_version,
                         override_initialprerelease,
                         override_initialprerelease_count,
@@ -1476,8 +1505,9 @@ def _stamp_version(
             break
 
     if not stamped:
-        LOGGER.error("Failed to stamp")
-        raise RuntimeError()
+        err = "Failed to stamp"
+        LOGGER.error(err)
+        raise RuntimeError(err)
 
     verstr = versions_be_ifc.gen_verstr(current_version, prerelease, prerelease_count)
 
@@ -1904,7 +1934,14 @@ def parse_user_commands(command_line):
         "--orv",
         "--override-root-version",
         default=None,
-        help="Override root version with any integer of your choice",
+        help="Override current root version with any integer of your choice",
+    )
+    pstamp.add_argument(
+        "--ov",
+        "--override-version",
+        default=None,
+        help=f"Override current version with any version in the "
+             f"format: {stamp_utils.VMN_VERSION_FORMAT}",
     )
     pstamp.add_argument("name", help="The application's name")
     pgoto = subprasers.add_parser("goto", help="go to version")
@@ -1932,7 +1969,30 @@ def parse_user_commands(command_line):
     prelease.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 
+    verify_user_input_version(args, 'version')
+    verify_user_input_version(args, 'ov')
+
     return args
+
+
+def verify_user_input_version(args, key):
+    if key not in args or getattr(args, key) is None:
+        return
+
+    if "root" not in args or not args.root:
+        match = re.search(stamp_utils.VMN_REGEX, getattr(args, key))
+    else:
+        match = re.search(stamp_utils.VMN_ROOT_REGEX, getattr(args, key))
+
+    if match is None:
+        if "root" not in args or not args.root:
+            err = f"Version must be in format: {stamp_utils.VMN_VERSION_FORMAT}"
+        else:
+            err = f"Root version must be an integer"
+
+        LOGGER.error(err)
+
+        raise RuntimeError(err)
 
 
 if __name__ == "__main__":

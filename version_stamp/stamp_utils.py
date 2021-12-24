@@ -19,35 +19,45 @@ VMN_DEFAULT_TEMPLATE = (
     "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
 )
 
-SEMVER_REGEX = (
-    "^(?P<major>0|[1-9]\d*)\."
+_SEMVER_VER_REGEX = (
+    "(?P<major>0|[1-9]\d*)\."
     "(?P<minor>0|[1-9]\d*)\."
     "(?P<patch>0|[1-9]\d*)"
-    "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-)
-# Regex for matching versions stamped by vmn
-VMN_REGEX = (
-    "^(?P<major>0|[1-9]\d*)\."
-    "(?P<minor>0|[1-9]\d*)\."
-    "(?P<patch>0|[1-9]\d*)"
-    "(?:\.(?P<hotfix>0|[1-9]\d*))?"
-    "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
-    "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$"
-)
-# TODO: create an abstraction layer on top of tag names versus the actual Semver versions
-VMN_TAG_REGEX = (
-    "^(?P<app_name>[^\/]+)_(?P<major>0|[1-9]\d*)\."
-    "(?P<minor>0|[1-9]\d*)\."
-    "(?P<patch>0|[1-9]\d*)"
-    "(?:\.(?P<hotfix>0|[1-9]\d*))?"
-    "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
-    "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?$"
 )
 
-VMN_ROOT_TAG_REGEX = "(?P<app_name>[^\/]+)_(?P<version>0|[1-9]\d*)$"
+_SEMVER_PRERELEASE_REGEX = (
+    "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+)
+
+_SEMVER_BUILDMETADATA_REGEX = (
+    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+)
+
+SEMVER_REGEX = (
+    f"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{_SEMVER_BUILDMETADATA_REGEX}$"
+)
+
+_VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
+_VMN_RELEASE_NOTES_REGEX = "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?"
+
+_VMN_REGEX = (
+    f"{_SEMVER_VER_REGEX}"
+    f"{_VMN_HOTFIX_REGEX}"
+    f"{_SEMVER_PRERELEASE_REGEX}"
+    f"{_SEMVER_BUILDMETADATA_REGEX}"
+    f"{_VMN_RELEASE_NOTES_REGEX}$"
+)
+
+# Regex for matching versions stamped by vmn
+VMN_REGEX = f"^{_VMN_REGEX}$"
+
+# TODO: create an abstraction layer on top of tag names versus the actual Semver versions
+VMN_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
+
+_VMN_ROOT_REGEX = "(?P<version>0|[1-9]\d*)"
+VMN_ROOT_REGEX = f"^{_VMN_ROOT_REGEX}$"
+
+VMN_ROOT_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
 
 VMN_TEMPLATE_REGEX = (
     "^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?"
@@ -99,19 +109,8 @@ class VMNBackend(object):
         return {}
 
     @staticmethod
-    def get_tag_formatted_app_name(
-        app_name, version=None, prerelease=None, prerelease_count=None
-    ):
-        app_name = app_name.replace("/", "-")
-
-        if version is None:
-            return f"{app_name}"
-        else:
-            verstr = f"{app_name}_{version}"
-            if prerelease is not None and prerelease != "release":
-                verstr = f"{verstr}-{prerelease}{prerelease_count[prerelease]}"
-
-            return verstr
+    def app_name_to_git_tag_app_name(app_name):
+        return app_name.replace("/", "-")
 
     @staticmethod
     def get_tag_properties(vmn_tag):
@@ -504,7 +503,7 @@ class GitBackend(VMNBackend):
         else:
             regex = VMN_TAG_REGEX
 
-        tag_formated_app_name = VMNBackend.get_tag_formatted_app_name(app_name)
+        tag_formated_app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
