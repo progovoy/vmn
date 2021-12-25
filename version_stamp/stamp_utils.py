@@ -494,7 +494,10 @@ class GitBackend(VMNBackend):
 
     def revert_local_changes(self, files=[]):
         if files:
-            self._be.index.checkout(files, force=True)
+            try:
+                self._be.index.checkout(files, force=True)
+            except Exception as exc:
+                pass
 
     def revert_vmn_commit(self, tags=[]):
         # TODO: also validte that the commit is of

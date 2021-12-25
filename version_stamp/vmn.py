@@ -346,9 +346,17 @@ class IVersionsStamper(object):
     def write_version_to_file(
         self, version_number: str, prerelease: str, prerelease_count: dict
     ) -> None:
-        self._write_version_to_vmn_version_file(
-            prerelease, prerelease_count, version_number
-        )
+        if self.dry_run:
+            LOGGER.info(
+                "would have written to version file: "
+                f"version: {version_number} "
+                f"prerelease: {prerelease} "
+                f"prerelease count: {prerelease_count} "
+            )
+        else:
+            self._write_version_to_vmn_version_file(
+                prerelease, prerelease_count, version_number
+            )
 
         if not self.version_backends:
             return
@@ -364,7 +372,13 @@ class IVersionsStamper(object):
                     continue
 
                 handler = getattr(self, f"_write_version_to_{backend}")
-                handler(verstr)
+                if self.dry_run:
+                    LOGGER.info(
+                        "Would have written to version backend file: "
+                        f"backend: {backend} version: {verstr}"
+                    )
+                else:
+                    handler(verstr)
             except AttributeError:
                 LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -856,6 +870,12 @@ class VersionControlStamper(IVersionsStamper):
     def publish_stamp(
         self, app_version, prerelease, prerelease_count, root_app_version
     ):
+        verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
+        app_msg = {
+            "vmn_info": self.current_version_info["vmn_info"],
+            "stamping": {"app": self.current_version_info["stamping"]["app"]},
+        }
+
         if not self.should_publish:
             return 0
 
@@ -865,12 +885,6 @@ class VersionControlStamper(IVersionsStamper):
             prerelease_count=prerelease_count,
         )
 
-        verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
-        app_msg = {
-            "vmn_info": self.current_version_info["vmn_info"],
-            "stamping": {"app": self.current_version_info["stamping"]["app"]},
-        }
-
         version_files_to_add = self.get_files_to_add_to_index(self.version_files)
 
         for backend in self.version_backends:
@@ -879,14 +893,7 @@ class VersionControlStamper(IVersionsStamper):
             version_files_to_add.append(file_path)
 
         if self.create_verinfo_files:
-            dir_path = os.path.join(self.app_dir_path, "verinfo")
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{verstr}.yml")
-            with open(path, "w") as f:
-                data = yaml.dump(app_msg, sort_keys=True)
-                f.write(data)
-
-            version_files_to_add.append(path)
+            self.create_verinfo_file(app_msg, version_files_to_add, verstr)
 
         if self.root_app_name is not None:
             root_app_msg = {
@@ -901,14 +908,7 @@ class VersionControlStamper(IVersionsStamper):
                 version_files_to_add.extend(tmp)
 
             if self.create_verinfo_files:
-                dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
-                Path(dir_path).mkdir(parents=True, exist_ok=True)
-                path = os.path.join(dir_path, f"{root_app_version}.yml")
-                with open(path, "w") as f:
-                    data = yaml.dump(root_app_msg, sort_keys=True)
-                    f.write(data)
-
-                version_files_to_add.append(path)
+                self.create_verinfo_root_file(root_app_msg, root_app_version, version_files_to_add)
 
         commit_msg = None
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
@@ -917,11 +917,7 @@ class VersionControlStamper(IVersionsStamper):
             commit_msg = f"{self.name}: Stamped version {verstr}\n\n"
 
         self.current_version_info["stamping"]["msg"] = commit_msg
-        self.backend.commit(
-            message=self.current_version_info["stamping"]["msg"],
-            user="vmn",
-            include=version_files_to_add,
-        )
+        self.publish_commit(version_files_to_add)
 
         tag = f'{self.name.replace("/", "-")}_{verstr}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, tag)
@@ -930,7 +926,12 @@ class VersionControlStamper(IVersionsStamper):
                 f"Tag {tag} doesn't comply to vmn version format"
                 f"Reverting vmn changes ..."
             )
-            self.backend.revert_vmn_commit()
+            if self.dry_run:
+                LOGGER.info(
+                    "Would have reverted vmn commit. "
+                )
+            else:
+                self.backend.revert_vmn_commit()
 
             return 3
 
@@ -946,7 +947,12 @@ class VersionControlStamper(IVersionsStamper):
                     f"Tag {tag} doesn't comply to vmn version format"
                     f"Reverting vmn changes ..."
                 )
-                self.backend.revert_vmn_commit()
+                if self.dry_run:
+                    LOGGER.info(
+                        "Would have reverted vmn commit. "
+                    )
+                else:
+                    self.backend.revert_vmn_commit()
 
                 return 3
 
@@ -957,11 +963,23 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             for t, m in zip(tags, msgs):
-                self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
+                if self.dry_run:
+                    LOGGER.info(
+                        "Would have created tag. "
+                        f"tag: {t} "
+                        f"content: {yaml.dump(m, sort_keys=True)} "
+                    )
+                else:
+                    self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception as exc:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
-            self.backend.revert_vmn_commit(all_tags)
+            if self.dry_run:
+                LOGGER.info(
+                    f"Would have reverted vmn commit. And delete tags: {all_tags}"
+                )
+            else:
+                self.backend.revert_vmn_commit(all_tags)
 
             return 1
 
@@ -970,11 +988,64 @@ class VersionControlStamper(IVersionsStamper):
         except Exception:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
-            self.backend.revert_vmn_commit(all_tags)
+            if self.dry_run:
+                LOGGER.info(
+                    f"Would have reverted vmn commit. And delete tags: {all_tags}"
+                )
+            else:
+                self.backend.revert_vmn_commit(all_tags)
 
             return 2
 
         return 0
+
+    def publish_commit(self, version_files_to_add):
+        if self.dry_run:
+            LOGGER.info(
+                "Would have created commit. "
+                f'message: {self.current_version_info["stamping"]["msg"]}'
+            )
+        else:
+            self.backend.commit(
+                message=self.current_version_info["stamping"]["msg"],
+                user="vmn",
+                include=version_files_to_add,
+            )
+
+    def create_verinfo_root_file(self, root_app_msg, root_app_version, version_files_to_add):
+        dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
+
+        if self.dry_run:
+            LOGGER.info(
+                "Would have written to root verinfo file: "
+                f"path: {dir_path} version: {root_app_version} "
+                f"message: {root_app_msg}"
+            )
+        else:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(dir_path, f"{root_app_version}.yml")
+            with open(path, "w") as f:
+                data = yaml.dump(root_app_msg, sort_keys=True)
+                f.write(data)
+            version_files_to_add.append(path)
+
+    def create_verinfo_file(self, app_msg, version_files_to_add, verstr):
+        dir_path = os.path.join(self.app_dir_path, "verinfo")
+
+        if self.dry_run:
+            LOGGER.info(
+                "Would have written to verinfo file: "
+                f"path: {dir_path} version: {verstr}"
+                f"message: {app_msg}"
+            )
+        else:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(dir_path, f"{verstr}.yml")
+            with open(path, "w") as f:
+                data = yaml.dump(app_msg, sort_keys=True)
+                f.write(data)
+
+            version_files_to_add.append(path)
 
     def retrieve_remote_changes(self):
         self.backend.pull()
@@ -1016,6 +1087,8 @@ def handle_init(vmn_ctx):
 
 
 def handle_init_app(vmn_ctx):
+    vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
+
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
@@ -1040,6 +1113,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
     vmn_ctx.vcs.override_root_version = vmn_ctx.args.orv
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
+    vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
     # For backward compatability
     if vmn_ctx.vcs.release_mode == "micro":
@@ -1935,6 +2009,8 @@ def parse_user_commands(command_line):
         help="The version to init from. Must be specified in the raw version format: "
         "{major}.{minor}.{patch}",
     )
+    pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
+    pinitapp.set_defaults(dry=False)
     pinitapp.add_argument(
         "name", help="The application's name to initialize version tracking for"
     )
@@ -1995,7 +2071,10 @@ def parse_user_commands(command_line):
         help=f"Override current version with any version in the "
              f"format: {stamp_utils.VMN_VER_REGEX}",
     )
+    pstamp.add_argument("--dry-run", dest="dry", action="store_true")
+    pstamp.set_defaults(dry=False)
     pstamp.add_argument("name", help="The application's name")
+
     pgoto = subprasers.add_parser("goto", help="go to version")
     pgoto.add_argument(
         "-v",
