@@ -236,7 +236,7 @@ class IVersionsStamper(object):
 
         # Continue from last stamp prerelease information as long as
         # the last version is coherent with what is requested from
-        # the version file or manual version (not yet implemented)
+        # the version file or manual version (manual version is not yet implemented)
         prerelease, prerelease_count = self._advanceprerelease(
             prerelease, prerelease_count
         )
@@ -271,6 +271,7 @@ class IVersionsStamper(object):
         return counter_key, prerelease_count
 
     def _advance_version(self, version):
+        # TODO: maybe move up the version validity test
         match = re.search(stamp_utils.VMN_REGEX, version)
         gdict = match.groupdict()
         if gdict["hotfix"] is None:
@@ -282,19 +283,38 @@ class IVersionsStamper(object):
         hotfix = gdict["hotfix"]
 
         if self.release_mode == "major":
-            major = str(int(major) + 1)
+            tag_name_prefix = f'{self.name.replace("/", "-")}_'
+            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            major = max(int(major), int(props["major"]))
+            major = str(major + 1)
+
             minor = str(0)
             patch = str(0)
             hotfix = str(0)
         elif self.release_mode == "minor":
-            minor = str(int(minor) + 1)
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
+            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            minor = max(int(minor), int(props["minor"]))
+            minor = str(minor + 1)
+
             patch = str(0)
             hotfix = str(0)
         elif self.release_mode == "patch":
-            patch = str(int(patch) + 1)
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
+            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            patch = max(int(patch), int(props["patch"]))
+            patch = str(patch + 1)
+
             hotfix = str(0)
         elif self.release_mode == "hotfix":
-            hotfix = str(int(hotfix) + 1)
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
+            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            hotfix = max(int(hotfix), int(props["hotfix"]))
+            hotfix = str(hotfix + 1)
 
         return self.gen_vmn_version_from_raw_components(
             major, minor, patch, hotfix

@@ -119,6 +119,9 @@ class VMNBackend(object):
             "type": "version",
             "version": None,
             "root_version": None,
+            "major": None,
+            "minor": None,
+            "patch": None,
             "hotfix": None,
             "prerelease": None,
             "buildmetadata": None,
@@ -143,11 +146,18 @@ class VMNBackend(object):
         gdict = match.groupdict()
         ret["app_name"] = gdict["app_name"].replace("-", "/")
         ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret["major"] = gdict["major"]
+        ret["minor"] = gdict["minor"]
+        ret["patch"] = gdict["patch"]
         ret["hotfix"] = "0"
 
         if gdict["hotfix"] is not None:
             ret["hotfix"] = gdict["hotfix"]
 
+        # TODO: Think about what it means that we have the whole
+        #  prerelease string here (with the prerelease count).
+        #  At least rename other prerelease prefixes to
+        #  something like "prerelease mode" or "prerelease prefix"
         if gdict["prerelease"] is not None:
             ret["prerelease"] = gdict["prerelease"]
             ret["type"] = "prerelease"
