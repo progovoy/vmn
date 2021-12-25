@@ -1220,6 +1220,7 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.tracked = vcs.ver_info_from_repo is not None
 
     if os.path.isfile(vcs.app_conf_path):
+        # TODO: Understand this peice of code
         with open(vcs.app_conf_path, "r") as f:
             data = yaml.safe_load(f)
 
