@@ -266,13 +266,14 @@ class IVersionsStamper(object):
             prerelease_count[counter_key] = 0
 
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
-        tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+        tags = self.backend.tags(filter=f"{tag_name_prefix}*")
         if tags:
             props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
 
             global_val = int(props["prerelease"].split(prerelease)[1])
-            prerelease_count[counter_key] = \
-                max(prerelease_count[counter_key], global_val)
+            prerelease_count[counter_key] = max(
+                prerelease_count[counter_key], global_val
+            )
 
         prerelease_count[counter_key] += 1
 
@@ -295,7 +296,7 @@ class IVersionsStamper(object):
 
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
-            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
             props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
             major = max(int(major), int(props["major"]))
             major = str(major + 1)
@@ -305,7 +306,7 @@ class IVersionsStamper(object):
             hotfix = str(0)
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
-            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
             props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
             minor = max(int(minor), int(props["minor"]))
             minor = str(minor + 1)
@@ -314,7 +315,7 @@ class IVersionsStamper(object):
             hotfix = str(0)
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
-            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
             props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
             patch = max(int(patch), int(props["patch"]))
             patch = str(patch + 1)
@@ -322,15 +323,12 @@ class IVersionsStamper(object):
             hotfix = str(0)
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
-            tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
             props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
-        return self.gen_vmn_version_from_raw_components(
-            major, minor, patch, hotfix
-        )
-
+        return self.gen_vmn_version_from_raw_components(major, minor, patch, hotfix)
 
     def gen_vmn_version_from_raw_components(self, major, minor, patch, hotfix=None):
         if self.hide_zero_hotfix and hotfix == "0":
@@ -341,7 +339,6 @@ class IVersionsStamper(object):
             vmn_version = f"{vmn_version}.{hotfix}"
 
         return vmn_version
-
 
     def write_version_to_file(
         self, version_number: str, prerelease: str, prerelease_count: dict
@@ -521,11 +518,7 @@ class VersionControlStamper(IVersionsStamper):
         IVersionsStamper.__init__(self, conf)
 
     def get_tag_formatted_app_name(
-            self,
-            app_name,
-            version,
-            prerelease=None,
-            prerelease_count=None
+        self, app_name, version, prerelease=None, prerelease_count=None
     ):
         app_name = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(app_name)
 
@@ -535,8 +528,10 @@ class VersionControlStamper(IVersionsStamper):
 
         match = re.search(stamp_utils.VMN_TAG_REGEX, verstr)
         if match is None:
-            err = f"Tag {verstr} doesn't comply with: " \
-                  f"{stamp_utils.VMN_TAG_REGEX} format"
+            err = (
+                f"Tag {verstr} doesn't comply with: "
+                f"{stamp_utils.VMN_TAG_REGEX} format"
+            )
             LOGGER.error(err)
 
             raise RuntimeError(err)
@@ -561,15 +556,15 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             assert prerelease in prerelease_count
-            #TODO: here try to use VMN_VERSION_FORMAT somehow
-            vmn_version = (
-                f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
-            )
+            # TODO: here try to use VMN_VERSION_FORMAT somehow
+            vmn_version = f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
 
             match = re.search(stamp_utils.VMN_REGEX, vmn_version)
             if match is None:
-                err = f"Tag {vmn_version} doesn't comply with: " \
-                      f"{stamp_utils.VMN_VERSION_FORMAT} format"
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{stamp_utils.VMN_VERSION_FORMAT} format"
+                )
                 LOGGER.error(err)
 
                 raise RuntimeError(err)
@@ -662,9 +657,7 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         self.should_publish = False
-        tag_name = self.get_tag_formatted_app_name(
-            self.name, old_version
-        )
+        tag_name = self.get_tag_formatted_app_name(self.name, old_version)
         if self.backend.changeset() != self.backend.changeset(tag=tag_name):
             raise RuntimeError(
                 "Releasing a release candidate is only possible when the repository "
@@ -908,7 +901,9 @@ class VersionControlStamper(IVersionsStamper):
                 version_files_to_add.extend(tmp)
 
             if self.create_verinfo_files:
-                self.create_verinfo_root_file(root_app_msg, root_app_version, version_files_to_add)
+                self.create_verinfo_root_file(
+                    root_app_msg, root_app_version, version_files_to_add
+                )
 
         commit_msg = None
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
@@ -927,9 +922,7 @@ class VersionControlStamper(IVersionsStamper):
                 f"Reverting vmn changes ..."
             )
             if self.dry_run:
-                LOGGER.info(
-                    "Would have reverted vmn commit. "
-                )
+                LOGGER.info("Would have reverted vmn commit. ")
             else:
                 self.backend.revert_vmn_commit()
 
@@ -948,9 +941,7 @@ class VersionControlStamper(IVersionsStamper):
                     f"Reverting vmn changes ..."
                 )
                 if self.dry_run:
-                    LOGGER.info(
-                        "Would have reverted vmn commit. "
-                    )
+                    LOGGER.info("Would have reverted vmn commit. ")
                 else:
                     self.backend.revert_vmn_commit()
 
@@ -1012,7 +1003,9 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
-    def create_verinfo_root_file(self, root_app_msg, root_app_version, version_files_to_add):
+    def create_verinfo_root_file(
+        self, root_app_msg, root_app_version, version_files_to_add
+    ):
         dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
 
         if self.dry_run:
@@ -1524,9 +1517,7 @@ def _init_app(versions_be_ifc, starting_version):
             starting_version, "release", {}, root_app_version
         )
     except Exception as exc:
-        versions_be_ifc.backend.revert_local_changes(
-            versions_be_ifc.version_files
-        )
+        versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
         err = -1
 
     if err:
@@ -1596,9 +1587,7 @@ def _stamp_version(
                 current_version, prerelease, prerelease_count, main_ver
             )
         except Exception as exc:
-            versions_be_ifc.backend.revert_local_changes(
-                versions_be_ifc.version_files
-            )
+            versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
             err = -1
 
         if not err:
@@ -2070,7 +2059,7 @@ def parse_user_commands(command_line):
         "--override-version",
         default=None,
         help=f"Override current version with any version in the "
-             f"format: {stamp_utils.VMN_VER_REGEX}",
+        f"format: {stamp_utils.VMN_VER_REGEX}",
     )
     pstamp.add_argument("--dry-run", dest="dry", action="store_true")
     pstamp.set_defaults(dry=False)
@@ -2104,9 +2093,9 @@ def parse_user_commands(command_line):
     prelease.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 
-    verify_user_input_version(args, 'version')
-    verify_user_input_version(args, 'ov')
-    verify_user_input_version(args, 'orv')
+    verify_user_input_version(args, "version")
+    verify_user_input_version(args, "ov")
+    verify_user_input_version(args, "orv")
 
     return args
 

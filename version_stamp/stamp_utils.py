@@ -20,14 +20,10 @@ VMN_DEFAULT_TEMPLATE = (
 )
 
 _SEMVER_VER_REGEX = (
-    "(?P<major>0|[1-9]\d*)\."
-    "(?P<minor>0|[1-9]\d*)\."
-    "(?P<patch>0|[1-9]\d*)"
+    "(?P<major>0|[1-9]\d*)\." "(?P<minor>0|[1-9]\d*)\." "(?P<patch>0|[1-9]\d*)"
 )
 
-_SEMVER_PRERELEASE_REGEX = (
-    "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-)
+_SEMVER_PRERELEASE_REGEX = "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
 
 _SEMVER_BUILDMETADATA_REGEX = (
     "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
@@ -40,10 +36,7 @@ SEMVER_REGEX = (
 _VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
 _VMN_RELEASE_NOTES_REGEX = "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?"
 
-_VMN_VER_REGEX = (
-    f"{_SEMVER_VER_REGEX}"
-    f"{_VMN_HOTFIX_REGEX}"
-)
+_VMN_VER_REGEX = f"{_SEMVER_VER_REGEX}" f"{_VMN_HOTFIX_REGEX}"
 
 VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
 
