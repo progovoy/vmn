@@ -40,9 +40,15 @@ SEMVER_REGEX = (
 _VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
 _VMN_RELEASE_NOTES_REGEX = "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?"
 
-_VMN_REGEX = (
+_VMN_VER_REGEX = (
     f"{_SEMVER_VER_REGEX}"
     f"{_VMN_HOTFIX_REGEX}"
+)
+
+VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
+
+_VMN_REGEX = (
+    f"{_VMN_VER_REGEX}"
     f"{_SEMVER_PRERELEASE_REGEX}"
     f"{_SEMVER_BUILDMETADATA_REGEX}"
     f"{_VMN_RELEASE_NOTES_REGEX}$"

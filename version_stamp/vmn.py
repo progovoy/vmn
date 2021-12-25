@@ -1090,6 +1090,9 @@ def handle_stamp(vmn_ctx):
         vmn_ctx.vcs.version_file_path
     )
 
+    if vmn_ctx.vcs.override_version:
+        initial_version = vmn_ctx.vcs.override_version
+
     try:
         version = _stamp_version(
             vmn_ctx.vcs,
@@ -1981,7 +1984,7 @@ def parse_user_commands(command_line):
         "--override-version",
         default=None,
         help=f"Override current version with any version in the "
-             f"format: {stamp_utils.VMN_VERSION_FORMAT}",
+             f"format: {stamp_utils.VMN_VER_REGEX}",
     )
     pstamp.add_argument("name", help="The application's name")
     pgoto = subprasers.add_parser("goto", help="go to version")
@@ -2011,6 +2014,7 @@ def parse_user_commands(command_line):
 
     verify_user_input_version(args, 'version')
     verify_user_input_version(args, 'ov')
+    verify_user_input_version(args, 'orv')
 
     return args
 
@@ -2019,7 +2023,11 @@ def verify_user_input_version(args, key):
     if key not in args or getattr(args, key) is None:
         return
 
-    if "root" not in args or not args.root:
+    if key == "ov":
+        match = re.search(stamp_utils.VMN_VER_REGEX, getattr(args, key))
+    elif key == "orv":
+        match = re.search(stamp_utils.VMN_ROOT_REGEX, getattr(args, key))
+    elif "root" not in args or not args.root:
         match = re.search(stamp_utils.VMN_REGEX, getattr(args, key))
     else:
         match = re.search(stamp_utils.VMN_ROOT_REGEX, getattr(args, key))
