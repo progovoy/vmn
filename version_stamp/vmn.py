@@ -1238,6 +1238,15 @@ def handle_goto(vmn_ctx):
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
+    if vmn_ctx.args.pull:
+        try:
+            vmn_ctx.vcs.retrieve_remote_changes()
+        except Exception as exc:
+            LOGGER.error("Failed to pull, run with --debug for more details")
+            LOGGER.debug("Logged Exception message:", exc_info=True)
+
+            return 1
+
     return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
 
 
@@ -2001,6 +2010,9 @@ def parse_user_commands(command_line):
     pgoto.add_argument("--deps-only", dest="deps_only", action="store_true")
     pgoto.set_defaults(deps_only=False)
     pgoto.add_argument("name", help="The application's name")
+    pgoto.add_argument("--pull", dest="pull", action="store_true")
+    pgoto.set_defaults(pull=False)
+
     prelease = subprasers.add_parser("release", help="Release app version")
     prelease.add_argument(
         "-v",
