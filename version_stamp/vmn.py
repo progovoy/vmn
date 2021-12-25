@@ -237,13 +237,13 @@ class IVersionsStamper(object):
         # Continue from last stamp prerelease information as long as
         # the last version is coherent with what is requested from
         # the version file or manual version (manual version is not yet implemented)
-        prerelease, prerelease_count = self._advanceprerelease(
-            prerelease, prerelease_count
+        prerelease, prerelease_count = self._advance_prerelease(
+            verstr, prerelease, prerelease_count
         )
 
         return verstr, prerelease, prerelease_count
 
-    def _advanceprerelease(self, prerelease, prerelease_count):
+    def _advance_prerelease(self, verstr, prerelease, prerelease_count):
         if prerelease is None:
             return None, {}
         if prerelease == "release":
@@ -262,6 +262,15 @@ class IVersionsStamper(object):
         counter_key = f"{prerelease}"
         if counter_key not in prerelease_count:
             prerelease_count[counter_key] = 0
+
+        tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
+        tags = self.backend.tags(filter=f'{tag_name_prefix}*')
+        if tags:
+            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+
+            global_val = int(props["prerelease"].split(prerelease)[1])
+            prerelease_count[counter_key] = \
+                max(prerelease_count[counter_key], global_val)
 
         prerelease_count[counter_key] += 1
 
