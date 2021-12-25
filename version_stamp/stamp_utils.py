@@ -486,7 +486,13 @@ class GitBackend(VMNBackend):
 
         return None
 
-    def revert_vmn_changes(self, tags=[]):
+    def revert_local_changes(self, files=[]):
+        if files:
+            self._be.index.checkout(files, force=True)
+
+    def revert_vmn_commit(self, tags=[]):
+        # TODO: also validte that the commit is of
+        #  currently worked on app name
         if self._be.active_branch.commit.author.name != VMN_USER_NAME:
             LOGGER.error("BUG: Will not revert non-vmn commit.")
             raise RuntimeError()

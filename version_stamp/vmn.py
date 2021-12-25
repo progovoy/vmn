@@ -141,6 +141,8 @@ class IVersionsStamper(object):
         self.initialize_paths(conf)
         self.update_attrs_from_app_conf_file()
 
+        self.version_files = [self.app_conf_path, self.version_file_path]
+
         if self.root_context:
             return
 
@@ -738,12 +740,6 @@ class VersionControlStamper(IVersionsStamper):
             initial_version, initialprerelease, initialprerelease_count
         )
 
-        self.write_version_to_file(
-            version_number=current_version,
-            prerelease=prerelease,
-            prerelease_count=prerelease_count,
-        )
-
         info = {}
         if self.extra_info:
             info["env"] = dict(os.environ)
@@ -863,20 +859,24 @@ class VersionControlStamper(IVersionsStamper):
         if not self.should_publish:
             return 0
 
+        self.write_version_to_file(
+            version_number=app_version,
+            prerelease=prerelease,
+            prerelease_count=prerelease_count,
+        )
+
         verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
         app_msg = {
             "vmn_info": self.current_version_info["vmn_info"],
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
         }
 
-        version_files = self.get_files_to_add_to_index(
-            [self.app_conf_path, self.version_file_path]
-        )
+        version_files_to_add = self.get_files_to_add_to_index(self.version_files)
 
         for backend in self.version_backends:
             backend_conf = self.version_backends[backend]
             file_path = os.path.join(self.root_path, backend_conf["path"])
-            version_files.append(file_path)
+            version_files_to_add.append(file_path)
 
         if self.create_verinfo_files:
             dir_path = os.path.join(self.app_dir_path, "verinfo")
@@ -886,7 +886,7 @@ class VersionControlStamper(IVersionsStamper):
                 data = yaml.dump(app_msg, sort_keys=True)
                 f.write(data)
 
-            version_files.append(path)
+            version_files_to_add.append(path)
 
         if self.root_app_name is not None:
             root_app_msg = {
@@ -898,7 +898,7 @@ class VersionControlStamper(IVersionsStamper):
 
             tmp = self.get_files_to_add_to_index([self.root_app_conf_path])
             if tmp:
-                version_files.extend(tmp)
+                version_files_to_add.extend(tmp)
 
             if self.create_verinfo_files:
                 dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
@@ -908,7 +908,7 @@ class VersionControlStamper(IVersionsStamper):
                     data = yaml.dump(root_app_msg, sort_keys=True)
                     f.write(data)
 
-                version_files.append(path)
+                version_files_to_add.append(path)
 
         commit_msg = None
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
@@ -920,7 +920,7 @@ class VersionControlStamper(IVersionsStamper):
         self.backend.commit(
             message=self.current_version_info["stamping"]["msg"],
             user="vmn",
-            include=version_files,
+            include=version_files_to_add,
         )
 
         tag = f'{self.name.replace("/", "-")}_{verstr}'
@@ -930,7 +930,7 @@ class VersionControlStamper(IVersionsStamper):
                 f"Tag {tag} doesn't comply to vmn version format"
                 f"Reverting vmn changes ..."
             )
-            self.backend.revert_vmn_changes()
+            self.backend.revert_vmn_commit()
 
             return 3
 
@@ -946,7 +946,7 @@ class VersionControlStamper(IVersionsStamper):
                     f"Tag {tag} doesn't comply to vmn version format"
                     f"Reverting vmn changes ..."
                 )
-                self.backend.revert_vmn_changes()
+                self.backend.revert_vmn_commit()
 
                 return 3
 
@@ -961,7 +961,7 @@ class VersionControlStamper(IVersionsStamper):
         except Exception as exc:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
-            self.backend.revert_vmn_changes(all_tags)
+            self.backend.revert_vmn_commit(all_tags)
 
             return 1
 
@@ -970,7 +970,7 @@ class VersionControlStamper(IVersionsStamper):
         except Exception:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
-            self.backend.revert_vmn_changes(all_tags)
+            self.backend.revert_vmn_commit(all_tags)
 
             return 2
 
@@ -1398,9 +1398,6 @@ def _init_app(versions_be_ifc, starting_version):
         return 1
 
     versions_be_ifc.create_config_files()
-    versions_be_ifc.write_version_to_file(
-        version_number=starting_version, prerelease="release", prerelease_count={}
-    )
 
     info = {}
     versions_be_ifc.update_stamping_info(
@@ -1435,9 +1432,16 @@ def _init_app(versions_be_ifc, starting_version):
         msg_app = versions_be_ifc.current_version_info["stamping"]["app"]
         msg_root_app["services"][versions_be_ifc.name] = msg_app["_version"]
 
-    err = versions_be_ifc.publish_stamp(
-        starting_version, "release", {}, root_app_version
-    )
+    try:
+        err = versions_be_ifc.publish_stamp(
+            starting_version, "release", {}, root_app_version
+        )
+    except Exception as exc:
+        versions_be_ifc.backend.revert_local_changes(
+            versions_be_ifc.version_files
+        )
+        err = -1
+
     if err:
         LOGGER.error("Failed to init app")
         raise RuntimeError()
@@ -1500,9 +1504,16 @@ def _stamp_version(
         )
         main_ver = versions_be_ifc.stamp_root_app_version(override_main_current_version)
 
-        err = versions_be_ifc.publish_stamp(
-            current_version, prerelease, prerelease_count, main_ver
-        )
+        try:
+            err = versions_be_ifc.publish_stamp(
+                current_version, prerelease, prerelease_count, main_ver
+            )
+        except Exception as exc:
+            versions_be_ifc.backend.revert_local_changes(
+                versions_be_ifc.version_files
+            )
+            err = -1
+
         if not err:
             stamped = True
             break
