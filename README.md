@@ -52,6 +52,8 @@ vmn init-app -v 1.6.8 <app-name2>
 # will stamp 1.7.0
 vmn stamp -r minor <app-name2>
 ```
+##### Note:
+`init-app` and `stamp` both support `--dry-run` flag
 
 ### Release candidates
 
