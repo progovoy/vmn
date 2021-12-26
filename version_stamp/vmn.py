@@ -751,9 +751,16 @@ class VersionControlStamper(IVersionsStamper):
             )
             raise RuntimeError()
 
-        tags = self.backend.tags(
-            filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*'
-        )
+        # For backward compatability
+        if "name" not in self.ver_info_from_repo["stamping"]["root_app"]:
+            tags = self.backend.tags(
+                filter=f'{self.ver_info_from_repo["stamping"]["app"]["name"].split("/")[0]}_*'
+            )
+        else:
+            tags = self.backend.tags(
+                filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*'
+            )
+
         old_version = tags[0].split("_")[-1]
 
         if override_version is None:
