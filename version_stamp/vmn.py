@@ -975,7 +975,13 @@ class VersionControlStamper(IVersionsStamper):
             return 1
 
         try:
-            self.backend.push(all_tags)
+            if self.dry_run:
+                    LOGGER.info(
+                        "Would have pushed with tags. "
+                        f"tags: {all_tags} "
+                    )
+            else:
+                self.backend.push(all_tags)
         except Exception:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
@@ -1091,7 +1097,11 @@ def handle_init_app(vmn_ctx):
     if err:
         return 1
 
-    LOGGER.info("Initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path))
+
+    if vmn_ctx.vcs.dry_run:
+        LOGGER.info("Would have initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path))
+    else:
+        LOGGER.info("Initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path))
 
     return 0
 
@@ -1174,7 +1184,10 @@ def handle_stamp(vmn_ctx):
 
         return 1
 
-    LOGGER.info(version)
+    if vmn_ctx.vcs.dry_run:
+        LOGGER.info(f"Would have stamped {version}")
+    else:
+        LOGGER.info(f"{version}")
 
     return 0
 
