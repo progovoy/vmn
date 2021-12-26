@@ -1209,3 +1209,7 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     with vmn.VMNContextMAnager(["goto", "app1"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
+
+    err, ver_info, _ = _stamp_app("root_app/service1", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
