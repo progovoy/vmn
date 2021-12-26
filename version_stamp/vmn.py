@@ -345,10 +345,10 @@ class IVersionsStamper(object):
     ) -> None:
         if self.dry_run:
             LOGGER.info(
-                "would have written to version file: "
-                f"version: {version_number} "
-                f"prerelease: {prerelease} "
-                f"prerelease count: {prerelease_count} "
+                "Would have written to version file:\n"
+                f"version: {version_number}\n"
+                f"prerelease: {prerelease}\n"
+                f"prerelease count: {prerelease_count}"
             )
         else:
             self._write_version_to_vmn_version_file(
@@ -371,8 +371,9 @@ class IVersionsStamper(object):
                 handler = getattr(self, f"_write_version_to_{backend}")
                 if self.dry_run:
                     LOGGER.info(
-                        "Would have written to version backend file: "
-                        f"backend: {backend} version: {verstr}"
+                        "Would have written to a version backend file:\n"
+                        f"backend: {backend}\n"
+                        f"version: {verstr}"
                     )
                 else:
                     handler(verstr)
@@ -929,7 +930,7 @@ class VersionControlStamper(IVersionsStamper):
                 f"Reverting vmn changes ..."
             )
             if self.dry_run:
-                LOGGER.info("Would have reverted vmn commit. ")
+                LOGGER.info("Would have reverted vmn commit.")
             else:
                 self.backend.revert_vmn_commit()
 
@@ -948,7 +949,7 @@ class VersionControlStamper(IVersionsStamper):
                     f"Reverting vmn changes ..."
                 )
                 if self.dry_run:
-                    LOGGER.info("Would have reverted vmn commit. ")
+                    LOGGER.info("Would have reverted vmn commit.")
                 else:
                     self.backend.revert_vmn_commit()
 
@@ -963,9 +964,9 @@ class VersionControlStamper(IVersionsStamper):
             for t, m in zip(tags, msgs):
                 if self.dry_run:
                     LOGGER.info(
-                        "Would have created tag. "
-                        f"tag: {t} "
-                        f"content: {yaml.dump(m, sort_keys=True)} "
+                        "Would have created tag:\n"
+                        f"{t}\n"
+                        f"Tag content:\n{yaml.dump(m, sort_keys=True)}"
                     )
                 else:
                     self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
@@ -974,7 +975,7 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
             if self.dry_run:
                 LOGGER.info(
-                    f"Would have reverted vmn commit. And delete tags: {all_tags}"
+                    f"Would have reverted vmn commit and delete tags:\n{all_tags}"
                 )
             else:
                 self.backend.revert_vmn_commit(all_tags)
@@ -984,7 +985,7 @@ class VersionControlStamper(IVersionsStamper):
         try:
             if self.dry_run:
                     LOGGER.info(
-                        "Would have pushed with tags. "
+                        "Would have pushed with tags.\n"
                         f"tags: {all_tags} "
                     )
             else:
@@ -994,7 +995,7 @@ class VersionControlStamper(IVersionsStamper):
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
             if self.dry_run:
                 LOGGER.info(
-                    f"Would have reverted vmn commit. And delete tags: {all_tags}"
+                    f"Would have reverted vmn commit and delete tags:\n{all_tags}"
                 )
             else:
                 self.backend.revert_vmn_commit(all_tags)
@@ -1006,8 +1007,8 @@ class VersionControlStamper(IVersionsStamper):
     def publish_commit(self, version_files_to_add):
         if self.dry_run:
             LOGGER.info(
-                "Would have created commit. "
-                f'message: {self.current_version_info["stamping"]["msg"]}'
+                "Would have created commit with message:\n"
+                f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
             self.backend.commit(
@@ -1023,8 +1024,8 @@ class VersionControlStamper(IVersionsStamper):
 
         if self.dry_run:
             LOGGER.info(
-                "Would have written to root verinfo file: "
-                f"path: {dir_path} version: {root_app_version} "
+                "Would have written to root verinfo file:\n"
+                f"path: {dir_path} version: {root_app_version}\n"
                 f"message: {root_app_msg}"
             )
         else:
@@ -1040,8 +1041,8 @@ class VersionControlStamper(IVersionsStamper):
 
         if self.dry_run:
             LOGGER.info(
-                "Would have written to verinfo file: "
-                f"path: {dir_path} version: {verstr}"
+                "Would have written to verinfo file:\n"
+                f"path: {dir_path} version: {verstr}\n"
                 f"message: {app_msg}"
             )
         else:
