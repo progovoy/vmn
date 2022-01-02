@@ -1486,6 +1486,11 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             if msg in status["err_msgs"] and status["err_msgs"][msg]:
                 LOGGER.error(status["err_msgs"][msg])
 
+        LOGGER.error(
+            f"Repository status is in unexpected state: "
+            f"{((optional_status | status['state']) - expected_status)}"
+        )
+
         raise RuntimeError()
 
     return status
