@@ -488,6 +488,11 @@ class GitBackend(VMNBackend):
     def revert_local_changes(self, files=[]):
         if files:
             try:
+                try:
+                    self._be.git.reset(paths=files)
+                except Exception as exc:
+                    pass
+
                 self._be.index.checkout(files, force=True)
             except Exception as exc:
                 pass

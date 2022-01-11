@@ -1611,6 +1611,10 @@ def _stamp_version(
                 current_version, prerelease, prerelease_count, main_ver
             )
         except Exception as exc:
+            LOGGER.error(
+                f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
+            )
+            LOGGER.debug("Exception info: ", exc_info=True)
             versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
             err = -1
 
