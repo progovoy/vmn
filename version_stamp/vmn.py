@@ -805,25 +805,25 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        if "version" not in self.ver_info_from_repo["stamping"]["root_app"]:
+        ver_info = self.backend.get_vmn_version_info(
+            self.root_app_name, root=True
+        )
+
+        if ver_info is None:
+            LOGGER.error(
+                f"Version information for {self.root_app_name} was not found"
+            )
+            raise RuntimeError()
+
+        # TODO: think about this case
+        if "version" not in ver_info["stamping"]["root_app"]:
             LOGGER.error(
                 f"Root app name is {self.root_app_name} and app name is {self.name}. "
                 f"However no version information for root was found"
             )
             raise RuntimeError()
 
-        # For backward compatability
-        if "name" not in self.ver_info_from_repo["stamping"]["root_app"]:
-            tags = self.backend.tags(
-                filter=f'{self.ver_info_from_repo["stamping"]["app"]["name"].split("/")[0]}_*'
-            )
-        else:
-            tags = self.backend.tags(
-                filter=f'{self.ver_info_from_repo["stamping"]["root_app"]["name"]}_*'
-            )
-
-        old_version = tags[0].split("_")[-1]
-
+        old_version = int(ver_info["stamping"]["root_app"]["version"])
         if override_version is None:
             override_version = old_version
 
@@ -834,7 +834,7 @@ class VersionControlStamper(IVersionsStamper):
             # TODO: why do we need deepcopy here?
             external_services = copy.deepcopy(data["conf"]["external_services"])
 
-        root_app = self.ver_info_from_repo["stamping"]["root_app"]
+        root_app = ver_info["stamping"]["root_app"]
         services = copy.deepcopy(root_app["services"])
 
         self.current_version_info["stamping"]["root_app"].update(

@@ -650,6 +650,8 @@ def test_basic_root_stamp(app_layout):
     assert data["_version"] == "1.0.0"
     data = ver_info["stamping"]["root_app"]
     assert data["version"] == 6
+    assert "root_app/app1" in data["services"]
+    assert "root_app/app2" in data["services"]
 
     app_name = "root_app/app2"
     err, ver_info, params = _stamp_app(app_name, "major")
@@ -658,6 +660,10 @@ def test_basic_root_stamp(app_layout):
     assert data["_version"] == "1.0.0"
     data = ver_info["stamping"]["root_app"]
     assert data["version"] == 7
+
+    assert data["services"]["root_app/app1"] == "1.0.0"
+    assert data["services"]["root_app/app2"] == "1.0.0"
+    assert data["services"]["root_app/app3"] == "0.0.1"
 
 
 def test_starting_version(app_layout):
