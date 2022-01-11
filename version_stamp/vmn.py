@@ -805,14 +805,10 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        ver_info = self.backend.get_vmn_version_info(
-            self.root_app_name, root=True
-        )
+        ver_info = self.backend.get_vmn_version_info(self.root_app_name, root=True)
 
         if ver_info is None:
-            LOGGER.error(
-                f"Version information for {self.root_app_name} was not found"
-            )
+            LOGGER.error(f"Version information for {self.root_app_name} was not found")
             raise RuntimeError()
 
         # TODO: think about this case
@@ -984,10 +980,7 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             if self.dry_run:
-                    LOGGER.info(
-                        "Would have pushed with tags.\n"
-                        f"tags: {all_tags} "
-                    )
+                LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
             else:
                 self.backend.push(all_tags)
         except Exception:
@@ -1105,11 +1098,16 @@ def handle_init_app(vmn_ctx):
     if err:
         return 1
 
-
     if vmn_ctx.vcs.dry_run:
-        LOGGER.info("Would have initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path))
+        LOGGER.info(
+            "Would have initialized app tracking on {0}".format(
+                vmn_ctx.vcs.root_app_dir_path
+            )
+        )
     else:
-        LOGGER.info("Initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path))
+        LOGGER.info(
+            "Initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path)
+        )
 
     return 0
 
