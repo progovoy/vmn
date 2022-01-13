@@ -916,7 +916,18 @@ class VersionControlStamper(IVersionsStamper):
             commit_msg = f"{self.name}: Stamped version {verstr}\n\n"
 
         self.current_version_info["stamping"]["msg"] = commit_msg
-        self.publish_commit(version_files_to_add)
+        try:
+            self.publish_commit(version_files_to_add)
+        except Exception as exc:
+            LOGGER.debug("Logged Exception message:", exc_info=True)
+            LOGGER.info(f"Reverting vmn changes... ")
+            if self.dry_run:
+                LOGGER.info(f"Would have reverted vmn commit")
+            else:
+                self.backend.revert_vmn_commit()
+
+            # TODO:: turn to error codes. This one means - exit without retries
+            return 3
 
         tag = f'{self.name.replace("/", "-")}_{verstr}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, tag)
@@ -1074,6 +1085,7 @@ def handle_init(vmn_ctx):
         for ignored_file in IGNORED_FILES:
             f.write(f"{ignored_file}{os.linesep}")
 
+    # TODO:: revert in case of failure. Use the publish_commit function
     be.commit(
         message=stamp_utils.INIT_COMMIT_MESSAGE,
         user="vmn",

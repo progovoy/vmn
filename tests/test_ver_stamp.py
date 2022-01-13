@@ -5,6 +5,7 @@ import shutil
 import toml
 import json
 import stat
+import pytest
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
@@ -152,7 +153,8 @@ def test_basic_stamp(app_layout):
     _init_app("myapp")
 
 
-def test_git_hooks(app_layout, capfd):
+@pytest.mark.parametrize("hook_name", ["pre-push", "post-commit"])
+def test_git_hooks(app_layout, capfd, hook_name):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
     _, params = _init_app(app_layout.app_name)
@@ -166,7 +168,7 @@ def test_git_hooks(app_layout, capfd):
     # More post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-push
     app_layout.write_file_commit_and_push(
         "test_repo",
-        ".git/hooks/pre-push",
+        f".git/hooks/{hook_name}",
         "#/bin/bash\nexit 1",
         add_exec=True,
         commit=False,
@@ -196,7 +198,7 @@ def test_git_hooks(app_layout, capfd):
     assert "0.0.1 (dirty): {'modified'}\n" == out
 
     app_layout.remove_file(
-        os.path.join(params["root_path"], ".git/hooks/pre-push"), from_git=False
+        os.path.join(params["root_path"], f".git/hooks/{hook_name}"), from_git=False
     )
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
