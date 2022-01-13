@@ -152,6 +152,67 @@ def test_basic_stamp(app_layout):
     _init_app("myapp")
 
 
+def test_git_hooks(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_vmn_in_repo(1)
+    _, params = _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "connnntenctt")
+
+    # More post-checkout, post-commit, post-merge, post-rewrite, pre-commit, pre-push
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        ".git/hooks/pre-push",
+        "#/bin/bash\nexit 1",
+        add_exec=True,
+        commit=False,
+    )
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.1 (dirty): {'modified'}\n" == out
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 1
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.1 (dirty): {'modified'}\n" == out
+
+    app_layout.remove_file(
+        os.path.join(params["root_path"], ".git/hooks/pre-push"), from_git=False
+    )
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.2\n" == out
+
+
 def test_basic_show(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
@@ -1023,7 +1084,7 @@ def test_manual_file_adjustment(app_layout):
 
     file_path = params["version_file_path"]
 
-    app_layout.remove_app_version_file(file_path)
+    app_layout.remove_file(file_path)
     verfile_manual_content = {
         "version_to_stamp_from": "0.2.3",
         "prerelease": "release",

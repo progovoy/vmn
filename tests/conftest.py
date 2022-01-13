@@ -5,6 +5,7 @@ import sys
 import logging
 import pathlib
 import shutil
+import stat
 import yaml
 from git import Repo
 
@@ -123,7 +124,13 @@ class FSAppLayoutFixture(object):
         client.close()
 
     def write_file_commit_and_push(
-        self, repo_name, file_relative_path, content, commit=True, push=True
+        self,
+        repo_name,
+        file_relative_path,
+        content,
+        commit=True,
+        push=True,
+        add_exec=False,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -138,6 +145,10 @@ class FSAppLayoutFixture(object):
 
         with open(path, "a+") as f:
             f.write(content)
+
+        if add_exec:
+            st = os.stat(path)
+            os.chmod(path, st.st_mode | stat.S_IEXEC)
 
         if not commit:
             return
@@ -173,8 +184,11 @@ class FSAppLayoutFixture(object):
 
         return self._repos[repo_name]["changesets"]
 
-    def remove_app_version_file(self, app_version_file_path):
-        self._app_backend.remove_app_version_file(app_version_file_path)
+    def remove_file(self, file_path, from_git=True):
+        os.remove(file_path)
+
+        if from_git:
+            self._app_backend.remove_file(file_path)
 
     def write_conf(
         self,
@@ -244,10 +258,10 @@ class GitBackend(VersionControlBackend):
         self._git_backend.close()
         VersionControlBackend.__del__(self)
 
-    def remove_app_version_file(self, app_version_file_path):
+    def remove_file(self, file_path):
         client = Repo(self.root_path)
-        client.index.remove(app_version_file_path, working_tree=True)
-        client.index.commit("Manualy removed file {0}".format(app_version_file_path))
+        client.index.remove(file_path, working_tree=True)
+        client.index.commit("Manualy removed file {0}".format(file_path))
 
         origin = client.remote(name="origin")
         origin.push()
