@@ -916,15 +916,18 @@ class VersionControlStamper(IVersionsStamper):
             commit_msg = f"{self.name}: Stamped version {verstr}\n\n"
 
         self.current_version_info["stamping"]["msg"] = commit_msg
+
+        prev_changeset = self.backend.changeset()
+
         try:
             self.publish_commit(version_files_to_add)
         except Exception as exc:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes... ")
             if self.dry_run:
-                LOGGER.info(f"Would have reverted vmn commit")
+                LOGGER.info(f"Would have tried to revert a vmn commit")
             else:
-                self.backend.revert_vmn_commit()
+                self.backend.revert_vmn_commit(prev_changeset, self.version_files)
 
             # TODO:: turn to error codes. This one means - exit without retries
             return 3
@@ -939,7 +942,7 @@ class VersionControlStamper(IVersionsStamper):
             if self.dry_run:
                 LOGGER.info("Would have reverted vmn commit.")
             else:
-                self.backend.revert_vmn_commit()
+                self.backend.revert_vmn_commit(prev_changeset, self.version_files)
 
             return 3
 
@@ -958,7 +961,7 @@ class VersionControlStamper(IVersionsStamper):
                 if self.dry_run:
                     LOGGER.info("Would have reverted vmn commit.")
                 else:
-                    self.backend.revert_vmn_commit()
+                    self.backend.revert_vmn_commit(prev_changeset, self.version_files)
 
                 return 3
 
@@ -985,7 +988,9 @@ class VersionControlStamper(IVersionsStamper):
                     f"Would have reverted vmn commit and delete tags:\n{all_tags}"
                 )
             else:
-                self.backend.revert_vmn_commit(all_tags)
+                self.backend.revert_vmn_commit(
+                    prev_changeset, self.version_files, all_tags
+                )
 
             return 1
 
@@ -1002,7 +1007,9 @@ class VersionControlStamper(IVersionsStamper):
                     f"Would have reverted vmn commit and delete tags:\n{all_tags}"
                 )
             else:
-                self.backend.revert_vmn_commit(all_tags)
+                self.backend.revert_vmn_commit(
+                    prev_changeset, self.version_files, all_tags
+                )
 
             return 2
 

@@ -489,17 +489,23 @@ class GitBackend(VMNBackend):
         if files:
             try:
                 try:
-                    self._be.git.reset(paths=files)
+                    for f in files:
+                        self._be.git.reset(f)
                 except Exception as exc:
-                    pass
+                    LOGGER.debug(f"Failed to git reset files: {files}", exc_info=True)
 
                 self._be.index.checkout(files, force=True)
             except Exception as exc:
-                pass
+                LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
 
-    def revert_vmn_commit(self, tags=[]):
-        # TODO: also validte that the commit is of
+    def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
+        self.revert_local_changes(version_files)
+
+        # TODO: also validate that the commit is
         #  currently worked on app name
+        if self.changeset() == prev_changeset:
+            return
+
         if self._be.active_branch.commit.author.name != VMN_USER_NAME:
             LOGGER.error("BUG: Will not revert non-vmn commit.")
             raise RuntimeError()

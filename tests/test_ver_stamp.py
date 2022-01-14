@@ -153,7 +153,9 @@ def test_basic_stamp(app_layout):
     _init_app("myapp")
 
 
-@pytest.mark.parametrize("hook_name", ["pre-push", "post-commit"])
+@pytest.mark.parametrize(
+    "hook_name", ["pre-push", "post-commit", "pre-commit"]
+)
 def test_git_hooks(app_layout, capfd, hook_name):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
