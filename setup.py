@@ -15,9 +15,10 @@ setuptools.setup(
     description=description,
     long_description=description,
     python_requires=">=3.6.0",
-    url="https://github.com/final-israel/ver_stamp",
+    url="https://github.com/final-israel/vmn",
     install_requires=install_requires,
     package_dir={"version_stamp": "version_stamp"},
     packages=["version_stamp"],
     entry_points={"console_scripts": ["vmn = version_stamp.vmn:main"]},
+    include_package_data=True,
 )
