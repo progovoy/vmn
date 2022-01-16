@@ -615,9 +615,13 @@ class GitBackend(VMNBackend):
 
             # TODO:: Check API commit version
 
-        if "root" in all_tags:
+        if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
             tag_msg["stamping"].update(
                 yaml.safe_load(all_tags["root"]["message"])["stamping"]
+            )
+        elif "app" not in tag_msg["stamping"] and "version" in all_tags:
+            tag_msg["stamping"].update(
+                yaml.safe_load(all_tags["version"]["message"])["stamping"]
             )
 
         return tag_name, tag_msg

@@ -999,6 +999,55 @@ def test_basic_goto(app_layout, capfd):
     c4 = app_layout._app_backend.be.changeset()
     assert c1 == c4
 
+    root_app_name = "some_root_app/service1"
+    _init_app(root_app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(root_app_name, "minor")
+    assert err == 0
+
+    rc1 = app_layout._app_backend.be.changeset()
+
+    app_layout.write_file_commit_and_push("test_repo", "a.yxy", "msg")
+
+    err, ver_info, _ = _stamp_app(root_app_name, "minor")
+    assert err == 0
+
+    rc2 = app_layout._app_backend.be.changeset()
+
+    assert rc1 != rc2
+
+    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", root_app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    assert rc1 == app_layout._app_backend.be.changeset()
+
+    with vmn.VMNContextMAnager(["goto", root_app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    assert rc2 == app_layout._app_backend.be.changeset()
+
+    err, ver_info, _ = _stamp_app(root_app_name, "minor")
+    assert err == 0
+
+    root_name = root_app_name.split('/')[0]
+
+    with vmn.VMNContextMAnager(["goto", "--root", "-v", "1", root_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    assert rc1 == app_layout._app_backend.be.changeset()
+
+    with vmn.VMNContextMAnager(["goto", "--root", root_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    assert rc2 == app_layout._app_backend.be.changeset()
+
+    err, ver_info, _ = _stamp_app(root_app_name, "minor")
+    assert err == 0
+
 
 def test_stamp_on_branch_merge_squash(app_layout):
     _init_vmn_in_repo()
