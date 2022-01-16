@@ -1031,7 +1031,7 @@ def test_basic_goto(app_layout, capfd):
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
 
-    root_name = root_app_name.split('/')[0]
+    root_name = root_app_name.split("/")[0]
 
     with vmn.VMNContextMAnager(["goto", "--root", "-v", "1", root_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
