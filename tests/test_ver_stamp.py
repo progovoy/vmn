@@ -1031,6 +1031,17 @@ def test_basic_goto(app_layout, capfd):
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
 
+    assert rc2 == app_layout._app_backend.be.changeset()
+
+    app_layout.write_file_commit_and_push("test_repo", "a.yxy", "msg")
+
+    err, ver_info, _ = _stamp_app(root_app_name, "minor")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.5.0"
+
+    rc3 = app_layout._app_backend.be.changeset()
+
     root_name = root_app_name.split("/")[0]
 
     with vmn.VMNContextMAnager(["goto", "--root", "-v", "1", root_name]) as vmn_ctx:
@@ -1043,7 +1054,7 @@ def test_basic_goto(app_layout, capfd):
         err = vmn.handle_goto(vmn_ctx)
         assert err == 0
 
-    assert rc2 == app_layout._app_backend.be.changeset()
+    assert rc3 == app_layout._app_backend.be.changeset()
 
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
