@@ -1783,7 +1783,12 @@ def goto_version(vcs, params, version):
 
     if version is None and not params["deps_only"]:
         vcs.backend.checkout_branch()
-        LOGGER.info(f"You are at the latest version {data['_version']} of {vcs.name}")
+
+        if vcs.root_context:
+            verstr = ver_info["stamping"]["root_app"]["version"]
+            LOGGER.info(f'You are at the latest version {verstr} of {vcs.name}')
+        else:
+            LOGGER.info(f"You are at the latest version {data['_version']} of {vcs.name}")
     elif not params["deps_only"]:
         try:
             vcs.backend.checkout(tag=tag_name)
