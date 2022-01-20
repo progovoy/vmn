@@ -1,3 +1,4 @@
+import copy
 import sys
 import os
 import yaml
@@ -611,6 +612,11 @@ def test_multi_repo_dependency(app_layout, capfd):
         assert "repo1" in data["conf"]["deps"]["../"]
         assert "repo2" in data["conf"]["deps"]["../"]
 
+    conf["deps"]["../"]["repo3"] = copy.deepcopy(conf["deps"]["../"]["repo2"])
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
 
 def test_goto_deleted_repos(app_layout):
     _init_vmn_in_repo()

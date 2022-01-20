@@ -1394,6 +1394,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             },
             "repos": {},
             "matched_version_info": None,
+            # Assumed state
             "state": {"repos_exist_locally", "repo_tracked", "app_tracked"},
             "local_repos_diff": set(),
         }
@@ -1465,11 +1466,11 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                 paths.append(os.path.join(versions_be_ifc.root_path, path))
 
             status["repos_exist_locally"] = False
-            status["err_msgs"]["repos_exist_locally"] = (
-                f"Dependency repository were specified in conf.yml file. "
+            status["err_msgs"]["repos_exist_locally"] = \
+                f"Dependency repository were specified in conf.yml file. " \
                 f"However repos: {paths} does not exist. Please clone and rerun"
-            )
             status["local_repos_diff"] = configured_repos - local_repos
+            status["state"].remove("repos_exist_locally")
 
         err = 0
         for repo in configured_repos & local_repos:
