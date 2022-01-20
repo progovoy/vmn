@@ -1081,9 +1081,9 @@ def handle_init(vmn_ctx):
         return err
 
     expected_status = {"repos_exist_locally"}
-    try:
-        status = _get_repo_status(vmn_ctx.vcs, expected_status)
-    except:
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status)
+    if status["error"]:
         return 1
 
     be = vmn_ctx.vcs.backend
@@ -1160,12 +1160,8 @@ def handle_stamp(vmn_ctx):
 
     optional_status = {"modified", "detached"}
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    status = {"matched_version_info": None}
 
-    try:
-        status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    except:
-        err = 1
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
 
     if status["matched_version_info"] is not None:
         # Good we have found an existing version matching
@@ -1178,8 +1174,8 @@ def handle_stamp(vmn_ctx):
 
         return 0
 
-    if err:
-        return err
+    if status["error"]:
+        return 1
 
     if "detached" in status["state"]:
         LOGGER.error("In detached head. Will not stamp new version")
@@ -1293,9 +1289,9 @@ def handle_release(vmn_ctx):
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps"}
-    try:
-        status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    except:
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
         return 1
 
     try:
@@ -1315,9 +1311,9 @@ def _handle_add(vmn_ctx):
 
     expected_status = {"repos_exist_locally"}
     optional_status = {"detached"}
-    try:
-        status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    except:
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
         return 1
 
     try:
@@ -1382,6 +1378,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         "detached": False,
         "outgoing": False,
         "state": set(),
+        "error": False
     }
     status = copy.deepcopy(default_status)
     status.update(
@@ -1516,7 +1513,9 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             if msg in status["err_msgs"] and status["err_msgs"][msg]:
                 LOGGER.error(status["err_msgs"][msg])
 
-        raise RuntimeError()
+        status["error"] = True
+
+        return status
 
     if ((optional_status | status["state"]) - expected_status) != optional_status:
         for msg in (optional_status | status["state"]) - expected_status:
@@ -1528,16 +1527,18 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             f"{((optional_status | status['state']) - expected_status)}"
         )
 
-        raise RuntimeError()
+        status["error"] = True
+
+        return status
 
     return status
 
 
 def _init_app(versions_be_ifc, starting_version):
     expected_status = {"repos_exist_locally", "repo_tracked", "modified"}
-    try:
-        status = _get_repo_status(versions_be_ifc, expected_status)
-    except Exception as exc:
+
+    status = _get_repo_status(versions_be_ifc, expected_status)
+    if status["error"]:
         return 1
 
     versions_be_ifc.create_config_files()
@@ -1828,9 +1829,8 @@ def goto_version(vcs, params, version):
 
 
 def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status):
-    try:
-        status = _get_repo_status(vcs, expected_status, optional_status)
-    except:
+    status = _get_repo_status(vcs, expected_status, optional_status)
+    if status["error"]:
         return None, None, None
 
     tag_name = f'{vcs.name.replace("/", "-")}'
