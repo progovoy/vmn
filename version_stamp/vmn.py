@@ -1162,6 +1162,8 @@ def handle_stamp(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
+        return 1
 
     if status["matched_version_info"] is not None:
         # Good we have found an existing version matching
@@ -1173,9 +1175,6 @@ def handle_stamp(vmn_ctx):
         LOGGER.info(version)
 
         return 0
-
-    if status["error"]:
-        return 1
 
     if "detached" in status["state"]:
         LOGGER.error("In detached head. Will not stamp new version")
