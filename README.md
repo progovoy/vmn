@@ -179,7 +179,6 @@ conf:
   deps:
     ../:
       <repo dir name>:
-        remote: <remote url>
         vcs_type: git
   extra_info: false
   create_verinfo_files: false
