@@ -1,4 +1,5 @@
 pytest
+pytest-html
 coverage
 black
 flake8

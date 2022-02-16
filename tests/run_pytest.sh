@@ -23,6 +23,7 @@ base_log_dir='/tmp/'
 specific_test='none'
 skip_test='none'
 module_name=${CUR_DIR}
+html_report_suffix='all'
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -34,6 +35,7 @@ while [ "$1" != "" ]; do
                            ;;
         --specific_test )   shift
                            specific_test=$1
+			   html_report_suffix=${specific_test}
                            ;;
         --skip_test     )  shift
                            skip_test=$1
@@ -76,11 +78,11 @@ DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
 echo "Will run:"
-echo "coverage run -m pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
+echo "coverage run -m pytest --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
 "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log"
 
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
-coverage run -m pytest -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
+coverage run -m pytest --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
 "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log
 
 RET_CODE=$?
