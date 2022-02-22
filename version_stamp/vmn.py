@@ -165,7 +165,7 @@ class IVersionsStamper(object):
                     self.template = data["conf"]["template"]
                 if "extra_info" in data["conf"]:
                     self.extra_info = data["conf"]["extra_info"]
-                if "deps" in data["conf"]:
+                if "deps" in data["conf"] and data["conf"]["deps"]:
                     self.raw_configured_deps = data["conf"]["deps"]
                 if "hide_zero_hotfix" in data["conf"]:
                     self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
