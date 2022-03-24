@@ -744,7 +744,7 @@ def test_starting_version(app_layout):
     assert data["_version"] == "1.3.0"
 
 
-def test_rc_stamping(app_layout):
+def test_rc_stamping(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name, "1.2.3")
 
@@ -872,6 +872,61 @@ def test_rc_stamping(app_layout):
         assert data["_version"] == item
         assert data["prerelease"] == "release"
         assert not data["prerelease_count"]
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.6.0-rc1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name)
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.6.0-rc2"
+    assert data["prerelease"] == "rc"
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "3.6.0-rc2\n" == out
+
+    ver_info, _ = _release_app(app_layout.app_name, f"3.6.0-rc1")
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "3.6.0\n" == out
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
+    assert err == 0
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.7.0-rc1"
+    assert data["prerelease"] == "rc"
 
 
 def test_rc_goto(app_layout, capfd):
