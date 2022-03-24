@@ -556,7 +556,6 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
         "deps": {
             "../": {
                 "test_repo": {
@@ -565,7 +564,6 @@ def test_multi_repo_dependency(app_layout, capfd):
                 }
             }
         },
-        "extra_info": False,
     }
     for repo in (("repo1", "git"), ("repo2", "git")):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
@@ -617,6 +615,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     app_layout.write_conf(params["app_conf_path"], **conf)
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
+
 
 def test_goto_deleted_repos(app_layout):
     _init_vmn_in_repo()
@@ -1266,6 +1265,50 @@ def test_version_backends_cargo(app_layout, capfd):
     with open(full_path, "r") as f:
         data = toml.load(f)
         assert data["package"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def test_conf(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.txt",
+        "text",
+    )
+
+    conf = {
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = {
+        "deps": {},
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
