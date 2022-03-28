@@ -111,6 +111,27 @@ def _show(
         return err
 
 
+def _gen(
+    app_name,
+    version=None,
+    template=None,
+    output=None,
+):
+    args_list = ["gen"]
+    if template is not None:
+        args_list.extend(["--template", template])
+    if version is not None:
+        args_list.extend(["--version", f"{version}"])
+    if output is not None:
+        args_list.extend(["--output", output])
+
+    args_list.append(app_name)
+
+    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
+        err = vmn.handle_gen(vmn_ctx)
+        return err
+
+
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
@@ -214,6 +235,42 @@ def test_git_hooks(app_layout, capfd, hook_name):
 
     out, err = capfd.readouterr()
     assert "0.0.2\n" == out
+
+
+def test_jinja2_gen(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    jinja2_content = "VERSION: {{version}} \n" \
+                        "NAME: {{name}} \n" \
+                        "BRANCH: {{stamped_on_branch}} \n" \
+                        "RELEASE_MODE: {{release_mode}} \n" \
+                        "{% for k,v in changesets.items() %} \n" \
+                        "    <h2>REPO: {{k}}\n" \
+                        "    <h2>HASH: {{v.hash}}</h2> \n" \
+                        "    <h2>REMOTE: {{v.remote}}</h2> \n" \
+                        "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
+                        "{% endfor %}\n"
+    app_layout.write_file_commit_and_push("test_repo", "f1.jinja2", jinja2_content)
+
+    err = _gen(app_layout.app_name, template="f1.jinja2")
+    assert err == 0
+
+    new_name = f"{app_layout.app_name}2/s1"
+    _init_app(new_name)
+
+    err, _, _ = _stamp_app(new_name, "patch")
+    assert err == 0
+
+    err = _gen(new_name, template="f1.jinja2")
+    assert err == 0
 
 
 def test_basic_show(app_layout, capfd):
@@ -472,7 +529,7 @@ def test_show_from_file(app_layout, capfd):
     assert show_minimal_res == show_file
 
 
-def test_show_from_file_conf_changged(app_layout, capfd):
+def test_show_from_file_conf_changed(app_layout, capfd):
     _init_vmn_in_repo()
     _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
@@ -1295,7 +1352,6 @@ def test_version_backends_cargo(app_layout, capfd):
     )
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
         "version_backends": {"cargo": {"path": "Cargo.toml"}},
         "deps": {
             "../": {
@@ -1305,7 +1361,6 @@ def test_version_backends_cargo(app_layout, capfd):
                 }
             }
         },
-        "extra_info": False,
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)

@@ -14,6 +14,8 @@ import re
 import tomlkit
 import json
 from packaging import version as pversion
+import jinja2
+
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
@@ -1350,6 +1352,20 @@ def handle_show(vmn_ctx):
     return 0
 
 
+def handle_gen(vmn_ctx):
+    vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
+    try:
+        out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    except:
+        return 1
+
+    return 0
+
+
 def handle_goto(vmn_ctx):
     err = initialize_backend_attrs(vmn_ctx)
     if err:
@@ -1791,6 +1807,51 @@ def show(vcs, params, verstr=None):
     return out
 
 
+def gen(vcs, params, verstr=None):
+    ver_info = None
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {
+        "repos_exist_locally",
+        "detached",
+        "pending",
+        "outgoing",
+        "modified",
+        "dirty_deps",
+    }
+    tag_name, ver_info, status = _retrieve_version_info(
+        params, vcs, verstr, expected_status, optional_status
+    )
+
+    if ver_info is None:
+        LOGGER.info("Version information was not found " "for {0}.".format(vcs.name))
+
+        raise RuntimeError()
+
+    data = ver_info["stamping"]["app"]
+    data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        data["_version"], vcs.template, vcs.hide_zero_hotfix
+    )
+
+    tmplt_value = {}
+    tmplt_value.update(data)
+    if 'root_app' in ver_info['stamping']:
+        for key, v in ver_info['stamping']['root_app'].items():
+            tmplt_value[f"root_{key}"] = v
+
+    jinja_template_path = os.path.realpath(
+        os.path.join(
+            params['root_path'],
+            params['jinja_template']
+        )
+    )
+    with open(jinja_template_path) as file_:
+        template = jinja2.Template(file_.read())
+
+    template.render(tmplt_value)
+
+    return 0
+
+
 def goto_version(vcs, params, version):
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {"detached", "repos_exist_locally", "modified"}
@@ -2042,9 +2103,10 @@ def vmn_run(command_line):
             err = handle_goto(vmn_ctx)
         elif vmn_ctx.args.command == "release":
             err = handle_release(vmn_ctx)
+        elif vmn_ctx.args.command == "gen":
+            err = handle_gen(vmn_ctx)
         else:
             LOGGER.info("Run vmn -h for help")
-            err = 0
 
     return err
 
@@ -2175,6 +2237,34 @@ def parse_user_commands(command_line):
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
+
+    pgen = subprasers.add_parser(
+        "gen",
+        help="Generate version file based on jinja2 template"
+    )
+    pgen.add_argument(
+        "-v",
+        "--version",
+        default=None,
+        required=False,
+        help=f"The version to generate the file for in the format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
+    )
+    pgen.add_argument(
+        "-t",
+        "--template",
+        default=None,
+        required=False,
+        help=f"Path to jinja2 template",
+    )
+    pgen.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        required=False,
+        help=f"Path for the output file",
+    )
+    pgen.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 
     verify_user_input_version(args, "version")
@@ -2209,8 +2299,8 @@ def verify_user_input_version(args, key):
 
 
 if __name__ == "__main__":
-    err = main()
-    if err:
+    ret_err = main()
+    if ret_err:
         sys.exit(1)
 
     sys.exit(0)
