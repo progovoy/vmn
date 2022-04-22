@@ -1354,6 +1354,7 @@ def handle_show(vmn_ctx):
 
 def handle_gen(vmn_ctx):
     vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
+    vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
@@ -2264,6 +2265,8 @@ def parse_user_commands(command_line):
         required=False,
         help=f"Path for the output file",
     )
+    pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
+    pgen.set_defaults(verify_version=False)
     pgen.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 

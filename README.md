@@ -167,6 +167,56 @@ stamping:
 
 `vmn show --root my_root_app` will output `5`
 
+### Generate version output file based on jinja2 template
+
+`vmn gen -t path/to/jinja_template -o path/to/output`
+
+#### Jinja template example
+```
+"VERSION: {{version}} \n" \
+"NAME: {{name}} \n" \
+"BRANCH: {{stamped_on_branch}} \n" \
+"RELEASE_MODE: {{release_mode}} \n" \
+"{% for k,v in changesets.items() %} \n" \
+"    <h2>REPO: {{k}}\n" \
+"    <h2>HASH: {{v.hash}}</h2> \n" \
+"    <h2>REMOTE: {{v.remote}}</h2> \n" \
+"    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
+"{% endfor %}\n"
+```
+
+#### Available jinja2 keywords
+```json
+{
+  "_version": "0.0.1", 
+  "changesets":
+  {
+    ".": 
+    {
+      "hash": "ef4c6f4355d0190e4f516230f65a79ec24fc7396", 
+      "remote": "../test_repo_remote",
+      "vcs_type": "git"
+    }
+  }, 
+  "info": {}, 
+  "name": "test_app2/s1",
+  "prerelease": "release",
+  "prerelease_count": {},
+  "previous_version": "0.0.0",
+  "release_mode": "patch",
+  "stamped_on_branch": "master",
+  "version": "0.0.1",
+  "root_external_services": {},
+  "root_latest_service": "test_app2/s1",
+  "root_name": "test_app2",
+  "root_services": 
+  {
+    "test_app2/s1": "0.0.1"
+  }, 
+  "root_version": 1
+}
+```
+
 ### Configuration
 `vmn` auto generates a `conf.yml` file that can be modified later by the user. 
 
@@ -187,7 +237,6 @@ conf:
     npm:
       path: "relative_path/to/Cargo.toml"
 ```
-
 
 
 |         Field          | Description                                                  | Example                                                      |
