@@ -1355,6 +1355,7 @@ def handle_show(vmn_ctx):
 def handle_gen(vmn_ctx):
     vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
     vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
+    vmn_ctx.params["output"] = vmn_ctx.args.output
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
@@ -1848,7 +1849,17 @@ def gen(vcs, params, verstr=None):
     with open(jinja_template_path) as file_:
         template = jinja2.Template(file_.read())
 
-    template.render(tmplt_value)
+    out = template.render(tmplt_value)
+
+    out_path = os.path.realpath(
+        os.path.join(
+            params['root_path'],
+            params['output']
+        )
+    )
+
+    with open(out_path, "w") as f:
+        f.write(out)
 
     return 0
 
