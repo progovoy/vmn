@@ -95,7 +95,7 @@ class FSAppLayoutFixture(object):
         import subprocess
 
         base_cmd = [
-            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
+            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))

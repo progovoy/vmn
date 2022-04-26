@@ -618,6 +618,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
 
+
 def test_goto_deleted_repos(app_layout):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
@@ -906,17 +907,11 @@ def test_goto_print(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name, "1.2.3")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="minor",
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
 
     app_layout.write_file_commit_and_push("test_repo", "my.js", "some text")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name,
-        release_mode="major",
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="major")
 
     capfd.readouterr()
 
