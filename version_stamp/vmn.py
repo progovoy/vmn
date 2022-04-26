@@ -76,7 +76,7 @@ class VMNContextMAnager(object):
             validate_app_name(self.args)
             initial_params["name"] = self.args.name
 
-            if 'command' in self.args and 'stamp' in self.args.command:
+            if "command" in self.args and "stamp" in self.args.command:
                 initial_params["extra_commit_message"] = self.args.extra_commit_message
 
         vmn_path = os.path.join(root_path, ".vmn")
