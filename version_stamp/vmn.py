@@ -2150,7 +2150,9 @@ def parse_user_commands(command_line):
         "-e",
         "--extra-commit-message",
         default="",
-        help="add more information to the commit message",
+        help="add more information to the commit message."
+             "example: adding --extra-commit-message '[ci-skip]' "
+             "will add the string '[ci-skip]' to the commit message",
     )
 
     pgoto = subprasers.add_parser("goto", help="go to version")
