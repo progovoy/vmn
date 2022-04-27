@@ -5,11 +5,6 @@ name: Build vmn package
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, extra_commit_msg ]
-  pull_request:
-    branches: [ main ]
-  workflow_call:
     inputs:
       version_type:
         type: choice
@@ -19,8 +14,7 @@ on:
         - patch
         - minor
         - major
-        - rc
-        required: false
+        required: true
 
 jobs:
 
