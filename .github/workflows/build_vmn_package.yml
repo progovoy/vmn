@@ -5,6 +5,11 @@ name: Build vmn package
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main, extra_commit_msg ]
+  pull_request:
+    branches: [ main ]
+  workflow_call:
     inputs:
       version_type:
         type: choice
@@ -15,7 +20,7 @@ on:
         - minor
         - major
         - rc
-        required: true
+        required: false
 
 jobs:
 
@@ -31,7 +36,8 @@ jobs:
 
     - name: build pkg
       run: |
-        make ${{ github.event.inputs.version_type }}
+        #make ${{ github.event.inputs.version_type }}
+        make check
         ls -ltrh ./dist/
 
     - name: Publish a Python distribution to PyPI
