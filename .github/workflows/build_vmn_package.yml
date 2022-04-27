@@ -34,11 +34,11 @@ jobs:
         make ${{ github.event.inputs.version_type }}
         ls -ltrh ./dist/
 
-#    - name: Publish a Python distribution to PyPI
-#      uses: pypa/gh-action-pypi-publish@release/v1
-#      with:
-#        verbose: true
-#        user: __token__
-#        password: ${{ secrets.PYPI_API_TOKEN }}
-#        print_hash: true
-#        skip_existing: false
+    - name: Publish a Python distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        verbose: true
+        user: __token__
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        print_hash: true
+        skip_existing: false
