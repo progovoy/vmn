@@ -4,16 +4,20 @@
 name: Build vmn package
 
 on:
-  workflow_dispatch:
-  inputs:
-    version_type:
-      type: choice
-      description: Version type
-      options:
-      - patch
-      - minor
-      - major
-      required: true
+  push:
+    branches: [ main, extra_commit_msg ]
+    pull_request:
+      branches: [ main ]
+#  workflow_dispatch:
+#    inputs:
+#      version_type:
+#        type: choice
+#        description: Version type
+#        options:
+#        - patch
+#        - minor
+#        - major
+#        required: true
 
 jobs:
 
@@ -33,11 +37,11 @@ jobs:
         make check
         ls -ltrh ./dist/
 
-    - name: Publish a Python distribution to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        verbose: true
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        print_hash: true
-        skip_existing: false
+#    - name: Publish a Python distribution to PyPI
+#      uses: pypa/gh-action-pypi-publish@release/v1
+#      with:
+#        verbose: true
+#        user: __token__
+#        password: ${{ secrets.PYPI_API_TOKEN }}
+#        print_hash: true
+#        skip_existing: false
