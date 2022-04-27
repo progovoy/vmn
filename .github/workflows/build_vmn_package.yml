@@ -5,16 +5,15 @@ name: Build vmn package
 
 on:
   workflow_dispatch:
-    inputs:
-      version_type:
-        type: choice
-        description: Version type
-        options:
-        - check
-        - patch
-        - minor
-        - major
-        required: true
+  inputs:
+    version_type:
+      type: choice
+      description: Version type
+      options:
+      - patch
+      - minor
+      - major
+      required: true
 
 jobs:
 
