@@ -29,13 +29,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-          sudo apt install -y black
+          python3 --version
+#          sudo apt install -y black
 
-    - name: build pkg
-      run: |
-        #make ${{ github.event.inputs.version_type }}
-        make check
-        ls -ltrh ./dist/
+#    - name: build pkg
+#      run: |
+#        #make ${{ github.event.inputs.version_type }}
+#        make check
+#        ls -ltrh ./dist/
 
 #    - name: Publish a Python distribution to PyPI
 #      uses: pypa/gh-action-pypi-publish@release/v1
