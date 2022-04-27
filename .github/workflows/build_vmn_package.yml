@@ -29,7 +29,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-          apt install black
+          sudo apt install -y black
 
     - name: build pkg
       run: |
