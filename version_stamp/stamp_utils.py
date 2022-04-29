@@ -258,7 +258,7 @@ class GitBackend(VMNBackend):
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self.add_git_user_cfg_if_missing()
-        self._origin = self._be.remote(name="origin")
+        self._origin = self._be.remotes[0]
 
         self._be.git.fetch("--tags")
 
@@ -643,7 +643,7 @@ class HostState(object):
 
         try:
             hash = client.head.commit.hexsha
-            remote = tuple(client.remote("origin").urls)[0]
+            remote = tuple(client.remotes[0].urls)[0]
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
         except Exception as exc:

@@ -173,7 +173,7 @@ class FSAppLayoutFixture(object):
 
         client.git.push(
             "--set-upstream",
-            "origin",
+            client.remotes[0].name,
             "refs/heads/{0}".format(client.active_branch.name),
         )
 
@@ -256,7 +256,7 @@ class GitBackend(VersionControlBackend):
         self._git_backend.index.add(os.path.join(versions_root_path, "init.txt"))
         self._git_backend.index.commit("first commit")
 
-        self._origin = self._git_backend.remote(name="origin")
+        self._origin = self._git_backend.remotes[0]
         self._origin.push()
 
         self.be = stamp_utils.GitBackend(versions_root_path)
@@ -270,7 +270,7 @@ class GitBackend(VersionControlBackend):
         client.index.remove(file_path, working_tree=True)
         client.index.commit("Manualy removed file {0}".format(file_path))
 
-        origin = client.remote(name="origin")
+        origin = client.remotes[0]
         origin.push()
 
         client.close()
@@ -281,7 +281,7 @@ class GitBackend(VersionControlBackend):
         client.index.add(conf_path)
         client.index.commit(message="Manually add config file")
 
-        origin = client.remote(name="origin")
+        origin = client.remotes[0]
         origin.push()
 
         client.close()
