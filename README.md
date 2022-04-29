@@ -235,8 +235,8 @@ RELEASE_MODE: patch
 
 | Backend | Description |
 | :-: | :-: |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file within the `vmn stamp` command |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file within the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed version string to `package.json` file within the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed version string to `Cargo.toml` file within the `vmn stamp` command |
 
 ## Configuration
 `vmn` auto generates a `conf.yml` file that can be modified later by the user. 
