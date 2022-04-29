@@ -14,6 +14,7 @@ import re
 import tomlkit
 import json
 from packaging import version as pversion
+import jinja2
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
@@ -141,7 +142,7 @@ class IVersionsStamper(object):
             self.tracked = False
             return
 
-        self.initialize_paths(conf)
+        self.initialize_paths()
         self.update_attrs_from_app_conf_file()
 
         self.version_files = [self.app_conf_path, self.version_file_path]
@@ -168,7 +169,7 @@ class IVersionsStamper(object):
                     self.template = data["conf"]["template"]
                 if "extra_info" in data["conf"]:
                     self.extra_info = data["conf"]["extra_info"]
-                if "deps" in data["conf"] and data["conf"]["deps"]:
+                if "deps" in data["conf"]:
                     self.raw_configured_deps = data["conf"]["deps"]
                 if "hide_zero_hotfix" in data["conf"]:
                     self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
@@ -179,7 +180,7 @@ class IVersionsStamper(object):
 
                 self.set_template(self.template)
 
-    def initialize_paths(self, conf):
+    def initialize_paths(self):
         self.app_dir_path = os.path.join(
             self.root_path, ".vmn", self.name.replace("/", os.sep)
         )
@@ -482,6 +483,12 @@ class IVersionsStamper(object):
                 parents=True, exist_ok=True
             )
 
+            self.raw_configured_deps[os.path.join("../")].pop(
+                os.path.basename(self.root_path)
+            )
+            if not self.raw_configured_deps[os.path.join("../")]:
+                self.raw_configured_deps.pop(os.path.join("../"))
+
             ver_conf_yml = {
                 "conf": {
                     "template": self.template,
@@ -492,12 +499,6 @@ class IVersionsStamper(object):
                     "version_backends": self.version_backends,
                 }
             }
-
-            self.raw_configured_deps[os.path.join("../")].pop(
-                os.path.basename(self.root_path)
-            )
-            if not self.raw_configured_deps[os.path.join("../")]:
-                self.raw_configured_deps.pop(os.path.join("../"))
 
             with open(self.app_conf_path, "w+") as f:
                 msg = (
@@ -1256,12 +1257,11 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.tracked = vcs.ver_info_from_repo is not None
 
     if os.path.isfile(vcs.app_conf_path):
-        # TODO: Understand this peice of code
         with open(vcs.app_conf_path, "r") as f:
             data = yaml.safe_load(f)
 
             deps = {}
-            for rel_path, dep in vcs.raw_configured_deps.items():
+            for rel_path, dep in data["conf"]["deps"].items():
                 deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
 
             vcs.actual_deps_state.update(
@@ -1346,6 +1346,24 @@ def handle_show(vmn_ctx):
     try:
         out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     except:
+        return 1
+
+    return 0
+
+
+def handle_gen(vmn_ctx):
+    vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
+    vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
+    vmn_ctx.params["output"] = vmn_ctx.args.output
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
+
+    try:
+        out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    except:
+        LOGGER.error("Failed to gen, run with --debug for more details")
+        LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
 
     return 0
@@ -1732,10 +1750,7 @@ def show(vcs, params, verstr=None):
             params, vcs, verstr, expected_status, optional_status
         )
         if ver_info is not None:
-            dirty_states = (
-                                   (optional_status & status["state"])
-                                   | {"repos_exist_locally", "detached"}
-                           ) - {"detached", "repos_exist_locally"}
+            dirty_states = get_dirty_states(optional_status, status)
 
             if params["ignore_dirty"]:
                 dirty_states = None
@@ -1787,6 +1802,71 @@ def show(vcs, params, verstr=None):
     print(out)
 
     return out
+
+
+def gen(vcs, params, verstr=None):
+    ver_info = None
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {
+        "repos_exist_locally",
+        "detached",
+        "pending",
+        "outgoing",
+        "modified",
+        "dirty_deps",
+    }
+    tag_name, ver_info, status = _retrieve_version_info(
+        params, vcs, verstr, expected_status, optional_status
+    )
+    if ver_info is not None:
+        dirty_states = get_dirty_states(optional_status, status)
+        if params["verify_version"]:
+            if verstr is None and dirty_states:
+                LOGGER.error('The repository is in dirty state. Refusing to gen')
+                raise RuntimeError()
+            elif verstr is not None:
+                if dirty_states or ver_info['stamping']['app']['_version'] != verstr:
+                    LOGGER.error(
+                        f'The repository is not exactly at version: {verstr}. '
+                        f'You can use `vmn goto` in order to jump to that version.\n'
+                        f'Refusing to gen'
+                    )
+                    raise RuntimeError()
+
+    if ver_info is None:
+        LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
+
+        raise RuntimeError()
+
+    data = ver_info["stamping"]["app"]
+    data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        data["_version"], vcs.template, vcs.hide_zero_hotfix
+    )
+
+    tmplt_value = {}
+    tmplt_value.update(data)
+    if 'root_app' in ver_info['stamping']:
+        for key, v in ver_info['stamping']['root_app'].items():
+            tmplt_value[f"root_{key}"] = v
+
+    with open(params['jinja_template']) as file_:
+        template = jinja2.Template(file_.read())
+
+    out = template.render(tmplt_value)
+
+    out_path = params['output']
+
+    with open(out_path, "w") as f:
+        f.write(out)
+
+    return 0
+
+
+def get_dirty_states(optional_status, status):
+    dirty_states = ((optional_status & status["state"]) | {"repos_exist_locally", "detached"})
+    dirty_states -= {"detached", "repos_exist_locally"}
+
+    return dirty_states
 
 
 def goto_version(vcs, params, version):
@@ -2040,9 +2120,10 @@ def vmn_run(command_line):
             err = handle_goto(vmn_ctx)
         elif vmn_ctx.args.command == "release":
             err = handle_release(vmn_ctx)
+        elif vmn_ctx.args.command == "gen":
+            err = handle_gen(vmn_ctx)
         else:
             LOGGER.info("Run vmn -h for help")
-            err = 0
 
     return err
 
@@ -2181,6 +2262,34 @@ def parse_user_commands(command_line):
              f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
+
+    pgen = subprasers.add_parser(
+        "gen",
+        help="Generate version file based on jinja2 template"
+    )
+    pgen.add_argument(
+        "-v",
+        "--version",
+        default=None,
+        required=False,
+        help=f"The version to generate the file for in the format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
+    )
+    pgen.add_argument(
+        "-t",
+        "--template",
+        required=True,
+        help=f"Path to the jinja2 template",
+    )
+    pgen.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        help=f"Path for the output file",
+    )
+    pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
+    pgen.set_defaults(verify_version=False)
+    pgen.add_argument("name", help="The application's name")
     args = parser.parse_args(command_line)
 
     verify_user_input_version(args, "version")
@@ -2215,8 +2324,8 @@ def verify_user_input_version(args, key):
 
 
 if __name__ == "__main__":
-    err = main()
-    if err:
+    ret_err = main()
+    if ret_err:
         sys.exit(1)
 
     sys.exit(0)
