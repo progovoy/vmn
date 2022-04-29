@@ -3,9 +3,22 @@
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
-A simple package for auto increasing version numbers of any application agnostic to language or architecture.
+A package for auto increasing version numbers of any application agnostic to language or architecture.
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
+
+<p align="center">
+  <br>
+  <img width="800" src="https://i.imgur.com/dwmhs3v.png">
+  <br>
+</p>
+
+### What it does?
+`vmn` is a CLI tool for handling project versioning needs.
+
+`vmn` can also be used like a Python library.
+
+Go ahead and read `vmn`'s docs :)
 
 ### Key features
 
@@ -26,18 +39,18 @@ pip3 install vmn
 ```
 
 ## Usage
-### cd into your git repository
+### `cd` into your git repository
 ```sh
 cd to/your/repository
 ```
 
-### Init phase
+### `vmn init`
 ```sh
 ## Needed only once per repository.
 vmn init
 ```
 
-### Start stamping
+### `vmn stamp`
 ```sh
 ## Needed only once per app-name
 # will start from 0.0.0
@@ -55,7 +68,7 @@ vmn stamp -r minor <app-name2>
 ##### Note:
 `init-app` and `stamp` both support `--dry-run` flag
 
-### Release candidates
+### `vmn stamp` for release candidates
 
 `vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only then release the final version.
 
@@ -75,40 +88,8 @@ vmn stamp --pr mybeta <app-name>
 # Run release when you ready - will stamp 2.0.0 (from the same commit)
 vmn release -v 2.0.0-mybeta1 <app-name>
 ```
-### Show
 
-Use `vmn show` for displaying version information of previous `vmn stamp` commands
-
-```sh
-vmn show <app-name>
-vmn show --verbose <app-name>
-vmn show -v 1.0.1 <app-name>
-```
-
-### Goto 
-
-Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to the **exact** state of you entire code for a specific version even when multiple git repositories are involved. 
-
-```sh
-vmn goto -v 1.0.1 <app-name>
-```
-
-## Why `vmn` is agnostic to application language?
-It is the application's responsibility to actually set the version number at build time. The version string can be retrieved from
-```sh
-vmn show <app-name>
-```
-and be embedded via a custom script to the application's code during its build phase. `vmn` supports auto-embedding the version string during the `vmn stamp` phase for popular backends (see **`Version auto-embedding`** section above).
-
-### Version auto-embedding
-
-| Backend | Description |
-| :-: | :-: |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file during the `vmn stamp` command |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file during the `vmn stamp` command |
-
-## Advanced features
-### Root apps
+### `vmn stamp` for "root apps" or microservices
 
 `vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under the same solution. 
 
@@ -167,23 +148,28 @@ stamping:
 
 `vmn show --root my_root_app` will output `5`
 
-### Generate version output file based on jinja2 template
+### `vmn show`
 
-`vmn gen -t path/to/jinja_template -o path/to/output`
+Use `vmn show` for displaying version information of previous `vmn stamp` commands
 
-#### Jinja template example
+```sh
+vmn show <app-name>
+vmn show --verbose <app-name>
+vmn show -v 1.0.1 <app-name>
 ```
-"VERSION: {{version}} \n" \
-"NAME: {{name}} \n" \
-"BRANCH: {{stamped_on_branch}} \n" \
-"RELEASE_MODE: {{release_mode}} \n" \
-"{% for k,v in changesets.items() %} \n" \
-"    <h2>REPO: {{k}}\n" \
-"    <h2>HASH: {{v.hash}}</h2> \n" \
-"    <h2>REMOTE: {{v.remote}}</h2> \n" \
-"    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
-"{% endfor %}\n"
+
+### `vmn goto` 
+
+Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to the **exact** state of you entire code for a specific version even when multiple git repositories are involved. 
+
+```sh
+vmn goto -v 1.0.1 <app-name>
 ```
+
+### `vmn gen`
+Generates version output file based on jinja2 template
+
+`vmn gen -t path/to/jinja_template.j2 -o path/to/output.txt app_name`
 
 #### Available jinja2 keywords
 ```json
@@ -217,7 +203,47 @@ stamping:
 }
 ```
 
-### Configuration
+#### `vmn gen` jinja template example
+```
+"VERSION: {{version}} \n" \
+"NAME: {{name}} \n" \
+"BRANCH: {{stamped_on_branch}} \n" \
+"RELEASE_MODE: {{release_mode}} \n" \
+"{% for k,v in changesets.items() %} \n" \
+"    <h2>REPO: {{k}}\n" \
+"    <h2>HASH: {{v.hash}}</h2> \n" \
+"    <h2>REMOTE: {{v.remote}}</h2> \n" \
+"    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
+"{% endfor %}\n"
+```
+
+#### `vmn gen` output example
+```
+VERSION: 0.0.1
+NAME: test_app2/s1
+BRANCH: master
+RELEASE_MODE: patch
+
+    <h2>REPO: .
+    <h2>HASH: ef4c6f4355d0190e4f516230f65a79ec24fc7396</h2>
+    <h2>REMOTE: ../test_repo_remote</h2>
+    <h2>VCS_TYPE: git</h2>
+```
+
+### Version auto-embedding
+##### Why `vmn` is agnostic to application language?
+It is the application's responsibility to actually set the version number at build time. The version string can be retrieved from
+```sh
+vmn show <app-name>
+```
+and be embedded via a custom script to the application's code during its build phase. `vmn` supports auto-embedding the version string during the `vmn stamp` phase for popular backends.
+
+| Backend | Description |
+| :-: | :-: |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file during the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file during the `vmn stamp` command |
+
+## Configuration
 `vmn` auto generates a `conf.yml` file that can be modified later by the user. 
 
 An example of a possible `conf.yml` file:
