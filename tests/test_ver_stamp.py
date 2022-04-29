@@ -1550,3 +1550,31 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     err, ver_info, _ = _stamp_app("root_app/service1", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+
+def test_remotes(app_layout):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    import subprocess
+
+    cmds = [
+        ["git", "remote", "add", "or2", app_layout.repo_path],
+        ["git", "remote", "rename", "origin", "or3"],
+        ["git", "remote", "rename", "or2", "origin"],
+        ["git", "remote", "remove", "or3"],
+        ["git", "remote", "add", "or3", app_layout.repo_path],
+        ["git", "remote", "remove", "origin"],
+    ]
+    c = 2
+    for cmd in cmds:
+        subprocess.call(cmd, cwd=app_layout.repo_path)
+
+        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+        assert err == 0
+        assert ver_info["stamping"]["app"]["_version"] == f"0.0.{c}"
+        c += 1
+
