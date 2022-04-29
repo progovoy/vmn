@@ -111,6 +111,31 @@ def _show(
         return err
 
 
+def _gen(
+    app_name,
+    template,
+    output,
+    verify_version=False,
+    version=None,
+):
+    args_list = ["--debug"]
+    args_list.extend(["gen"])
+    args_list.extend(["--template", template])
+    args_list.extend(["--output", output])
+
+    if version is not None:
+        args_list.extend(["--version", f"{version}"])
+
+    if verify_version:
+        args_list.extend(["--verify-version"])
+
+    args_list.append(app_name)
+
+    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
+        err = vmn.handle_gen(vmn_ctx)
+        return err
+
+
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
@@ -214,6 +239,93 @@ def test_git_hooks(app_layout, capfd, hook_name):
 
     out, err = capfd.readouterr()
     assert "0.0.2\n" == out
+
+
+def test_jinja2_gen(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", 'content')
+
+    jinja2_content = "VERSION: {{version}} \n" \
+                        "NAME: {{name}} \n" \
+                        "BRANCH: {{stamped_on_branch}} \n" \
+                        "RELEASE_MODE: {{release_mode}} \n" \
+                        "{% for k,v in changesets.items() %} \n" \
+                        "    <h2>REPO: {{k}}\n" \
+                        "    <h2>HASH: {{v.hash}}</h2> \n" \
+                        "    <h2>REMOTE: {{v.remote}}</h2> \n" \
+                        "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
+                        "{% endfor %}\n"
+    app_layout.write_file_commit_and_push(
+        "test_repo", "f1.jinja2", jinja2_content,
+        commit=False, push=False
+    )
+
+    tpath = os.path.join(app_layout._repos["test_repo"]["path"], "f1.jinja2")
+    opath = os.path.join(app_layout._repos["test_repo"]["path"], "jinja_out.txt")
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 1
+
+    out, err = capfd.readouterr()
+
+    assert out.startswith(
+        "[ERROR] The repository is in dirty state. Refusing to gen"
+    )
+
+    err = _gen(
+        app_layout.app_name,
+        tpath,
+        opath,
+        verify_version=True,
+        version='0.0.1'
+    )
+    assert err == 1
+
+    out, err = capfd.readouterr()
+
+    assert out.startswith(
+        "[ERROR] The repository is not exactly at version: 0.0.1"
+    )
+
+    with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 0
+
+    with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 1
+
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
+
+    new_name = f"{app_layout.app_name}2/s1"
+    _init_app(new_name)
+
+    err, _, _ = _stamp_app(new_name, "patch")
+    assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
 
 
 def test_basic_show(app_layout, capfd):
@@ -472,7 +584,7 @@ def test_show_from_file(app_layout, capfd):
     assert show_minimal_res == show_file
 
 
-def test_show_from_file_conf_changged(app_layout, capfd):
+def test_show_from_file_conf_changed(app_layout, capfd):
     _init_vmn_in_repo()
     _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
@@ -556,7 +668,6 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
         "deps": {
             "../": {
                 "test_repo": {
@@ -565,7 +676,6 @@ def test_multi_repo_dependency(app_layout, capfd):
                 }
             }
         },
-        "extra_info": False,
     }
     for repo in (("repo1", "git"), ("repo2", "git")):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
@@ -617,6 +727,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     app_layout.write_conf(params["app_conf_path"], **conf)
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
+
 
 def test_goto_deleted_repos(app_layout):
     _init_vmn_in_repo()
@@ -745,7 +856,7 @@ def test_starting_version(app_layout):
     assert data["_version"] == "1.3.0"
 
 
-def test_rc_stamping(app_layout):
+def test_rc_stamping(app_layout, capfd):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name, "1.2.3")
 
@@ -873,6 +984,61 @@ def test_rc_stamping(app_layout):
         assert data["_version"] == item
         assert data["prerelease"] == "release"
         assert not data["prerelease_count"]
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.6.0-rc1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name)
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.6.0-rc2"
+    assert data["prerelease"] == "rc"
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "3.6.0-rc2\n" == out
+
+    ver_info, _ = _release_app(app_layout.app_name, f"3.6.0-rc1")
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "3.6.0\n" == out
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
+    assert err == 0
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.7.0-rc1"
+    assert data["prerelease"] == "rc"
 
 
 def test_rc_goto(app_layout, capfd):
@@ -1241,8 +1407,48 @@ def test_version_backends_cargo(app_layout, capfd):
     )
 
     conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
         "version_backends": {"cargo": {"path": "Cargo.toml"}},
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    full_path = os.path.join(
+        params["root_path"], params["version_backends"]["cargo"]["path"]
+    )
+
+    with open(full_path, "r") as f:
+        data = toml.load(f)
+        assert data["package"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def test_conf(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "f1.txt",
+        "text",
+    )
+
+    conf = {
         "deps": {
             "../": {
                 "test_repo": {
@@ -1259,13 +1465,15 @@ def test_version_backends_cargo(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    full_path = os.path.join(
-        params["root_path"], params["version_backends"]["cargo"]["path"]
-    )
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
 
-    with open(full_path, "r") as f:
-        data = toml.load(f)
-        assert data["package"]["version"] == "0.0.2"
+    conf = {
+        "deps": {},
+        "extra_info": False,
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
