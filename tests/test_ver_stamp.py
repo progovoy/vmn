@@ -113,17 +113,21 @@ def _show(
 
 def _gen(
     app_name,
+    template,
+    output,
+    verify_version=False,
     version=None,
-    template=None,
-    output=None,
 ):
-    args_list = ["gen"]
-    if template is not None:
-        args_list.extend(["--template", template])
+    args_list = ["--debug"]
+    args_list.extend(["gen"])
+    args_list.extend(["--template", template])
+    args_list.extend(["--output", output])
+
     if version is not None:
         args_list.extend(["--version", f"{version}"])
-    if output is not None:
-        args_list.extend(["--output", output])
+
+    if verify_version:
+        args_list.extend(["--verify-version"])
 
     args_list.append(app_name)
 
@@ -248,6 +252,8 @@ def test_jinja2_gen(app_layout, capfd):
     out, err = capfd.readouterr()
     assert not err
 
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", 'content')
+
     jinja2_content = "VERSION: {{version}} \n" \
                         "NAME: {{name}} \n" \
                         "BRANCH: {{stamped_on_branch}} \n" \
@@ -258,9 +264,58 @@ def test_jinja2_gen(app_layout, capfd):
                         "    <h2>REMOTE: {{v.remote}}</h2> \n" \
                         "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
                         "{% endfor %}\n"
-    app_layout.write_file_commit_and_push("test_repo", "f1.jinja2", jinja2_content)
+    app_layout.write_file_commit_and_push(
+        "test_repo", "f1.jinja2", jinja2_content,
+        commit=False, push=False
+    )
 
-    err = _gen(app_layout.app_name, template="f1.jinja2")
+    tpath = os.path.join(app_layout._repos["test_repo"]["path"], "f1.jinja2")
+    opath = os.path.join(app_layout._repos["test_repo"]["path"], "jinja_out.txt")
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 1
+
+    out, err = capfd.readouterr()
+
+    assert out.startswith(
+        "[ERROR] The repository is in dirty state. Refusing to gen"
+    )
+
+    err = _gen(
+        app_layout.app_name,
+        tpath,
+        opath,
+        verify_version=True,
+        version='0.0.1'
+    )
+    assert err == 1
+
+    out, err = capfd.readouterr()
+
+    assert out.startswith(
+        "[ERROR] The repository is not exactly at version: 0.0.1"
+    )
+
+    with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 0
+
+    with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
+    assert err == 1
+
+    err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
 
     new_name = f"{app_layout.app_name}2/s1"
@@ -269,7 +324,7 @@ def test_jinja2_gen(app_layout, capfd):
     err, _, _ = _stamp_app(new_name, "patch")
     assert err == 0
 
-    err = _gen(new_name, template="f1.jinja2")
+    err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
 
 

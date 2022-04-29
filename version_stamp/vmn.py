@@ -1363,6 +1363,8 @@ def handle_gen(vmn_ctx):
     try:
         out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     except:
+        LOGGER.error("Failed to gen, run with --debug for more details")
+        LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
 
     return 0
@@ -1749,13 +1751,7 @@ def show(vcs, params, verstr=None):
             params, vcs, verstr, expected_status, optional_status
         )
         if ver_info is not None:
-            dirty_states = (
-                (optional_status & status["state"])
-                | {"repos_exist_locally", "detached"}
-            ) - {
-                "detached",
-                "repos_exist_locally",
-            }
+            dirty_states = get_dirty_states(optional_status, status)
 
             if params["ignore_dirty"]:
                 dirty_states = None
@@ -1823,9 +1819,23 @@ def gen(vcs, params, verstr=None):
     tag_name, ver_info, status = _retrieve_version_info(
         params, vcs, verstr, expected_status, optional_status
     )
+    if ver_info is not None:
+        dirty_states = get_dirty_states(optional_status, status)
+        if params["verify_version"]:
+            if verstr is None and dirty_states:
+                LOGGER.error('The repository is in dirty state. Refusing to gen')
+                raise RuntimeError()
+            elif verstr is not None:
+                if dirty_states or ver_info['stamping']['app']['_version'] != verstr:
+                    LOGGER.error(
+                        f'The repository is not exactly at version: {verstr}. '
+                        f'You can use `vmn goto` in order to jump to that version.\n'
+                        f'Refusing to gen'
+                    )
+                    raise RuntimeError()
 
     if ver_info is None:
-        LOGGER.info("Version information was not found " "for {0}.".format(vcs.name))
+        LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
 
         raise RuntimeError()
 
@@ -1840,29 +1850,24 @@ def gen(vcs, params, verstr=None):
         for key, v in ver_info['stamping']['root_app'].items():
             tmplt_value[f"root_{key}"] = v
 
-    jinja_template_path = os.path.realpath(
-        os.path.join(
-            params['root_path'],
-            params['jinja_template']
-        )
-    )
-    with open(jinja_template_path) as file_:
+    with open(params['jinja_template']) as file_:
         template = jinja2.Template(file_.read())
 
     out = template.render(tmplt_value)
 
-    out_path = os.path.realpath(
-        os.path.join(
-            params['root_path'],
-            params['output']
-        )
-    )
+    out_path = params['output']
 
     with open(out_path, "w") as f:
         f.write(out)
 
     return 0
 
+
+def get_dirty_states(optional_status, status):
+    dirty_states = ((optional_status & status["state"]) | {"repos_exist_locally", "detached"})
+    dirty_states -= {"detached", "repos_exist_locally"}
+
+    return dirty_states
 
 def goto_version(vcs, params, version):
     expected_status = {"repo_tracked", "app_tracked"}
@@ -2265,15 +2270,13 @@ def parse_user_commands(command_line):
     pgen.add_argument(
         "-t",
         "--template",
-        default=None,
-        required=False,
-        help=f"Path to jinja2 template",
+        required=True,
+        help=f"Path to the jinja2 template",
     )
     pgen.add_argument(
         "-o",
         "--output",
-        default=None,
-        required=False,
+        required=True,
         help=f"Path for the output file",
     )
     pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
