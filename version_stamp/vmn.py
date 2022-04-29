@@ -77,6 +77,9 @@ class VMNContextMAnager(object):
             validate_app_name(self.args)
             initial_params["name"] = self.args.name
 
+            if "command" in self.args and "stamp" in self.args.command:
+                initial_params["extra_commit_message"] = self.args.extra_commit_message
+
         vmn_path = os.path.join(root_path, ".vmn")
 
         lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
@@ -553,10 +556,7 @@ class VersionControlStamper(IVersionsStamper):
             gdict["hotfix"] = str(0)
 
         vmn_version = self.gen_vmn_version_from_raw_components(
-            gdict["major"],
-            gdict["minor"],
-            gdict["patch"],
-            gdict["hotfix"],
+            gdict["major"], gdict["minor"], gdict["patch"], gdict["hotfix"]
         )
 
         if prerelease is None or prerelease == "release":
@@ -920,7 +920,10 @@ class VersionControlStamper(IVersionsStamper):
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
             commit_msg = f"{self.name}: Stamped initial version {verstr}\n\n"
         else:
-            commit_msg = f"{self.name}: Stamped version {verstr}\n\n"
+            extra_commit_message = self.params["extra_commit_message"]
+            commit_msg = (
+                f"{self.name}: Stamped version {verstr}\n{extra_commit_message}\n"
+            )
 
         self.current_version_info["stamping"]["msg"] = commit_msg
 
@@ -1232,10 +1235,7 @@ def initialize_backend_attrs(vmn_ctx):
         return 1
 
     self_base = os.path.basename(vcs.root_path)
-    self_dep = {
-        "remote": vcs.backend.remote(),
-        "vcs_type": vcs.backend.type(),
-    }
+    self_dep = {"remote": vcs.backend.remote(), "vcs_type": vcs.backend.type()}
     initialize_empty_raw_deps(vcs, self_base)
 
     vcs.raw_configured_deps[os.path.join("../")][self_base] = self_dep
@@ -2227,6 +2227,14 @@ def parse_user_commands(command_line):
     pstamp.add_argument("--dry-run", dest="dry", action="store_true")
     pstamp.set_defaults(dry=False)
     pstamp.add_argument("name", help="The application's name")
+    pstamp.add_argument(
+        "-e",
+        "--extra-commit-message",
+        default="",
+        help="add more information to the commit message."
+             "example: adding --extra-commit-message '[ci-skip]' "
+             "will add the string '[ci-skip]' to the commit message",
+    )
 
     pgoto = subprasers.add_parser("goto", help="go to version")
     pgoto.add_argument(
