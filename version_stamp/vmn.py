@@ -16,7 +16,6 @@ import json
 from packaging import version as pversion
 import jinja2
 
-
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
@@ -227,7 +226,7 @@ class IVersionsStamper(object):
     # Note: this function generates
     # a version (including prerelease)
     def gen_advanced_version(
-        self, initial_version, initialprerelease, initialprerelease_count
+            self, initial_version, initialprerelease, initialprerelease_count
     ):
         verstr = self._advance_version(initial_version)
 
@@ -343,7 +342,7 @@ class IVersionsStamper(object):
         return vmn_version
 
     def write_version_to_file(
-        self, version_number: str, prerelease: str, prerelease_count: dict
+            self, version_number: str, prerelease: str, prerelease_count: dict
     ) -> None:
         if self.dry_run:
             LOGGER.info(
@@ -423,7 +422,7 @@ class IVersionsStamper(object):
             raise RuntimeError(e)
 
     def _write_version_to_vmn_version_file(
-        self, prerelease, prerelease_count, version_number
+            self, prerelease, prerelease_count, version_number
     ):
         file_path = self.version_file_path
         if prerelease is None:
@@ -527,7 +526,7 @@ class VersionControlStamper(IVersionsStamper):
         IVersionsStamper.__init__(self, conf)
 
     def get_tag_formatted_app_name(
-        self, app_name, version, prerelease=None, prerelease_count=None
+            self, app_name, version, prerelease=None, prerelease_count=None
     ):
         app_name = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(app_name)
 
@@ -742,7 +741,7 @@ class VersionControlStamper(IVersionsStamper):
         return props["version"]
 
     def stamp_app_version(
-        self, initial_version, initialprerelease, initialprerelease_count
+            self, initial_version, initialprerelease, initialprerelease_count
     ):
         if initialprerelease == "release" and self.release_mode is None:
             LOGGER.error(
@@ -781,15 +780,15 @@ class VersionControlStamper(IVersionsStamper):
         return current_version, prerelease, prerelease_count
 
     def update_stamping_info(
-        self,
-        info,
-        initial_version,
-        initialprerelease,
-        initialprerelease_count,
-        current_version,
-        prerelease,
-        prerelease_count,
-        release_mode,
+            self,
+            info,
+            initial_version,
+            initialprerelease,
+            initialprerelease_count,
+            current_version,
+            prerelease,
+            prerelease_count,
+            release_mode,
     ):
         verstr = self.gen_verstr(current_version, prerelease, prerelease_count)
         self.current_version_info["stamping"]["app"]["_version"] = verstr
@@ -873,7 +872,7 @@ class VersionControlStamper(IVersionsStamper):
         return version_files
 
     def publish_stamp(
-        self, app_version, prerelease, prerelease_count, root_app_version
+            self, app_version, prerelease, prerelease_count, root_app_version
     ):
         verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
         app_msg = {
@@ -1037,7 +1036,7 @@ class VersionControlStamper(IVersionsStamper):
             )
 
     def create_verinfo_root_file(
-        self, root_app_msg, root_app_version, version_files_to_add
+            self, root_app_msg, root_app_version, version_files_to_add
     ):
         dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
 
@@ -1424,7 +1423,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
     # For compatability of early adapters of 0.4.0
     old_path = os.path.join(versions_be_ifc.root_path, ".vmn", "vmn.init")
     if not versions_be_ifc.backend.is_path_tracked(
-        path
+            path
     ) and not versions_be_ifc.backend.is_path_tracked(old_path):
         # Backward compatability with vmn 0.3.9 code:
         file_path = backward_compatible_initialized_check(versions_be_ifc.root_path)
@@ -1623,12 +1622,12 @@ def backward_compatible_initialized_check(root_path):
 
 
 def _stamp_version(
-    versions_be_ifc,
-    pull,
-    check_vmn_version,
-    initial_version,
-    initialprerelease,
-    initialprerelease_count,
+        versions_be_ifc,
+        pull,
+        check_vmn_version,
+        initial_version,
+        initialprerelease,
+        initialprerelease_count,
 ):
     stamped = False
     retries = 3
@@ -1639,10 +1638,10 @@ def _stamp_version(
 
     if check_vmn_version:
         newer_stamping = version_mod.version != "dev" and (
-            pversion.parse(
-                versions_be_ifc.ver_info_from_repo["vmn_info"]["vmn_version"]
-            )
-            > pversion.parse(version_mod.version)
+                pversion.parse(
+                    versions_be_ifc.ver_info_from_repo["vmn_info"]["vmn_version"]
+                )
+                > pversion.parse(version_mod.version)
         )
         if newer_stamping:
             LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
@@ -1868,6 +1867,7 @@ def get_dirty_states(optional_status, status):
     dirty_states -= {"detached", "repos_exist_locally"}
 
     return dirty_states
+
 
 def goto_version(vcs, params, version):
     expected_status = {"repo_tracked", "app_tracked"}
@@ -2148,19 +2148,19 @@ def parse_user_commands(command_line):
     subprasers.add_parser(
         "init",
         help="initialize version tracking for the repository. "
-        "This command should be called only once per repository",
+             "This command should be called only once per repository",
     )
     pinitapp = subprasers.add_parser(
         "init-app",
         help="initialize version tracking for application. "
-        "This command should be called only once per application",
+             "This command should be called only once per application",
     )
     pinitapp.add_argument(
         "-v",
         "--version",
         default="0.0.0",
         help="The version to init from. Must be specified in the raw version format: "
-        "{major}.{minor}.{patch}",
+             "{major}.{minor}.{patch}",
     )
     pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
     pinitapp.set_defaults(dry=False)
@@ -2174,7 +2174,7 @@ def parse_user_commands(command_line):
         "--version",
         default=None,
         help=f"The version to show. Must be specified in the raw version format:"
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     pshow.add_argument(
         "-t", "--template", default=None, help="The template to use in show"
@@ -2203,7 +2203,7 @@ def parse_user_commands(command_line):
         "--prerelease",
         default=None,
         help="Prerelease version. Can be anything really until you decide "
-        "to release the version",
+             "to release the version",
     )
     pstamp.add_argument("--pull", dest="pull", action="store_true")
     pstamp.set_defaults(pull=False)
@@ -2222,7 +2222,7 @@ def parse_user_commands(command_line):
         "--override-version",
         default=None,
         help=f"Override current version with any version in the "
-        f"format: {stamp_utils.VMN_VER_REGEX}",
+             f"format: {stamp_utils.VMN_VER_REGEX}",
     )
     pstamp.add_argument("--dry-run", dest="dry", action="store_true")
     pstamp.set_defaults(dry=False)
@@ -2235,7 +2235,7 @@ def parse_user_commands(command_line):
         default=None,
         required=False,
         help=f"The version to go to in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     pgoto.add_argument("--root", dest="root", action="store_true")
     pgoto.set_defaults(root=False)
@@ -2251,7 +2251,7 @@ def parse_user_commands(command_line):
         "--version",
         required=True,
         help=f"The version to release in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
 
