@@ -236,7 +236,7 @@ It is the application's responsibility to actually set the version number at bui
 ```sh
 vmn show <app-name>
 ```
-and be embedded via a custom script to the application's code during its build phase. `vmn` supports auto-embedding the version string during the `vmn stamp` phase for popular backends.
+and be embedded via a custom script to the application's code during its build phase. However, `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
 | Backend | Description |
 | :-: | :-: |
