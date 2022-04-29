@@ -231,17 +231,12 @@ RELEASE_MODE: patch
 ```
 
 ### Version auto-embedding
-##### Why `vmn` is agnostic to application language?
-It is the application's responsibility to actually set the version number at build time. The version string can be retrieved from
-```sh
-vmn show <app-name>
-```
-and be embedded via a custom script to the application's code during its build phase. However, `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
+`vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
 | Backend | Description |
 | :-: | :-: |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file during the `vmn stamp` command |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file during the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed Semver version string to your `package.json` file within the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed Semver version string to your `Cargo.toml` file within the `vmn stamp` command |
 
 ## Configuration
 `vmn` auto generates a `conf.yml` file that can be modified later by the user. 
