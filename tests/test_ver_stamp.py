@@ -1567,6 +1567,7 @@ def test_remotes(app_layout):
         ["git", "remote", "remove", "or3"],
         ["git", "remote", "add", "or3", app_layout.repo_path],
         ["git", "remote", "remove", "origin"],
+        ["git", "remote", "add", "or2", f"{app_layout.repo_path}2"],
     ]
     c = 2
     for cmd in cmds:
