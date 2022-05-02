@@ -33,6 +33,7 @@ jobs:
           sudo apt install -y git
           sudo apt install -y black
           python3 -m pip install -r tests/test_requirements.txt
+          python3 -m pip install -r tests/requirements.txt
 
     - name: build pkg
       run: |
