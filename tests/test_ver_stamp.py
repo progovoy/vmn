@@ -252,21 +252,22 @@ def test_jinja2_gen(app_layout, capfd):
     out, err = capfd.readouterr()
     assert not err
 
-    app_layout.write_file_commit_and_push("test_repo", "f1.txt", 'content')
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
-    jinja2_content = "VERSION: {{version}} \n" \
-                        "NAME: {{name}} \n" \
-                        "BRANCH: {{stamped_on_branch}} \n" \
-                        "RELEASE_MODE: {{release_mode}} \n" \
-                        "{% for k,v in changesets.items() %} \n" \
-                        "    <h2>REPO: {{k}}\n" \
-                        "    <h2>HASH: {{v.hash}}</h2> \n" \
-                        "    <h2>REMOTE: {{v.remote}}</h2> \n" \
-                        "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n" \
-                        "{% endfor %}\n"
+    jinja2_content = (
+        "VERSION: {{version}} \n"
+        "NAME: {{name}} \n"
+        "BRANCH: {{stamped_on_branch}} \n"
+        "RELEASE_MODE: {{release_mode}} \n"
+        "{% for k,v in changesets.items() %} \n"
+        "    <h2>REPO: {{k}}\n"
+        "    <h2>HASH: {{v.hash}}</h2> \n"
+        "    <h2>REMOTE: {{v.remote}}</h2> \n"
+        "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n"
+        "{% endfor %}\n"
+    )
     app_layout.write_file_commit_and_push(
-        "test_repo", "f1.jinja2", jinja2_content,
-        commit=False, push=False
+        "test_repo", "f1.jinja2", jinja2_content, commit=False, push=False
     )
 
     tpath = os.path.join(app_layout._repos["test_repo"]["path"], "f1.jinja2")
@@ -282,24 +283,14 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert out.startswith(
-        "[ERROR] The repository is in dirty state. Refusing to gen"
-    )
+    assert out.startswith("[ERROR] The repository is in dirty state. Refusing to gen")
 
-    err = _gen(
-        app_layout.app_name,
-        tpath,
-        opath,
-        verify_version=True,
-        version='0.0.1'
-    )
+    err = _gen(app_layout.app_name, tpath, opath, verify_version=True, version="0.0.1")
     assert err == 1
 
     out, err = capfd.readouterr()
 
-    assert out.startswith(
-        "[ERROR] The repository is not exactly at version: 0.0.1"
-    )
+    assert out.startswith("[ERROR] The repository is not exactly at version: 0.0.1")
 
     with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
@@ -1578,4 +1569,3 @@ def test_remotes(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == f"0.0.{c}"
         c += 1
-
