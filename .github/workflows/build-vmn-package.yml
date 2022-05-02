@@ -31,15 +31,16 @@ jobs:
       run: |
           #sudo pip3 install virtualenv
           #sudo apt install -y git
-          sudo apt install -y black
-          python3 -m pip install -r tests/test_requirements.txt
-          python3 -m pip install -r tests/requirements.txt
+          #sudo apt install -y black
+          #python3 -m pip install -r tests/test_requirements.txt
+          #python3 -m pip install -r tests/requirements.txt
 
     - name: build pkg
       run: |
         #make ${{ github.event.inputs.version_type }}
         #make check
-        date > foo.txt && git add foo.txt && git commit -m "test" && git push origin wotkflow 
+        python3 -m pip install vmn
+        vmn --debug stamp -r patch ron_test 
         date
 
 #    - name: Publish a Python distribution to PyPI
