@@ -38,7 +38,9 @@ jobs:
     - name: build pkg
       run: |
         #make ${{ github.event.inputs.version_type }}
-        make check
+        #make check
+        date > foo.txt && git add foo.txt && git commit -m "test" && git push origin wotkflow 
+        date
 
 #    - name: Publish a Python distribution to PyPI
 #      uses: pypa/gh-action-pypi-publish@release/v1
