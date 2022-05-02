@@ -111,13 +111,7 @@ def _show(
         return err
 
 
-def _gen(
-    app_name,
-    template,
-    output,
-    verify_version=False,
-    version=None,
-):
+def _gen(app_name, template, output, verify_version=False, version=None):
     args_list = ["--debug"]
     args_list.extend(["gen"])
     args_list.extend(["--template", template])
@@ -666,7 +660,7 @@ def test_multi_repo_dependency(app_layout, capfd):
                     "remote": app_layout._app_backend.be.remote(),
                 }
             }
-        },
+        }
     }
     for repo in (("repo1", "git"), ("repo2", "git")):
         be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
@@ -1427,11 +1421,7 @@ def test_conf(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout.write_file_commit_and_push(
-        "test_repo",
-        "f1.txt",
-        "text",
-    )
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "text")
 
     conf = {
         "deps": {
@@ -1453,10 +1443,7 @@ def test_conf(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "deps": {},
-        "extra_info": False,
-    }
+    conf = {"deps": {}, "extra_info": False}
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
