@@ -29,8 +29,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-          sudo pip3 install virtualenv
-          sudo apt install -y git
+          #sudo pip3 install virtualenv
+          #sudo apt install -y git
           sudo apt install -y black
           python3 -m pip install -r tests/test_requirements.txt
           python3 -m pip install -r tests/requirements.txt
