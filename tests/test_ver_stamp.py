@@ -1084,7 +1084,7 @@ def test_goto_print(app_layout, capfd):
 
         sout, serr = capfd.readouterr()
         assert (
-            f"[INFO] You are at the latest version 2.0.0 of {app_layout.app_name}\n"
+            f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
             == sout
         )
 
