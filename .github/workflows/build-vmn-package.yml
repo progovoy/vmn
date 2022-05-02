@@ -5,7 +5,7 @@ name: Build vmn package dev
 
 on:
   push:
-    branches: [ workflow ]
+    branches: [ wotkflow ]
 
   workflow_dispatch:
     inputs:
@@ -17,13 +17,12 @@ on:
         - patch
         - minor
         - major
-        required: true
+        required: false
 
 jobs:
 
   build_pkg:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
 
