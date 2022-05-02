@@ -4,6 +4,9 @@
 name: Build vmn package dev
 
 on:
+  push:
+    branches: [ workflow ]
+
   workflow_dispatch:
     inputs:
       version_type:
