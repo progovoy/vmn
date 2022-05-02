@@ -29,7 +29,7 @@ jobs:
           python3 -m pip install -U pip
           python3 -m pip install -r tests/test_requirements.txt
           python3 -m pip install -r tests/requirements.txt
-          pyhton3 -m pip list
+          python3 -m pip list
     
     - name: build pkg
       run: |
