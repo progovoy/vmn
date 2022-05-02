@@ -28,8 +28,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-          python3 -m pip install -r tests/test_requirements.txt
+          sudo pip3 install virtualenv
           sudo apt install -y black
+          python3 -m pip install -r tests/test_requirements.txt
 
     - name: build pkg
       run: |
