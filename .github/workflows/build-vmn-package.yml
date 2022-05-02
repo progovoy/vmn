@@ -4,8 +4,8 @@
 name: Build vmn package dev
 
 on:
-  push:
-    branches: [ wotkflow ]
+#  push:
+#    branches: [ wotkflow ]
 
   workflow_dispatch:
     inputs:
@@ -16,8 +16,7 @@ on:
         - check
         - patch
         - minor
-        - major
-        required: false
+        required: true
 
 
 jobs:
@@ -27,21 +26,20 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-          #sudo pip3 install virtualenv
-          #sudo apt install -y git
-          #sudo apt install -y black
-          #python3 -m pip install -r tests/test_requirements.txt
-          #python3 -m pip install -r tests/requirements.txt
+#    - name: Install dependencies
+#      run: |
+#          sudo apt install -y black
+#          python3 -m pip install -r tests/test_requirements.txt
+#          python3 -m pip install -r tests/requirements.txt
 
     - name: build pkg
       run: |
         #make ${{ github.event.inputs.version_type }}
+        echo ${{ github.event.inputs.version_type }}
         #make check
-        python3 -m pip install vmn
-        vmn --debug stamp -r patch ron_test 
-        date
+        #python3 -m pip install vmn
+        #vmn --debug stamp -r patch ron_test 
+        #date
 
 #    - name: Publish a Python distribution to PyPI
 #      uses: pypa/gh-action-pypi-publish@release/v1
