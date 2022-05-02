@@ -38,7 +38,6 @@ jobs:
       run: |
         #make ${{ github.event.inputs.version_type }}
         make check
-        ls -ltrh ./dist/
 
 #    - name: Publish a Python distribution to PyPI
 #      uses: pypa/gh-action-pypi-publish@release/v1
