@@ -2278,17 +2278,9 @@ def parse_user_commands(command_line):
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     pgen.add_argument(
-        "-t",
-        "--template",
-        required=True,
-        help=f"Path to the jinja2 template",
+        "-t", "--template", required=True, help=f"Path to the jinja2 template"
     )
-    pgen.add_argument(
-        "-o",
-        "--output",
-        required=True,
-        help=f"Path for the output file",
-    )
+    pgen.add_argument("-o", "--output", required=True, help=f"Path for the output file")
     pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
     pgen.set_defaults(verify_version=False)
     pgen.add_argument("name", help="The application's name")
