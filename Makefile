@@ -8,11 +8,11 @@ _build: clean
 	@echo "Publishing"
 	vmn show ${EXTRA_SHOW_ARGS} --verbose vmn > .vmn/vmn/ver.yml
 	python3 ${PWD}/gen_ver.py
-	python3 setup.py sdist bdist_wheel
+	python3 setup.py bdist_wheel
 	git checkout -- ${PWD}/version_stamp/version.py
 
 upload:
-	twine upload ${PWD}/dist/*
+	twine upload --verbose ${PWD}/dist/*
 
 major: check _major _build
 

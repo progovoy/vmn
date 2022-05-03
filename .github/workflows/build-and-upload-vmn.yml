@@ -30,12 +30,28 @@ jobs:
           python3 -m pip install -r tests/test_requirements.txt
           python3 -m pip install -r tests/requirements.txt
           python3 -m pip list
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
     
+    
+    - name: run tests
+      run: |
+        make check
+
+    - name: run vmn stamp version
+      run: |
+        python3 -m pip install vmn
+        make _${{ github.event.inputs.version_type }}
+
     - name: build pkg
       run: |
-        make ${{ github.event.inputs.version_type }}
+        make _build
+        ls -ltrh ./dist/
         
     - name: Publish a Python distribution to PyPI
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
         ls -ltrh ./dist/
         make upload
