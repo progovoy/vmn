@@ -33,9 +33,19 @@ jobs:
           git config --global user.email "you@example.com"
           git config --global user.name "Your Name"
     
-    - name: build pkg
+    
+    - name: run tests
       run: |
-        make ${{ github.event.inputs.version_type }}
+        make check
+
+    - name: run vmn stamp version
+      run: |
+        python3 -m pip install vmn
+        make _${{ github.event.inputs.version_type }}
+
+    - name: build pkg
+        make _build
+        ls -ltrh ./dist/
         
     - name: Publish a Python distribution to PyPI
       run: |
