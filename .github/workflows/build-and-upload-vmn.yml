@@ -30,6 +30,8 @@ jobs:
           python3 -m pip install -r tests/test_requirements.txt
           python3 -m pip install -r tests/requirements.txt
           python3 -m pip list
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
     
     - name: build pkg
       run: |
