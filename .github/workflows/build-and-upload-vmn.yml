@@ -49,6 +49,9 @@ jobs:
         ls -ltrh ./dist/
         
     - name: Publish a Python distribution to PyPI
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
         ls -ltrh ./dist/
         make upload
