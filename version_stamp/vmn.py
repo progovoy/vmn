@@ -1898,7 +1898,9 @@ def goto_version(vcs, params, version):
 
         if vcs.root_context:
             verstr = ver_info["stamping"]["root_app"]["version"]
-            LOGGER.info(f"You are at the tip of the branch of version {verstr} for {vcs.name}")
+            LOGGER.info(
+                f"You are at the tip of the branch of version {verstr} for {vcs.name}"
+            )
         else:
             LOGGER.info(
                 f"You are at the tip of the branch of version {data['_version']} for {vcs.name}"
