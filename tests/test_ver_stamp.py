@@ -45,7 +45,6 @@ def _init_app(app_name, starting_version="0.0.0"):
 def _release_app(app_name, version):
     with vmn.VMNContextMAnager(["release", "-v", version, app_name]) as vmn_ctx:
         err = vmn.handle_release(vmn_ctx)
-        assert err == 0
 
         ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
 
@@ -55,7 +54,7 @@ def _release_app(app_name, version):
         except:
             merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
-        return ver_info, merged_dict
+        return err, ver_info, merged_dict
 
 
 def _stamp_app(app_name, release_mode=None, prerelease=None):
@@ -876,7 +875,13 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "1.3.0-beta2"
     assert data["prerelease"] == "beta"
 
-    ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+    _, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0"
+    assert data["prerelease"] == "release"
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0")
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
@@ -903,7 +908,7 @@ def test_rc_stamping(app_layout, capfd):
         assert data["_version"] == f"{item}-rc1"
         assert data["prerelease"] == "rc"
 
-        ver_info, _ = _release_app(app_layout.app_name, f"{item}-rc1")
+        _, ver_info, _ = _release_app(app_layout.app_name, f"{item}-rc1")
 
         assert "vmn_info" in ver_info
         data = ver_info["stamping"]["app"]
@@ -997,7 +1002,7 @@ def test_rc_stamping(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "3.6.0-rc2\n" == out
 
-    ver_info, _ = _release_app(app_layout.app_name, f"3.6.0-rc1")
+    _, ver_info, _ = _release_app(app_layout.app_name, f"3.6.0-rc1")
 
     capfd.readouterr()
     err = _show(app_layout.app_name)
