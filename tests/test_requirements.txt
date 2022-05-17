@@ -1,5 +1,6 @@
 pytest
 pytest-html
+pytest-xdist
 coverage
 black
 flake8

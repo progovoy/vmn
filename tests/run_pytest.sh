@@ -79,11 +79,11 @@ DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
 echo "Will run:"
-echo "coverage run -m pytest --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
+echo "coverage run -m pytest -n 10 --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
 "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log"
 
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
-coverage run -m pytest --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
+coverage run -m pytest -n 10 --html=report_${html_report_suffix}.html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} \
 "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log
 
 RET_CODE=$?
