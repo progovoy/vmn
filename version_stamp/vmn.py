@@ -22,6 +22,16 @@ INIT_FILENAME = "conf.yml"
 LOCK_FILENAME = "vmn.lock"
 
 IGNORED_FILES = [LOCK_FILENAME]
+VMN_ARGS = [
+        'init',
+        'init-app',
+        'show',
+        'stamp',
+        'goto',
+        'release',
+        'gen',
+        'add',
+    ]
 
 sys.path.append(CUR_PATH)
 
@@ -272,7 +282,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
         tags = self.backend.tags(filter=f"{tag_name_prefix}*")
         if tags:
-            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -301,7 +311,7 @@ class IVersionsStamper(object):
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
             major = max(int(major), int(props["major"]))
             major = str(major + 1)
 
@@ -311,7 +321,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
             minor = max(int(minor), int(props["minor"]))
             minor = str(minor + 1)
 
@@ -320,7 +330,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
             patch = max(int(patch), int(props["patch"]))
             patch = str(patch + 1)
 
@@ -328,7 +338,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_tag_properties(tags[0])
+            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
@@ -681,7 +691,7 @@ class VersionControlStamper(IVersionsStamper):
             prerelease,
             _,
             _,
-        ) = stamp_utils.VMNBackend.get_tag_properties(tag_name)
+        ) = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
 
         if not self.hide_zero_hotfix:
             version = f"{version}.{hotfix}"
@@ -702,16 +712,17 @@ class VersionControlStamper(IVersionsStamper):
 
     def release_app_version(self, verstr):
         tag_name = f'{self.name.replace("/", "-")}_{verstr}'
-        props = stamp_utils.VMNBackend.get_tag_properties(tag_name)
+        props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
 
         should_append_hotfix = props["hotfix"] is not None
         if should_append_hotfix and self.hide_zero_hotfix:
             should_append_hotfix = props["hotfix"] != "0"
 
+        res_ver = f'{props["version"]}'
         if should_append_hotfix:
-            props["version"] = f'{props["version"]}.{props["hotfix"]}'
+            res_ver = f'{res_ver}.{props["hotfix"]}'
 
-        release_tag_name = f'{self.name.replace("/", "-")}_{props["version"]}'
+        release_tag_name = f'{self.name.replace("/", "-")}_{res_ver}'
         match = re.search(stamp_utils.VMN_TAG_REGEX, release_tag_name)
         if match is None:
             LOGGER.error(f"Tag {release_tag_name} doesn't comply to vmn version format")
@@ -726,7 +737,11 @@ class VersionControlStamper(IVersionsStamper):
             },
             "vmn_info": self.current_version_info["vmn_info"],
         }
-        ver_info["stamping"]["app"]["_version"] = props["version"]
+        ver_info["stamping"]["app"]["_version"] = res_ver
+        ver_info["stamping"]["app"]["version"] = \
+            stamp_utils.VMNBackend.get_utemplate_formatted_version(
+                res_ver, self.template, self.hide_zero_hotfix
+            )
         ver_info["stamping"]["app"]["prerelease"] = "release"
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
@@ -738,7 +753,57 @@ class VersionControlStamper(IVersionsStamper):
             push=True,
         )
 
-        return props["version"]
+        return res_ver
+
+    def add_metadata_to_version(self, verstr):
+        tag_name = f'{self.name.replace("/", "-")}_{verstr}'
+        props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
+        # TODO: use utils function
+        res_ver = f'{props["version"]}+{self.params["buildmetadata"]}'
+        buildmetadata_tag_name = \
+            f'{self.name.replace("/", "-")}_{res_ver}'
+        match = re.search(stamp_utils.VMN_TAG_REGEX, buildmetadata_tag_name)
+        if match is None:
+            LOGGER.error(f"Tag {buildmetadata_tag_name} doesn't comply to vmn version format")
+            raise RuntimeError()
+
+        tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(
+            tag_name
+        )
+        ver_info = {
+            "stamping": {
+                "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"]),
+            },
+            "vmn_info": self.current_version_info["vmn_info"],
+        }
+        ver_info["stamping"]["app"]["_version"] = res_ver
+        ver_info["stamping"]["app"]["version"] = \
+            stamp_utils.VMNBackend.get_utemplate_formatted_version(
+            res_ver, self.template, self.hide_zero_hotfix
+        )
+        ver_info["stamping"]["app"]["prerelease"] = "metadata"
+
+        if self.params['link'] is not None:
+            ver_info["stamping"]["link"] = self.params['link']
+
+        if self.params['file'] is not None:
+            path = self.params['file']
+            if not os.path.isabs(path):
+                path = os.path.join(self.root_path, self.params['file'])
+
+            with open(path) as f:
+                ver_info["stamping"]["file"] = yaml.safe_load(f)
+
+        messages = [yaml.dump(ver_info, sort_keys=True)]
+
+        self.backend.tag(
+            [buildmetadata_tag_name],
+            messages,
+            ref=self.backend.changeset(tag=tag_name),
+            push=True,
+        )
+
+        return res_ver
 
     def stamp_app_version(
         self, initial_version, initialprerelease, initialprerelease_count
@@ -1304,19 +1369,24 @@ def handle_release(vmn_ctx):
     return 0
 
 
-def _handle_add(vmn_ctx):
-    vmn_ctx.params["buildmetadata"] = vmn_ctx.args.build_metadata
-    vmn_ctx.params["releasenotes"] = vmn_ctx.args.releasenotes
+def handle_add(vmn_ctx):
+    err = initialize_backend_attrs(vmn_ctx)
+    if err:
+        return err
 
-    expected_status = {"repos_exist_locally"}
-    optional_status = {"detached"}
+    vmn_ctx.params["buildmetadata"] = vmn_ctx.args.input
+    vmn_ctx.params["file"] = vmn_ctx.args.file
+    vmn_ctx.params["link"] = vmn_ctx.args.link
+
+    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
+    optional_status = {"detached", "modified", "dirty_deps"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         return 1
 
     try:
-        raise NotImplementedError("Adding metadata to versions is not supported yet")
+        LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(vmn_ctx.args.version))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -1760,15 +1830,27 @@ def show(vcs, params, verstr=None):
 
         raise RuntimeError()
 
+    data = {
+        'versions': []
+    }
+    if "file" in ver_info["stamping"]:
+        data["file"] = ver_info["stamping"]["file"]
+    if "link" in ver_info["stamping"]:
+        data["link"] = ver_info["stamping"]["link"]
+
     # TODO: refactor
     if vcs.root_context:
-        data = ver_info["stamping"]["root_app"]
+        data.update(ver_info["stamping"]["root_app"])
         if not data:
             LOGGER.info("App {0} does not have a root app ".format(vcs.name))
 
             raise RuntimeError()
 
         out = None
+
+        data["versions"].extend(
+            vcs.backend.get_all_brother_tags(f"{vcs.name}_{data['version']}")
+        )
 
         if params.get("verbose"):
             out = yaml.dump(data)
@@ -1782,10 +1864,14 @@ def show(vcs, params, verstr=None):
 
         return 0
 
-    data = ver_info["stamping"]["app"]
+    data.update(ver_info["stamping"]["app"])
     data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         data["_version"], vcs.template, vcs.hide_zero_hotfix
     )
+    data["versions"].extend(
+        vcs.backend.get_all_brother_tags(f"{vcs.name}_{data['version']}")
+    )
+
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
@@ -1944,7 +2030,7 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
                 return None, None, None
         else:
             try:
-                stamp_utils.VMNBackend.get_tag_properties(tag_name)
+                stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
                 tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
             except:
                 LOGGER.error(f"Wrong version specified: {verstr}")
@@ -2113,20 +2199,9 @@ def main(command_line=None):
 def vmn_run(command_line):
     err = 0
     with VMNContextMAnager(command_line) as vmn_ctx:
-        if vmn_ctx.args.command == "init":
-            err = handle_init(vmn_ctx)
-        elif vmn_ctx.args.command == "init-app":
-            err = handle_init_app(vmn_ctx)
-        elif vmn_ctx.args.command == "show":
-            err = handle_show(vmn_ctx)
-        elif vmn_ctx.args.command == "stamp":
-            err = handle_stamp(vmn_ctx)
-        elif vmn_ctx.args.command == "goto":
-            err = handle_goto(vmn_ctx)
-        elif vmn_ctx.args.command == "release":
-            err = handle_release(vmn_ctx)
-        elif vmn_ctx.args.command == "gen":
-            err = handle_gen(vmn_ctx)
+        if vmn_ctx.args.command in VMN_ARGS:
+            cmd = vmn_ctx.args.command.replace('-', '_')
+            err = getattr(sys.modules[__name__], f'handle_{cmd}')(vmn_ctx)
         else:
             LOGGER.info("Run vmn -h for help")
 
@@ -2151,16 +2226,8 @@ def parse_user_commands(command_line):
     parser.set_defaults(debug=False)
     subprasers = parser.add_subparsers(dest="command")
 
-    args = [
-        'init',
-        'init-app',
-        'show',
-        'stamp',
-        'goto',
-        'release',
-        'gen',
-    ]
-    for arg in args:
+    for arg in VMN_ARGS:
+        arg = arg.replace('-', '_')
         getattr(sys.modules[__name__], f'add_arg_{arg}')(subprasers)
 
     args = parser.parse_args(command_line)
@@ -2325,6 +2392,28 @@ def add_arg_init(subprasers):
         help="initialize version tracking for the repository. "
              "This command should be called only once per repository",
     )
+
+
+def add_arg_add(subprasers):
+    padd = subprasers.add_parser(
+        "add", help="Add additional metadata for already stamped version"
+    )
+    padd.add_argument(
+        "-v",
+        "--version",
+        default=None,
+        required=False,
+        help=f"The version to add the metadata in the format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
+    )
+    padd.add_argument(
+        "-i", "--input", required=True,
+        help=f"Name of the metadata in a Semver 'buildmetadata' format:"
+             f" {stamp_utils.SEMVER_BUILDMETADATA_REGEX}"
+    )
+    padd.add_argument("-f", "--file", required=False, help=f"Path for the metadata YAML file")
+    padd.add_argument("-l", "--link", required=False, help=f"Link to add to the metadata")
+    padd.add_argument("name", help="The application's name")
 
 
 def verify_user_input_version(args, key):
