@@ -2150,50 +2150,81 @@ def parse_user_commands(command_line):
     parser.add_argument("--debug", required=False, action="store_true")
     parser.set_defaults(debug=False)
     subprasers = parser.add_subparsers(dest="command")
-    subprasers.add_parser(
-        "init",
-        help="initialize version tracking for the repository. "
-        "This command should be called only once per repository",
+
+    args = [
+        'init',
+        'init-app',
+        'show',
+        'stamp',
+        'goto',
+        'release',
+        'gen',
+    ]
+    for arg in args:
+        getattr(sys.modules[__name__], f'add_arg_{arg}')(subprasers)
+
+    args = parser.parse_args(command_line)
+
+    verify_user_input_version(args, "version")
+    verify_user_input_version(args, "ov")
+    verify_user_input_version(args, "orv")
+
+    return args
+
+
+def add_arg_gen(subprasers):
+    pgen = subprasers.add_parser(
+        "gen", help="Generate version file based on jinja2 template"
     )
-    pinitapp = subprasers.add_parser(
-        "init-app",
-        help="initialize version tracking for application. "
-        "This command should be called only once per application",
-    )
-    pinitapp.add_argument(
-        "-v",
-        "--version",
-        default="0.0.0",
-        help="The version to init from. Must be specified in the raw version format: "
-        "{major}.{minor}.{patch}",
-    )
-    pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
-    pinitapp.set_defaults(dry=False)
-    pinitapp.add_argument(
-        "name", help="The application's name to initialize version tracking for"
-    )
-    pshow = subprasers.add_parser("show", help="show app version")
-    pshow.add_argument("name", help="The application's name to show the version for")
-    pshow.add_argument(
+    pgen.add_argument(
         "-v",
         "--version",
         default=None,
-        help=f"The version to show. Must be specified in the raw version format:"
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+        required=False,
+        help=f"The version to generate the file for in the format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
-    pshow.add_argument(
-        "-t", "--template", default=None, help="The template to use in show"
+    pgen.add_argument(
+        "-t", "--template", required=True, help=f"Path to the jinja2 template"
     )
-    pshow.add_argument("--root", dest="root", action="store_true")
-    pshow.set_defaults(root=False)
-    pshow.add_argument("--verbose", dest="verbose", action="store_true")
-    pshow.set_defaults(verbose=False)
-    pshow.add_argument("--raw", dest="raw", action="store_true")
-    pshow.set_defaults(raw=False)
-    pshow.add_argument("--from-file", dest="from_file", action="store_true")
-    pshow.set_defaults(from_file=False)
-    pshow.add_argument("--ignore-dirty", dest="ignore_dirty", action="store_true")
-    pshow.set_defaults(ignore_dirty=False)
+    pgen.add_argument("-o", "--output", required=True, help=f"Path for the output file")
+    pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
+    pgen.set_defaults(verify_version=False)
+    pgen.add_argument("name", help="The application's name")
+
+
+def add_arg_release(subprasers):
+    prelease = subprasers.add_parser("release", help="Release app version")
+    prelease.add_argument(
+        "-v",
+        "--version",
+        required=True,
+        help=f"The version to release in the format: "
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
+    )
+    prelease.add_argument("name", help="The application's name")
+
+
+def add_arg_goto(subprasers):
+    pgoto = subprasers.add_parser("goto", help="go to version")
+    pgoto.add_argument(
+        "-v",
+        "--version",
+        default=None,
+        required=False,
+        help=f"The version to go to in the format: "
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
+    )
+    pgoto.add_argument("--root", dest="root", action="store_true")
+    pgoto.set_defaults(root=False)
+    pgoto.add_argument("--deps-only", dest="deps_only", action="store_true")
+    pgoto.set_defaults(deps_only=False)
+    pgoto.add_argument("name", help="The application's name")
+    pgoto.add_argument("--pull", dest="pull", action="store_true")
+    pgoto.set_defaults(pull=False)
+
+
+def add_arg_stamp(subprasers):
     pstamp = subprasers.add_parser("stamp", help="stamp version")
     pstamp.add_argument(
         "-r",
@@ -2208,7 +2239,7 @@ def parse_user_commands(command_line):
         "--prerelease",
         default=None,
         help="Prerelease version. Can be anything really until you decide "
-        "to release the version",
+             "to release the version",
     )
     pstamp.add_argument("--pull", dest="pull", action="store_true")
     pstamp.set_defaults(pull=False)
@@ -2227,7 +2258,7 @@ def parse_user_commands(command_line):
         "--override-version",
         default=None,
         help=f"Override current version with any version in the "
-        f"format: {stamp_utils.VMN_VER_REGEX}",
+             f"format: {stamp_utils.VMN_VER_REGEX}",
     )
     pstamp.add_argument("--dry-run", dest="dry", action="store_true")
     pstamp.set_defaults(dry=False)
@@ -2237,62 +2268,63 @@ def parse_user_commands(command_line):
         "--extra-commit-message",
         default="",
         help="add more information to the commit message."
-        "example: adding --extra-commit-message '[ci-skip]' "
-        "will add the string '[ci-skip]' to the commit message",
+             "example: adding --extra-commit-message '[ci-skip]' "
+             "will add the string '[ci-skip]' to the commit message",
     )
 
-    pgoto = subprasers.add_parser("goto", help="go to version")
-    pgoto.add_argument(
+
+def add_arg_show(subprasers):
+    pshow = subprasers.add_parser("show", help="show app version")
+    pshow.add_argument("name", help="The application's name to show the version for")
+    pshow.add_argument(
         "-v",
         "--version",
         default=None,
-        required=False,
-        help=f"The version to go to in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+        help=f"The version to show. Must be specified in the raw version format:"
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
-    pgoto.add_argument("--root", dest="root", action="store_true")
-    pgoto.set_defaults(root=False)
-    pgoto.add_argument("--deps-only", dest="deps_only", action="store_true")
-    pgoto.set_defaults(deps_only=False)
-    pgoto.add_argument("name", help="The application's name")
-    pgoto.add_argument("--pull", dest="pull", action="store_true")
-    pgoto.set_defaults(pull=False)
+    pshow.add_argument(
+        "-t", "--template", default=None, help="The template to use in show"
+    )
+    pshow.add_argument("--root", dest="root", action="store_true")
+    pshow.set_defaults(root=False)
+    pshow.add_argument("--verbose", dest="verbose", action="store_true")
+    pshow.set_defaults(verbose=False)
+    pshow.add_argument("--raw", dest="raw", action="store_true")
+    pshow.set_defaults(raw=False)
+    pshow.add_argument("--from-file", dest="from_file", action="store_true")
+    pshow.set_defaults(from_file=False)
+    pshow.add_argument("--ignore-dirty", dest="ignore_dirty", action="store_true")
+    pshow.set_defaults(ignore_dirty=False)
 
-    prelease = subprasers.add_parser("release", help="Release app version")
-    prelease.add_argument(
+
+def add_arg_init_app(subprasers):
+    pinitapp = subprasers.add_parser(
+        "init-app",
+        help="initialize version tracking for application. "
+             "This command should be called only once per application",
+    )
+
+    pinitapp.add_argument(
         "-v",
         "--version",
-        required=True,
-        help=f"The version to release in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+        default="0.0.0",
+        help="The version to init from. Must be specified in the raw version format: "
+             "{major}.{minor}.{patch}",
     )
-    prelease.add_argument("name", help="The application's name")
+    pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
+    pinitapp.set_defaults(dry=False)
+    pinitapp.add_argument(
+        "name", help="The application's name to initialize version tracking for"
+    )
 
-    pgen = subprasers.add_parser(
-        "gen", help="Generate version file based on jinja2 template"
-    )
-    pgen.add_argument(
-        "-v",
-        "--version",
-        default=None,
-        required=False,
-        help=f"The version to generate the file for in the format:"
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
-    )
-    pgen.add_argument(
-        "-t", "--template", required=True, help=f"Path to the jinja2 template"
-    )
-    pgen.add_argument("-o", "--output", required=True, help=f"Path for the output file")
-    pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
-    pgen.set_defaults(verify_version=False)
-    pgen.add_argument("name", help="The application's name")
-    args = parser.parse_args(command_line)
 
-    verify_user_input_version(args, "version")
-    verify_user_input_version(args, "ov")
-    verify_user_input_version(args, "orv")
-
-    return args
+def add_arg_init(subprasers):
+    subprasers.add_parser(
+        "init",
+        help="initialize version tracking for the repository. "
+             "This command should be called only once per repository",
+    )
 
 
 def verify_user_input_version(args, key):
