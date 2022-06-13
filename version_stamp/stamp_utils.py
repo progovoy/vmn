@@ -357,6 +357,7 @@ class GitBackend(VMNBackend):
         return tags
 
     def get_all_brother_tags(self, tag_name):
+        app_tags = self.tags(filter=(f"{tag_name}_*"))
         cmd = ["--sort", "taggerdate"]
         cmd.append("--list")
         cmd.append(tag_name)

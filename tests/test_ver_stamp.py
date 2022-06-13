@@ -1561,3 +1561,21 @@ def test_remotes(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == f"0.0.{c}"
         c += 1
+
+
+def test_add(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "file.txt",
+        'str1',
+    )
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
