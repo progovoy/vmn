@@ -1379,7 +1379,7 @@ def handle_add(vmn_ctx):
     if err:
         return err
 
-    vmn_ctx.params["buildmetadata"] = vmn_ctx.args.input
+    vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
     vmn_ctx.params["file"] = vmn_ctx.args.file
     vmn_ctx.params["link"] = vmn_ctx.args.link
 
@@ -2399,14 +2399,15 @@ def add_arg_add(subprasers):
         "--version",
         default=None,
         required=False,
-        help=f"The version to add the metadata in the format:"
+        help=f"The version to add the 'buildmetadata' in the format:"
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     padd.add_argument(
-        "-i",
-        "--input",
+        "--bm",
+        "--buildmetadata",
         required=True,
-        help=f"Name of the metadata in a Semver 'buildmetadata' format:"
+        help=f"String for the 'buildmetadata' version extension "
+             f"without the '+' sign complying with the regex:"
         f" {stamp_utils.SEMVER_BUILDMETADATA_REGEX}",
     )
     padd.add_argument(
