@@ -465,6 +465,8 @@ def test_show_from_file(app_layout, capfd):
 
     assert show_file_res_empty_ver == show_file_res
 
+    show_res.pop('versions')
+
     assert show_res == show_file_res
 
     app_name = "root_app/app1"
@@ -506,6 +508,8 @@ def test_show_from_file(app_layout, capfd):
 
     out, err = capfd.readouterr()
     show_file_res = yaml.safe_load(out)
+
+    show_res.pop('versions')
 
     assert show_res == show_file_res
 
