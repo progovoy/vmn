@@ -3,8 +3,6 @@ CUR_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 set -o pipefail
 
-source ${CUR_DIR}/../venv/bin/activate
-
 usage()
 {
 cat << EOF
