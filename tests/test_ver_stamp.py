@@ -465,7 +465,7 @@ def test_show_from_file(app_layout, capfd):
 
     assert show_file_res_empty_ver == show_file_res
 
-    show_res.pop('versions')
+    show_res.pop("versions")
 
     assert show_res == show_file_res
 
@@ -509,7 +509,7 @@ def test_show_from_file(app_layout, capfd):
     out, err = capfd.readouterr()
     show_file_res = yaml.safe_load(out)
 
-    show_res.pop('versions')
+    show_res.pop("versions")
 
     assert show_res == show_file_res
 
@@ -1577,9 +1577,8 @@ def test_add(app_layout, capfd):
     app_layout.write_file_commit_and_push(
         "test_repo",
         "file.txt",
-        'str1',
+        "str1",
     )
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
-

@@ -13,10 +13,11 @@ import configparser
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
-VMN_VERSION_FORMAT = "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
+VMN_VERSION_FORMAT = (
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
+)
 VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]"
-    "[-{prerelease}][+{buildmetadata}]"
+    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][+{buildmetadata}]"
 )
 
 _SEMVER_VER_REGEX = (
@@ -195,8 +196,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                    f"{octat}_template" in template
-                    and template[f"{octat}_template"] is not None
+                f"{octat}_template" in template
+                and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -329,7 +330,7 @@ class GitBackend(VMNBackend):
         return self._be.working_dir
 
     def status(self, tag):
-        found_tag = self._be.tag(f'tags/{tag}')
+        found_tag = self._be.tag(f"tags/{tag}")
         try:
             return tuple(found_tag.commit.stats.files)
         except:
@@ -474,7 +475,7 @@ class GitBackend(VMNBackend):
         if tag is None:
             return self._be.head.commit.hexsha
 
-        found_tag = self._be.tag(f'tags/{tag}')
+        found_tag = self._be.tag(f"tags/{tag}")
 
         try:
             return found_tag.commit.hexsha
