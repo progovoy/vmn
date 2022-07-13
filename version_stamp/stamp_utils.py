@@ -195,8 +195,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -329,15 +329,11 @@ class GitBackend(VMNBackend):
         return self._be.working_dir
 
     def status(self, tag):
-        found_tag = None
-        for _tag in self._be.tags:
-            if _tag.name != tag:
-                continue
-
-            found_tag = _tag
-            break
-
-        return tuple(found_tag.commit.stats.files)
+        found_tag = self._be.tag(f'tags/{tag}')
+        try:
+            return tuple(found_tag.commit.stats.files)
+        except:
+            return None
 
     def tags(self, branch=None, filter=None):
         cmd = ["--sort", "taggerdate"]
@@ -357,17 +353,8 @@ class GitBackend(VMNBackend):
         return tags
 
     def get_all_brother_tags(self, tag_name):
-        app_tags = self.tags(filter=(f"{tag_name}_*"))
-        cmd = ["--sort", "taggerdate"]
-        cmd.append("--list")
-        cmd.append(tag_name)
-
+        cmd = ["--points-at", self.changeset(tag=tag_name)]
         tags = self._be.git.tag(*cmd).split("\n")
-
-
-        tags = tags[::-1]
-        if len(tags) == 1 and tags[0] == "":
-            tags.pop(0)
 
         return tags
 
@@ -487,18 +474,12 @@ class GitBackend(VMNBackend):
         if tag is None:
             return self._be.head.commit.hexsha
 
-        found_tag = None
-        for _tag in self._be.tags:
-            if _tag.name != tag:
-                continue
+        found_tag = self._be.tag(f'tags/{tag}')
 
-            found_tag = _tag
-            break
-
-        if found_tag:
+        try:
             return found_tag.commit.hexsha
-
-        return None
+        except:
+            return None
 
     def revert_local_changes(self, files=[]):
         if files:
