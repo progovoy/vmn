@@ -13,10 +13,11 @@ import configparser
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
-VMN_VERSION_FORMAT = "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}]"
+VMN_VERSION_FORMAT = (
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
+)
 VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]"
-    "[-{prerelease}][+{buildmetadata}][-{releasenotes}]"
+    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][+{buildmetadata}]"
 )
 
 _SEMVER_VER_REGEX = (
@@ -25,12 +26,12 @@ _SEMVER_VER_REGEX = (
 
 _SEMVER_PRERELEASE_REGEX = "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
 
-_SEMVER_BUILDMETADATA_REGEX = (
+SEMVER_BUILDMETADATA_REGEX = (
     "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
 )
 
 SEMVER_REGEX = (
-    f"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{_SEMVER_BUILDMETADATA_REGEX}$"
+    f"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
 _VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
@@ -43,7 +44,7 @@ VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
 _VMN_REGEX = (
     f"{_VMN_VER_REGEX}"
     f"{_SEMVER_PRERELEASE_REGEX}"
-    f"{_SEMVER_BUILDMETADATA_REGEX}"
+    f"{SEMVER_BUILDMETADATA_REGEX}"
     f"{_VMN_RELEASE_NOTES_REGEX}$"
 )
 
@@ -112,7 +113,7 @@ class VMNBackend(object):
         return app_name.replace("/", "-")
 
     @staticmethod
-    def get_tag_properties(vmn_tag):
+    def get_vmn_tag_name_properties(vmn_tag):
         ret = {
             "app_name": None,
             "type": "version",
@@ -329,15 +330,11 @@ class GitBackend(VMNBackend):
         return self._be.working_dir
 
     def status(self, tag):
-        found_tag = None
-        for _tag in self._be.tags:
-            if _tag.name != tag:
-                continue
-
-            found_tag = _tag
-            break
-
-        return tuple(found_tag.commit.stats.files)
+        found_tag = self._be.tag(f"tags/{tag}")
+        try:
+            return tuple(found_tag.commit.stats.files)
+        except:
+            return None
 
     def tags(self, branch=None, filter=None):
         cmd = ["--sort", "taggerdate"]
@@ -353,6 +350,12 @@ class GitBackend(VMNBackend):
         tags = tags[::-1]
         if len(tags) == 1 and tags[0] == "":
             tags.pop(0)
+
+        return tags
+
+    def get_all_brother_tags(self, tag_name):
+        cmd = ["--points-at", self.changeset(tag=tag_name)]
+        tags = self._be.git.tag(*cmd).split("\n")
 
         return tags
 
@@ -472,18 +475,12 @@ class GitBackend(VMNBackend):
         if tag is None:
             return self._be.head.commit.hexsha
 
-        found_tag = None
-        for _tag in self._be.tags:
-            if _tag.name != tag:
-                continue
+        found_tag = self._be.tag(f"tags/{tag}")
 
-            found_tag = _tag
-            break
-
-        if found_tag:
+        try:
             return found_tag.commit.hexsha
-
-        return None
+        except:
+            return None
 
     def revert_local_changes(self, files=[]):
         if files:
@@ -607,7 +604,7 @@ class GitBackend(VMNBackend):
 
             found = True
 
-            tagd = VMNBackend.get_tag_properties(tag)
+            tagd = VMNBackend.get_vmn_tag_name_properties(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 

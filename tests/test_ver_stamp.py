@@ -129,6 +129,25 @@ def _gen(app_name, template, output, verify_version=False, version=None):
         return err
 
 
+def _add_buildmetadata_to_version(app_name, version, bm, file_path=None, link=None):
+    args_list = ["--debug"]
+    args_list.extend(["add"])
+    args_list.extend(["--version", version])
+    args_list.extend(["--bm", bm])
+
+    if file_path is not None:
+        args_list.extend(["--file", f"{file_path}"])
+
+    if link:
+        args_list.extend(["--link", link])
+
+    args_list.append(app_name)
+
+    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
+        err = vmn.handle_add(vmn_ctx)
+        return err
+
+
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
@@ -465,6 +484,8 @@ def test_show_from_file(app_layout, capfd):
 
     assert show_file_res_empty_ver == show_file_res
 
+    show_res.pop("versions")
+
     assert show_res == show_file_res
 
     app_name = "root_app/app1"
@@ -506,6 +527,8 @@ def test_show_from_file(app_layout, capfd):
 
     out, err = capfd.readouterr()
     show_file_res = yaml.safe_load(out)
+
+    show_res.pop("versions")
 
     assert show_res == show_file_res
 
@@ -1561,3 +1584,138 @@ def test_remotes(app_layout):
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == f"0.0.{c}"
         c += 1
+
+
+def test_add_bm(app_layout, capfd):
+    _init_vmn_in_repo()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "file.txt",
+        "str1",
+    )
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        ver_info["stamping"]["app"]["_version"],
+        'build.1-aef.1-its-okay',
+        link='https://whateverlink.com',
+    )
+    assert err == 0
+
+    # read to clear stderr and out
+    out, err = capfd.readouterr()
+    assert not err
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.2+build.1-aef.1-its-okay\n" == out
+
+    err = _show(app_layout.app_name, raw=True, verbose=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert len(yaml.safe_load(out)['versions']) == 2
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "file.txt",
+        "str1",
+    )
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.2',
+        'build.1-aef.1-its-okay',
+        link='https://whateverlink.com',
+    )
+    assert err == 1
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.2',
+        'build.1-aef.1-its-okay2',
+        link='https://whateverlink.com',
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+
+    err = _show(
+        app_layout.app_name,
+        raw=True,
+        verbose=True,
+        version='0.0.2'
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert len(yaml.safe_load(out)['versions']) == 3
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.3',
+        'build.1-aef.1-its-okay',
+        link='https://whateverlink.com',
+    )
+    assert err == 1
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.3',
+        'build.1-aef.1-its-okay',
+        link='https://whateverlink.com',
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.3',
+        'build.1-aef.1-its-okay+',
+        link='https://whateverlink.com',
+    )
+    assert err == 1
+
+    out, err = capfd.readouterr()
+    assert out.startswith(
+        "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply "
+        "to vmn version format"
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "test.yml",
+        yaml.dump({'test': 1}),
+        commit=False,
+    )
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        '0.0.3',
+        'build.1-aef.1-its-okay3',
+        file_path='test.yml',
+        link='https://whateverlink.com',
+    )
+    assert err == 0
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True, verbose=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert len(yaml.safe_load(out)['versions']) == 3
+    assert yaml.safe_load(out)['file']['test'] == 1
+    assert yaml.safe_load(out)['versions'][0] == 'test_app_0.0.3'

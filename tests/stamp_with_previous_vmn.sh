@@ -4,6 +4,8 @@ CUR_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 cd /test_repo
 
+git config --global --add safe.directory /test_repo
+
 git config user.email "you@example.com"
 git config user.name "Your Name"
 
