@@ -39,6 +39,18 @@ pip3 install vmn
 ```
 
 ## Usage
+
+### Create a playground
+```sh
+mkdir remote
+cd remote
+git init --bare
+cd ..
+git clone ./remote ./local
+cd local
+echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
+```
+
 ### `cd` into your git repository
 ```sh
 cd to/your/repository
