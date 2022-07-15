@@ -55,3 +55,8 @@ clean:
 	git checkout -- ${PWD}/version_stamp/version.py
 	rm -rf ${PWD}/dist
 	rm -rf ${PWD}/build
+
+package: _package
+_package: 
+	@echo "Container Packaging"
+	@docker build -t vmn/vmn:latest -f Dockerfile .
