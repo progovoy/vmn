@@ -129,17 +129,17 @@ def _gen(app_name, template, output, verify_version=False, version=None):
         return err
 
 
-def _add_buildmetadata_to_version(app_name, version, bm, file_path=None, link=None):
+def _add_buildmetadata_to_version(app_name, version, bm, file_path=None, url=None):
     args_list = ["--debug"]
     args_list.extend(["add"])
     args_list.extend(["--version", version])
     args_list.extend(["--bm", bm])
 
     if file_path is not None:
-        args_list.extend(["--file", f"{file_path}"])
+        args_list.extend(["--version-metadata", f"{file_path}"])
 
-    if link:
-        args_list.extend(["--link", link])
+    if url:
+        args_list.extend(["--version-metadata-url", url])
 
     args_list.append(app_name)
 
@@ -1606,7 +1606,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         ver_info["stamping"]["app"]["_version"],
         'build.1-aef.1-its-okay',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 0
 
@@ -1636,7 +1636,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         '0.0.2',
         'build.1-aef.1-its-okay',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 1
 
@@ -1644,7 +1644,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         '0.0.2',
         'build.1-aef.1-its-okay2',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 0
 
@@ -1665,7 +1665,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         '0.0.3',
         'build.1-aef.1-its-okay',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 1
 
@@ -1676,7 +1676,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         '0.0.3',
         'build.1-aef.1-its-okay',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 0
 
@@ -1685,7 +1685,7 @@ def test_add_bm(app_layout, capfd):
         app_layout.app_name,
         '0.0.3',
         'build.1-aef.1-its-okay+',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 1
 
@@ -1707,7 +1707,7 @@ def test_add_bm(app_layout, capfd):
         '0.0.3',
         'build.1-aef.1-its-okay3',
         file_path='test.yml',
-        link='https://whateverlink.com',
+        url='https://whateverlink.com',
     )
     assert err == 0
 
@@ -1717,5 +1717,5 @@ def test_add_bm(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert len(yaml.safe_load(out)['versions']) == 3
-    assert yaml.safe_load(out)['file']['test'] == 1
+    assert yaml.safe_load(out)['version_metadata']['test'] == 1
     assert yaml.safe_load(out)['versions'][0] == 'test_app_0.0.3'

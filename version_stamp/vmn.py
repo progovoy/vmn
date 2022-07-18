@@ -788,16 +788,16 @@ class VersionControlStamper(IVersionsStamper):
         )
         ver_info["stamping"]["app"]["prerelease"] = "metadata"
 
-        if self.params["link"] is not None:
-            ver_info["stamping"]["app"]["link"] = self.params["link"]
+        if self.params["version_metadata_url"] is not None:
+            ver_info["stamping"]["app"]["version_metadata_url"] = self.params["version_metadata_url"]
 
-        if self.params["file"] is not None:
-            path = self.params["file"]
+        if self.params["version_metadata"] is not None:
+            path = self.params["version_metadata"]
             if not os.path.isabs(path):
-                path = os.path.join(self.root_path, self.params["file"])
+                path = os.path.join(self.root_path, self.params["version_metadata"])
 
             with open(path) as f:
-                ver_info["stamping"]["app"]["file"] = yaml.safe_load(f)
+                ver_info["stamping"]["app"]["version_metadata"] = yaml.safe_load(f)
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
@@ -1380,8 +1380,8 @@ def handle_add(vmn_ctx):
         return err
 
     vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
-    vmn_ctx.params["file"] = vmn_ctx.args.file
-    vmn_ctx.params["link"] = vmn_ctx.args.link
+    vmn_ctx.params["version_metadata"] = vmn_ctx.args.vm
+    vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps"}
@@ -2411,10 +2411,16 @@ def add_arg_add(subprasers):
         f" {stamp_utils.SEMVER_BUILDMETADATA_REGEX}",
     )
     padd.add_argument(
-        "-f", "--file", required=False, help=f"Path for the metadata YAML file"
+        "--vm",
+        "--version-metadata",
+        required=False,
+        help=f"A path to a file which is associated with the specific build version"
     )
     padd.add_argument(
-        "-l", "--link", required=False, help=f"Link to add to the metadata"
+        "--vmu",
+        "--version-metadata-url",
+        required=False,
+        help=f"A URL which is associated with the specific build version"
     )
     padd.add_argument("name", help="The application's name")
 
