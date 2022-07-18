@@ -1390,8 +1390,23 @@ def handle_add(vmn_ctx):
     if status["error"]:
         return 1
 
+    ver = vmn_ctx.args.version
+    if status["matched_version_info"] is not None:
+        # Good we have found an existing version matching
+        # the actual_deps_state
+        ver = vmn_ctx.vcs.get_be_formatted_version(
+            status["matched_version_info"]["stamping"]["app"]["_version"]
+        )
+    elif ver is None:
+        LOGGER.error(
+            "When running vmn add and not on a version commit, "
+            "you must specify a specific version using -v flag"
+        )
+
+        return 1
+
     try:
-        LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(vmn_ctx.args.version))
+        LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(ver))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
 
