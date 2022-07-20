@@ -1391,7 +1391,7 @@ def handle_add(vmn_ctx):
         return 1
 
     ver = vmn_ctx.args.version
-    if status["matched_version_info"] is not None:
+    if ver is None and status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
         ver = vmn_ctx.vcs.get_be_formatted_version(
@@ -1845,10 +1845,19 @@ def show(vcs, params, verstr=None):
             if params["ignore_dirty"]:
                 dirty_states = None
 
+            versions = []
+            tags = vcs.backend.get_all_brother_tags(tag_name)
+            for tag in tags:
+                if tag:
+                    # TODO:: use some utils function
+                    # buildmetadata cannot include an '_' so we can assume
+                    # that the version will always be at the last splitted element
+                    versions.append(tag.split('_')[-1])
+                else:
+                    versions.append(tag)
+
             ver_info["stamping"]["app"]["versions"] = []
-            ver_info["stamping"]["app"]["versions"].extend(
-                vcs.backend.get_all_brother_tags(tag_name)
-            )
+            ver_info["stamping"]["app"]["versions"].extend(versions)
 
     if ver_info is None:
         LOGGER.info("Version information was not found " "for {0}.".format(vcs.name))

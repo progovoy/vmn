@@ -425,6 +425,42 @@ def test_basic_show(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "0.0.1\n" == out
 
+    with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        'build.1-aef.1-its-okay',
+        url='https://whateverlink.com',
+    )
+    assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        'build.1-aef.1-its-okay',
+        version="0.0.1",
+        url='https://whateverlink.com',
+    )
+    assert err == 0
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.2\n" == out
+
+    err = _show(app_layout.app_name, raw=True, version='0.0.1+build.1-aef.1-its-okay')
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "0.0.1+build.1-aef.1-its-okay\n" == out
+
 
 def test_show_from_file(app_layout, capfd):
     _init_vmn_in_repo()
@@ -1630,7 +1666,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay',
-        "0.0.2",
+        version="0.0.2",
         url='https://whateverlink.com',
     )
     assert err == 0
@@ -1643,7 +1679,7 @@ def test_add_bm(app_layout, capfd):
     assert err == 0
 
     out, err = capfd.readouterr()
-    assert "0.0.2+build.1-aef.1-its-okay\n" == out
+    assert "0.0.2\n" == out
 
     err = _show(app_layout.app_name, raw=True, verbose=True)
     assert err == 0
@@ -1660,7 +1696,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay',
-        '0.0.2',
+        version='0.0.2',
         url='https://whateverlink.com',
     )
     assert err == 1
@@ -1668,7 +1704,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay2',
-        '0.0.2',
+        version='0.0.2',
         url='https://whateverlink.com',
     )
     assert err == 0
@@ -1689,7 +1725,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay',
-        '0.0.3',
+        version='0.0.3',
         url='https://whateverlink.com',
     )
     assert err == 1
@@ -1700,7 +1736,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay',
-        '0.0.3',
+        version='0.0.3',
         url='https://whateverlink.com',
     )
     assert err == 0
@@ -1709,7 +1745,7 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay+',
-        '0.0.3',
+        version='0.0.3',
         url='https://whateverlink.com',
     )
     assert err == 1
@@ -1730,17 +1766,22 @@ def test_add_bm(app_layout, capfd):
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay3',
-        '0.0.3',
+        version='0.0.3',
         file_path='test.yml',
         url='https://whateverlink.com',
     )
     assert err == 0
 
     capfd.readouterr()
-    err = _show(app_layout.app_name, raw=True, verbose=True)
+    err = _show(
+        app_layout.app_name,
+        raw=True,
+        version='0.0.3+build.1-aef.1-its-okay3',
+        verbose=True,
+    )
     assert err == 0
 
     out, err = capfd.readouterr()
     assert len(yaml.safe_load(out)['versions']) == 3
     assert yaml.safe_load(out)['version_metadata']['test'] == 1
-    assert yaml.safe_load(out)['versions'][0] == 'test_app_0.0.3'
+    assert yaml.safe_load(out)['versions'][0] == '0.0.3'

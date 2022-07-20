@@ -534,6 +534,10 @@ class GitBackend(VMNBackend):
         app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
         for tag in app_tags:
+            # skip buildmetadata versions
+            if '+' in tag:
+                continue
+
             match = re.search(regex, tag)
             if match is None:
                 LOGGER.error(f"Tag {tag} doesn't comply to vmn version format")
