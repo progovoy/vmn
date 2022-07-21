@@ -1699,7 +1699,7 @@ def test_add_bm(app_layout, capfd):
         version='0.0.2',
         url='https://whateverlink.com',
     )
-    assert err == 1
+    assert err == 0
 
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
@@ -1709,7 +1709,7 @@ def test_add_bm(app_layout, capfd):
     )
     assert err == 0
 
-    out, err = capfd.readouterr()
+    capfd.readouterr()
 
     err = _show(
         app_layout.app_name,
@@ -1732,6 +1732,14 @@ def test_add_bm(app_layout, capfd):
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout.app_name,
+        'build.1-aef.1-its-okay',
+        version='999.999.999',
+        url='https://whateverlink.com',
+    )
+    assert err == 1
 
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
@@ -1763,6 +1771,23 @@ def test_add_bm(app_layout, capfd):
         commit=False,
     )
 
+    for i in range(2):
+        err = _add_buildmetadata_to_version(
+            app_layout.app_name,
+            'build.1-aef.1-its-okay3',
+            version='0.0.3',
+            file_path='test.yml',
+            url='https://whateverlink.com',
+        )
+        assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "test.yml",
+        yaml.dump({'test': 2}),
+        commit=False,
+    )
+
     err = _add_buildmetadata_to_version(
         app_layout.app_name,
         'build.1-aef.1-its-okay3',
@@ -1770,7 +1795,7 @@ def test_add_bm(app_layout, capfd):
         file_path='test.yml',
         url='https://whateverlink.com',
     )
-    assert err == 0
+    assert err == 1
 
     capfd.readouterr()
     err = _show(

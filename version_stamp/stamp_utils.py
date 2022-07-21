@@ -565,8 +565,9 @@ class GitBackend(VMNBackend):
             # TODO: maybe log here?
             # Backward compatability code for vmn 0.3.9:
             try:
-                tag_name = f"{tag_name}.0"
-                commit_tag_obj = self._be.commit(tag_name)
+                _tag_name = f"{tag_name}.0"
+                commit_tag_obj = self._be.commit(_tag_name)
+                tag_name = _tag_name
             except:
                 return tag_name, None
 

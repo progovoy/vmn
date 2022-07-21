@@ -775,6 +775,12 @@ class VersionControlStamper(IVersionsStamper):
         tag_name, tag_ver_info_form_repo = self.backend.get_vmn_tag_version_info(
             tag_name
         )
+        if tag_ver_info_form_repo is None:
+            LOGGER.error(
+                f"Tag {tag_name} doesn't seem to exist. Wrong version specified?"
+            )
+            raise RuntimeError()
+
         ver_info = {
             "stamping": {
                 "app": copy.deepcopy(tag_ver_info_form_repo["stamping"]["app"]),
@@ -790,7 +796,8 @@ class VersionControlStamper(IVersionsStamper):
         ver_info["stamping"]["app"]["prerelease"] = "metadata"
 
         if self.params["version_metadata_url"] is not None:
-            ver_info["stamping"]["app"]["version_metadata_url"] = self.params["version_metadata_url"]
+            ver_info["stamping"]["app"]["version_metadata_url"] = \
+                self.params["version_metadata_url"]
 
         if self.params["version_metadata"] is not None:
             path = self.params["version_metadata"]
@@ -799,6 +806,17 @@ class VersionControlStamper(IVersionsStamper):
 
             with open(path) as f:
                 ver_info["stamping"]["app"]["version_metadata"] = yaml.safe_load(f)
+
+        buildmetadata_tag_name, tag_ver_info_form_repo = \
+            self.backend.get_vmn_tag_version_info(buildmetadata_tag_name)
+        if tag_ver_info_form_repo is not None:
+            if tag_ver_info_form_repo != ver_info:
+                LOGGER.error(
+                    f"Tried to add different metadata for the same version."
+                )
+                raise RuntimeError()
+
+            return res_ver
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
