@@ -718,6 +718,7 @@ class VersionControlStamper(IVersionsStamper):
         if should_append_hotfix and self.hide_zero_hotfix:
             should_append_hotfix = props["hotfix"] != "0"
 
+        # res_ver is a version string without prerelease
         res_ver = f'{props["version"]}'
         if should_append_hotfix:
             res_ver = f'{res_ver}.{props["hotfix"]}'
