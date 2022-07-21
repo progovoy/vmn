@@ -1981,6 +1981,12 @@ def gen(vcs, params, verstr=None):
 
     out_path = params["output"]
 
+    if os.path.exists(out_path):
+        with open(out_path) as file_:
+            current_out_content = file_.read()
+            if current_out_content == out:
+                return 0
+
     with open(out_path, "w") as f:
         f.write(out)
 

@@ -281,7 +281,7 @@ def test_jinja2_gen(app_layout, capfd):
         "{% endfor %}\n"
     )
     app_layout.write_file_commit_and_push(
-        "test_repo", "f1.jinja2", jinja2_content, commit=False, push=False
+        "test_repo", "f1.jinja2", jinja2_content, commit=False
     )
 
     tpath = os.path.join(app_layout._repos["test_repo"]["path"], "f1.jinja2")
@@ -289,8 +289,17 @@ def test_jinja2_gen(app_layout, capfd):
     err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
 
+    m_time = os.path.getmtime(opath)
+
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
+
+    m_time_after = os.path.getmtime(opath)
+
+    assert m_time == m_time_after
+
     # read to clear stderr and out
-    out, err = capfd.readouterr()
+    capfd.readouterr()
 
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
     assert err == 1
