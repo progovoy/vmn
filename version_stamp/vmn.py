@@ -801,8 +801,6 @@ class VersionControlStamper(IVersionsStamper):
 
         if self.params["version_metadata"] is not None:
             path = self.params["version_metadata"]
-            if not os.path.isabs(path):
-                path = os.path.join(self.root_path, self.params["version_metadata"])
 
             with open(path) as f:
                 ver_info["stamping"]["app"]["version_metadata"] = yaml.safe_load(f)
@@ -1957,6 +1955,19 @@ def gen(vcs, params, verstr=None):
                         f"Refusing to gen"
                     )
                     raise RuntimeError()
+        elif verstr is None:
+            #TODO:: reuse logic with "matching"
+            for k, v in ver_info["stamping"]["app"]["changesets"].items():
+                if k not in vcs.actual_deps_state:
+                    #TODO:: reuse goto logic
+                    LOGGER.error(f"{k} doesn't exist locally. Clone and rerun")
+                    raise RuntimeError()
+
+                v["hash"] = vcs.actual_deps_state[k]["hash"]
+
+                # when k is the "main repo" repo
+                if vcs.repo_name == k:
+                    v["hash"] = vcs.backend.last_user_changeset(vcs.name)
 
     if ver_info is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
