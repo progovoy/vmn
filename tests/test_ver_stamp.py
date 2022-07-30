@@ -1800,6 +1800,17 @@ def test_add_bm(app_layout, capfd):
             url='https://whateverlink.com',
         )
         assert err == 0
+        app_layout.write_file_commit_and_push(
+            "test_repo",
+            "test.yml",
+            yaml.dump(
+                {
+                    'build_flags': '-g',
+                    'build_time': 'Debug'
+                }
+            ),
+            commit=False,
+        )
 
     app_layout.write_file_commit_and_push(
         "test_repo",

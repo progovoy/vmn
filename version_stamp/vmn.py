@@ -115,27 +115,24 @@ class VMNContextMAnager(object):
 
 
 class IVersionsStamper(object):
-    """
-    name: str
-    unit_price: float
-    quantity_on_hand: int = 0
-    """
-
-    def __init__(self, conf):
+    def __init__(self, arg_params):
         self.backend = None
-        self.params = conf
-        self.root_path = conf["root_path"]
-        self.repo_name = "."
-        self.name = conf["name"]
+        self.params: dict = arg_params
+        self.root_path: str = arg_params["root_path"]
+        self.repo_name: str = "."
+        self.name: str = arg_params["name"]
 
         # Configuration defaults
-        self.template = stamp_utils.VMN_DEFAULT_TEMPLATE
+        self.template: str = stamp_utils.VMN_DEFAULT_TEMPLATE
         self.extra_info = False
         self.create_verinfo_files = False
         self.hide_zero_hotfix = True
         self.version_backends = {}
         # This one will be filled with self dependency ('.') by default
         self.raw_configured_deps = None
+        self.configured_deps = None
+        self.conf_file_exists = False
+        self.root_conf_file_exists = False
 
         self.should_publish = True
         self.current_version_info = {
@@ -146,7 +143,7 @@ class IVersionsStamper(object):
             "stamping": {"msg": "", "app": {"info": {}}, "root_app": {}},
         }
 
-        self.root_context = conf["root"]
+        self.root_context = arg_params["root"]
 
         if self.name is None:
             self.tracked = False
@@ -173,6 +170,8 @@ class IVersionsStamper(object):
     def update_attrs_from_app_conf_file(self):
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
+            self.conf_file_exists = True
+
             with open(self.app_conf_path, "r") as f:
                 data = yaml.safe_load(f)
                 if "template" in data["conf"]:
@@ -204,7 +203,7 @@ class IVersionsStamper(object):
             )
         self.root_app_dir_path = self.app_dir_path
         self.root_app_conf_path = None
-        if self.root_app_name is not None:
+        if self.root_context:
             self.root_app_dir_path = os.path.join(
                 self.root_path, ".vmn", self.root_app_name
             )
@@ -467,11 +466,11 @@ class IVersionsStamper(object):
 
         return gdict
 
-    def get_deps_changesets(self):
+    def get_configured_deps_full_paths(self):
         flat_dependency_repos = []
 
         # resolve relative paths
-        for rel_path, v in self.raw_configured_deps.items():
+        for rel_path, v in self.configured_deps.items():
             for repo in v:
                 flat_dependency_repos.append(
                     os.path.relpath(
@@ -488,21 +487,21 @@ class IVersionsStamper(object):
 
     def create_config_files(self):
         # If there is no file - create it
-        if not os.path.isfile(self.app_conf_path):
+        if not self.conf_file_exists:
             pathlib.Path(os.path.dirname(self.app_conf_path)).mkdir(
                 parents=True, exist_ok=True
             )
 
-            self.raw_configured_deps[os.path.join("../")].pop(
+            self.configured_deps[os.path.join("../")].pop(
                 os.path.basename(self.root_path)
             )
-            if not self.raw_configured_deps[os.path.join("../")]:
-                self.raw_configured_deps.pop(os.path.join("../"))
+            if not self.configured_deps[os.path.join("../")]:
+                self.configured_deps.pop(os.path.join("../"))
 
             ver_conf_yml = {
                 "conf": {
                     "template": self.template,
-                    "deps": self.raw_configured_deps,
+                    "deps": self.configured_deps,
                     "extra_info": self.extra_info,
                     "hide_zero_hotfix": self.hide_zero_hotfix,
                     "create_verinfo_files": self.create_verinfo_files,
@@ -520,7 +519,7 @@ class IVersionsStamper(object):
         if self.root_app_name is None:
             return
 
-        if os.path.isfile(self.root_app_conf_path):
+        if self.root_conf_file_exists:
             return
 
         pathlib.Path(os.path.dirname(self.app_conf_path)).mkdir(
@@ -535,8 +534,8 @@ class IVersionsStamper(object):
 
 
 class VersionControlStamper(IVersionsStamper):
-    def __init__(self, conf):
-        IVersionsStamper.__init__(self, conf)
+    def __init__(self, arg_params):
+        IVersionsStamper.__init__(self, arg_params)
 
     def get_tag_formatted_app_name(
         self, app_name, version, prerelease=None, prerelease_count=None
@@ -596,6 +595,15 @@ class VersionControlStamper(IVersionsStamper):
         return vmn_version
 
     def find_matching_version(self, version, prerelease, prerelease_count):
+        """
+        Try to find any version of the application matching the
+        user's repositories local state
+        :param version:
+        :param prerelease:
+        :param prerelease_count:
+        :return:
+        """
+
         if version is None:
             return None
 
@@ -603,8 +611,7 @@ class VersionControlStamper(IVersionsStamper):
             self.name, version, prerelease, prerelease_count
         )
 
-        # Try to find any version of the application matching the
-        # user's repositories local state
+        # Get version info for tag
         _, ver_info = self.backend.get_vmn_tag_version_info(tag_formatted_app_name)
         if ver_info is None:
             return None
@@ -1323,49 +1330,46 @@ def initialize_backend_attrs(vmn_ctx):
 
     self_base = os.path.basename(vcs.root_path)
     self_dep = {"remote": vcs.backend.remote(), "vcs_type": vcs.backend.type()}
-    initialize_empty_raw_deps(vcs, self_base)
+    initialize_configured_deps(vcs, self_base)
 
-    vcs.raw_configured_deps[os.path.join("../")][self_base] = self_dep
+    vcs.configured_deps[os.path.join("../")][self_base] = self_dep
 
     if vcs.name is None:
         return
 
     vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
     deps = {}
-    for rel_path, dep in vcs.raw_configured_deps.items():
+    for rel_path, dep in vcs.configured_deps.items():
         deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
     vcs.actual_deps_state = HostState.get_actual_deps_state(deps, vcs.root_path)
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
-    vcs.flat_configured_deps = vcs.get_deps_changesets()
+    vcs.flat_configured_deps = vcs.get_configured_deps_full_paths()
     vcs.ver_info_from_repo = vcs.backend.get_vmn_version_info(
         vcs.name, vcs.root_context
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
 
-    if os.path.isfile(vcs.app_conf_path):
-        with open(vcs.app_conf_path, "r") as f:
-            data = yaml.safe_load(f)
+    if vcs.raw_configured_deps:
+        deps = {}
+        for rel_path, dep in vcs.raw_configured_deps.items():
+            deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
 
-            deps = {}
-            for rel_path, dep in data["conf"]["deps"].items():
-                deps[os.path.join(vcs.root_path, rel_path)] = tuple(dep.keys())
-
-            vcs.actual_deps_state.update(
-                HostState.get_actual_deps_state(deps, vcs.root_path)
-            )
-            vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
+        vcs.actual_deps_state.update(
+            HostState.get_actual_deps_state(deps, vcs.root_path)
+        )
+        vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
 
     return 0
 
 
-def initialize_empty_raw_deps(vcs, self_base):
-    if vcs.raw_configured_deps is None:
-        vcs.raw_configured_deps = {}
-    if os.path.join("../") not in vcs.raw_configured_deps:
-        vcs.raw_configured_deps[os.path.join("../")] = {}
-    if self_base not in vcs.raw_configured_deps[os.path.join("../")]:
-        vcs.raw_configured_deps[os.path.join("../")][self_base] = {}
+def initialize_configured_deps(vcs, self_base):
+    if vcs.raw_configured_deps is not None:
+        vcs.configured_deps = vcs.raw_configured_deps
+    if os.path.join("../") not in vcs.configured_deps:
+        vcs.configured_deps[os.path.join("../")] = {}
+    if self_base not in vcs.configured_deps[os.path.join("../")]:
+        vcs.configured_deps[os.path.join("../")][self_base] = {}
 
 
 def handle_release(vmn_ctx):
