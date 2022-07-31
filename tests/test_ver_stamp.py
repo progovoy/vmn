@@ -31,7 +31,7 @@ def _init_app(app_name, starting_version="0.0.0"):
         # TODO: why validating this?
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
-        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
+        ver_info = vmn_ctx.vcs.backend.get_latest_reachable_version_info(app_name)
 
         try:
             # Python3.9 only
@@ -46,7 +46,7 @@ def _release_app(app_name, version):
     with vmn.VMNContextMAnager(["release", "-v", version, app_name]) as vmn_ctx:
         err = vmn.handle_release(vmn_ctx)
 
-        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
+        ver_info = vmn_ctx.vcs.backend.get_latest_reachable_version_info(app_name)
 
         try:
             # Python3.9 only
@@ -69,7 +69,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
     with vmn.VMNContextMAnager(args_list) as vmn_ctx:
         err = vmn.handle_stamp(vmn_ctx)
-        ver_info = vmn_ctx.vcs.backend.get_vmn_version_info(app_name)
+        ver_info = vmn_ctx.vcs.backend.get_latest_reachable_version_info(app_name)
 
         try:
             # Python3.9 only

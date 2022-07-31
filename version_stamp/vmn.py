@@ -293,7 +293,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
         tags = self.backend.tags(filter=f"{tag_name_prefix}*")
         if tags:
-            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
+            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -322,7 +322,7 @@ class IVersionsStamper(object):
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
+            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
             major = max(int(major), int(props["major"]))
             major = str(major + 1)
 
@@ -332,7 +332,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
+            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
             minor = max(int(minor), int(props["minor"]))
             minor = str(minor + 1)
 
@@ -341,7 +341,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
+            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
             patch = max(int(patch), int(props["patch"]))
             patch = str(patch + 1)
 
@@ -349,7 +349,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tags[0])
+            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
@@ -383,7 +383,11 @@ class IVersionsStamper(object):
         if not self.version_backends:
             return
 
-        verstr = self.gen_verstr(version_number, prerelease, prerelease_count)
+        verstr = self.serialize_vmn_version(
+            version_number,
+            prerelease,
+            prerelease_count,
+        )
         verstr = self.get_be_formatted_version(verstr)
         for backend in self.version_backends:
             try:
@@ -549,12 +553,13 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, arg_params):
         IVersionsStamper.__init__(self, arg_params)
 
-    def get_tag_formatted_app_name(
+    # TODO:: move to VMN_BACKEND in stamp_utils
+    def serialize_vmn_tag_name(
         self, app_name, version, prerelease=None, prerelease_count=None, buildmetadata=None
     ):
         app_name = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(app_name)
 
-        verstr = self.gen_verstr(version, prerelease, prerelease_count, buildmetadata)
+        verstr = self.serialize_vmn_version(version, prerelease, prerelease_count, buildmetadata)
 
         verstr = f"{app_name}_{verstr}"
 
@@ -570,7 +575,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return verstr
 
-    def gen_verstr(
+    def serialize_vmn_version(
             self,
             current_version,
             prerelease,
@@ -631,12 +636,12 @@ class VersionControlStamper(IVersionsStamper):
         if version is None:
             return None
 
-        tag_formatted_app_name = self.get_tag_formatted_app_name(
+        tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, version, prerelease, prerelease_count
         )
 
         # Get version info for tag
-        _, ver_info = self.backend.get_vmn_tag_version_info(tag_formatted_app_name)
+        _, ver_info = self.backend.get_version_info_from_tag_name(tag_formatted_app_name)
         if ver_info is None:
             return None
 
@@ -705,20 +710,13 @@ class VersionControlStamper(IVersionsStamper):
             raise RuntimeError()
 
         tmp = ver_info['stamping']['app']
-        release_tag_name = self.get_tag_formatted_app_name(
-            self.name,
-            tmp["_version"],
-            tmp['prerelease'],
-            tmp['prerelease_count'],
-            self.params["buildmetadata"]
-        )
+        release_tag_name = self.serialize_vmn_tag_name(self.name, tmp["_version"])
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
 
-        props = stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
+        props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tag_name)
         ver_info["stamping"]["app"]["_version"] = props['version']
-        ver_info["stamping"]["app"][
-            "version"
-        ] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
+        ver_info["stamping"]["app"]["version"] = \
+            stamp_utils.VMNBackend.get_utemplate_formatted_version(
             props['version'], self.template, self.hide_zero_hotfix
         )
         ver_info["stamping"]["app"]["prerelease"] = "release"
@@ -744,13 +742,13 @@ class VersionControlStamper(IVersionsStamper):
             raise RuntimeError()
 
         tmp = ver_info['stamping']['app']
-        res_ver = self.gen_verstr(
+        res_ver = self.serialize_vmn_version(
             tmp["_version"],
             tmp['prerelease'],
             tmp['prerelease_count'],
             self.params["buildmetadata"]
         )
-        buildmetadata_tag_name = self.get_tag_formatted_app_name(
+        buildmetadata_tag_name = self.serialize_vmn_tag_name(
             self.name,
             tmp["_version"],
             tmp['prerelease'],
@@ -777,7 +775,7 @@ class VersionControlStamper(IVersionsStamper):
                 ver_info["stamping"]["app"]["version_metadata_path"] = yaml.safe_load(f)
 
         buildmetadata_tag_name, tag_ver_info_form_repo = \
-            self.backend.get_vmn_tag_version_info(buildmetadata_tag_name)
+            self.backend.get_version_info_from_tag_name(buildmetadata_tag_name)
         if tag_ver_info_form_repo is not None:
             if tag_ver_info_form_repo != ver_info:
                 LOGGER.error(
@@ -848,10 +846,10 @@ class VersionControlStamper(IVersionsStamper):
         prerelease_count,
         release_mode,
     ):
-        verstr = self.gen_verstr(current_version, prerelease, prerelease_count)
+        verstr = self.serialize_vmn_version(current_version, prerelease, prerelease_count)
         self.current_version_info["stamping"]["app"]["_version"] = verstr
         self.current_version_info["stamping"]["app"]["prerelease"] = prerelease
-        initial_verstr = self.gen_verstr(
+        initial_verstr = self.serialize_vmn_version(
             initial_version, initialprerelease, initialprerelease_count
         )
         self.current_version_info["stamping"]["app"][
@@ -870,7 +868,7 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        ver_info = self.backend.get_vmn_version_info(self.root_app_name, root=True)
+        ver_info = self.backend.get_latest_reachable_version_info(self.root_app_name, root=True)
 
         if ver_info is None:
             LOGGER.error(f"Version information for {self.root_app_name} was not found")
@@ -925,7 +923,7 @@ class VersionControlStamper(IVersionsStamper):
     def publish_stamp(
         self, app_version, prerelease, prerelease_count, root_app_version
     ):
-        verstr = self.gen_verstr(app_version, prerelease, prerelease_count)
+        verstr = self.serialize_vmn_version(app_version, prerelease, prerelease_count)
         app_msg = {
             "vmn_info": self.current_version_info["vmn_info"],
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
@@ -1302,7 +1300,7 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
     vcs.flat_configured_deps = vcs.get_configured_deps_full_paths()
-    vcs.ver_info_from_repo = vcs.backend.get_vmn_version_info(
+    vcs.ver_info_from_repo = vcs.backend.get_latest_reachable_version_info(
         vcs.name, vcs.root_context
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
@@ -1637,7 +1635,7 @@ def _init_app(versions_be_ifc, starting_version):
     root_app_version = 0
     services = {}
     if versions_be_ifc.root_app_name is not None:
-        ver_info = versions_be_ifc.backend.get_vmn_version_info(
+        ver_info = versions_be_ifc.backend.get_latest_reachable_version_info(
             versions_be_ifc.root_app_name, root=True
         )
         if ver_info:
@@ -1773,7 +1771,7 @@ def _stamp_version(
         LOGGER.error(err)
         raise RuntimeError(err)
 
-    verstr = versions_be_ifc.gen_verstr(current_version, prerelease, prerelease_count)
+    verstr = versions_be_ifc.serialize_vmn_version(current_version, prerelease, prerelease_count)
 
     return versions_be_ifc.get_be_formatted_version(verstr)
 
@@ -1784,7 +1782,7 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             be = stamp_utils.LocalFileBackend(vcs.vmn_root_path)
-            ver_info = be.get_vmn_version_info(vcs.name, vcs.root_context)
+            ver_info = be.get_latest_reachable_version_info(vcs.name, vcs.root_context)
         else:
             if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
@@ -2000,6 +1998,7 @@ def goto_version(vcs, params, version):
         return 1
 
     data = ver_info["stamping"]["app"]
+    # TODO:: take deps from conf, actual deps, last stamp
     deps = data["changesets"]
 
     if check_unique:
@@ -2042,6 +2041,7 @@ def goto_version(vcs, params, version):
 
 
 def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status):
+    # TODO:: maybe remove expected status from here because now we have duplicates
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status["error"]:
         return None, None, None
@@ -2052,22 +2052,22 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
 
     if verstr is None:
         try:
-            ver_info = vcs.backend.get_vmn_version_info(vcs.name, vcs.root_context)
+            ver_info = vcs.backend.get_latest_reachable_version_info(vcs.name, vcs.root_context)
         except:
             return None, None, None
     else:
         if vcs.root_context:
             try:
                 int(verstr)
-                tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+                tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
             except Exception:
                 LOGGER.error("wrong version specified: root version must be an integer")
 
                 return None, None, None
         else:
             try:
-                stamp_utils.VMNBackend.get_vmn_tag_name_properties(tag_name)
-                tag_name, ver_info = vcs.backend.get_vmn_tag_version_info(tag_name)
+                stamp_utils.VMNBackend.deserealize_vmn_tag_name(tag_name)
+                tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
             except:
                 LOGGER.error(f"Wrong version specified: {verstr}")
 

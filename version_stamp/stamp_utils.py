@@ -105,7 +105,7 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
-    def get_vmn_version_info(self, app_name, root=False):
+    def get_latest_reachable_version_info(self, app_name, root=False):
         return {}
 
     @staticmethod
@@ -117,7 +117,7 @@ class VMNBackend(object):
         return f"{verstr}+{hash}"
 
     @staticmethod
-    def get_vmn_tag_name_properties(vmn_tag):
+    def deserealize_vmn_tag_name(vmn_tag):
         ret = {
             "app_name": None,
             "type": "version",
@@ -137,6 +137,7 @@ class VMNBackend(object):
             if gdict["version"] is not None:
                 int(gdict["version"])
                 ret["root_version"] = gdict["version"]
+                ret["app_name"] = gdict["app_name"]
                 ret["type"] = "root"
 
             return ret
@@ -229,7 +230,7 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
-    def get_vmn_version_info(self, app_name, root=False):
+    def get_latest_reachable_version_info(self, app_name, root=False):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
@@ -521,7 +522,7 @@ class GitBackend(VMNBackend):
             LOGGER.info("Failed to fetch tags")
             LOGGER.debug("Exception info: ", exc_info=True)
 
-    def get_vmn_version_info(self, app_name, root=False):
+    def get_latest_reachable_version_info(self, app_name, root=False):
         if root:
             regex = VMN_ROOT_TAG_REGEX
         else:
@@ -552,15 +553,14 @@ class GitBackend(VMNBackend):
         if cleaned_app_tag is None:
             return None
 
-        _, verinfo = self.get_vmn_tag_version_info(cleaned_app_tag)
+        _, verinfo = self.get_version_info_from_tag_name(cleaned_app_tag)
 
         return verinfo
 
-    def get_vmn_tag_version_info(self, tag_name):
+    def get_version_info_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except:
-            # TODO: maybe log here?
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
@@ -597,8 +597,13 @@ class GitBackend(VMNBackend):
 
         all_tags = {}
         found = False
-        # TODO: improve to iter_commits
-        tags = self.tags(filter=f'{tag_name.split("_")[0].split("-")[0]}*')
+        # TODO: maybe use iter_commits?
+        res = VMNBackend.deserealize_vmn_tag_name(tag_name)
+        tag_prefix = VMNBackend.get_root_app_name_from_name(res['app_name'])
+        if tag_prefix is None:
+           tag_prefix = res['app_name']
+
+        tags = self.tags(filter=f'{tag_prefix}*')
         for tag in tags:
             if found and commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
                 break
@@ -607,7 +612,7 @@ class GitBackend(VMNBackend):
 
             found = True
 
-            tagd = VMNBackend.get_vmn_tag_name_properties(tag)
+            tagd = VMNBackend.deserealize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 
