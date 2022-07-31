@@ -234,7 +234,9 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert err == 0
 
     out, err = capfd.readouterr()
-    assert "0.0.1 (dirty): {'modified'}\n" == out
+    tmp = yaml.safe_load(out)
+    assert tmp["out"] == "0.0.1"
+    assert 'modified' in tmp["dirty"]
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 1
@@ -247,7 +249,9 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert err == 0
 
     out, err = capfd.readouterr()
-    assert "0.0.1 (dirty): {'modified'}\n" == out
+    tmp = yaml.safe_load(out)
+    assert tmp["out"] == "0.0.1"
+    assert 'modified' in tmp["dirty"]
 
     app_layout.remove_file(
         os.path.join(params["root_path"], f".git/hooks/{hook_name}"), from_git=False
