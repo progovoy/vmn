@@ -88,7 +88,8 @@ def _show(
     root=False,
     from_file=False,
     ignore_dirty=False,
-    unique=False
+    unique=False,
+    display_type=False
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -105,6 +106,8 @@ def _show(
         args_list.append("--ignore-dirty")
     if unique:
         args_list.append("--unique")
+    if display_type:
+        args_list.append("--type")
 
     args_list.append(app_name)
 
@@ -479,6 +482,13 @@ def test_basic_show(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "0.0.1+build.1-aef.1-its-okay\n" == out
 
+    err = _show(app_layout.app_name, display_type=True, version='0.0.1+build.1-aef.1-its-okay')
+    assert err == 0
+    out, err = capfd.readouterr()
+    tmp = yaml.safe_load(out)
+    assert tmp["type"] == "metadata"
+    assert tmp["out"] == "0.0.1+build.1-aef.1-its-okay"
+
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
@@ -490,6 +500,13 @@ def test_basic_show(app_layout, capfd):
     assert err == 0
     out, err = capfd.readouterr()
     assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(out[:-1])
+
+    err = _show(app_layout.app_name, display_type=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    tmp = yaml.safe_load(out)
+    assert tmp["type"] == 'release'
+    assert tmp["out"] == "0.0.2"
 
 
 def test_show_from_file(app_layout, capfd):
@@ -1129,6 +1146,13 @@ def test_rc_stamping(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert "3.6.0-rc2\n" == out
+
+    err = _show(app_layout.app_name, display_type=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    tmp = yaml.safe_load(out)
+    assert tmp["type"] == "rc"
+    assert tmp["out"] == "3.6.0-rc2"
 
     _, ver_info, _ = _release_app(app_layout.app_name, f"3.6.0-rc1")
 

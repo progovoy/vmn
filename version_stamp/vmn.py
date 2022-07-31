@@ -1398,7 +1398,6 @@ def handle_add(vmn_ctx):
 
 
 def handle_show(vmn_ctx):
-    vmn_ctx.params["display_unique_id"] = vmn_ctx.args.display_unique_id
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
     if not vmn_ctx.params["from_file"]:
         err = initialize_backend_attrs(vmn_ctx)
@@ -1416,6 +1415,10 @@ def handle_show(vmn_ctx):
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
     if vmn_ctx.args.template is not None:
         vmn_ctx.vcs.set_template(vmn_ctx.args.template)
+
+    vmn_ctx.params["display_unique_id"] = vmn_ctx.args.display_unique_id
+    vmn_ctx.params["display_type"] = vmn_ctx.args.display_type
+
     try:
         out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     except:
@@ -1888,8 +1891,20 @@ def show(vcs, params, verstr=None):
                 data['changesets']['.']['hash']
             )
 
+        d_out = {}
         if dirty_states:
-            out = f"{out} (dirty): {dirty_states}"
+            d_out.update({
+                "out": out,
+                "dirty": dirty_states,
+            })
+        if params.get("display_type"):
+            d_out.update({
+                "out": out,
+                "type": data["prerelease"],
+            })
+
+        if d_out:
+            out = yaml.safe_dump(d_out)
 
     print(out)
 
@@ -2431,6 +2446,8 @@ def add_arg_show(subprasers):
     pshow.set_defaults(ignore_dirty=False)
     pshow.add_argument("-u", "--unique", dest="display_unique_id", action="store_true")
     pshow.set_defaults(display_unique_id=False)
+    pshow.add_argument("--type", dest="display_type", action="store_true")
+    pshow.set_defaults(display_type=False)
 
 
 def add_arg_init_app(subprasers):
