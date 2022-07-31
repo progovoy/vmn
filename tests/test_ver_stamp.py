@@ -88,6 +88,7 @@ def _show(
     root=False,
     from_file=False,
     ignore_dirty=False,
+    unique=False
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -102,6 +103,8 @@ def _show(
         args_list.append("--from-file")
     if ignore_dirty:
         args_list.append("--ignore-dirty")
+    if unique:
+        args_list.append("--unique")
 
     args_list.append(app_name)
 
@@ -141,7 +144,7 @@ def _add_buildmetadata_to_version(app_layout, bm, version=None, file_path=None, 
     if file_path is not None:
         args_list.extend(
             [
-                "--version-metadata",
+                "--version-metadata-path",
                 f"{os.path.join(app_layout.repo_path, file_path)}"
             ]
         )
@@ -476,6 +479,18 @@ def test_basic_show(app_layout, capfd):
     out, err = capfd.readouterr()
     assert "0.0.1+build.1-aef.1-its-okay\n" == out
 
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    tmp = yaml.safe_load(out)
+    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(tmp['unique_id'])
+
+    err = _show(app_layout.app_name, unique=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(out[:-1])
+
 
 def test_show_from_file(app_layout, capfd):
     _init_vmn_in_repo()
@@ -642,6 +657,17 @@ def test_show_from_file(app_layout, capfd):
     show_file = yaml.safe_load(out)
 
     assert show_minimal_res == show_file
+
+    err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    show_file_res = yaml.safe_load(out)
+
+    err = _show(app_name, version="0.0.1", from_file=True, unique=True)
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(out[:-1])
 
 
 def test_show_from_file_conf_changed(app_layout, capfd):
@@ -1291,6 +1317,29 @@ def test_basic_goto(app_layout, capfd):
     err, ver_info, _ = _stamp_app(root_app_name, "minor")
     assert err == 0
 
+    deps = ver_info['stamping']['app']['changesets']
+    with vmn.VMNContextMAnager(
+            ["goto", "-v", f"1.5.0+{deps['.']['hash']}", root_app_name]
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    with vmn.VMNContextMAnager(
+            ["goto", "-v", f"1.5.0+{deps['.']['hash'][:-10]}", root_app_name]
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    capfd.readouterr()
+    with vmn.VMNContextMAnager(
+            ["goto", "-v", f"1.5.0+{deps['.']['hash'][:-10]}X", root_app_name]
+    ) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 1
+
+        out, err = capfd.readouterr()
+        assert "[ERROR] Wrong unique id\n" == out
+
 
 def test_stamp_on_branch_merge_squash(app_layout):
     _init_vmn_in_repo()
@@ -1764,7 +1813,7 @@ def test_add_bm(app_layout, capfd):
     )
     assert err == 0
 
-    out, err = capfd.readouterr()
+    capfd.readouterr()
     err = _add_buildmetadata_to_version(
         app_layout,
         'build.1-aef.1-its-okay+',
@@ -1776,7 +1825,6 @@ def test_add_bm(app_layout, capfd):
     out, err = capfd.readouterr()
     assert out.startswith(
         "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply "
-        "to vmn version format"
     )
 
     app_layout.write_file_commit_and_push(
@@ -1843,5 +1891,39 @@ def test_add_bm(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert len(yaml.safe_load(out)['versions']) == 3
-    assert yaml.safe_load(out)['version_metadata']['build_flags'] == '-g'
+    assert yaml.safe_load(out)["version_metadata_path"]['build_flags'] == '-g'
     assert yaml.safe_load(out)['versions'][0] == '0.0.3'
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "test.tst",
+        'bla',
+    )
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        "patch",
+        prerelease='alpha'
+    )
+    assert err == 0
+
+    err = _add_buildmetadata_to_version(
+        app_layout,
+        'build.1-aef.1-its-okay',
+        version='0.0.4-alpha1',
+        url='https://whateverlink.com',
+    )
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo",
+        "test.test",
+        yaml.dump(
+            {
+                'bla': '-g2',
+            }),
+    )
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "0.0.4-alpha1")
+    assert err == 0
+

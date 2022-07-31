@@ -113,6 +113,10 @@ class VMNBackend(object):
         return app_name.replace("/", "-")
 
     @staticmethod
+    def gen_unique_id(verstr, hash):
+        return f"{verstr}+{hash}"
+
+    @staticmethod
     def get_vmn_tag_name_properties(vmn_tag):
         ret = {
             "app_name": None,
@@ -125,7 +129,6 @@ class VMNBackend(object):
             "hotfix": None,
             "prerelease": None,
             "buildmetadata": None,
-            "releasenotes": None,
         }
 
         match = re.search(VMN_ROOT_TAG_REGEX, vmn_tag)
@@ -166,10 +169,6 @@ class VMNBackend(object):
             ret["buildmetadata"] = gdict["buildmetadata"]
             ret["type"] = "buildmetadata"
 
-        if gdict["releasenotes"] is not None:
-            ret["releasenotes"] = gdict["releasenotes"]
-            ret["type"] = "releasenotes"
-
         return ret
 
     @staticmethod
@@ -187,7 +186,6 @@ class VMNBackend(object):
             "hotfix",
             "prerelease",
             "buildmetadata",
-            "releasenotes",
         )
 
         formatted_version = ""
