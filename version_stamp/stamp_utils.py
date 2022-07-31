@@ -643,7 +643,9 @@ class HostState(object):
             client = git.Repo(path, search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError as exc:
             LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-
+            return None
+        except Exception as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
 
         try:
@@ -660,22 +662,19 @@ class HostState(object):
         return hash, remote, "git"
 
     @staticmethod
-    def get_actual_deps_state(paths, root):
+    def get_actual_deps_state(vmn_root_path, paths):
         actual_deps_state = {}
-        for path, lst in paths.items():
-            repos = [name for name in lst if os.path.isdir(os.path.join(path, name))]
+        for path in paths:
+            full_path = os.path.join(vmn_root_path, path)
+            details = HostState.get_repo_details(full_path)
+            if details is None:
+                continue
 
-            for repo in repos:
-                joined_path = os.path.join(path, repo)
-                details = HostState.get_repo_details(joined_path)
-                if details is None:
-                    continue
-
-                actual_deps_state[os.path.relpath(joined_path, root)] = {
-                    "hash": details[0],
-                    "remote": details[1],
-                    "vcs_type": details[2],
-                }
+            actual_deps_state[path] = {
+                "hash": details[0],
+                "remote": details[1],
+                "vcs_type": details[2],
+            }
 
         return actual_deps_state
 

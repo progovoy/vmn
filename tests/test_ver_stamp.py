@@ -800,7 +800,9 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert os.path.join("..", "repo1") in ver_info["stamping"]["app"]["changesets"]
     assert os.path.join("..", "repo2") in ver_info["stamping"]["app"]["changesets"]
 
+    # TODO:: remove this line (seems like the conf write is redundant
     app_layout.write_conf(params["app_conf_path"], **conf)
+
     with open(params["app_conf_path"], "r") as f:
         data = yaml.safe_load(f)
         assert "../" in data["conf"]["deps"]
@@ -809,10 +811,34 @@ def test_multi_repo_dependency(app_layout, capfd):
         assert "repo2" in data["conf"]["deps"]["../"]
 
     conf["deps"]["../"]["repo3"] = copy.deepcopy(conf["deps"]["../"]["repo2"])
+    conf["deps"]["../"]["repo3"].pop("remote")
 
     app_layout.write_conf(params["app_conf_path"], **conf)
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
+
+    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 1
+
+    be = app_layout.create_repo(repo_name="repo3", repo_type="git")
+
+    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
+
+    shutil.rmtree(app_layout._repos["repo3"]["path"])
+
+    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
+        err = vmn.handle_goto(vmn_ctx)
+        assert err == 0
 
 
 def test_goto_deleted_repos(app_layout):

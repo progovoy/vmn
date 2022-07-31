@@ -482,20 +482,6 @@ class IVersionsStamper(object):
 
         return gdict
 
-    def get_configured_deps_full_paths(self):
-        flat_dependency_repos = []
-
-        # resolve relative paths
-        for rel_path, v in self.configured_deps.items():
-            for repo in v:
-                flat_dependency_repos.append(
-                    os.path.relpath(
-                        os.path.join(self.vmn_root_path, rel_path, repo), self.vmn_root_path
-                    )
-                )
-
-        return flat_dependency_repos
-
     def get_be_formatted_version(self, version):
         return stamp_utils.VMNBackend.get_utemplate_formatted_version(
             version, self.template, self.hide_zero_hotfix
@@ -508,16 +494,13 @@ class IVersionsStamper(object):
                 parents=True, exist_ok=True
             )
 
-            self.configured_deps[os.path.join("../")].pop(
-                os.path.basename(self.vmn_root_path)
-            )
-            if not self.configured_deps[os.path.join("../")]:
-                self.configured_deps.pop(os.path.join("../"))
+            tmp = copy.deepcopy(self.configured_deps)
+            tmp.pop('.')
 
             ver_conf_yml = {
                 "conf": {
                     "template": self.template,
-                    "deps": self.configured_deps,
+                    "deps": tmp,
                     "extra_info": self.extra_info,
                     "hide_zero_hotfix": self.hide_zero_hotfix,
                     "create_verinfo_files": self.create_verinfo_files,
@@ -1285,30 +1268,41 @@ def initialize_backend_attrs(vmn_ctx):
 
     self_base = os.path.basename(vcs.vmn_root_path)
     self_dep = {"remote": vcs.backend.remote(), "vcs_type": vcs.backend.type()}
-    initialize_configured_deps(vcs, self_base)
-
-    vcs.configured_deps[os.path.join("../")][self_base] = self_dep
+    initialize_configured_deps(vcs, self_base, self_dep)
 
     if vcs.name is None:
         return
 
     vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
-    deps = {}
-    for rel_path, dep in vcs.configured_deps.items():
-        deps[os.path.join(vcs.vmn_root_path, rel_path)] = tuple(dep.keys())
-    vcs.actual_deps_state = HostState.get_actual_deps_state(deps, vcs.vmn_root_path)
+    vcs.actual_deps_state = HostState.get_actual_deps_state(
+        vcs.vmn_root_path,
+        vcs.configured_deps,
+    )
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
-    vcs.flat_configured_deps = vcs.get_configured_deps_full_paths()
     vcs.ver_info_from_repo = vcs.backend.get_latest_reachable_version_info(
         vcs.name, vcs.root_context
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
 
+    if vcs.tracked:
+        for rel_path, dep in vcs.configured_deps.items():
+            if rel_path.endswith(os.path.join('/', self_base)):
+                continue
+
+            if 'remote' in dep:
+                continue
+
+            if rel_path in vcs.actual_deps_state:
+                dep["remote"] = vcs.actual_deps_state[rel_path]["remote"]
+            elif rel_path in vcs.ver_info_from_repo["stamping"]["app"]["changesets"]:
+                dep["remote"] = \
+                    vcs.ver_info_from_repo["stamping"]["app"]["changesets"][rel_path]['remote']
+
     return 0
 
 
-def initialize_configured_deps(vcs, self_base):
+def initialize_configured_deps(vcs, self_base, self_dep):
     if vcs.raw_configured_deps is not None:
         vcs.configured_deps = vcs.raw_configured_deps
     if vcs.configured_deps is None:
@@ -1318,6 +1312,19 @@ def initialize_configured_deps(vcs, self_base):
         vcs.configured_deps[os.path.join("../")] = {}
     if self_base not in vcs.configured_deps[os.path.join("../")]:
         vcs.configured_deps[os.path.join("../")][self_base] = {}
+
+    vcs.configured_deps[os.path.join("../")][self_base] = self_dep
+
+    flat_deps = {}
+    for rel_path, v in vcs.configured_deps.items():
+        for repo in v:
+            key = os.path.relpath(
+                os.path.join(vcs.vmn_root_path, rel_path, repo),
+                vcs.vmn_root_path,
+            )
+            flat_deps[key] = v[repo]
+
+    vcs.configured_deps = flat_deps
 
 
 def handle_release(vmn_ctx):
@@ -1542,7 +1549,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
         else:
             status["matched_version_info"] = matched_version_info
 
-        configured_repos = set(versions_be_ifc.flat_configured_deps)
+        configured_repos = set(versions_be_ifc.configured_deps.keys())
         local_repos = set(versions_be_ifc.actual_deps_state.keys())
 
         if configured_repos - local_repos:
@@ -1998,8 +2005,10 @@ def goto_version(vcs, params, version):
         return 1
 
     data = ver_info["stamping"]["app"]
-    # TODO:: take deps from conf, actual deps, last stamp
-    deps = data["changesets"]
+    if version is not None:
+        deps = copy.deepcopy(data["changesets"])
+    else:
+        deps = copy.deepcopy(vcs.configured_deps)
 
     if check_unique:
         if not deps['.']['hash'].startswith(unique_id):
@@ -2012,7 +2021,15 @@ def goto_version(vcs, params, version):
             for rel_path, v in deps.items():
                 v["hash"] = None
 
-        _goto_version(deps, vcs.vmn_root_path)
+        try:
+            _goto_version(deps, vcs.vmn_root_path)
+        except Exception as exc:
+            LOGGER.error(
+                f"goto failed: {exc}"
+            )
+            LOGGER.debug(f"", exc_info=exc)
+
+            return 1
 
     if version is None and not params["deps_only"]:
         vcs.backend.checkout_branch()
@@ -2169,13 +2186,26 @@ def _clone_repo(args):
     return {"repo": rel_path, "status": 0, "description": None}
 
 
-def _goto_version(deps, root):
+def _goto_version(deps, vmn_root_path):
     args = []
     for rel_path, v in deps.items():
+        if "remote" not in v or not v["remote"]:
+            LOGGER.error(
+                "Failed to find a remote for a configured repository. Failing goto"
+            )
+            raise RuntimeError()
+
+        # In case the remote is a local dir
         if v["remote"].startswith("."):
-            v["remote"] = os.path.join(root, v["remote"])
+            v["remote"] = os.path.join(vmn_root_path, v["remote"])
+
         args.append(
-            (os.path.join(root, rel_path), rel_path, v["remote"], v["vcs_type"])
+            (
+                os.path.join(vmn_root_path, rel_path),
+                rel_path,
+                v["remote"],
+                v["vcs_type"]
+             )
         )
     with Pool(min(len(args), 10)) as p:
         results = p.map(_clone_repo, args)
@@ -2195,7 +2225,7 @@ def _goto_version(deps, root):
 
     args = []
     for rel_path, v in deps.items():
-        args.append((os.path.join(root, rel_path), rel_path, v["hash"]))
+        args.append((os.path.join(vmn_root_path, rel_path), rel_path, v["hash"]))
 
     with Pool(min(len(args), 20)) as p:
         results = p.map(_update_repo, args)
