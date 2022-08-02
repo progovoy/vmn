@@ -1437,7 +1437,7 @@ def handle_gen(vmn_ctx):
 
     try:
         out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    except:
+    except Exception as exc:
         LOGGER.error("Failed to gen, run with --debug for more details")
         LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
@@ -1569,7 +1569,7 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
             status["state"].remove("repos_exist_locally")
 
         err = 0
-        for repo in configured_repos & local_repos:
+        for repo in (configured_repos & local_repos):
             if repo == ".":
                 continue
 
@@ -1912,7 +1912,6 @@ def show(vcs, params, verstr=None):
 
 
 def gen(vcs, params, verstr=None):
-    ver_info = None
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {
         "repos_exist_locally",
@@ -1925,40 +1924,49 @@ def gen(vcs, params, verstr=None):
     tag_name, ver_info, status = _retrieve_version_info(
         params, vcs, verstr, expected_status, optional_status
     )
-    if ver_info is not None:
-        dirty_states = get_dirty_states(optional_status, status)
-        if params["verify_version"]:
-            if verstr is None and dirty_states:
-                LOGGER.error("The repository is in dirty state. Refusing to gen")
-                raise RuntimeError()
-            elif verstr is not None:
-                if dirty_states or ver_info["stamping"]["app"]["_version"] != verstr:
-                    LOGGER.error(
-                        f"The repository is not exactly at version: {verstr}. "
-                        f"You can use `vmn goto` in order to jump to that version.\n"
-                        f"Refusing to gen"
-                    )
-                    raise RuntimeError()
-        elif verstr is None:
-            #TODO:: reuse logic with "matching"
-            for k, v in ver_info["stamping"]["app"]["changesets"].items():
-                if k not in vcs.actual_deps_state:
-                    #TODO:: reuse goto logic
-                    LOGGER.error(f"{k} doesn't exist locally. Clone and rerun")
-                    raise RuntimeError()
-
-                v["hash"] = vcs.actual_deps_state[k]["hash"]
-
-                # when k is the "main repo" repo
-                if vcs.repo_name == k:
-                    v["hash"] = vcs.backend.last_user_changeset(vcs.name)
 
     if ver_info is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
 
         raise RuntimeError()
 
+    dirty_states = get_dirty_states(optional_status, status)
+    if params["verify_version"]:
+        # TODO: check here what will happen when using "hotfix" octa
+        if dirty_states:
+            LOGGER.error(
+                f"The repository and maybe some of its dependencies are in dirty state."
+                f"Dirty states found: {dirty_states}.\nError messages collected for dependencies:\n"
+                f"{status['err_msgs']['dirty_deps']}\n"
+                f"Refusing to gen."
+            )
+            raise RuntimeError()
+
+        if status["matched_version_info"] is not None and verstr is not None and status["matched_version_info"]["stamping"]["app"]["_version"]:
+            LOGGER.error(
+                f"The repository is not exactly at version: {verstr}. "
+                f"You can use `vmn goto` in order to jump to that version.\n"
+                f"Refusing to gen."
+            )
+            raise RuntimeError()
+
     data = ver_info["stamping"]["app"]
+    if verstr is None:
+        data["changesets"] = {}
+
+        for k, v in vcs.configured_deps.items():
+            if k not in vcs.actual_deps_state:
+                LOGGER.error(f"{k} doesn't exist locally. Use vmn goto and rerun")
+                raise RuntimeError()
+
+            data["changesets"][k] = copy.deepcopy(vcs.actual_deps_state[k])
+            data["changesets"][k]['state'] = {'clean'}
+
+            if status['repos'] and vcs.repo_name != k:
+                data["changesets"][k]['state'] = status['repos'][k]['state']
+            elif vcs.repo_name == k:
+                data["changesets"][k]['state'] = dirty_states
+
     data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         data["_version"], vcs.template, vcs.hide_zero_hotfix
     )
@@ -2042,7 +2050,7 @@ def goto_version(vcs, params, version):
             LOGGER.error(
                 f"goto failed: {exc}"
             )
-            LOGGER.debug(f"", exc_info=exc)
+            LOGGER.debug(f"", exc_info=True)
 
             return 1
 

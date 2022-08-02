@@ -284,6 +284,7 @@ def test_jinja2_gen(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
+    # TODO:: turn into parsable output so we can test it
     jinja2_content = (
         "VERSION: {{version}} \n"
         "NAME: {{name}} \n"
@@ -294,6 +295,7 @@ def test_jinja2_gen(app_layout, capfd):
         "    <h2>HASH: {{v.hash}}</h2> \n"
         "    <h2>REMOTE: {{v.remote}}</h2> \n"
         "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n"
+        "    <h2>State: {{v.state}}</h2> \n"
         "{% endfor %}\n"
     )
     app_layout.write_file_commit_and_push(
@@ -322,14 +324,27 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert out.startswith("[ERROR] The repository is in dirty state. Refusing to gen")
+    assert out.startswith(
+        "[ERROR] The repository and maybe some of its dependencies are in"
+        " dirty state.Dirty states found: {'modified'}"
+    )
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    capfd.readouterr()
 
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True, version="0.0.1")
     assert err == 1
 
     out, err = capfd.readouterr()
 
-    assert out.startswith("[ERROR] The repository is not exactly at version: 0.0.1")
+    assert out.startswith(
+        "[ERROR] The repository is not exactly at version: 0.0.1. "
+        "You can use `vmn goto` in order to jump to that version.\n"
+        "Refusing to gen."
+    )
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
     with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
@@ -353,6 +368,34 @@ def test_jinja2_gen(app_layout, capfd):
 
     err, _, _ = _stamp_app(new_name, "patch")
     assert err == 0
+
+    err = _gen(app_layout.app_name, tpath, opath)
+    assert err == 0
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = {
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        }
+    }
+    for repo in (("repo1", "git"), ("repo2", "git")):
+        be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
+
+        conf["deps"]["../"].update(
+            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
+        )
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg2", commit=False)
+    app_layout.write_file_commit_and_push("repo2", "f1.file", "msg1", push=False)
 
     err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
