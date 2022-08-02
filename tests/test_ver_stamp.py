@@ -844,7 +844,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    _configure_2_deps(app_layout, params)
+    conf = _configure_2_deps(app_layout, params)
 
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", commit=False)
