@@ -1666,8 +1666,8 @@ def test_conf(app_layout, capfd):
     assert err == 0
 
     conf = _configure_2_deps(app_layout, params)
-    conf["deps"]['../']["repo1"]["branch"] = "new_branch"
-    conf["deps"]['../']["repo2"]["hash"] = "deadbeef"
+    conf["deps"]["../"]["repo1"]["branch"] = "new_branch"
+    conf["deps"]["../"]["repo2"]["hash"] = "deadbeef"
     app_layout.write_conf(params["app_conf_path"], **conf)
 
     capfd.readouterr()
@@ -1675,16 +1675,18 @@ def test_conf(app_layout, capfd):
     assert err == 1
     out, err = capfd.readouterr()
 
-    app_layout._repos["repo1"]['_be'].be.checkout(("-b", "new_branch"))
+    app_layout._repos["repo1"]["_be"].be.checkout(("-b", "new_branch"))
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
-    conf["deps"]['../']["repo2"]["hash"] = app_layout._repos["repo2"]['_be'].be.changeset()
+    conf["deps"]["../"]["repo2"]["hash"] = app_layout._repos["repo2"][
+        "_be"
+    ].be.changeset()
     app_layout.write_conf(params["app_conf_path"], **conf)
 
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     out, err = capfd.readouterr()
-    assert out == '[INFO] 0.0.4\n'
+    assert out == "[INFO] 0.0.4\n"
 
 
 def test_version_backends_npm(app_layout, capfd):

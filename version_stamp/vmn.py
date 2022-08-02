@@ -1613,15 +1613,21 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                 status["repos"][repo]["pending"] = True
                 status["repos"][repo]["state"].add("pending")
 
-            if 'branch' in versions_be_ifc.configured_deps[repo]:
+            if "branch" in versions_be_ifc.configured_deps[repo]:
                 try:
-                    err_msg = f"Could not get active branch name " \
-                              f"for {repo}. Probably in detached head"
+                    err_msg = (
+                        f"Could not get active branch name "
+                        f"for {repo}. Probably in detached head"
+                    )
                     branch_name = be.get_active_branch()
-                    err_msg = f"{repo} repository is on a different branch: " \
-                              f"{branch_name} than what is required by the configuration: " \
-                              f"{versions_be_ifc.configured_deps[repo]['branch']}"
-                    assert branch_name == versions_be_ifc.configured_deps[repo]['branch']
+                    err_msg = (
+                        f"{repo} repository is on a different branch: "
+                        f"{branch_name} than what is required by the configuration: "
+                        f"{versions_be_ifc.configured_deps[repo]['branch']}"
+                    )
+                    assert (
+                        branch_name == versions_be_ifc.configured_deps[repo]["branch"]
+                    )
                 except Exception as exc:
                     status["dirty_deps"] = True
                     status["err_msgs"][
@@ -1631,13 +1637,13 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                     status["repos"][repo]["branch_error"] = True
                     status["repos"][repo]["state"].add("branch_error")
 
-            if 'tag' in versions_be_ifc.configured_deps[repo]:
+            if "tag" in versions_be_ifc.configured_deps[repo]:
                 try:
-                    err_msg = f"Repository in not on the requested tag by the configuration " \
-                              f"for {repo}."
-                    c1 = be.changeset(
-                        tag=versions_be_ifc.configured_deps[repo]["tag"]
+                    err_msg = (
+                        f"Repository in not on the requested tag by the configuration "
+                        f"for {repo}."
                     )
+                    c1 = be.changeset(tag=versions_be_ifc.configured_deps[repo]["tag"])
                     c2 = be.changeset()
                     assert c1 == c2
                 except Exception as exc:
@@ -1649,11 +1655,15 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                     status["repos"][repo]["tag_error"] = True
                     status["repos"][repo]["state"].add("tag_error")
 
-            if 'hash' in versions_be_ifc.configured_deps[repo]:
+            if "hash" in versions_be_ifc.configured_deps[repo]:
                 try:
-                    err_msg = f"Repository in not on the requested hash by the configuration " \
-                              f"for {repo}."
-                    assert versions_be_ifc.configured_deps[repo]["hash"] == be.changeset()
+                    err_msg = (
+                        f"Repository in not on the requested hash by the configuration "
+                        f"for {repo}."
+                    )
+                    assert (
+                        versions_be_ifc.configured_deps[repo]["hash"] == be.changeset()
+                    )
                 except Exception as exc:
                     status["dirty_deps"] = True
                     status["err_msgs"][
