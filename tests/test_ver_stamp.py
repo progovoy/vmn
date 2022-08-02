@@ -164,6 +164,38 @@ def _add_buildmetadata_to_version(
         return err
 
 
+def _configure_2_deps(app_layout, params):
+    conf = {
+        "deps": {
+            "../": {
+                "test_repo": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        }
+    }
+    for repo in (("repo1", "git"), ("repo2", "git")):
+        be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
+
+        conf["deps"]["../"].update(
+            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
+        )
+
+        be.__del__()
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    return conf
+
+
+def _configure_empty_conf(app_layout, params):
+    conf = {"deps": {}, "extra_info": False}
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    return conf
+
+
 def test_basic_stamp(app_layout):
     _init_vmn_in_repo()
     _init_vmn_in_repo(1)
@@ -376,24 +408,7 @@ def test_jinja2_gen(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
-                }
-            }
-        }
-    }
-    for repo in (("repo1", "git"), ("repo2", "git")):
-        be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
-
-        conf["deps"]["../"].update(
-            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
-        )
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    _configure_2_deps(app_layout, params)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg2", commit=False)
     app_layout.write_file_commit_and_push("repo2", "f1.file", "msg1", push=False)
@@ -829,24 +844,8 @@ def test_multi_repo_dependency(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
-                }
-            }
-        }
-    }
-    for repo in (("repo1", "git"), ("repo2", "git")):
-        be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
+    _configure_2_deps(app_layout, params)
 
-        conf["deps"]["../"].update(
-            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
-        )
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", commit=False)
 
@@ -924,28 +923,7 @@ def test_goto_deleted_repos(app_layout):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "template": "[{major}][.{minor}][.{patch}]",
-        "deps": {
-            "../": {
-                "test_repo": {
-                    "vcs_type": app_layout.be_type,
-                    "remote": app_layout._app_backend.be.remote(),
-                }
-            }
-        },
-        "extra_info": False,
-    }
-    for repo in (("repo1", "git"), ("repo2", "git")):
-        be = app_layout.create_repo(repo_name=repo[0], repo_type=repo[1])
-
-        conf["deps"]["../"].update(
-            {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
-        )
-
-        be.__del__()
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    _configure_2_deps(app_layout, params)
 
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1682,12 +1660,31 @@ def test_conf(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {"deps": {}, "extra_info": False}
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    _configure_empty_conf(app_layout, params)
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
+
+    conf = _configure_2_deps(app_layout, params)
+    conf["deps"]['../']["repo1"]["branch"] = "new_branch"
+    conf["deps"]['../']["repo2"]["hash"] = "deadbeef"
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
+    out, err = capfd.readouterr()
+
+    app_layout._repos["repo1"]['_be'].be.checkout(("-b", "new_branch"))
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    conf["deps"]['../']["repo2"]["hash"] = app_layout._repos["repo2"]['_be'].be.changeset()
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    out, err = capfd.readouterr()
+    assert out == '[INFO] 0.0.4\n'
 
 
 def test_version_backends_npm(app_layout, capfd):
@@ -1736,7 +1733,7 @@ def test_version_backends_npm(app_layout, capfd):
 
 def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     app_layout.stamp_with_previous_vmn()
-    out, err = capfd.readouterr()
+    capfd.readouterr()
     err, ver_info, _ = _stamp_app("app1", "major")
     assert err == 0
     out, err = capfd.readouterr()

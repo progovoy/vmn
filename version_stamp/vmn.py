@@ -294,7 +294,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
         tags = self.backend.tags(filter=f"{tag_name_prefix}*")
         if tags:
-            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -323,7 +323,7 @@ class IVersionsStamper(object):
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             major = max(int(major), int(props["major"]))
             major = str(major + 1)
 
@@ -333,7 +333,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             minor = max(int(minor), int(props["minor"]))
             minor = str(minor + 1)
 
@@ -342,7 +342,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             patch = max(int(patch), int(props["patch"]))
             patch = str(patch + 1)
 
@@ -350,7 +350,7 @@ class IVersionsStamper(object):
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
             tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tags[0])
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
@@ -714,7 +714,7 @@ class VersionControlStamper(IVersionsStamper):
         release_tag_name = self.serialize_vmn_tag_name(self.name, tmp["_version"])
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
 
-        props = stamp_utils.VMNBackend.deserealize_vmn_tag_name(tag_name)
+        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
         ver_info["stamping"]["app"]["_version"] = props["version"]
         ver_info["stamping"]["app"][
             "version"
@@ -1613,6 +1613,56 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                 status["repos"][repo]["pending"] = True
                 status["repos"][repo]["state"].add("pending")
 
+            if 'branch' in versions_be_ifc.configured_deps[repo]:
+                try:
+                    err_msg = f"Could not get active branch name " \
+                              f"for {repo}. Probably in detached head"
+                    branch_name = be.get_active_branch()
+                    err_msg = f"{repo} repository is on a different branch: " \
+                              f"{branch_name} than what is required by the configuration: " \
+                              f"{versions_be_ifc.configured_deps[repo]['branch']}"
+                    assert branch_name == versions_be_ifc.configured_deps[repo]['branch']
+                except Exception as exc:
+                    status["dirty_deps"] = True
+                    status["err_msgs"][
+                        "dirty_deps"
+                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
+                    status["state"].add("dirty_deps")
+                    status["repos"][repo]["branch_error"] = True
+                    status["repos"][repo]["state"].add("branch_error")
+
+            if 'tag' in versions_be_ifc.configured_deps[repo]:
+                try:
+                    err_msg = f"Repository in not on the requested tag by the configuration " \
+                              f"for {repo}."
+                    c1 = be.changeset(
+                        tag=versions_be_ifc.configured_deps[repo]["tag"]
+                    )
+                    c2 = be.changeset()
+                    assert c1 == c2
+                except Exception as exc:
+                    status["dirty_deps"] = True
+                    status["err_msgs"][
+                        "dirty_deps"
+                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
+                    status["state"].add("dirty_deps")
+                    status["repos"][repo]["tag_error"] = True
+                    status["repos"][repo]["state"].add("tag_error")
+
+            if 'hash' in versions_be_ifc.configured_deps[repo]:
+                try:
+                    err_msg = f"Repository in not on the requested hash by the configuration " \
+                              f"for {repo}."
+                    assert versions_be_ifc.configured_deps[repo]["hash"] == be.changeset()
+                except Exception as exc:
+                    status["dirty_deps"] = True
+                    status["err_msgs"][
+                        "dirty_deps"
+                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
+                    status["state"].add("dirty_deps")
+                    status["repos"][repo]["tag_error"] = True
+                    status["repos"][repo]["state"].add("tag_error")
+
             if not be.in_detached_head():
                 err = be.check_for_outgoing_changes()
                 if err:
@@ -2142,7 +2192,7 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
                 return None, None, None
         else:
             try:
-                stamp_utils.VMNBackend.deserealize_vmn_tag_name(tag_name)
+                stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
                 tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
                     tag_name
                 )
