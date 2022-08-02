@@ -534,7 +534,7 @@ class GitBackend(VMNBackend):
         cleaned_app_tag = None
         for tag in app_tags:
             # skip buildmetadata versions
-            if '+' in tag:
+            if "+" in tag:
                 continue
 
             match = re.search(regex, tag)
@@ -599,11 +599,11 @@ class GitBackend(VMNBackend):
         found = False
         # TODO: maybe use iter_commits?
         res = VMNBackend.deserealize_vmn_tag_name(tag_name)
-        tag_prefix = VMNBackend.get_root_app_name_from_name(res['app_name'])
+        tag_prefix = VMNBackend.get_root_app_name_from_name(res["app_name"])
         if tag_prefix is None:
-           tag_prefix = res['app_name']
+            tag_prefix = res["app_name"]
 
-        tags = self.tags(filter=f'{tag_prefix}*')
+        tags = self.tags(filter=f"{tag_prefix}*")
         for tag in tags:
             if found and commit_tag_obj.hexsha != self._be.commit(tag).hexsha:
                 break
