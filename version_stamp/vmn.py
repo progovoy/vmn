@@ -353,9 +353,9 @@ class IVersionsStamper(object):
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
-        return self.gen_vmn_version_from_raw_components(major, minor, patch, hotfix)
+        return self.serialize_vmn_version_hotfix(major, minor, patch, hotfix)
 
-    def gen_vmn_version_from_raw_components(self, major, minor, patch, hotfix=None):
+    def serialize_vmn_version_hotfix(self, major, minor, patch, hotfix=None):
         if self.hide_zero_hotfix and hotfix == "0":
             hotfix = None
 
@@ -565,14 +565,7 @@ class VersionControlStamper(IVersionsStamper):
             prerelease_count,
             buildmetadata=None
     ):
-        match = re.search(stamp_utils.VMN_REGEX, current_version)
-        gdict = match.groupdict()
-        if gdict["hotfix"] is None:
-            gdict["hotfix"] = str(0)
-
-        vmn_version = self.gen_vmn_version_from_raw_components(
-            gdict["major"], gdict["minor"], gdict["patch"], gdict["hotfix"]
-        )
+        vmn_version = self.get_base_vmn_version(current_version)
 
         if prerelease is None or prerelease == "release":
             if buildmetadata is not None:
@@ -604,6 +597,25 @@ class VersionControlStamper(IVersionsStamper):
         if buildmetadata is not None:
             vmn_version = f"{vmn_version}+{buildmetadata}"
 
+            match = re.search(stamp_utils.VMN_REGEX, vmn_version)
+            if match is None:
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{stamp_utils.VMN_VERSION_FORMAT} format"
+                )
+                LOGGER.error(err)
+                raise RuntimeError(err)
+
+        return vmn_version
+
+    def get_base_vmn_version(self, current_version):
+        match = re.search(stamp_utils.VMN_REGEX, current_version)
+        gdict = match.groupdict()
+        if gdict["hotfix"] is None:
+            gdict["hotfix"] = str(0)
+        vmn_version = self.serialize_vmn_version_hotfix(
+            gdict["major"], gdict["minor"], gdict["patch"], gdict["hotfix"]
+        )
         return vmn_version
 
     def find_matching_version(self, version, prerelease, prerelease_count):
@@ -1973,6 +1985,7 @@ def gen(vcs, params, verstr=None):
 
     tmplt_value = {}
     tmplt_value.update(data)
+    tmplt_value['base_version'] = vcs.get_base_vmn_version(data["_version"])
     if "root_app" in ver_info["stamping"]:
         for key, v in ver_info["stamping"]["root_app"].items():
             tmplt_value[f"root_{key}"] = v

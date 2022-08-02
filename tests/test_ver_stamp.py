@@ -284,18 +284,17 @@ def test_jinja2_gen(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
-    # TODO:: turn into parsable output so we can test it
     jinja2_content = (
-        "VERSION: {{version}} \n"
-        "NAME: {{name}} \n"
-        "BRANCH: {{stamped_on_branch}} \n"
-        "RELEASE_MODE: {{release_mode}} \n"
-        "{% for k,v in changesets.items() %} \n"
-        "    <h2>REPO: {{k}}\n"
-        "    <h2>HASH: {{v.hash}}</h2> \n"
-        "    <h2>REMOTE: {{v.remote}}</h2> \n"
-        "    <h2>VCS_TYPE: {{v.vcs_type}}</h2> \n"
-        "    <h2>State: {{v.state}}</h2> \n"
+        "VERSION: {{version}}\n"
+        "NAME: {{name}}\n"
+        "BRANCH: {{stamped_on_branch}}\n"
+        "RELEASE_MODE: {{release_mode}}\n"
+        "{% for k,v in changesets.items() %}\n"
+        "{{k}}:\n"
+        "  hash: {{v.hash}}\n"
+        "  remote: {{v.remote}}\n"
+        "  vcs_type: {{v.vcs_type}}\n"
+        "  state: {{v.state}}\n"
         "{% endfor %}\n"
     )
     app_layout.write_file_commit_and_push(
@@ -399,6 +398,16 @@ def test_jinja2_gen(app_layout, capfd):
 
     err = _gen(app_layout.app_name, tpath, opath)
     assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["VERSION"] == "0.0.3"
+        assert data["RELEASE_MODE"] == "patch"
+        assert "dirty_deps" in data["."]['state']
+        assert "modified" in data["."]['state']
+        assert "pending" in data["../repo1"]['state']
+        assert "outgoing" in data["../repo2"]['state']
+
 
 
 def test_basic_show(app_layout, capfd):
