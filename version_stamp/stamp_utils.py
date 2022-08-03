@@ -404,13 +404,17 @@ class GitBackend(VMNBackend):
 
         return None
 
-    def checkout_branch(self):
+    def checkout_branch(self, branch_name=None):
         try:
-            self.checkout(self.get_active_branch(raise_on_detached_head=False))
+            if branch_name is None:
+                branch_name = self.get_active_branch(raise_on_detached_head=False)
+
+            self.checkout(branch=branch_name)
         except Exception:
             logging.info("Failed to get branch name. Trying to checkout to master")
             LOGGER.debug("Exception info: ", exc_info=True)
-            self.checkout(rev="master")
+            # TODO:: change to some branch name that can be retreived from repo
+            self.checkout(branch="master")
 
         return self._be.active_branch.commit.hexsha
 
@@ -440,9 +444,15 @@ class GitBackend(VMNBackend):
 
         return active_branch
 
-    def checkout(self, rev=None, tag=None):
+    def checkout(self, rev=None, tag=None, branch=None):
         if tag is not None:
-            rev = tag
+            # TODO:: maybe it issafer to
+            rev = f"refs/tags/{tag}"
+        elif branch is not None:
+            # TODO:: : f"refs/heads/{branch}"
+            rev = f"{branch}"
+
+        assert rev is not None
 
         self._be.git.checkout(rev)
 

@@ -776,7 +776,7 @@ class VersionControlStamper(IVersionsStamper):
             path = self.params["version_metadata_path"]
 
             with open(path) as f:
-                ver_info["stamping"]["app"]["version_metadata_path"] = yaml.safe_load(f)
+                ver_info["stamping"]["app"]["version_metadata"] = yaml.safe_load(f)
 
         (
             buildmetadata_tag_name,
@@ -2138,6 +2138,15 @@ def goto_version(vcs, params, version):
             for rel_path, v in deps.items():
                 v["hash"] = None
 
+                if "branch" in vcs.configured_deps[rel_path]:
+                    v["branch"] = vcs.configured_deps[rel_path]["branch"]
+                if "tag" in vcs.configured_deps[rel_path]:
+                    v["branch"] = None
+                    v["tag"] = vcs.configured_deps[rel_path]["tag"]
+                if "hash" in vcs.configured_deps[rel_path]:
+                    v["branch"] = None
+                    v["tag"] = None
+                    v["hash"] = vcs.configured_deps[rel_path]["hash"]
         try:
             _goto_version(deps, vcs.vmn_root_path)
         except Exception as exc:
@@ -2218,7 +2227,7 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
 
 
 def _update_repo(args):
-    path, rel_path, changeset = args
+    path, rel_path, branch_name, tag, changeset = args
 
     client = None
     try:
@@ -2244,6 +2253,7 @@ def _update_repo(args):
 
         return {"repo": rel_path, "status": 0, "description": None}
 
+    cur_changeset = client.changeset()
     try:
         if not client.in_detached_head():
             err = client.check_for_outgoing_changes()
@@ -2256,11 +2266,16 @@ def _update_repo(args):
             if not client.in_detached_head():
                 client.pull()
 
-            rev = client.checkout_branch()
-
-            LOGGER.info("Updated {0} to {1}".format(rel_path, rev))
+            if tag is not None:
+                client.checkout(tag=tag)
+                LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
+            else:
+                rev = client.checkout_branch(branch_name=branch_name)
+                if branch_name is not None:
+                    LOGGER.info("Updated {0} to branch {1}".format(rel_path, branch_name))
+                else:
+                    LOGGER.info("Updated {0} to changeset {1}".format(rel_path, rev))
         else:
-            cur_changeset = client.changeset()
             if not client.in_detached_head():
                 client.pull()
 
@@ -2269,7 +2284,8 @@ def _update_repo(args):
             LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
     except Exception as exc:
         LOGGER.exception(
-            f"Unexpected behaviour:\nAborting update operation in {path} " "Reason:\n"
+            f"Unexpected behaviour:\n"
+            f"Aborting update operation in {path} " "Reason:\n"
         )
 
         try:
@@ -2346,7 +2362,20 @@ def _goto_version(deps, vmn_root_path):
 
     args = []
     for rel_path, v in deps.items():
-        args.append((os.path.join(vmn_root_path, rel_path), rel_path, v["hash"]))
+        branch = None
+        if "branch" in v and v["branch"] is not None:
+            branch = v["branch"]
+        tag = None
+        if "tag" in v and v["tag"] is not None:
+            tag = v["tag"]
+
+        args.append((
+            os.path.join(vmn_root_path, rel_path),
+            rel_path,
+            branch,
+            tag,
+            v["hash"],
+        ))
 
     with Pool(min(len(args), 20)) as p:
         results = p.map(_update_repo, args)
