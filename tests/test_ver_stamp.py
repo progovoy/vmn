@@ -1982,7 +1982,7 @@ def test_add_bm(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert len(yaml.safe_load(out)["versions"]) == 3
-    assert yaml.safe_load(out)["version_metadata_path"]["build_flags"] == "-g"
+    assert yaml.safe_load(out)["version_metadata"]["build_flags"] == "-g"
     assert yaml.safe_load(out)["versions"][0] == "0.0.3"
 
     app_layout.write_file_commit_and_push(
