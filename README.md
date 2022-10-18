@@ -51,6 +51,18 @@ cd local
 echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
 ```
 
+### Create a dev environment
+```sh
+# After cloning vmn repo:
+cd ./vmn
+python3 -m venv ./venv
+source ./venv/bin/activate
+
+pip install -r  ./tests/requirements.txt 
+pip install -r  ./tests/test_requirements.txt 
+pip install -e  ./
+```
+
 ### `cd` into your git repository
 ```sh
 cd to/your/repository
