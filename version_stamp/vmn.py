@@ -308,12 +308,13 @@ class IVersionsStamper(object):
 
         return counter_key, prerelease_count
 
-    def int_plus_from_tags(self, tags: list, version_number_bit: int) -> int:
+    def increase_octet(self, tag_name_prefix: str, version_number_oct: int) -> str:
+        tags = self.backend.tags(filter=f"{tag_name_prefix}*")
         if tags:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
-            version_number_bit = max(version_number_bit, int(props[self.release_mode]))
-        version_number_bit += 1
-        return version_number_bit
+            version_number_oct = max(version_number_oct, int(props[self.release_mode]))
+        version_number_oct += 1
+        return str(version_number_oct)
 
     def _advance_version(self, version):
         # TODO: maybe move up the version validity test
@@ -329,31 +330,27 @@ class IVersionsStamper(object):
 
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
-            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            major = self.int_plus_from_tags(tags, major)
+            major = self.increase_octet(tag_name_prefix, major)
 
             minor = 0
             patch = 0
             hotfix = 0
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
-            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            minor = self.int_plus_from_tags(tags, minor)
+            minor = self.increase_octet(tag_name_prefix, minor)
 
             patch = 0
             hotfix = 0
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
-            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            patch = self.int_plus_from_tags(tags, patch)
+            patch = self.increase_octet(tag_name_prefix, patch)
 
             hotfix = 0
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
-            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-            hotfix = self.int_plus_from_tags(tags, hotfix)
+            hotfix = self.increase_octet(tag_name_prefix, hotfix)
 
-        return self.serialize_vmn_version_hotfix(int(major), int(minor), int(patch), int(hotfix))
+        return self.serialize_vmn_version_hotfix(major, minor, patch, hotfix)
 
     def serialize_vmn_version_hotfix(self, major, minor, patch, hotfix=None):
         if self.hide_zero_hotfix and hotfix == "0":
