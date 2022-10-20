@@ -1558,7 +1558,6 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     assert "1.2.4" == _version
 
 
-
 def test_basic_root_show(app_layout, capfd):
     _init_vmn_in_repo()
     app_name = "root_app/app1"

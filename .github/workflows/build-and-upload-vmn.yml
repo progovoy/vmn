@@ -42,7 +42,9 @@ jobs:
     - name: run vmn stamp version
       run: |
         python3 -m pip install vmn
+        git status
         make _${{ github.event.inputs.version_type }}
+        git status
 
     - name: build pkg
       run: |
