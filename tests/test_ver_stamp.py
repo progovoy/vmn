@@ -1516,7 +1516,7 @@ def test_manual_file_adjustment(app_layout):
 
     app_layout.remove_file(file_path)
     verfile_manual_content = {
-        "version_to_stamp_from": "1.2.3",
+        "version_to_stamp_from": "0.2.3",
         "prerelease": "release",
         "prerelease_count": {},
     }
@@ -1530,7 +1530,7 @@ def test_manual_file_adjustment(app_layout):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     _version = ver_info["stamping"]["app"]["_version"]
-    assert "1.2.4" == _version
+    assert "0.2.4" == _version
 
 
 def test_basic_root_show(app_layout, capfd):

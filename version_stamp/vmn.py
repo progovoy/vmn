@@ -319,10 +319,11 @@ class IVersionsStamper(object):
         minor = gdict["minor"]
         patch = gdict["patch"]
         hotfix = gdict["hotfix"]
-        tag_name_prefix = f'{self.name.replace("/", "-")}_'
-        tags = self.backend.tags(filter=f"{tag_name_prefix}*")
-        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
+
         if self.release_mode == "major":
+            tag_name_prefix = f'{self.name.replace("/", "-")}_'
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             major = max(int(major), int(props["major"]))
             major = str(major + 1)
 
@@ -330,17 +331,26 @@ class IVersionsStamper(object):
             patch = str(0)
             hotfix = str(0)
         elif self.release_mode == "minor":
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             minor = max(int(minor), int(props["minor"]))
             minor = str(minor + 1)
 
             patch = str(0)
             hotfix = str(0)
         elif self.release_mode == "patch":
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             patch = max(int(patch), int(props["patch"]))
             patch = str(patch + 1)
 
             hotfix = str(0)
         elif self.release_mode == "hotfix":
+            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
+            tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             hotfix = max(int(hotfix), int(props["hotfix"]))
             hotfix = str(hotfix + 1)
 
