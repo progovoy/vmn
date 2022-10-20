@@ -321,7 +321,7 @@ class IVersionsStamper(object):
         match = re.search(stamp_utils.VMN_REGEX, version)
         gdict = match.groupdict()
         if gdict["hotfix"] is None:
-            gdict["hotfix"] = str(0)
+            gdict["hotfix"] = '0'
 
         major = int(gdict["major"])
         minor = int(gdict["minor"])
@@ -332,20 +332,20 @@ class IVersionsStamper(object):
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
             major = self.increase_octet(tag_name_prefix, major)
 
-            minor = 0
-            patch = 0
-            hotfix = 0
+            minor = '0'
+            patch = '0'
+            hotfix = '0'
         elif self.release_mode == "minor":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
             minor = self.increase_octet(tag_name_prefix, minor)
 
-            patch = 0
-            hotfix = 0
+            patch = '0'
+            hotfix = '0'
         elif self.release_mode == "patch":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
             patch = self.increase_octet(tag_name_prefix, patch)
 
-            hotfix = 0
+            hotfix = '0'
         elif self.release_mode == "hotfix":
             tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
             hotfix = self.increase_octet(tag_name_prefix, hotfix)
