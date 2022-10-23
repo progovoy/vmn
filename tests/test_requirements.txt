@@ -2,7 +2,7 @@ pytest
 pytest-html
 pytest-xdist
 coverage
-black
+black==22.10.0
 flake8
 wheel
 twine
