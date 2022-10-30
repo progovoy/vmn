@@ -52,7 +52,7 @@ class VMNContextMAnager(object):
             command_line = sys.argv
 
         if self.args.debug:
-            if 'vmn' != command_line[0]:
+            if not command_line[0].endswith('vmn'):
                 command_line.insert(0, 'vmn')
 
             LOGGER.debug(f"Command line: {' '.join(command_line)}")
