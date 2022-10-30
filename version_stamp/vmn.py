@@ -48,6 +48,15 @@ class VMNContextMAnager(object):
         global LOGGER
         LOGGER = stamp_utils.init_stamp_logger(self.args.debug)
 
+        if command_line is None:
+            command_line = sys.argv
+
+        if self.args.debug:
+            if 'vmn' != command_line[0]:
+                command_line.insert(0, 'vmn')
+
+            LOGGER.debug(f"Command line: {' '.join(command_line)}")
+
         cwd = os.getcwd()
         if "VMN_WORKING_DIR" in os.environ:
             cwd = os.environ["VMN_WORKING_DIR"]
