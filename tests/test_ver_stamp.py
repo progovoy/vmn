@@ -1219,6 +1219,17 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.7.0-rc1"
     assert data["prerelease"] == "rc"
 
+    _, ver_info, _ = _release_app(app_layout.app_name, "3.7.0-rc1")
+
+    assert "vmn_info" in ver_info
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "3.7.0"
+    assert data["prerelease"] == "release"
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, prerelease="rc"
+    )
+    assert err == 1
 
 def test_rc_goto(app_layout, capfd):
     _init_vmn_in_repo()

@@ -727,6 +727,7 @@ class VersionControlStamper(IVersionsStamper):
             props["version"], self.template, self.hide_zero_hotfix
         )
         ver_info["stamping"]["app"]["prerelease"] = "release"
+        ver_info["stamping"]["app"]["release_mode"] = "release"
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
