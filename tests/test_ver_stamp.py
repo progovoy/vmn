@@ -1479,6 +1479,9 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
     app_layout._app_backend.be.checkout(("-b", "new_branch"))
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
@@ -1492,8 +1495,8 @@ def test_stamp_on_branch_merge_squash(app_layout):
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
-    app_layout._app_backend.be.checkout("master")
-    app_layout.merge(from_rev="new_branch", to_rev="master", squash=True)
+    app_layout._app_backend.be.checkout(main_branch)
+    app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
 
     app_layout._app_backend.be.push()
@@ -1509,13 +1512,15 @@ def test_get_version(app_layout):
     _init_vmn_in_repo()
     _init_app(app_layout.app_name)
 
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
     app_layout._app_backend.be.checkout(("-b", "new_branch"))
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
-    app_layout._app_backend.be.checkout("master")
-    app_layout.merge(from_rev="new_branch", to_rev="master", squash=True)
+    app_layout._app_backend.be.checkout(main_branch)
+    app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
     app_layout._app_backend._origin.pull(rebase=True)
     app_layout._app_backend.be.push()
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
