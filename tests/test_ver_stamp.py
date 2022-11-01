@@ -1057,7 +1057,9 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "1.3.0-beta2"
     assert data["prerelease"] == "beta"
 
-    _, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+    out, err = capfd.readouterr()
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
@@ -1226,10 +1228,45 @@ def test_rc_stamping(app_layout, capfd):
     assert data["_version"] == "3.7.0"
     assert data["prerelease"] == "release"
 
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, prerelease="rc"
+    )
+
+    out, err = capfd.readouterr()
+    assert "[INFO] 3.7.0\n" == out
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+
+    for i in range(2):
+        app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
+        err, ver_info, _ = _stamp_app(
+            app_layout.app_name, prerelease="rc"
+        )
+
+    _, ver_info, _ = _release_app(app_layout.app_name, "3.8.0-rc2")
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, prerelease="rc"
+    )
+    assert err == 0
+
+    out, err = capfd.readouterr()
+    assert "[INFO] 3.8.0-rc3\n" == out
+
+    app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, prerelease="rc"
     )
     assert err == 1
+
+    out, err = capfd.readouterr()
+    assert out.startswith("[ERROR] The version 3.8.0 was already ")
+
 
 def test_rc_goto(app_layout, capfd):
     _init_vmn_in_repo()

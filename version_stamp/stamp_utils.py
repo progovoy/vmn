@@ -35,7 +35,6 @@ SEMVER_REGEX = (
 )
 
 _VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
-_VMN_RELEASE_NOTES_REGEX = "(?:-(?P<releasenotes>(?:rn\.[1-9]\d*))+)?"
 
 _VMN_VER_REGEX = f"{_SEMVER_VER_REGEX}" f"{_VMN_HOTFIX_REGEX}"
 
@@ -44,8 +43,7 @@ VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
 _VMN_REGEX = (
     f"{_VMN_VER_REGEX}"
     f"{_SEMVER_PRERELEASE_REGEX}"
-    f"{SEMVER_BUILDMETADATA_REGEX}"
-    f"{_VMN_RELEASE_NOTES_REGEX}$"
+    f"{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
 # Regex for matching versions stamped by vmn
@@ -65,8 +63,7 @@ VMN_TEMPLATE_REGEX = (
     "(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
     "(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
     "(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
-    "(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?"
-    "(?:\[(?P<releasenotes_template>[^\{\}]*\{releasenotes\}[^\{\}]*)\])?$"
+    "(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 
 VMN_USER_NAME = "vmn"

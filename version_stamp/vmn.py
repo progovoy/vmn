@@ -317,8 +317,9 @@ class IVersionsStamper(object):
 
         return counter_key, prerelease_count
 
-    def increase_octet(self, tag_name_prefix: str, version_number_oct: int) -> str:
+    def increase_octet(self, tag_name_prefix: str, version_number_oct: str) -> str:
         tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+        version_number_oct = int(version_number_oct)
         if tags:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
             version_number_oct = max(version_number_oct, int(props[self.release_mode]))
@@ -332,10 +333,10 @@ class IVersionsStamper(object):
         if gdict["hotfix"] is None:
             gdict["hotfix"] = "0"
 
-        major = int(gdict["major"])
-        minor = int(gdict["minor"])
-        patch = int(gdict["patch"])
-        hotfix = int(gdict["hotfix"])
+        major = gdict["major"]
+        minor = gdict["minor"]
+        patch = gdict["patch"]
+        hotfix = gdict["hotfix"]
 
         if self.release_mode == "major":
             tag_name_prefix = f'{self.name.replace("/", "-")}_'
@@ -643,6 +644,8 @@ class VersionControlStamper(IVersionsStamper):
         tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, version, prerelease, prerelease_count
         )
+        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_formatted_app_name)
+        release_tag_formatted_app_name = self.serialize_vmn_tag_name(self.name, props['version'])
 
         # Get version info for tag
         _, ver_info = self.backend.get_version_info_from_tag_name(
@@ -650,6 +653,17 @@ class VersionControlStamper(IVersionsStamper):
         )
         if ver_info is None:
             return None
+
+        # means we are trying to find a matching version that is in rc state
+        if prerelease_count:
+            # try to check if there is a release version on it
+            tags = self.backend.get_all_brother_tags(tag_formatted_app_name)
+            if release_tag_formatted_app_name in tags:
+                _, ver_info = self.backend.get_version_info_from_tag_name(
+                    release_tag_formatted_app_name
+                )
+                if ver_info is None:
+                    raise RuntimeError("Bug")
 
         # Can happen if app's name is a prefix of another app
         if ver_info["stamping"]["app"]["name"] != self.name:
@@ -816,6 +830,20 @@ class VersionControlStamper(IVersionsStamper):
                 "-r/--release-mode with one of major/minor/patch/hotfix"
             )
             raise RuntimeError()
+
+        if initialprerelease != "release" and self.release_mode is None:
+            release_tag_formatted_app_name = \
+                self.serialize_vmn_tag_name(self.name, initial_version)
+            _, ver_info = self.backend.get_version_info_from_tag_name(
+                release_tag_formatted_app_name
+            )
+
+            if ver_info is not None:
+                LOGGER.error(
+                    f"The version {initial_version} was already released. "
+                    "Will refuse to stamp prerelease version "
+                )
+                raise RuntimeError()
 
         current_version, prerelease, prerelease_count = self.gen_advanced_version(
             initial_version, initialprerelease, initialprerelease_count
@@ -1362,6 +1390,16 @@ def handle_release(vmn_ctx):
     err = initialize_backend_attrs(vmn_ctx)
     if err:
         return err
+
+    match = re.search(stamp_utils.VMN_REGEX, vmn_ctx.args.version)
+    res = match.groupdict()
+    if res["buildmetadata"]:
+        LOGGER.error(
+            f"Failed to release {vmn_ctx.args.version}. "
+            f"Releasing metadata versions is not supported"
+        )
+
+        return 1
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps"}
