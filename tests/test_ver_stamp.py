@@ -357,10 +357,9 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert out.startswith(
-        "[ERROR] The repository and maybe some of its dependencies are in"
-        " dirty state.Dirty states found: {'modified'}"
-    )
+    assert "[ERROR] The repository and maybe" \
+           " some of its dependencies are in dirty state.Dirty states" \
+           " found: {'modified'}" in out
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -371,11 +370,9 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert out.startswith(
-        "[ERROR] The repository is not exactly at version: 0.0.1. "
-        "You can use `vmn goto` in order to jump to that version.\n"
-        "Refusing to gen."
-    )
+    assert "[ERROR] The repository is not exactly at " \
+           "version: 0.0.1. You can use `vmn goto` in order " \
+           "to jump to that version.\nRefusing to gen." in out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
@@ -1903,8 +1900,8 @@ def test_add_bm(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert (
-        out == "[ERROR] When running vmn add and not on a version commit, "
-        "you must specify a specific version using -v flag\n"
+        "[ERROR] When running vmn add and not on a version commit, "
+        "you must specify a specific version using -v flag\n" in out
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -2001,9 +1998,8 @@ def test_add_bm(app_layout, capfd):
     assert err == 1
 
     out, err = capfd.readouterr()
-    assert out.startswith(
-        "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply "
-    )
+    assert "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply " in out
+
 
     app_layout.write_file_commit_and_push(
         "test_repo",
