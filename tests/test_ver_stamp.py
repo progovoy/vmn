@@ -357,9 +357,11 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert "[ERROR] The repository and maybe" \
-           " some of its dependencies are in dirty state.Dirty states" \
-           " found: {'modified'}" in out
+    assert (
+        "[ERROR] The repository and maybe"
+        " some of its dependencies are in dirty state.Dirty states"
+        " found: {'modified'}" in out
+    )
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -370,9 +372,11 @@ def test_jinja2_gen(app_layout, capfd):
 
     out, err = capfd.readouterr()
 
-    assert "[ERROR] The repository is not exactly at " \
-           "version: 0.0.1. You can use `vmn goto` in order " \
-           "to jump to that version.\nRefusing to gen." in out
+    assert (
+        "[ERROR] The repository is not exactly at "
+        "version: 0.0.1. You can use `vmn goto` in order "
+        "to jump to that version.\nRefusing to gen." in out
+    )
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
@@ -1226,9 +1230,7 @@ def test_rc_stamping(app_layout, capfd):
     assert data["prerelease"] == "release"
 
     capfd.readouterr()
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, prerelease="rc"
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
     out, err = capfd.readouterr()
     assert "[INFO] 3.7.0\n" == out
@@ -1241,24 +1243,18 @@ def test_rc_stamping(app_layout, capfd):
 
     for i in range(2):
         app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
-        err, ver_info, _ = _stamp_app(
-            app_layout.app_name, prerelease="rc"
-        )
+        err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
     _, ver_info, _ = _release_app(app_layout.app_name, "3.8.0-rc2")
     capfd.readouterr()
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, prerelease="rc"
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 0
 
     out, err = capfd.readouterr()
     assert "[INFO] 3.8.0-rc3\n" == out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, prerelease="rc"
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 1
 
     out, err = capfd.readouterr()
@@ -2004,7 +2000,6 @@ def test_add_bm(app_layout, capfd):
 
     out, err = capfd.readouterr()
     assert "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply " in out
-
 
     app_layout.write_file_commit_and_push(
         "test_repo",

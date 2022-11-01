@@ -52,8 +52,8 @@ class VMNContextMAnager(object):
             command_line = sys.argv
 
         if self.args.debug:
-            if not command_line[0].endswith('vmn'):
-                command_line.insert(0, 'vmn')
+            if not command_line[0].endswith("vmn"):
+                command_line.insert(0, "vmn")
 
             LOGGER.debug(f"Command line: {' '.join(command_line)}")
 
@@ -645,7 +645,9 @@ class VersionControlStamper(IVersionsStamper):
             self.name, version, prerelease, prerelease_count
         )
         props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_formatted_app_name)
-        release_tag_formatted_app_name = self.serialize_vmn_tag_name(self.name, props['version'])
+        release_tag_formatted_app_name = self.serialize_vmn_tag_name(
+            self.name, props["version"]
+        )
 
         # Get version info for tag
         _, ver_info = self.backend.get_version_info_from_tag_name(
@@ -832,8 +834,9 @@ class VersionControlStamper(IVersionsStamper):
             raise RuntimeError()
 
         if initialprerelease != "release" and self.release_mode is None:
-            release_tag_formatted_app_name = \
-                self.serialize_vmn_tag_name(self.name, initial_version)
+            release_tag_formatted_app_name = self.serialize_vmn_tag_name(
+                self.name, initial_version
+            )
             _, ver_info = self.backend.get_version_info_from_tag_name(
                 release_tag_formatted_app_name
             )
