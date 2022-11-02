@@ -1394,6 +1394,7 @@ def handle_release(vmn_ctx):
     if err:
         return err
 
+    # TODO:: extract method
     match = re.search(stamp_utils.VMN_REGEX, vmn_ctx.args.version)
     res = match.groupdict()
     if res["buildmetadata"]:
@@ -1442,6 +1443,18 @@ def handle_add(vmn_ctx):
         return 1
 
     ver = vmn_ctx.args.version
+
+    # TODO:: extract method
+    match = re.search(stamp_utils.VMN_REGEX, ver)
+    res = match.groupdict()
+    if res["buildmetadata"]:
+        LOGGER.error(
+            f"Failed to add to {ver}. "
+            f"Adding metadata versions to metadata versions is not supported"
+        )
+
+        return 1
+
     if ver is None and status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
