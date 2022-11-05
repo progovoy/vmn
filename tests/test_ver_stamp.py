@@ -32,8 +32,7 @@ def _init_app(app_name, starting_version="0.0.0"):
         assert len(vmn_ctx.vcs.actual_deps_state) == 1
 
         ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name,
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
 
         try:
@@ -50,8 +49,7 @@ def _release_app(app_name, version):
         err = vmn.handle_release(vmn_ctx)
 
         ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name,
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
 
         try:
@@ -76,8 +74,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
     with vmn.VMNContextMAnager(args_list) as vmn_ctx:
         err = vmn.handle_stamp(vmn_ctx)
         ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name,
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
 
         try:

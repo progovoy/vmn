@@ -104,7 +104,9 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
-    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_first_reachable_version_info(
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
         return {}
 
     @staticmethod
@@ -229,7 +231,9 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
-    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_first_reachable_version_info(
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
@@ -361,13 +365,15 @@ class GitBackend(VMNBackend):
 
                 # yay, we found the object
                 t = tag
-                if t.commit.author.name != 'vmn':
+                if t.commit.author.name != "vmn":
                     continue
 
                 break
 
             if t is None:
-                raise RuntimeError(f"Somehow did not find a tag object for tag: {tname}")
+                raise RuntimeError(
+                    f"Somehow did not find a tag object for tag: {tname}"
+                )
 
             sorted_tags.append(t)
 
@@ -386,17 +392,11 @@ class GitBackend(VMNBackend):
             tags[t.commit.hexsha].append(t)
 
         tags_commit_order = sorted(
-            tags_commit_order,
-            key=lambda t: t.commit.committed_date,
-            reverse=True
+            tags_commit_order, key=lambda t: t.commit.committed_date, reverse=True
         )
 
         for k in tags.keys():
-            tags[k] = sorted(
-                tags[k],
-                key=lambda t: t.object.tagged_date,
-                reverse=True
-            )
+            tags[k] = sorted(tags[k], key=lambda t: t.object.tagged_date, reverse=True)
 
         final_tags = []
         for tag_object in tags_commit_order:
@@ -585,7 +585,9 @@ class GitBackend(VMNBackend):
             LOGGER.info("Failed to fetch tags")
             LOGGER.debug("Exception info: ", exc_info=True)
 
-    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_first_reachable_version_info(
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
         if root:
             regex = VMN_ROOT_TAG_REGEX
         else:
@@ -595,7 +597,7 @@ class GitBackend(VMNBackend):
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
             branch = self.get_active_branch(raise_on_detached_head=False)
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
-            branch = 'HEAD'
+            branch = "HEAD"
 
         tag_formated_app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 

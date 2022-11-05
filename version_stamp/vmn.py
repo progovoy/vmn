@@ -914,7 +914,7 @@ class VersionControlStamper(IVersionsStamper):
         ver_info = self.backend.get_first_reachable_version_info(
             self.root_app_name,
             root=True,
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
 
         if ver_info is None:
@@ -1346,7 +1346,7 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name,
         vcs.root_context,
-        type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+        type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
 
@@ -1811,7 +1811,7 @@ def _init_app(versions_be_ifc, starting_version):
         ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
             versions_be_ifc.root_app_name,
             root=True,
-            type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE
+            type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
         )
         if ver_info:
             root_app_version = int(ver_info["stamping"]["root_app"]["version"]) + 1
@@ -1985,15 +1985,15 @@ def show(vcs, params, verstr=None):
         }
         status = _get_repo_status(vcs, expected_status, optional_status)
         if status["error"]:
-            LOGGER.error(
-                "Error occured when getting the repo status"
-            )
+            LOGGER.error("Error occured when getting the repo status")
 
             raise RuntimeError()
 
         if verstr is None:
             ver_info = vcs.backend.get_first_reachable_version_info(
-                vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+                vcs.name,
+                vcs.root_context,
+                stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
             )
             tag_name = get_tag_name(vcs, verstr)
         else:
@@ -2105,15 +2105,15 @@ def gen(vcs, params, verstr=None):
     }
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status["error"]:
-        LOGGER.error(
-            "Error occured when getting the repo status"
-        )
+        LOGGER.error("Error occured when getting the repo status")
 
         raise RuntimeError()
 
     if verstr is None:
         ver_info = vcs.backend.get_first_reachable_version_info(
-            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+            vcs.name,
+            vcs.root_context,
+            stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
     else:
         _, ver_info = _retrieve_version_info(vcs, verstr)
@@ -2297,9 +2297,7 @@ def _retrieve_version_info(vcs, verstr):
     if vcs.root_context:
         try:
             int(verstr)
-            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
-                tag_name
-            )
+            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
         except Exception:
             LOGGER.error("wrong version specified: root version must be an integer")
 
@@ -2307,9 +2305,7 @@ def _retrieve_version_info(vcs, verstr):
     else:
         try:
             stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
-            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
-                tag_name
-            )
+            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
         except:
             LOGGER.error(f"Wrong version specified: {verstr}")
 
@@ -2591,7 +2587,7 @@ def add_arg_release(subprasers):
         default=None,
         required=False,
         help=f"The version to release in the format: "
-             f" {stamp_utils.VMN_VERSION_FORMAT}",
+        f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
 
