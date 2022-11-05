@@ -64,6 +64,10 @@ VMN_TEMPLATE_REGEX = (
     "(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 
+RELATIVE_TO_CURRENT_VCS_POSITION_TYPE = "current"
+RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE = "branch"
+RELATIVE_TO_GLOBAL_TYPE = "global"
+
 VMN_USER_NAME = "vmn"
 LOGGER = None
 
@@ -100,7 +104,7 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
-    def get_first_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
         return {}
 
     @staticmethod
@@ -225,7 +229,7 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
-    def get_first_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
@@ -331,11 +335,11 @@ class GitBackend(VMNBackend):
             return None
 
     def tags(self, branch=None, filter=None):
-        cmd = ["--sort", "committerdate", "--merged"]
+        cmd = ["--sort", "committerdate"]
 
-        if branch is None:
-            branch = 'HEAD'
-        cmd.append(branch)
+        if branch is not None:
+            cmd.append("--merged")
+            cmd.append(branch)
 
         if filter is not None:
             cmd.append("--list")
@@ -372,8 +376,6 @@ class GitBackend(VMNBackend):
 
         tags_commit_order = []
         tags = {}
-        tmp = []
-        prev_hexsha = None
         for t in sorted_tags:
             if t.commit.hexsha not in tags:
                 tags[t.commit.hexsha] = []
@@ -583,15 +585,21 @@ class GitBackend(VMNBackend):
             LOGGER.info("Failed to fetch tags")
             LOGGER.debug("Exception info: ", exc_info=True)
 
-    def get_first_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE):
         if root:
             regex = VMN_ROOT_TAG_REGEX
         else:
             regex = VMN_TAG_REGEX
 
+        branch = None
+        if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
+            branch = self.get_active_branch(raise_on_detached_head=False)
+        elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
+            branch = 'HEAD'
+
         tag_formated_app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
-        app_tags = self.tags(filter=(f"{tag_formated_app_name}_*"))
+        app_tags = self.tags(branch=branch, filter=(f"{tag_formated_app_name}_*"))
         cleaned_app_tag = None
         for tag in app_tags:
             # skip buildmetadata versions

@@ -912,7 +912,9 @@ class VersionControlStamper(IVersionsStamper):
             return None
 
         ver_info = self.backend.get_first_reachable_version_info(
-            self.root_app_name, root=True
+            self.root_app_name,
+            root=True,
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
         )
 
         if ver_info is None:
@@ -1342,7 +1344,9 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
     vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
-        vcs.name, vcs.root_context
+        vcs.name,
+        vcs.root_context,
+        type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
 
@@ -1394,17 +1398,6 @@ def handle_release(vmn_ctx):
     if err:
         return err
 
-    # TODO:: extract method
-    match = re.search(stamp_utils.VMN_REGEX, vmn_ctx.args.version)
-    res = match.groupdict()
-    if res["buildmetadata"]:
-        LOGGER.error(
-            f"Failed to release {vmn_ctx.args.version}. "
-            f"Releasing metadata versions is not supported"
-        )
-
-        return 1
-
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps"}
 
@@ -1412,10 +1405,36 @@ def handle_release(vmn_ctx):
     if status["error"]:
         return 1
 
-    try:
-        tag_name, ver_info, _ = _retrieve_version_info(
-            None, vmn_ctx.vcs, vmn_ctx.args.version, expected_status, optional_status
+    ver = vmn_ctx.args.version
+
+    if ver:
+        # TODO:: extract method
+        match = re.search(stamp_utils.VMN_REGEX, ver)
+        res = match.groupdict()
+        if res["buildmetadata"]:
+            LOGGER.error(
+                f"Failed to release {vmn_ctx.args.version}. "
+                f"Releasing metadata versions is not supported"
+            )
+
+            return 1
+
+    if ver is None and status["matched_version_info"] is not None:
+        # Good we have found an existing version matching
+        # the actual_deps_state
+        ver = vmn_ctx.vcs.get_be_formatted_version(
+            status["matched_version_info"]["stamping"]["app"]["_version"]
         )
+    elif ver is None:
+        LOGGER.error(
+            "When running vmn release and not on a version commit, "
+            "you must specify a specific version using -v flag"
+        )
+
+        return 1
+
+    try:
+        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.error(f"Failed to release {vmn_ctx.args.version}")
@@ -1471,9 +1490,7 @@ def handle_add(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info, _ = _retrieve_version_info(
-            None, vmn_ctx.vcs, ver, expected_status, optional_status
-        )
+        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
@@ -1792,7 +1809,9 @@ def _init_app(versions_be_ifc, starting_version):
     services = {}
     if versions_be_ifc.root_app_name is not None:
         ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
-            versions_be_ifc.root_app_name, root=True
+            versions_be_ifc.root_app_name,
+            root=True,
+            type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE
         )
         if ver_info:
             root_app_version = int(ver_info["stamping"]["root_app"]["version"]) + 1
@@ -1964,9 +1983,22 @@ def show(vcs, params, verstr=None):
             "modified",
             "dirty_deps",
         }
-        tag_name, ver_info, status = _retrieve_version_info(
-            params, vcs, verstr, expected_status, optional_status
-        )
+        status = _get_repo_status(vcs, expected_status, optional_status)
+        if status["error"]:
+            LOGGER.error(
+                "Error occured when getting the repo status"
+            )
+
+            raise RuntimeError()
+
+        if verstr is None:
+            ver_info = vcs.backend.get_first_reachable_version_info(
+                vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+            )
+            tag_name = get_tag_name(vcs, verstr)
+        else:
+            tag_name, ver_info = _retrieve_version_info(vcs, verstr)
+
         if ver_info is not None:
             dirty_states = get_dirty_states(optional_status, status)
 
@@ -2071,9 +2103,20 @@ def gen(vcs, params, verstr=None):
         "modified",
         "dirty_deps",
     }
-    tag_name, ver_info, status = _retrieve_version_info(
-        params, vcs, verstr, expected_status, optional_status
-    )
+    status = _get_repo_status(vcs, expected_status, optional_status)
+    if status["error"]:
+        LOGGER.error(
+            "Error occured when getting the repo status"
+        )
+
+        raise RuntimeError()
+
+    if verstr is None:
+        ver_info = vcs.backend.get_first_reachable_version_info(
+            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+        )
+    else:
+        _, ver_info = _retrieve_version_info(vcs, verstr)
 
     if ver_info is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
@@ -2174,9 +2217,15 @@ def goto_version(vcs, params, version):
             version, unique_id = res
             check_unique = True
 
-    tag_name, ver_info, _ = _retrieve_version_info(
-        params, vcs, version, expected_status, optional_status
-    )
+    ver_info = None
+    tag_name = None
+    if version is None:
+        ver_info = vcs.backend.get_first_reachable_version_info(
+            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        )
+        tag_name = get_tag_name(vcs, version)
+    else:
+        tag_name, ver_info = _retrieve_version_info(vcs, version)
 
     if ver_info is None:
         LOGGER.error(f"No such app: {vcs.name}")
@@ -2242,49 +2291,41 @@ def goto_version(vcs, params, version):
     return 0
 
 
-def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status):
-    # TODO:: maybe remove expected status from here because now we have duplicates
-    status = _get_repo_status(vcs, expected_status, optional_status)
-    if status["error"]:
-        return None, None, None
+def _retrieve_version_info(vcs, verstr):
+    tag_name = get_tag_name(vcs, verstr)
 
+    if vcs.root_context:
+        try:
+            int(verstr)
+            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
+                tag_name
+            )
+        except Exception:
+            LOGGER.error("wrong version specified: root version must be an integer")
+
+            return None, None
+    else:
+        try:
+            stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
+            tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
+                tag_name
+            )
+        except:
+            LOGGER.error(f"Wrong version specified: {verstr}")
+
+            return None, None
+
+    if ver_info is None:
+        return None, None
+
+    return tag_name, ver_info
+
+
+def get_tag_name(vcs, verstr):
     tag_name = f'{vcs.name.replace("/", "-")}'
     if verstr is not None:
         tag_name = f"{tag_name}_{verstr}"
-
-    if verstr is None:
-        try:
-            ver_info = vcs.backend.get_first_reachable_version_info(
-                vcs.name, vcs.root_context
-            )
-        except:
-            return None, None, None
-    else:
-        if vcs.root_context:
-            try:
-                int(verstr)
-                tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
-                    tag_name
-                )
-            except Exception:
-                LOGGER.error("wrong version specified: root version must be an integer")
-
-                return None, None, None
-        else:
-            try:
-                stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
-                tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(
-                    tag_name
-                )
-            except:
-                LOGGER.error(f"Wrong version specified: {verstr}")
-
-                return None, None, None
-
-    if ver_info is None:
-        return None, None, None
-
-    return tag_name, ver_info, status
+    return tag_name
 
 
 def _update_repo(args):
@@ -2547,9 +2588,10 @@ def add_arg_release(subprasers):
     prelease.add_argument(
         "-v",
         "--version",
-        required=True,
+        default=None,
+        required=False,
         help=f"The version to release in the format: "
-        f" {stamp_utils.VMN_VERSION_FORMAT}",
+             f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
     prelease.add_argument("name", help="The application's name")
 
