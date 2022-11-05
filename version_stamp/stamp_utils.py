@@ -100,7 +100,7 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
-    def get_latest_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False):
         return {}
 
     @staticmethod
@@ -225,7 +225,7 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
-    def get_latest_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
@@ -331,21 +331,77 @@ class GitBackend(VMNBackend):
             return None
 
     def tags(self, branch=None, filter=None):
-        cmd = ["--sort", "taggerdate"]
+        cmd = ["--sort", "committerdate", "--merged"]
+
+        if branch is None:
+            branch = 'HEAD'
+        cmd.append(branch)
+
         if filter is not None:
             cmd.append("--list")
             cmd.append(filter)
-        if branch is not None:
-            cmd.append("--merged")
-            cmd.append(branch)
 
-        tags = self._be.git.tag(*cmd).split("\n")
+        tag_names = self._be.git.tag(*cmd).split("\n")
+        if len(tag_names) == 1 and tag_names[0] == "":
+            tag_names.pop(0)
 
-        tags = tags[::-1]
-        if len(tags) == 1 and tags[0] == "":
-            tags.pop(0)
+        if not tag_names:
+            return tag_names
 
-        return tags
+        sorted_tags = []
+        for tname in tag_names:
+            t = None
+            for tag in self._be.tags:
+                if tname != tag.name:
+                    continue
+
+                # yay, we found the object
+                t = tag
+                if t.commit.author.name != 'vmn':
+                    continue
+
+                break
+
+            if t is None:
+                raise RuntimeError(f"Somehow did not find a tag object for tag: {tname}")
+
+            sorted_tags.append(t)
+
+        # The order of this list does not really matter. Can be anything really
+        sorted_tags.reverse()
+
+        tags_commit_order = []
+        tags = {}
+        tmp = []
+        prev_hexsha = None
+        for t in sorted_tags:
+            if t.commit.hexsha not in tags:
+                tags[t.commit.hexsha] = []
+
+                # We want to achieve first (commit wise) tags at the head of the list
+                tags_commit_order.append(t)
+
+            tags[t.commit.hexsha].append(t)
+
+        tags_commit_order = sorted(
+            tags_commit_order,
+            key=lambda t: t.commit.committed_date,
+            reverse=True
+        )
+
+        for k in tags.keys():
+            tags[k] = sorted(
+                tags[k],
+                key=lambda t: t.object.tagged_date,
+                reverse=True
+            )
+
+        final_tags = []
+        for tag_object in tags_commit_order:
+            for t in tags[tag_object.commit.hexsha]:
+                final_tags.append(t.name)
+
+        return final_tags
 
     def get_all_brother_tags(self, tag_name):
         cmd = ["--points-at", self.changeset(tag=tag_name)]
@@ -527,7 +583,7 @@ class GitBackend(VMNBackend):
             LOGGER.info("Failed to fetch tags")
             LOGGER.debug("Exception info: ", exc_info=True)
 
-    def get_latest_reachable_version_info(self, app_name, root=False):
+    def get_first_reachable_version_info(self, app_name, root=False):
         if root:
             regex = VMN_ROOT_TAG_REGEX
         else:

@@ -911,7 +911,7 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        ver_info = self.backend.get_latest_reachable_version_info(
+        ver_info = self.backend.get_first_reachable_version_info(
             self.root_app_name, root=True
         )
 
@@ -1341,7 +1341,7 @@ def initialize_backend_attrs(vmn_ctx):
     )
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = vcs.actual_deps_state
-    vcs.ver_info_from_repo = vcs.backend.get_latest_reachable_version_info(
+    vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name, vcs.root_context
     )
     vcs.tracked = vcs.ver_info_from_repo is not None
@@ -1444,16 +1444,17 @@ def handle_add(vmn_ctx):
 
     ver = vmn_ctx.args.version
 
-    # TODO:: extract method
-    match = re.search(stamp_utils.VMN_REGEX, ver)
-    res = match.groupdict()
-    if res["buildmetadata"]:
-        LOGGER.error(
-            f"Failed to add to {ver}. "
-            f"Adding metadata versions to metadata versions is not supported"
-        )
+    if ver:
+        # TODO:: extract method
+        match = re.search(stamp_utils.VMN_REGEX, ver)
+        res = match.groupdict()
+        if res["buildmetadata"]:
+            LOGGER.error(
+                f"Failed to add to {ver}. "
+                f"Adding metadata versions to metadata versions is not supported"
+            )
 
-        return 1
+            return 1
 
     if ver is None and status["matched_version_info"] is not None:
         # Good we have found an existing version matching
@@ -1790,7 +1791,7 @@ def _init_app(versions_be_ifc, starting_version):
     root_app_version = 0
     services = {}
     if versions_be_ifc.root_app_name is not None:
-        ver_info = versions_be_ifc.backend.get_latest_reachable_version_info(
+        ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
             versions_be_ifc.root_app_name, root=True
         )
         if ver_info:
@@ -1939,7 +1940,7 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             be = stamp_utils.LocalFileBackend(vcs.vmn_root_path)
-            ver_info = be.get_latest_reachable_version_info(vcs.name, vcs.root_context)
+            ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
         else:
             if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
@@ -2253,7 +2254,7 @@ def _retrieve_version_info(params, vcs, verstr, expected_status, optional_status
 
     if verstr is None:
         try:
-            ver_info = vcs.backend.get_latest_reachable_version_info(
+            ver_info = vcs.backend.get_first_reachable_version_info(
                 vcs.name, vcs.root_context
             )
         except:
