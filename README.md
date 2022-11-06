@@ -29,8 +29,7 @@ Go ahead and read `vmn`'s docs :)
 - [x] Stamping of micro-services-like project topologies (see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
 - [x] Stamping of a project depending on multiple git repositories (see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
 - [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
-- [ ] `WIP` Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
-- [ ] `WIP` Addition of `releasenotes` for an existing version [`Semver` extension]
+- [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
 ## Installation
