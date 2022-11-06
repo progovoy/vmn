@@ -1413,7 +1413,7 @@ def handle_release(vmn_ctx):
         res = match.groupdict()
         if res["buildmetadata"]:
             LOGGER.error(
-                f"Failed to release {vmn_ctx.args.version}. "
+                f"Failed to release {ver}. "
                 f"Releasing metadata versions is not supported"
             )
 
@@ -1437,7 +1437,7 @@ def handle_release(vmn_ctx):
         tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
-        LOGGER.error(f"Failed to release {vmn_ctx.args.version}")
+        LOGGER.error(f"Failed to release {ver}")
         LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
