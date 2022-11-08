@@ -2532,7 +2532,7 @@ def validate_app_name(args):
         LOGGER.error("App name cannot start with /")
         raise RuntimeError()
     if "-" in args.name:
-        LOGGER.error("App name cannot start with -")
+        LOGGER.error("App name cannot include -")
         raise RuntimeError()
 
 
