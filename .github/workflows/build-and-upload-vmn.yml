@@ -4,7 +4,6 @@
 name: Build vmn package and upload to PyPI
 
 on:
-
   workflow_dispatch:
     inputs:
       version_type:
@@ -23,6 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
+    - id: foo
+        uses: actions/vmn-action@0.0.1
+        with:
+          release-mode: 'patch'
+          app-name: 'vmn2'
 
     - name: Install dependencies
       run: |

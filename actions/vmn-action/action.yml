@@ -1,0 +1,25 @@
+name: 'vmn-stamping'
+description: 'Everything you need for stamping'
+inputs:
+  release-mode:
+    type: choice
+    description: Desired Release Mode
+    options:
+      - major
+      - minor
+      - patch
+    required: false
+  prerelease:
+    required: false
+  app-name:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install vmn
+      shell: bash
+      run: pip3 install vmn
+    - name: release-mode
+      if: "${{ inputs.release-mode != '' }}"
+      run: "vmn stamp -r ${{inputs.release-mode}} ${{inputs.app-name}}"
