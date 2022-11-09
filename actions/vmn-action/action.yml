@@ -10,8 +10,10 @@ inputs:
       - patch
     required: false
   prerelease:
+    description: "rc"
     required: false
   app-name:
+    description: "name"
     required: true
 
 runs:
@@ -21,5 +23,6 @@ runs:
       shell: bash
       run: pip3 install vmn
     - name: release-mode
+      shell: bash
       if: "${{ inputs.release-mode != '' }}"
       run: "vmn stamp -r ${{inputs.release-mode}} ${{inputs.app-name}}"
