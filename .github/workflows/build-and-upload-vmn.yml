@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - id: foo
-      uses: actions/vmn-action@0.0.1
+      uses: actions/vmn-action@vmn_stamping_action_0.0.1
       with:
         release-mode: 'patch'
         app-name: 'vmn2'
