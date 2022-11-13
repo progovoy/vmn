@@ -13,9 +13,7 @@ on:
         - patch
         - minor
         - major
-        - rc
         required: true
-
 
 jobs:
   build_pkg:
@@ -24,9 +22,9 @@ jobs:
     - uses: actions/checkout@v2
 
     - id: foo
-      uses: ./actions/vmn-action
+      uses: actions/vmn-stamp-action@vmn_stamp_action_0.1.0
       with:
-        release-mode: 'patch'
+        release-mode: ${{inputs.version_type}}
         app-name: 'vmn2'
 
     - name: Install dependencies
