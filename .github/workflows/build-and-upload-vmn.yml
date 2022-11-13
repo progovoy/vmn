@@ -22,7 +22,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - id: foo
-      uses: actions/vmn-stamp-action@vmn_stamp_action_0.3.0
+      uses: actions/vmn-stamp-action
       with:
         release-mode: ${{inputs.version_type}}
         app-name: 'vmn2'
