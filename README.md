@@ -279,7 +279,7 @@ conf:
   hide_zero_hotfix: true
   version_backends: 
     npm:
-      path: "relative_path/to/Cargo.toml"
+      path: "relative_path/to/package.json"
 ```
 
 
