@@ -426,7 +426,7 @@ class IVersionsStamper(object):
 
             data["version"] = verstr
             with open(file_path, "w") as f:
-                json.dump(data, f, sort_keys=True)
+                json.dump(data, f, indent=4, sort_keys=True)
         except IOError as e:
             LOGGER.error(f"Error writing npm ver file: {file_path}\n")
             LOGGER.debug("Exception info: ", exc_info=True)
