@@ -1337,11 +1337,17 @@ def initialize_backend_attrs(vmn_ctx):
         return
 
     vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
+    if vcs.last_user_changeset is None:
+        raise RuntimeError(
+            "Somehow vmn was not able to get last user changeset. "
+            "This usualy means that not enough git commit history was cloned. "
+            "Check your clone / checkout process."
+        )
+
     vcs.actual_deps_state = HostState.get_actual_deps_state(
         vcs.vmn_root_path,
         vcs.configured_deps,
     )
-    assert vcs.last_user_changeset
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
     vcs.current_version_info["stamping"]["app"]["changesets"] = \
         copy.deepcopy(vcs.actual_deps_state)

@@ -511,23 +511,18 @@ class GitBackend(VMNBackend):
 
     def last_user_changeset(self, name):
         init_hex = None
-        LOGGER.debug(f"Getting last user changeset")
         for p in self._be.iter_commits():
-            LOGGER.debug(f"Current commit: {p.author}, {p.hexsha}, msg:\n{p.message}")
             if p.author.name == VMN_USER_NAME:
                 if f"{name}: Stamped initial version" in p.message:
                     return p.hexsha
 
                 if p.message.startswith(INIT_COMMIT_MESSAGE):
-                    LOGGER.debug(f"Found init commit. Saving it as init_hex")
                     init_hex = p.hexsha
 
                 continue
 
-            LOGGER.debug(f"Returning: {p.hexsha}")
             return p.hexsha
 
-        LOGGER.debug(f"No vmn commit was found. Returning inithex: {init_hex}")
         return init_hex
 
     def remote(self):
