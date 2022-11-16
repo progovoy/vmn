@@ -1561,7 +1561,14 @@ def handle_goto(vmn_ctx):
     if err:
         return err
 
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {"detached", "repos_exist_locally", "modified"}
+
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
+        return 1
 
     if vmn_ctx.args.pull:
         try:
@@ -2215,9 +2222,6 @@ def get_dirty_states(optional_status, status):
 
 
 def goto_version(vcs, params, version):
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {"detached", "repos_exist_locally", "modified"}
-
     unique_id = None
     check_unique = False
     if version is not None:
