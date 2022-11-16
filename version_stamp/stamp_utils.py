@@ -511,7 +511,9 @@ class GitBackend(VMNBackend):
 
     def last_user_changeset(self, name):
         init_hex = None
+        LOGGER.debug(f"Getting last user changeset")
         for p in self._be.iter_commits():
+            LOGGER.debug(f"Current commit: {p.message}, {p.author.name}")
             if p.author.name == VMN_USER_NAME:
                 if f"{name}: Stamped initial version" in p.message:
                     return p.hexsha
