@@ -1780,8 +1780,9 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
                 LOGGER.error(status["err_msgs"][msg])
 
         LOGGER.error(
-            f"Repository status is in unexpected state: "
-            f"{((optional_status | status['state']) - expected_status)}"
+            f"Repository status is in unexpected state:\n"
+            f"{((optional_status | status['state']) - expected_status)}\n"
+            f"versus optional:\n{optional_status}"
         )
 
         status["error"] = True
@@ -1792,9 +1793,10 @@ def _get_repo_status(versions_be_ifc, expected_status, optional_status=set()):
 
 
 def _init_app(versions_be_ifc, starting_version):
-    expected_status = {"repos_exist_locally", "repo_tracked", "modified"}
+    optional_status = {"modified", "detached"}
+    expected_status = {"repos_exist_locally", "repo_tracked"}
 
-    status = _get_repo_status(versions_be_ifc, expected_status)
+    status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
     if status["error"]:
         return 1
 
