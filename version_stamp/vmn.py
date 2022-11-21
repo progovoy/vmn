@@ -682,7 +682,7 @@ class VersionControlStamper(IVersionsStamper):
 
             # when k is the "main repo" repo
             if self.repo_name == k:
-                user_changeset = self.backend.last_user_changeset(self.name)
+                user_changeset = self.backend.last_user_changeset()
 
                 if v["hash"] != user_changeset:
                     found = False
@@ -1336,11 +1336,12 @@ def initialize_backend_attrs(vmn_ctx):
     if vcs.name is None:
         return
 
-    vcs.last_user_changeset = vcs.backend.last_user_changeset(vcs.name)
+    vcs.last_user_changeset = vcs.backend.last_user_changeset()
     if vcs.last_user_changeset is None:
         raise RuntimeError(
             "Somehow vmn was not able to get last user changeset. "
             "This usualy means that not enough git commit history was cloned. "
+            "This can happen when using shallow repositories. "
             "Check your clone / checkout process."
         )
 

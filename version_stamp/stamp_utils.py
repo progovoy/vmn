@@ -405,11 +405,19 @@ class GitBackend(VMNBackend):
 
         return final_tags
 
-    def get_all_brother_tags(self, tag_name):
-        cmd = ["--points-at", self.changeset(tag=tag_name)]
+    def get_all_commit_tags(self, hexsha):
+        cmd = ["--points-at", hexsha]
         tags = self._be.git.tag(*cmd).split("\n")
 
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
         return tags
+
+    def get_all_brother_tags(self, tag_name):
+        return self.get_all_commit_tags(
+            self.changeset(tag=tag_name)
+        )
 
     def in_detached_head(self):
         return self._be.head.is_detached
@@ -509,21 +517,22 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    def last_user_changeset(self, name):
-        init_hex = None
-        for p in self._be.iter_commits():
-            if p.author.name == VMN_USER_NAME:
-                if f"{name}: Stamped initial version" in p.message:
-                    return p.hexsha
+    # TODO:: Missing impl in LocalFileBackend
+    def last_user_changeset(self):
+        p = self._be.head.commit
+        if p.author.name == VMN_USER_NAME:
+            if p.message.startswith(INIT_COMMIT_MESSAGE):
+                return p.hexsha
 
-                if p.message.startswith(INIT_COMMIT_MESSAGE):
-                    init_hex = p.hexsha
+            tags = self.get_all_commit_tags(p.hexsha)
+            for t in tags:
+                _, verinfo = self.get_version_info_from_tag_name(t)
+                if "stamping" in verinfo:
+                    return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
 
-                continue
+            return None
 
-            return p.hexsha
-
-        return init_hex
+        return p.hexsha
 
     def remote(self):
         remote = tuple(self._origin.urls)[0]
