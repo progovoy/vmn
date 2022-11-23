@@ -387,7 +387,7 @@ class GitBackend(VMNBackend):
             if branch and shallow:
                 cur_branch = self.get_active_branch(raise_on_detached_head=False)
                 commit_obj = self._be.head.commit
-                if branch != 'HEAD':
+                if branch != "HEAD":
                     commit_obj = self.get_commit_object_from_branch_name(branch)
 
                 # TODO:: add debug print here
@@ -399,7 +399,10 @@ class GitBackend(VMNBackend):
                 for t in cur_commit_tags:
                     _, verinfo = self.get_version_info_from_tag_name(t)
                     if "stamping" in verinfo:
-                        if cur_branch != verinfo["stamping"]["app"]["stamped_on_branch"]:
+                        if (
+                            cur_branch
+                            != verinfo["stamping"]["app"]["stamped_on_branch"]
+                        ):
                             tag_commit_in_current_branch = False
 
                 if not tag_commit_in_current_branch:
@@ -437,9 +440,7 @@ class GitBackend(VMNBackend):
 
             break
         if t is None:
-            raise RuntimeError(
-                f"Somehow did not find a tag object for tag: {tname}"
-            )
+            raise RuntimeError(f"Somehow did not find a tag object for tag: {tname}")
 
         return t
 
@@ -453,9 +454,7 @@ class GitBackend(VMNBackend):
         return tags
 
     def get_all_brother_tags(self, tag_name):
-        return self.get_all_commit_tags(
-            self.changeset(tag=tag_name)
-        )
+        return self.get_all_commit_tags(self.changeset(tag=tag_name))
 
     def in_detached_head(self):
         return self._be.head.is_detached

@@ -250,7 +250,7 @@ class GitBackend(VersionControlBackend):
         self._git_backend = Repo.clone_from(
             "{0}".format(self.remote_versions_root_path),
             "{0}".format(self.root_path),
-            #depth=1,
+            # depth=1,
         )
 
         with open(os.path.join(versions_root_path, "init.txt"), "w+") as f:

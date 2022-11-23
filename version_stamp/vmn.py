@@ -1350,8 +1350,9 @@ def initialize_backend_attrs(vmn_ctx):
         vcs.configured_deps,
     )
     vcs.actual_deps_state["."]["hash"] = vcs.last_user_changeset
-    vcs.current_version_info["stamping"]["app"]["changesets"] = \
-        copy.deepcopy(vcs.actual_deps_state)
+    vcs.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
+        vcs.actual_deps_state
+    )
     vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name,
         vcs.root_context,
