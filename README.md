@@ -3,7 +3,7 @@
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
-A package for auto increasing version numbers of any application agnostic to language or architecture.
+Solution for auto increasing version numbers of any application agnostic to language or architecture.
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
 
