@@ -340,10 +340,12 @@ class GitBackend(VMNBackend):
 
     def tags(self, branch=None, filter=None):
         cmd = ["--sort", "committerdate"]
+        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
         if branch is not None:
-            cmd.append("--merged")
-            cmd.append(branch)
+            if not shallow:
+                cmd.append("--merged")
+                cmd.append(branch)
 
         if filter is not None:
             cmd.append("--list")
@@ -356,37 +358,19 @@ class GitBackend(VMNBackend):
         if not tag_names:
             return tag_names
 
-        sorted_tags = []
+        tag_objects = []
         for tname in tag_names:
-            t = None
-            for tag in self._be.tags:
-                if tname != tag.name:
-                    continue
-
-                # yay, we found the object
-                t = tag
-                if t.commit.author.name != "vmn":
-                    continue
-
-                break
-
-            if t is None:
-                raise RuntimeError(
-                    f"Somehow did not find a tag object for tag: {tname}"
-                )
-
-            sorted_tags.append(t)
-
-        # The order of this list does not really matter. Can be anything really
-        sorted_tags.reverse()
+            o = self.get_tag_object_from_tag_name(tname)
+            tag_objects.append(o)
 
         tags_commit_order = []
         tags = {}
-        for t in sorted_tags:
+        for t in tag_objects:
             if t.commit.hexsha not in tags:
                 tags[t.commit.hexsha] = []
 
-                # We want to achieve first (commit wise) tags at the head of the list
+                # We want to put earlier tags (commit wise)
+                # at the head of the list
                 tags_commit_order.append(t)
 
             tags[t.commit.hexsha].append(t)
@@ -398,12 +382,66 @@ class GitBackend(VMNBackend):
         for k in tags.keys():
             tags[k] = sorted(tags[k], key=lambda t: t.object.tagged_date, reverse=True)
 
-        final_tags = []
+        final_list_of_tag_names = []
         for tag_object in tags_commit_order:
-            for t in tags[tag_object.commit.hexsha]:
-                final_tags.append(t.name)
+            if branch and shallow:
+                cur_branch = self.get_active_branch(raise_on_detached_head=False)
+                commit_obj = self._be.head.commit
+                if branch != 'HEAD':
+                    commit_obj = self.get_commit_object_from_branch_name(branch)
 
-        return final_tags
+                # TODO:: add debug print here
+                if commit_obj.committed_date < tag_object.commit.committed_date:
+                    continue
+
+                cur_commit_tags = self.get_all_commit_tags(tag_object.commit.hexsha)
+                tag_commit_in_current_branch = True
+                for t in cur_commit_tags:
+                    _, verinfo = self.get_version_info_from_tag_name(t)
+                    if "stamping" in verinfo:
+                        if cur_branch != verinfo["stamping"]["app"]["stamped_on_branch"]:
+                            tag_commit_in_current_branch = False
+
+                if not tag_commit_in_current_branch:
+                    continue
+
+            for t in tags[tag_object.commit.hexsha]:
+                final_list_of_tag_names.append(t.name)
+
+        return final_list_of_tag_names
+
+    def get_commit_object_from_branch_name(self, bname):
+        # TODO:: Unfortunately, need to spend o(N) here
+        for branch in self._be.branches:
+            if bname != branch.name:
+                continue
+
+            # yay, we found the tag's commit object
+            return branch.commit
+
+        raise RuntimeError(
+            f"Somehow did not find a branch commit object for branch: {bname}"
+        )
+
+    def get_tag_object_from_tag_name(self, tname):
+        # TODO:: Unfortunately, need to spend o(N) here
+        t = None
+        for tag in self._be.tags:
+            if tname != tag.name:
+                continue
+
+            # yay, we found the tag's commit object
+            t = tag
+            if t.commit.author.name != "vmn":
+                continue
+
+            break
+        if t is None:
+            raise RuntimeError(
+                f"Somehow did not find a tag object for tag: {tname}"
+            )
+
+        return t
 
     def get_all_commit_tags(self, hexsha):
         cmd = ["--points-at", hexsha]
@@ -487,22 +525,29 @@ class GitBackend(VMNBackend):
                 LOGGER.error("Active branch cannot be found in detached head")
                 raise RuntimeError()
 
-            out = self._be.git.branch("--contains", self._be.head.commit.hexsha)
-            out = out.split("\n")[1:]
-            active_branches = []
-            for item in out:
-                active_branches.append(item.strip())
+            active_branch = self.get_branch_from_changeset(self._be.head.commit.hexsha)
 
-            if len(active_branches) > 1:
-                LOGGER.info(
-                    "In detached head. Commit hash: "
-                    f"{self._be.head.commit.hexsha} is "
-                    f"related to multiple branches: {active_branches}. "
-                    "Using the first one as the active branch"
-                )
+        return active_branch
 
-            active_branch = active_branches[0]
+    def get_branch_from_changeset(self, hexsha):
+        out = self._be.git.branch("--contains", hexsha)
+        out = out.split("\n")[1:]
+        if not out:
+            # TODO:: add debug print here
+            out = self._be.git.branch().split("\n")[1:]
 
+        active_branches = []
+        for item in out:
+            active_branches.append(item.strip())
+        if len(active_branches) > 1:
+            LOGGER.info(
+                "In detached head. Commit hash: "
+                f"{self._be.head.commit.hexsha} is "
+                f"related to multiple branches: {active_branches}. "
+                "Using the first one as the active branch"
+            )
+
+        active_branch = active_branches[0]
         return active_branch
 
     def checkout(self, rev=None, tag=None, branch=None):
