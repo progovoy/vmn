@@ -51,44 +51,15 @@ class VMNContextMAnager(object):
         if command_line is None:
             command_line = sys.argv
 
-        if self.args.debug:
-            if not command_line[0].endswith("vmn"):
-                command_line.insert(0, "vmn")
-
-            LOGGER.debug(f"Command line: {' '.join(command_line)}")
-
-        cwd = os.getcwd()
-        if "VMN_WORKING_DIR" in os.environ:
-            cwd = os.environ["VMN_WORKING_DIR"]
+        if not command_line[0].endswith("vmn"):
+            command_line.insert(0, "vmn")
+        LOGGER.debug(f"\nCommand line: {' '.join(command_line)}")
 
         root = False
         if "root" in self.args:
             root = self.args.root
 
-        root_path = os.path.realpath(os.path.expanduser(cwd))
-        """
-            ".git" is the default app's backend in this case. If other backends will be added, 
-            then it can be moved to the configuration file as a default_backend or similar. 
-        """
-        exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
-            os.path.join(root_path, ".git")
-        )
-        while not exist:
-            try:
-                prev_path = root_path
-                root_path = os.path.realpath(os.path.join(root_path, ".."))
-                if prev_path == root_path:
-                    raise RuntimeError()
-
-                exist = os.path.exists(
-                    os.path.join(root_path, ".vmn")
-                ) or os.path.exists(os.path.join(root_path, ".git"))
-            except:
-                root_path = None
-                break
-
-        if root_path is None:
-            raise RuntimeError("Running from an unmanaged directory")
+        root_path = stamp_utils.resolve_root_path()
 
         initial_params = {"root": root, "name": None, "root_path": root_path}
 

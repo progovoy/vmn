@@ -6,10 +6,9 @@ import logging
 import glob
 import re
 import time
-
 import yaml
-
 import configparser
+from logging.handlers import RotatingFileHandler
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
@@ -72,24 +71,98 @@ VMN_USER_NAME = "vmn"
 LOGGER = None
 
 
+def resolve_root_path():
+    cwd = os.getcwd()
+    if "VMN_WORKING_DIR" in os.environ:
+        cwd = os.environ["VMN_WORKING_DIR"]
+
+    root_path = os.path.realpath(os.path.expanduser(cwd))
+    """
+            ".git" is the default app's backend in this case. If other backends will be added, 
+            then it can be moved to the configuration file as a default_backend or similar. 
+        """
+    exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
+        os.path.join(root_path, ".git")
+    )
+    while not exist:
+        try:
+            prev_path = root_path
+            root_path = os.path.realpath(os.path.join(root_path, ".."))
+            if prev_path == root_path:
+                raise RuntimeError()
+
+            exist = os.path.exists(
+                os.path.join(root_path, ".vmn")
+            ) or os.path.exists(os.path.join(root_path, ".git"))
+        except:
+            root_path = None
+            break
+    if root_path is None:
+        raise RuntimeError("Running from an unmanaged directory")
+
+    return root_path
+
+
+class LevelFilter(logging.Filter):
+    def __init__(self, low, high):
+        self._low = low
+        self._high = high
+        logging.Filter.__init__(self)
+
+    def filter(self, record):
+        if self._low <= record.levelno <= self._high:
+            return True
+        return False
+
+
 def init_stamp_logger(debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
-    for handler in LOGGER.handlers:
-        LOGGER.removeHandler(handler)
+    hlen = len(LOGGER.handlers)
+    for h in range(hlen):
+        LOGGER.handlers[0].close()
+        LOGGER.removeHandler(LOGGER.handlers[0])
+    flen = len(LOGGER.filters)
+    for f in range(flen):
+        LOGGER.removeFilter(LOGGER.filters[0])
 
+    LOGGER.setLevel(logging.DEBUG)
+
+    fmt = "[%(levelname)s] %(message)s"
+    formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+
+    min_stdout_level = logging.INFO
     if debug:
-        LOGGER.setLevel(logging.DEBUG)
-    else:
-        LOGGER.setLevel(logging.INFO)
-    format = "[%(levelname)s] %(message)s"
+        min_stdout_level = logging.DEBUG
 
-    formatter = logging.Formatter(format, "%Y-%m-%d %H:%M:%S")
+    stdout_handler.addFilter(
+        LevelFilter(min_stdout_level, logging.INFO)
+    )
+    LOGGER.addHandler(stdout_handler)
 
-    cons_handler = logging.StreamHandler(sys.stdout)
-    cons_handler.setFormatter(formatter)
-    LOGGER.addHandler(cons_handler)
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(formatter)
+    stderr_handler.setLevel(logging.WARNING)
+    LOGGER.addHandler(stderr_handler)
+
+    log_path = resolve_root_path()
+
+    log_path = os.path.join(log_path, ".vmn", 'vmn.log')
+    rotating_file_handler = RotatingFileHandler(
+        log_path, maxBytes=100000, backupCount=1
+    )
+    rotating_file_handler.setLevel(logging.DEBUG)
+
+    BOLD = '\033[1m'
+    END = '\033[0m'
+    fmt = f"{BOLD}%(asctime)s - [%(levelname)s]{END} %(message)s"
+    formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
+    rotating_file_handler.setFormatter(formatter)
+    LOGGER.addHandler(rotating_file_handler)
 
     return LOGGER
 
