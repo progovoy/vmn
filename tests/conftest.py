@@ -40,6 +40,15 @@ class FSAppLayoutFixture(object):
         if be_type == "git":
             self._app_backend = GitBackend(self.test_app_remote, self.repo_path)
 
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
+        vmn.LOGGER = stamp_utils.init_stamp_logger(
+            os.path.join(vmn_path, vmn.LOG_FILENAME),
+            True
+        )
+
         self._repos = {
             TEST_REPO_NAME: {
                 "path": test_app.strpath,

@@ -13,8 +13,6 @@ sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 import vmn
 import stamp_utils
 
-vmn.LOGGER = stamp_utils.init_stamp_logger(True)
-
 
 def _init_vmn_in_repo(expected_res=0):
     with vmn.VMNContextMAnager(["init"]) as vmn_ctx:
@@ -267,14 +265,13 @@ def test_git_hooks(app_layout, capfd, hook_name):
     )
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "0.0.1"
     assert "modified" in tmp["dirty"]
 
@@ -282,14 +279,13 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert err == 1
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "0.0.1"
     assert "modified" in tmp["dirty"]
 
@@ -301,14 +297,13 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.2\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.2\n" == captured.out
 
 
 def test_jinja2_gen(app_layout, capfd):
@@ -319,8 +314,7 @@ def test_jinja2_gen(app_layout, capfd):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
 
@@ -361,12 +355,12 @@ def test_jinja2_gen(app_layout, capfd):
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
     assert err == 1
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
 
     assert (
         "[ERROR] The repository and maybe"
         " some of its dependencies are in dirty state.Dirty states"
-        " found: {'modified'}" in out
+        " found: {'modified'}" in captured.err
     )
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -376,12 +370,12 @@ def test_jinja2_gen(app_layout, capfd):
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True, version="0.0.1")
     assert err == 1
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
 
     assert (
         "[ERROR] The repository is not exactly at "
         "version: 0.0.1. You can use `vmn goto` in order "
-        "to jump to that version.\nRefusing to gen." in out
+        "to jump to that version.\nRefusing to gen." in captured.err
     )
 
     app_layout.write_file_commit_and_push("test_repo", "f1.txt", "content")
@@ -441,21 +435,20 @@ def test_basic_show(app_layout, capfd):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     try:
-        tmp = yaml.safe_load(out)
+        tmp = yaml.safe_load(captured.out)
         assert "dirty" not in tmp
     except Exception:
         assert False
@@ -467,21 +460,21 @@ def test_basic_show(app_layout, capfd):
     err = _show(app_layout.app_name)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "dirty" in out
+    captured = capfd.readouterr()
+    assert "dirty" in captured.out
 
     err = _show(app_layout.app_name, ignore_dirty=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     try:
-        tmp = yaml.safe_load(out)
+        tmp = yaml.safe_load(captured.out)
         assert "modified" in tmp["dirty"]
         assert "pending" in tmp["dirty"]
         assert len(tmp["dirty"]) == 2
@@ -492,9 +485,9 @@ def test_basic_show(app_layout, capfd):
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     try:
-        tmp = yaml.safe_load(out)
+        tmp = yaml.safe_load(captured.out)
         assert "modified" in tmp["dirty"]
         assert "outgoing" in tmp["dirty"]
         assert len(tmp["dirty"]) == 2
@@ -505,9 +498,9 @@ def test_basic_show(app_layout, capfd):
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     try:
-        tmp = yaml.safe_load(out)
+        tmp = yaml.safe_load(captured.out)
         assert "modified" in tmp["dirty"]
         assert len(tmp["dirty"]) == 1
     except Exception:
@@ -522,8 +515,8 @@ def test_basic_show(app_layout, capfd):
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
@@ -552,40 +545,40 @@ def test_basic_show(app_layout, capfd):
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.2\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.2\n" == captured.out
 
     err = _show(app_layout.app_name, raw=True, version="0.0.1+build.1-aef.1-its-okay")
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.1+build.1-aef.1-its-okay\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1+build.1-aef.1-its-okay\n" == captured.out
 
     err = _show(
         app_layout.app_name, display_type=True, version="0.0.1+build.1-aef.1-its-okay"
     )
     assert err == 0
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert tmp["type"] == "metadata"
     assert tmp["out"] == "0.0.1+build.1-aef.1-its-okay"
 
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(tmp["unique_id"])
 
     err = _show(app_layout.app_name, unique=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(out[:-1])
+    captured = capfd.readouterr()
+    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(captured.out[:-1])
 
     err = _show(app_layout.app_name, display_type=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert tmp["type"] == "release"
     assert tmp["out"] == "0.0.2"
 
@@ -597,9 +590,11 @@ def test_show_from_file(app_layout, capfd):
 
     err = _show(app_layout.app_name, verbose=True, from_file=True)
     assert err == 1
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     assert (
-        out == f"[INFO] Version information was not found for {app_layout.app_name}.\n"
+        captured.out ==
+        f"[INFO] Version information was not "
+        f"found for {app_layout.app_name}.\n"
     )
 
     conf = {
@@ -622,31 +617,30 @@ def test_show_from_file(app_layout, capfd):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     err = _show(app_layout.app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_res = yaml.safe_load(captured.out)
 
     err = _show(app_layout.app_name, verbose=True, from_file=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    show_file_res_empty_ver = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res_empty_ver = yaml.safe_load(captured.out)
 
     err = _show(app_layout.app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
 
     assert show_file_res_empty_ver == show_file_res
 
@@ -685,14 +679,14 @@ def test_show_from_file(app_layout, capfd):
     err = _show(app_name, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_res = yaml.safe_load(captured.out)
 
     err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
 
     show_res.pop("versions")
 
@@ -702,26 +696,26 @@ def test_show_from_file(app_layout, capfd):
     # TODO: Improve stdout in such a case
     err = _show(app_name, verbose=True, root=True)
     assert err == 1
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
 
     err = _show("root_app", verbose=True, root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_root_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_root_res = yaml.safe_load(captured.out)
 
     err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
 
     assert show_root_res == show_file_res
 
     err = _show(app_name)
     assert err == 0
-    out, err = capfd.readouterr()
-    show_minimal_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_minimal_res = yaml.safe_load(captured.out)
 
     def rmtree(top):
         for root, dirs, files in os.walk(top, topdown=False):
@@ -738,34 +732,36 @@ def test_show_from_file(app_layout, capfd):
     err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
     assert show_file_res == show_root_res
 
     err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
     assert show_file_res == show_res
 
     err = _show(app_name, version="0.0.1", from_file=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    show_file = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file = yaml.safe_load(captured.out)
 
     assert show_minimal_res == show_file
 
     err = _show(app_name, version="0.0.1", verbose=True, from_file=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    show_file_res = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    show_file_res = yaml.safe_load(captured.out)
 
     err = _show(app_name, version="0.0.1", from_file=True, unique=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    assert f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(out[:-1])
+    captured = capfd.readouterr()
+    assert (f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(
+        captured.out[:-1])
+    )
 
 
 def test_show_from_file_conf_changed(app_layout, capfd):
@@ -795,13 +791,13 @@ def test_show_from_file_conf_changed(app_layout, capfd):
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     err = _show(app_layout.app_name, from_file=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     conf = {
         "template": "[{major}][.{minor}][.{patch}]",
@@ -822,25 +818,25 @@ def test_show_from_file_conf_changed(app_layout, capfd):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.2\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.2\n" == captured.out
 
     err = _show(app_layout.app_name, from_file=True, raw=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    assert "0.0.1\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
 
     err = _show(app_layout.app_name, from_file=True, raw=True, version="0.0.2")
     assert err == 1
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     assert (
-        f"[INFO] Version information was not found for {app_layout.app_name}.\n" == out
+        f"[INFO] Version information was not found for "
+        f"{app_layout.app_name}.\n" == captured.out
     )
 
 
@@ -859,9 +855,9 @@ def test_multi_repo_dependency(app_layout, capfd):
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
-    out, err = capfd.readouterr()
-    assert "[ERROR] \nPending changes in" in out
-    assert "repo1" in out
+    captured = capfd.readouterr()
+    assert "[ERROR] \nPending changes in" in captured.err
+    assert "repo1" in captured.err
     app_layout.revert_changes("repo1")
 
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1", push=False)
@@ -869,9 +865,9 @@ def test_multi_repo_dependency(app_layout, capfd):
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
-    out, err = capfd.readouterr()
-    assert "[ERROR] \nOutgoing changes in" in out
-    assert "repo1" in out
+    captured = capfd.readouterr()
+    assert "[ERROR] \nOutgoing changes in" in captured.err
+    assert "repo1" in captured.err
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
@@ -903,7 +899,7 @@ def test_multi_repo_dependency(app_layout, capfd):
         err = vmn.handle_goto(vmn_ctx)
         assert err == 1
 
-    be = app_layout.create_repo(repo_name="repo3", repo_type="git")
+    app_layout.create_repo(repo_name="repo3", repo_type="git")
 
     with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
         err = vmn.handle_goto(vmn_ctx)
@@ -1066,7 +1062,7 @@ def test_rc_stamping(app_layout, capfd):
 
     capfd.readouterr()
     err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
-    out, err = capfd.readouterr()
+    capfd.readouterr()
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
@@ -1190,13 +1186,13 @@ def test_rc_stamping(app_layout, capfd):
     err = _show(app_layout.app_name)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "3.6.0-rc2\n" == out
+    captured = capfd.readouterr()
+    assert "3.6.0-rc2\n" == captured.out
 
     err = _show(app_layout.app_name, display_type=True)
     assert err == 0
-    out, err = capfd.readouterr()
-    tmp = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
     assert tmp["type"] == "rc"
     assert tmp["out"] == "3.6.0-rc2"
 
@@ -1206,8 +1202,8 @@ def test_rc_stamping(app_layout, capfd):
     err = _show(app_layout.app_name)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "3.6.0-rc2\n" == out
+    captured = capfd.readouterr()
+    assert "3.6.0-rc2\n" == captured.out
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
     assert err == 0
@@ -1238,8 +1234,8 @@ def test_rc_stamping(app_layout, capfd):
     capfd.readouterr()
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
-    out, err = capfd.readouterr()
-    assert "[INFO] 3.7.0\n" == out
+    captured = capfd.readouterr()
+    assert "[INFO] 3.7.0\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -1256,15 +1252,15 @@ def test_rc_stamping(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "[INFO] 3.8.0-rc3\n" == out
+    captured = capfd.readouterr()
+    assert "[INFO] 3.8.0-rc3\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
     assert err == 1
 
-    out, err = capfd.readouterr()
-    assert out.startswith("[ERROR] The version 3.8.0 was already ")
+    captured = capfd.readouterr()
+    assert captured.err.startswith("[ERROR] The version 3.8.0 was already ")
 
 
 def test_rc_goto(app_layout, capfd):
@@ -1367,14 +1363,13 @@ def test_basic_goto(app_layout, capfd):
         assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "[INFO] 1.3.0\n" == out
+    captured = capfd.readouterr()
+    assert "[INFO] 1.3.0\n" == captured.out
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
@@ -1471,8 +1466,8 @@ def test_basic_goto(app_layout, capfd):
         err = vmn.handle_goto(vmn_ctx)
         assert err == 1
 
-        out, err = capfd.readouterr()
-        assert "[ERROR] Wrong unique id\n" == out
+        captured = capfd.readouterr()
+        assert "[ERROR] Wrong unique id\n" == captured.err
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
@@ -1627,14 +1622,14 @@ def test_basic_root_show(app_layout, capfd):
     err = _show("root_app", root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "1\n" == out
+    captured = capfd.readouterr()
+    assert "1\n" == captured.out
 
     err = _show("root_app", verbose=True, root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    out_dict = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    out_dict = yaml.safe_load(captured.out)
     assert app_name == out_dict["latest_service"]
     assert len(out_dict["services"]) == 2
     assert app_name in out_dict["services"]
@@ -1642,25 +1637,25 @@ def test_basic_root_show(app_layout, capfd):
 
     err, _, _ = _stamp_app(app_name)
     assert err == 1
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     assert (
         "[ERROR] When not in release candidate mode, a release mode must be "
         "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
-        == out
+        == captured.err
     )
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
     assert err == 0
-    out, err = capfd.readouterr()
-    assert "[INFO] 0.2.2\n" == out
+    captured = capfd.readouterr()
+    assert "[INFO] 0.2.2\n" == captured.out
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.2.2"
 
     err = _show("root_app", verbose=True, root=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    out_dict = yaml.safe_load(out)
+    captured = capfd.readouterr()
+    out_dict = yaml.safe_load(captured.out)
     assert app_name == out_dict["latest_service"]
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.2"
@@ -1750,7 +1745,7 @@ def test_conf(app_layout, capfd):
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
-    out, err = capfd.readouterr()
+    capfd.readouterr()
 
     app_layout._repos["repo1"]["_be"].be.checkout(("-b", "new_branch"))
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
@@ -1762,8 +1757,8 @@ def test_conf(app_layout, capfd):
     capfd.readouterr()
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
-    out, err = capfd.readouterr()
-    assert out == "[INFO] 0.0.4\n"
+    captured = capfd.readouterr()
+    assert captured.out == "[INFO] 0.0.4\n"
 
 
 def test_version_backends_npm(app_layout, capfd):
@@ -1814,9 +1809,9 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     app_layout.stamp_with_previous_vmn()
     capfd.readouterr()
     err, ver_info, _ = _stamp_app("app1", "major")
+    captured = capfd.readouterr()
     assert err == 0
-    out, err = capfd.readouterr()
-    assert "[INFO] 0.0.3\n" == out
+    assert "[INFO] 0.0.3\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo", "f1.file", "msg1")
 
@@ -1895,8 +1890,8 @@ def test_add_bm(app_layout, capfd):
         "str1",
     )
 
-    out, err = capfd.readouterr()
-    assert not err
+    captured = capfd.readouterr()
+    assert not captured.err
 
     err = _add_buildmetadata_to_version(
         app_layout,
@@ -1905,10 +1900,10 @@ def test_add_bm(app_layout, capfd):
     )
     assert err == 1
 
-    out, err = capfd.readouterr()
+    captured = capfd.readouterr()
     assert (
         "[ERROR] When running vmn add and not on a version commit, "
-        "you must specify a specific version using -v flag\n" in out
+        "you must specify a specific version using -v flag\n" in captured.err
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -1923,20 +1918,19 @@ def test_add_bm(app_layout, capfd):
     assert err == 0
 
     # read to clear stderr and out
-    out, err = capfd.readouterr()
-    assert not err
+    capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert "0.0.2\n" == out
+    captured = capfd.readouterr()
+    assert "0.0.2\n" == captured.out
 
     err = _show(app_layout.app_name, raw=True, verbose=True)
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert len(yaml.safe_load(out)["versions"]) == 2
+    captured = capfd.readouterr()
+    assert len(yaml.safe_load(captured.out)["versions"]) == 2
 
     app_layout.write_file_commit_and_push(
         "test_repo",
@@ -1965,8 +1959,8 @@ def test_add_bm(app_layout, capfd):
     err = _show(app_layout.app_name, raw=True, verbose=True, version="0.0.2")
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert len(yaml.safe_load(out)["versions"]) == 3
+    captured = capfd.readouterr()
+    assert len(yaml.safe_load(captured.out)["versions"]) == 3
 
     err = _add_buildmetadata_to_version(
         app_layout,
@@ -2004,8 +1998,9 @@ def test_add_bm(app_layout, capfd):
     )
     assert err == 1
 
-    out, err = capfd.readouterr()
-    assert "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ doesn't comply " in out
+    captured = capfd.readouterr()
+    assert "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ " \
+           "doesn't comply " in captured.err
 
     app_layout.write_file_commit_and_push(
         "test_repo",
@@ -2055,10 +2050,10 @@ def test_add_bm(app_layout, capfd):
     )
     assert err == 0
 
-    out, err = capfd.readouterr()
-    assert len(yaml.safe_load(out)["versions"]) == 3
-    assert yaml.safe_load(out)["version_metadata"]["build_flags"] == "-g"
-    assert yaml.safe_load(out)["versions"][0] == "0.0.3"
+    captured = capfd.readouterr()
+    assert len(yaml.safe_load(captured.out)["versions"]) == 3
+    assert yaml.safe_load(captured.out)["version_metadata"]["build_flags"] == "-g"
+    assert yaml.safe_load(captured.out)["versions"][0] == "0.0.3"
 
     app_layout.write_file_commit_and_push(
         "test_repo",

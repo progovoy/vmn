@@ -81,9 +81,8 @@ def resolve_root_path():
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
         """
-    exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
-        os.path.join(root_path, ".git")
-    )
+    exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
+            os.path.exists(os.path.join(root_path, ".git"))
     while not exist:
         try:
             prev_path = root_path
@@ -91,9 +90,8 @@ def resolve_root_path():
             if prev_path == root_path:
                 raise RuntimeError()
 
-            exist = os.path.exists(
-                os.path.join(root_path, ".vmn")
-            ) or os.path.exists(os.path.join(root_path, ".git"))
+            exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
+                    os.path.exists(os.path.join(root_path, ".git"))
         except:
             root_path = None
             break
@@ -115,7 +113,7 @@ class LevelFilter(logging.Filter):
         return False
 
 
-def init_stamp_logger(debug=False):
+def init_stamp_logger(rotating_log_path, debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
@@ -149,17 +147,14 @@ def init_stamp_logger(debug=False):
     stderr_handler.setLevel(logging.WARNING)
     LOGGER.addHandler(stderr_handler)
 
-    log_path = resolve_root_path()
-
-    log_path = os.path.join(log_path, ".vmn", 'vmn.log')
     rotating_file_handler = RotatingFileHandler(
-        log_path, maxBytes=100000, backupCount=1
+        rotating_log_path, maxBytes=1024 * 10, backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
 
-    BOLD = '\033[1m'
-    END = '\033[0m'
-    fmt = f"{BOLD}%(asctime)s - [%(levelname)s]{END} %(message)s"
+    bold_char = '\033[1m'
+    end_char = '\033[0m'
+    fmt = f"{bold_char}%(asctime)s - [%(levelname)s]{end_char} %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     LOGGER.addHandler(rotating_file_handler)
@@ -178,7 +173,7 @@ class VMNBackend(object):
         return self._type
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -269,8 +264,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -293,7 +288,8 @@ class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
         VMNBackend.__init__(self, "local_file")
 
-        if not os.path.isdir(os.path.join(repo_path, ".vmn")):
+        vmn_dir_path = os.path.join(repo_path, ".vmn")
+        if not os.path.isdir(vmn_dir_path):
             raise RuntimeError(
                 "LocalFile backend needs to be initialized with a local"
                 " path containing .vmn dir in it"
@@ -305,7 +301,7 @@ class LocalFileBackend(VMNBackend):
         pass
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -473,8 +469,8 @@ class GitBackend(VMNBackend):
                     _, verinfo = self.get_version_info_from_tag_name(t)
                     if "stamping" in verinfo:
                         if (
-                            cur_branch
-                            != verinfo["stamping"]["app"]["stamped_on_branch"]
+                                cur_branch
+                                != verinfo["stamping"]["app"]["stamped_on_branch"]
                         ):
                             tag_commit_in_current_branch = False
 
@@ -712,7 +708,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             regex = VMN_ROOT_TAG_REGEX
@@ -876,30 +872,13 @@ class HostState(object):
         return actual_deps_state
 
 
-def get_client(path, from_file=False):
-    if from_file:
-        try:
-            be = LocalFileBackend(path)
-            return be, None
-        except RuntimeError:
-            err = (
-                f"path: {path} doesn't have .vmn dir so it cannot be "
-                f"used as local file backend"
-            )
-            return None, err
-
-    be_type = None
+def get_client(path):
     try:
         client = git.Repo(path, search_parent_directories=True)
         client.close()
 
-        be_type = "git"
+        be = GitBackend(path)
+        return be, None
     except git.exc.InvalidGitRepositoryError:
         err = f"repository path: {path} is not a functional git or repository.\n"
         return None, err
-
-    be = None
-    if be_type == "git":
-        be = GitBackend(path)
-
-    return be, None
