@@ -1,9 +1,12 @@
+[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+
 <p align="center">
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
-Fully automatic version managment solution for any application agnostic to language or architecture
+Fully automatic version management solution for any application agnostic to language or architecture.
+
 `vmn` is compliant with `Semver` (https://semver.org) semantics
 
 <p align="center">
