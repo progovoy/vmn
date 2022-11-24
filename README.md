@@ -5,7 +5,7 @@
   <br>
 <h1 align="center">Version managment package</h1>
 </p>
-Fully automatic version management solution for any application agnostic to language or architecture.
+Automatic version management and state recovery solution for any application agnostic to language or architecture.
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
 
