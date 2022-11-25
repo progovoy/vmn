@@ -36,12 +36,10 @@ Go ahead and read `vmn`'s docs :)
 - [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
-## Installation
+### Installation
 ```sh
 pip3 install vmn
 ```
-
-## Usage
 
 ### Create a playground
 ```sh
@@ -65,7 +63,7 @@ pip install -r  ./tests/requirements.txt
 pip install -r  ./tests/test_requirements.txt 
 pip install -e  ./
 ```
-
+## Usage
 ### `cd` into your git repository
 ```sh
 cd to/your/repository
