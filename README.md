@@ -17,39 +17,47 @@ Automatic version management and state recovery solution for any application agn
   <br>
 </p>
 
-### What is `vmn`?
+# What is `vmn`?
 `vmn` is a CLI tool and a Python library that is used for handling project versioning needs.
 
 Now go ahead and read `vmn`'s docs :)
 
-### Key features
-- [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
-- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (see [`goto`](https://github.com/final-israel/vmn#goto) section)
-- [x] Stamping of micro-services-like project topologies (see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
-- [x] Stamping of a project depending on multiple git repositories (see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
-- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
-- [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
-- [ ] `WIP` Support "root apps" that are located in different repositories
-
-### Installation
+# Play around with `vmn`
+## Create a playground
 ```sh
-pip3 install vmn
-```
+# Install vmn
+pip install vmn
 
-### Create a playground
-```sh
+# Create fake remote
 mkdir remote
 cd remote
 git init --bare
+
+# Clone from fake remote
 cd ..
 git clone ./remote ./local
 cd local
+
+# Mimic user commit
 echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
+
+# Initialize vmn for first time
+vmn init
+# Initialize app for first time
+vmn init-app my_cool_app
+
+# First stamp
+vmn stamp -r patch my_cool_app
+
+# Mimic user commit
+echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
+
+# Second stamp
+vmn stamp -r patch my_cool_app
 ```
 
-### Create a dev environment
+# Contribute
+## Create a dev environment
 ```sh
 # After cloning vmn repo:
 cd ./vmn
@@ -60,19 +68,36 @@ pip install -r  ./tests/requirements.txt
 pip install -r  ./tests/test_requirements.txt 
 pip install -e  ./
 ```
-## Usage
-### `cd` into your git repository
+
+# Key features
+- [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
+- [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
+- [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
+- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (see [`goto`](https://github.com/final-israel/vmn#goto) section)
+- [x] Stamping of micro-services-like project topologies (see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
+- [x] Stamping of a project depending on multiple git repositories (see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
+- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
+- [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
+- [ ] `WIP` Support "root apps" that are located in different repositories
+
+# Usage
+## 1. Installation
+```sh
+pip3 install vmn
+```
+
+## 2. `cd` into your git repository
 ```sh
 cd to/your/repository
 ```
 
-### `vmn init`
+## 3. `vmn init`
 ```sh
 ## Needed only once per repository.
 vmn init
 ```
 
-### `vmn stamp`
+## 4. `vmn stamp`
 ```sh
 ## Needed only once per app-name
 # will start from 0.0.0
@@ -90,7 +115,8 @@ vmn stamp -r minor <app-name2>
 ##### Note:
 `init-app` and `stamp` both support `--dry-run` flag
 
-### `vmn stamp` for release candidates
+# Detailed Documentation
+## `vmn stamp` for release candidates
 
 `vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only then release the final version.
 
@@ -111,7 +137,7 @@ vmn stamp --pr mybeta <app-name>
 vmn release -v 2.0.0-mybeta1 <app-name>
 ```
 
-### `vmn stamp` for "root apps" or microservices
+## `vmn stamp` for "root apps" or microservices
 
 `vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under the same solution. 
 
@@ -170,7 +196,7 @@ stamping:
 
 `vmn show --root my_root_app` will output `5`
 
-### `vmn show`
+## `vmn show`
 
 Use `vmn show` for displaying version information of previous `vmn stamp` commands
 
@@ -180,7 +206,7 @@ vmn show --verbose <app-name>
 vmn show -v 1.0.1 <app-name>
 ```
 
-### `vmn goto` 
+## `vmn goto` 
 
 Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to the **exact** state of you entire code for a specific version even when multiple git repositories are involved. 
 
@@ -188,7 +214,7 @@ Similar to `git checkout` but also supports checking out all configured dependen
 vmn goto -v 1.0.1 <app-name>
 ```
 
-### `vmn gen`
+## `vmn gen`
 Generates version output file based on jinja2 template
 
 `vmn gen -t path/to/jinja_template.j2 -o path/to/output.txt app_name`
@@ -247,7 +273,7 @@ RELEASE_MODE: patch
     <h2>VCS_TYPE: git</h2>
 ```
 
-### Version auto-embedding
+## Version auto-embedding
 `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
 | Backend | Description |
