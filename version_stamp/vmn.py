@@ -15,6 +15,7 @@ import tomlkit
 import json
 from packaging import version as pversion
 import jinja2
+from pprint import pformat
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
@@ -2151,6 +2152,10 @@ def gen(vcs, params, verstr=None):
     with open(params["jinja_template"]) as file_:
         template = jinja2.Template(file_.read())
 
+    LOGGER.debug(
+        f"Possible keywords for your Jinja template:\n"
+        f"{pformat(tmplt_value)}"
+    )
     out = template.render(tmplt_value)
 
     out_path = params["output"]
