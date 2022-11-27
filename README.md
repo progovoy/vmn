@@ -5,7 +5,7 @@
 <p align="center">
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
-<h1 align="center">Version managment package</h1>
+<h1 align="center">Version management package</h1>
 </p>
 Automatic version management and state recovery solution for any application agnostic to language or architecture.
 
