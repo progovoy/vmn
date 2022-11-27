@@ -5,7 +5,7 @@
 <p align="center">
   <img width="100" src="https://i.imgur.com/4gUaVKW.png">
   <br>
-<h1 align="center">Version management package</h1>
+<h1 align="center">Automatic version management solution</h1>
 </p>
 Automatic version management and state recovery solution for any application agnostic to language or architecture.
 
@@ -17,15 +17,12 @@ Automatic version management and state recovery solution for any application agn
   <br>
 </p>
 
-### What it does?
-`vmn` is a CLI tool for handling project versioning needs.
+### What is `vmn`?
+`vmn` is a CLI tool and a Python library that is used for handling project versioning needs.
 
-`vmn` can also be used like a Python library.
-
-Go ahead and read `vmn`'s docs :)
+Now go ahead and read `vmn`'s docs :)
 
 ### Key features
-
 - [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
@@ -199,32 +196,27 @@ Generates version output file based on jinja2 template
 #### Available jinja2 keywords
 ```json
 {
-  "_version": "0.0.1", 
-  "changesets":
-  {
-    ".": 
-    {
-      "hash": "ef4c6f4355d0190e4f516230f65a79ec24fc7396", 
-      "remote": "../test_repo_remote",
-      "vcs_type": "git"
-    }
-  }, 
-  "info": {}, 
-  "name": "test_app2/s1",
-  "prerelease": "release",
-  "prerelease_count": {},
-  "previous_version": "0.0.0",
-  "release_mode": "patch",
-  "stamped_on_branch": "master",
-  "version": "0.0.1",
-  "root_external_services": {},
-  "root_latest_service": "test_app2/s1",
-  "root_name": "test_app2",
-  "root_services": 
-  {
-    "test_app2/s1": "0.0.1"
-  }, 
-  "root_version": 1
+ '_version': '0.0.1',
+ 'base_version': '0.0.1',
+ 'changesets': {'.': {'hash': 'd6377170ae767cd025f6c623b838c7a99efbe7f8',
+                      'remote': '../test_repo_remote',
+                      'state': {'modified'},
+                      'vcs_type': 'git'}},
+ 'info': {},
+ "name": "test_app2/s1",
+ 'prerelease': 'release',
+ 'prerelease_count': {},
+ 'previous_version': '0.0.0',
+ 'release_mode': 'patch',
+ 'stamped_on_branch': 'main',
+ 'version': '0.0.1',
+ "root_latest_service": "test_app2/s1",
+ "root_name": "test_app2",
+ "root_services": 
+ {
+   "test_app2/s1": "0.0.1"
+ }, 
+ "root_version": 1,
 }
 ```
 
