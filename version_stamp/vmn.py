@@ -1079,6 +1079,23 @@ class VersionControlStamper(IVersionsStamper):
                 LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
             else:
                 self.backend.push(all_tags)
+
+                count = 0
+                res = self.backend.check_for_outgoing_changes()
+                while count < 5 and res:
+                    count += 1
+                    LOGGER.error(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
+                    )
+                    time.sleep(count)
+                    res = self.backend.check_for_outgoing_changes()
+
+                if count == 5 and res:
+                    raise RuntimeError(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
+                    )
         except Exception:
             LOGGER.debug("Logged Exception message:", exc_info=True)
             LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")

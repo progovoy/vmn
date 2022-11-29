@@ -566,7 +566,11 @@ class GitBackend(VMNBackend):
         )
 
         if len(outgoing) > 0:
-            err = f"Outgoing changes in {self.root()} from branch {branch_name} ({self._origin.name}/{branch_name}..{branch_name})"
+            err = f"Outgoing changes in {self.root()} " \
+                  f"from branch {branch_name} " \
+                  f"({self._origin.name}/{branch_name}..{branch_name})\n" \
+                  f"The commits that are outgoing are: {outgoing}"
+
             return err
 
         return None
