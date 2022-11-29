@@ -2196,6 +2196,17 @@ def get_dirty_states(optional_status, status):
     }
     dirty_states -= {"detached", "repos_exist_locally"}
 
+    try:
+        debug_msg = ''
+        for k in status["err_msgs"].keys():
+            if k in dirty_states:
+                debug_msg = f"{debug_msg}\n{status['err_msgs'][k]}"
+
+        if debug_msg:
+            LOGGER.debug(f'Debug for dirty states call:\n{debug_msg}')
+    except Exception as exc:
+        pass
+
     return dirty_states
 
 
