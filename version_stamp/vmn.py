@@ -46,11 +46,13 @@ LOGGER = None
 
 class VMNContextMAnager(object):
     def __init__(self, command_line):
-        root_path = stamp_utils.resolve_root_path()
-        vmn_path = os.path.join(root_path, ".vmn")
-
         self.args = parse_user_commands(command_line)
         global LOGGER
+
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
         LOGGER = stamp_utils.init_stamp_logger(
             os.path.join(vmn_path, LOG_FILENAME),
             self.args.debug
@@ -2525,15 +2527,6 @@ def _goto_version(deps, vmn_root_path):
 
 
 def main(command_line=None):
-    global LOGGER
-
-    root_path = stamp_utils.resolve_root_path()
-    vmn_path = os.path.join(root_path, ".vmn")
-    pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
-
-    LOGGER = stamp_utils.init_stamp_logger(
-        os.path.join(vmn_path, LOG_FILENAME)
-    )
     try:
         return vmn_run(command_line)
     except Exception as exc:
