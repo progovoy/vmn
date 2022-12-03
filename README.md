@@ -11,6 +11,9 @@
   <a href="#badge">
     <img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
   </a>
+  <a href="#badge">
+    <img alt="vmn: supported platfroms" src="https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen">
+  </a>
   
   `vmn` is compliant with `Semver` (https://semver.org) semantics
   
