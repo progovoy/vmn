@@ -16,6 +16,15 @@
   
 </p>
 
+### Badge
+Let people know that your package is managed using **vmn** by including this badge in your readme.
+
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
+
+```md
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
+```
+
 <p align="center">
   <br>
   <img width="800" src="https://i.imgur.com/dwmhs3v.png">
