@@ -1,15 +1,20 @@
-[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
-
+<h1 align="center" style="border-bottom: none;">🥇🏷️Automatic version management solution</h1>
+<h3 align="center">Automatic version management and state recovery solution for any application agnostic to language or architecture.</h3>
 
 <p align="center">
-  <img width="100" src="https://i.imgur.com/4gUaVKW.png">
-  <br>
-<h1 align="center">Automatic version management solution</h1>
+  
+  [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+  [![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn) 
+  <a href="#badge">
+    <img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/final-israel/vmn">
+  </a>
+  <a href="#badge">
+    <img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
+  </a>
+  
+  `vmn` is compliant with `Semver` (https://semver.org) semantics
+  
 </p>
-Automatic version management and state recovery solution for any application agnostic to language or architecture.
-
-`vmn` is compliant with `Semver` (https://semver.org) semantics
 
 <p align="center">
   <br>
