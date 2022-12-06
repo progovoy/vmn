@@ -101,6 +101,9 @@ pip install -e  ./
 ## 1. Installation
 ```sh
 pip3 install vmn
+
+# Another option (and a better one) is to use pipX (https://github.com/pypa/pipx):
+pipx install vmn
 ```
 
 ## 2. `cd` into your git repository
