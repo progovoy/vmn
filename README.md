@@ -1,5 +1,5 @@
 <h1 align="center" style="border-bottom: none;">🥇🏷️Automatic version management solution</h1>
-<h3 align="center">Automatic version management and state recovery solution for any application agnostic to language or architecture.</h3>
+<h3 align="center">Automatic version management and state recovery solution for any application agnostic to language or architecture</h3>
 
 <p align="center">
   
@@ -20,7 +20,7 @@
 </p>
 
 ### Badge
-Let people know that your package is managed using **vmn** by including this badge in your readme.
+Let people know that your repository is managed by **vmn** by including this badge in your readme.
 
 [![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
 
