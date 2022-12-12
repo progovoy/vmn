@@ -28,17 +28,17 @@ LOGGER.addHandler(cons_handler)
 
 class FSAppLayoutFixture(object):
     def __init__(self, tmpdir, be_type):
-        test_app = tmpdir.mkdir(TEST_REPO_NAME)
-        test_app_remote = tmpdir.mkdir("test_repo_remote")
-        self.base_dir = test_app.dirname
+        test_app_remote = tmpdir.mkdir(f"{TEST_REPO_NAME}_remote")
+        self.base_dir = test_app_remote.dirname
         self.be_type = be_type
         self.test_app_remote = test_app_remote.strpath
-        self.repo_path = test_app.strpath
+        self.repo_path = os.path.join(self.base_dir, f"{TEST_REPO_NAME}_0")
         self.app_name = "test_app"
-        os.environ["VMN_WORKING_DIR"] = self.repo_path
 
         if be_type == "git":
             self._app_backend = GitBackend(self.test_app_remote, self.repo_path)
+
+        self.set_working_repo(self.repo_path)
 
         root_path = stamp_utils.resolve_root_path()
         vmn_path = os.path.join(root_path, ".vmn")
@@ -50,11 +50,12 @@ class FSAppLayoutFixture(object):
         )
 
         self._repos = {
-            TEST_REPO_NAME: {
-                "path": test_app.strpath,
+            f"{TEST_REPO_NAME}_0": {
+                "path": self.repo_path,
                 "type": be_type,
-                "remote": test_app_remote.strpath,
+                "remote": self.test_app_remote,
                 "_be": self._app_backend,
+                "clones_paths": [self.repo_path]
             }
         }
 
@@ -64,19 +65,24 @@ class FSAppLayoutFixture(object):
         for val in self._repos.values():
             shutil.rmtree(val["path"])
 
+    def set_working_repo(self, repo_path):
+        os.environ["VMN_WORKING_DIR"] = repo_path
+
     def create_repo(self, repo_name, repo_type):
-        path = os.path.join(self.base_dir, repo_name)
+        path = os.path.join(self.base_dir, f"{repo_name}")
+        remote_path = f"{path}_remote"
 
         if repo_type == "git":
-            be = GitBackend("{0}_remote".format(path), path)
+            be = GitBackend(remote_path, path)
         else:
             raise RuntimeError("Unknown repository type provided")
 
         self._repos[repo_name] = {
             "path": path,
             "type": repo_type,
-            "remote": "{0}_remote".format(path),
+            "remote": remote_path,
             "_be": be,
+            "clones_paths": [path]
         }
 
         self.write_file_commit_and_push(
@@ -84,6 +90,27 @@ class FSAppLayoutFixture(object):
         )
 
         return be
+
+    def create_new_clone(self, repo_name, depth=0):
+        import subprocess
+
+        base_cmd = ["git", "clone"]
+        if depth:
+            base_cmd.append(f"--depth={depth}")
+
+        base_cmd.append(f"file://{self._repos[repo_name]['remote']}")
+
+        suffix_len = len("remote")
+        local_path = \
+            f"{self._repos[repo_name]['remote'][:-suffix_len]}{len(self._repos[repo_name]['clones_paths'])}"
+        self._repos[repo_name]['clones_paths'].append(local_path)
+
+        base_cmd.append(local_path)
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+        subprocess.call(base_cmd, cwd=self.base_dir)
+
+        return local_path
 
     def merge(self, from_rev, to_rev, squash=False):
         import subprocess
@@ -99,6 +126,29 @@ class FSAppLayoutFixture(object):
             ["git", "commit", "-m", "Merge {} in {}".format(from_rev, to_rev)],
             cwd=self.repo_path,
         )
+
+    def get_all_tags(self):
+        cmd = ["--sort", "taggerdate"]
+        tags = self._app_backend._git_backend.git.tag(*cmd).split("\n")
+
+        tags = tags[::-1]
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
+        return tags
+
+    def create_tag(self, commit_hash, tag_name):
+        import subprocess
+
+        base_cmd = ["git", "tag", tag_name, commit_hash]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+        base_cmd = ["git", "push", "--tags"]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
 
     def stamp_with_previous_vmn(self):
         import subprocess
@@ -117,7 +167,7 @@ class FSAppLayoutFixture(object):
             "-t",
             f"-u{os.getuid()}:{os.getgid()}",
             "-v",
-            f"{self.repo_path}:/test_repo",
+            f"{self.repo_path}:/test_repo_0",
             "-v",
             f"{self.base_dir}:{self.base_dir}",
             "previous_vmn_stamper:latest",

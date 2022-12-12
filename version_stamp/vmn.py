@@ -278,7 +278,10 @@ class IVersionsStamper(object):
             prerelease_count[counter_key] = 0
 
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
-        tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+        tags = self.backend.tags(
+            filter=f"{tag_name_prefix}*",
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+        )
         if tags:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
 
@@ -295,7 +298,10 @@ class IVersionsStamper(object):
         return counter_key, prerelease_count
 
     def increase_octet(self, tag_name_prefix: str, version_number_oct: str) -> str:
-        tags = self.backend.tags(filter=f"{tag_name_prefix}*")
+        tags = self.backend.tags(
+            filter=f"{tag_name_prefix}*",
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+        )
         version_number_oct = int(version_number_oct)
         if tags:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
