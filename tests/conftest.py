@@ -46,8 +46,7 @@ class FSAppLayoutFixture(object):
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
         vmn.LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, vmn.LOG_FILENAME),
-            True
+            os.path.join(vmn_path, vmn.LOG_FILENAME), True
         )
 
         self._repos = {
@@ -56,7 +55,7 @@ class FSAppLayoutFixture(object):
                 "type": be_type,
                 "remote": self.test_app_remote,
                 "_be": self._app_backend,
-                "clones_paths": [self.repo_path]
+                "clones_paths": [self.repo_path],
             }
         }
 
@@ -83,7 +82,7 @@ class FSAppLayoutFixture(object):
             "type": repo_type,
             "remote": remote_path,
             "_be": be,
-            "clones_paths": [path]
+            "clones_paths": [path],
         }
 
         self.write_file_commit_and_push(
@@ -102,9 +101,8 @@ class FSAppLayoutFixture(object):
         base_cmd.append(f"file://{self._repos[repo_name]['remote']}")
 
         suffix_len = len("remote")
-        local_path = \
-            f"{self._repos[repo_name]['remote'][:-suffix_len]}{len(self._repos[repo_name]['clones_paths'])}"
-        self._repos[repo_name]['clones_paths'].append(local_path)
+        local_path = f"{self._repos[repo_name]['remote'][:-suffix_len]}{len(self._repos[repo_name]['clones_paths'])}"
+        self._repos[repo_name]["clones_paths"].append(local_path)
 
         base_cmd.append(local_path)
 
@@ -191,13 +189,13 @@ class FSAppLayoutFixture(object):
         client.close()
 
     def write_file_commit_and_push(
-            self,
-            repo_name,
-            file_relative_path,
-            content,
-            commit=True,
-            push=True,
-            add_exec=False,
+        self,
+        repo_name,
+        file_relative_path,
+        content,
+        commit=True,
+        push=True,
+        add_exec=False,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -258,13 +256,13 @@ class FSAppLayoutFixture(object):
             self._app_backend.remove_file(file_path)
 
     def write_conf(
-            self,
-            app_conf_path,
-            template=None,
-            deps=None,
-            extra_info=None,
-            version_backends=None,
-            create_verinfo_files=None,
+        self,
+        app_conf_path,
+        template=None,
+        deps=None,
+        extra_info=None,
+        version_backends=None,
+        create_verinfo_files=None,
     ):
         with open(app_conf_path, "r+") as f:
             data = yaml.safe_load(f)

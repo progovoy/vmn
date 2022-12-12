@@ -81,8 +81,9 @@ def resolve_root_path():
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
         """
-    exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
-            os.path.exists(os.path.join(root_path, ".git"))
+    exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
+        os.path.join(root_path, ".git")
+    )
     while not exist:
         try:
             prev_path = root_path
@@ -90,8 +91,9 @@ def resolve_root_path():
             if prev_path == root_path:
                 raise RuntimeError()
 
-            exist = os.path.exists(os.path.join(root_path, ".vmn")) or \
-                    os.path.exists(os.path.join(root_path, ".git"))
+            exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
+                os.path.join(root_path, ".git")
+            )
         except:
             root_path = None
             break
@@ -137,9 +139,7 @@ def init_stamp_logger(rotating_log_path, debug=False):
     if debug:
         min_stdout_level = logging.DEBUG
 
-    stdout_handler.addFilter(
-        LevelFilter(min_stdout_level, logging.INFO)
-    )
+    stdout_handler.addFilter(LevelFilter(min_stdout_level, logging.INFO))
     LOGGER.addHandler(stdout_handler)
 
     stderr_handler = logging.StreamHandler(sys.stderr)
@@ -148,12 +148,14 @@ def init_stamp_logger(rotating_log_path, debug=False):
     LOGGER.addHandler(stderr_handler)
 
     rotating_file_handler = RotatingFileHandler(
-        rotating_log_path, maxBytes=1024 * 10, backupCount=1,
+        rotating_log_path,
+        maxBytes=1024 * 10,
+        backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
 
-    bold_char = '\033[1m'
-    end_char = '\033[0m'
+    bold_char = "\033[1m"
+    end_char = "\033[0m"
     fmt = f"{bold_char}%(asctime)s - [%(levelname)s]{end_char} %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
@@ -173,7 +175,7 @@ class VMNBackend(object):
         return self._type
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -264,8 +266,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                    f"{octat}_template" in template
-                    and template[f"{octat}_template"] is not None
+                f"{octat}_template" in template
+                and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -301,7 +303,7 @@ class LocalFileBackend(VMNBackend):
         pass
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -409,7 +411,9 @@ class GitBackend(VMNBackend):
 
     def tags(self, filter, type=RELATIVE_TO_GLOBAL_TYPE):
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
-            cmd_suffix = f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
+            cmd_suffix = (
+                f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
+            )
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:
@@ -421,7 +425,7 @@ class GitBackend(VMNBackend):
             f"--author={VMN_USER_NAME}",
             "--pretty=%H,,,%D",
             "--decorate=short",
-            cmd_suffix
+            cmd_suffix,
         ]
 
         tag_names = self._be.git.log(*cmd).split("\n")
@@ -431,11 +435,11 @@ class GitBackend(VMNBackend):
         if not tag_names:
             return tag_names
 
-        items = tag_names[0].split(',,,')
-        tag_names[0].split(',,,')[1].split(',')
+        items = tag_names[0].split(",,,")
+        tag_names[0].split(",,,")[1].split(",")
 
         tag_objects = []
-        for t in items[1].split(','):
+        for t in items[1].split(","):
             if not "tag:" in t:
                 continue
 
@@ -453,16 +457,20 @@ class GitBackend(VMNBackend):
         idx_release = -1
         idx_prerelease = -1
         for i in range(len(final_list_of_tag_names)):
-            tagd = VMNBackend.deserialize_vmn_tag_name(
-                final_list_of_tag_names[i]
-            )
+            tagd = VMNBackend.deserialize_vmn_tag_name(final_list_of_tag_names[i])
             if tagd["prerelease"] and not tagd["buildmetadata"]:
                 idx_prerelease = i
             if not tagd["prerelease"] and not tagd["buildmetadata"]:
                 idx_release = i
 
         if idx_prerelease != -1 and idx_release != -1:
-            final_list_of_tag_names[idx_release], final_list_of_tag_names[idx_prerelease] = final_list_of_tag_names[idx_prerelease], final_list_of_tag_names[idx_release]
+            (
+                final_list_of_tag_names[idx_release],
+                final_list_of_tag_names[idx_prerelease],
+            ) = (
+                final_list_of_tag_names[idx_prerelease],
+                final_list_of_tag_names[idx_release],
+            )
 
         return final_list_of_tag_names
 
@@ -549,10 +557,12 @@ class GitBackend(VMNBackend):
         )
 
         if len(outgoing) > 0:
-            err = f"Outgoing changes in {self.root()} " \
-                  f"from branch {branch_name} " \
-                  f"({self._origin.name}/{branch_name}..{branch_name})\n" \
-                  f"The commits that are outgoing are: {outgoing}"
+            err = (
+                f"Outgoing changes in {self.root()} "
+                f"from branch {branch_name} "
+                f"({self._origin.name}/{branch_name}..{branch_name})\n"
+                f"The commits that are outgoing are: {outgoing}"
+            )
 
             return err
 
@@ -696,7 +706,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             regex = VMN_ROOT_TAG_REGEX

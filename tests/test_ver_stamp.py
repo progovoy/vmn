@@ -460,7 +460,9 @@ def test_basic_show(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1", commit=False)
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.file", "msg1", commit=False
+    )
 
     err = _show(app_layout.app_name)
     assert err == 0
@@ -597,8 +599,7 @@ def test_show_from_file(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        captured.out ==
-        f"[INFO] Version information was not "
+        captured.out == f"[INFO] Version information was not "
         f"found for {app_layout.app_name}.\n"
     )
 
@@ -764,8 +765,8 @@ def test_show_from_file(app_layout, capfd):
     err = _show(app_name, version="0.0.1", from_file=True, unique=True)
     assert err == 0
     captured = capfd.readouterr()
-    assert (f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(
-        captured.out[:-1])
+    assert f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(
+        captured.out[:-1]
     )
 
 
@@ -2004,8 +2005,10 @@ def test_add_bm(app_layout, capfd):
     assert err == 1
 
     captured = capfd.readouterr()
-    assert "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ " \
-           "doesn't comply " in captured.err
+    assert (
+        "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ "
+        "doesn't comply " in captured.err
+    )
 
     app_layout.write_file_commit_and_push(
         "test_repo_0",
@@ -2125,7 +2128,11 @@ def test_same_user_tag(app_layout):
 def test_perf_show(app_layout):
     import subprocess
     import shutil
-    base_cmd = ["wget", 'https://github.com/final-israel/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz' ]
+
+    base_cmd = [
+        "wget",
+        "https://github.com/final-israel/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz",
+    ]
     subprocess.call(base_cmd, cwd=app_layout.base_dir)
     shutil.rmtree(app_layout.test_app_remote)
     shutil.rmtree(app_layout.repo_path)
@@ -2135,6 +2142,7 @@ def test_perf_show(app_layout):
     subprocess.call(base_cmd, cwd=app_layout.base_dir)
 
     import time
+
     t1 = time.perf_counter()
     err = _show(app_layout.app_name, raw=True)
     assert err == 0

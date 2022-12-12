@@ -54,8 +54,7 @@ class VMNContextMAnager(object):
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
         LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, LOG_FILENAME),
-            self.args.debug
+            os.path.join(vmn_path, LOG_FILENAME), self.args.debug
         )
 
         if command_line is None:
@@ -280,7 +279,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
         tags = self.backend.tags(
             filter=f"{tag_name_prefix}*",
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
         if tags:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
@@ -300,7 +299,7 @@ class IVersionsStamper(object):
     def increase_octet(self, tag_name_prefix: str, version_number_oct: str) -> str:
         tags = self.backend.tags(
             filter=f"{tag_name_prefix}*",
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
         version_number_oct = int(version_number_oct)
         if tags:
@@ -2178,8 +2177,7 @@ def gen(vcs, params, verstr=None):
         template = jinja2.Template(file_.read())
 
     LOGGER.debug(
-        f"Possible keywords for your Jinja template:\n"
-        f"{pformat(tmplt_value)}"
+        f"Possible keywords for your Jinja template:\n" f"{pformat(tmplt_value)}"
     )
     out = template.render(tmplt_value)
 
@@ -2205,13 +2203,13 @@ def get_dirty_states(optional_status, status):
     dirty_states -= {"detached", "repos_exist_locally"}
 
     try:
-        debug_msg = ''
+        debug_msg = ""
         for k in status["err_msgs"].keys():
             if k in dirty_states:
                 debug_msg = f"{debug_msg}\n{status['err_msgs'][k]}"
 
         if debug_msg:
-            LOGGER.debug(f'Debug for dirty states call:\n{debug_msg}')
+            LOGGER.debug(f"Debug for dirty states call:\n{debug_msg}")
     except Exception as exc:
         pass
 
@@ -2340,9 +2338,7 @@ def _update_repo(args):
     root_path = stamp_utils.resolve_root_path()
     vmn_path = os.path.join(root_path, ".vmn")
 
-    LOGGER = stamp_utils.init_stamp_logger(
-        os.path.join(vmn_path, LOG_FILENAME)
-    )
+    LOGGER = stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME))
 
     path, rel_path, branch_name, tag, changeset = args
 
@@ -2423,9 +2419,7 @@ def _clone_repo(args):
     root_path = stamp_utils.resolve_root_path()
     vmn_path = os.path.join(root_path, ".vmn")
 
-    LOGGER = stamp_utils.init_stamp_logger(
-        os.path.join(vmn_path, LOG_FILENAME)
-    )
+    LOGGER = stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME))
 
     path, rel_path, remote, vcs_type = args
     if os.path.exists(path):
