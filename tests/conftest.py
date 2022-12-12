@@ -1,11 +1,12 @@
-import pytest
-import uuid
-import os
-import sys
 import logging
+import os
 import pathlib
 import shutil
 import stat
+import sys
+import uuid
+
+import pytest
 import yaml
 from git import Repo
 
@@ -190,13 +191,13 @@ class FSAppLayoutFixture(object):
         client.close()
 
     def write_file_commit_and_push(
-        self,
-        repo_name,
-        file_relative_path,
-        content,
-        commit=True,
-        push=True,
-        add_exec=False,
+            self,
+            repo_name,
+            file_relative_path,
+            content,
+            commit=True,
+            push=True,
+            add_exec=False,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -257,13 +258,13 @@ class FSAppLayoutFixture(object):
             self._app_backend.remove_file(file_path)
 
     def write_conf(
-        self,
-        app_conf_path,
-        template=None,
-        deps=None,
-        extra_info=None,
-        version_backends=None,
-        create_verinfo_files=None,
+            self,
+            app_conf_path,
+            template=None,
+            deps=None,
+            extra_info=None,
+            version_backends=None,
+            create_verinfo_files=None,
     ):
         with open(app_conf_path, "r+") as f:
             data = yaml.safe_load(f)
