@@ -22,8 +22,9 @@ VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
 LOCK_FILENAME = "vmn.lock"
 LOG_FILENAME = "vmn.log"
+CACHE_FILENAME = "vmn.cache"
 
-IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME]
+IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME, CACHE_FILENAME]
 VMN_ARGS = [
     "init",
     "init-app",

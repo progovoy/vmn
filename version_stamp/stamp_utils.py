@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import pathlib
 import sys
 import os
 import git
@@ -7,6 +8,7 @@ import glob
 import re
 import time
 import yaml
+import datetime
 import configparser
 from logging.handlers import RotatingFileHandler
 
@@ -334,7 +336,18 @@ class GitBackend(VMNBackend):
         self.add_git_user_cfg_if_missing()
         self._origin = self._be.remotes[0]
 
-        self._be.git.fetch("--tags")
+        vmn_cache_path = os.path.join(repo_path, ".vmn", "vmn.cache")
+        if not os.path.exists(vmn_cache_path):
+            pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(vmn_cache_path).touch()
+            self._be.git.fetch("--tags")
+        else:
+            minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
+            filemtime = datetime.datetime.fromtimestamp(os.path.getmtime(vmn_cache_path))
+            # file is more than 30 minutes old
+            if filemtime < minutes_ago:
+                pathlib.Path(vmn_cache_path).touch()
+                self._be.git.fetch("--tags")
 
     def __del__(self):
         self._be.close()
@@ -448,29 +461,13 @@ class GitBackend(VMNBackend):
             if o:
                 tag_objects.append(o)
 
-        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date)
+        # We want the newest tag on top because we skip "buildmetadata tags"
+        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
+        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
 
         final_list_of_tag_names = []
         for tag_object in tag_objects:
             final_list_of_tag_names.append(tag_object.name)
-
-        idx_release = -1
-        idx_prerelease = -1
-        for i in range(len(final_list_of_tag_names)):
-            tagd = VMNBackend.deserialize_vmn_tag_name(final_list_of_tag_names[i])
-            if tagd["prerelease"] and not tagd["buildmetadata"]:
-                idx_prerelease = i
-            if not tagd["prerelease"] and not tagd["buildmetadata"]:
-                idx_release = i
-
-        if idx_prerelease != -1 and idx_release != -1:
-            (
-                final_list_of_tag_names[idx_release],
-                final_list_of_tag_names[idx_prerelease],
-            ) = (
-                final_list_of_tag_names[idx_prerelease],
-                final_list_of_tag_names[idx_release],
-            )
 
         return final_list_of_tag_names
 
@@ -718,6 +715,10 @@ class GitBackend(VMNBackend):
         app_tags = self.tags(f, type)
         cleaned_app_tag = None
         for tag in app_tags:
+            # skip buildmetadata versions
+            if "+" in tag:
+                continue
+
             match = re.search(regex, tag)
             if match is None:
                 continue
