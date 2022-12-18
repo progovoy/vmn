@@ -46,25 +46,8 @@ LOGGER = None
 
 
 class VMNContextMAnager(object):
-    def __init__(self, command_line):
-        self.args = parse_user_commands(command_line)
-        global LOGGER
-
-        root_path = stamp_utils.resolve_root_path()
-        vmn_path = os.path.join(root_path, ".vmn")
-        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
-
-        LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, LOG_FILENAME), self.args.debug
-        )
-
-        if command_line is None:
-            command_line = sys.argv
-
-        if not command_line[0].endswith("vmn"):
-            command_line.insert(0, "vmn")
-        LOGGER.debug(f"\nCommand line: {' '.join(command_line)}")
-
+    def __init__(self, args, root_path):
+        self.args = args
         root = False
         if "root" in self.args:
             root = self.args.root
@@ -78,22 +61,20 @@ class VMNContextMAnager(object):
             if "command" in self.args and "stamp" in self.args.command:
                 initial_params["extra_commit_message"] = self.args.extra_commit_message
 
+        vmn_path = os.path.join(root_path, ".vmn")
         lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
 
         self.lock = FileLock(lock_file_path)
         self.params = initial_params
         self.vcs = None
         self.lock_file_path = lock_file_path
+        self.vcs = VersionControlStamper(self.params)
 
     def __enter__(self):
         self.lock.acquire()
-        self.vcs = VersionControlStamper(self.params)
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.vcs is not None:
-            del self.vcs
-
         self.lock.release()
 
         if os.path.exists(self.lock_file_path):
@@ -216,7 +197,8 @@ class IVersionsStamper(object):
         try:
             self.template = IVersionsStamper.parse_template(template)
             self.bad_format_template = False
-        except:
+        except Exception as exc:
+            LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
                 stamp_utils.VMN_DEFAULT_TEMPLATE
             )
@@ -277,13 +259,16 @@ class IVersionsStamper(object):
         if counter_key not in prerelease_count:
             prerelease_count[counter_key] = 0
 
-        tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}'
-        tags = self.backend.tags(
-            filter=f"{tag_name_prefix}*",
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
-        )
-        if tags:
-            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
+        tag_name_prefix = \
+            stamp_utils.VMNBackend. \
+                app_name_to_git_tag_app_name(
+                self.name
+            )
+
+        tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}*'
+        tag = self.backend.get_latest_available_tag(tag_name_prefix)
+        if tag:
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -298,13 +283,10 @@ class IVersionsStamper(object):
         return counter_key, prerelease_count
 
     def increase_octet(self, tag_name_prefix: str, version_number_oct: str) -> str:
-        tags = self.backend.tags(
-            filter=f"{tag_name_prefix}*",
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
-        )
+        tag = self.backend.get_latest_available_tag(tag_name_prefix)
         version_number_oct = int(version_number_oct)
-        if tags:
-            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tags[0])
+        if tag:
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
             version_number_oct = max(version_number_oct, int(props[self.release_mode]))
         version_number_oct += 1
         return str(version_number_oct)
@@ -322,25 +304,49 @@ class IVersionsStamper(object):
         hotfix = gdict["hotfix"]
 
         if self.release_mode == "major":
-            tag_name_prefix = f'{self.name.replace("/", "-")}_'
+            tag_name_prefix = \
+                stamp_utils.VMNBackend.\
+                    app_name_to_git_tag_app_name(
+                    self.name
+                )
+
+            tag_name_prefix = f'{tag_name_prefix}_*'
             major = self.increase_octet(tag_name_prefix, major)
 
             minor = "0"
             patch = "0"
             hotfix = "0"
         elif self.release_mode == "minor":
-            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}'
+            tag_name_prefix = \
+                stamp_utils.VMNBackend. \
+                    app_name_to_git_tag_app_name(
+                    self.name
+                )
+
+            tag_name_prefix = f'{tag_name_prefix}_{major}*'
             minor = self.increase_octet(tag_name_prefix, minor)
 
             patch = "0"
             hotfix = "0"
         elif self.release_mode == "patch":
-            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}'
+            tag_name_prefix = \
+                stamp_utils.VMNBackend. \
+                    app_name_to_git_tag_app_name(
+                    self.name
+                )
+
+            tag_name_prefix = f'{tag_name_prefix}_{major}.{minor}*'
             patch = self.increase_octet(tag_name_prefix, patch)
 
             hotfix = "0"
         elif self.release_mode == "hotfix":
-            tag_name_prefix = f'{self.name.replace("/", "-")}_{major}.{minor}.{patch}'
+            tag_name_prefix = \
+                stamp_utils.VMNBackend. \
+                    app_name_to_git_tag_app_name(
+                    self.name
+                )
+
+            tag_name_prefix = f'{tag_name_prefix}_{major}.{minor}.{patch}*'
             hotfix = self.increase_octet(tag_name_prefix, hotfix)
 
         return self.serialize_vmn_version_hotfix(major, minor, patch, hotfix)
@@ -894,9 +900,9 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        ver_info = self.backend.get_first_reachable_version_info(
+        _, ver_info = self.backend.get_first_reachable_version_info(
             self.root_app_name,
-            root=True,
+            root_context=True,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
 
@@ -1010,7 +1016,7 @@ class VersionControlStamper(IVersionsStamper):
         try:
             self.publish_commit(version_files_to_add)
         except Exception as exc:
-            LOGGER.debug("Logged Exception message:", exc_info=True)
+            LOGGER.debug("Logged Exception message: ", exc_info=True)
             LOGGER.info(f"Reverting vmn changes... ")
             if self.dry_run:
                 LOGGER.info(f"Would have tried to revert a vmn commit")
@@ -1353,7 +1359,7 @@ def initialize_backend_attrs(vmn_ctx):
     vcs.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
         vcs.actual_deps_state
     )
-    vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
+    _, vcs.ver_info_from_repo = vcs.backend.get_first_reachable_version_info(
         vcs.name,
         vcs.root_context,
         type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
@@ -1444,7 +1450,7 @@ def handle_release(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
+        tag_name, ver_info = _get_version_info_from_verstr(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.error(f"Failed to release {ver}")
@@ -1500,7 +1506,7 @@ def handle_add(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = _retrieve_version_info(vmn_ctx.vcs, ver)
+        tag_name, ver_info = _get_version_info_from_verstr(vmn_ctx.vcs, ver)
         LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
@@ -1534,7 +1540,8 @@ def handle_show(vmn_ctx):
 
     try:
         out = show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    except:
+    except Exception as exc:
+        LOGGER.debug("Logged Exception message:", exc_info=True)
         return 1
 
     return 0
@@ -1819,9 +1826,9 @@ def _init_app(versions_be_ifc, starting_version):
     root_app_version = 0
     services = {}
     if versions_be_ifc.root_app_name is not None:
-        ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
+        _, ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
             versions_be_ifc.root_app_name,
-            root=True,
+            root_context=True,
             type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
         )
         if ver_info:
@@ -1845,6 +1852,7 @@ def _init_app(versions_be_ifc, starting_version):
             starting_version, "release", {}, root_app_version
         )
     except Exception as exc:
+        LOGGER.debug("Logged Exception message: ", exc_info=True)
         versions_be_ifc.backend.revert_local_changes(versions_be_ifc.version_files)
         err = -1
 
@@ -1958,7 +1966,7 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             be = stamp_utils.LocalFileBackend(vcs.vmn_root_path)
-            ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
+            _, ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
         else:
             if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
@@ -1970,7 +1978,8 @@ def show(vcs, params, verstr=None):
             try:
                 with open(path, "r") as f:
                     ver_info = yaml.safe_load(f)
-            except:
+            except Exception as exc:
+                LOGGER.error("Logged Exception message:", exc_info=True)
                 ver_info = None
     else:
         expected_status = {"repo_tracked", "app_tracked"}
@@ -1989,14 +1998,13 @@ def show(vcs, params, verstr=None):
             raise RuntimeError()
 
         if verstr is None:
-            ver_info = vcs.backend.get_first_reachable_version_info(
+            tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
                 vcs.name,
                 vcs.root_context,
                 stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
             )
-            tag_name = get_tag_name(vcs, verstr)
         else:
-            tag_name, ver_info = _retrieve_version_info(vcs, verstr)
+            tag_name, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
         if ver_info is not None:
             dirty_states = get_dirty_states(optional_status, status)
@@ -2109,13 +2117,13 @@ def gen(vcs, params, verstr=None):
         raise RuntimeError()
 
     if verstr is None:
-        ver_info = vcs.backend.get_first_reachable_version_info(
+        _, ver_info = vcs.backend.get_first_reachable_version_info(
             vcs.name,
             vcs.root_context,
             stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
     else:
-        _, ver_info = _retrieve_version_info(vcs, verstr)
+        _, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
     if ver_info is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
@@ -2212,6 +2220,7 @@ def get_dirty_states(optional_status, status):
         if debug_msg:
             LOGGER.debug(f"Debug for dirty states call:\n{debug_msg}")
     except Exception as exc:
+        LOGGER.debug("Logged Exception message: ", exc_info=True)
         pass
 
     return dirty_states
@@ -2227,15 +2236,12 @@ def goto_version(vcs, params, version):
             version, unique_id = res
             check_unique = True
 
-    ver_info = None
-    tag_name = None
     if version is None:
-        ver_info = vcs.backend.get_first_reachable_version_info(
+        tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
             vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
-        tag_name = get_tag_name(vcs, version)
     else:
-        tag_name, ver_info = _retrieve_version_info(vcs, version)
+        tag_name, ver_info = _get_version_info_from_verstr(vcs, version)
 
     if ver_info is None:
         LOGGER.error(f"No such app: {vcs.name}")
@@ -2301,7 +2307,7 @@ def goto_version(vcs, params, version):
     return 0
 
 
-def _retrieve_version_info(vcs, verstr):
+def _get_version_info_from_verstr(vcs, verstr):
     tag_name = get_tag_name(vcs, verstr)
 
     if vcs.root_context:
@@ -2316,8 +2322,9 @@ def _retrieve_version_info(vcs, verstr):
         try:
             stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
             tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
-        except:
+        except Exception as exc:
             LOGGER.error(f"Wrong version specified: {verstr}")
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
 
             return None, None
 
@@ -2329,8 +2336,9 @@ def _retrieve_version_info(vcs, verstr):
 
 def get_tag_name(vcs, verstr):
     tag_name = f'{vcs.name.replace("/", "-")}'
-    if verstr is not None:
-        tag_name = f"{tag_name}_{verstr}"
+    assert verstr is not None
+    tag_name = f"{tag_name}_{verstr}"
+
     return tag_name
 
 
@@ -2528,25 +2536,78 @@ def _goto_version(deps, vmn_root_path):
 
 
 def main(command_line=None):
+    # Please KEEP this function exactly like this
+    # The purpose of this function is to keep the return
+    # value to be an integer
+    res, _ = vmn_run(command_line)
+    return res
+
+
+def vmn_run(command_line=None):
+    global LOGGER
     try:
-        return vmn_run(command_line)
+        LOGGER = stamp_utils.init_stamp_logger()
+        args = parse_user_commands(command_line)
+    except:
+        LOGGER.debug("Logged exception: ", exc_info=True)
+        return 1, None
+
+    try:
+        LOGGER = stamp_utils.init_stamp_logger(
+            debug=args.debug
+        )
+
+        root_path = stamp_utils.resolve_root_path()
+        vmn_path = os.path.join(root_path, ".vmn")
+        pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
+
+        LOGGER = stamp_utils.init_stamp_logger(
+            os.path.join(vmn_path, LOG_FILENAME),
+            args.debug
+        )
+    except Exception as exc:
+        LOGGER.error(
+            "Failed to init logger. "
+            "Maybe you are running from a non-managed directory?"
+        )
+        LOGGER.debug("Logged exception: ", exc_info=True)
+
+        return 1, None
+
+    command_line = copy.deepcopy(command_line)
+
+    try:
+        if command_line is None or not command_line:
+            command_line = sys.argv
+            if command_line is None:
+                command_line = ["vmn"]
+
+        if not command_line[0].endswith("vmn"):
+            command_line.insert(0, "vmn")
+        LOGGER.debug(f"\nCommand line: {' '.join(command_line)}")
+
+        return _vmn_run(args, root_path)
     except Exception as exc:
         LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
         LOGGER.debug("Exception info: ", exc_info=True)
 
-        return 1
+        return 1, None
+    except:
+        LOGGER.debug("Exception info: ", exc_info=True)
+        return 1, None
 
 
-def vmn_run(command_line):
+def _vmn_run(args, root_path):
     err = 0
-    with VMNContextMAnager(command_line) as vmn_ctx:
+    vmn_ctx = VMNContextMAnager(args, root_path)
+    with vmn_ctx:
         if vmn_ctx.args.command in VMN_ARGS:
             cmd = vmn_ctx.args.command.replace("-", "_")
             err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmn_ctx)
         else:
             LOGGER.info("Run vmn -h for help")
 
-    return err
+    return err, vmn_ctx
 
 
 def validate_app_name(args):

@@ -15,48 +15,41 @@ import stamp_utils
 
 
 def _run_vmn_init():
-    with vmn.VMNContextMAnager(["init"]) as vmn_ctx:
-        err = vmn.handle_init(vmn_ctx)
-        return err
+    return vmn.vmn_run(["init"])[0]
 
 
 def _init_app(app_name, starting_version="0.0.0"):
-    with vmn.VMNContextMAnager(
-        ["init-app", "-v", starting_version, app_name]
-    ) as vmn_ctx:
-        err = vmn.handle_init_app(vmn_ctx)
-        assert err == 0
-        # TODO: why validating this?
-        assert len(vmn_ctx.vcs.actual_deps_state) == 1
+    cmd = ["init-app", "-v", starting_version, app_name]
+    ret, vmn_ctx = vmn.vmn_run(cmd)
 
-        ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-        )
+    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+    )
 
-        try:
-            # Python3.9 only
-            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
-        except:
-            merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+    try:
+        # Python3.9 only
+        merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
+    except:
+        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
-        return ver_info, merged_dict
+    return ret, ver_info, merged_dict
 
 
 def _release_app(app_name, version):
-    with vmn.VMNContextMAnager(["release", "-v", version, app_name]) as vmn_ctx:
-        err = vmn.handle_release(vmn_ctx)
+    cmd = ["release", "-v", version, app_name]
+    ret, vmn_ctx = vmn.vmn_run(cmd)
+    vmn.initialize_backend_attrs(vmn_ctx)
+    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+    )
 
-        ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-        )
+    try:
+        # Python3.9 only
+        merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
+    except:
+        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
-        try:
-            # Python3.9 only
-            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
-        except:
-            merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
-
-        return err, ver_info, merged_dict
+    return ret, ver_info, merged_dict
 
 
 def _stamp_app(app_name, release_mode=None, prerelease=None):
@@ -69,19 +62,19 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
     args_list.append(app_name)
 
-    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
-        err = vmn.handle_stamp(vmn_ctx)
-        ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-        )
+    ret, vmn_ctx = vmn.vmn_run(args_list)
 
-        try:
-            # Python3.9 only
-            merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
-        except:
-            merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+    )
 
-        return err, ver_info, merged_dict
+    try:
+        # Python3.9 only
+        merged_dict = vmn_ctx.params | vmn_ctx.vcs.__dict__
+    except:
+        merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
+
+    return ret, ver_info, merged_dict
 
 
 def _show(
@@ -115,9 +108,7 @@ def _show(
 
     args_list.append(app_name)
 
-    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
-        err = vmn.handle_show(vmn_ctx)
-        return err
+    return vmn.vmn_run(args_list)[0]
 
 
 def _gen(app_name, template, output, verify_version=False, version=None):
@@ -134,9 +125,19 @@ def _gen(app_name, template, output, verify_version=False, version=None):
 
     args_list.append(app_name)
 
-    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
-        err = vmn.handle_gen(vmn_ctx)
-        return err
+    return vmn.vmn_run(args_list)[0]
+
+
+def _goto(app_name, version=None, root=False):
+    args_list = ["goto"]
+    if version is not None:
+        args_list.extend(["--version", f"{version}"])
+    if root:
+        args_list.append("--root")
+
+    args_list.append(app_name)
+
+    return vmn.vmn_run(args_list)[0]
 
 
 def _add_buildmetadata_to_version(
@@ -163,9 +164,7 @@ def _add_buildmetadata_to_version(
 
     args_list.append(app_name)
 
-    with vmn.VMNContextMAnager(args_list) as vmn_ctx:
-        err = vmn.handle_add(vmn_ctx)
-        return err
+    return vmn.vmn_run(args_list)[0]
 
 
 def _configure_2_deps(app_layout, params):
@@ -252,7 +251,7 @@ def test_git_hooks(app_layout, capfd, hook_name):
     assert res == 0
     res = _run_vmn_init()
     assert res == 1
-    _, params = _init_app(app_layout.app_name)
+    _, _, params = _init_app(app_layout.app_name)
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
@@ -385,16 +384,14 @@ def test_jinja2_gen(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="0.0.1")
+    assert err == 0
 
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
     assert err == 0
 
-    with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
     err = _gen(app_layout.app_name, tpath, opath, verify_version=True)
     assert err == 1
@@ -460,6 +457,9 @@ def test_basic_show(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
+    err = _show(app_layout.app_name)
+    assert err == 0
+
     app_layout.write_file_commit_and_push(
         "test_repo_0", "f1.file", "msg1", commit=False
     )
@@ -513,9 +513,8 @@ def test_basic_show(app_layout, capfd):
     except Exception:
         assert False
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.1", "test_app"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="0.0.1")
+    assert err == 0
 
     capfd.readouterr()
 
@@ -525,9 +524,8 @@ def test_basic_show(app_layout, capfd):
     captured = capfd.readouterr()
     assert "0.0.1\n" == captured.out
 
-    with vmn.VMNContextMAnager(["goto", "test_app"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -592,7 +590,7 @@ def test_basic_show(app_layout, capfd):
 
 def test_show_from_file(app_layout, capfd):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name)
+    _, _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
 
     err = _show(app_layout.app_name, verbose=True, from_file=True)
@@ -655,7 +653,7 @@ def test_show_from_file(app_layout, capfd):
     assert show_res == show_file_res
 
     app_name = "root_app/app1"
-    _, params = _init_app(app_name)
+    _, _, params = _init_app(app_name)
     conf = {
         "template": "[{major}][.{minor}][.{patch}]",
         "create_verinfo_files": True,
@@ -772,7 +770,7 @@ def test_show_from_file(app_layout, capfd):
 
 def test_show_from_file_conf_changed(app_layout, capfd):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name)
+    _, _, params = _init_app(app_layout.app_name)
     capfd.readouterr()
 
     conf = {
@@ -901,28 +899,24 @@ def test_multi_repo_dependency(app_layout, capfd):
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 1
+    err = _goto(app_layout.app_name)
+    assert err == 1
 
     app_layout.create_repo(repo_name="repo3", repo_type="git")
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
     err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
     shutil.rmtree(app_layout._repos["repo3"]["path"])
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
 
 def test_goto_deleted_repos(app_layout):
@@ -941,9 +935,8 @@ def test_goto_deleted_repos(app_layout):
     # deleting repo_b
     shutil.rmtree(dir_path)
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.2", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="0.0.2")
+    assert err == 0
 
 
 def test_basic_root_stamp(app_layout):
@@ -1289,11 +1282,8 @@ def test_rc_goto(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0-rcaaa1"
 
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", "1.3.0-rcaaa1", app_layout.app_name]
-    ) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="1.3.0-rcaaa1")
+    assert err == 0
 
 
 def test_goto_print(app_layout, capfd):
@@ -1308,22 +1298,21 @@ def test_goto_print(app_layout, capfd):
 
     capfd.readouterr()
 
-    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="1.3.0")
+    assert err == 0
 
-        sout, serr = capfd.readouterr()
-        assert f"[INFO] You are at version 1.3.0 of {app_layout.app_name}\n" == sout
+    sout, serr = capfd.readouterr()
+    assert f"[INFO] You are at version 1.3.0 of {app_layout.app_name}\n" == sout
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
-        sout, serr = capfd.readouterr()
-        assert (
-            f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
-            == sout
-        )
+
+    sout, serr = capfd.readouterr()
+    assert (
+        f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
+        == sout
+    )
 
 
 def test_version_template():
@@ -1361,12 +1350,11 @@ def test_basic_goto(app_layout, capfd):
     assert data["_version"] == "1.3.1"
 
     c1 = app_layout._app_backend.be.changeset()
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.2", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 1
-    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="0.0.2")
+    assert err == 1
+
+    err = _goto(app_layout.app_name, version="1.3.0")
+    assert err == 0
 
     # read to clear stderr and out
     capfd.readouterr()
@@ -1379,15 +1367,13 @@ def test_basic_goto(app_layout, capfd):
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
-    with vmn.VMNContextMAnager(["goto", "-v", "1.3.1", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name, version="1.3.1")
+    assert err == 0
     c3 = app_layout._app_backend.be.changeset()
     assert c1 == c3
 
-    with vmn.VMNContextMAnager(["goto", app_layout.app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(app_layout.app_name)
+    assert err == 0
 
     c4 = app_layout._app_backend.be.changeset()
     assert c1 == c4
@@ -1409,15 +1395,13 @@ def test_basic_goto(app_layout, capfd):
 
     assert rc1 != rc2
 
-    with vmn.VMNContextMAnager(["goto", "-v", "1.3.0", root_app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(root_app_name, version="1.3.0")
+    assert err == 0
 
     assert rc1 == app_layout._app_backend.be.changeset()
 
-    with vmn.VMNContextMAnager(["goto", root_app_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(root_app_name)
+    assert err == 0
 
     assert rc2 == app_layout._app_backend.be.changeset()
 
@@ -1437,15 +1421,13 @@ def test_basic_goto(app_layout, capfd):
 
     root_name = root_app_name.split("/")[0]
 
-    with vmn.VMNContextMAnager(["goto", "--root", "-v", "1", root_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(root_name, version="1", root=True)
+    assert err == 0
 
     assert rc1 == app_layout._app_backend.be.changeset()
 
-    with vmn.VMNContextMAnager(["goto", "--root", root_name]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(root_name, root=True)
+    assert err == 0
 
     assert rc3 == app_layout._app_backend.be.changeset()
 
@@ -1453,27 +1435,29 @@ def test_basic_goto(app_layout, capfd):
     assert err == 0
 
     deps = ver_info["stamping"]["app"]["changesets"]
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", f"1.5.0+{deps['.']['hash']}", root_app_name]
-    ) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
 
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", f"1.5.0+{deps['.']['hash'][:-10]}", root_app_name]
-    ) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto(
+        root_app_name,
+        version=f"1.5.0+{deps['.']['hash']}",
+    )
+    assert err == 0
+
+    err = _goto(
+        root_app_name,
+        version=f"1.5.0+{deps['.']['hash'][:-10]}",
+    )
+    assert err == 0
 
     capfd.readouterr()
-    with vmn.VMNContextMAnager(
-        ["goto", "-v", f"1.5.0+{deps['.']['hash'][:-10]}X", root_app_name]
-    ) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 1
 
-        captured = capfd.readouterr()
-        assert "[ERROR] Wrong unique id\n" == captured.err
+    err = _goto(
+        root_app_name,
+        version=f"1.5.0+{deps['.']['hash'][:-10]}X",
+    )
+    assert err == 1
+
+    captured = capfd.readouterr()
+    assert "[ERROR] Wrong unique id\n" == captured.err
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
@@ -1534,7 +1518,7 @@ def test_get_version(app_layout):
 
 def test_get_version_number_from_file(app_layout):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name, "0.2.1")
+    _, _, params = _init_app(app_layout.app_name, "0.2.1")
 
     assert vmn.VersionControlStamper.get_version_number_from_file(
         params["version_file_path"]
@@ -1543,7 +1527,7 @@ def test_get_version_number_from_file(app_layout):
 
 def test_read_version_from_file(app_layout):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name, "0.2.1")
+    _, _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
 
@@ -1563,7 +1547,7 @@ def test_read_version_from_file(app_layout):
 
 def test_manual_file_adjustment(app_layout):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name, "0.2.1")
+    _, _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
 
@@ -1588,7 +1572,7 @@ def test_manual_file_adjustment(app_layout):
 
 def test_manual_file_adjustment_with_major_version(app_layout):
     _run_vmn_init()
-    _, params = _init_app(app_layout.app_name, "0.2.1")
+    _, _, params = _init_app(app_layout.app_name, "0.2.1")
 
     file_path = params["version_file_path"]
 
@@ -1614,7 +1598,7 @@ def test_manual_file_adjustment_with_major_version(app_layout):
 def test_basic_root_show(app_layout, capfd):
     _run_vmn_init()
     app_name = "root_app/app1"
-    ver_info, params = _init_app(app_name, "0.2.1")
+    ret, ver_info, params = _init_app(app_name, "0.2.1")
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.2.1"
 
@@ -1825,21 +1809,17 @@ def test_backward_compatability_with_previous_vmn(app_layout, capfd):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.4"
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.2", "app1"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto("app1", version="0.0.2")
+    assert err == 0
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.3", "app1"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto("app1", version="0.0.3")
+    assert err == 0
 
-    with vmn.VMNContextMAnager(["goto", "-v", "0.0.4", "app1"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto("app1", version="0.0.4")
+    assert err == 0
 
-    with vmn.VMNContextMAnager(["goto", "app1"]) as vmn_ctx:
-        err = vmn.handle_goto(vmn_ctx)
-        assert err == 0
+    err = _goto("app1")
+    assert err == 0
 
     err, ver_info, _ = _stamp_app("root_app/service1", "patch")
     assert err == 0
@@ -2094,7 +2074,7 @@ def test_add_bm(app_layout, capfd):
     assert err == 0
 
 
-def test_shallow_repo_stamp(app_layout):
+def test_shallow_vmn_commit_repo_stamp(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -2102,10 +2082,32 @@ def test_shallow_repo_stamp(app_layout):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
     clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
-    app_layout.set_working_repo(clone_path)
+    app_layout.set_working_dir(clone_path)
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+
+def test_shallow_non_vmn_commit_repo_stamp(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "f1.txt",
+        "connnntenctt"
+    )
+
+    clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
+    app_layout.set_working_dir(clone_path)
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    captured = capfd.readouterr()
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
 
 def test_same_user_tag(app_layout):
@@ -2150,3 +2152,14 @@ def test_perf_show(app_layout):
     diff = t2 - t1
 
     assert diff < 2
+
+
+def test_run_vmn_from_non_git_repo(app_layout, capfd):
+    _run_vmn_init()
+    app_layout.set_working_dir(app_layout.base_dir)
+    vmn.LOGGER = None
+    capfd.readouterr()
+    ret = vmn.vmn_run([])[0]
+    captured = capfd.readouterr()
+    assert ret == 1
+

@@ -39,7 +39,7 @@ class FSAppLayoutFixture(object):
         if be_type == "git":
             self._app_backend = GitBackend(self.test_app_remote, self.repo_path)
 
-        self.set_working_repo(self.repo_path)
+        self.set_working_dir(self.repo_path)
 
         root_path = stamp_utils.resolve_root_path()
         vmn_path = os.path.join(root_path, ".vmn")
@@ -65,7 +65,7 @@ class FSAppLayoutFixture(object):
         for val in self._repos.values():
             shutil.rmtree(val["path"])
 
-    def set_working_repo(self, repo_path):
+    def set_working_dir(self, repo_path):
         os.environ["VMN_WORKING_DIR"] = repo_path
 
     def create_repo(self, repo_name, repo_type):
