@@ -2007,7 +2007,9 @@ def show(vcs, params, verstr=None):
             tag_name, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
         if ver_info is not None:
-            dirty_states = get_dirty_states(optional_status, status)
+            dirty_states = list(
+                get_dirty_states(optional_status, status)
+            )
 
             if params["ignore_dirty"]:
                 dirty_states = None
