@@ -430,9 +430,9 @@ class GitBackend(VMNBackend):
 
     def get_all_latest_stamp_tags(self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE):
         if root_context:
-            msg_filter = f"{app_name}/.*: Stamped"
+            msg_filter = f"^{app_name}/.*: Stamped"
         else:
-            msg_filter = f"{app_name}: Stamped"
+            msg_filter = f"^{app_name}: Stamped"
 
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
             cmd_suffix = (
