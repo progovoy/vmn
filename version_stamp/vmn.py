@@ -1189,6 +1189,11 @@ def handle_init(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     be = vmn_ctx.vcs.backend
@@ -1268,6 +1273,11 @@ def handle_stamp(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     if status["matched_version_info"] is not None:
@@ -1419,6 +1429,11 @@ def handle_release(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     ver = vmn_ctx.args.version
@@ -1475,6 +1490,11 @@ def handle_add(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     ver = vmn_ctx.args.version
@@ -1577,6 +1597,11 @@ def handle_goto(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     if vmn_ctx.args.pull:
@@ -1814,6 +1839,11 @@ def _init_app(versions_be_ifc, starting_version):
 
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
     if status["error"]:
+        LOGGER.debug(
+            f"Error occured when getting the repo status: {status}",
+            exc_info=True
+        )
+
         return 1
 
     versions_be_ifc.create_config_files()
@@ -1994,6 +2024,7 @@ def show(vcs, params, verstr=None):
         status = _get_repo_status(vcs, expected_status, optional_status)
         if status["error"]:
             LOGGER.error("Error occured when getting the repo status")
+            LOGGER.debug(status, exc_info=True)
 
             raise RuntimeError()
 
@@ -2115,6 +2146,7 @@ def gen(vcs, params, verstr=None):
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.error("Error occured when getting the repo status")
+        LOGGER.debug(status, exc_info=True)
 
         raise RuntimeError()
 
