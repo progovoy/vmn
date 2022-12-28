@@ -2618,7 +2618,12 @@ def vmn_run(command_line=None):
 
         if not command_line[0].endswith("vmn"):
             command_line.insert(0, "vmn")
-        LOGGER.debug(f"\nCommand line: {' '.join(command_line)}")
+
+        bold_char = "\033[1m"
+        end_char = "\033[0m"
+        LOGGER.debug(
+            f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}"
+        )
 
         return _vmn_run(args, root_path)
     except Exception as exc:

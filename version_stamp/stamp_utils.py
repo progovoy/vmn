@@ -160,9 +160,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     )
     rotating_file_handler.setLevel(logging.DEBUG)
 
-    bold_char = "\033[1m"
-    end_char = "\033[0m"
-    fmt = f"{bold_char}%(filename)s:%(lineno)d => %(asctime)s{end_char} - [%(levelname)s] %(message)s"
+    fmt = f"%(filename)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     LOGGER.addHandler(rotating_file_handler)
