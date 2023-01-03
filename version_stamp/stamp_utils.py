@@ -721,12 +721,23 @@ class GitBackend(VMNBackend):
                 return p.hexsha
 
             tags = self.get_all_commit_tags(p.hexsha)
+            if not tags:
+                LOGGER.warning(
+                    f"Somehow vmn's commit {p.hexsha} has no tags. "
+                    f"Check your repo. Assuming this commit is a user commit"
+                )
+                return p.hexsha
+
             for t in tags:
                 _, verinfo = self.get_version_info_from_tag_name(t)
                 if "stamping" in verinfo:
                     return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
 
-            return None
+            LOGGER.warning(
+                f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
+                f"Check your repo. Assuming this commit is a user commit"
+            )
+            return p.hexsha
 
         return p.hexsha
 
