@@ -2163,3 +2163,26 @@ def test_run_vmn_from_non_git_repo(app_layout, capfd):
     captured = capfd.readouterr()
     assert ret == 1
 
+
+def test_bad_tag(app_layout, capfd):
+    res = _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    app_layout.create_tag("HEAD", "Semver-foo-python3-1.1.1")
+
+    # read to clear stderr and out
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    captured = capfd.readouterr()
+
+    assert err == 0
+
+    app_layout.create_tag("HEAD", "app_name-1.1.1")
+
+    # read to clear stderr and out
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    captured = capfd.readouterr()
+
+    assert err == 0
