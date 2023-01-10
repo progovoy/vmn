@@ -73,6 +73,10 @@ VMN_USER_NAME = "vmn"
 LOGGER = None
 
 
+class WrongTagFormatException(Exception):
+    pass
+
+
 def resolve_root_path():
     cwd = os.getcwd()
     if "VMN_WORKING_DIR" in os.environ:
@@ -192,62 +196,6 @@ class VMNBackend(object):
         return f"{verstr}+{hash}"
 
     @staticmethod
-    def deserialize_vmn_tag_name(vmn_tag):
-        ret = {
-            "app_name": None,
-            "type": "version",
-            "version": None,
-            "root_version": None,
-            "major": None,
-            "minor": None,
-            "patch": None,
-            "hotfix": None,
-            "prerelease": None,
-            "buildmetadata": None,
-        }
-
-        match = re.search(VMN_ROOT_TAG_REGEX, vmn_tag)
-        if match is not None:
-            gdict = match.groupdict()
-            if gdict["version"] is not None:
-                int(gdict["version"])
-                ret["root_version"] = gdict["version"]
-                ret["app_name"] = gdict["app_name"]
-                ret["type"] = "root"
-
-            return ret
-
-        match = re.search(VMN_TAG_REGEX, vmn_tag)
-        if match is None:
-            LOGGER.error(f"Tag {vmn_tag} doesn't comply to vmn version format")
-            raise RuntimeError()
-
-        gdict = match.groupdict()
-        ret["app_name"] = gdict["app_name"].replace("-", "/")
-        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret["major"] = gdict["major"]
-        ret["minor"] = gdict["minor"]
-        ret["patch"] = gdict["patch"]
-        ret["hotfix"] = "0"
-
-        if gdict["hotfix"] is not None:
-            ret["hotfix"] = gdict["hotfix"]
-
-        # TODO: Think about what it means that we have the whole
-        #  prerelease string here (with the prerelease count).
-        #  At least rename other prerelease prefixes to
-        #  something like "prerelease mode" or "prerelease prefix"
-        if gdict["prerelease"] is not None:
-            ret["prerelease"] = gdict["prerelease"]
-            ret["type"] = "prerelease"
-
-        if gdict["buildmetadata"] is not None:
-            ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["type"] = "buildmetadata"
-
-        return ret
-
-    @staticmethod
     def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
         match = re.search(VMN_REGEX, raw_vmn_version)
 
@@ -361,6 +309,79 @@ class GitBackend(VMNBackend):
         except Exception as exc:
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return False
+
+    def deserialize_tag_name(self, some_tag):
+        ret = {
+            "app_name": None,
+            "type": "version",
+            "version": None,
+            "root_version": None,
+            "major": None,
+            "minor": None,
+            "patch": None,
+            "hotfix": None,
+            "prerelease": None,
+            "buildmetadata": None,
+            "tag_msg": self.get_tag_message(some_tag)
+        }
+
+        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
+        if match is not None:
+            gdict = match.groupdict()
+
+            int(gdict["version"])
+            ret["root_version"] = gdict["version"]
+            ret["app_name"] = gdict["app_name"]
+            ret["type"] = "root"
+
+            return ret
+
+        match = re.search(VMN_TAG_REGEX, some_tag)
+        if match is None:
+            raise WrongTagFormatException()
+
+        gdict = match.groupdict()
+        ret["app_name"] = gdict["app_name"].replace("-", "/")
+        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret["major"] = gdict["major"]
+        ret["minor"] = gdict["minor"]
+        ret["patch"] = gdict["patch"]
+        ret["hotfix"] = "0"
+
+        if gdict["hotfix"] is not None:
+            ret["hotfix"] = gdict["hotfix"]
+
+        # TODO: Think about what it means that we have the whole
+        #  prerelease string here (with the prerelease count).
+        #  At least rename other prerelease prefixes to
+        #  something like "prerelease mode" or "prerelease prefix"
+        if gdict["prerelease"] is not None:
+            ret["prerelease"] = gdict["prerelease"]
+            ret["type"] = "prerelease"
+
+        if gdict["buildmetadata"] is not None:
+            ret["buildmetadata"] = gdict["buildmetadata"]
+            ret["type"] = "buildmetadata"
+
+        return ret
+
+    def deserialize_vmn_tag_name(self, vmn_tag):
+        try:
+            return self.deserialize_tag_name(vmn_tag)
+        except WrongTagFormatException as exc:
+            LOGGER.error(
+                f"Tag {vmn_tag} doesn't comply to vmn version format",
+                exc_info=True,
+            )
+
+            raise exc
+        except Exception as exc:
+            LOGGER.error(
+                f"Failed to deserialize tag {vmn_tag}",
+                exc_info=True,
+            )
+
+            raise exc
 
     def tag(self, tags, messages, ref="HEAD", push=False):
         for tag, message in zip(tags, messages):
@@ -585,7 +606,26 @@ class GitBackend(VMNBackend):
         if len(tags) == 1 and tags[0] == "":
             tags.pop(0)
 
-        return tags
+        final_tags = []
+        for t in tags:
+            try:
+                tagd = None
+                tagd = self.deserialize_tag_name(t)
+                if tagd["tag_msg"] is None:
+                    raise WrongTagFormatException()
+
+                final_tags.append(t)
+            except Exception as exc:
+                if tagd is None:
+                    tagd = {"tag_msg": None}
+
+                LOGGER.debug(
+                    f"Probably non-vmn tag - {t} with tag msg: {tagd['tag_msg']} ",
+                    exc_info=True
+                )
+                continue
+
+        return final_tags
 
     def get_all_brother_tags(self, tag_name):
         try:
@@ -598,6 +638,8 @@ class GitBackend(VMNBackend):
                 exc_info=True
             )
             return []
+
+        #final_tag_list
 
         return tags
 
@@ -836,41 +878,13 @@ class GitBackend(VMNBackend):
         return self.get_version_info_from_tag_name(cleaned_app_tag)
 
     def get_version_info_from_tag_name(self, tag_name):
-        try:
-            commit_tag_obj = self._be.commit(tag_name)
-        except Exception as exc:
-            LOGGER.debug(f"Logged exception: ", exc_info=True)
-            # Backward compatability code for vmn 0.3.9:
-            try:
-                _tag_name = f"{tag_name}.0"
-                commit_tag_obj = self._be.commit(_tag_name)
-                tag_name = _tag_name
-            except Exception as exc:
-                LOGGER.debug(f"Logged exception: ", exc_info=True)
-                return tag_name, None
+        tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
 
-        if commit_tag_obj.author.name != VMN_USER_NAME:
+        if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
             return tag_name, None
 
-        # TODO:: Check API commit version
-
-        # safe_load discards any text before the YAML document (if present)
-        tag_msg = yaml.safe_load(self._be.tag(f"refs/tags/{tag_name}").object.message)
-
-        if type(tag_msg) is not dict and tag_msg.startswith("Automatic"):
-            # Code from vmn 0.3.9
-            # safe_load discards any text before the YAML document (if present)
-            commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
-
-            if commit_msg is None or "stamping" not in commit_msg:
-                return tag_name, None
-
-            commit_msg["stamping"]["app"]["prerelease"] = "release"
-            commit_msg["stamping"]["app"]["prerelease_count"] = {}
-
-            return tag_name, commit_msg
-
+        tag_msg = self.get_tag_message(tag_name)
         if not tag_msg:
             LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
             return tag_name, None
@@ -879,7 +893,7 @@ class GitBackend(VMNBackend):
 
         tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
+            tagd = self.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
             tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
 
@@ -897,6 +911,59 @@ class GitBackend(VMNBackend):
             )
 
         return tag_name, tag_msg
+
+    def get_tag_message(self, tag_name):
+        tag_exists = True
+        try:
+            o = self._be.tag(f"refs/tags/{tag_name}").object
+        except Exception as exc:
+            tag_exists = False
+
+        if not tag_exists:
+            return None
+
+        # TODO:: Check API commit version
+        # safe_load discards any text before the YAML document (if present)
+        tag_msg = yaml.safe_load(self._be.tag(f"refs/tags/{tag_name}").object.message)
+        if tag_msg is None:
+            return None
+
+        if type(tag_msg) is not dict and tag_msg.startswith("Automatic"):
+            # Code from vmn 0.3.9
+            # safe_load discards any text before the YAML document (if present)
+            commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
+
+            if commit_msg is not None and "stamping" in commit_msg:
+                commit_msg["stamping"]["app"]["prerelease"] = "release"
+                commit_msg["stamping"]["app"]["prerelease_count"] = {}
+
+            tag_msg = commit_msg
+            if tag_msg is None:
+                return None
+
+        if "vmn_info" not in tag_msg:
+            LOGGER.debug(
+                f"vmn_info key was not found in tag {tag_name}"
+            )
+            return None
+
+        return tag_msg
+
+    def get_commit_object_from_tag_name(self, tag_name):
+        try:
+            commit_tag_obj = self._be.commit(tag_name)
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
+            # Backward compatability code for vmn 0.3.9:
+            try:
+                _tag_name = f"{tag_name}.0"
+                commit_tag_obj = self._be.commit(_tag_name)
+                tag_name = _tag_name
+            except Exception as exc:
+                LOGGER.debug(f"Logged exception: ", exc_info=True)
+                return tag_name, None
+
+        return tag_name, commit_tag_obj
 
     @staticmethod
     def clone(path, remote):

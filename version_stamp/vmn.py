@@ -268,7 +268,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}*'
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         if tag:
-            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+            props = self.backend.deserialize_vmn_tag_name(tag)
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -286,7 +286,7 @@ class IVersionsStamper(object):
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         version_number_oct = int(version_number_oct)
         if tag:
-            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+            props = self.backend.deserialize_vmn_tag_name(tag)
             version_number_oct = max(version_number_oct, int(props[self.release_mode]))
         version_number_oct += 1
         return str(version_number_oct)
@@ -633,7 +633,7 @@ class VersionControlStamper(IVersionsStamper):
         tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, version, prerelease, prerelease_count
         )
-        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_formatted_app_name)
+        props = self.backend.deserialize_vmn_tag_name(tag_formatted_app_name)
         release_tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, props["version"]
         )
@@ -724,7 +724,7 @@ class VersionControlStamper(IVersionsStamper):
         release_tag_name = self.serialize_vmn_tag_name(self.name, tmp["_version"])
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
 
-        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
+        props = self.backend.deserialize_vmn_tag_name(tag_name)
         ver_info["stamping"]["app"]["_version"] = props["version"]
         ver_info["stamping"]["app"][
             "version"
@@ -2354,7 +2354,7 @@ def _get_version_info_from_verstr(vcs, verstr):
             return None, None
     else:
         try:
-            stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
+            vcs.backend.deserialize_vmn_tag_name(tag_name)
             tag_name, ver_info = vcs.backend.get_version_info_from_tag_name(tag_name)
         except Exception as exc:
             LOGGER.error(f"Wrong version specified: {verstr}")
