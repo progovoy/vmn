@@ -175,7 +175,13 @@ class IVersionsStamper(object):
             self.vmn_root_path, ".vmn", self.name.replace("/", os.sep)
         )
         self.version_file_path = os.path.join(self.app_dir_path, VER_FILE_NAME)
-        self.app_conf_path = os.path.join(self.app_dir_path, "conf.yml")
+        self.app_conf_path = os.path.join(
+            self.app_dir_path,
+            f"{self.backend.get_active_branch(raise_on_detached_head=False)}_conf.yml"
+        )
+        if not os.path.isfile(self.app_conf_path):
+            self.app_conf_path = os.path.join(self.app_dir_path, "conf.yml")
+
         if self.root_context:
             self.root_app_name = self.name
         else:
@@ -192,8 +198,14 @@ class IVersionsStamper(object):
             )
 
             self.root_app_conf_path = os.path.join(
-                self.root_app_dir_path, "root_conf.yml"
+                self.root_app_dir_path,
+                f"{self.backend.get_active_branch(raise_on_detached_head=False)}_root_conf.yml"
             )
+
+            if not os.path.isfile(self.root_app_conf_path):
+                self.root_app_conf_path = os.path.join(
+                    self.root_app_dir_path, "root_conf.yml"
+                )
 
     def set_template(self, template):
         try:
