@@ -534,6 +534,11 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, arg_params):
         IVersionsStamper.__init__(self, arg_params)
 
+        if "from_file" in arg_params and not arg_params["from_file"]:
+            err = initialize_backend_attrs(self)
+            if err:
+                raise RuntimeError("Failed to initialize git ")
+
     # TODO:: move to VMN_BACKEND in stamp_utils
     def serialize_vmn_tag_name(
         self,
@@ -1183,10 +1188,6 @@ class VersionControlStamper(IVersionsStamper):
 
 
 def handle_init(vmn_ctx):
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     expected_status = {"repos_exist_locally"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status)
@@ -1225,10 +1226,6 @@ def handle_init(vmn_ctx):
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     # TODO: validate version number is of type major.minor.patch[.hotfix]
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
@@ -1249,10 +1246,6 @@ def handle_init_app(vmn_ctx):
 
 
 def handle_stamp(vmn_ctx):
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
@@ -1420,10 +1413,6 @@ def initialize_configured_deps(vcs, self_base, self_dep):
 
 
 def handle_release(vmn_ctx):
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps"}
 
@@ -1476,10 +1465,6 @@ def handle_release(vmn_ctx):
 
 
 def handle_add(vmn_ctx):
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
     vmn_ctx.params["version_metadata_path"] = vmn_ctx.args.vmp
     vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
@@ -1536,10 +1521,6 @@ def handle_add(vmn_ctx):
 
 def handle_show(vmn_ctx):
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
-    if not vmn_ctx.params["from_file"]:
-        err = initialize_backend_attrs(vmn_ctx)
-        if err:
-            return err
 
     # root app does not have raw version number
     if vmn_ctx.vcs.root_context:
@@ -1569,9 +1550,6 @@ def handle_gen(vmn_ctx):
     vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
     vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
     vmn_ctx.params["output"] = vmn_ctx.args.output
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
 
     try:
         out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
@@ -1584,10 +1562,6 @@ def handle_gen(vmn_ctx):
 
 
 def handle_goto(vmn_ctx):
-    err = initialize_backend_attrs(vmn_ctx)
-    if err:
-        return err
-
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {"detached", "repos_exist_locally", "modified"}
 
