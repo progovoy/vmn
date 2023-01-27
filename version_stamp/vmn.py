@@ -4,6 +4,8 @@ import random
 import time
 from pathlib import Path
 import copy
+
+import git
 import yaml
 import sys
 import os
@@ -1259,7 +1261,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
-    # For backward compatability
+    # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
 
@@ -1374,8 +1376,8 @@ def initialize_backend_attrs(vmn_ctx):
         vcs.root_context,
         type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     )
-    vcs.tracked = vcs.ver_info_from_repo is not None
 
+    vcs.tracked = vcs.ver_info_from_repo is not None
     if vcs.tracked:
         for rel_path, dep in vcs.configured_deps.items():
             if rel_path.endswith(os.path.join("/", self_base)):

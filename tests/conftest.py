@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 import yaml
+import git
 from git import Repo
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
@@ -145,6 +146,35 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
         base_cmd = ["git", "push", "--tags"]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+    def is_file_tracked(self, file_path):
+        try:
+            self._app_backend._be.git.execute(
+                ["git", "ls-files", "--error-unmatch", f"{file_path}"]
+            )
+        except git.GitCommandError as exc:
+            return False
+
+        return True
+
+    def remove_tag(self, tag_name):
+        import subprocess
+
+        base_cmd = ["git", "tag", "-d", tag_name]
+
+        LOGGER.info(f"going to run: {' '.join(base_cmd)}")
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+        base_cmd = [
+            "git",
+            "push",
+            "--delete",
+            self._app_backend.be._origin.name,
+            tag_name
+        ]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
