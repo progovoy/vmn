@@ -44,6 +44,7 @@ jobs:
         git status
         make _${{ github.event.inputs.version_type }}
         git status
+        cat .vmn/vmn.log
 
     - name: build pkg
       run: |
