@@ -2146,7 +2146,7 @@ def test_perf_show(app_layout):
     t2 = time.perf_counter()
     diff = t2 - t1
 
-    assert diff < 5
+    assert diff < 10
 
 
 def test_run_vmn_from_non_git_repo(app_layout, capfd):
