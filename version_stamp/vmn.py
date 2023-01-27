@@ -261,11 +261,7 @@ class IVersionsStamper(object):
         if counter_key not in prerelease_count:
             prerelease_count[counter_key] = 0
 
-        tag_name_prefix = \
-            stamp_utils.VMNBackend. \
-                app_name_to_git_tag_app_name(
-                self.name
-            )
+        tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(self.name)
 
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}*'
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
@@ -306,49 +302,41 @@ class IVersionsStamper(object):
         hotfix = gdict["hotfix"]
 
         if self.release_mode == "major":
-            tag_name_prefix = \
-                stamp_utils.VMNBackend.\
-                    app_name_to_git_tag_app_name(
-                    self.name
-                )
+            tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
+                self.name
+            )
 
-            tag_name_prefix = f'{tag_name_prefix}_*'
+            tag_name_prefix = f"{tag_name_prefix}_*"
             major = self.increase_octet(tag_name_prefix, major)
 
             minor = "0"
             patch = "0"
             hotfix = "0"
         elif self.release_mode == "minor":
-            tag_name_prefix = \
-                stamp_utils.VMNBackend. \
-                    app_name_to_git_tag_app_name(
-                    self.name
-                )
+            tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
+                self.name
+            )
 
-            tag_name_prefix = f'{tag_name_prefix}_{major}*'
+            tag_name_prefix = f"{tag_name_prefix}_{major}*"
             minor = self.increase_octet(tag_name_prefix, minor)
 
             patch = "0"
             hotfix = "0"
         elif self.release_mode == "patch":
-            tag_name_prefix = \
-                stamp_utils.VMNBackend. \
-                    app_name_to_git_tag_app_name(
-                    self.name
-                )
+            tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
+                self.name
+            )
 
-            tag_name_prefix = f'{tag_name_prefix}_{major}.{minor}*'
+            tag_name_prefix = f"{tag_name_prefix}_{major}.{minor}*"
             patch = self.increase_octet(tag_name_prefix, patch)
 
             hotfix = "0"
         elif self.release_mode == "hotfix":
-            tag_name_prefix = \
-                stamp_utils.VMNBackend. \
-                    app_name_to_git_tag_app_name(
-                    self.name
-                )
+            tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
+                self.name
+            )
 
-            tag_name_prefix = f'{tag_name_prefix}_{major}.{minor}.{patch}*'
+            tag_name_prefix = f"{tag_name_prefix}_{major}.{minor}.{patch}*"
             hotfix = self.increase_octet(tag_name_prefix, hotfix)
 
         return self.serialize_vmn_version_hotfix(major, minor, patch, hotfix)
@@ -1192,8 +1180,7 @@ def handle_init(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1276,8 +1263,7 @@ def handle_stamp(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1432,8 +1418,7 @@ def handle_release(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1493,8 +1478,7 @@ def handle_add(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1600,8 +1584,7 @@ def handle_goto(vmn_ctx):
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1842,8 +1825,7 @@ def _init_app(versions_be_ifc, starting_version):
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
-            f"Error occured when getting the repo status: {status}",
-            exc_info=True
+            f"Error occured when getting the repo status: {status}", exc_info=True
         )
 
         return 1
@@ -1998,7 +1980,9 @@ def show(vcs, params, verstr=None):
     if params["from_file"]:
         if verstr is None:
             be = stamp_utils.LocalFileBackend(vcs.vmn_root_path)
-            _, ver_info = be.get_first_reachable_version_info(vcs.name, vcs.root_context)
+            _, ver_info = be.get_first_reachable_version_info(
+                vcs.name, vcs.root_context
+            )
         else:
             if vcs.root_context:
                 dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
@@ -2040,9 +2024,7 @@ def show(vcs, params, verstr=None):
             tag_name, ver_info = _get_version_info_from_verstr(vcs, verstr)
 
         if ver_info is not None:
-            dirty_states = list(
-                get_dirty_states(optional_status, status)
-            )
+            dirty_states = list(get_dirty_states(optional_status, status))
 
             if params["ignore_dirty"]:
                 dirty_states = None
@@ -2589,17 +2571,14 @@ def vmn_run(command_line=None):
         return 1, None
 
     try:
-        LOGGER = stamp_utils.init_stamp_logger(
-            debug=args.debug
-        )
+        LOGGER = stamp_utils.init_stamp_logger(debug=args.debug)
 
         root_path = stamp_utils.resolve_root_path()
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
         LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, LOG_FILENAME),
-            args.debug
+            os.path.join(vmn_path, LOG_FILENAME), args.debug
         )
     except Exception as exc:
         LOGGER.error(
@@ -2623,9 +2602,7 @@ def vmn_run(command_line=None):
 
         bold_char = "\033[1m"
         end_char = "\033[0m"
-        LOGGER.debug(
-            f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}"
-        )
+        LOGGER.debug(f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}")
 
         return _vmn_run(args, root_path)
     except Exception as exc:

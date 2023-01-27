@@ -173,7 +173,7 @@ class FSAppLayoutFixture(object):
             "push",
             "--delete",
             self._app_backend.be._origin.name,
-            tag_name
+            tag_name,
         ]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")

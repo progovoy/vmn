@@ -288,13 +288,17 @@ class GitBackend(VMNBackend):
 
         vmn_cache_path = os.path.join(repo_path, ".vmn", "vmn.cache")
         if not os.path.exists(vmn_cache_path):
-            pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(
+                parents=True, exist_ok=True
+            )
             pathlib.Path(vmn_cache_path).touch()
 
             self._be.git.execute(["git", "fetch", "--tags"])
         else:
             minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
-            filemtime = datetime.datetime.fromtimestamp(os.path.getmtime(vmn_cache_path))
+            filemtime = datetime.datetime.fromtimestamp(
+                os.path.getmtime(vmn_cache_path)
+            )
             # file is more than 30 minutes old
             if filemtime < minutes_ago:
                 pathlib.Path(vmn_cache_path).touch()
@@ -323,7 +327,7 @@ class GitBackend(VMNBackend):
             "hotfix": None,
             "prerelease": None,
             "buildmetadata": None,
-            "tag_msg": self.get_tag_message(some_tag)
+            "tag_msg": self.get_tag_message(some_tag),
         }
 
         match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
@@ -448,7 +452,9 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
-    def get_latest_stamp_tags(self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE):
+    def get_latest_stamp_tags(
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
         else:
@@ -463,13 +469,13 @@ class GitBackend(VMNBackend):
         else:
             cmd_suffix = f"--branches"
 
-        shallow = os.path.exists(
-            os.path.join(self._be.common_dir, "shallow")
-        )
+        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
             tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(app_name)
         else:
-            tag_names = self._get_first_reachable_vmn_stamp_tag_list(cmd_suffix, msg_filter)
+            tag_names = self._get_first_reachable_vmn_stamp_tag_list(
+                cmd_suffix, msg_filter
+            )
 
         return tag_names
 
@@ -501,7 +507,9 @@ class GitBackend(VMNBackend):
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
-        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
+        tag_objects = sorted(
+            tag_objects, key=lambda t: t.object.tagged_date, reverse=True
+        )
         tag_names = []
         for tag_object in tag_objects:
             tag_names.append(tag_object.name)
@@ -509,10 +517,7 @@ class GitBackend(VMNBackend):
         return tag_names
 
     def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name):
-        tag_name_prefix = \
-            VMNBackend.app_name_to_git_tag_app_name(
-                app_name
-            )
+        tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
         tag_names = self._be.git.tag(*cmd).split("\n")
 
@@ -527,7 +532,10 @@ class GitBackend(VMNBackend):
         for tname in reversed(tag_names):
             o = self.get_tag_object_from_tag_name(tname)
             if o:
-                if self._be.head.commit.hexsha != o.commit.hexsha and head_date < o.object.tagged_date:
+                if (
+                    self._be.head.commit.hexsha != o.commit.hexsha
+                    and head_date < o.object.tagged_date
+                ):
                     continue
 
                 latest_tag = tname
@@ -536,9 +544,7 @@ class GitBackend(VMNBackend):
         try:
             found_tag = self._be.tag(f"refs/tags/{latest_tag}")
         except Exception as exc:
-            LOGGER.error(
-                f"Failed to get tag object from tag name: {latest_tag}"
-            )
+            LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
             return []
 
         head_tags = self.get_all_commit_tags(found_tag.commit.hexsha)
@@ -551,7 +557,9 @@ class GitBackend(VMNBackend):
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
-        tag_objects = sorted(tag_objects, key=lambda t: t.object.tagged_date, reverse=True)
+        tag_objects = sorted(
+            tag_objects, key=lambda t: t.object.tagged_date, reverse=True
+        )
 
         final_list_of_tag_names = []
         for tag_object in tag_objects:
@@ -638,7 +646,7 @@ class GitBackend(VMNBackend):
 
                 LOGGER.debug(
                     f"Probably non-vmn tag - {t} with tag msg: {tagd['tag_msg']} ",
-                    exc_info=True
+                    exc_info=True,
                 )
                 continue
 
@@ -652,7 +660,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
                 f"Logged exception: ",
-                exc_info=True
+                exc_info=True,
             )
             return []
 
@@ -720,7 +728,10 @@ class GitBackend(VMNBackend):
             logging.info("Failed to get branch name. Trying to checkout to master")
             LOGGER.debug("Exception info: ", exc_info=True)
             # TODO:: change to some branch name that can be retreived from repo
-            self.checkout(branch="master")
+            try:
+                self.checkout(branch="master")
+            except Exception as exc:
+                self.checkout(branch="main")
 
         return self._be.active_branch.commit.hexsha
 
@@ -957,9 +968,7 @@ class GitBackend(VMNBackend):
                 return None
 
         if "vmn_info" not in tag_msg:
-            LOGGER.debug(
-                f"vmn_info key was not found in tag {tag_name}"
-            )
+            LOGGER.debug(f"vmn_info key was not found in tag {tag_name}")
             return None
 
         return tag_msg

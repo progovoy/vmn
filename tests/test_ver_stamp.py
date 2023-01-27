@@ -1307,7 +1307,6 @@ def test_goto_print(app_layout, capfd):
     err = _goto(app_layout.app_name)
     assert err == 0
 
-
     sout, serr = capfd.readouterr()
     assert (
         f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
@@ -2095,11 +2094,7 @@ def test_shallow_non_vmn_commit_repo_stamp(app_layout, capfd):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push(
-        "test_repo_0",
-        "f1.txt",
-        "connnntenctt"
-    )
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "connnntenctt")
 
     clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
     app_layout.set_working_dir(clone_path)
@@ -2195,7 +2190,7 @@ def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
 
     app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
 
-    ret, ver_info, _ =_stamp_app(f"{app_layout.app_name}", "patch")
+    ret, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert ret == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
@@ -2208,7 +2203,7 @@ def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
 
     app_layout.remove_tag(f"{app_layout.app_name}_0.0.1")
 
-    ret, ver_info, _ =_stamp_app(f"{app_layout.app_name}", "patch")
+    ret, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert ret == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
