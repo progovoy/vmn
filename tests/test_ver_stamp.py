@@ -2271,20 +2271,30 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
 
 
 def test_conf_for_branch(app_layout, capfd):
-    res = _run_vmn_init()
+    _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
 
+    branch = "b2"
     app_layout.write_conf(
-        app_layout.repo_path+"/.vmn/test_app/b2_conf.yml",
+        f"{app_layout.repo_path}/.vmn/{app_layout.app_name}/{branch}_conf.yml",
         template="[test_{major}][.{minor}][.{patch}]"
     )
-    import subprocess
-    base_cmd = ["git", "checkout", "-b", "b2"]
-    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
     capfd.readouterr()
     err = _show(app_layout.app_name)
-
     captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "0.0.1"
+
+    import subprocess
+    base_cmd = ["git", "checkout", "-b", branch]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
     tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "test_0.0.1"
