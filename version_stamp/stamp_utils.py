@@ -190,6 +190,15 @@ class VMNBackend(object):
     ):
         return {}
 
+    def get_active_branch(self, raise_on_detached_head=True):
+        return "none"
+
+    def remote(self):
+        return "none"
+
+    def last_user_changeset(self):
+        return "none"
+
     @staticmethod
     def app_name_to_git_tag_app_name(app_name):
         return app_name.replace("/", "-")
@@ -243,7 +252,7 @@ class VMNBackend(object):
 
 class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
-        VMNBackend.__init__(self, "local_file")
+        VMNBackend.__init__(self, VMN_BE_TYPE_LOCAL_FILE)
 
         vmn_dir_path = os.path.join(repo_path, ".vmn")
         if not os.path.isdir(vmn_dir_path):
@@ -281,7 +290,7 @@ class LocalFileBackend(VMNBackend):
             return None, yaml.safe_load(f)
 
     def get_tag_version_info(self, tag_name):
-        if vcs.root_context:
+        if self.root_context:
             dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
             path = os.path.join(dir_path, f"{verstr}.yml")
         else:
@@ -332,7 +341,7 @@ class LocalFileBackend(VMNBackend):
 
 class GitBackend(VMNBackend):
     def __init__(self, repo_path):
-        VMNBackend.__init__(self, "git")
+        VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
 
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self.add_git_user_cfg_if_missing()
@@ -366,79 +375,6 @@ class GitBackend(VMNBackend):
         except Exception as exc:
             LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
-
-    def deserialize_tag_name(self, some_tag):
-        ret = {
-            "app_name": None,
-            "type": "version",
-            "version": None,
-            "root_version": None,
-            "major": None,
-            "minor": None,
-            "patch": None,
-            "hotfix": None,
-            "prerelease": None,
-            "buildmetadata": None,
-            "tag_msg": self.get_tag_message(some_tag),
-        }
-
-        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
-        if match is not None:
-            gdict = match.groupdict()
-
-            int(gdict["version"])
-            ret["root_version"] = gdict["version"]
-            ret["app_name"] = gdict["app_name"]
-            ret["type"] = "root"
-
-            return ret
-
-        match = re.search(VMN_TAG_REGEX, some_tag)
-        if match is None:
-            raise WrongTagFormatException()
-
-        gdict = match.groupdict()
-        ret["app_name"] = gdict["app_name"].replace("-", "/")
-        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret["major"] = gdict["major"]
-        ret["minor"] = gdict["minor"]
-        ret["patch"] = gdict["patch"]
-        ret["hotfix"] = "0"
-
-        if gdict["hotfix"] is not None:
-            ret["hotfix"] = gdict["hotfix"]
-
-        # TODO: Think about what it means that we have the whole
-        #  prerelease string here (with the prerelease count).
-        #  At least rename other prerelease prefixes to
-        #  something like "prerelease mode" or "prerelease prefix"
-        if gdict["prerelease"] is not None:
-            ret["prerelease"] = gdict["prerelease"]
-            ret["type"] = "prerelease"
-
-        if gdict["buildmetadata"] is not None:
-            ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["type"] = "buildmetadata"
-
-        return ret
-
-    def deserialize_vmn_tag_name(self, vmn_tag):
-        try:
-            return self.deserialize_tag_name(vmn_tag)
-        except WrongTagFormatException as exc:
-            LOGGER.error(
-                f"Tag {vmn_tag} doesn't comply to vmn version format",
-                exc_info=True,
-            )
-
-            raise exc
-        except Exception as exc:
-            LOGGER.error(
-                f"Failed to deserialize tag {vmn_tag}",
-                exc_info=True,
-            )
-
-            raise exc
 
     def tag(self, tags, messages, ref="HEAD", push=False):
         for tag, message in zip(tags, messages):
