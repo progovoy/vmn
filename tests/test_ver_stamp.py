@@ -2182,7 +2182,6 @@ def test_bad_tag(app_layout, capfd):
 
     assert err == 0
 
-
 def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -2269,3 +2268,23 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == manual_version[1]
+
+
+def test_conf_for_branch(app_layout, capfd):
+    res = _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    app_layout.write_conf(
+        app_layout.repo_path+"/.vmn/test_app/b2_conf.yml",
+        template="[test_{major}][.{minor}][.{patch}]"
+    )
+    import subprocess
+    base_cmd = ["git", "checkout", "-b", "b2"]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "test_0.0.1"
