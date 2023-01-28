@@ -38,7 +38,7 @@ def _init_app(app_name, starting_version="0.0.0"):
 def _release_app(app_name, version):
     cmd = ["release", "-v", version, app_name]
     ret, vmn_ctx = vmn.vmn_run(cmd)
-    vmn.initialize_backend_attrs(vmn_ctx)
+    vmn_ctx.vcs.initialize_backend_attrs()
     _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )

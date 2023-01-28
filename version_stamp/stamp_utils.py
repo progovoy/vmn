@@ -70,6 +70,9 @@ RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE = "branch"
 RELATIVE_TO_GLOBAL_TYPE = "global"
 
 VMN_USER_NAME = "vmn"
+VMN_BE_TYPE_GIT = "git"
+VMN_BE_TYPE_LOCAL_FILE = "local_file"
+
 LOGGER = None
 
 
@@ -277,6 +280,55 @@ class LocalFileBackend(VMNBackend):
         with open(latest_file, "r") as f:
             return None, yaml.safe_load(f)
 
+    def get_tag_version_info(self, tag_name):
+        if vcs.root_context:
+            dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
+            path = os.path.join(dir_path, f"{verstr}.yml")
+        else:
+            dir_path = os.path.join(vcs.app_dir_path, "verinfo")
+            path = os.path.join(dir_path, f"{verstr}.yml")
+
+        try:
+            with open(path, "r") as f:
+                ver_info = yaml.safe_load(f)
+        except Exception as exc:
+            LOGGER.error("Logged Exception message:", exc_info=True)
+            ver_info = None
+
+        tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
+
+        if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
+            LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
+            return tag_name, None
+
+        tag_msg = self.get_tag_message(tag_name)
+        if not tag_msg:
+            LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
+            return tag_name, None
+
+        all_tags = {}
+
+        tags = self.get_all_brother_tags(tag_name)
+        for tag in tags:
+            tagd = self.deserialize_vmn_tag_name(tag)
+            tagd.update({"tag": tag})
+            tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
+
+            all_tags[tagd["type"]] = tagd
+
+            # TODO:: Check API commit version
+
+        if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
+            tag_msg["stamping"].update(
+                yaml.safe_load(all_tags["root"]["message"])["stamping"]
+            )
+        elif "app" not in tag_msg["stamping"] and "version" in all_tags:
+            tag_msg["stamping"].update(
+                yaml.safe_load(all_tags["version"]["message"])["stamping"]
+            )
+
+        return tag_name, tag_msg
+
 
 class GitBackend(VMNBackend):
     def __init__(self, repo_path):
@@ -312,7 +364,7 @@ class GitBackend(VMNBackend):
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
             return True
         except Exception as exc:
-            LOGGER.debug(f"Logged exception: ", exc_info=True)
+            LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
 
     def deserialize_tag_name(self, some_tag):
@@ -471,7 +523,11 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
-            tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(app_name)
+            tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(
+                app_name,
+                cmd_suffix,
+                msg_filter,
+            )
         else:
             tag_names = self._get_first_reachable_vmn_stamp_tag_list(
                 cmd_suffix, msg_filter
@@ -516,7 +572,33 @@ class GitBackend(VMNBackend):
 
         return tag_names
 
-    def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name):
+    def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
+        tag_objects = []
+        res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
+        if res:
+            items = res[0].split(",,,")
+            for t in items[1].split(","):
+                if "tag:" not in t:
+                    continue
+
+                tname = t.split("tag:")[1].strip()
+                # TODO:: add call desearilize here
+                o = self.get_tag_object_from_tag_name(tname)
+                if o:
+                    tag_objects.append(o)
+
+        if tag_objects:
+            # We want the newest tag on top because we skip "buildmetadata tags"
+            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
+            tag_objects = sorted(
+                tag_objects, key=lambda t: t.object.tagged_date, reverse=True
+            )
+            tag_names = []
+            for tag_object in tag_objects:
+                tag_names.append(tag_object.name)
+
+            return tag_names
+
         tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
         tag_names = self._be.git.tag(*cmd).split("\n")
@@ -781,7 +863,6 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    # TODO:: Missing impl in LocalFileBackend
     def last_user_changeset(self):
         p = self._be.head.commit
         if p.author.name == VMN_USER_NAME:
@@ -797,7 +878,7 @@ class GitBackend(VMNBackend):
                 return p.hexsha
 
             for t in tags:
-                _, verinfo = self.get_version_info_from_tag_name(t)
+                _, verinfo = self.get_tag_version_info(t)
                 if "stamping" in verinfo:
                     return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
 
@@ -901,9 +982,9 @@ class GitBackend(VMNBackend):
         if cleaned_app_tag is None:
             return None, None
 
-        return self.get_version_info_from_tag_name(cleaned_app_tag)
+        return self.get_tag_version_info(cleaned_app_tag)
 
-    def get_version_info_from_tag_name(self, tag_name):
+    def get_tag_version_info(self, tag_name):
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
 
         if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
@@ -1037,13 +1118,17 @@ class HostState(object):
         return actual_deps_state
 
 
-def get_client(path):
+def get_client(root_path, be_type):
+    if be_type == "local_file":
+        be = LocalFileBackend(root_path)
+        return be, None
+
     try:
-        client = git.Repo(path, search_parent_directories=True)
+        client = git.Repo(root_path, search_parent_directories=True)
         client.close()
 
-        be = GitBackend(path)
+        be = GitBackend(root_path)
         return be, None
     except git.exc.InvalidGitRepositoryError:
-        err = f"repository path: {path} is not a functional git or repository.\n"
+        err = f"repository path: {root_path} is not a functional git or repository.\n"
         return None, err
