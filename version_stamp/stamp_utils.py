@@ -249,6 +249,80 @@ class VMNBackend(object):
 
         return "/".join(root_app_name[:-1])
 
+    @staticmethod
+    def deserialize_tag_name(some_tag):
+        ret = {
+            "app_name": None,
+            "type": "version",
+            "version": None,
+            "root_version": None,
+            "major": None,
+            "minor": None,
+            "patch": None,
+            "hotfix": None,
+            "prerelease": None,
+            "buildmetadata": None,
+        }
+
+        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
+        if match is not None:
+            gdict = match.groupdict()
+
+            int(gdict["version"])
+            ret["root_version"] = gdict["version"]
+            ret["app_name"] = gdict["app_name"]
+            ret["type"] = "root"
+
+            return ret
+
+        match = re.search(VMN_TAG_REGEX, some_tag)
+        if match is None:
+            raise WrongTagFormatException()
+
+        gdict = match.groupdict()
+        ret["app_name"] = gdict["app_name"].replace("-", "/")
+        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        ret["major"] = gdict["major"]
+        ret["minor"] = gdict["minor"]
+        ret["patch"] = gdict["patch"]
+        ret["hotfix"] = "0"
+
+        if gdict["hotfix"] is not None:
+            ret["hotfix"] = gdict["hotfix"]
+
+        # TODO: Think about what it means that we have the whole
+        #  prerelease string here (with the prerelease count).
+        #  At least rename other prerelease prefixes to
+        #  something like "prerelease mode" or "prerelease prefix"
+        if gdict["prerelease"] is not None:
+            ret["prerelease"] = gdict["prerelease"]
+            ret["type"] = "prerelease"
+
+        if gdict["buildmetadata"] is not None:
+            ret["buildmetadata"] = gdict["buildmetadata"]
+            ret["type"] = "buildmetadata"
+
+        return ret
+
+    @staticmethod
+    def deserialize_vmn_tag_name(vmn_tag):
+        try:
+            return VMNBackend.deserialize_tag_name(vmn_tag)
+        except WrongTagFormatException as exc:
+            LOGGER.error(
+                f"Tag {vmn_tag} doesn't comply to vmn version format",
+                exc_info=True,
+            )
+
+            raise exc
+        except Exception as exc:
+            LOGGER.error(
+                f"Failed to deserialize tag {vmn_tag}",
+                exc_info=True,
+            )
+
+            raise exc
+
 
 class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
@@ -319,9 +393,9 @@ class LocalFileBackend(VMNBackend):
 
         tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            tagd = self.deserialize_vmn_tag_name(tag)
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
-            tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
+            tagd["message"] = self.get_tag_message(tag)
 
             all_tags[tagd["type"]] = tagd
 
@@ -651,22 +725,15 @@ class GitBackend(VMNBackend):
 
         final_tags = []
         for t in tags:
-            try:
-                tagd = None
-                tagd = self.deserialize_tag_name(t)
-                if tagd["tag_msg"] is None:
-                    raise WrongTagFormatException()
-
-                final_tags.append(t)
-            except Exception as exc:
-                if tagd is None:
-                    tagd = {"tag_msg": None}
-
+            tag_msg = self.get_tag_message(t)
+            if tag_msg is None:
                 LOGGER.debug(
-                    f"Probably non-vmn tag - {t} with tag msg: {tagd['tag_msg']} ",
+                    f"Probably non-vmn tag - {t} with tag msg: {tag_msg}. Skipping ",
                     exc_info=True,
                 )
                 continue
+
+            final_tags.append(t)
 
         return final_tags
 
@@ -936,9 +1003,9 @@ class GitBackend(VMNBackend):
 
         tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            tagd = self.deserialize_vmn_tag_name(tag)
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
-            tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
+            tagd["message"] = self.get_tag_message(tag)
 
             all_tags[tagd["type"]] = tagd
 

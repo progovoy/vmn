@@ -251,79 +251,6 @@ class IVersionsStamper(object):
 
         self.configured_deps = flat_deps
 
-    def deserialize_tag_name(self, some_tag):
-        ret = {
-            "app_name": None,
-            "type": "version",
-            "version": None,
-            "root_version": None,
-            "major": None,
-            "minor": None,
-            "patch": None,
-            "hotfix": None,
-            "prerelease": None,
-            "buildmetadata": None,
-            "tag_msg": self.backend.get_tag_message(some_tag),
-        }
-
-        match = re.search(stamp_utils.VMN_ROOT_TAG_REGEX, some_tag)
-        if match is not None:
-            gdict = match.groupdict()
-
-            int(gdict["version"])
-            ret["root_version"] = gdict["version"]
-            ret["app_name"] = gdict["app_name"]
-            ret["type"] = "root"
-
-            return ret
-
-        match = re.search(stamp_utils.VMN_TAG_REGEX, some_tag)
-        if match is None:
-            raise stamp_utils.WrongTagFormatException()
-
-        gdict = match.groupdict()
-        ret["app_name"] = gdict["app_name"].replace("-", "/")
-        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret["major"] = gdict["major"]
-        ret["minor"] = gdict["minor"]
-        ret["patch"] = gdict["patch"]
-        ret["hotfix"] = "0"
-
-        if gdict["hotfix"] is not None:
-            ret["hotfix"] = gdict["hotfix"]
-
-        # TODO: Think about what it means that we have the whole
-        #  prerelease string here (with the prerelease count).
-        #  At least rename other prerelease prefixes to
-        #  something like "prerelease mode" or "prerelease prefix"
-        if gdict["prerelease"] is not None:
-            ret["prerelease"] = gdict["prerelease"]
-            ret["type"] = "prerelease"
-
-        if gdict["buildmetadata"] is not None:
-            ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["type"] = "buildmetadata"
-
-        return ret
-
-    def deserialize_vmn_tag_name(self, vmn_tag):
-        try:
-            return self.deserialize_tag_name(vmn_tag)
-        except stamp_utils.WrongTagFormatException as exc:
-            LOGGER.error(
-                f"Tag {vmn_tag} doesn't comply to vmn version format",
-                exc_info=True,
-            )
-
-            raise exc
-        except Exception as exc:
-            LOGGER.error(
-                f"Failed to deserialize tag {vmn_tag}",
-                exc_info=True,
-            )
-
-            raise exc
-
     def get_version_info_from_verstr(self, verstr):
         tag_name = self.get_tag_name(verstr)
         if self.root_context:
@@ -335,7 +262,7 @@ class IVersionsStamper(object):
                 return None, None
         else:
             try:
-                self.deserialize_vmn_tag_name(tag_name)
+                stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
             except Exception as exc:
                 LOGGER.error(f"Wrong version specified: {verstr}")
                 LOGGER.debug(f"Logged exception: ", exc_info=True)
@@ -481,7 +408,7 @@ class IVersionsStamper(object):
         tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}*'
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         if tag:
-            props = self.deserialize_vmn_tag_name(tag)
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
             global_val = int(props["prerelease"].split(prerelease)[1])
             prerelease_count[counter_key] = max(
@@ -499,7 +426,7 @@ class IVersionsStamper(object):
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         version_number_oct = int(version_number_oct)
         if tag:
-            props = self.deserialize_vmn_tag_name(tag)
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
             version_number_oct = max(version_number_oct, int(props[self.release_mode]))
         version_number_oct += 1
         return str(version_number_oct)
@@ -737,7 +664,7 @@ class VersionControlStamper(IVersionsStamper):
     def __init__(self, arg_params):
         IVersionsStamper.__init__(self, arg_params)
 
-    # TODO:: move to VMN_BACKEND in stamp_utils
+    # TODO:: move to VMN_BACKEND in stamp_utils (and probably make static)
     def serialize_vmn_tag_name(
         self,
         app_name,
@@ -838,7 +765,7 @@ class VersionControlStamper(IVersionsStamper):
         tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, version, prerelease, prerelease_count
         )
-        props = self.deserialize_vmn_tag_name(tag_formatted_app_name)
+        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_formatted_app_name)
         release_tag_formatted_app_name = self.serialize_vmn_tag_name(
             self.name, props["version"]
         )
@@ -929,7 +856,7 @@ class VersionControlStamper(IVersionsStamper):
         release_tag_name = self.serialize_vmn_tag_name(self.name, tmp["_version"])
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
 
-        props = self.deserialize_vmn_tag_name(tag_name)
+        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
         ver_info["stamping"]["app"]["_version"] = props["version"]
         ver_info["stamping"]["app"][
             "version"
