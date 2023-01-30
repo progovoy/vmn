@@ -1,12 +1,13 @@
 import copy
-import sys
-import os
-import yaml
-import shutil
-import toml
 import json
+import os
+import shutil
 import stat
+import sys
+
 import pytest
+import toml
+import yaml
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
@@ -78,15 +79,15 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
 
 def _show(
-    app_name,
-    version=None,
-    verbose=None,
-    raw=None,
-    root=False,
-    from_file=False,
-    ignore_dirty=False,
-    unique=False,
-    display_type=False,
+        app_name,
+        version=None,
+        verbose=None,
+        raw=None,
+        root=False,
+        from_file=False,
+        ignore_dirty=False,
+        unique=False,
+        display_type=False,
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -141,7 +142,7 @@ def _goto(app_name, version=None, root=False):
 
 
 def _add_buildmetadata_to_version(
-    app_layout, bm, version=None, file_path=None, url=None
+        app_layout, bm, version=None, file_path=None, url=None
 ):
     args_list = ["--debug"]
     args_list.extend(["add"])
@@ -362,9 +363,9 @@ def test_jinja2_gen(app_layout, capfd):
     captured = capfd.readouterr()
 
     assert (
-        "[ERROR] The repository and maybe"
-        " some of its dependencies are in dirty state.Dirty states"
-        " found: {'modified'}" in captured.err
+            "[ERROR] The repository and maybe"
+            " some of its dependencies are in dirty state.Dirty states"
+            " found: {'modified'}" in captured.err
     )
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -377,9 +378,9 @@ def test_jinja2_gen(app_layout, capfd):
     captured = capfd.readouterr()
 
     assert (
-        "[ERROR] The repository is not exactly at "
-        "version: 0.0.1. You can use `vmn goto` in order "
-        "to jump to that version.\nRefusing to gen." in captured.err
+            "[ERROR] The repository is not exactly at "
+            "version: 0.0.1. You can use `vmn goto` in order "
+            "to jump to that version.\nRefusing to gen." in captured.err
     )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
@@ -597,8 +598,8 @@ def test_show_from_file(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        captured.out == f"[INFO] Version information was not "
-        f"found for {app_layout.app_name}.\n"
+            captured.out == f"[INFO] Version information was not "
+                            f"found for {app_layout.app_name}.\n"
     )
 
     conf = {
@@ -839,8 +840,8 @@ def test_show_from_file_conf_changed(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        f"[INFO] Version information was not found for "
-        f"{app_layout.app_name}.\n" == captured.out
+            f"[INFO] Version information was not found for "
+            f"{app_layout.app_name}.\n" == captured.out
     )
 
 
@@ -1309,8 +1310,8 @@ def test_goto_print(app_layout, capfd):
 
     sout, serr = capfd.readouterr()
     assert (
-        f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
-        == sout
+            f"[INFO] You are at the tip of the branch of version 2.0.0 for {app_layout.app_name}\n"
+            == sout
     )
 
 
@@ -1628,9 +1629,9 @@ def test_basic_root_show(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        "[ERROR] When not in release candidate mode, a release mode must be "
-        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
-        == captured.err
+            "[ERROR] When not in release candidate mode, a release mode must be "
+            "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
+            == captured.err
     )
 
     err, ver_info, _ = _stamp_app(app_name, release_mode="patch")
@@ -1887,8 +1888,8 @@ def test_add_bm(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert (
-        "[ERROR] When running vmn add and not on a version commit, "
-        "you must specify a specific version using -v flag\n" in captured.err
+            "[ERROR] When running vmn add and not on a version commit, "
+            "you must specify a specific version using -v flag\n" in captured.err
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -1985,8 +1986,8 @@ def test_add_bm(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert (
-        "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ "
-        "doesn't comply " in captured.err
+            "[ERROR] Tag test_app_0.0.3+build.1-aef.1-its-okay+ "
+            "doesn't comply " in captured.err
     )
 
     app_layout.write_file_commit_and_push(
@@ -2181,6 +2182,7 @@ def test_bad_tag(app_layout, capfd):
     captured = capfd.readouterr()
 
     assert err == 0
+
 
 def test_stamp_with_removed_tags_no_commit(app_layout, capfd):
     _run_vmn_init()

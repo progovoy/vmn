@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-import pathlib
-import sys
-import os
-import git
-import logging
-import glob
-import re
-import time
-import yaml
-import datetime
 import configparser
+import datetime
+import glob
+import logging
+import os
+import pathlib
+import re
+import sys
+import time
 from logging.handlers import RotatingFileHandler
+
+import git
+import yaml
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
@@ -186,7 +187,7 @@ class VMNBackend(object):
         return self._type
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -230,8 +231,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -341,7 +342,7 @@ class LocalFileBackend(VMNBackend):
         pass
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -499,7 +500,7 @@ class GitBackend(VMNBackend):
             return None
 
     def get_latest_stamp_tags(
-        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -609,8 +610,8 @@ class GitBackend(VMNBackend):
             o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                    self._be.head.commit.hexsha != o.commit.hexsha
-                    and head_date < o.object.tagged_date
+                        self._be.head.commit.hexsha != o.commit.hexsha
+                        and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -955,7 +956,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         app_tags = self.get_latest_stamp_tags(app_name, root_context, type)
         cleaned_app_tag = None
