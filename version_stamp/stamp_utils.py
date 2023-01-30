@@ -363,13 +363,29 @@ class LocalFileBackend(VMNBackend):
         with open(latest_file, "r") as f:
             return None, yaml.safe_load(f)
 
+    def get_actual_deps_state(self, vmn_root_path, paths):
+        actual_deps_state = {
+            ".": {
+                "hash": "0xdeadbeef",
+                "remote": "none",
+                "vcs_type": VMN_BE_TYPE_LOCAL_FILE,
+            }
+        }
+
+        return actual_deps_state
+
     def get_tag_version_info(self, tag_name):
-        if self.root_context:
-            dir_path = os.path.join(vcs.root_app_dir_path, "root_verinfo")
-            path = os.path.join(dir_path, f"{verstr}.yml")
+        tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
+        if tagd["type"] == "root":
+            dir_path = os.path.join(
+                self.repo_path, ".vmn", tagd["app_name"], "root_verinfo"
+            )
+            path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
         else:
-            dir_path = os.path.join(vcs.app_dir_path, "verinfo")
-            path = os.path.join(dir_path, f"{verstr}.yml")
+            dir_path = os.path.join(
+                self.repo_path, ".vmn", tagd["app_name"], "verinfo"
+            )
+            path = os.path.join(dir_path, f"{tagd['version']}.yml")
 
         try:
             with open(path, "r") as f:
@@ -378,39 +394,7 @@ class LocalFileBackend(VMNBackend):
             LOGGER.error("Logged Exception message:", exc_info=True)
             ver_info = None
 
-        tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
-
-        if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
-            LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return tag_name, None
-
-        tag_msg = self.get_tag_message(tag_name)
-        if not tag_msg:
-            LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
-            return tag_name, None
-
-        all_tags = {}
-
-        tags = self.get_all_brother_tags(tag_name)
-        for tag in tags:
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = self.get_tag_message(tag)
-
-            all_tags[tagd["type"]] = tagd
-
-            # TODO:: Check API commit version
-
-        if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
-            tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["root"]["message"])["stamping"]
-            )
-        elif "app" not in tag_msg["stamping"] and "version" in all_tags:
-            tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["version"]["message"])["stamping"]
-            )
-
-        return tag_name, tag_msg
+        return tag_name, ver_info
 
 
 class GitBackend(VMNBackend):
@@ -866,6 +850,22 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
+    def get_actual_deps_state(self, vmn_root_path, paths):
+        actual_deps_state = {}
+        for path in paths:
+            full_path = os.path.join(vmn_root_path, path)
+            details = HostState.get_repo_details(full_path)
+            if details is None:
+                continue
+
+            actual_deps_state[path] = {
+                "hash": details[0],
+                "remote": details[1],
+                "vcs_type": details[2],
+            }
+
+        return actual_deps_state
+
     def last_user_changeset(self):
         p = self._be.head.commit
         if p.author.name == VMN_USER_NAME:
@@ -1013,11 +1013,11 @@ class GitBackend(VMNBackend):
 
         if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
             tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["root"]["message"])["stamping"]
+                all_tags["root"]["message"]["stamping"]
             )
         elif "app" not in tag_msg["stamping"] and "version" in all_tags:
             tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["version"]["message"])["stamping"]
+                all_tags["version"]["message"]["stamping"]
             )
 
         return tag_name, tag_msg
@@ -1102,23 +1102,6 @@ class HostState(object):
             client.close()
 
         return hash, remote, "git"
-
-    @staticmethod
-    def get_actual_deps_state(vmn_root_path, paths):
-        actual_deps_state = {}
-        for path in paths:
-            full_path = os.path.join(vmn_root_path, path)
-            details = HostState.get_repo_details(full_path)
-            if details is None:
-                continue
-
-            actual_deps_state[path] = {
-                "hash": details[0],
-                "remote": details[1],
-                "vcs_type": details[2],
-            }
-
-        return actual_deps_state
 
 
 def get_client(root_path, be_type):

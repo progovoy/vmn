@@ -306,7 +306,7 @@ class IVersionsStamper(object):
                 "Check your clone / checkout process."
             )
 
-        self.actual_deps_state = HostState.get_actual_deps_state(
+        self.actual_deps_state = self.backend.get_actual_deps_state(
             self.vmn_root_path,
             self.configured_deps,
         )
