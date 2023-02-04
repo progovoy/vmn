@@ -200,11 +200,26 @@ def _configure_empty_conf(app_layout, params):
     return conf
 
 
-def test_basic_stamp(app_layout):
+def test_vmn_init(app_layout, capfd):
     res = _run_vmn_init()
     assert res == 0
+    captured = capfd.readouterr()
+
+    assert f"[INFO] Initialized vmn tracking on {app_layout.repo_path}\n" == captured.out
+    assert "" == captured.err
+
     res = _run_vmn_init()
     assert res == 1
+
+    captured = capfd.readouterr()
+    assert "[ERROR] vmn repo tracking is already initialized\n" \
+           "[ERROR] Repository status is in unexpected state:\n" \
+           "{'repo_tracked'}\nversus optional:\nset()\n" == captured.err
+    assert "" == captured.out
+
+
+def test_basic_stamp(app_layout):
+    _run_vmn_init()
 
     _init_app(app_layout.app_name)
 
