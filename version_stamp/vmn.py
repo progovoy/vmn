@@ -1922,11 +1922,12 @@ def _stamp_version(
 
     if check_vmn_version:
         newer_stamping = version_mod.version != "dev" and (
-                pversion.parse(
-                    versions_be_ifc.ver_info_from_repo["vmn_info"]["vmn_version"]
-                )
-                > pversion.parse(version_mod.version)
+            pversion.parse(
+                versions_be_ifc.current_version_info["vmn_info"]["vmn_version"]
+            )
+            > pversion.parse(version_mod.version)
         )
+
         if newer_stamping:
             LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
             raise RuntimeError()
