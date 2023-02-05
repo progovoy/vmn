@@ -2105,6 +2105,26 @@ def test_shallow_non_vmn_commit_repo_stamp(app_layout, capfd):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
 
+def test_shallow_vmn_commit_repo_stamp_pr(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch", prerelease="yuval")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1-yuval1"
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "test.tst",
+        "bla",
+    )
+
+    clone_path = app_layout.create_new_clone("test_repo_0", depth=1)
+    app_layout.set_working_dir(clone_path)
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1-yuval2"
+
+
 def test_same_user_tag(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
