@@ -537,6 +537,30 @@ class GitBackend(VMNBackend):
     def __del__(self):
         self._be.close()
 
+    @staticmethod
+    def get_repo_details(path):
+        try:
+            client = git.Repo(path, search_parent_directories=True)
+        except git.exc.InvalidGitRepositoryError as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+        except Exception as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+
+        try:
+            hash = client.head.commit.hexsha
+            remote = tuple(client.remotes[0].urls)[0]
+            if os.path.isdir(remote):
+                remote = os.path.relpath(remote, client.working_dir)
+        except Exception as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+        finally:
+            client.close()
+
+        return hash, remote, "git"
+
     def is_path_tracked(self, path):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
@@ -963,11 +987,12 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    def get_actual_deps_state(self, vmn_root_path, paths):
+    @staticmethod
+    def get_actual_deps_state(vmn_root_path, paths):
         actual_deps_state = {}
         for path in paths:
             full_path = os.path.join(vmn_root_path, path)
-            details = HostState.get_repo_details(full_path)
+            details = GitBackend.get_repo_details(full_path)
             if details is None:
                 continue
 
@@ -1185,32 +1210,6 @@ class GitBackend(VMNBackend):
     @staticmethod
     def clone(path, remote):
         git.Repo.clone_from(f"{remote}", f"{path}")
-
-
-class HostState(object):
-    @staticmethod
-    def get_repo_details(path):
-        try:
-            client = git.Repo(path, search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
-        except Exception as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
-
-        try:
-            hash = client.head.commit.hexsha
-            remote = tuple(client.remotes[0].urls)[0]
-            if os.path.isdir(remote):
-                remote = os.path.relpath(remote, client.working_dir)
-        except Exception as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
-        finally:
-            client.close()
-
-        return hash, remote, "git"
 
 
 def get_client(root_path, be_type):
