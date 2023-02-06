@@ -187,7 +187,7 @@ class VMNBackend(object):
         return self._type
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -231,8 +231,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                    f"{octat}_template" in template
-                    and template[f"{octat}_template"] is not None
+                f"{octat}_template" in template
+                and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -249,6 +249,118 @@ class VMNBackend(object):
             return None
 
         return "/".join(root_app_name[:-1])
+
+    @staticmethod
+    def serialize_vmn_tag_name(
+        app_name,
+        version,
+        hide_zero_hotfix,
+        prerelease=None,
+        prerelease_count=None,
+        buildmetadata=None,
+    ):
+        app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
+
+        verstr = VMNBackend.serialize_vmn_version(
+            version,
+            prerelease,
+            prerelease_count,
+            hide_zero_hotfix,
+            buildmetadata,
+        )
+
+        verstr = f"{app_name}_{verstr}"
+
+        match = re.search(VMN_TAG_REGEX, verstr)
+        if match is None:
+            err = f"Tag {verstr} doesn't comply with: " f"{VMN_TAG_REGEX} format"
+            LOGGER.error(err)
+
+            raise RuntimeError(err)
+
+        return verstr
+
+    @staticmethod
+    def serialize_vmn_version(
+        current_version,
+        prerelease,
+        prerelease_count,
+        hide_zero_hostfix,
+        buildmetadata=None,
+    ):
+        vmn_version = VMNBackend.get_base_vmn_version(
+            current_version, hide_zero_hostfix
+        )
+
+        if prerelease is None or prerelease == "release":
+            if buildmetadata is not None:
+                vmn_version = f"{vmn_version}+{buildmetadata}"
+
+            return vmn_version
+
+        try:
+            assert prerelease in prerelease_count
+            # TODO: here try to use VMN_VERSION_FORMAT somehow
+            vmn_version = f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
+
+            match = re.search(VMN_REGEX, vmn_version)
+            if match is None:
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{VMN_VERSION_FORMAT} format"
+                )
+                LOGGER.error(err)
+
+                raise RuntimeError(err)
+        except AssertionError:
+            LOGGER.error(
+                f"{prerelease} doesn't appear in {prerelease_count} "
+                "Turn on debug mode to see traceback"
+            )
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+        if buildmetadata is not None:
+            vmn_version = f"{vmn_version}+{buildmetadata}"
+
+            match = re.search(VMN_REGEX, vmn_version)
+            if match is None:
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{VMN_VERSION_FORMAT} format"
+                )
+                LOGGER.error(err)
+                raise RuntimeError(err)
+
+        return vmn_version
+
+    @staticmethod
+    def serialize_vmn_version_hotfix(
+        hide_zero_hotfix, major, minor, patch, hotfix=None
+    ):
+        if hide_zero_hotfix and hotfix == "0":
+            hotfix = None
+
+        vmn_version = f"{major}.{minor}.{patch}"
+        if hotfix is not None:
+            vmn_version = f"{vmn_version}.{hotfix}"
+
+        return vmn_version
+
+    @staticmethod
+    def get_base_vmn_version(current_version, hide_zero_hotfix):
+        match = re.search(VMN_REGEX, current_version)
+        gdict = match.groupdict()
+        if gdict["hotfix"] is None:
+            gdict["hotfix"] = str(0)
+        vmn_version = VMNBackend.serialize_vmn_version_hotfix(
+            hide_zero_hotfix,
+            gdict["major"],
+            gdict["minor"],
+            gdict["patch"],
+            gdict["hotfix"],
+        )
+
+        return vmn_version
 
     @staticmethod
     def deserialize_tag_name(some_tag):
@@ -342,7 +454,7 @@ class LocalFileBackend(VMNBackend):
         pass
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -383,9 +495,7 @@ class LocalFileBackend(VMNBackend):
             )
             path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
         else:
-            dir_path = os.path.join(
-                self.repo_path, ".vmn", tagd["app_name"], "verinfo"
-            )
+            dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
             path = os.path.join(dir_path, f"{tagd['version']}.yml")
 
         try:
@@ -500,7 +610,7 @@ class GitBackend(VMNBackend):
             return None
 
     def get_latest_stamp_tags(
-            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -567,7 +677,9 @@ class GitBackend(VMNBackend):
 
         return tag_names
 
-    def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
+    def _get_shallow_first_reachable_vmn_stamp_tag_list(
+        self, app_name, cmd_suffix, msg_filter
+    ):
         tag_objects = []
         res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
         if res:
@@ -610,8 +722,8 @@ class GitBackend(VMNBackend):
             o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                        self._be.head.commit.hexsha != o.commit.hexsha
-                        and head_date < o.object.tagged_date
+                    self._be.head.commit.hexsha != o.commit.hexsha
+                    and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -956,7 +1068,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-            self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         app_tags = self.get_latest_stamp_tags(app_name, root_context, type)
         cleaned_app_tag = None
@@ -1013,13 +1125,9 @@ class GitBackend(VMNBackend):
             # TODO:: Check API commit version
 
         if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
-            tag_msg["stamping"].update(
-                all_tags["root"]["message"]["stamping"]
-            )
+            tag_msg["stamping"].update(all_tags["root"]["message"]["stamping"])
         elif "app" not in tag_msg["stamping"] and "version" in all_tags:
-            tag_msg["stamping"].update(
-                all_tags["version"]["message"]["stamping"]
-            )
+            tag_msg["stamping"].update(all_tags["version"]["message"]["stamping"])
 
         return tag_name, tag_msg
 
