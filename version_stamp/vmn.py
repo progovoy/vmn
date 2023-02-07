@@ -1522,6 +1522,7 @@ def handle_gen(vmn_ctx):
     vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
     vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
     vmn_ctx.params["output"] = vmn_ctx.args.output
+    vmn_ctx.params["custom_values"] = vmn_ctx.args.custom_values
 
     try:
         out = gen(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
@@ -2143,6 +2144,11 @@ def gen(vcs, params, verstr=None):
         for key, v in ver_info["stamping"]["root_app"].items():
             tmplt_value[f"root_{key}"] = v
 
+    if params["custom_values"] is not None:
+        with open(params["custom_values"], "r") as f:
+            ret = yaml.safe_load(f)
+            tmplt_value.update(ret)
+
     with open(params["jinja_template"]) as file_:
         template = jinja2.Template(file_.read())
 
@@ -2586,6 +2592,13 @@ def add_arg_gen(subprasers):
     pgen.add_argument("--verify-version", dest="verify_version", action="store_true")
     pgen.set_defaults(verify_version=False)
     pgen.add_argument("name", help="The application's name")
+    pgen.add_argument(
+        "-c",
+        "--custom-values",
+        default=None,
+        required=False,
+        help=f"Path to a yml file with custom keys and values"
+    )
 
 
 def add_arg_release(subprasers):
