@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import copy
+import glob
 import json
 import os
 import pathlib
@@ -1187,12 +1188,43 @@ class VersionControlStamper(IVersionsStamper):
         return 0
 
     def publish_commit(self, version_files_to_add):
+        cur_branch = self.backend.get_active_branch(
+            raise_on_detached_head=False
+        )
+        path = os.path.join(
+            self.app_dir_path,
+            f"*_conf.yml",
+        )
+        list_of_files = glob.glob(path)
+        branch_conf_path = os.path.join(
+            self.app_dir_path,
+            f"{cur_branch}_conf.yml"
+        )
+
         if self.dry_run:
+            if list_of_files:
+                LOGGER.info(
+                    "Would have removed config files:\n"
+                    f'{set(list_of_files) - set(branch_conf_path)}'
+                )
+
             LOGGER.info(
                 "Would have created commit with message:\n"
                 f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
+            for f in set(list_of_files) - set(branch_conf_path):
+                try:
+                    self.backend._be.index.remove([f], working_tree=True)
+                except Exception as exc:
+                    pass
+
+                try:
+                    f_to_rem = pathlib.Path(f)
+                    f_to_rem.unlink()
+                except Exception as exc:
+                    pass
+
             self.backend.commit(
                 message=self.current_version_info["stamping"]["msg"],
                 user="vmn",

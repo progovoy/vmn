@@ -2355,3 +2355,47 @@ def test_conf_for_branch(app_layout, capfd):
 
     tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "test_0.0.1"
+
+
+def test_conf_for_branch_removal_of_conf(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "b2"
+    branch_conf_path = os.path.join(
+        f"{app_layout.repo_path}", ".vmn", f"{app_layout.app_name}", f"{branch}_conf.yml"
+    )
+    app_layout.write_conf(
+        branch_conf_path,
+        template="[test_{major}][.{minor}][.{patch}]"
+    )
+
+    import subprocess
+    base_cmd = ["git", "checkout", "-b", branch]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "a.txt",
+        "bv",
+    )
+
+    err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+
+    base_cmd = ["git", "checkout", "-b", "main"]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "b.txt",
+        "bv",
+    )
+
+    assert os.path.exists(branch_conf_path)
+
+    err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+
+    assert not os.path.exists(branch_conf_path)
