@@ -112,7 +112,7 @@ def _show(
     return vmn.vmn_run(args_list)[0]
 
 
-def _gen(app_name, template, output, verify_version=False, version=None):
+def _gen(app_name, template, output, verify_version=False, version=None, custom_path=None):
     args_list = ["--debug"]
     args_list.extend(["gen"])
     args_list.extend(["--template", template])
@@ -123,6 +123,9 @@ def _gen(app_name, template, output, verify_version=False, version=None):
 
     if verify_version:
         args_list.extend(["--verify-version"])
+
+    if custom_path is not None:
+        args_list.extend(["-c", f"{custom_path}"])
 
     args_list.append(app_name)
 
@@ -443,6 +446,43 @@ def test_jinja2_gen(app_layout, capfd):
         assert "modified" in data["."]["state"]
         assert "pending" in data["../repo1"]["state"]
         assert "outgoing" in data["../repo2"]["state"]
+
+
+def test_jinja2_gen_custom(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    jinja2_content = (
+        "VERSION: {{version}}\n"
+        "Custom: {{k1}}\n"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.jinja2", jinja2_content
+    )
+
+    custom_keys_content = "k1: 5\n"
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "custom.yml", custom_keys_content
+    )
+
+    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
+    err = _gen(app_layout.app_name, tpath, opath, custom_path=custom_path)
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["VERSION"] == "0.0.1"
+        assert data["Custom"] == 5
 
 
 def test_basic_show(app_layout, capfd):
