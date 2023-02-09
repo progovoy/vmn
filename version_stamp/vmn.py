@@ -1205,7 +1205,7 @@ class VersionControlStamper(IVersionsStamper):
             if list_of_files:
                 LOGGER.info(
                     "Would have removed config files:\n"
-                    f'{set(list_of_files) - set(branch_conf_path)}'
+                    f'{set(list_of_files) - set([branch_conf_path])}'
                 )
 
             LOGGER.info(
@@ -1213,7 +1213,7 @@ class VersionControlStamper(IVersionsStamper):
                 f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
-            for f in set(list_of_files) - set(branch_conf_path):
+            for f in set(list_of_files) - set([branch_conf_path]):
                 try:
                     self.backend._be.index.remove([f], working_tree=True)
                 except Exception as exc:

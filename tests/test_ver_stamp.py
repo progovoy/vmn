@@ -2371,6 +2371,8 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
         template="[test_{major}][.{minor}][.{patch}]"
     )
 
+    assert os.path.exists(branch_conf_path)
+
     import subprocess
     base_cmd = ["git", "checkout", "-b", branch]
     subprocess.call(base_cmd, cwd=app_layout.repo_path)
@@ -2383,6 +2385,8 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
 
     err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
+
+    assert os.path.exists(branch_conf_path)
 
     base_cmd = ["git", "checkout", "-b", "main"]
     subprocess.call(base_cmd, cwd=app_layout.repo_path)
