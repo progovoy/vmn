@@ -1,4 +1,4 @@
 prerelease: rc
 prerelease_count:
-  rc: 1
+  rc: 2
 version_to_stamp_from: 0.8.0
