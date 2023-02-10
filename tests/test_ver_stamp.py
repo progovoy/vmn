@@ -2357,6 +2357,7 @@ def test_conf_for_branch(app_layout, capfd):
     assert tmp["out"] == "test_0.0.1"
 
 
+<<<<<<< HEAD
 def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -2403,3 +2404,37 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     assert err == 0
 
     assert not os.path.exists(branch_conf_path)
+=======
+def test_stamp_on_branch_merge_squash2(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "new_branch"
+
+    app_layout._app_backend.be.checkout(("-b", other_branch))
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout._app_backend.be.checkout(main_branch)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1msg1")
+
+    app_layout._app_backend.be.checkout(other_branch)
+
+    app_layout.rebase(main_branch, other_branch)
+
+    app_layout.push(force_lease=True)
+
+    app_layout._app_backend.be.checkout(main_branch)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msgd1msg1")
+
+    app_layout.merge(from_rev=other_branch, to_rev=main_branch, squash=True, no_ff=True)
+
+    _stamp_app(app_layout.app_name, "patch")
+
+    pass
+>>>>>>> 5f92a5e (add rebase test (wip))

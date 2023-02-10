@@ -112,12 +112,15 @@ class FSAppLayoutFixture(object):
 
         return local_path
 
-    def merge(self, from_rev, to_rev, squash=False):
+    def merge(self, from_rev, to_rev, squash=False, no_ff=False, delete_source=False):
         import subprocess
 
         base_cmd = ["git", "merge"]
         if squash:
             base_cmd.append("--squash")
+        if no_ff:
+            base_cmd.append("--no-ff")
+
         base_cmd.extend([from_rev, to_rev])
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
@@ -126,6 +129,31 @@ class FSAppLayoutFixture(object):
             ["git", "commit", "-m", "Merge {} in {}".format(from_rev, to_rev)],
             cwd=self.repo_path,
         )
+
+        subprocess.call(["git", "branch", "-D", from_rev], cwd=self.repo_path)
+
+        subprocess.call(["git", "push"], cwd=self.repo_path)
+
+
+    def rebase(self, from_rev, to_rev):
+        import subprocess
+
+        base_cmd = ["git", "rebase"]
+        base_cmd.extend([from_rev, to_rev])
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
+    def push(self, force_lease=False):
+        import subprocess
+
+        base_cmd = ["git", "push"]
+
+        if force_lease:
+            base_cmd.append("--force-with-lease")
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+        subprocess.call(base_cmd, cwd=self.repo_path)
 
     def get_all_tags(self):
         cmd = ["--sort", "taggerdate"]
