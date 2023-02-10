@@ -135,11 +135,12 @@ class FSAppLayoutFixture(object):
         subprocess.call(["git", "push"], cwd=self.repo_path)
 
 
-    def rebase(self, from_rev, to_rev):
+    def rebase(self, target, who_to_put_on_target, no_ff=False):
         import subprocess
 
-        base_cmd = ["git", "rebase"]
-        base_cmd.extend([from_rev, to_rev])
+        base_cmd = ["git", "rebase", target, who_to_put_on_target]
+        if no_ff:
+            base_cmd.append("--no-ff")
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)

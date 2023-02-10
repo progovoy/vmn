@@ -2264,7 +2264,7 @@ def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
 
-def test_show_removed_tags(app_layout, capfd):
+def test_show_after_1_tag_removed(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
@@ -2279,6 +2279,46 @@ def test_show_removed_tags(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert "dirty:\n- modified\nout: 0.0.0\n\n" == captured.out
+
+
+def test_show_after_multiple_tags_removed_1_tag_left(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    for i in range(4):
+        app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", f"{i}msg1")
+        _stamp_app(f"{app_layout.app_name}", "patch")
+        app_layout.remove_tag(f"{app_layout.app_name}_0.0.{i + 1}")
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+
+    res = yaml.safe_load(captured.out)
+    assert res['out'] == "0.0.0"
+    assert res["dirty"][0] == "modified"
+
+
+def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.0")
+
+    for i in range(4):
+        app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", f"{i}msg1")
+        _stamp_app(f"{app_layout.app_name}", "patch")
+        app_layout.remove_tag(f"{app_layout.app_name}_0.0.{i + 1}")
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 1
+
+    captured = capfd.readouterr()
+    assert captured.err == "[ERROR] Untracked app. Run vmn init-app first"
 
 
 def test_shallow_removed_vmn_tag_repo_stamp(app_layout):
@@ -2357,7 +2397,6 @@ def test_conf_for_branch(app_layout, capfd):
     assert tmp["out"] == "test_0.0.1"
 
 
-<<<<<<< HEAD
 def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -2404,37 +2443,35 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     assert err == 0
 
     assert not os.path.exists(branch_conf_path)
-=======
-def test_stamp_on_branch_merge_squash2(app_layout):
+
+
+def test_stamp_no_ff_rebase(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "minor")
 
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
     main_branch = app_layout._app_backend.be.get_active_branch()
-    other_branch = "new_branch"
+    other_branch = "topic"
 
     app_layout._app_backend.be.checkout(("-b", other_branch))
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
     _stamp_app(app_layout.app_name, "patch")
-
-    app_layout._app_backend.be.checkout(main_branch)
-
-    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1msg1")
-
-    app_layout._app_backend.be.checkout(other_branch)
-
-    app_layout.rebase(main_branch, other_branch)
-
-    app_layout.push(force_lease=True)
-
-    app_layout._app_backend.be.checkout(main_branch)
-
-    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msgd1msg1")
-
-    app_layout.merge(from_rev=other_branch, to_rev=main_branch, squash=True, no_ff=True)
-
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
     _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
 
-    pass
->>>>>>> 5f92a5e (add rebase test (wip))
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.1" == res["out"]
+
