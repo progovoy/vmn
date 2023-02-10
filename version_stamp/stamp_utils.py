@@ -659,36 +659,33 @@ class GitBackend(VMNBackend):
             )
         else:
             tag_names = self._get_first_reachable_vmn_stamp_tag_list(
-                cmd_suffix, msg_filter
+                app_name,
+                cmd_suffix,
+                msg_filter
             )
 
         return tag_names
 
-    def _get_first_reachable_vmn_stamp_tag_list(self, cmd_suffix, msg_filter):
-        tag_objects = []
-        res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
-        while res:
-            items = res[0].split(",,,")
-            _tag_objects = []
-            for t in items[1].split(","):
-                if "tag:" not in t:
-                    continue
-
-                tname = t.split("tag:")[1].strip()
-                # TODO:: add call desearilize here
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    _tag_objects.append(o)
-
-            if _tag_objects:
-                tag_objects = _tag_objects
+    def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
+        res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+        tag_objects = res[1]
+        bug_limit = 0
+        while not tag_objects and bug_limit < 100:
+            if res[0] is None:
                 break
 
-            if cmd_suffix == "HEAD":
-                cmd_suffix = f"{items[0]}~1"
-                res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
-            else:
-                res = []
+            cmd_suffix = f"{res[0].hexsha}~1"
+            res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+            tag_objects = res[1]
+
+            bug_limit += 1
+            if bug_limit == 100:
+                LOGGER.warning(
+                    f"Probable bug: vmn failed to find "
+                    f"vmn's commit after 100 interations."
+                )
+                tag_objects = []
+                break
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
@@ -704,28 +701,16 @@ class GitBackend(VMNBackend):
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
         self, app_name, cmd_suffix, msg_filter
     ):
-        tag_objects = []
-        res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
-        if res:
-            items = res[0].split(",,,")
-            for t in items[1].split(","):
-                if "tag:" not in t:
-                    continue
+        res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
-                tname = t.split("tag:")[1].strip()
-                # TODO:: add call desearilize here
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    tag_objects.append(o)
-
-        if tag_objects:
+        if res[1]:
             # We want the newest tag on top because we skip "buildmetadata tags"
             # TODO:: solve the weird coupling between here and get_first_reachable_version_info
-            tag_objects = sorted(
-                tag_objects, key=lambda t: t.object.tagged_date, reverse=True
+            res[1] = sorted(
+                res[1], key=lambda t: t.object.tagged_date, reverse=True
             )
             tag_names = []
-            for tag_object in tag_objects:
+            for tag_object in res[1]:
                 tag_names.append(tag_object.name)
 
             return tag_names
@@ -780,7 +765,7 @@ class GitBackend(VMNBackend):
 
         return final_list_of_tag_names
 
-    def _get_top_vmn_commit(self, cmd_suffix, msg_filter):
+    def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
             f"-1",
@@ -793,7 +778,37 @@ class GitBackend(VMNBackend):
         res = self._be.git.log(*cmd).split("\n")
         if len(res) == 1 and res[0] == "":
             res.pop(0)
-        return res
+
+        if not res:
+            return [None, []]
+
+        items = res[0].split(",,,")
+        _tag_objects = []
+
+        commit_hex = items[0]
+        commit_obj = self.get_commit_object_from_commit_hex(commit_hex)
+
+        for t in items[1].split(","):
+            if "tag:" not in t:
+                # Maybe rebase or tag was removed. Will handle the rebase case here
+                try:
+                    verstr = commit_obj.message.split(" version ")[1].strip()
+                    tagname = f"{app_name}_{verstr}"
+                    o = self.get_tag_object_from_tag_name(tagname)
+                    if o:
+                        _tag_objects.append(o)
+                except Exception as exc:
+                    LOGGER.debug(f"Skipped on {commit_hex} commit")
+
+                continue
+
+            tname = t.split("tag:")[1].strip()
+            # TODO:: add call desearilize here
+            o = self.get_tag_object_from_tag_name(tname)
+            if o:
+                _tag_objects.append(o)
+
+        return [commit_obj, _tag_objects]
 
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
@@ -1190,6 +1205,9 @@ class GitBackend(VMNBackend):
             return None
 
         return tag_msg
+
+    def get_commit_object_from_commit_hex(self, hex):
+        return self._be.commit(hex)
 
     def get_commit_object_from_tag_name(self, tag_name):
         try:

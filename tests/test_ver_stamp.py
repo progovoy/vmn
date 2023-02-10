@@ -2318,7 +2318,8 @@ def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
     assert err == 1
 
     captured = capfd.readouterr()
-    assert captured.err == "[ERROR] Untracked app. Run vmn init-app first"
+    assert captured.err == "[ERROR] Untracked app. Run vmn init-app first\n[ERROR] " \
+                           "Error occured when getting the repo status\n"
 
 
 def test_shallow_removed_vmn_tag_repo_stamp(app_layout):
@@ -2473,5 +2474,4 @@ def test_stamp_no_ff_rebase(app_layout, capfd):
 
     captured = capfd.readouterr()
     res = yaml.safe_load(captured.out)
-    assert "0.1.1" == res["out"]
-
+    assert "0.1.2" == res["out"]
