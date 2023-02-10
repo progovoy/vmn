@@ -77,6 +77,9 @@ VMN_BE_TYPE_LOCAL_FILE = "local_file"
 LOGGER = None
 
 
+VMN_GLOBAL_RESULTS_CACHE = {}
+
+
 class WrongTagFormatException(Exception):
     pass
 
@@ -861,15 +864,8 @@ class GitBackend(VMNBackend):
 
         final_tags = []
         for t in tags:
-            tag_msg = self.get_tag_message(t)
-            if tag_msg is None:
-                LOGGER.debug(
-                    f"Probably non-vmn tag - {t} with tag msg: {tag_msg}. Skipping ",
-                    exc_info=True,
-                )
-                continue
-
-            final_tags.append(t)
+            ver_info = self.get_tag_message(t)
+            final_tags.append((t, ver_info))
 
         return final_tags
 
@@ -1034,7 +1030,7 @@ class GitBackend(VMNBackend):
                 return p.hexsha
 
             for t in tags:
-                _, verinfo = self.get_tag_version_info(t)
+                _, verinfo, _ = self.get_tag_version_info(t)
                 if "stamping" in verinfo:
                     return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
 
@@ -1138,7 +1134,9 @@ class GitBackend(VMNBackend):
         if cleaned_app_tag is None:
             return None, None
 
-        return self.get_tag_version_info(cleaned_app_tag)
+        tag_name, verinfo, _ = self.get_tag_version_info(cleaned_app_tag)
+
+        return tag_name, verinfo
 
     def get_tag_version_info(self, tag_name):
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
@@ -1147,29 +1145,29 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
             return tag_name, None
 
-        tag_msg = self.get_tag_message(tag_name)
-        if not tag_msg:
-            LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
-            return tag_name, None
-
         all_tags = {}
-
+        ver_infos = {}
         tags = self.get_all_brother_tags(tag_name)
         for tag in tags:
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = self.get_tag_message(tag)
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag[0])
+            tagd.update({"tag": tag[0]})
+            tagd["message"] = tag[1]
+            ver_infos[tag[0]] = tag[1]
+            if not tag[1]:
+                LOGGER.debug(f"Corrupted tag msg of tag {tag[0]}")
+
+                return tag_name, None
 
             all_tags[tagd["type"]] = tagd
 
             # TODO:: Check API commit version
 
-        if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
-            tag_msg["stamping"].update(all_tags["root"]["message"]["stamping"])
-        elif "app" not in tag_msg["stamping"] and "version" in all_tags:
-            tag_msg["stamping"].update(all_tags["version"]["message"]["stamping"])
+        if "root_app" not in ver_infos[tag_name]["stamping"] and "root" in all_tags:
+            ver_infos[tag_name]["stamping"].update(all_tags["root"]["message"]["stamping"])
+        elif "app" not in ver_infos[tag_name]["stamping"] and "version" in all_tags:
+            ver_infos[tag_name]["stamping"].update(all_tags["version"]["message"]["stamping"])
 
-        return tag_name, tag_msg
+        return tag_name, ver_infos[tag_name], ver_infos
 
     def get_tag_message(self, tag_name):
         tag_exists = True

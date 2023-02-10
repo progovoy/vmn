@@ -267,7 +267,7 @@ class IVersionsStamper(object):
                 return None, None
 
         try:
-            tag_name, ver_info = self.backend.get_tag_version_info(tag_name)
+            tag_name, ver_info, _ = self.backend.get_tag_version_info(tag_name)
         except Exception:
             LOGGER.error("wrong version specified: root version must be an integer")
 
@@ -686,7 +686,7 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         # Get version info for tag
-        _, ver_info = self.backend.get_tag_version_info(tag_formatted_app_name)
+        _, ver_info, all_tags = self.backend.get_tag_version_info(tag_formatted_app_name)
         if ver_info is None:
             return None
 
@@ -1642,15 +1642,16 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
         status["err_msgs"]["pending"] = err
         status["state"].add("pending")
 
-    if be.in_detached_head():
-        status["detached"] = True
-        status["err_msgs"]["detached"] = err
-        status["state"].add("detached")
-    else:
-        # Outgoing changes cannot be in detached head
-        # TODO: is it really?
-        err = be.check_for_outgoing_changes()
-        if err:
+    err = be.check_for_outgoing_changes()
+    if err:
+        # TODO:: Check for errcode instead of startswith
+        if err.startswith("Detached head"):
+            status["detached"] = True
+            status["err_msgs"]["detached"] = err
+            status["state"].add("detached")
+        else:
+            # Outgoing changes cannot be in detached head
+            # TODO: is it really?
             status["outgoing"] = True
             status["err_msgs"]["outgoing"] = err
             status["state"].add("outgoing")
@@ -2108,11 +2109,7 @@ def gen(vcs, params, verstr=None):
         raise RuntimeError()
 
     if verstr is None:
-        _, ver_info = vcs.backend.get_first_reachable_version_info(
-            vcs.name,
-            vcs.root_context,
-            stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
-        )
+        ver_info = vcs.ver_info_from_repo
     else:
         _, ver_info = vcs.get_version_info_from_verstr(verstr)
 
