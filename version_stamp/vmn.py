@@ -1624,17 +1624,17 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
     )
 
     path = os.path.join(vcs.vmn_root_path, ".vmn")
-    if not vcs.backend.is_path_tracked(path):
-        status["repo_tracked"] = False
-        status["err_msgs"][
-            "repo_tracked"
-        ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
-        status["state"].remove("repo_tracked")
-
     if not vcs.tracked:
         status["app_tracked"] = False
         status["err_msgs"]["app_tracked"] = "Untracked app. Run vmn init-app first"
         status["state"].remove("app_tracked")
+
+        if not vcs.backend.is_path_tracked(path):
+            status["repo_tracked"] = False
+            status["err_msgs"][
+                "repo_tracked"
+            ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
+            status["state"].remove("repo_tracked")
 
     err = be.check_for_pending_changes()
     if err:
