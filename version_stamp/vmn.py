@@ -256,7 +256,7 @@ class IVersionsStamper(object):
             except Exception:
                 LOGGER.error("wrong version specified: root version must be an integer")
 
-                return None, None
+                return tag_name, {}
         else:
             try:
                 stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
@@ -264,19 +264,21 @@ class IVersionsStamper(object):
                 LOGGER.error(f"Wrong version specified: {verstr}")
                 LOGGER.debug(f"Logged exception: ", exc_info=True)
 
-                return None, None
+                return tag_name, {}
 
         try:
             tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
         except Exception:
             LOGGER.error(f"Faield to get version info for tag: {tag_name}")
 
-            return None, None
+            return tag_name, {}
 
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            return None, None
+            return tag_name, {}
 
-        return tag_name, ver_infos[tag_name]["ver_info"]
+        stamp_utils.VMNBackend.enhance_ver_info(ver_infos)
+
+        return tag_name, ver_infos
 
     def get_tag_name(self, verstr):
         tag_name = f'{self.name.replace("/", "-")}'
@@ -311,13 +313,14 @@ class IVersionsStamper(object):
         self.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
             self.actual_deps_state
         )
-        _, self.ver_info_from_repo = self.backend.get_first_reachable_version_info(
+        self.selected_tag, self.ver_infos_from_repo = self.backend.get_first_reachable_version_info(
             self.name,
             self.root_context,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
 
-        self.tracked = self.ver_info_from_repo is not None
+        self.tracked = \
+            self.selected_tag in self.ver_infos_from_repo and self.ver_infos_from_repo[self.selected_tag]["ver_info"] is not None
         if self.tracked:
             for rel_path, dep in self.configured_deps.items():
                 if rel_path.endswith(os.path.join("/", self_base)):
@@ -329,9 +332,9 @@ class IVersionsStamper(object):
                 if rel_path in self.actual_deps_state:
                     dep["remote"] = self.actual_deps_state[rel_path]["remote"]
                 elif (
-                    rel_path in self.ver_info_from_repo["stamping"]["app"]["changesets"]
+                    rel_path in self.ver_infos_from_repo[self.selected_tag]["ver_info"]["stamping"]["app"]["changesets"]
                 ):
-                    dep["remote"] = self.ver_info_from_repo["stamping"]["app"][
+                    dep["remote"] = self.ver_infos_from_repo[self.selected_tag]["ver_info"]["stamping"]["app"][
                         "changesets"
                     ][rel_path]["remote"]
 
@@ -685,9 +688,12 @@ class VersionControlStamper(IVersionsStamper):
             self.name, props["version"], self.hide_zero_hotfix
         )
 
-        # Get version info for tag
-        tag_formatted_app_name, ver_infos = \
-            self.backend.get_tag_version_info(tag_formatted_app_name)
+        if self.selected_tag != tag_formatted_app_name:
+            # Get version info for tag
+            tag_formatted_app_name, ver_infos = \
+                self.backend.get_tag_version_info(tag_formatted_app_name)
+        else:
+            ver_infos = self.ver_infos_from_repo
 
         if tag_formatted_app_name not in ver_infos or ver_infos[tag_formatted_app_name] is None:
             return None
@@ -959,31 +965,31 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        _, ver_info = self.backend.get_first_reachable_version_info(
+        tag_name, ver_infos = self.backend.get_first_reachable_version_info(
             self.root_app_name,
             root_context=True,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
 
-        if ver_info is None:
+        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
             LOGGER.error(f"Version information for {self.root_app_name} was not found")
             raise RuntimeError()
 
         # TODO: think about this case
-        if "version" not in ver_info["stamping"]["root_app"]:
+        if "version" not in ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]:
             LOGGER.error(
                 f"Root app name is {self.root_app_name} and app name is {self.name}. "
                 f"However no version information for root was found"
             )
             raise RuntimeError()
 
-        old_version = int(ver_info["stamping"]["root_app"]["version"])
+        old_version = int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"])
         if override_version is None:
             override_version = old_version
 
         root_version = int(override_version) + 1
 
-        root_app = ver_info["stamping"]["root_app"]
+        root_app = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]
         services = copy.deepcopy(root_app["services"])
 
         services[self.name] = self.current_version_info["stamping"]["app"]["_version"]
@@ -1348,7 +1354,7 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
         vmn_ctx.vcs.current_version_info["stamping"]["app"][
             "release_mode"
-        ] = vmn_ctx.vcs.ver_info_from_repo["stamping"]["app"]["release_mode"]
+        ] = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"]
 
     optional_status = {"modified", "detached"}
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
@@ -1460,7 +1466,12 @@ def handle_release(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = vmn_ctx.vcs.get_version_info_from_verstr(ver)
+        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
+        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+            ver_info = None
+        else:
+            ver_info = ver_infos[tag_name]["ver_info"]
+
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.error(f"Failed to release {ver}")
@@ -1516,7 +1527,11 @@ def handle_add(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_info = vmn_ctx.vcs.get_version_info_from_verstr(ver)
+        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
+        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+            ver_info = None
+        else:
+            ver_info = ver_infos[tag_name]["ver_info"]
         LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.debug("Logged Exception message:", exc_info=True)
@@ -1829,14 +1844,14 @@ def _init_app(versions_be_ifc, starting_version):
     root_app_version = 0
     services = {}
     if versions_be_ifc.root_app_name is not None:
-        _, ver_info = versions_be_ifc.backend.get_first_reachable_version_info(
+        tag_name, ver_infos = versions_be_ifc.backend.get_first_reachable_version_info(
             versions_be_ifc.root_app_name,
             root_context=True,
             type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
         )
-        if ver_info:
-            root_app_version = int(ver_info["stamping"]["root_app"]["version"]) + 1
-            root_app = ver_info["stamping"]["root_app"]
+        if tag_name in ver_infos and ver_infos[tag_name]["ver_info"]:
+            root_app_version = int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]) + 1
+            root_app = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]
             services = copy.deepcopy(root_app["services"])
 
         versions_be_ifc.current_version_info["stamping"]["root_app"].update(
@@ -1966,15 +1981,12 @@ def _stamp_version(
 
 def show(vcs, params, verstr=None):
     dirty_states = None
-    ver_info = None
-    if params["from_file"]:
-        if verstr is None:
-            _, ver_info = vcs.backend.get_first_reachable_version_info(
-                vcs.name, vcs.root_context
-            )
-        else:
-            _, ver_info = vcs.get_version_info_from_verstr(verstr)
-    else:
+    ver_infos = vcs.ver_infos_from_repo
+    tag_name = vcs.selected_tag
+    if verstr:
+        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
+
+    if not params["from_file"]:
         expected_status = {"repo_tracked", "app_tracked"}
         optional_status = {
             "repos_exist_locally",
@@ -1991,34 +2003,22 @@ def show(vcs, params, verstr=None):
 
             raise RuntimeError()
 
-        if verstr is None:
-            tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
-                vcs.name,
-                vcs.root_context,
-                stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
-            )
-        else:
-            tag_name, ver_info = vcs.get_version_info_from_verstr(verstr)
-
-        if ver_info is not None:
+        if tag_name in ver_infos:
             dirty_states = list(get_dirty_states(optional_status, status))
 
             if params["ignore_dirty"]:
                 dirty_states = None
 
-            versions = []
-            ver_infos = vcs.backend.get_all_brother_tags(tag_name)
-            for tag in ver_infos:
-                if tag:
-                    # TODO:: use some utils function
-                    # buildmetadata cannot include an '_' so we can assume
-                    # that the version will always be at the last splitted element
-                    versions.append(tag.split("_")[-1])
-                else:
-                    versions.append(tag)
+            vers = []
+            for i in ver_infos.keys():
+                vers.append(i.split("_")[-1])
+            ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"] = []
+            ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"].extend(vers)
 
-            ver_info["stamping"]["app"]["versions"] = []
-            ver_info["stamping"]["app"]["versions"].extend(versions)
+    if tag_name not in ver_infos:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     if ver_info is None:
         LOGGER.info("Version information was not found " "for {0}.".format(vcs.name))
@@ -2112,11 +2112,12 @@ def gen(vcs, params, verstr=None):
         raise RuntimeError()
 
     if verstr is None:
-        ver_info = vcs.ver_info_from_repo
+        ver_infos = vcs.ver_infos_from_repo
+        tag_name = vcs.selected_tag
     else:
-        _, ver_info = vcs.get_version_info_from_verstr(verstr)
+        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
 
-    if ver_info is None:
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
 
         raise RuntimeError()
@@ -2145,7 +2146,7 @@ def gen(vcs, params, verstr=None):
             )
             raise RuntimeError()
 
-    data = ver_info["stamping"]["app"]
+    data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
     if verstr is None:
         data["changesets"] = {}
 
@@ -2172,8 +2173,8 @@ def gen(vcs, params, verstr=None):
         data["_version"],
         vcs.hide_zero_hotfix,
     )
-    if "root_app" in ver_info["stamping"]:
-        for key, v in ver_info["stamping"]["root_app"].items():
+    if "root_app" in ver_infos[tag_name]["ver_info"]["stamping"]:
+        for key, v in ver_infos[tag_name]["ver_info"]["stamping"]["root_app"].items():
             tmplt_value[f"root_{key}"] = v
 
     if params["custom_values"] is not None:
@@ -2236,17 +2237,19 @@ def goto_version(vcs, params, version):
             check_unique = True
 
     if version is None:
-        tag_name, ver_info = vcs.backend.get_first_reachable_version_info(
-            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        tag_name, ver_infos = vcs.backend.get_first_reachable_version_info(
+            vcs.name,
+            vcs.root_context,
+            stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
     else:
-        tag_name, ver_info = vcs.get_version_info_from_verstr(version)
+        tag_name, ver_infos = vcs.get_version_info_from_verstr(version)
 
-    if ver_info is None:
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         LOGGER.error(f"No such app: {vcs.name}")
         return 1
 
-    data = ver_info["stamping"]["app"]
+    data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
     if version is not None:
         deps = copy.deepcopy(data["changesets"])
     else:
@@ -2284,7 +2287,7 @@ def goto_version(vcs, params, version):
         vcs.backend.checkout_branch()
 
         if vcs.root_context:
-            verstr = ver_info["stamping"]["root_app"]["version"]
+            verstr = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
             LOGGER.info(
                 f"You are at the tip of the branch of version {verstr} for {vcs.name}"
             )

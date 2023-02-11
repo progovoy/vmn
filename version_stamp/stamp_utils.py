@@ -421,6 +421,28 @@ class VMNBackend(object):
         return ret
 
     @staticmethod
+    def enhance_ver_info(ver_infos):
+        all_tags = {}
+        for tag, ver_info_c in ver_infos.items():
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
+            tagd.update({"tag": tag})
+            tagd["message"] = ver_info_c["ver_info"]
+
+            all_tags[tagd["type"]] = tagd
+
+            # TODO:: Check API commit version
+        # Enhance "raw" ver_infos so all tags will have all info
+        for t, v in ver_infos.items():
+            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["root"]["message"]["stamping"]
+                )
+            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["version"]["message"]["stamping"]
+                )
+
+    @staticmethod
     def deserialize_vmn_tag_name(vmn_tag):
         try:
             return VMNBackend.deserialize_tag_name(vmn_tag)
@@ -459,25 +481,34 @@ class LocalFileBackend(VMNBackend):
     def get_first_reachable_version_info(
         self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
+        ver_infos = {
+            "none": {
+                "tag_object": None,
+                "commit_obj": None,
+                "ver_info": None,
+            }
+        }
         if root:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
             list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
             if not list_of_files:
-                return None, None
+                return None, {}
 
             latest_file = max(list_of_files, key=os.path.getctime)
             with open(latest_file, "r") as f:
-                return None, yaml.safe_load(f)
+                ver_infos["none"]["ver_info"] = yaml.safe_load(f)
+                return "none", ver_infos
 
         dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
         list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
         if not list_of_files:
-            return None, None
+            return None, {}
 
         latest_file = max(list_of_files, key=os.path.getctime)
 
         with open(latest_file, "r") as f:
-            return None, yaml.safe_load(f)
+            ver_infos["none"]["ver_info"] = yaml.safe_load(f)
+            return "none", ver_infos
 
     def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {
@@ -661,19 +692,19 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
-            tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(
+            tag_names, cobj, ver_infos = self._get_shallow_first_reachable_vmn_stamp_tag_list(
                 app_name,
                 cmd_suffix,
                 msg_filter,
             )
         else:
-            tag_names = self._get_first_reachable_vmn_stamp_tag_list(
+            tag_names, cobj, ver_infos = self._get_first_reachable_vmn_stamp_tag_list(
                 app_name,
                 cmd_suffix,
                 msg_filter
             )
 
-        return tag_names
+        return tag_names, cobj, ver_infos
 
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
@@ -707,7 +738,7 @@ class GitBackend(VMNBackend):
         for tag_object in tag_objects:
             tag_names.append(tag_object.name)
 
-        return tag_names
+        return tag_names, cobj, ver_infos
 
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
         self, app_name, cmd_suffix, msg_filter
@@ -728,7 +759,7 @@ class GitBackend(VMNBackend):
             for tag_object in tag_objects:
                 tag_names.append(tag_object.name)
 
-            return tag_names
+            return tag_names, cobj, ver_infos
 
         tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
@@ -777,7 +808,7 @@ class GitBackend(VMNBackend):
         for tag_object in tag_objects:
             final_list_of_tag_names.append(tag_object.name)
 
-        return final_list_of_tag_names
+        return final_list_of_tag_names, found_tag.commit, ver_infos
 
     def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
@@ -794,7 +825,7 @@ class GitBackend(VMNBackend):
             log_res.pop(0)
 
         if not log_res:
-            return [None, []]
+            return None, {}
 
         items = log_res[0].split(",,,")
         tags = items[1].split(",")
@@ -1147,14 +1178,14 @@ class GitBackend(VMNBackend):
     def get_first_reachable_version_info(
         self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
-        app_tags = self.get_latest_stamp_tags(app_name, root_context, type)
-        cleaned_app_tag = None
+        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(app_name, root_context, type)
 
         if root_context:
             regex = VMN_ROOT_TAG_REGEX
         else:
             regex = VMN_TAG_REGEX
 
+        cleaned_app_tag = None
         for tag in app_tags:
             # skip buildmetadata versions
             if "+" in tag:
@@ -1173,12 +1204,15 @@ class GitBackend(VMNBackend):
             break
 
         if cleaned_app_tag is None:
-            return None, None
+            return None, {}
 
-        # TODO::: do not call it. Use verinfos from get_latest_stamp_tags
-        tag_name, enhanced_verinfos = self.get_tag_version_info(cleaned_app_tag)
+        if cleaned_app_tag not in ver_infos:
+            LOGGER.debug(f"Somehow {cleaned_app_tag} not in ver_infos")
+            return None, {}
 
-        return tag_name, enhanced_verinfos[tag_name]["ver_info"]
+        VMNBackend.enhance_ver_info(ver_infos)
+
+        return cleaned_app_tag, ver_infos
 
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
@@ -1188,33 +1222,13 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
             return tag_name, ver_infos
 
-        all_tags = {}
-
         # "raw" ver_infos
         ver_infos = self.get_all_brother_tags(tag_name)
         if tag_name not in ver_infos:
             LOGGER.debug(f"Could not find version info for {tag_name}")
             return tag_name, None
 
-        for tag, ver_info_c in ver_infos.items():
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = ver_info_c["ver_info"]
-
-            all_tags[tagd["type"]] = tagd
-
-            # TODO:: Check API commit version
-
-        # Enhance "raw" ver_infos so all tags will have all info
-        for t,v in ver_infos.items():
-            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["root"]["message"]["stamping"]
-                )
-            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["version"]["message"]["stamping"]
-                )
+        VMNBackend.enhance_ver_info(ver_infos)
 
         return tag_name, ver_infos
 

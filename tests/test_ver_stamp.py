@@ -23,9 +23,13 @@ def _init_app(app_name, starting_version="0.0.0"):
     cmd = ["init-app", "-v", starting_version, app_name]
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
@@ -40,9 +44,13 @@ def _release_app(app_name, version):
     cmd = ["release", "-v", version, app_name]
     ret, vmn_ctx = vmn.vmn_run(cmd)
     vmn_ctx.vcs.initialize_backend_attrs()
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
@@ -65,9 +73,13 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
