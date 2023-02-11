@@ -313,14 +313,19 @@ class IVersionsStamper(object):
         self.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
             self.actual_deps_state
         )
-        self.selected_tag, self.ver_infos_from_repo = self.backend.get_first_reachable_version_info(
+        (
+            self.selected_tag,
+            self.ver_infos_from_repo,
+        ) = self.backend.get_first_reachable_version_info(
             self.name,
             self.root_context,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
 
-        self.tracked = \
-            self.selected_tag in self.ver_infos_from_repo and self.ver_infos_from_repo[self.selected_tag]["ver_info"] is not None
+        self.tracked = (
+            self.selected_tag in self.ver_infos_from_repo
+            and self.ver_infos_from_repo[self.selected_tag]["ver_info"] is not None
+        )
         if self.tracked:
             for rel_path, dep in self.configured_deps.items():
                 if rel_path.endswith(os.path.join("/", self_base)):
@@ -332,11 +337,14 @@ class IVersionsStamper(object):
                 if rel_path in self.actual_deps_state:
                     dep["remote"] = self.actual_deps_state[rel_path]["remote"]
                 elif (
-                    rel_path in self.ver_infos_from_repo[self.selected_tag]["ver_info"]["stamping"]["app"]["changesets"]
+                    rel_path
+                    in self.ver_infos_from_repo[self.selected_tag]["ver_info"][
+                        "stamping"
+                    ]["app"]["changesets"]
                 ):
-                    dep["remote"] = self.ver_infos_from_repo[self.selected_tag]["ver_info"]["stamping"]["app"][
-                        "changesets"
-                    ][rel_path]["remote"]
+                    dep["remote"] = self.ver_infos_from_repo[self.selected_tag][
+                        "ver_info"
+                    ]["stamping"]["app"]["changesets"][rel_path]["remote"]
 
         return 0
 
@@ -690,18 +698,22 @@ class VersionControlStamper(IVersionsStamper):
 
         if self.selected_tag != tag_formatted_app_name:
             # Get version info for tag
-            tag_formatted_app_name, ver_infos = \
-                self.backend.get_tag_version_info(tag_formatted_app_name)
+            tag_formatted_app_name, ver_infos = self.backend.get_tag_version_info(
+                tag_formatted_app_name
+            )
         else:
             ver_infos = self.ver_infos_from_repo
 
-        if tag_formatted_app_name not in ver_infos or ver_infos[tag_formatted_app_name] is None:
+        if (
+            tag_formatted_app_name not in ver_infos
+            or ver_infos[tag_formatted_app_name] is None
+        ):
             return None
 
         # means we are trying to find a matching version that is in rc state
         if prerelease_count:
             # try to check if there is a release version on it
-            for k,v in ver_infos.items():
+            for k, v in ver_infos.items():
                 if v is None:
                     raise RuntimeError("Bug")
 
@@ -887,12 +899,15 @@ class VersionControlStamper(IVersionsStamper):
                     self.name, initial_version, self.hide_zero_hotfix
                 )
             )
-            release_tag_formatted_app_name, ver_infos = \
-                self.backend.get_tag_version_info(
-                    release_tag_formatted_app_name
-                )
+            (
+                release_tag_formatted_app_name,
+                ver_infos,
+            ) = self.backend.get_tag_version_info(release_tag_formatted_app_name)
 
-            if release_tag_formatted_app_name in ver_infos and ver_infos[release_tag_formatted_app_name] is not None:
+            if (
+                release_tag_formatted_app_name in ver_infos
+                and ver_infos[release_tag_formatted_app_name] is not None
+            ):
                 LOGGER.error(
                     f"The version {initial_version} was already released. "
                     "Will refuse to stamp prerelease version "
@@ -983,7 +998,9 @@ class VersionControlStamper(IVersionsStamper):
             )
             raise RuntimeError()
 
-        old_version = int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"])
+        old_version = int(
+            ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
+        )
         if override_version is None:
             override_version = old_version
 
@@ -1197,24 +1214,19 @@ class VersionControlStamper(IVersionsStamper):
         return 0
 
     def publish_commit(self, version_files_to_add):
-        cur_branch = self.backend.get_active_branch(
-            raise_on_detached_head=False
-        )
+        cur_branch = self.backend.get_active_branch(raise_on_detached_head=False)
         path = os.path.join(
             self.app_dir_path,
             f"*_conf.yml",
         )
         list_of_files = glob.glob(path)
-        branch_conf_path = os.path.join(
-            self.app_dir_path,
-            f"{cur_branch}_conf.yml"
-        )
+        branch_conf_path = os.path.join(self.app_dir_path, f"{cur_branch}_conf.yml")
 
         if self.dry_run:
             if list_of_files:
                 LOGGER.info(
                     "Would have removed config files:\n"
-                    f'{set(list_of_files) - set([branch_conf_path])}'
+                    f"{set(list_of_files) - set([branch_conf_path])}"
                 )
 
             LOGGER.info(
@@ -1354,7 +1366,13 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
         vmn_ctx.vcs.current_version_info["stamping"]["app"][
             "release_mode"
-        ] = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"]
+        ] = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"][
+            "stamping"
+        ][
+            "app"
+        ][
+            "release_mode"
+        ]
 
     optional_status = {"modified", "detached"}
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
@@ -1850,7 +1868,10 @@ def _init_app(versions_be_ifc, starting_version):
             type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
         )
         if tag_name in ver_infos and ver_infos[tag_name]["ver_info"]:
-            root_app_version = int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]) + 1
+            root_app_version = (
+                int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"])
+                + 1
+            )
             root_app = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]
             services = copy.deepcopy(root_app["services"])
 
@@ -2238,9 +2259,7 @@ def goto_version(vcs, params, version):
 
     if version is None:
         tag_name, ver_infos = vcs.backend.get_first_reachable_version_info(
-            vcs.name,
-            vcs.root_context,
-            stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
     else:
         tag_name, ver_infos = vcs.get_version_info_from_verstr(version)
@@ -2632,7 +2651,7 @@ def add_arg_gen(subprasers):
         "--custom-values",
         default=None,
         required=False,
-        help=f"Path to a yml file with custom keys and values"
+        help=f"Path to a yml file with custom keys and values",
     )
 
 

@@ -533,11 +533,7 @@ class LocalFileBackend(VMNBackend):
             path = os.path.join(dir_path, f"{tagd['version']}.yml")
 
         ver_infos = {
-            tag_name: {
-                "ver_info": None,
-                "tag_object": None,
-                "commit_object": None
-            }
+            tag_name: {"ver_info": None, "tag_object": None, "commit_object": None}
         }
         try:
             with open(path, "r") as f:
@@ -692,16 +688,18 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
-            tag_names, cobj, ver_infos = self._get_shallow_first_reachable_vmn_stamp_tag_list(
+            (
+                tag_names,
+                cobj,
+                ver_infos,
+            ) = self._get_shallow_first_reachable_vmn_stamp_tag_list(
                 app_name,
                 cmd_suffix,
                 msg_filter,
             )
         else:
             tag_names, cobj, ver_infos = self._get_first_reachable_vmn_stamp_tag_list(
-                app_name,
-                cmd_suffix,
-                msg_filter
+                app_name, cmd_suffix, msg_filter
             )
 
         return tag_names, cobj, ver_infos
@@ -897,7 +895,7 @@ class GitBackend(VMNBackend):
                     verstr = commit_obj.message.split(" version ")[1].strip()
                     tagname = f"{app_name}_{verstr}"
                     tagname, ver_info_c = self.parse_tag_message(tagname)
-                    if ver_info_c['tag_object']:
+                    if ver_info_c["tag_object"]:
 
                         ver_infos[tagname] = ver_info_c
                 except Exception as exc:
@@ -907,7 +905,7 @@ class GitBackend(VMNBackend):
 
             tname = t.split("tag:")[1].strip()
             tname, ver_info_c = self.parse_tag_message(tname)
-            if ver_info_c['ver_info'] is None:
+            if ver_info_c["ver_info"] is None:
                 LOGGER.debug(
                     f"Probably non-vmn tag - {tname} with tag msg: {ver_info_c['ver_info']}. Skipping ",
                     exc_info=True,
@@ -931,7 +929,7 @@ class GitBackend(VMNBackend):
         ver_infos = {}
         for t in tags:
             t, ver_info_c = self.parse_tag_message(t)
-            if ver_info_c['ver_info'] is None:
+            if ver_info_c["ver_info"] is None:
                 LOGGER.debug(
                     f"Probably non-vmn tag - {t} with tag msg: {ver_info_c['ver_info']}. Skipping ",
                     exc_info=True,
@@ -1178,7 +1176,9 @@ class GitBackend(VMNBackend):
     def get_first_reachable_version_info(
         self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
-        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(app_name, root_context, type)
+        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
+            app_name, root_context, type
+        )
 
         if root_context:
             regex = VMN_ROOT_TAG_REGEX
@@ -1235,11 +1235,7 @@ class GitBackend(VMNBackend):
     def parse_tag_message(self, tag_name):
         tag_name, tag_obj = self.get_tag_object_from_tag_name(tag_name)
 
-        ret = {
-            "ver_info": None,
-            "tag_object": tag_obj,
-            "commit_object": None
-        }
+        ret = {"ver_info": None, "tag_object": tag_obj, "commit_object": None}
         if not tag_obj:
             return tag_name, ret
 
