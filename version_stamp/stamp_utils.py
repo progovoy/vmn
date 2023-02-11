@@ -478,6 +478,9 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
+    def perform_cached_fetch(self, repo_path):
+        return
+
     def get_first_reachable_version_info(
         self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
@@ -551,10 +554,12 @@ class GitBackend(VMNBackend):
         self._be = git.Repo(repo_path, search_parent_directories=True)
         self.add_git_user_cfg_if_missing()
         self._origin = self._be.remotes[0]
+        self.repo_path = repo_path
 
-        vmn_cache_path = os.path.join(repo_path, ".vmn", "vmn.cache")
+    def perform_cached_fetch(self):
+        vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
         if not os.path.exists(vmn_cache_path):
-            pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(
+            pathlib.Path(os.path.join(self.repo_path, ".vmn")).mkdir(
                 parents=True, exist_ok=True
             )
             pathlib.Path(vmn_cache_path).touch()
@@ -688,6 +693,7 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
+            self.perform_cached_fetch()
             (
                 tag_names,
                 cobj,
@@ -767,7 +773,7 @@ class GitBackend(VMNBackend):
             tag_names.pop(0)
 
         if not tag_names:
-            return tag_names
+            return tag_names, cobj, ver_infos
 
         latest_tag = tag_names[-1]
         head_date = self._be.head.commit.committed_date
@@ -787,7 +793,7 @@ class GitBackend(VMNBackend):
             found_tag = self._be.tag(f"refs/tags/{latest_tag}")
         except Exception as exc:
             LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
-            return []
+            return [], cobj, ver_infos
 
         ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
         tag_objects = []

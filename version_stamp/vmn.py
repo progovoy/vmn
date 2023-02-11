@@ -1400,6 +1400,8 @@ def handle_stamp(vmn_ctx):
         LOGGER.error("In detached head. Will not stamp new version")
         return 1
 
+    vmn_ctx.vcs.backend.perform_cached_fetch()
+
     # We didn't find any existing version
     if vmn_ctx.args.pull:
         try:
@@ -1858,6 +1860,8 @@ def _init_app(versions_be_ifc, starting_version):
     versions_be_ifc.update_stamping_info(
         info, starting_version, "release", {}, starting_version, "release", {}, "init"
     )
+
+    versions_be_ifc.backend.perform_cached_fetch()
 
     root_app_version = 0
     services = {}
