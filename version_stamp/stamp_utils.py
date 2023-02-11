@@ -501,15 +501,20 @@ class LocalFileBackend(VMNBackend):
             dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
             path = os.path.join(dir_path, f"{tagd['version']}.yml")
 
-        ver_infos = {}
+        ver_infos = {
+            tag_name: {
+                "ver_info": None,
+                "tag_object": None,
+                "commit_object": None
+            }
+        }
         try:
             with open(path, "r") as f:
-                ver_infos[tag_name] = yaml.safe_load(f)
+                ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
         except Exception as exc:
             LOGGER.error("Logged Exception message:", exc_info=True)
-            ver_info = None
 
-        return tag_name, ver_infos, None
+        return tag_name, ver_infos
 
 
 class GitBackend(VMNBackend):
@@ -671,16 +676,14 @@ class GitBackend(VMNBackend):
         return tag_names
 
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
-        res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
-        tag_objects = res[1]
+        cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
         bug_limit = 0
-        while not tag_objects and bug_limit < 100:
-            if res[0] is None:
+        while not ver_infos and bug_limit < 100:
+            if cobj is None:
                 break
 
-            cmd_suffix = f"{res[0].hexsha}~1"
-            res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
-            tag_objects = res[1]
+            cmd_suffix = f"{cobj.hexsha}~1"
+            cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
             bug_limit += 1
             if bug_limit == 100:
@@ -688,8 +691,12 @@ class GitBackend(VMNBackend):
                     f"Probable bug: vmn failed to find "
                     f"vmn's commit after 100 interations."
                 )
-                tag_objects = []
+                ver_infos = {}
                 break
+
+        tag_objects = []
+        for k in ver_infos:
+            tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
@@ -705,16 +712,20 @@ class GitBackend(VMNBackend):
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
         self, app_name, cmd_suffix, msg_filter
     ):
-        res = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+        cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
-        if res[1]:
+        if ver_infos:
+            tag_objects = []
+            for k in ver_infos:
+                tag_objects.append(ver_infos[k]["tag_object"])
+
             # We want the newest tag on top because we skip "buildmetadata tags"
             # TODO:: solve the weird coupling between here and get_first_reachable_version_info
-            res[1] = sorted(
-                res[1], key=lambda t: t.object.tagged_date, reverse=True
+            tag_objects = sorted(
+                tag_objects, key=lambda t: t.object.tagged_date, reverse=True
             )
             tag_names = []
-            for tag_object in res[1]:
+            for tag_object in tag_objects:
                 tag_names.append(tag_object.name)
 
             return tag_names
@@ -749,12 +760,12 @@ class GitBackend(VMNBackend):
             LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
             return []
 
-        ver_infos, tag_objs = self.get_all_commit_tags(found_tag.commit.hexsha)
+        ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
         tag_objects = []
 
         for k in ver_infos.keys():
-            if tag_objs[k]:
-                tag_objects.append(tag_objs[k])
+            if ver_infos[k]["tag_object"]:
+                tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
@@ -778,40 +789,21 @@ class GitBackend(VMNBackend):
             cmd_suffix,
         ]
         LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
-        res = self._be.git.log(*cmd).split("\n")
-        if len(res) == 1 and res[0] == "":
-            res.pop(0)
+        log_res = self._be.git.log(*cmd).split("\n")
+        if len(log_res) == 1 and log_res[0] == "":
+            log_res.pop(0)
 
-        if not res:
+        if not log_res:
             return [None, []]
 
-        items = res[0].split(",,,")
-        _tag_objects = []
-
+        items = log_res[0].split(",,,")
+        tags = items[1].split(",")
         commit_hex = items[0]
-        commit_obj = self.get_commit_object_from_commit_hex(commit_hex)
+        ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
 
-        for t in items[1].split(","):
-            if "tag:" not in t:
-                # Maybe rebase or tag was removed. Will handle the rebase case here
-                try:
-                    verstr = commit_obj.message.split(" version ")[1].strip()
-                    tagname = f"{app_name}_{verstr}"
-                    tagname, o = self.get_tag_object_from_tag_name(tagname)
-                    if o:
-                        _tag_objects.append(o)
-                except Exception as exc:
-                    LOGGER.debug(f"Skipped on {commit_hex} commit")
+        cobj = self.get_commit_object_from_commit_hex(commit_hex)
 
-                continue
-
-            tname = t.split("tag:")[1].strip()
-            # TODO:: add call desearilize here
-            tname, o = self.get_tag_object_from_tag_name(tname)
-            if o:
-                _tag_objects.append(o)
-
-        return [commit_obj, _tag_objects]
+        return cobj, ver_infos
 
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
@@ -864,6 +856,37 @@ class GitBackend(VMNBackend):
 
         return tname, o
 
+    def get_all_commit_tags_log_impl(self, hexsha, tags, app_name):
+        ver_infos = {}
+        for t in tags:
+            if "tag:" not in t:
+                # Maybe rebase or tag was removed. Will handle the rebase case here
+                try:
+                    commit_obj = self.get_commit_object_from_commit_hex(hexsha)
+                    verstr = commit_obj.message.split(" version ")[1].strip()
+                    tagname = f"{app_name}_{verstr}"
+                    tagname, ver_info_c = self.parse_tag_message(tagname)
+                    if ver_info_c['tag_object']:
+
+                        ver_infos[tagname] = ver_info_c
+                except Exception as exc:
+                    LOGGER.debug(f"Skipped on {hexsha} commit")
+
+                continue
+
+            tname = t.split("tag:")[1].strip()
+            tname, ver_info_c = self.parse_tag_message(tname)
+            if ver_info_c['ver_info'] is None:
+                LOGGER.debug(
+                    f"Probably non-vmn tag - {tname} with tag msg: {ver_info_c['ver_info']}. Skipping ",
+                    exc_info=True,
+                )
+                continue
+
+            ver_infos[tname] = ver_info_c
+
+        return ver_infos
+
     def get_all_commit_tags(self, hexsha="HEAD"):
         if hexsha is None:
             hexsha = "HEAD"
@@ -875,25 +898,23 @@ class GitBackend(VMNBackend):
             tags.pop(0)
 
         ver_infos = {}
-        tag_objs = {}
         for t in tags:
-            t, ver_info, o = self.get_tag_message(t)
-            if ver_info is None:
+            t, ver_info_c = self.parse_tag_message(t)
+            if ver_info_c['ver_info'] is None:
                 LOGGER.debug(
-                    f"Probably non-vmn tag - {t} with tag msg: {ver_info}. Skipping ",
+                    f"Probably non-vmn tag - {t} with tag msg: {ver_info_c['ver_info']}. Skipping ",
                     exc_info=True,
                 )
                 continue
 
-            ver_infos[t] = ver_info
-            tag_objs[t] = o
+            ver_infos[t] = ver_info_c
 
-        return ver_infos, tag_objs
+        return ver_infos
 
     def get_all_brother_tags(self, tag_name):
         try:
             sha = self.changeset(tag=tag_name)
-            ver_infos, tag_objs = self.get_all_commit_tags(sha)
+            ver_infos = self.get_all_commit_tags(sha)
         except Exception as exc:
             LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
@@ -902,7 +923,7 @@ class GitBackend(VMNBackend):
             )
             return []
 
-        return ver_infos, tag_objs
+        return ver_infos
 
     def in_detached_head(self):
         return self._be.head.is_detached
@@ -1042,7 +1063,7 @@ class GitBackend(VMNBackend):
             if p.message.startswith(INIT_COMMIT_MESSAGE):
                 return p.hexsha
 
-            ver_infos, _ = self.get_all_commit_tags(p.hexsha)
+            ver_infos = self.get_all_commit_tags(p.hexsha)
             if not ver_infos:
                 LOGGER.warning(
                     f"Somehow vmn's commit {p.hexsha} has no tags. "
@@ -1051,8 +1072,8 @@ class GitBackend(VMNBackend):
                 return p.hexsha
 
             for t, v in ver_infos.items():
-                if "stamping" in v:
-                    return v["stamping"]["app"]["changesets"]["."]["hash"]
+                if "stamping" in v["ver_info"]:
+                    return v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
 
             LOGGER.warning(
                 f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
@@ -1155,57 +1176,73 @@ class GitBackend(VMNBackend):
             return None, None
 
         # TODO::: do not call it. Use verinfos from get_latest_stamp_tags
-        tag_name, verinfos, _ = self.get_tag_version_info(cleaned_app_tag)
+        tag_name, enhanced_verinfos = self.get_tag_version_info(cleaned_app_tag)
 
-        return tag_name, verinfos[tag_name]
+        return tag_name, enhanced_verinfos[tag_name]["ver_info"]
 
     def get_tag_version_info(self, tag_name):
+        ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
 
         if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return tag_name, None, None
+            return tag_name, ver_infos
 
         all_tags = {}
-        ver_infos, tag_objs = self.get_all_brother_tags(tag_name)
+
+        # "raw" ver_infos
+        ver_infos = self.get_all_brother_tags(tag_name)
         if tag_name not in ver_infos:
             LOGGER.debug(f"Could not find version info for {tag_name}")
-            return tag_name, None, None
+            return tag_name, None
 
-        for tag, ver_info in ver_infos.items():
+        for tag, ver_info_c in ver_infos.items():
             tagd = VMNBackend.deserialize_vmn_tag_name(tag)
             tagd.update({"tag": tag})
-            tagd["message"] = ver_info
+            tagd["message"] = ver_info_c["ver_info"]
 
             all_tags[tagd["type"]] = tagd
 
             # TODO:: Check API commit version
 
-        # TODO:: understand what is going on here
-        if "root_app" not in ver_infos[tag_name]["stamping"] and "root" in all_tags:
-            ver_infos[tag_name]["stamping"].update(all_tags["root"]["message"]["stamping"])
-        elif "app" not in ver_infos[tag_name]["stamping"] and "version" in all_tags:
-            ver_infos[tag_name]["stamping"].update(all_tags["version"]["message"]["stamping"])
+        # Enhance "raw" ver_infos so all tags will have all info
+        for t,v in ver_infos.items():
+            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["root"]["message"]["stamping"]
+                )
+            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["version"]["message"]["stamping"]
+                )
 
-        return tag_name, ver_infos, tag_objs
+        return tag_name, ver_infos
 
-    def get_tag_message(self, tag_name):
-        tag_name, o = self.get_tag_object_from_tag_name(tag_name)
-        if not o:
-            return tag_name, None, o
+    def parse_tag_message(self, tag_name):
+        tag_name, tag_obj = self.get_tag_object_from_tag_name(tag_name)
 
-        commit_tag_obj = o.commit
+        ret = {
+            "ver_info": None,
+            "tag_object": tag_obj,
+            "commit_object": None
+        }
+        if not tag_obj:
+            return tag_name, ret
+
+        commit_tag_obj = tag_obj.commit
         if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return tag_name, None, o
+            return tag_name, ret
+
+        ret["commit_object"] = commit_tag_obj
 
         # TODO:: Check API commit version
         # safe_load discards any text before the YAML document (if present)
-        tag_msg = yaml.safe_load(o.object.message)
-        if tag_msg is None:
-            return tag_name, None, o
+        ver_info = yaml.safe_load(tag_obj.object.message)
+        if ver_info is None:
+            return tag_name, ret
 
-        if type(tag_msg) is not dict and tag_msg.startswith("Automatic"):
+        if type(ver_info) is not dict and ver_info.startswith("Automatic"):
             # Code from vmn 0.3.9
             # safe_load discards any text before the YAML document (if present)
             commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
@@ -1214,15 +1251,17 @@ class GitBackend(VMNBackend):
                 commit_msg["stamping"]["app"]["prerelease"] = "release"
                 commit_msg["stamping"]["app"]["prerelease_count"] = {}
 
-            tag_msg = commit_msg
-            if tag_msg is None:
-                return tag_name, None, o
+            ver_info = commit_msg
+            if ver_info is None:
+                return tag_name, ret
 
-        if "vmn_info" not in tag_msg:
+        if "vmn_info" not in ver_info:
             LOGGER.debug(f"vmn_info key was not found in tag {tag_name}")
-            return tag_name, None, o
+            return tag_name, ret
 
-        return tag_name, tag_msg, o
+        ret["ver_info"] = ver_info
+
+        return tag_name, ret
 
     def get_commit_object_from_commit_hex(self, hex):
         return self._be.commit(hex)
