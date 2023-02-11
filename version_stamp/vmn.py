@@ -267,16 +267,16 @@ class IVersionsStamper(object):
                 return None, None
 
         try:
-            tag_name, ver_info, _ = self.backend.get_tag_version_info(tag_name)
+            tag_name, ver_infos, _ = self.backend.get_tag_version_info(tag_name)
         except Exception:
             LOGGER.error("wrong version specified: root version must be an integer")
 
             return None, None
 
-        if ver_info is None:
+        if ver_infos[tag_name] is None:
             return None, None
 
-        return tag_name, ver_info
+        return tag_name, ver_infos[tag_name]
 
     def get_tag_name(self, verstr):
         tag_name = f'{self.name.replace("/", "-")}'
@@ -686,30 +686,31 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         # Get version info for tag
-        _, ver_info, all_tags = self.backend.get_tag_version_info(tag_formatted_app_name)
-        if ver_info is None:
+        tag_formatted_app_name, ver_infos, _ = \
+            self.backend.get_tag_version_info(tag_formatted_app_name)
+
+        if ver_infos is None:
+            return None
+
+        if ver_infos[tag_formatted_app_name] is None:
             return None
 
         # means we are trying to find a matching version that is in rc state
         if prerelease_count:
             # try to check if there is a release version on it
-            tags = self.backend.get_all_brother_tags(tag_formatted_app_name)
-            if release_tag_formatted_app_name in tags:
-                _, ver_info = self.backend.get_tag_version_info(
-                    release_tag_formatted_app_name
-                )
-                if ver_info is None:
+            for k,v in ver_infos.items():
+                if v is None:
                     raise RuntimeError("Bug")
 
         # Can happen if app's name is a prefix of another app
-        if ver_info["stamping"]["app"]["name"] != self.name:
+        if ver_infos[tag_formatted_app_name]["stamping"]["app"]["name"] != self.name:
             return None
 
-        if ver_info["stamping"]["app"]["release_mode"] == "init":
+        if ver_infos[tag_formatted_app_name]["stamping"]["app"]["release_mode"] == "init":
             return None
 
         found = True
-        for k, v in ver_info["stamping"]["app"]["changesets"].items():
+        for k, v in ver_infos[tag_formatted_app_name]["stamping"]["app"]["changesets"].items():
             if k not in self.actual_deps_state:
                 found = False
                 break
@@ -726,7 +727,7 @@ class VersionControlStamper(IVersionsStamper):
                 break
 
         if found:
-            return ver_info
+            return ver_infos[tag_formatted_app_name]
 
         return None
 
@@ -842,10 +843,11 @@ class VersionControlStamper(IVersionsStamper):
 
         (
             buildmetadata_tag_name,
-            tag_ver_info_form_repo,
+            tag_ver_infos,
+            _
         ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
-        if tag_ver_info_form_repo is not None:
-            if tag_ver_info_form_repo != ver_info:
+        if tag_ver_infos[buildmetadata_tag_name] is not None:
+            if tag_ver_infos[buildmetadata_tag_name] != ver_info:
                 LOGGER.error(f"Tried to add different metadata for the same version.")
                 raise RuntimeError()
 
@@ -879,11 +881,12 @@ class VersionControlStamper(IVersionsStamper):
                     self.name, initial_version, self.hide_zero_hotfix
                 )
             )
-            _, ver_info = self.backend.get_tag_version_info(
-                release_tag_formatted_app_name
-            )
+            release_tag_formatted_app_name, ver_infos, _ = \
+                self.backend.get_tag_version_info(
+                    release_tag_formatted_app_name
+                )
 
-            if ver_info is not None:
+            if ver_infos and ver_infos[release_tag_formatted_app_name] is not None:
                 LOGGER.error(
                     f"The version {initial_version} was already released. "
                     "Will refuse to stamp prerelease version "
@@ -2005,7 +2008,7 @@ def show(vcs, params, verstr=None):
 
             versions = []
             tags = vcs.backend.get_all_brother_tags(tag_name)
-            for tag in tags:
+            for tag in tags[0]:
                 if tag:
                     # TODO:: use some utils function
                     # buildmetadata cannot include an '_' so we can assume
