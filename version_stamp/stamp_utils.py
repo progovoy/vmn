@@ -551,10 +551,7 @@ class GitBackend(VMNBackend):
     def __init__(self, repo_path, inherit_env=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
 
-        self._be = GitBackend.initialize_git_backend(
-            repo_path,
-            inherit_env
-        )
+        self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
         self.add_git_user_cfg_if_missing()
 
         self._origin = self._be.remotes[0]
@@ -587,8 +584,9 @@ class GitBackend(VMNBackend):
         be = git.Repo(repo_path, search_parent_directories=True)
 
         if inherit_env:
-            current_git_env = \
-                {k: os.environ[k] for k in os.environ if k.startswith('GIT_')}
+            current_git_env = {
+                k: os.environ[k] for k in os.environ if k.startswith("GIT_")
+            }
             current_git_env.update(
                 {
                     "GIT_AUTHOR_NAME": VMN_USER_NAME,
