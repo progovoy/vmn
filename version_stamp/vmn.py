@@ -122,7 +122,11 @@ class IVersionsStamper(object):
         # root_context means that the user uses vmn in a context of a root app
         self.root_context = arg_params["root"]
 
-        self.backend, err = stamp_utils.get_client(self.vmn_root_path, self.be_type)
+        self.backend, err = stamp_utils.get_client(
+            self.vmn_root_path,
+            self.be_type,
+            inherit_env=True,
+        )
         if err:
             err_str = "Failed to create backend {0}. Exiting".format(err)
             LOGGER.error(err_str)
@@ -1733,9 +1737,9 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             status["repos"][repo] = copy.deepcopy(default_status)
             full_path = os.path.join(vcs.vmn_root_path, repo)
 
-            be, err = stamp_utils.get_client(full_path, vcs.be_type)
+            dep_be, err = stamp_utils.get_client(full_path, vcs.be_type)
 
-            err = be.check_for_pending_changes()
+            err = dep_be.check_for_pending_changes()
             if err:
                 status["dirty_deps"] = True
                 status["err_msgs"][
@@ -1751,7 +1755,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                         f"Could not get active branch name "
                         f"for {repo}. Probably in detached head"
                     )
-                    branch_name = be.get_active_branch()
+                    branch_name = dep_be.get_active_branch()
                     err_msg = (
                         f"{repo} repository is on a different branch: "
                         f"{branch_name} than what is required by the configuration: "
@@ -1773,8 +1777,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                         f"Repository in not on the requested tag by the configuration "
                         f"for {repo}."
                     )
-                    c1 = be.changeset(tag=vcs.configured_deps[repo]["tag"])
-                    c2 = be.changeset()
+                    c1 = dep_be.changeset(tag=vcs.configured_deps[repo]["tag"])
+                    c2 = dep_be.changeset()
                     assert c1 == c2
                 except Exception as exc:
                     status["dirty_deps"] = True
@@ -1791,7 +1795,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                         f"Repository in not on the requested hash by the configuration "
                         f"for {repo}."
                     )
-                    assert vcs.configured_deps[repo]["hash"] == be.changeset()
+                    assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
                 except Exception as exc:
                     status["dirty_deps"] = True
                     status["err_msgs"][
@@ -1801,8 +1805,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     status["repos"][repo]["tag_error"] = True
                     status["repos"][repo]["state"].add("tag_error")
 
-            if not be.in_detached_head():
-                err = be.check_for_outgoing_changes()
+            if not dep_be.in_detached_head():
+                err = dep_be.check_for_outgoing_changes()
                 if err:
                     status["dirty_deps"] = True
                     status["err_msgs"][
@@ -2343,7 +2347,11 @@ def _update_repo(args):
 
     client = None
     try:
-        client, err = stamp_utils.get_client(path, "git")
+        if path == root_path:
+            client, err = stamp_utils.get_client(path, "git", inherit_env=True)
+        else:
+            client, err = stamp_utils.get_client(path, "git")
+
         if client is None:
             return {"repo": rel_path, "status": 0, "description": err}
     except Exception as exc:

@@ -2445,6 +2445,7 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
 
+    main_branch = app_layout._app_backend.be.get_active_branch()
     branch = "b2"
     branch_conf_path = os.path.join(
         f"{app_layout.repo_path}",
@@ -2474,7 +2475,7 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
 
     assert os.path.exists(branch_conf_path)
 
-    base_cmd = ["git", "checkout", "-b", "main"]
+    base_cmd = ["git", "checkout", main_branch]
     subprocess.call(base_cmd, cwd=app_layout.repo_path)
 
     app_layout.write_file_commit_and_push(

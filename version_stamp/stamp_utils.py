@@ -548,11 +548,15 @@ class LocalFileBackend(VMNBackend):
 
 
 class GitBackend(VMNBackend):
-    def __init__(self, repo_path):
+    def __init__(self, repo_path, inherit_env=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
 
-        self._be = git.Repo(repo_path, search_parent_directories=True)
+        self._be = GitBackend.initialize_git_backend(
+            repo_path,
+            inherit_env
+        )
         self.add_git_user_cfg_if_missing()
+
         self._origin = self._be.remotes[0]
         self.repo_path = repo_path
 
@@ -577,6 +581,25 @@ class GitBackend(VMNBackend):
 
     def __del__(self):
         self._be.close()
+
+    @staticmethod
+    def initialize_git_backend(repo_path, inherit_env):
+        be = git.Repo(repo_path, search_parent_directories=True)
+
+        if inherit_env:
+            current_git_env = \
+                {k: os.environ[k] for k in os.environ if k.startswith('GIT_')}
+            current_git_env.update(
+                {
+                    "GIT_AUTHOR_NAME": VMN_USER_NAME,
+                    "GIT_COMMITTER_NAME": VMN_USER_NAME,
+                    "GIT_AUTHOR_EMAIL": VMN_USER_NAME,
+                    "GIT_COMMITTER_EMAIL": VMN_USER_NAME,
+                }
+            )
+            be.git.update_environment(**current_git_env)
+
+        return be
 
     @staticmethod
     def get_repo_details(path):
@@ -1303,7 +1326,7 @@ class GitBackend(VMNBackend):
         git.Repo.clone_from(f"{remote}", f"{path}")
 
 
-def get_client(root_path, be_type):
+def get_client(root_path, be_type, inherit_env=False):
     if be_type == "local_file":
         be = LocalFileBackend(root_path)
         return be, None
@@ -1312,7 +1335,7 @@ def get_client(root_path, be_type):
         client = git.Repo(root_path, search_parent_directories=True)
         client.close()
 
-        be = GitBackend(root_path)
+        be = GitBackend(root_path, inherit_env)
         return be, None
     except git.exc.InvalidGitRepositoryError:
         err = f"repository path: {root_path} is not a functional git or repository.\n"
