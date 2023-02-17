@@ -1559,7 +1559,7 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     main_branch = app_layout._app_backend.be.get_active_branch()
 
-    app_layout._app_backend.be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -1591,7 +1591,7 @@ def test_get_version(app_layout):
 
     main_branch = app_layout._app_backend.be.get_active_branch()
 
-    app_layout._app_backend.be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     app_layout._app_backend._origin.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
@@ -1827,7 +1827,7 @@ def test_conf(app_layout, capfd):
     assert err == 1
     capfd.readouterr()
 
-    app_layout._repos["repo1"]["_be"].be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", repo_name="repo1", create_new=True)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     conf["deps"]["../"]["repo2"]["hash"] = app_layout._repos["repo2"][
         "_be"
@@ -2502,7 +2502,7 @@ def test_stamp_no_ff_rebase(app_layout, capfd):
     main_branch = app_layout._app_backend.be.get_active_branch()
     other_branch = "topic"
 
-    app_layout._app_backend.be.checkout(("-b", other_branch))
+    app_layout.checkout(other_branch, create_new=True)
 
     app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
     _stamp_app(app_layout.app_name, "patch")
@@ -2521,3 +2521,22 @@ def test_stamp_no_ff_rebase(app_layout, capfd):
     captured = capfd.readouterr()
     res = yaml.safe_load(captured.out)
     assert "0.1.2" == res["out"]
+
+
+def test_missing_local_branch(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    cur_hex = app_layout._app_backend.be._be.head.commit.hexsha
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    app_layout.checkout(cur_hex)
+    app_layout.delete_branch(main_branch)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0

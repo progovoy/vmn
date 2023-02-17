@@ -982,6 +982,21 @@ class GitBackend(VMNBackend):
         return ver_infos
 
     def in_detached_head(self):
+        out = self._be.git.branch("-r", "--contains", "HEAD")
+        out = out.split("\n")[0].strip()
+
+        if not out:
+            raise RuntimeError(
+                f"Failed to find remote branch for hex: {hexsha}"
+            )
+
+        local_branch_name = \
+            f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
+        self._be.git.checkout(
+            "-b",
+            local_branch_name,
+            out
+        )
         return self._be.head.is_detached
 
     def add_git_user_cfg_if_missing(self):
@@ -1008,6 +1023,7 @@ class GitBackend(VMNBackend):
 
         branch_name = self._be.active_branch.name
         try:
+            # TODO:: get actual tracked branch
             self._be.git.rev_parse("--verify", f"{self._origin.name}/{branch_name}")
         except Exception:
             err = (
@@ -1065,6 +1081,7 @@ class GitBackend(VMNBackend):
 
     def get_branch_from_changeset(self, hexsha):
         out = self._be.git.branch("--contains", hexsha)
+        # We assume that we are in detached head when calling this function
         out = out.split("\n")[1:]
         if not out:
             # TODO:: add debug print here
@@ -1080,6 +1097,25 @@ class GitBackend(VMNBackend):
                 f"related to multiple branches: {active_branches}. "
                 "Using the first one as the active branch"
             )
+
+        if not active_branches:
+            out = self._be.git.branch("-r", "--contains", hexsha)
+            out = out.split("\n")[0].strip()
+
+            if not out:
+                raise RuntimeError(
+                    f"Failed to find remote branch for hex: {hexsha}"
+                )
+
+            local_branch_name = \
+                f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
+            self._be.git.checkout(
+                "-b",
+                local_branch_name,
+                out
+            )
+
+            active_branches.append(local_branch_name)
 
         active_branch = active_branches[0]
         return active_branch

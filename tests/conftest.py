@@ -144,6 +144,39 @@ class FSAppLayoutFixture(object):
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
 
+    def checkout(
+            self,
+            target,
+            repo_name=f"{TEST_REPO_NAME}_0",
+            branch_to_track=None,
+            create_new=False):
+        import subprocess
+
+        base_cmd = ["git", "checkout"]
+        if create_new:
+            base_cmd.append("-b")
+
+        base_cmd.append(target)
+
+        if branch_to_track:
+            base_cmd.append(branch_to_track)
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+
+        subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
+
+    def delete_branch(
+            self,
+            branch_name,
+            repo_name=f"{TEST_REPO_NAME}_0",
+    ):
+        import subprocess
+
+        base_cmd = ["git", "branch", "-D", branch_name]
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+
+        subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
+
     def push(self, force_lease=False):
         import subprocess
 
