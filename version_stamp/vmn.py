@@ -199,7 +199,7 @@ class IVersionsStamper(object):
 
         self.app_conf_path = os.path.join(
             self.app_dir_path,
-            f"{self.backend.get_active_branch(raise_on_detached_head=False)}_conf.yml",
+            f"{self.backend.active_branch}_conf.yml",
         )
         if not os.path.isfile(self.app_conf_path):
             self.app_conf_path = os.path.join(self.app_dir_path, "conf.yml")
@@ -221,7 +221,7 @@ class IVersionsStamper(object):
 
             self.root_app_conf_path = os.path.join(
                 self.root_app_dir_path,
-                f"{self.backend.get_active_branch(raise_on_detached_head=False)}_root_conf.yml",
+                f"{self.backend.active_branch}_root_conf.yml",
             )
             if not os.path.isfile(self.root_app_conf_path):
                 self.root_app_conf_path = os.path.join(
@@ -975,7 +975,7 @@ class VersionControlStamper(IVersionsStamper):
         self.current_version_info["stamping"]["app"]["info"] = copy.deepcopy(info)
         self.current_version_info["stamping"]["app"][
             "stamped_on_branch"
-        ] = self.backend.get_active_branch()
+        ] = self.backend.active_branch
         self.current_version_info["stamping"]["app"][
             "prerelease_count"
         ] = copy.deepcopy(prerelease_count)
@@ -1218,7 +1218,7 @@ class VersionControlStamper(IVersionsStamper):
         return 0
 
     def publish_commit(self, version_files_to_add):
-        cur_branch = self.backend.get_active_branch(raise_on_detached_head=False)
+        cur_branch = self.backend.active_branch
         path = os.path.join(
             self.app_dir_path,
             f"*_conf.yml",
@@ -1751,10 +1751,6 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
             if "branch" in vcs.configured_deps[repo]:
                 try:
-                    err_msg = (
-                        f"Could not get active branch name "
-                        f"for {repo}. Probably in detached head"
-                    )
                     branch_name = dep_be.get_active_branch()
                     err_msg = (
                         f"{repo} repository is on a different branch: "

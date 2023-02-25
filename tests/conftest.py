@@ -233,7 +233,7 @@ class FSAppLayoutFixture(object):
             "git",
             "push",
             "--delete",
-            self._app_backend.be._origin.name,
+            self._app_backend.be._selected_remote.name,
             tag_name,
         ]
 
@@ -407,8 +407,8 @@ class GitBackend(VersionControlBackend):
         self._git_backend.index.add(os.path.join(versions_root_path, "init.txt"))
         self._git_backend.index.commit("first commit")
 
-        self._origin = self._git_backend.remotes[0]
-        self._origin.push()
+        self._selected_remote = self._git_backend.remotes[0]
+        self._selected_remote.push()
 
         self.be = stamp_utils.GitBackend(versions_root_path)
 

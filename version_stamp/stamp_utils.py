@@ -194,7 +194,7 @@ class VMNBackend(object):
     ):
         return {}
 
-    def get_active_branch(self, raise_on_detached_head=True):
+    def get_active_branch(self):
         return "none"
 
     def remote(self):
@@ -474,6 +474,8 @@ class LocalFileBackend(VMNBackend):
             )
 
         self.repo_path = repo_path
+        self.active_branch = "none"
+        self.remote_active_branch = "remote/none"
 
     def __del__(self):
         pass
@@ -554,8 +556,16 @@ class GitBackend(VMNBackend):
         self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
         self.add_git_user_cfg_if_missing()
 
-        self._origin = self._be.remotes[0]
+        # TODO:: make _selected_remote configurable.
+        # Currently just selecting the first one
+        self._selected_remote = self._be.remotes[0]
         self.repo_path = repo_path
+        self.active_branch = self.get_active_branch()
+        self.remote_active_branch = \
+            self.get_remote_tracking_branch(
+                self.active_branch
+            )
+        self.detached_head = self.in_detached_head()
 
     def perform_cached_fetch(self):
         vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
@@ -632,6 +642,9 @@ class GitBackend(VMNBackend):
             return False
 
     def tag(self, tags, messages, ref="HEAD", push=False):
+        if push and self.remote_active_branch is None:
+            raise RuntimeError("Will not push remote branch does not exist")
+
         for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
@@ -642,17 +655,31 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
+                self._selected_remote.push(
+                    refspec=f"refs/tags/{tag}",
+                    o="ci.skip"
+                )
             except Exception:
-                self._origin.push(f"refs/tags/{tag}")
+                self._selected_remote.push(
+                    refspec=f"refs/tags/{tag}"
+                )
 
     def push(self, tags=()):
+        if self.detached_head:
+            raise RuntimeError("Will not push from detached head")
+
+        if self.remote_active_branch is None:
+            raise RuntimeError("Will not push remote branch does not exist")
+
         try:
-            ret = self._origin.push(
-                f"refs/heads/{self.get_active_branch()}", o="ci.skip"
+            ret = self._selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{self.remote_active_branch.split('/')[-1]}",
+                o="ci.skip"
             )
-        except Exception:
-            ret = self._origin.push(f"refs/heads/{self.get_active_branch()}")
+        except Exception as exc:
+            ret = self._selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{self.remote_active_branch.split('/')[-1]}"
+            )
 
         if ret[0].old_commit is None:
             if "up to date" in ret[0].summary:
@@ -669,12 +696,17 @@ class GitBackend(VMNBackend):
 
         for tag in tags:
             try:
-                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
+                self._selected_remote.push(
+                    refspec=f"refs/tags/{tag}",
+                    o="ci.skip"
+                )
             except Exception:
-                self._origin.push(f"refs/tags/{tag}")
+                self._selected_remote.push(
+                    refspec=f"refs/tags/{tag}"
+                )
 
     def pull(self):
-        self._origin.pull()
+        self._selected_remote.pull()
 
     def commit(self, message, user, include=None):
         if include is not None:
@@ -705,7 +737,7 @@ class GitBackend(VMNBackend):
 
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
             cmd_suffix = (
-                f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
+                f"refs/heads/{self.active_branch}"
             )
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
@@ -982,21 +1014,6 @@ class GitBackend(VMNBackend):
         return ver_infos
 
     def in_detached_head(self):
-        out = self._be.git.branch("-r", "--contains", "HEAD")
-        out = out.split("\n")[0].strip()
-
-        if not out:
-            raise RuntimeError(
-                f"Failed to find remote branch for hex: {hexsha}"
-            )
-
-        local_branch_name = \
-            f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
-        self._be.git.checkout(
-            "-b",
-            local_branch_name,
-            out
-        )
         return self._be.head.is_detached
 
     def add_git_user_cfg_if_missing(self):
@@ -1021,27 +1038,30 @@ class GitBackend(VMNBackend):
             err = f"Detached head in {self.root()}."
             return err
 
-        branch_name = self._be.active_branch.name
+        if self.remote_active_branch is None:
+            err = f"No remote branch found in {self.root()}."
+            return err
+
+        branch_name = self.active_branch
         try:
-            # TODO:: get actual tracked branch
-            self._be.git.rev_parse("--verify", f"{self._origin.name}/{branch_name}")
+            self._be.git.rev_parse("--verify", f"{self.remote_active_branch}")
         except Exception:
             err = (
-                f"Branch {self._origin.name}/{branch_name} does not exist. "
+                f"Branch {self.remote_active_branch} does not exist. "
                 "Please push or set-upstream branch to "
-                f"{self._origin.name}/{branch_name} of branch {branch_name}"
+                f"{self.remote_active_branch} of branch {branch_name}"
             )
             return err
 
         outgoing = tuple(
-            self._be.iter_commits(f"{self._origin.name}/{branch_name}..{branch_name}")
+            self._be.iter_commits(f"{self.remote_active_branch}..{branch_name}")
         )
 
         if len(outgoing) > 0:
             err = (
                 f"Outgoing changes in {self.root()} "
                 f"from branch {branch_name} "
-                f"({self._origin.name}/{branch_name}..{branch_name})\n"
+                f"({self.remote_active_branch}..{branch_name})\n"
                 f"The commits that are outgoing are: {outgoing}"
             )
 
@@ -1052,7 +1072,7 @@ class GitBackend(VMNBackend):
     def checkout_branch(self, branch_name=None):
         try:
             if branch_name is None:
-                branch_name = self.get_active_branch(raise_on_detached_head=False)
+                branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
         except Exception:
@@ -1060,28 +1080,37 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
             # TODO:: change to some branch name that can be retreived from repo
             try:
+                # TODO:: configure the default branchname
                 self.checkout(branch="master")
             except Exception as exc:
                 self.checkout(branch="main")
 
         return self._be.active_branch.commit.hexsha
 
-    def get_active_branch(self, raise_on_detached_head=True):
+    def get_remote_tracking_branch(self, local_branch_name):
+        command = ["git",
+            'rev-parse',
+                   '--abbrev-ref',
+                   '--symbolic-full-name',
+                   f'{local_branch_name}@{{u}}'
+                   ]
+
+        try:
+            return self._be.git.execute(command)
+        except Exception as exc:
+            return None
+
+    def get_active_branch(self):
         # TODO:: return the full ref name: refs/heads/..
         if not self.in_detached_head():
             active_branch = self._be.active_branch.name
         else:
-            if raise_on_detached_head:
-                LOGGER.error("Active branch cannot be found in detached head")
-                raise RuntimeError()
-
             active_branch = self.get_branch_from_changeset(self._be.head.commit.hexsha)
 
         return active_branch
 
     def get_branch_from_changeset(self, hexsha):
         out = self._be.git.branch("--contains", hexsha)
-        # We assume that we are in detached head when calling this function
         out = out.split("\n")[1:]
         if not out:
             # TODO:: add debug print here
@@ -1092,7 +1121,6 @@ class GitBackend(VMNBackend):
             active_branches.append(item.strip())
         if len(active_branches) > 1:
             LOGGER.info(
-                "In detached head. Commit hash: "
                 f"{self._be.head.commit.hexsha} is "
                 f"related to multiple branches: {active_branches}. "
                 "Using the first one as the active branch"
@@ -1109,11 +1137,21 @@ class GitBackend(VMNBackend):
 
             local_branch_name = \
                 f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
-            self._be.git.checkout(
-                "-b",
+            self._be.git.branch(
                 local_branch_name,
                 out
             )
+            self._be.git.branch(
+                f"--set-upstream-to={out}",
+                local_branch_name
+            )
+
+            self.active_branch = local_branch_name
+            self.remote_active_branch = out
+
+            remote_branch_hexsha = self._be.refs[out].commit.hexsha
+            if remote_branch_hexsha == hexsha:
+                self.checkout_branch()
 
             active_branches.append(local_branch_name)
 
@@ -1131,6 +1169,8 @@ class GitBackend(VMNBackend):
         assert rev is not None
 
         self._be.git.checkout(rev)
+
+        self.detached_head = self.in_detached_head()
 
     @staticmethod
     def get_actual_deps_state(vmn_root_path, paths):
@@ -1176,7 +1216,7 @@ class GitBackend(VMNBackend):
         return p.hexsha
 
     def remote(self):
-        remote = tuple(self._origin.urls)[0]
+        remote = tuple(self._selected_remote.urls)[0]
 
         if os.path.isdir(remote):
             remote = os.path.relpath(remote, self.root())
@@ -1185,11 +1225,17 @@ class GitBackend(VMNBackend):
 
     def changeset(self, tag=None, short=False):
         if tag is None:
+            if short:
+                return self._be.head.commit.hexsha[:6]
+
             return self._be.head.commit.hexsha
 
         found_tag = self._be.tag(f"refs/tags/{tag}")
 
         try:
+            if short:
+                return found_tag.commit.hexsha[:6]
+
             return found_tag.commit.hexsha
         except Exception as exc:
             LOGGER.debug(f"Logged exception: ", exc_info=True)

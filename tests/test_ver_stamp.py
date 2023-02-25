@@ -1561,20 +1561,20 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout.write_file_commit_and_push("test_repo_0", "f3.file", "msg3")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
 
     app_layout._app_backend.be.push()
 
@@ -1593,12 +1593,12 @@ def test_get_version(app_layout):
 
     app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     app_layout._app_backend.be.push()
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1628,7 +1628,7 @@ def test_read_version_from_file(app_layout):
     )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend._selected_remote.pull(rebase=True)
     with open(file_path, "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
@@ -2528,6 +2528,26 @@ def test_missing_local_branch(app_layout):
     _init_app(app_layout.app_name)
 
     main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    cur_hex = app_layout._app_backend.be.changeset()
+    app_layout.checkout(cur_hex)
+
+    app_layout.delete_branch(main_branch)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def test_missing_local_branch_error_scenarios(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
     cur_hex = app_layout._app_backend.be._be.head.commit.hexsha
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
@@ -2539,4 +2559,10 @@ def test_missing_local_branch(app_layout):
     app_layout.delete_branch(main_branch)
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
+    assert err == 1
+
+    cur_hex = app_layout._app_backend.be._be.head.commit.hexsha
+    app_layout.checkout(cur_hex)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
