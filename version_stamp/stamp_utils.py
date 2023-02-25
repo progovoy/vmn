@@ -561,10 +561,7 @@ class GitBackend(VMNBackend):
         self._selected_remote = self._be.remotes[0]
         self.repo_path = repo_path
         self.active_branch = self.get_active_branch()
-        self.remote_active_branch = \
-            self.get_remote_tracking_branch(
-                self.active_branch
-            )
+        self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
         self.detached_head = self.in_detached_head()
 
     def perform_cached_fetch(self):
@@ -655,14 +652,9 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self._selected_remote.push(
-                    refspec=f"refs/tags/{tag}",
-                    o="ci.skip"
-                )
+                self._selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._selected_remote.push(
-                    refspec=f"refs/tags/{tag}"
-                )
+                self._selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def push(self, tags=()):
         if self.detached_head:
@@ -674,7 +666,7 @@ class GitBackend(VMNBackend):
         try:
             ret = self._selected_remote.push(
                 refspec=f"refs/heads/{self.active_branch}:{self.remote_active_branch.split('/')[-1]}",
-                o="ci.skip"
+                o="ci.skip",
             )
         except Exception as exc:
             ret = self._selected_remote.push(
@@ -696,14 +688,9 @@ class GitBackend(VMNBackend):
 
         for tag in tags:
             try:
-                self._selected_remote.push(
-                    refspec=f"refs/tags/{tag}",
-                    o="ci.skip"
-                )
+                self._selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._selected_remote.push(
-                    refspec=f"refs/tags/{tag}"
-                )
+                self._selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def pull(self):
         self._selected_remote.pull()
@@ -736,9 +723,7 @@ class GitBackend(VMNBackend):
             msg_filter = f"^{app_name}: Stamped"
 
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
-            cmd_suffix = (
-                f"refs/heads/{self.active_branch}"
-            )
+            cmd_suffix = f"refs/heads/{self.active_branch}"
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:
@@ -1088,12 +1073,13 @@ class GitBackend(VMNBackend):
         return self._be.active_branch.commit.hexsha
 
     def get_remote_tracking_branch(self, local_branch_name):
-        command = ["git",
-            'rev-parse',
-                   '--abbrev-ref',
-                   '--symbolic-full-name',
-                   f'{local_branch_name}@{{u}}'
-                   ]
+        command = [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            f"{local_branch_name}@{{u}}",
+        ]
 
         try:
             return self._be.git.execute(command)
@@ -1131,20 +1117,13 @@ class GitBackend(VMNBackend):
             out = out.split("\n")[0].strip()
 
             if not out:
-                raise RuntimeError(
-                    f"Failed to find remote branch for hex: {hexsha}"
-                )
+                raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
 
-            local_branch_name = \
+            local_branch_name = (
                 f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
-            self._be.git.branch(
-                local_branch_name,
-                out
             )
-            self._be.git.branch(
-                f"--set-upstream-to={out}",
-                local_branch_name
-            )
+            self._be.git.branch(local_branch_name, out)
+            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
 
             self.active_branch = local_branch_name
             self.remote_active_branch = out

@@ -2613,22 +2613,22 @@ def test_double_release_works(app_layout, capfd):
         captured = capfd.readouterr()
 
         assert err == 0
-        assert captured.out == '[INFO] 1.3.0\n'
-        assert captured.err == ''
+        assert captured.out == "[INFO] 1.3.0\n"
+        assert captured.err == ""
 
     err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0")
     captured = capfd.readouterr()
 
     assert err == 0
-    assert captured.out == '[INFO] 1.3.0\n'
-    assert captured.err == ''
+    assert captured.out == "[INFO] 1.3.0\n"
+    assert captured.err == ""
 
     err, ver_info, _ = _release_app(app_layout.app_name)
     captured = capfd.readouterr()
 
     assert err == 0
-    assert captured.out == '[INFO] 1.3.0\n'
-    assert captured.err == ''
+    assert captured.out == "[INFO] 1.3.0\n"
+    assert captured.err == ""
 
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
@@ -2639,6 +2639,8 @@ def test_double_release_works(app_layout, capfd):
     captured = capfd.readouterr()
 
     assert err == 1
-    assert captured.out == ''
-    assert captured.err == '[ERROR] When running vmn release and not on a version commit, ' \
-                           'you must specify a specific version using -v flag\n'
+    assert captured.out == ""
+    assert (
+        captured.err == "[ERROR] When running vmn release and not on a version commit, "
+        "you must specify a specific version using -v flag\n"
+    )

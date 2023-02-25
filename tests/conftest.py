@@ -145,11 +145,12 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def checkout(
-            self,
-            target,
-            repo_name=f"{TEST_REPO_NAME}_0",
-            branch_to_track=None,
-            create_new=False):
+        self,
+        target,
+        repo_name=f"{TEST_REPO_NAME}_0",
+        branch_to_track=None,
+        create_new=False,
+    ):
         import subprocess
 
         base_cmd = ["git", "checkout"]
@@ -166,9 +167,9 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
 
     def delete_branch(
-            self,
-            branch_name,
-            repo_name=f"{TEST_REPO_NAME}_0",
+        self,
+        branch_name,
+        repo_name=f"{TEST_REPO_NAME}_0",
     ):
         import subprocess
 
