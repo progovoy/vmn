@@ -1496,6 +1496,21 @@ def handle_release(vmn_ctx):
         else:
             ver_info = ver_infos[tag_name]["ver_info"]
 
+        base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
+            ver,
+            vmn_ctx.vcs.hide_zero_hotfix,
+        )
+
+        tag_formatted_app_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(
+            vmn_ctx.vcs.name,
+            base_ver,
+            vmn_ctx.vcs.hide_zero_hotfix,
+        )
+
+        if tag_formatted_app_name in ver_infos:
+            LOGGER.info(base_ver)
+            return 0
+
         LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
     except Exception as exc:
         LOGGER.error(f"Failed to release {ver}")

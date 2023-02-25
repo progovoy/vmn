@@ -40,8 +40,11 @@ def _init_app(app_name, starting_version="0.0.0"):
     return ret, ver_info, merged_dict
 
 
-def _release_app(app_name, version):
-    cmd = ["release", "-v", version, app_name]
+def _release_app(app_name, version=None):
+    cmd = ["release", app_name]
+    if version:
+        cmd.extend(["-v", version])
+
     ret, vmn_ctx = vmn.vmn_run(cmd)
     vmn_ctx.vcs.initialize_backend_attrs()
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
@@ -2566,3 +2569,76 @@ def test_missing_local_branch_error_scenarios(app_layout):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 1
+
+
+def test_double_release_works(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rc1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rc2"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="beta")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-beta1"
+    assert data["prerelease"] == "beta"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-beta2"
+    assert data["prerelease"] == "beta"
+
+    for i in range(2):
+        capfd.readouterr()
+        err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+        captured = capfd.readouterr()
+
+        assert err == 0
+        assert captured.out == '[INFO] 1.3.0\n'
+        assert captured.err == ''
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0")
+    captured = capfd.readouterr()
+
+    assert err == 0
+    assert captured.out == '[INFO] 1.3.0\n'
+    assert captured.err == ''
+
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    assert err == 0
+    assert captured.out == '[INFO] 1.3.0\n'
+    assert captured.err == ''
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0"
+    assert data["prerelease"] == "release"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert captured.out == ''
+    assert captured.err == '[ERROR] When running vmn release and not on a version commit, ' \
+                           'you must specify a specific version using -v flag\n'
