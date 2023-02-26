@@ -314,6 +314,9 @@ conf:
     ../:
       <repo dir name>:
         vcs_type: git
+        branch: branch_name
+        # tag: tag_name
+        # hash: specific_hash
   extra_info: false
   create_verinfo_files: false
   hide_zero_hotfix: true
