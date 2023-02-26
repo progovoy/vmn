@@ -977,6 +977,9 @@ class VersionControlStamper(IVersionsStamper):
             "stamped_on_branch"
         ] = self.backend.active_branch
         self.current_version_info["stamping"]["app"][
+            "stamped_on_remote_branch"
+        ] = self.backend.remote_active_branch
+        self.current_version_info["stamping"]["app"][
             "prerelease_count"
         ] = copy.deepcopy(prerelease_count)
 
