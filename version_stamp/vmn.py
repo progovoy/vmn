@@ -2571,7 +2571,7 @@ def vmn_run(command_line=None):
         lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
         lock = FileLock(lock_file_path)
 
-        # start of unparallel code section
+        # start of non-parallel code section
         lock.acquire()
 
         LOGGER = stamp_utils.init_stamp_logger(
@@ -2595,7 +2595,7 @@ def vmn_run(command_line=None):
 
         # We only need it here. In other, Exception cases -
         # the unlock will happen naturally because the process will exit
-        release_vmn_lock(lock, lock_file_path)
+        lock.release()
 
     except Exception as exc:
         LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
@@ -2607,12 +2607,6 @@ def vmn_run(command_line=None):
         err = 1
 
     return err, vmnc
-
-
-def release_vmn_lock(lock, lock_file_path):
-    lock.release()
-    if os.path.exists(lock_file_path):
-        os.unlink(lock_file_path)
 
 
 def _vmn_run(args, root_path):
