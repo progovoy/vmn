@@ -46,7 +46,7 @@ import stamp_utils
 LOGGER = None
 
 
-class VMNContextMAnager(object):
+class VMNContainer(object):
     def __init__(self, args, root_path):
         self.args = args
         root = False
@@ -62,13 +62,8 @@ class VMNContextMAnager(object):
             if "command" in self.args and "stamp" in self.args.command:
                 initial_params["extra_commit_message"] = self.args.extra_commit_message
 
-        vmn_path = os.path.join(root_path, ".vmn")
-        lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
-
-        self.lock = FileLock(lock_file_path)
         self.params = initial_params
         self.vcs = None
-        self.lock_file_path = lock_file_path
 
         # Currently this is used only for show and only for cargo situation
         # TODO:: think if this feature should exist at all
@@ -77,16 +72,6 @@ class VMNContextMAnager(object):
             self.params["be_type"] = stamp_utils.VMN_BE_TYPE_LOCAL_FILE
 
         self.vcs = VersionControlStamper(self.params)
-
-    def __enter__(self):
-        self.lock.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.lock.release()
-
-        if os.path.exists(self.lock_file_path):
-            os.unlink(self.lock_file_path)
 
 
 class IVersionsStamper(object):
@@ -2571,9 +2556,6 @@ def vmn_run(command_line=None):
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
-        LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, LOG_FILENAME), args.debug
-        )
     except Exception as exc:
         LOGGER.error(
             "Failed to init logger. "
@@ -2583,9 +2565,20 @@ def vmn_run(command_line=None):
 
         return 1, None
 
-    command_line = copy.deepcopy(command_line)
-
+    err = 0
+    vmnc = None
     try:
+        lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
+        lock = FileLock(lock_file_path)
+
+        # start of unparallel code section
+        lock.acquire()
+
+        LOGGER = stamp_utils.init_stamp_logger(
+            os.path.join(vmn_path, LOG_FILENAME), args.debug
+        )
+        command_line = copy.deepcopy(command_line)
+
         if command_line is None or not command_line:
             command_line = sys.argv
             if command_line is None:
@@ -2598,28 +2591,40 @@ def vmn_run(command_line=None):
         end_char = "\033[0m"
         LOGGER.debug(f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}")
 
-        return _vmn_run(args, root_path)
+        err, vmnc = _vmn_run(args, root_path)
+
+        # We only need it here. In other, Exception cases -
+        # the unlock will happen naturally because the process will exit
+        release_vmn_lock(lock, lock_file_path)
+
     except Exception as exc:
         LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
         LOGGER.debug("Exception info: ", exc_info=True)
 
-        return 1, None
+        err = 1
     except:
         LOGGER.debug("Exception info: ", exc_info=True)
-        return 1, None
+        err = 1
+
+    return err, vmnc
+
+
+def release_vmn_lock(lock, lock_file_path):
+    lock.release()
+    if os.path.exists(lock_file_path):
+        os.unlink(lock_file_path)
 
 
 def _vmn_run(args, root_path):
     err = 0
-    vmn_ctx = VMNContextMAnager(args, root_path)
-    with vmn_ctx:
-        if vmn_ctx.args.command in VMN_ARGS:
-            cmd = vmn_ctx.args.command.replace("-", "_")
-            err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmn_ctx)
-        else:
-            LOGGER.info("Run vmn -h for help")
+    vmnc = VMNContainer(args, root_path)
+    if vmnc.args.command in VMN_ARGS:
+        cmd = vmnc.args.command.replace("-", "_")
+        err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
+    else:
+        LOGGER.info("Run vmn -h for help")
 
-    return err, vmn_ctx
+    return err, vmnc
 
 
 def validate_app_name(args):
