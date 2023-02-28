@@ -2623,6 +2623,13 @@ def test_double_release_works(app_layout, capfd):
     assert captured.out == "[INFO] 1.3.0\n"
     assert captured.err == ""
 
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta1")
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert captured.err == "[ERROR] Failed to release 1.3.0-beta1\n"
+    assert captured.out == ""
+
     err, ver_info, _ = _release_app(app_layout.app_name)
     captured = capfd.readouterr()
 
@@ -2643,4 +2650,21 @@ def test_double_release_works(app_layout, capfd):
     assert (
         captured.err == "[ERROR] When running vmn release and not on a version commit, "
         "you must specify a specific version using -v flag\n"
+    )
+
+
+def test_change_of_tracking_branch(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_layout.checkout("new_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    app_layout.checkout("new_branch2", create_new=True)
+
+    app_layout.delete_branch("new_branch")
+
+    app_layout._app_backend.be._be.git.branch(
+        f"--set-upstream-to={out}",
+        local_branch_name
     )
