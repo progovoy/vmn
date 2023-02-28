@@ -2665,10 +2665,8 @@ def test_change_of_tracking_branch(app_layout, capfd):
     app_layout.delete_branch("new_branch")
 
     app_layout._app_backend.be._be.git.branch(
-        "--set-upstream-to=origin/new_branch",
-        "new_branch2"
+        "--set-upstream-to=origin/new_branch", "new_branch2"
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
     assert err == 0
-
