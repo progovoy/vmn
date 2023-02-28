@@ -19,6 +19,8 @@ import yaml
 from filelock import FileLock
 from packaging import version as pversion
 
+LOCK_FILE_ENV = "VMN_LOCK_FILE_PATH"
+
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
@@ -2569,6 +2571,9 @@ def vmn_run(command_line=None):
     vmnc = None
     try:
         lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
+        if LOCK_FILE_ENV in os.environ:
+            lock_file_path = os.environ[LOCK_FILE_ENV]
+
         lock = FileLock(lock_file_path)
 
         # start of non-parallel code section
