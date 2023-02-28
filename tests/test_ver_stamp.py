@@ -2653,7 +2653,7 @@ def test_double_release_works(app_layout, capfd):
     )
 
 
-def test_change_of_tracking_branch(app_layout):
+def test_change_of_tracking_branch(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -2665,6 +2665,10 @@ def test_change_of_tracking_branch(app_layout):
     app_layout.delete_branch("new_branch")
 
     app_layout._app_backend.be._be.git.branch(
-        f"--set-upstream-to={out}",
-        local_branch_name
+        "--set-upstream-to=origin/new_branch",
+        "new_branch2"
     )
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
+    assert err == 0
+
