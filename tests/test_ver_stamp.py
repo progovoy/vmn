@@ -2670,3 +2670,28 @@ def test_change_of_tracking_branch(app_layout, capfd):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
     assert err == 0
+
+
+def test_no_upstream_branch_stamp(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout._app_backend.be._be.git.branch(
+        "--unset-upstream", main_branch
+    )
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.1"

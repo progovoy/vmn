@@ -1024,7 +1024,10 @@ class GitBackend(VMNBackend):
             return err
 
         if self.remote_active_branch is None:
-            err = f"No remote branch found in {self.root()}."
+            err = f"No upstream branch found in {self.root()}. " \
+                  f"for local branch {self.active_branch}. " \
+                  f"Probably no upstream branch is set"
+
             return err
 
         branch_name = self.active_branch
@@ -1032,8 +1035,8 @@ class GitBackend(VMNBackend):
             self._be.git.rev_parse("--verify", f"{self.remote_active_branch}")
         except Exception:
             err = (
-                f"Branch {self.remote_active_branch} does not exist. "
-                "Please push or set-upstream branch to "
+                f"Remote branch {self.remote_active_branch} does not exist. "
+                "Please set-upstream branch to "
                 f"{self.remote_active_branch} of branch {branch_name}"
             )
             return err
@@ -1124,6 +1127,11 @@ class GitBackend(VMNBackend):
             )
             self._be.git.branch(local_branch_name, out)
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
+
+            LOGGER.debug(
+                f"Setting local branch {local_branch_name} "
+                f"to track remote branch {out}"
+            )
 
             self.active_branch = local_branch_name
             self.remote_active_branch = out
