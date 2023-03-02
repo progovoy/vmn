@@ -1088,8 +1088,13 @@ class GitBackend(VMNBackend):
             ret = self._be.git.execute(command)
             return ret
         except Exception as exc:
+            out = self._be.git.branch("-r", "--contains", "HEAD")
+            out = out.split("\n")[0].strip()
+            if not out:
+                out = f"{self._selected_remote.name}/{local_branch_name}"
+
             self._be.git.branch(
-                f"--set-upstream-to={self._selected_remote.name}/{local_branch_name}",
+                f"--set-upstream-to={out}",
                 local_branch_name
             )
             try:
