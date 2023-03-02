@@ -77,7 +77,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
@@ -1003,6 +1003,13 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     shutil.rmtree(app_layout._repos["repo3"]["path"])
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert captured.out == 'dirty:\n- modified\nout: 0.0.3\n\n'
 
     err = _goto(app_layout.app_name)
     assert err == 0
@@ -2695,3 +2702,63 @@ def test_no_upstream_branch_stamp(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.1"
+
+
+def test_multi_repo_dependency_goto_and_stamp(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = _configure_2_deps(app_layout, params)
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    prev_ver = ver_info["stamping"]["app"]["_version"]
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert prev_ver != ver_info["stamping"]["app"]["_version"]
+
+    err = _goto(app_layout.app_name, version=prev_ver)
+    assert err == 0
+
+    # TODO:: for each stamp add capfd assertions
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == prev_ver
+
+
+def test_multi_repo_dependency_goto_and_show(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = _configure_2_deps(app_layout, params)
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    prev_ver = ver_info["stamping"]["app"]["_version"]
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert prev_ver != ver_info["stamping"]["app"]["_version"]
+
+    err = _goto(app_layout.app_name, version=prev_ver)
+    assert err == 0
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert captured.out == "0.0.2\n"

@@ -1085,9 +1085,18 @@ class GitBackend(VMNBackend):
         ]
 
         try:
-            return self._be.git.execute(command)
+            ret = self._be.git.execute(command)
+            return ret
         except Exception as exc:
-            return None
+            self._be.git.branch(
+                f"--set-upstream-to={self._selected_remote.name}/{local_branch_name}",
+                local_branch_name
+            )
+            try:
+                ret = self._be.git.execute(command)
+                return ret
+            except Exception as iexc:
+                return None
 
     def get_active_branch(self):
         # TODO:: return the full ref name: refs/heads/..
