@@ -556,9 +556,9 @@ class GitBackend(VMNBackend):
         self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
         self.add_git_user_cfg_if_missing()
 
-        # TODO:: make _selected_remote configurable.
+        # TODO:: make selected_remote configurable.
         # Currently just selecting the first one
-        self._selected_remote = self._be.remotes[0]
+        self.selected_remote = self._be.remotes[0]
         self.repo_path = repo_path
         self.active_branch = self.get_active_branch()
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
@@ -652,9 +652,9 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self._selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._selected_remote.push(refspec=f"refs/tags/{tag}")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def push(self, tags=()):
         if self.detached_head:
@@ -663,14 +663,21 @@ class GitBackend(VMNBackend):
         if self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
 
+        remote_branch_name_no_remote_name = \
+            ''.join(
+                self.remote_active_branch.split(
+                    f"{self.selected_remote.name}/"
+                )
+            )
+
         try:
-            ret = self._selected_remote.push(
-                refspec=f"refs/heads/{self.active_branch}:{self.remote_active_branch.split('/')[-1]}",
+            ret = self.selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
                 o="ci.skip",
             )
         except Exception as exc:
-            ret = self._selected_remote.push(
-                refspec=f"refs/heads/{self.active_branch}:{self.remote_active_branch.split('/')[-1]}"
+            ret = self.selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
             )
 
         if ret[0].old_commit is None:
@@ -688,12 +695,12 @@ class GitBackend(VMNBackend):
 
         for tag in tags:
             try:
-                self._selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._selected_remote.push(refspec=f"refs/tags/{tag}")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def pull(self):
-        self._selected_remote.pull()
+        self.selected_remote.pull()
 
     def commit(self, message, user, include=None):
         if include is not None:
@@ -1086,12 +1093,14 @@ class GitBackend(VMNBackend):
 
         try:
             ret = self._be.git.execute(command)
+            assert ret.startswith(self.selected_remote.name)
+
             return ret
         except Exception as exc:
             out = self._be.git.branch("-r", "--contains", "HEAD")
             out = out.split("\n")[0].strip()
             if not out:
-                out = f"{self._selected_remote.name}/{local_branch_name}"
+                out = f"{self.selected_remote.name}/{local_branch_name}"
 
             self._be.git.branch(
                 f"--set-upstream-to={out}",
@@ -1135,6 +1144,8 @@ class GitBackend(VMNBackend):
 
             if not out:
                 raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
+
+            assert out.startswith(self.selected_remote.name)
 
             local_branch_name = (
                 f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
@@ -1217,7 +1228,7 @@ class GitBackend(VMNBackend):
         return p.hexsha
 
     def remote(self):
-        remote = tuple(self._selected_remote.urls)[0]
+        remote = tuple(self.selected_remote.urls)[0]
 
         if os.path.isdir(remote):
             remote = os.path.relpath(remote, self.root())

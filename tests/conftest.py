@@ -234,7 +234,7 @@ class FSAppLayoutFixture(object):
             "git",
             "push",
             "--delete",
-            self._app_backend.be._selected_remote.name,
+            self._app_backend.be.selected_remote.name,
             tag_name,
         ]
 

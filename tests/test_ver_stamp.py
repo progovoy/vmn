@@ -1571,20 +1571,20 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout.write_file_commit_and_push("test_repo_0", "f3.file", "msg3")
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
 
     app_layout._app_backend.be.push()
 
@@ -1603,12 +1603,12 @@ def test_get_version(app_layout):
 
     app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     app_layout._app_backend.be.push()
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1638,7 +1638,7 @@ def test_read_version_from_file(app_layout):
     )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._selected_remote.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     with open(file_path, "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
@@ -2660,28 +2660,33 @@ def test_double_release_works(app_layout, capfd):
     )
 
 
-def test_change_of_tracking_branch(app_layout, capfd):
+@pytest.mark.parametrize("branch_name", [("new_branch", "new_branch2"), ("new_branch/a", "new_branch2/b")])
+def test_change_of_tracking_branch(app_layout, capfd, branch_name):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
-    app_layout.checkout("new_branch", create_new=True)
+    app_layout.checkout(branch_name[0], create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
-    app_layout.checkout("new_branch2", create_new=True)
+    app_layout.checkout(branch_name[1], create_new=True)
 
-    app_layout.delete_branch("new_branch")
+    app_layout.delete_branch(branch_name[0])
 
     app_layout._app_backend.be._be.git.branch(
-        "--set-upstream-to=origin/new_branch", "new_branch2"
+        f"--set-upstream-to=origin/{branch_name[0]}", branch_name[1]
     )
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
     assert err == 0
 
 
-def test_no_upstream_branch_stamp(app_layout, capfd):
+@pytest.mark.parametrize("branch_name", ["new_branch", "new_branch/a"])
+def test_no_upstream_branch_stamp(app_layout, capfd, branch_name):
     _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
+
+    app_layout.checkout(branch_name, create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, release_mode="minor"
@@ -2694,6 +2699,8 @@ def test_no_upstream_branch_stamp(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     main_branch = app_layout._app_backend.be.get_active_branch()
+    assert branch_name == main_branch
+
     app_layout._app_backend.be._be.git.branch(
         "--unset-upstream", main_branch
     )
