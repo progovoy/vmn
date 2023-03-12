@@ -1519,7 +1519,7 @@ def test_basic_goto(app_layout, capfd):
 
     rc3 = app_layout._app_backend.be.changeset()
 
-    root_name = root_app_name.split("/cd ")[0]
+    root_name = root_app_name.split("/")[0]
 
     err = _goto(root_name, version="1", root=True)
     assert err == 0
