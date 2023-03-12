@@ -280,9 +280,9 @@ def test_stamp_multiple_apps(app_layout):
 
     _stamp_app(new_name, "hotfix")
 
-    repo_name = app_layout.repo_path.split("/")[-1]
-    app_layout.write_file_commit_and_push(f"{repo_name}", "a/b/c/f1.file", "msg1")
-    os.environ["VMN_WORKING_DIR"] = f"{app_layout.repo_path}/a/b/c/"
+    repo_name = app_layout.repo_path.split(os.path.sep)[-1]
+    app_layout.write_file_commit_and_push(f"{repo_name}", os.path.join("a", "b", "c", "f1.file"), "msg1")
+    os.environ["VMN_WORKING_DIR"] = f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
@@ -482,8 +482,8 @@ def test_jinja2_gen(app_layout, capfd):
         assert data["RELEASE_MODE"] == "patch"
         assert "dirty_deps" in data["."]["state"]
         assert "modified" in data["."]["state"]
-        assert "pending" in data["../repo1"]["state"]
-        assert "outgoing" in data["../repo2"]["state"]
+        assert "pending" in data[os.path.join("..", "repo1")]["state"]
+        assert "outgoing" in data[os.path.join("..", "repo2")]["state"]
 
 
 def test_jinja2_gen_custom(app_layout, capfd):
@@ -1116,7 +1116,7 @@ def test_starting_version(app_layout, capfd):
     _init_app(app_layout.app_name, "1.2.3")
     captured = capfd.readouterr()
 
-    path = f"{app_layout.repo_path}/.vmn/{app_layout.app_name}"
+    path = f"{os.path.join(app_layout.repo_path, '.vmn', app_layout.app_name)}"
     assert f"[INFO] Initialized app tracking on {path}\n" == captured.out
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
@@ -1519,7 +1519,7 @@ def test_basic_goto(app_layout, capfd):
 
     rc3 = app_layout._app_backend.be.changeset()
 
-    root_name = root_app_name.split("/")[0]
+    root_name = root_app_name.split("/cd ")[0]
 
     err = _goto(root_name, version="1", root=True)
     assert err == 0
