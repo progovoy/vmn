@@ -133,15 +133,11 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
-    hlen = len(LOGGER.handlers)
-    for h in range(hlen):
-        LOGGER.handlers[0].close()
-        LOGGER.removeHandler(LOGGER.handlers[0])
-    flen = len(LOGGER.filters)
-    for f in range(flen):
-        LOGGER.removeFilter(LOGGER.filters[0])
+    clear_logger_handlers(LOGGER)
+    global_logger = logging.getLogger()
+    clear_logger_handlers(global_logger)
 
-    LOGGER.setLevel(logging.DEBUG)
+    global_logger.setLevel(logging.DEBUG)
 
     fmt = "[%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
@@ -171,12 +167,23 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     )
     rotating_file_handler.setLevel(logging.DEBUG)
 
-    fmt = f"%(filename)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
+    fmt = f"%(pathname)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
-    LOGGER.addHandler(rotating_file_handler)
+
+    global_logger.addHandler(rotating_file_handler)
 
     return LOGGER
+
+
+def clear_logger_handlers(logger_obj):
+    hlen = len(logger_obj.handlers)
+    for h in range(hlen):
+        logger_obj.handlers[0].close()
+        logger_obj.removeHandler(logger_obj.handlers[0])
+    flen = len(logger_obj.filters)
+    for f in range(flen):
+        logger_obj.removeFilter(logger_obj.filters[0])
 
 
 class VMNBackend(object):
