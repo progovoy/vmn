@@ -2540,7 +2540,7 @@ def test_stamp_no_ff_rebase(app_layout, capfd):
     assert "0.1.2" == res["out"]
 
 
-def test_stamp_no_ff_rebase_rc(app_layout, capfd):
+def test_show_no_ff_rebase_rc(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "minor")
@@ -2843,3 +2843,38 @@ def test_multi_repo_dependency_on_specific_branch_goto(app_layout, capfd):
     assert err == 0
     captured = capfd.readouterr()
     assert captured.out == "0.0.2\n"
+
+
+def test_dirty_no_ff_rebase(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.2" == res["out"]
+    assert len(res["dirty"]) == 1
+    assert res["dirty"][0] == "modified"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
