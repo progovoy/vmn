@@ -1085,15 +1085,11 @@ class GitBackend(VMNBackend):
                 branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
-        except Exception:
-            logging.info("Failed to get branch name. Trying to checkout to master")
+        except Exception as exc:
+            logging.error("Failed to get branch name")
             LOGGER.debug("Exception info: ", exc_info=True)
-            # TODO:: change to some branch name that can be retreived from repo
-            try:
-                # TODO:: configure the default branchname
-                self.checkout(branch="master")
-            except Exception as exc:
-                self.checkout(branch="main")
+
+            return None
 
         return self._be.active_branch.commit.hexsha
 
@@ -1178,7 +1174,8 @@ class GitBackend(VMNBackend):
 
             remote_branch_hexsha = self._be.refs[out].commit.hexsha
             if remote_branch_hexsha == hexsha:
-                self.checkout_branch()
+                ret = self.checkout_branch()
+                assert ret is not None
 
             active_branches.append(local_branch_name)
 

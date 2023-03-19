@@ -1284,13 +1284,15 @@ class VersionControlStamper(IVersionsStamper):
             version_files_to_add.append(path)
 
     def retrieve_remote_changes(self):
+        # TODO:: make sure pull is safe and do it for all deps repos
         self.backend.pull()
 
 
 def handle_init(vmn_ctx):
     expected_status = {"repos_exist_locally"}
+    optional_status = {"deps_synced_with_conf"}
 
-    status = _get_repo_status(vmn_ctx.vcs, expected_status)
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
         LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
@@ -1369,7 +1371,7 @@ def handle_stamp(vmn_ctx):
         ]
 
     optional_status = {"modified", "detached"}
-    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
+    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
@@ -1441,7 +1443,7 @@ def handle_stamp(vmn_ctx):
 
 def handle_release(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "modified", "dirty_deps"}
+    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
@@ -1517,7 +1519,7 @@ def handle_add(vmn_ctx):
     vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "modified", "dirty_deps"}
+    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
@@ -1615,7 +1617,7 @@ def handle_gen(vmn_ctx):
 
 def handle_goto(vmn_ctx):
     expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {"detached", "repos_exist_locally", "modified"}
+    optional_status = {"detached", "repos_exist_locally", "modified", "deps_synced_with_conf"}
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
@@ -1652,20 +1654,27 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
     status.update(
         {
             "repos_exist_locally": True,
+            "deps_synced_with_conf": True,
+            "repo_tracked": True,
+            "app_tracked": True,
             # TODO: rename to on_stamped_version and turn to True
             "modified": False,
             "dirty_deps": False,
-            "repo_tracked": True,
-            "app_tracked": True,
             "err_msgs": {
                 "dirty_deps": "",
+                "deps_synced_with_conf": "",
                 "repo_tracked": "vmn repo tracking is already initialized",
                 "app_tracked": "vmn app tracking is already initialized",
             },
             "repos": {},
             "matched_version_info": None,
             # Assumed state
-            "state": {"repos_exist_locally", "repo_tracked", "app_tracked"},
+            "state": {
+                "repos_exist_locally",
+                "deps_synced_with_conf",
+                "repo_tracked",
+                "app_tracked"
+            },
             "local_repos_diff": set(),
         }
     )
@@ -1721,9 +1730,10 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
         configured_repos = set(vcs.configured_deps.keys())
         local_repos = set(vcs.actual_deps_state.keys())
 
-        if configured_repos - local_repos:
+        missing_deps = configured_repos - local_repos
+        if missing_deps:
             paths = []
-            for path in configured_repos - local_repos:
+            for path in missing_deps:
                 paths.append(os.path.join(vcs.vmn_root_path, path))
 
             status["repos_exist_locally"] = False
@@ -1731,11 +1741,13 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                 f"Dependency repository were specified in conf.yml file. "
                 f"However repos: {paths} do not exist. Please clone and rerun"
             )
-            status["local_repos_diff"] = configured_repos - local_repos
+            status["local_repos_diff"] = missing_deps
             status["state"].remove("repos_exist_locally")
 
         err = 0
-        for repo in configured_repos & local_repos:
+        common_deps = configured_repos & local_repos
+        for repo in common_deps:
+            # Skip local repo
             if repo == ".":
                 continue
 
@@ -1764,13 +1776,14 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     )
                     assert branch_name == vcs.configured_deps[repo]["branch"]
                 except Exception as exc:
-                    status["dirty_deps"] = True
-                    status["err_msgs"][
-                        "dirty_deps"
-                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
-                    status["state"].add("dirty_deps")
-                    status["repos"][repo]["branch_error"] = True
-                    status["repos"][repo]["state"].add("branch_error")
+                    status["deps_synced_with_conf"] = False
+                    status["err_msgs"]["deps_synced_with_conf"] = \
+                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status["state"]:
+                        status["state"].remove("deps_synced_with_conf")
+
+                    status["repos"][repo]["branch_synced_error"] = True
+                    status["repos"][repo]["state"].add("not_synced_with_conf")
 
             if "tag" in vcs.configured_deps[repo]:
                 try:
@@ -1782,13 +1795,14 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     c2 = dep_be.changeset()
                     assert c1 == c2
                 except Exception as exc:
-                    status["dirty_deps"] = True
-                    status["err_msgs"][
-                        "dirty_deps"
-                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
-                    status["state"].add("dirty_deps")
-                    status["repos"][repo]["tag_error"] = True
-                    status["repos"][repo]["state"].add("tag_error")
+                    status["deps_synced_with_conf"] = False
+                    status["err_msgs"]["deps_synced_with_conf"] = \
+                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status["state"]:
+                        status["state"].remove("deps_synced_with_conf")
+
+                    status["repos"][repo]["tag_synced_error"] = True
+                    status["repos"][repo]["state"].add("not_synced_with_conf")
 
             if "hash" in vcs.configured_deps[repo]:
                 try:
@@ -1798,13 +1812,14 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     )
                     assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
                 except Exception as exc:
-                    status["dirty_deps"] = True
-                    status["err_msgs"][
-                        "dirty_deps"
-                    ] = f"{status['err_msgs']['dirty_deps']}\n{err_msg}"
-                    status["state"].add("dirty_deps")
-                    status["repos"][repo]["tag_error"] = True
-                    status["repos"][repo]["state"].add("tag_error")
+                    status["deps_synced_with_conf"] = False
+                    status["err_msgs"]["deps_synced_with_conf"] = \
+                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status["state"]:
+                        status["state"].remove("deps_synced_with_conf")
+
+                    status["repos"][repo]["hash_synced_error"] = True
+                    status["repos"][repo]["state"].add("not_synced_with_conf")
 
             if not dep_be.in_detached_head():
                 err = dep_be.check_for_outgoing_changes()
@@ -1849,7 +1864,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
 def _init_app(versions_be_ifc, starting_version):
     optional_status = {"modified", "detached"}
-    expected_status = {"repos_exist_locally", "repo_tracked"}
+    expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
 
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
     if status["error"]:
@@ -2025,6 +2040,7 @@ def show(vcs, params, verstr=None):
             "outgoing",
             "modified",
             "dirty_deps",
+            "deps_synced_with_conf",
         }
         status = _get_repo_status(vcs, expected_status, optional_status)
         if status["error"]:
@@ -2133,6 +2149,7 @@ def gen(vcs, params, verstr=None):
         "outgoing",
         "modified",
         "dirty_deps",
+        "deps_synced_with_conf"
     }
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status["error"]:
@@ -2239,7 +2256,7 @@ def get_dirty_states(optional_status, status):
         "repos_exist_locally",
         "detached",
     }
-    dirty_states -= {"detached", "repos_exist_locally"}
+    dirty_states -= {"detached", "repos_exist_locally", "deps_synced_with_conf"}
 
     try:
         debug_msg = ""
@@ -2259,29 +2276,57 @@ def get_dirty_states(optional_status, status):
 def goto_version(vcs, params, version):
     unique_id = None
     check_unique = False
-    if version is not None:
+    status_str = ""
+
+    if version is None:
+        if not params["deps_only"]:
+            ret = vcs.backend.checkout_branch()
+            assert ret is not None
+
+            del vcs
+            vcs = VersionControlStamper(params)
+
+        tag_name, ver_infos = vcs.backend.get_first_reachable_version_info(
+            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        )
+        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+            LOGGER.error(f"No such app: {vcs.name}")
+            return 1
+
+        data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
+        deps = copy.deepcopy(vcs.configured_deps)
+
+        if not params["deps_only"]:
+            if vcs.root_context:
+                verstr = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
+                status_str = f"You are at the tip of the branch of version {verstr} for {vcs.name}"
+            else:
+                status_str = f"You are at the tip of the branch of version {data['_version']} for {vcs.name}"
+    else:
         # check for unique id
         res = version.split("+")
         if len(res) > 1:
             version, unique_id = res
             check_unique = True
 
-    if version is None:
-        tag_name, ver_infos = vcs.backend.get_first_reachable_version_info(
-            vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
-        )
-    else:
         tag_name, ver_infos = vcs.get_version_info_from_verstr(version)
+        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+            LOGGER.error(f"No such app: {vcs.name}")
+            return 1
 
-    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-        LOGGER.error(f"No such app: {vcs.name}")
-        return 1
-
-    data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
-    if version is not None:
+        data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
         deps = copy.deepcopy(data["changesets"])
-    else:
-        deps = copy.deepcopy(vcs.configured_deps)
+
+        if not params["deps_only"]:
+            try:
+                vcs.backend.checkout(tag=tag_name)
+                status_str = f"You are at version {version} of {vcs.name}"
+            except Exception:
+                LOGGER.error(
+                    "App: {0} with version: {1} was " "not found".format(vcs.name, version)
+                )
+
+                return 1
 
     if check_unique:
         if not deps["."]["hash"].startswith(unique_id):
@@ -2311,28 +2356,8 @@ def goto_version(vcs, params, version):
 
             return 1
 
-    if version is None and not params["deps_only"]:
-        vcs.backend.checkout_branch()
-
-        if vcs.root_context:
-            verstr = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
-            LOGGER.info(
-                f"You are at the tip of the branch of version {verstr} for {vcs.name}"
-            )
-        else:
-            LOGGER.info(
-                f"You are at the tip of the branch of version {data['_version']} for {vcs.name}"
-            )
-    elif not params["deps_only"]:
-        try:
-            vcs.backend.checkout(tag=tag_name)
-            LOGGER.info(f"You are at version {version} of {vcs.name}")
-        except Exception:
-            LOGGER.error(
-                "App: {0} with version: {1} was " "not found".format(vcs.name, version)
-            )
-
-            return 1
+    if status_str:
+        LOGGER.info(status_str)
 
     return 0
 
@@ -2353,6 +2378,7 @@ def _update_repo(args):
         else:
             client, err = stamp_utils.get_client(path, "git")
 
+        # TODO:: why this is not an error?
         if client is None:
             return {"repo": rel_path, "status": 0, "description": err}
     except Exception as exc:
@@ -2385,6 +2411,7 @@ def _update_repo(args):
         LOGGER.info("Updating {0}".format(rel_path))
         if changeset is None:
             if not client.in_detached_head():
+                # TODO:: why we need the pull here?
                 client.pull()
 
             if tag is not None:
@@ -2392,6 +2419,9 @@ def _update_repo(args):
                 LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
             else:
                 rev = client.checkout_branch(branch_name=branch_name)
+                if rev is None:
+                    raise RuntimeError(f"Failed to checkout to branch {branch_name}")
+
                 if branch_name is not None:
                     LOGGER.info(
                         "Updated {0} to branch {1}".format(rel_path, branch_name)
@@ -2400,6 +2430,7 @@ def _update_repo(args):
                     LOGGER.info("Updated {0} to changeset {1}".format(rel_path, rev))
         else:
             if not client.in_detached_head():
+                # TODO:: why need pull here?
                 client.pull()
 
             client.checkout(rev=changeset)
@@ -2408,14 +2439,15 @@ def _update_repo(args):
     except Exception as exc:
         LOGGER.exception(
             f"Unexpected behaviour:\n"
-            f"Aborting update operation in {path} "
-            "Reason:\n"
+            f"Trying to abort update operation in {path} "
+            "Reason:\n",
+            exc_info=True
         )
 
         try:
             client.checkout(rev=cur_changeset)
-        except Exception:
-            LOGGER.exception("Unexpected behaviour:")
+        except Exception as exc:
+            LOGGER.exception("Unexpected behaviour:", exc_info=True)
 
         return {"repo": rel_path, "status": 1, "description": None}
 
@@ -2477,13 +2509,18 @@ def _goto_version(deps, vmn_root_path):
     with Pool(min(len(args), 10)) as p:
         results = p.map(_clone_repo, args)
 
+    err = False
+    failed_repos = set()
     for res in results:
         if res["status"] == 1:
+            err = True
+
             if res["repo"] is None and res["description"] is None:
                 continue
 
             msg = "Failed to clone "
             if res["repo"] is not None:
+                failed_repos.add(res["repo"])
                 msg += "from {0} ".format(res["repo"])
             if res["description"] is not None:
                 msg += "because {0}".format(res["description"])
@@ -2492,6 +2529,9 @@ def _goto_version(deps, vmn_root_path):
 
     args = []
     for rel_path, v in deps.items():
+        if rel_path in failed_repos:
+            continue
+
         branch = None
         if "branch" in v and v["branch"] is not None:
             branch = v["branch"]
@@ -2512,7 +2552,6 @@ def _goto_version(deps, vmn_root_path):
     with Pool(min(len(args), 20)) as p:
         results = p.map(_update_repo, args)
 
-    err = False
     for res in results:
         if res["status"] == 1:
             err = True
