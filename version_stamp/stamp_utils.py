@@ -944,24 +944,32 @@ class GitBackend(VMNBackend):
         return tname, o
 
     def get_all_commit_tags_log_impl(self, hexsha, tags, app_name):
-        ver_infos = {}
+        cleaned_tags = []
         for t in tags:
             if "tag:" not in t:
-                # Maybe rebase or tag was removed. Will handle the rebase case here
-                try:
-                    commit_obj = self.get_commit_object_from_commit_hex(hexsha)
-                    verstr = commit_obj.message.split(" version ")[1].strip()
-                    tagname = f"{app_name}_{verstr}"
-                    tagname, ver_info_c = self.parse_tag_message(tagname)
-                    if ver_info_c["tag_object"]:
-
-                        ver_infos[tagname] = ver_info_c
-                except Exception as exc:
-                    LOGGER.debug(f"Skipped on {hexsha} commit")
-
                 continue
 
             tname = t.split("tag:")[1].strip()
+            cleaned_tags.append(tname)
+
+        ver_infos = {}
+        if not cleaned_tags:
+            # Maybe rebase or tag was removed. Will handle the rebase case here
+            try:
+                commit_obj = self.get_commit_object_from_commit_hex(hexsha)
+                verstr = commit_obj.message.split(" version ")[1].strip()
+                tagname = f"{app_name}_{verstr}"
+                tagname, ver_info_c = self.parse_tag_message(tagname)
+                if ver_info_c["tag_object"]:
+                    ver_infos[tagname] = ver_info_c
+
+                    cleaned_tags = self.get_all_brother_tags(tagname)
+                    cleaned_tags.pop(tagname)
+                    cleaned_tags = cleaned_tags.keys()
+            except Exception as exc:
+                LOGGER.debug(f"Skipped on {hexsha} commit")
+
+        for tname in cleaned_tags:
             tname, ver_info_c = self.parse_tag_message(tname)
             if ver_info_c["ver_info"] is None:
                 LOGGER.debug(

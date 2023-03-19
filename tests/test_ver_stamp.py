@@ -2533,6 +2533,38 @@ def test_stamp_no_ff_rebase(app_layout, capfd):
     assert "0.1.2" == res["out"]
 
 
+def test_stamp_no_ff_rebase_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
+    _stamp_app(app_layout.app_name, "patch", prerelease='rc')
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+    _stamp_app(app_layout.app_name)
+    _release_app(app_layout.app_name)
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.1" == res["out"]
+
+
 def test_missing_local_branch(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
