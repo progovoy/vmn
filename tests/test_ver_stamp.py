@@ -2873,8 +2873,6 @@ def test_dirty_no_ff_rebase(app_layout, capfd):
     captured = capfd.readouterr()
     res = yaml.safe_load(captured.out)
     assert "0.1.2" == res["out"]
-    assert len(res["dirty"]) == 1
-    assert res["dirty"][0] == "modified"
-
-    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]

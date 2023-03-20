@@ -885,6 +885,9 @@ class GitBackend(VMNBackend):
 
         items = log_res[0].split(",,,")
         tags = items[1].split(",")
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
         commit_hex = items[0]
         ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
 
