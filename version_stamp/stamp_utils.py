@@ -670,12 +670,9 @@ class GitBackend(VMNBackend):
         if self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
 
-        remote_branch_name_no_remote_name = \
-            ''.join(
-                self.remote_active_branch.split(
-                    f"{self.selected_remote.name}/"
-                )
-            )
+        remote_branch_name_no_remote_name = "".join(
+            self.remote_active_branch.split(f"{self.selected_remote.name}/")
+        )
 
         try:
             ret = self.selected_remote.push(
@@ -1049,9 +1046,11 @@ class GitBackend(VMNBackend):
             return err
 
         if self.remote_active_branch is None:
-            err = f"No upstream branch found in {self.root()}. " \
-                  f"for local branch {self.active_branch}. " \
-                  f"Probably no upstream branch is set"
+            err = (
+                f"No upstream branch found in {self.root()}. "
+                f"for local branch {self.active_branch}. "
+                f"Probably no upstream branch is set"
+            )
 
             return err
 
@@ -1116,10 +1115,7 @@ class GitBackend(VMNBackend):
             if not out:
                 out = f"{self.selected_remote.name}/{local_branch_name}"
 
-            self._be.git.branch(
-                f"--set-upstream-to={out}",
-                local_branch_name
-            )
+            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
             try:
                 ret = self._be.git.execute(command)
                 return ret

@@ -1371,7 +1371,12 @@ def handle_stamp(vmn_ctx):
         ]
 
     optional_status = {"modified", "detached"}
-    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked", "deps_synced_with_conf"}
+    expected_status = {
+        "repos_exist_locally",
+        "repo_tracked",
+        "app_tracked",
+        "deps_synced_with_conf",
+    }
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status["error"]:
@@ -1617,7 +1622,12 @@ def handle_gen(vmn_ctx):
 
 def handle_goto(vmn_ctx):
     expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {"detached", "repos_exist_locally", "modified", "deps_synced_with_conf"}
+    optional_status = {
+        "detached",
+        "repos_exist_locally",
+        "modified",
+        "deps_synced_with_conf",
+    }
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
@@ -1673,7 +1683,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                 "repos_exist_locally",
                 "deps_synced_with_conf",
                 "repo_tracked",
-                "app_tracked"
+                "app_tracked",
             },
             "local_repos_diff": set(),
         }
@@ -1777,8 +1787,9 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     assert branch_name == vcs.configured_deps[repo]["branch"]
                 except Exception as exc:
                     status["deps_synced_with_conf"] = False
-                    status["err_msgs"]["deps_synced_with_conf"] = \
-                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    status["err_msgs"][
+                        "deps_synced_with_conf"
+                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
                     if "deps_synced_with_conf" in status["state"]:
                         status["state"].remove("deps_synced_with_conf")
 
@@ -1796,8 +1807,9 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     assert c1 == c2
                 except Exception as exc:
                     status["deps_synced_with_conf"] = False
-                    status["err_msgs"]["deps_synced_with_conf"] = \
-                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    status["err_msgs"][
+                        "deps_synced_with_conf"
+                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
                     if "deps_synced_with_conf" in status["state"]:
                         status["state"].remove("deps_synced_with_conf")
 
@@ -1813,8 +1825,9 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
                 except Exception as exc:
                     status["deps_synced_with_conf"] = False
-                    status["err_msgs"]["deps_synced_with_conf"] = \
-                        f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
+                    status["err_msgs"][
+                        "deps_synced_with_conf"
+                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
                     if "deps_synced_with_conf" in status["state"]:
                         status["state"].remove("deps_synced_with_conf")
 
@@ -2149,7 +2162,7 @@ def gen(vcs, params, verstr=None):
         "outgoing",
         "modified",
         "dirty_deps",
-        "deps_synced_with_conf"
+        "deps_synced_with_conf",
     }
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status["error"]:
@@ -2298,7 +2311,9 @@ def goto_version(vcs, params, version):
 
         if not params["deps_only"]:
             if vcs.root_context:
-                verstr = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
+                verstr = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"][
+                    "version"
+                ]
                 status_str = f"You are at the tip of the branch of version {verstr} for {vcs.name}"
             else:
                 status_str = f"You are at the tip of the branch of version {data['_version']} for {vcs.name}"
@@ -2323,7 +2338,8 @@ def goto_version(vcs, params, version):
                 status_str = f"You are at version {version} of {vcs.name}"
             except Exception:
                 LOGGER.error(
-                    "App: {0} with version: {1} was " "not found".format(vcs.name, version)
+                    "App: {0} with version: {1} was "
+                    "not found".format(vcs.name, version)
                 )
 
                 return 1
@@ -2441,7 +2457,7 @@ def _update_repo(args):
             f"Unexpected behaviour:\n"
             f"Trying to abort update operation in {path} "
             "Reason:\n",
-            exc_info=True
+            exc_info=True,
         )
 
         try:

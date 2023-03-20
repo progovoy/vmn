@@ -188,7 +188,9 @@ def _add_buildmetadata_to_version(
     return vmn.vmn_run(args_list)[0]
 
 
-def _configure_2_deps(app_layout, params, specific_branch=None, specific_hash=None, specific_tag=None):
+def _configure_2_deps(
+    app_layout, params, specific_branch=None, specific_hash=None, specific_tag=None
+):
     conf = {
         "deps": {
             "../": {
@@ -206,14 +208,12 @@ def _configure_2_deps(app_layout, params, specific_branch=None, specific_hash=No
             {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
         if specific_branch:
-            cur_branch = app_layout._repos[repo[0]]['_be'].be.get_active_branch()
+            cur_branch = app_layout._repos[repo[0]]["_be"].be.get_active_branch()
             app_layout.checkout("new_branch", repo_name=repo[0], create_new=True)
             app_layout.write_file_commit_and_push(repo[0], "f1.file", "msg1")
             app_layout.write_file_commit_and_push(repo[0], "f1.file", "msg1")
             app_layout.checkout(cur_branch, repo_name=repo[0])
-            conf["deps"]["../"][repo[0]].update(
-                {"branch": specific_branch}
-            )
+            conf["deps"]["../"][repo[0]].update({"branch": specific_branch})
 
         be.__del__()
 
@@ -243,9 +243,7 @@ def test_vmn_init(app_layout, capfd):
     assert res == 1
 
     captured = capfd.readouterr()
-    assert captured.err.startswith(
-        "[ERROR] vmn repo tracking is already initialized"
-    )
+    assert captured.err.startswith("[ERROR] vmn repo tracking is already initialized")
     assert "" == captured.out
 
 
@@ -288,8 +286,12 @@ def test_stamp_multiple_apps(app_layout):
     _stamp_app(new_name, "hotfix")
 
     repo_name = app_layout.repo_path.split(os.path.sep)[-1]
-    app_layout.write_file_commit_and_push(f"{repo_name}", os.path.join("a", "b", "c", "f1.file"), "msg1")
-    os.environ["VMN_WORKING_DIR"] = f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
+    app_layout.write_file_commit_and_push(
+        f"{repo_name}", os.path.join("a", "b", "c", "f1.file"), "msg1"
+    )
+    os.environ[
+        "VMN_WORKING_DIR"
+    ] = f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
@@ -1016,7 +1018,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert captured.out == 'dirty:\n- modified\nout: 0.0.3\n\n'
+    assert captured.out == "dirty:\n- modified\nout: 0.0.3\n\n"
 
     err = _goto(app_layout.app_name)
     assert err == 0
@@ -2553,7 +2555,7 @@ def test_show_no_ff_rebase_rc(app_layout, capfd):
     app_layout.checkout(other_branch, create_new=True)
 
     app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
-    _stamp_app(app_layout.app_name, "patch", prerelease='rc')
+    _stamp_app(app_layout.app_name, "patch", prerelease="rc")
     app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
     _stamp_app(app_layout.app_name)
     _release_app(app_layout.app_name)
@@ -2699,7 +2701,9 @@ def test_double_release_works(app_layout, capfd):
     )
 
 
-@pytest.mark.parametrize("branch_name", [("new_branch", "new_branch2"), ("new_branch/a", "new_branch2/b")])
+@pytest.mark.parametrize(
+    "branch_name", [("new_branch", "new_branch2"), ("new_branch/a", "new_branch2/b")]
+)
 def test_change_of_tracking_branch(app_layout, capfd, branch_name):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -2727,9 +2731,7 @@ def test_no_upstream_branch_stamp(app_layout, capfd, branch_name):
     app_layout.checkout(branch_name, create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, release_mode="minor"
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
     assert err == 0
 
     data = ver_info["stamping"]["app"]
@@ -2740,9 +2742,7 @@ def test_no_upstream_branch_stamp(app_layout, capfd, branch_name):
     main_branch = app_layout._app_backend.be.get_active_branch()
     assert branch_name == main_branch
 
-    app_layout._app_backend.be._be.git.branch(
-        "--unset-upstream", main_branch
-    )
+    app_layout._app_backend.be._be.git.branch("--unset-upstream", main_branch)
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
     assert err == 0
@@ -2817,7 +2817,7 @@ def test_multi_repo_dependency_on_specific_branch_goto(app_layout, capfd):
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = _configure_2_deps(app_layout, params, specific_branch='new_branch')
+    conf = _configure_2_deps(app_layout, params, specific_branch="new_branch")
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
 
     capfd.readouterr()
