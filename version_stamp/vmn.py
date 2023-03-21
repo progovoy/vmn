@@ -2674,7 +2674,13 @@ def _vmn_run(args, root_path):
     vmnc = VMNContainer(args, root_path)
     if vmnc.args.command in VMN_ARGS:
         if VMN_ARGS[vmnc.args.command] == "remote":
-            vmnc.vcs.backend.prepare_for_remote_operation()
+            err = vmnc.vcs.backend.prepare_for_remote_operation()
+            if err:
+                LOGGER.error(
+                    "Failed to run prepare for remote operation.\n"
+                    "Check the log. Aborting remote operation."
+                )
+                return err, vmnc
 
         cmd = vmnc.args.command.replace("-", "_")
         err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)

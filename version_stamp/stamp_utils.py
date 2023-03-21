@@ -196,6 +196,9 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
+    def prepare_for_remote_operation(self):
+        return 0
+
     def get_first_reachable_version_info(
         self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
