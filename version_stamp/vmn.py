@@ -2448,10 +2448,16 @@ def _update_repo(args):
 
         if pull:
             try:
+                err = client.prepare_for_remote_operation()
+                if err:
+                    err_msg = "Failed to run prepare for remote operation.\n"
+                    LOGGER.error(err_msg)
+                    raise RuntimeError(err_msg)
+
                 client.checkout_branch()
                 client.pull()
             except Exception as exc:
-                LOGGER.exception("Faield to pull:", exc_info=True)
+                LOGGER.exception("Failed to pull:", exc_info=True)
                 return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
         if changeset is None:
