@@ -74,10 +74,9 @@ VMN_USER_NAME = "vmn"
 VMN_BE_TYPE_GIT = "git"
 VMN_BE_TYPE_LOCAL_FILE = "local_file"
 
+GLOBAL_LOG_FILENAME = "global_vmn.log"
+
 LOGGER = None
-
-
-VMN_GLOBAL_RESULTS_CACHE = {}
 
 
 class WrongTagFormatException(Exception):
@@ -160,20 +159,30 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     if rotating_log_path is None:
         return LOGGER
 
+    rotating_file_handler = init_log_file_handler(rotating_log_path)
+    LOGGER.addHandler(rotating_file_handler)
+
+    global_log_path = os.path.join(
+        os.path.dirname(rotating_log_path),
+        GLOBAL_LOG_FILENAME
+    )
+    global_file_handler = init_log_file_handler(global_log_path)
+    global_logger.addHandler(global_file_handler)
+
+    return LOGGER
+
+
+def init_log_file_handler(rotating_log_path):
     rotating_file_handler = RotatingFileHandler(
         rotating_log_path,
         maxBytes=1024 * 1024 * 10,
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
-
     fmt = f"%(pathname)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
-
-    global_logger.addHandler(rotating_file_handler)
-
-    return LOGGER
+    return rotating_file_handler
 
 
 def clear_logger_handlers(logger_obj):

@@ -19,16 +19,21 @@ import yaml
 from filelock import FileLock
 from packaging import version as pversion
 
+CUR_PATH = "{0}/".format(os.path.dirname(__file__))
+sys.path.append(CUR_PATH)
+import version as version_mod
+import stamp_utils
+
+
 LOCK_FILE_ENV = "VMN_LOCK_FILE_PATH"
 
-CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
 LOCK_FILENAME = "vmn.lock"
 LOG_FILENAME = "vmn.log"
 CACHE_FILENAME = "vmn.cache"
 
-IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME, CACHE_FILENAME]
+IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME, CACHE_FILENAME, stamp_utils.GLOBAL_LOG_FILENAME]
 VMN_ARGS = {
     "init": "remote",
     "init-app": "remote",
@@ -39,11 +44,6 @@ VMN_ARGS = {
     "gen": "local",
     "add": "remote",
 }
-
-sys.path.append(CUR_PATH)
-
-import version as version_mod
-import stamp_utils
 
 LOGGER = None
 
@@ -2275,7 +2275,7 @@ def get_dirty_states(optional_status, status):
                 debug_msg = f"{debug_msg}\n{status['err_msgs'][k]}"
 
         if debug_msg:
-            LOGGER.debug(f"Debug for dirty states call:\n{debug_msg}")
+            LOGGER.debug(f"Debug for dirty states call:{debug_msg}")
     except Exception as exc:
         LOGGER.debug("Logged Exception message: ", exc_info=True)
         pass
