@@ -2377,8 +2377,9 @@ def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert (
-        captured.err == "[ERROR] Untracked app. Run vmn init-app first\n[ERROR] "
-        "Error occured when getting the repo status\n"
+        captured.err == "[ERROR] Failed to get version info for tag: test_app_0.0.0\n"
+                        "[ERROR] Untracked app. Run vmn init-app first\n"
+                        "[ERROR] Error occured when getting the repo status\n"
     )
 
 

@@ -257,10 +257,9 @@ class IVersionsStamper(object):
 
                 return tag_name, {}
 
-        try:
-            tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
-        except Exception:
-            LOGGER.error(f"Faield to get version info for tag: {tag_name}")
+        tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
+        if not ver_infos:
+            LOGGER.error(f"Failed to get version info for tag: {tag_name}")
 
             return tag_name, {}
 
@@ -692,6 +691,9 @@ class VersionControlStamper(IVersionsStamper):
             tag_formatted_app_name, ver_infos = self.backend.get_tag_version_info(
                 tag_formatted_app_name
             )
+            if not ver_infos:
+                LOGGER.error(f"Failed to get version info for tag: {tag_formatted_app_name}")
+                return None
         else:
             ver_infos = self.ver_infos_from_repo
 
@@ -855,7 +857,7 @@ class VersionControlStamper(IVersionsStamper):
             buildmetadata_tag_name,
             tag_ver_infos,
         ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
-        if buildmetadata_tag_name in tag_ver_infos is not None:
+        if buildmetadata_tag_name in tag_ver_infos:
             if tag_ver_infos[buildmetadata_tag_name]["ver_info"] != ver_info:
                 LOGGER.error(f"Tried to add different metadata for the same version.")
                 raise RuntimeError()

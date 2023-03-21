@@ -1384,8 +1384,11 @@ class GitBackend(VMNBackend):
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
+        if commit_tag_obj is None:
+            LOGGER.debug(f"Tried to find {tag_name} but with no success")
+            return tag_name, ver_infos
 
-        if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
+        if commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
             return tag_name, ver_infos
 
@@ -1447,14 +1450,12 @@ class GitBackend(VMNBackend):
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except Exception as exc:
-            LOGGER.debug(f"Logged exception: ", exc_info=True)
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(_tag_name)
                 tag_name = _tag_name
             except Exception as exc:
-                LOGGER.debug(f"Logged exception: ", exc_info=True)
                 return tag_name, None
 
         return tag_name, commit_tag_obj
