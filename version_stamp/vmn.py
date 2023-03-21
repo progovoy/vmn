@@ -2333,6 +2333,17 @@ def goto_version(vcs, params, version, pull):
             version, unique_id = res
             check_unique = True
 
+        if not params["deps_only"] and pull:
+            try:
+                vcs.retrieve_remote_changes()
+            except Exception as exc:
+                LOGGER.error(
+                    "Failed to pull, run with --debug for more details"
+                )
+                LOGGER.debug("Logged Exception message:", exc_info=True)
+
+                return 1
+
         tag_name, ver_infos = vcs.get_version_info_from_verstr(version)
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
             LOGGER.error(f"No such app: {vcs.name}")
@@ -2345,19 +2356,6 @@ def goto_version(vcs, params, version, pull):
             try:
                 vcs.backend.checkout(tag=tag_name)
                 status_str = f"You are at version {version} of {vcs.name}"
-
-                if pull:
-                    try:
-                        vcs.retrieve_remote_changes()
-                    except Exception as exc:
-                        LOGGER.info(status_str)
-                        LOGGER.error(
-                            "Failed to pull, run with --debug for more details"
-                        )
-                        LOGGER.debug("Logged Exception message:", exc_info=True)
-
-                        return 1
-
             except Exception:
                 LOGGER.error(
                     "App: {0} with version: {1} was "
@@ -2447,6 +2445,15 @@ def _update_repo(args):
                 return {"repo": rel_path, "status": 1, "description": err}
 
         LOGGER.info("Updating {0}".format(rel_path))
+
+        if pull:
+            try:
+                client.checkout_branch()
+                client.pull()
+            except Exception as exc:
+                LOGGER.exception("Faield to pull:", exc_info=True)
+                return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
+
         if changeset is None:
             if tag is not None:
                 client.checkout(tag=tag)
@@ -2477,16 +2484,9 @@ def _update_repo(args):
         try:
             client.checkout(rev=cur_changeset)
         except Exception as exc:
-            LOGGER.exception("Unexpected behaviour:", exc_info=True)
+            LOGGER.exception("Unexpected behaviour when tried to revert:", exc_info=True)
 
         return {"repo": rel_path, "status": 1, "description": None}
-
-    if pull:
-        try:
-            client.pull()
-        except Exception as exc:
-            LOGGER.exception("Faield to pull:", exc_info=True)
-            return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
     return {"repo": rel_path, "status": 0, "description": None}
 
