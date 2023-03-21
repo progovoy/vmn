@@ -1106,21 +1106,46 @@ class GitBackend(VMNBackend):
 
         try:
             ret = self._be.git.execute(command)
-            assert ret.startswith(self.selected_remote.name)
+
+            try:
+                assert ret.startswith(self.selected_remote.name)
+            except Exception as exc:
+                LOGGER.warning(
+                    f"Found remote branch {ret} however it belongs to a "
+                    f"different remote that vmn has selected to work with. "
+                    f"Will behave like no remote was found. The remote that vmn has "
+                    f"selected to work with is: {self.selected_remote.name}"
+                )
+
+                return None
 
             return ret
         except Exception as exc:
-            out = self._be.git.branch("-r", "--contains", "HEAD")
-            out = out.split("\n")[0].strip()
-            if not out:
-                out = f"{self.selected_remote.name}/{local_branch_name}"
+            return None
 
+    def prepare_for_remote_operation(self):
+        if self.remote_active_branch is not None:
+            return 0
+
+        local_branch_name = self.active_branch
+
+        LOGGER.warning(f"No remote branch for local branch: {local_branch_name} "
+                       f"was found. Will try to set upstream for it")
+
+        out = self._be.git.branch("-r", "--contains", "HEAD")
+        out = out.split("\n")[0].strip()
+        if not out:
+            out = f"{self.selected_remote.name}/{local_branch_name}"
+
+        try:
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
-            try:
-                ret = self._be.git.execute(command)
-                return ret
-            except Exception as iexc:
-                return None
+        except Exception as exc:
+            LOGGER.debug(f"Failed to set upstream branch for {local_branch_name}:", exc_info=True)
+            return 1
+
+        self.remote_active_branch = out
+
+        return 0
 
     def get_active_branch(self):
         # TODO:: return the full ref name: refs/heads/..

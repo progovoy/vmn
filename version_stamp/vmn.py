@@ -29,16 +29,16 @@ LOG_FILENAME = "vmn.log"
 CACHE_FILENAME = "vmn.cache"
 
 IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME, CACHE_FILENAME]
-VMN_ARGS = [
-    "init",
-    "init-app",
-    "show",
-    "stamp",
-    "goto",
-    "release",
-    "gen",
-    "add",
-]
+VMN_ARGS = {
+    "init": "remote",
+    "init-app": "remote",
+    "show": "local",
+    "stamp": "remote",
+    "goto": "local",
+    "release": "remote",
+    "gen": "local",
+    "add": "remote",
+}
 
 sys.path.append(CUR_PATH)
 
@@ -2673,6 +2673,9 @@ def _vmn_run(args, root_path):
     err = 0
     vmnc = VMNContainer(args, root_path)
     if vmnc.args.command in VMN_ARGS:
+        if VMN_ARGS[vmnc.args.command] == "remote":
+            vmnc.vcs.backend.prepare_for_remote_operation()
+
         cmd = vmnc.args.command.replace("-", "_")
         err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
     else:
@@ -2699,7 +2702,7 @@ def parse_user_commands(command_line):
     parser.set_defaults(debug=False)
     subprasers = parser.add_subparsers(dest="command")
 
-    for arg in VMN_ARGS:
+    for arg in VMN_ARGS.keys():
         arg = arg.replace("-", "_")
         getattr(sys.modules[__name__], f"add_arg_{arg}")(subprasers)
 

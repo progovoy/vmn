@@ -2876,3 +2876,53 @@ def test_dirty_no_ff_rebase(app_layout, capfd):
     assert len(res["dirty"]) == 2
     assert "modified" in res["dirty"]
     assert "outgoing" in res["dirty"]
+
+
+def test_show_on_local_only_branch_1_commit_after(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic/abc"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1", push=False)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.0" == res["out"]
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]
+
+
+def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic/abc"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.0" == res["out"]
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]
