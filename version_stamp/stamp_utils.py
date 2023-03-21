@@ -707,7 +707,10 @@ class GitBackend(VMNBackend):
                 self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def pull(self):
-        self.selected_remote.pull()
+        if self.detached_head:
+            raise RuntimeError("Will not pull in detached head")
+
+        self.selected_remote.pull("--ff-only")
 
     def commit(self, message, user, include=None):
         if include is not None:

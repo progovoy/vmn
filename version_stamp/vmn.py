@@ -1284,7 +1284,6 @@ class VersionControlStamper(IVersionsStamper):
             version_files_to_add.append(path)
 
     def retrieve_remote_changes(self):
-        # TODO:: make sure pull is safe and do it for all deps repos
         self.backend.pull()
 
 
@@ -1639,16 +1638,7 @@ def handle_goto(vmn_ctx):
 
         return 1
 
-    if vmn_ctx.args.pull:
-        try:
-            vmn_ctx.vcs.retrieve_remote_changes()
-        except Exception as exc:
-            LOGGER.error("Failed to pull, run with --debug for more details")
-            LOGGER.debug("Logged Exception message:", exc_info=True)
-
-            return 1
-
-    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.pull)
 
 
 def _get_repo_status(vcs, expected_status, optional_status=set()):
@@ -2021,7 +2011,10 @@ def _stamp_version(
                 break
 
             time.sleep(random.randint(1, 5))
-            versions_be_ifc.retrieve_remote_changes()
+            try:
+                versions_be_ifc.retrieve_remote_changes()
+            except Exception as exc:
+                LOGGER.error("Failed to pull", exc_info=True)
         else:
             break
 
@@ -2286,7 +2279,7 @@ def get_dirty_states(optional_status, status):
     return dirty_states
 
 
-def goto_version(vcs, params, version):
+def goto_version(vcs, params, version, pull):
     unique_id = None
     check_unique = False
     status_str = ""
@@ -2295,6 +2288,18 @@ def goto_version(vcs, params, version):
         if not params["deps_only"]:
             ret = vcs.backend.checkout_branch()
             assert ret is not None
+
+            if pull:
+                try:
+                    vcs.retrieve_remote_changes()
+                except Exception as exc:
+                    LOGGER.error("Failed to pull, run with --debug for more details")
+                    LOGGER.debug("Logged Exception message:", exc_info=True)
+
+                    return 1
+
+                ret = vcs.backend.checkout_branch()
+                assert ret is not None
 
             del vcs
             vcs = VersionControlStamper(params)
@@ -2336,6 +2341,17 @@ def goto_version(vcs, params, version):
             try:
                 vcs.backend.checkout(tag=tag_name)
                 status_str = f"You are at version {version} of {vcs.name}"
+
+                if pull:
+                    try:
+                        vcs.retrieve_remote_changes()
+                    except Exception as exc:
+                        LOGGER.info(status_str)
+                        LOGGER.error("Failed to pull, run with --debug for more details")
+                        LOGGER.debug("Logged Exception message:", exc_info=True)
+
+                        return 1
+
             except Exception:
                 LOGGER.error(
                     "App: {0} with version: {1} was "
@@ -2365,7 +2381,7 @@ def goto_version(vcs, params, version):
                     v["tag"] = None
                     v["hash"] = vcs.configured_deps[rel_path]["hash"]
         try:
-            _goto_version(deps, vcs.vmn_root_path)
+            _goto_version(deps, vcs.vmn_root_path, pull)
         except Exception as exc:
             LOGGER.error(f"goto failed: {exc}")
             LOGGER.debug(f"", exc_info=True)
@@ -2385,7 +2401,7 @@ def _update_repo(args):
 
     LOGGER = stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME))
 
-    path, rel_path, branch_name, tag, changeset = args
+    path, rel_path, branch_name, tag, changeset, pull = args
 
     client = None
     try:
@@ -2426,10 +2442,6 @@ def _update_repo(args):
 
         LOGGER.info("Updating {0}".format(rel_path))
         if changeset is None:
-            if not client.in_detached_head():
-                # TODO:: why we need the pull here?
-                client.pull()
-
             if tag is not None:
                 client.checkout(tag=tag)
                 LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
@@ -2445,10 +2457,6 @@ def _update_repo(args):
                 else:
                     LOGGER.info("Updated {0} to changeset {1}".format(rel_path, rev))
         else:
-            if not client.in_detached_head():
-                # TODO:: why need pull here?
-                client.pull()
-
             client.checkout(rev=changeset)
 
             LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
@@ -2466,6 +2474,13 @@ def _update_repo(args):
             LOGGER.exception("Unexpected behaviour:", exc_info=True)
 
         return {"repo": rel_path, "status": 1, "description": None}
+
+    if pull:
+        try:
+            client.pull()
+        except Exception as exc:
+            LOGGER.exception("Faield to pull:", exc_info=True)
+            return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
     return {"repo": rel_path, "status": 0, "description": None}
 
@@ -2501,7 +2516,7 @@ def _clone_repo(args):
     return {"repo": rel_path, "status": 0, "description": None}
 
 
-def _goto_version(deps, vmn_root_path):
+def _goto_version(deps, vmn_root_path, pull):
     args = []
     for rel_path, v in deps.items():
         if "remote" not in v or not v["remote"]:
@@ -2562,6 +2577,7 @@ def _goto_version(deps, vmn_root_path):
                 branch,
                 tag,
                 v["hash"],
+                pull,
             )
         )
 
