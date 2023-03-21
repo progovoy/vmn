@@ -2689,7 +2689,7 @@ def _vmn_run(args, root_path):
     err = 0
     vmnc = VMNContainer(args, root_path)
     if vmnc.args.command in VMN_ARGS:
-        if VMN_ARGS[vmnc.args.command] == "remote":
+        if VMN_ARGS[vmnc.args.command] == "remote" or ("pull" in vmnc.args and vmnc.args.pull):
             err = vmnc.vcs.backend.prepare_for_remote_operation()
             if err:
                 LOGGER.error(
