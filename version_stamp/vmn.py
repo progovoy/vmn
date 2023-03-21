@@ -1638,7 +1638,9 @@ def handle_goto(vmn_ctx):
 
         return 1
 
-    return goto_version(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.pull)
+    return goto_version(
+        vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.pull
+    )
 
 
 def _get_repo_status(vcs, expected_status, optional_status=set()):
@@ -2347,7 +2349,9 @@ def goto_version(vcs, params, version, pull):
                         vcs.retrieve_remote_changes()
                     except Exception as exc:
                         LOGGER.info(status_str)
-                        LOGGER.error("Failed to pull, run with --debug for more details")
+                        LOGGER.error(
+                            "Failed to pull, run with --debug for more details"
+                        )
                         LOGGER.debug("Logged Exception message:", exc_info=True)
 
                         return 1
@@ -2689,7 +2693,9 @@ def _vmn_run(args, root_path):
     err = 0
     vmnc = VMNContainer(args, root_path)
     if vmnc.args.command in VMN_ARGS:
-        if VMN_ARGS[vmnc.args.command] == "remote" or ("pull" in vmnc.args and vmnc.args.pull):
+        if VMN_ARGS[vmnc.args.command] == "remote" or (
+            "pull" in vmnc.args and vmnc.args.pull
+        ):
             err = vmnc.vcs.backend.prepare_for_remote_operation()
             if err:
                 LOGGER.error(

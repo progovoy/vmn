@@ -1135,8 +1135,10 @@ class GitBackend(VMNBackend):
 
         local_branch_name = self.active_branch
 
-        LOGGER.warning(f"No remote branch for local branch: {local_branch_name} "
-                       f"was found. Will try to set upstream for it")
+        LOGGER.warning(
+            f"No remote branch for local branch: {local_branch_name} "
+            f"was found. Will try to set upstream for it"
+        )
 
         out = self._be.git.branch("-r", "--contains", "HEAD")
         out = out.split("\n")[0].strip()
@@ -1146,7 +1148,9 @@ class GitBackend(VMNBackend):
         try:
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
         except Exception as exc:
-            LOGGER.debug(f"Failed to set upstream branch for {local_branch_name}:", exc_info=True)
+            LOGGER.debug(
+                f"Failed to set upstream branch for {local_branch_name}:", exc_info=True
+            )
             return 1
 
         self.remote_active_branch = out
