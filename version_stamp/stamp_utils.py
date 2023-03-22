@@ -499,7 +499,7 @@ class LocalFileBackend(VMNBackend):
     def __del__(self):
         pass
 
-    def perform_cached_fetch(self, repo_path):
+    def perform_cached_fetch(self, force=False):
         return
 
     def get_first_reachable_version_info(
@@ -583,16 +583,16 @@ class GitBackend(VMNBackend):
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
         self.detached_head = self.in_detached_head()
 
-    def perform_cached_fetch(self):
+    def perform_cached_fetch(self, force=False):
         vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
-        if not os.path.exists(vmn_cache_path):
+        if not os.path.exists(vmn_cache_path) or force:
             pathlib.Path(os.path.join(self.repo_path, ".vmn")).mkdir(
                 parents=True, exist_ok=True
             )
             pathlib.Path(vmn_cache_path).touch()
 
             self._be.git.execute(["git", "fetch", "--tags"])
-        else:
+        elif os.path.exists(vmn_cache_path):
             minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
             filemtime = datetime.datetime.fromtimestamp(
                 os.path.getmtime(vmn_cache_path)
@@ -757,6 +757,8 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
+            # This is the only usecase where we must perform a remote operation
+            # because otherwise even show will not work
             self.perform_cached_fetch()
             (
                 tag_names,

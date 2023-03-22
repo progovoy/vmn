@@ -1405,6 +1405,7 @@ def handle_stamp(vmn_ctx):
     # We didn't find any existing version
     if vmn_ctx.args.pull:
         try:
+            vmn_ctx.vcs.backend.perform_cached_fetch(force=True)
             vmn_ctx.vcs.retrieve_remote_changes()
         except Exception as exc:
             LOGGER.error("Failed to pull, run with --debug for more details")
