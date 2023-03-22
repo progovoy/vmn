@@ -92,8 +92,8 @@ class IVersionsStamper(object):
         self.hide_zero_hotfix = True
         self.version_backends = {}
         # This one will be filled with self dependency ('.') by default
-        self.raw_configured_deps = None
-        self.configured_deps = None
+        self.raw_configured_deps = {}
+        self.configured_deps = {}
         self.conf_file_exists = False
         self.root_conf_file_exists = False
 
@@ -216,10 +216,8 @@ class IVersionsStamper(object):
                 )
 
     def initialize_configured_deps(self, self_base, self_dep):
-        if self.raw_configured_deps is not None:
+        if self.raw_configured_deps:
             self.configured_deps = self.raw_configured_deps
-        if self.configured_deps is None:
-            self.configured_deps = {}
 
         if os.path.join("../") not in self.configured_deps:
             self.configured_deps[os.path.join("../")] = {}
@@ -1590,6 +1588,8 @@ def handle_show(vmn_ctx):
     vmn_ctx.params["ignore_dirty"] = vmn_ctx.args.ignore_dirty
 
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose
+    vmn_ctx.params["conf"] = vmn_ctx.args.conf
+
     if vmn_ctx.args.template is not None:
         vmn_ctx.vcs.set_template(vmn_ctx.args.template)
 
@@ -2068,6 +2068,7 @@ def show(vcs, params, verstr=None):
             vers = []
             for i in ver_infos.keys():
                 vers.append(i.split("_")[-1])
+
             ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"] = []
             ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"].extend(vers)
 
@@ -2082,6 +2083,15 @@ def show(vcs, params, verstr=None):
         raise RuntimeError()
 
     data = {}
+
+    if params["conf"]:
+        data["conf"] = {
+            "raw_deps": copy.deepcopy(vcs.raw_configured_deps),
+            "deps": copy.deepcopy(vcs.configured_deps),
+            "template": vcs.template,
+            "hide_zero_hotfix": vcs.hide_zero_hotfix,
+            "version_backends": copy.deepcopy(vcs.version_backends)
+        }
 
     if vcs.root_context:
         data.update(ver_info["stamping"]["root_app"])
@@ -2139,6 +2149,14 @@ def show(vcs, params, verstr=None):
                 {
                     "out": out,
                     "type": data["prerelease"],
+                }
+            )
+
+        if params.get("conf"):
+            d_out.update(
+                {
+                    "out": out,
+                    "conf": data["conf"],
                 }
             )
 
@@ -2877,6 +2895,8 @@ def add_arg_show(subprasers):
     pshow.set_defaults(root=False)
     pshow.add_argument("--verbose", dest="verbose", action="store_true")
     pshow.set_defaults(verbose=False)
+    pshow.add_argument("--conf", dest="conf", action="store_true")
+    pshow.set_defaults(conf=False)
     pshow.add_argument("--raw", dest="raw", action="store_true")
     pshow.set_defaults(raw=False)
     pshow.add_argument("--from-file", dest="from_file", action="store_true")
