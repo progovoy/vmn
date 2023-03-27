@@ -135,6 +135,20 @@ vmn stamp -r minor <app-name2>
 ##### Note:
 `init-app` and `stamp` both support `--dry-run` flag
 
+## You can also use vmn as a python lib by importing it
+```
+from contextlib import redirect_stdout
+import io
+import version_stamp.vmn as vmn
+
+f = io.StringIO()
+with redirect_stdout(f):
+    ret, vmn_ctx = vmn.vmn_run(["show", "vmn"])
+s = f.getvalue()
+```
+
+explore `vmn_ctx` object to see what you can get from it. Vars starting with `_` are private and may change with time
+
 # Detailed Documentation
 ## `vmn stamp` for release candidates
 
