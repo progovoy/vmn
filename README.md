@@ -137,14 +137,16 @@ vmn stamp -r minor <app-name2>
 
 ## You can also use vmn as a python lib by importing it
 ```
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 import io
 import version_stamp.vmn as vmn
 
-f = io.StringIO()
-with redirect_stdout(f):
+out = io.StringIO()
+err = io.StringIO()
+with redirect_stdout(out), redirect_stderr(err):
     ret, vmn_ctx = vmn.vmn_run(["show", "vmn"])
-s = f.getvalue()
+out_s = out.getvalue()
+err_s = err.getvalue()
 ```
 
 explore `vmn_ctx` object to see what you can get from it. Vars starting with `_` are private and may change with time
