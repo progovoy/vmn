@@ -2961,3 +2961,16 @@ def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
     assert len(res["dirty"]) == 2
     assert "modified" in res["dirty"]
     assert "outgoing" in res["dirty"]
+
+
+def test_no_fetch_branch_configured(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    app_layout.git_cmd(["config", "--unset", "remote.origin.fetch"])
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
+    assert err == 0

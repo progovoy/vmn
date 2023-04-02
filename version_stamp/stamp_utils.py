@@ -209,7 +209,7 @@ class VMNBackend(object):
         return 0
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -253,8 +253,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -274,12 +274,12 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_tag_name(
-        app_name,
-        version,
-        hide_zero_hotfix,
-        prerelease=None,
-        prerelease_count=None,
-        buildmetadata=None,
+            app_name,
+            version,
+            hide_zero_hotfix,
+            prerelease=None,
+            prerelease_count=None,
+            buildmetadata=None,
     ):
         app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
@@ -304,11 +304,11 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version(
-        current_version,
-        prerelease,
-        prerelease_count,
-        hide_zero_hostfix,
-        buildmetadata=None,
+            current_version,
+            prerelease,
+            prerelease_count,
+            hide_zero_hostfix,
+            buildmetadata=None,
     ):
         vmn_version = VMNBackend.get_base_vmn_version(
             current_version, hide_zero_hostfix
@@ -357,7 +357,7 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version_hotfix(
-        hide_zero_hotfix, major, minor, patch, hotfix=None
+            hide_zero_hotfix, major, minor, patch, hotfix=None
     ):
         if hide_zero_hotfix and hotfix == "0":
             hotfix = None
@@ -503,7 +503,7 @@ class LocalFileBackend(VMNBackend):
         return
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         ver_infos = {
             "none": {
@@ -741,7 +741,7 @@ class GitBackend(VMNBackend):
             return None
 
     def get_latest_stamp_tags(
-        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -811,7 +811,7 @@ class GitBackend(VMNBackend):
         return tag_names, cobj, ver_infos
 
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
-        self, app_name, cmd_suffix, msg_filter
+            self, app_name, cmd_suffix, msg_filter
     ):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
@@ -847,8 +847,8 @@ class GitBackend(VMNBackend):
             tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                    self._be.head.commit.hexsha != o.commit.hexsha
-                    and head_date < o.object.tagged_date
+                        self._be.head.commit.hexsha != o.commit.hexsha
+                        and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -1157,6 +1157,10 @@ class GitBackend(VMNBackend):
             out = f"{self.selected_remote.name}/{local_branch_name}"
 
         try:
+            self._be.git.execute(
+                ["git", "remote", "set-branches", "--add",
+                 self.selected_remote.name, local_branch_name]
+            )
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
         except Exception as exc:
             LOGGER.debug(
@@ -1352,7 +1356,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
             app_name, root_context, type
