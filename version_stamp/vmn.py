@@ -572,6 +572,26 @@ class IVersionsStamper(object):
             LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
+    def _write_version_to_poetry(self, verstr):
+        backend_conf = self.version_backends["poetry"]
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        try:
+            with open(file_path, "r") as f:
+                data = tomlkit.loads(f.read())
+
+            data["tool"]["poetry"]["version"] = verstr
+            with open(file_path, "w") as f:
+                data = tomlkit.dumps(data)
+                f.write(data)
+        except IOError as e:
+            LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
+
     def _write_version_to_vmn_version_file(
         self, prerelease, prerelease_count, version_number
     ):
