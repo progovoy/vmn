@@ -1203,7 +1203,7 @@ class VersionControlStamper(IVersionsStamper):
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
                     )
-                    time.sleep(count)
+                    time.sleep(60)
                     res = self.backend.check_for_outgoing_changes()
 
                 if count == 5 and res:
