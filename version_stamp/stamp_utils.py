@@ -1064,7 +1064,7 @@ class GitBackend(VMNBackend):
 
         if self.remote_active_branch is None:
             err = (
-                f"No upstream branch found in {self.root()}. "
+         f"No upstream branch found in {self.root()}. "
                 f"for local branch {self.active_branch}. "
                 f"Probably no upstream branch is set"
             )

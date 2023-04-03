@@ -2970,7 +2970,24 @@ def test_no_fetch_branch_configured(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
-    app_layout.git_cmd(["config", "--unset", "remote.origin.fetch"])
+    app_layout.git_cmd(args=["config", "--unset", "remote.origin.fetch"])
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
+    assert err == 0
+
+
+def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, params = _stamp_app(app_layout.app_name, "minor")
+
+    captured = capfd.readouterr()
+
+    _configure_2_deps(app_layout, params)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    app_layout.git_cmd("repo1", ["config", "--unset", "remote.origin.fetch"])
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
