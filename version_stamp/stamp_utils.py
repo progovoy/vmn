@@ -9,6 +9,8 @@ import re
 import sys
 import time
 from logging.handlers import RotatingFileHandler
+import traceback
+import io
 
 import git
 import yaml
@@ -83,7 +85,10 @@ LOGGER = None
 def custom_execute(self, *args, **kwargs):
     if LOGGER is not None:
         try:
-            LOGGER.debug(f"git exec: {' '.join(str(v) for v in args[0])}")
+            trace_str = io.StringIO()
+            traceback.print_stack(file=trace_str)
+            LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
+            LOGGER.debug(f"git exec:\n{' '.join(str(v) for v in args[0])}")
         except Exception as exc:
             pass
 
@@ -92,11 +97,13 @@ def custom_execute(self, *args, **kwargs):
     ret = original_execute(self, *args, **kwargs)
     end_time = time.perf_counter()
 
-    time_taken = end_time - start_time
+    time_took = end_time - start_time
+
+    if type(ret) is not str:
+        pass
 
     if LOGGER is not None:
-        LOGGER.debug(f"git exec taken: {time_taken:.6f} seconds")
-        LOGGER.debug(f"ret: {ret}")
+        LOGGER.debug(f"git exec took: {time_took:.6f} seconds. ret:\n{ret}\n")
 
     return ret
 
