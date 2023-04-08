@@ -79,6 +79,33 @@ GLOBAL_LOG_FILENAME = "global_vmn.log"
 LOGGER = None
 
 
+# Create a custom execute function
+def custom_execute(self, *args, **kwargs):
+    if LOGGER is not None:
+        try:
+            LOGGER.debug(f"git exec: {' '.join(str(v) for v in args[0])}")
+        except Exception as exc:
+            pass
+
+    original_execute = getattr(self.__class__, '_execute')
+    start_time = time.perf_counter()
+    ret = original_execute(self, *args, **kwargs)
+    end_time = time.perf_counter()
+
+    time_taken = end_time - start_time
+
+    if LOGGER is not None:
+        LOGGER.debug(f"git exec taken: {time_taken:.6f} seconds")
+        LOGGER.debug(f"ret: {ret}")
+
+    return ret
+
+
+# Monkey-patch the Git class
+git.cmd.Git._execute = git.cmd.Git.execute
+git.cmd.Git.execute = custom_execute
+
+
 class WrongTagFormatException(Exception):
     pass
 
