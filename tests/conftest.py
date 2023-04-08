@@ -30,10 +30,11 @@ LOGGER.addHandler(cons_handler)
 
 class FSAppLayoutFixture(object):
     def __init__(self, tmpdir, be_type):
-        test_app_remote = tmpdir.mkdir(f"{TEST_REPO_NAME}_remote")
-        self.base_dir = test_app_remote.dirname
+        test_app_remote = tmpdir.joinpath(f"{TEST_REPO_NAME}_remote")
+        test_app_remote.mkdir(exist_ok=True)
+        self.base_dir = str(tmpdir.absolute())
         self.be_type = be_type
-        self.test_app_remote = test_app_remote.strpath
+        self.test_app_remote = str(test_app_remote.absolute())
         self.repo_path = os.path.join(self.base_dir, f"{TEST_REPO_NAME}_0")
         self.app_name = "test_app"
 
@@ -62,9 +63,6 @@ class FSAppLayoutFixture(object):
 
     def __del__(self):
         del self._app_backend
-
-        for val in self._repos.values():
-            shutil.rmtree(val["path"])
 
     def set_working_dir(self, repo_path):
         os.environ["VMN_WORKING_DIR"] = repo_path
@@ -407,20 +405,29 @@ class GitBackend(VersionControlBackend):
         client = Repo.init(self.remote_versions_root_path, bare=True)
         client.close()
 
-        self._git_backend = Repo.clone_from(
-            "{0}".format(self.remote_versions_root_path),
-            "{0}".format(self.root_path),
-            # depth=1,
-        )
+        try:
+            self._git_backend = Repo.clone_from(
+                "{0}".format(self.remote_versions_root_path),
+                "{0}".format(self.root_path),
+                # depth=1,
+            )
+        except Exception as exc:
 
-        with open(os.path.join(versions_root_path, "init.txt"), "w+") as f:
-            f.write("# init\n")
+            if hasattr(exc, 'stderr') and "exist" not in exc.stderr:
+                raise exc
 
-        self._git_backend.index.add(os.path.join(versions_root_path, "init.txt"))
-        self._git_backend.index.commit("first commit")
+            self._git_backend = git.Repo(self.root_path)
 
-        self.selected_remote = self._git_backend.remotes[0]
-        self.selected_remote.push()
+        p = os.path.join(versions_root_path, "init.txt")
+        if not os.path.exists(p):
+            with open(p, "w+") as f:
+                f.write("# init\n")
+
+            self._git_backend.index.add(os.path.join(versions_root_path, "init.txt"))
+            self._git_backend.index.commit("first commit")
+
+            self.selected_remote = self._git_backend.remotes[0]
+            self.selected_remote.push()
 
         self.be = stamp_utils.GitBackend(versions_root_path)
 
@@ -455,23 +462,24 @@ def session_uuid():
     return uuid.uuid4()
 
 
-@pytest.fixture(scope="session")
-def ver_stamp_env():
-    try:
-        del os.environ["VER_STAMP_VERSIONS_PATH"]
-    except:
-        pass
-
-
 def pytest_generate_tests(metafunc):
     if "app_layout" in metafunc.fixturenames:
         metafunc.parametrize("app_layout", ["git"], indirect=True)
 
 
 @pytest.fixture(scope="function")
-def app_layout(request, tmpdir, ver_stamp_env):
+def app_layout(request, tmpdir):
+    from pathlib import Path
+    tmpdir = Path(tmpdir)
+    if "VMN_TESTS_CUSTOM_DIR" in os.environ:
+        tmpdir = Path(os.environ["VMN_TESTS_CUSTOM_DIR"])
+
     app_layout = FSAppLayoutFixture(tmpdir, request.param)
 
     yield app_layout
 
     del app_layout
+
+    if "VMN_TESTS_CUSTOM_DIR" not in os.environ:
+        shutil.rmtree(str(tmpdir.absolute()))
+
