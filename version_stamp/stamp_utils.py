@@ -15,6 +15,8 @@ import io
 import git
 import yaml
 
+DEBUG_TRACE_ENV_VAR = "VMN_DEBUG_TRACE"
+
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 VMN_VERSION_FORMAT = (
@@ -85,9 +87,11 @@ LOGGER = None
 def custom_execute(self, *args, **kwargs):
     if LOGGER is not None:
         try:
-            trace_str = io.StringIO()
-            traceback.print_stack(file=trace_str)
-            LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
+            if DEBUG_TRACE_ENV_VAR in os.environ:
+                trace_str = io.StringIO()
+                traceback.print_stack(file=trace_str)
+                LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
+
             LOGGER.debug(f"git exec:\n{' '.join(str(v) for v in args[0])}")
         except Exception as exc:
             pass
@@ -98,9 +102,6 @@ def custom_execute(self, *args, **kwargs):
     end_time = time.perf_counter()
 
     time_took = end_time - start_time
-
-    if type(ret) is not str:
-        pass
 
     if LOGGER is not None:
         LOGGER.debug(f"git exec took: {time_took:.6f} seconds. ret:\n{ret}\n")
