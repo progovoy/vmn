@@ -1,12 +1,13 @@
 import copy
-import sys
-import os
-import yaml
-import shutil
-import toml
 import json
+import os
+import shutil
 import stat
+import sys
+
 import pytest
+import toml
+import yaml
 
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
@@ -22,9 +23,13 @@ def _init_app(app_name, starting_version="0.0.0"):
     cmd = ["init-app", "-v", starting_version, app_name]
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
@@ -35,13 +40,20 @@ def _init_app(app_name, starting_version="0.0.0"):
     return ret, ver_info, merged_dict
 
 
-def _release_app(app_name, version):
-    cmd = ["release", "-v", version, app_name]
+def _release_app(app_name, version=None):
+    cmd = ["release", app_name]
+    if version:
+        cmd.extend(["-v", version])
+
     ret, vmn_ctx = vmn.vmn_run(cmd)
-    vmn.initialize_backend_attrs(vmn_ctx)
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    vmn_ctx.vcs.initialize_backend_attrs()
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
@@ -64,9 +76,13 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
-    _, ver_info = vmn_ctx.vcs.backend.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
 
     try:
         # Python3.9 only
@@ -111,7 +127,9 @@ def _show(
     return vmn.vmn_run(args_list)[0]
 
 
-def _gen(app_name, template, output, verify_version=False, version=None):
+def _gen(
+    app_name, template, output, verify_version=False, version=None, custom_path=None
+):
     args_list = ["--debug"]
     args_list.extend(["gen"])
     args_list.extend(["--template", template])
@@ -122,6 +140,9 @@ def _gen(app_name, template, output, verify_version=False, version=None):
 
     if verify_version:
         args_list.extend(["--verify-version"])
+
+    if custom_path is not None:
+        args_list.extend(["-c", f"{custom_path}"])
 
     args_list.append(app_name)
 
@@ -167,7 +188,9 @@ def _add_buildmetadata_to_version(
     return vmn.vmn_run(args_list)[0]
 
 
-def _configure_2_deps(app_layout, params):
+def _configure_2_deps(
+    app_layout, params, specific_branch=None, specific_hash=None, specific_tag=None
+):
     conf = {
         "deps": {
             "../": {
@@ -184,6 +207,13 @@ def _configure_2_deps(app_layout, params):
         conf["deps"]["../"].update(
             {repo[0]: {"vcs_type": repo[1], "remote": be.be.remote()}}
         )
+        if specific_branch:
+            cur_branch = app_layout._repos[repo[0]]["_be"].be.get_active_branch()
+            app_layout.checkout("new_branch", repo_name=repo[0], create_new=True)
+            app_layout.write_file_commit_and_push(repo[0], "f1.file", "msg1")
+            app_layout.write_file_commit_and_push(repo[0], "f1.file", "msg1")
+            app_layout.checkout(cur_branch, repo_name=repo[0])
+            conf["deps"]["../"][repo[0]].update({"branch": specific_branch})
 
         be.__del__()
 
@@ -199,18 +229,38 @@ def _configure_empty_conf(app_layout, params):
     return conf
 
 
-def test_basic_stamp(app_layout):
+def test_vmn_init(app_layout, capfd):
     res = _run_vmn_init()
     assert res == 0
+    captured = capfd.readouterr()
+
+    assert (
+        f"[INFO] Initialized vmn tracking on {app_layout.repo_path}\n" == captured.out
+    )
+    assert "" == captured.err
+
     res = _run_vmn_init()
     assert res == 1
 
+    captured = capfd.readouterr()
+    assert captured.err.startswith("[ERROR] vmn repo tracking is already initialized")
+    assert "" == captured.out
+
+
+def test_double_stamp_no_commit(app_layout):
+    _run_vmn_init()
     _init_app(app_layout.app_name)
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
         assert err == 0
         assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+
+def test_app2_and_app1_not_advance(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
 
     new_name = f"{app_layout.app_name}_2"
     _init_app(new_name, "1.0.0")
@@ -224,8 +274,24 @@ def test_basic_stamp(app_layout):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
-    os.environ["VMN_WORKING_DIR"] = f"{app_layout.repo_path}/a/b/c/"
+
+def test_stamp_multiple_apps(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    new_name = f"{app_layout.app_name}_2"
+    _init_app(new_name, "1.0.0")
+
+    _stamp_app(new_name, "hotfix")
+
+    repo_name = app_layout.repo_path.split(os.path.sep)[-1]
+    app_layout.write_file_commit_and_push(
+        f"{repo_name}", os.path.join("a", "b", "c", "f1.file"), "msg1"
+    )
+    os.environ[
+        "VMN_WORKING_DIR"
+    ] = f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
@@ -425,8 +491,40 @@ def test_jinja2_gen(app_layout, capfd):
         assert data["RELEASE_MODE"] == "patch"
         assert "dirty_deps" in data["."]["state"]
         assert "modified" in data["."]["state"]
-        assert "pending" in data["../repo1"]["state"]
-        assert "outgoing" in data["../repo2"]["state"]
+        assert "pending" in data[os.path.join("..", "repo1")]["state"]
+        assert "outgoing" in data[os.path.join("..", "repo2")]["state"]
+
+
+def test_jinja2_gen_custom(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    jinja2_content = "VERSION: {{version}}\n" "Custom: {{k1}}\n"
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
+
+    custom_keys_content = "k1: 5\n"
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "custom.yml", custom_keys_content
+    )
+
+    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
+    err = _gen(app_layout.app_name, tpath, opath, custom_path=custom_path)
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["VERSION"] == "0.0.1"
+        assert data["Custom"] == 5
 
 
 def test_basic_show(app_layout, capfd):
@@ -915,6 +1013,13 @@ def test_multi_repo_dependency(app_layout, capfd):
 
     shutil.rmtree(app_layout._repos["repo3"]["path"])
 
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert captured.out == "dirty:\n- modified\nout: 0.0.3\n\n"
+
     err = _goto(app_layout.app_name)
     assert err == 0
 
@@ -1014,9 +1119,14 @@ def test_basic_root_stamp(app_layout):
     assert data["services"]["root_app/app3"] == "0.0.1"
 
 
-def test_starting_version(app_layout):
+def test_starting_version(app_layout, capfd):
     _run_vmn_init()
+    capfd.readouterr()
     _init_app(app_layout.app_name, "1.2.3")
+    captured = capfd.readouterr()
+
+    path = f"{os.path.join(app_layout.repo_path, '.vmn', app_layout.app_name)}"
+    assert f"[INFO] Initialized app tracking on {path}\n" == captured.out
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
@@ -1468,22 +1578,22 @@ def test_stamp_on_branch_merge_squash(app_layout):
 
     main_branch = app_layout._app_backend.be.get_active_branch()
 
-    app_layout._app_backend.be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout.write_file_commit_and_push("test_repo_0", "f3.file", "msg3")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
 
     app_layout._app_backend.be.push()
 
@@ -1500,14 +1610,14 @@ def test_get_version(app_layout):
 
     main_branch = app_layout._app_backend.be.get_active_branch()
 
-    app_layout._app_backend.be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     app_layout._app_backend.be.checkout(main_branch)
     app_layout.merge(from_rev="new_branch", to_rev=main_branch, squash=True)
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     app_layout._app_backend.be.push()
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -1537,7 +1647,7 @@ def test_read_version_from_file(app_layout):
     )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    app_layout._app_backend._origin.pull(rebase=True)
+    app_layout._app_backend.selected_remote.pull(rebase=True)
     with open(file_path, "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
@@ -1692,6 +1802,40 @@ def test_version_backends_cargo(app_layout, capfd):
     assert err == 0
 
 
+def test_version_backends_poetry(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "pyproject.toml",
+        toml.dumps({"tool": {"poetry": {"name": "test_app", "version": "some ignored string"}}}),
+    )
+
+    conf = {
+        "version_backends": {"poetry": {"path": "pyproject.toml"}},
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    full_path = os.path.join(
+        params["root_path"], params["version_backends"]["poetry"]["path"]
+    )
+
+    with open(full_path, "r") as f:
+        data = toml.load(f)
+        assert data["tool"]["poetry"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
 def test_conf(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -1736,7 +1880,7 @@ def test_conf(app_layout, capfd):
     assert err == 1
     capfd.readouterr()
 
-    app_layout._repos["repo1"]["_be"].be.checkout(("-b", "new_branch"))
+    app_layout.checkout("new_branch", repo_name="repo1", create_new=True)
     app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
     conf["deps"]["../"]["repo2"]["hash"] = app_layout._repos["repo2"][
         "_be"
@@ -2228,7 +2372,7 @@ def test_stamp_with_removed_tags_with_commit(app_layout, capfd):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
 
-def test_show_removed_tags(app_layout, capfd):
+def test_show_after_1_tag_removed(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
@@ -2243,6 +2387,54 @@ def test_show_removed_tags(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert "dirty:\n- modified\nout: 0.0.0\n\n" == captured.out
+
+
+def test_show_after_multiple_tags_removed_1_tag_left(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    for i in range(4):
+        app_layout.write_file_commit_and_push(
+            "test_repo_0", "a/b/c/f1.file", f"{i}msg1"
+        )
+        _stamp_app(f"{app_layout.app_name}", "patch")
+        app_layout.remove_tag(f"{app_layout.app_name}_0.0.{i + 1}")
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+
+    res = yaml.safe_load(captured.out)
+    assert res["out"] == "0.0.0"
+    assert res["dirty"][0] == "modified"
+
+
+def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    app_layout.remove_tag(f"{app_layout.app_name}_0.0.0")
+
+    for i in range(4):
+        app_layout.write_file_commit_and_push(
+            "test_repo_0", "a/b/c/f1.file", f"{i}msg1"
+        )
+        _stamp_app(f"{app_layout.app_name}", "patch")
+        app_layout.remove_tag(f"{app_layout.app_name}_0.0.{i + 1}")
+
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 1
+
+    captured = capfd.readouterr()
+    assert (
+        captured.err == "[ERROR] Failed to get version info for tag: test_app_0.0.0\n"
+                        "[ERROR] Untracked app. Run vmn init-app first\n"
+                        "[ERROR] Error occured when getting the repo status\n"
+    )
 
 
 def test_shallow_removed_vmn_tag_repo_stamp(app_layout):
@@ -2289,3 +2481,533 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == manual_version[1]
+
+
+def test_conf_for_branch(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "b2"
+    app_layout.write_conf(
+        f"{app_layout.repo_path}/.vmn/{app_layout.app_name}/{branch}_conf.yml",
+        template="[test_{major}][.{minor}][.{patch}]",
+    )
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "0.0.1"
+
+    import subprocess
+
+    base_cmd = ["git", "checkout", "-b", branch]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "test_0.0.1"
+
+
+def test_conf_for_branch_removal_of_conf(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    branch = "b2"
+    branch_conf_path = os.path.join(
+        f"{app_layout.repo_path}",
+        ".vmn",
+        f"{app_layout.app_name}",
+        f"{branch}_conf.yml",
+    )
+    app_layout.write_conf(
+        branch_conf_path, template="[test_{major}][.{minor}][.{patch}]"
+    )
+
+    assert os.path.exists(branch_conf_path)
+
+    import subprocess
+
+    base_cmd = ["git", "checkout", "-b", branch]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "a.txt",
+        "bv",
+    )
+
+    err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+
+    assert os.path.exists(branch_conf_path)
+
+    base_cmd = ["git", "checkout", main_branch]
+    subprocess.call(base_cmd, cwd=app_layout.repo_path)
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "b.txt",
+        "bv",
+    )
+
+    assert os.path.exists(branch_conf_path)
+
+    err, ver_info, params = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+
+    assert not os.path.exists(branch_conf_path)
+
+
+def test_stamp_no_ff_rebase(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.2" == res["out"]
+
+
+def test_show_no_ff_rebase_rc(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
+    _stamp_app(app_layout.app_name, "patch", prerelease="rc")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+    _stamp_app(app_layout.app_name)
+    _release_app(app_layout.app_name)
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.1" == res["out"]
+
+
+def test_missing_local_branch(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    cur_hex = app_layout._app_backend.be.changeset()
+    app_layout.checkout(cur_hex)
+
+    app_layout.delete_branch(main_branch)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def test_missing_local_branch_error_scenarios(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    cur_hex = app_layout._app_backend.be._be.head.commit.hexsha
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    app_layout.checkout(cur_hex)
+    app_layout.delete_branch(main_branch)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
+
+    cur_hex = app_layout._app_backend.be._be.head.commit.hexsha
+    app_layout.checkout(cur_hex)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
+
+
+def test_double_release_works(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="minor", prerelease="rc"
+    )
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rc1"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rc2"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="beta")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-beta1"
+    assert data["prerelease"] == "beta"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-beta2"
+    assert data["prerelease"] == "beta"
+
+    for i in range(2):
+        capfd.readouterr()
+        err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta2")
+        captured = capfd.readouterr()
+
+        assert err == 0
+        assert captured.out == "[INFO] 1.3.0\n"
+        assert captured.err == ""
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0")
+    captured = capfd.readouterr()
+
+    assert err == 0
+    assert captured.out == "[INFO] 1.3.0\n"
+    assert captured.err == ""
+
+    err, ver_info, _ = _release_app(app_layout.app_name, "1.3.0-beta1")
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert captured.err == "[ERROR] Failed to release 1.3.0-beta1\n"
+    assert captured.out == ""
+
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    assert err == 0
+    assert captured.out == "[INFO] 1.3.0\n"
+    assert captured.err == ""
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0"
+    assert data["prerelease"] == "release"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert captured.out == ""
+    assert (
+        captured.err == "[ERROR] When running vmn release and not on a version commit, "
+        "you must specify a specific version using -v flag\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "branch_name", [("new_branch", "new_branch2"), ("new_branch/a", "new_branch2/b")]
+)
+def test_change_of_tracking_branch(app_layout, capfd, branch_name):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_layout.checkout(branch_name[0], create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    app_layout.checkout(branch_name[1], create_new=True)
+
+    app_layout.delete_branch(branch_name[0])
+
+    app_layout._app_backend.be._be.git.branch(
+        f"--set-upstream-to=origin/{branch_name[0]}", branch_name[1]
+    )
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
+    assert err == 0
+
+
+@pytest.mark.parametrize("branch_name", ["new_branch", "new_branch/a"])
+def test_no_upstream_branch_stamp(app_layout, capfd, branch_name):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    app_layout.checkout(branch_name, create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="minor")
+    assert err == 0
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    assert branch_name == main_branch
+
+    app_layout._app_backend.be._be.git.branch("--unset-upstream", main_branch)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.1"
+
+
+def test_multi_repo_dependency_goto_and_stamp(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = _configure_2_deps(app_layout, params)
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    prev_ver = ver_info["stamping"]["app"]["_version"]
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert prev_ver != ver_info["stamping"]["app"]["_version"]
+
+    err = _goto(app_layout.app_name, version=prev_ver)
+    assert err == 0
+
+    # TODO:: for each stamp add capfd assertions
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == prev_ver
+
+
+def test_multi_repo_dependency_goto_and_show(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = _configure_2_deps(app_layout, params)
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    prev_ver = ver_info["stamping"]["app"]["_version"]
+
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert prev_ver != ver_info["stamping"]["app"]["_version"]
+
+    err = _goto(app_layout.app_name, version=prev_ver)
+    assert err == 0
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert captured.out == "0.0.2\n"
+
+
+def test_multi_repo_dependency_on_specific_branch_goto(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = _configure_2_deps(app_layout, params, specific_branch="new_branch")
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "msg1")
+
+    capfd.readouterr()
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
+    captured = capfd.readouterr()
+
+    err = _goto(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+
+    err = _show(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "0.0.1"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    captured = capfd.readouterr()
+
+    err = _show(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert captured.out == "0.0.2\n"
+
+
+def test_dirty_no_ff_rebase(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1")
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.rebase(main_branch, other_branch, no_ff=True)
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.2" == res["out"]
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]
+
+
+def test_show_on_local_only_branch_1_commit_after(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic/abc"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg1", push=False)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.0" == res["out"]
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]
+
+
+def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    other_branch = "topic/abc"
+
+    app_layout.checkout(other_branch, create_new=True)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.1.0" == res["out"]
+    assert len(res["dirty"]) == 2
+    assert "modified" in res["dirty"]
+    assert "outgoing" in res["dirty"]
+
+
+def test_no_fetch_branch_configured(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    app_layout.git_cmd(args=["config", "--unset", "remote.origin.fetch"])
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
+    assert err == 0
+
+
+def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, params = _stamp_app(app_layout.app_name, "minor")
+
+    captured = capfd.readouterr()
+
+    _configure_2_deps(app_layout, params)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    app_layout.git_cmd("repo1", ["config", "--unset", "remote.origin.fetch"])
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
+    assert err == 0

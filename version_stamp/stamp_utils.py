@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-import pathlib
-import sys
-import os
-import git
-import logging
-import glob
-import re
-import time
-import yaml
-import datetime
 import configparser
+import datetime
+import glob
+import logging
+import os
+import pathlib
+import re
+import sys
+import time
 from logging.handlers import RotatingFileHandler
+import traceback
+import io
+
+import git
+import yaml
+
+DEBUG_TRACE_ENV_VAR = "VMN_DEBUG_TRACE"
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
@@ -70,7 +75,67 @@ RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE = "branch"
 RELATIVE_TO_GLOBAL_TYPE = "global"
 
 VMN_USER_NAME = "vmn"
+VMN_BE_TYPE_GIT = "git"
+VMN_BE_TYPE_LOCAL_FILE = "local_file"
+
+GLOBAL_LOG_FILENAME = "global_vmn.log"
+
 LOGGER = None
+
+
+# Create a custom execute function
+def custom_execute(self, *args, **kwargs):
+    if LOGGER is not None:
+        try:
+            if DEBUG_TRACE_ENV_VAR in os.environ:
+                trace_str = io.StringIO()
+                traceback.print_stack(file=trace_str)
+                LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
+
+            LOGGER.debug(f"git cmd:\n{' '.join(str(v) for v in args[0])}")
+        except Exception as exc:
+            pass
+
+    original_execute = getattr(self.__class__, '_execute')
+    start_time = time.perf_counter()
+    originally_extended_output = "with_extended_output" in kwargs
+    kwargs["with_extended_output"] = True
+    ret = original_execute(self, *args, **kwargs)
+
+    ret_code = 0
+    sout = ''
+    serr = ''
+    if not originally_extended_output:
+        if type(ret) is tuple:
+            ret_code = ret[0]
+            sout = ret[1]
+            serr = ret[2]
+            ret = sout
+    elif type(ret) is not tuple:
+        sout = ret.stdout.read()
+        serr = ret.stdout.read()
+        ret_code = 0
+        if serr:
+            ret_code = 1
+
+    end_time = time.perf_counter()
+
+    time_took = end_time - start_time
+
+    if LOGGER is not None:
+        LOGGER.debug(
+            f"git cmd took: {time_took:.6f} seconds.\n"
+            f"ret code: {ret_code}\n"
+            f"out: {sout}\n"
+            f"err: {serr}"
+        )
+
+    return ret
+
+
+# Monkey-patch the Git class
+git.cmd.Git._execute = git.cmd.Git.execute
+git.cmd.Git.execute = custom_execute
 
 
 class WrongTagFormatException(Exception):
@@ -126,15 +191,11 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     global LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
-    hlen = len(LOGGER.handlers)
-    for h in range(hlen):
-        LOGGER.handlers[0].close()
-        LOGGER.removeHandler(LOGGER.handlers[0])
-    flen = len(LOGGER.filters)
-    for f in range(flen):
-        LOGGER.removeFilter(LOGGER.filters[0])
+    clear_logger_handlers(LOGGER)
+    global_logger = logging.getLogger()
+    clear_logger_handlers(global_logger)
 
-    LOGGER.setLevel(logging.DEBUG)
+    global_logger.setLevel(logging.DEBUG)
 
     fmt = "[%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
@@ -157,19 +218,40 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     if rotating_log_path is None:
         return LOGGER
 
+    rotating_file_handler = init_log_file_handler(rotating_log_path)
+    LOGGER.addHandler(rotating_file_handler)
+
+    global_log_path = os.path.join(
+        os.path.dirname(rotating_log_path),
+        GLOBAL_LOG_FILENAME
+    )
+    global_file_handler = init_log_file_handler(global_log_path)
+    global_logger.addHandler(global_file_handler)
+
+    return LOGGER
+
+
+def init_log_file_handler(rotating_log_path):
     rotating_file_handler = RotatingFileHandler(
         rotating_log_path,
         maxBytes=1024 * 1024 * 10,
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
-
-    fmt = f"%(filename)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
+    fmt = f"%(pathname)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
-    LOGGER.addHandler(rotating_file_handler)
+    return rotating_file_handler
 
-    return LOGGER
+
+def clear_logger_handlers(logger_obj):
+    hlen = len(logger_obj.handlers)
+    for h in range(hlen):
+        logger_obj.handlers[0].close()
+        logger_obj.removeHandler(logger_obj.handlers[0])
+    flen = len(logger_obj.filters)
+    for f in range(flen):
+        logger_obj.removeFilter(logger_obj.filters[0])
 
 
 class VMNBackend(object):
@@ -182,10 +264,22 @@ class VMNBackend(object):
     def type(self):
         return self._type
 
+    def prepare_for_remote_operation(self):
+        return 0
+
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
+
+    def get_active_branch(self):
+        return "none"
+
+    def remote(self):
+        return "none"
+
+    def last_user_changeset(self):
+        return "none"
 
     @staticmethod
     def app_name_to_git_tag_app_name(app_name):
@@ -218,8 +312,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -237,85 +331,120 @@ class VMNBackend(object):
 
         return "/".join(root_app_name[:-1])
 
-
-class LocalFileBackend(VMNBackend):
-    def __init__(self, repo_path):
-        VMNBackend.__init__(self, "local_file")
-
-        vmn_dir_path = os.path.join(repo_path, ".vmn")
-        if not os.path.isdir(vmn_dir_path):
-            raise RuntimeError(
-                "LocalFile backend needs to be initialized with a local"
-                " path containing .vmn dir in it"
-            )
-
-        self.repo_path = repo_path
-
-    def __del__(self):
-        pass
-
-    def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+    @staticmethod
+    def serialize_vmn_tag_name(
+            app_name,
+            version,
+            hide_zero_hotfix,
+            prerelease=None,
+            prerelease_count=None,
+            buildmetadata=None,
     ):
-        if root:
-            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
-            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
-            if not list_of_files:
-                return None, None
+        app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
-            latest_file = max(list_of_files, key=os.path.getctime)
-            with open(latest_file, "r") as f:
-                return None, yaml.safe_load(f)
+        verstr = VMNBackend.serialize_vmn_version(
+            version,
+            prerelease,
+            prerelease_count,
+            hide_zero_hotfix,
+            buildmetadata,
+        )
 
-        dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
-        list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
-        if not list_of_files:
-            return None, None
+        verstr = f"{app_name}_{verstr}"
 
-        latest_file = max(list_of_files, key=os.path.getctime)
+        match = re.search(VMN_TAG_REGEX, verstr)
+        if match is None:
+            err = f"Tag {verstr} doesn't comply with: " f"{VMN_TAG_REGEX} format"
+            LOGGER.error(err)
 
-        with open(latest_file, "r") as f:
-            return None, yaml.safe_load(f)
+            raise RuntimeError(err)
 
+        return verstr
 
-class GitBackend(VMNBackend):
-    def __init__(self, repo_path):
-        VMNBackend.__init__(self, "git")
+    @staticmethod
+    def serialize_vmn_version(
+            current_version,
+            prerelease,
+            prerelease_count,
+            hide_zero_hostfix,
+            buildmetadata=None,
+    ):
+        vmn_version = VMNBackend.get_base_vmn_version(
+            current_version, hide_zero_hostfix
+        )
 
-        self._be = git.Repo(repo_path, search_parent_directories=True)
-        self.add_git_user_cfg_if_missing()
-        self._origin = self._be.remotes[0]
+        if prerelease is None or prerelease == "release":
+            if buildmetadata is not None:
+                vmn_version = f"{vmn_version}+{buildmetadata}"
 
-        vmn_cache_path = os.path.join(repo_path, ".vmn", "vmn.cache")
-        if not os.path.exists(vmn_cache_path):
-            pathlib.Path(os.path.join(repo_path, ".vmn")).mkdir(
-                parents=True, exist_ok=True
-            )
-            pathlib.Path(vmn_cache_path).touch()
+            return vmn_version
 
-            self._be.git.execute(["git", "fetch", "--tags"])
-        else:
-            minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
-            filemtime = datetime.datetime.fromtimestamp(
-                os.path.getmtime(vmn_cache_path)
-            )
-            # file is more than 30 minutes old
-            if filemtime < minutes_ago:
-                pathlib.Path(vmn_cache_path).touch()
-                self._be.git.execute(["git", "fetch", "--tags"])
-
-    def __del__(self):
-        self._be.close()
-
-    def is_path_tracked(self, path):
         try:
-            self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
-            return True
-        except Exception as exc:
-            LOGGER.debug(f"Logged exception: ", exc_info=True)
-            return False
+            assert prerelease in prerelease_count
+            # TODO: here try to use VMN_VERSION_FORMAT somehow
+            vmn_version = f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
 
-    def deserialize_tag_name(self, some_tag):
+            match = re.search(VMN_REGEX, vmn_version)
+            if match is None:
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{VMN_VERSION_FORMAT} format"
+                )
+                LOGGER.error(err)
+
+                raise RuntimeError(err)
+        except AssertionError:
+            LOGGER.error(
+                f"{prerelease} doesn't appear in {prerelease_count} "
+                "Turn on debug mode to see traceback"
+            )
+            LOGGER.debug("Exception info: ", exc_info=True)
+
+        if buildmetadata is not None:
+            vmn_version = f"{vmn_version}+{buildmetadata}"
+
+            match = re.search(VMN_REGEX, vmn_version)
+            if match is None:
+                err = (
+                    f"Tag {vmn_version} doesn't comply with: "
+                    f"{VMN_VERSION_FORMAT} format"
+                )
+                LOGGER.error(err)
+                raise RuntimeError(err)
+
+        return vmn_version
+
+    @staticmethod
+    def serialize_vmn_version_hotfix(
+            hide_zero_hotfix, major, minor, patch, hotfix=None
+    ):
+        if hide_zero_hotfix and hotfix == "0":
+            hotfix = None
+
+        vmn_version = f"{major}.{minor}.{patch}"
+        if hotfix is not None:
+            vmn_version = f"{vmn_version}.{hotfix}"
+
+        return vmn_version
+
+    @staticmethod
+    def get_base_vmn_version(current_version, hide_zero_hotfix):
+        match = re.search(VMN_REGEX, current_version)
+        gdict = match.groupdict()
+        if gdict["hotfix"] is None:
+            gdict["hotfix"] = str(0)
+        vmn_version = VMNBackend.serialize_vmn_version_hotfix(
+            hide_zero_hotfix,
+            gdict["major"],
+            gdict["minor"],
+            gdict["patch"],
+            gdict["hotfix"],
+        )
+
+        return vmn_version
+
+    @staticmethod
+    def deserialize_tag_name(some_tag):
         ret = {
             "app_name": None,
             "type": "version",
@@ -327,7 +456,6 @@ class GitBackend(VMNBackend):
             "hotfix": None,
             "prerelease": None,
             "buildmetadata": None,
-            "tag_msg": self.get_tag_message(some_tag),
         }
 
         match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
@@ -370,9 +498,32 @@ class GitBackend(VMNBackend):
 
         return ret
 
-    def deserialize_vmn_tag_name(self, vmn_tag):
+    @staticmethod
+    def enhance_ver_info(ver_infos):
+        all_tags = {}
+        for tag, ver_info_c in ver_infos.items():
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
+            tagd.update({"tag": tag})
+            tagd["message"] = ver_info_c["ver_info"]
+
+            all_tags[tagd["type"]] = tagd
+
+            # TODO:: Check API commit version
+        # Enhance "raw" ver_infos so all tags will have all info
+        for t, v in ver_infos.items():
+            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["root"]["message"]["stamping"]
+                )
+            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["version"]["message"]["stamping"]
+                )
+
+    @staticmethod
+    def deserialize_vmn_tag_name(vmn_tag):
         try:
-            return self.deserialize_tag_name(vmn_tag)
+            return VMNBackend.deserialize_tag_name(vmn_tag)
         except WrongTagFormatException as exc:
             LOGGER.error(
                 f"Tag {vmn_tag} doesn't comply to vmn version format",
@@ -388,7 +539,187 @@ class GitBackend(VMNBackend):
 
             raise exc
 
+
+class LocalFileBackend(VMNBackend):
+    def __init__(self, repo_path):
+        VMNBackend.__init__(self, VMN_BE_TYPE_LOCAL_FILE)
+
+        vmn_dir_path = os.path.join(repo_path, ".vmn")
+        if not os.path.isdir(vmn_dir_path):
+            raise RuntimeError(
+                "LocalFile backend needs to be initialized with a local"
+                " path containing .vmn dir in it"
+            )
+
+        self.repo_path = repo_path
+        self.active_branch = "none"
+        self.remote_active_branch = "remote/none"
+
+    def __del__(self):
+        pass
+
+    def perform_cached_fetch(self, force=False):
+        return
+
+    def get_first_reachable_version_info(
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
+        ver_infos = {
+            "none": {
+                "tag_object": None,
+                "commit_obj": None,
+                "ver_info": None,
+            }
+        }
+        if root:
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
+            list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+            if not list_of_files:
+                return None, {}
+
+            latest_file = max(list_of_files, key=os.path.getctime)
+            with open(latest_file, "r") as f:
+                ver_infos["none"]["ver_info"] = yaml.safe_load(f)
+                return "none", ver_infos
+
+        dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
+        list_of_files = glob.glob(os.path.join(dir_path, "*.yml"))
+        if not list_of_files:
+            return None, {}
+
+        latest_file = max(list_of_files, key=os.path.getctime)
+
+        with open(latest_file, "r") as f:
+            ver_infos["none"]["ver_info"] = yaml.safe_load(f)
+            return "none", ver_infos
+
+    def get_actual_deps_state(self, vmn_root_path, paths):
+        actual_deps_state = {
+            ".": {
+                "hash": "0xdeadbeef",
+                "remote": "none",
+                "vcs_type": VMN_BE_TYPE_LOCAL_FILE,
+            }
+        }
+
+        return actual_deps_state
+
+    def get_tag_version_info(self, tag_name):
+        tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
+        if tagd["type"] == "root":
+            dir_path = os.path.join(
+                self.repo_path, ".vmn", tagd["app_name"], "root_verinfo"
+            )
+            path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
+        else:
+            dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
+            path = os.path.join(dir_path, f"{tagd['version']}.yml")
+
+        ver_infos = {
+            tag_name: {"ver_info": None, "tag_object": None, "commit_object": None}
+        }
+        try:
+            with open(path, "r") as f:
+                ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
+        except Exception as exc:
+            LOGGER.error("Logged Exception message:", exc_info=True)
+
+        return tag_name, ver_infos
+
+
+class GitBackend(VMNBackend):
+    def __init__(self, repo_path, inherit_env=False):
+        VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
+
+        self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
+        self.add_git_user_cfg_if_missing()
+
+        # TODO:: make selected_remote configurable.
+        # Currently just selecting the first one
+        self.selected_remote = self._be.remotes[0]
+        self.repo_path = repo_path
+        self.active_branch = self.get_active_branch()
+        self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
+        self.detached_head = self.in_detached_head()
+
+    def perform_cached_fetch(self, force=False):
+        vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
+        if not os.path.exists(vmn_cache_path) or force:
+            pathlib.Path(os.path.join(self.repo_path, ".vmn")).mkdir(
+                parents=True, exist_ok=True
+            )
+            pathlib.Path(vmn_cache_path).touch()
+
+            self._be.git.execute(["git", "fetch", "--tags"])
+        elif os.path.exists(vmn_cache_path):
+            minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes=30)
+            filemtime = datetime.datetime.fromtimestamp(
+                os.path.getmtime(vmn_cache_path)
+            )
+            # file is more than 30 minutes old
+            if filemtime < minutes_ago:
+                pathlib.Path(vmn_cache_path).touch()
+                self._be.git.execute(["git", "fetch", "--tags"])
+
+    def __del__(self):
+        self._be.close()
+
+    @staticmethod
+    def initialize_git_backend(repo_path, inherit_env):
+        be = git.Repo(repo_path, search_parent_directories=True)
+
+        if inherit_env:
+            current_git_env = {
+                k: os.environ[k] for k in os.environ if k.startswith("GIT_")
+            }
+            current_git_env.update(
+                {
+                    "GIT_AUTHOR_NAME": VMN_USER_NAME,
+                    "GIT_COMMITTER_NAME": VMN_USER_NAME,
+                    "GIT_AUTHOR_EMAIL": VMN_USER_NAME,
+                    "GIT_COMMITTER_EMAIL": VMN_USER_NAME,
+                }
+            )
+            be.git.update_environment(**current_git_env)
+
+        return be
+
+    @staticmethod
+    def get_repo_details(path):
+        try:
+            client = git.Repo(path, search_parent_directories=True)
+        except git.exc.InvalidGitRepositoryError as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+        except Exception as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+
+        try:
+            hash = client.head.commit.hexsha
+            remote = tuple(client.remotes[0].urls)[0]
+            if os.path.isdir(remote):
+                remote = os.path.relpath(remote, client.working_dir)
+        except Exception as exc:
+            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
+            return None
+        finally:
+            client.close()
+
+        return hash, remote, "git"
+
+    def is_path_tracked(self, path):
+        try:
+            self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
+            return True
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
+            return False
+
     def tag(self, tags, messages, ref="HEAD", push=False):
+        if push and self.remote_active_branch is None:
+            raise RuntimeError("Will not push remote branch does not exist")
+
         for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
@@ -399,17 +730,30 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._origin.push(f"refs/tags/{tag}")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def push(self, tags=()):
+        if self.detached_head:
+            raise RuntimeError("Will not push from detached head")
+
+        if self.remote_active_branch is None:
+            raise RuntimeError("Will not push remote branch does not exist")
+
+        remote_branch_name_no_remote_name = "".join(
+            self.remote_active_branch.split(f"{self.selected_remote.name}/")
+        )
+
         try:
-            ret = self._origin.push(
-                f"refs/heads/{self.get_active_branch()}", o="ci.skip"
+            ret = self.selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
+                o="ci.skip",
             )
-        except Exception:
-            ret = self._origin.push(f"refs/heads/{self.get_active_branch()}")
+        except Exception as exc:
+            ret = self.selected_remote.push(
+                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
+            )
 
         if ret[0].old_commit is None:
             if "up to date" in ret[0].summary:
@@ -426,12 +770,15 @@ class GitBackend(VMNBackend):
 
         for tag in tags:
             try:
-                self._origin.push(f"refs/tags/{tag}", o="ci.skip")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
             except Exception:
-                self._origin.push(f"refs/tags/{tag}")
+                self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
     def pull(self):
-        self._origin.pull()
+        if self.detached_head:
+            raise RuntimeError("Will not pull in detached head")
+
+        self.selected_remote.pull("--ff-only")
 
     def commit(self, message, user, include=None):
         if include is not None:
@@ -453,7 +800,7 @@ class GitBackend(VMNBackend):
             return None
 
     def get_latest_stamp_tags(
-        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -461,9 +808,7 @@ class GitBackend(VMNBackend):
             msg_filter = f"^{app_name}: Stamped"
 
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
-            cmd_suffix = (
-                f"refs/heads/{self.get_active_branch(raise_on_detached_head=False)}"
-            )
+            cmd_suffix = f"refs/heads/{self.active_branch}"
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:
@@ -471,39 +816,47 @@ class GitBackend(VMNBackend):
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
-            tag_names = self._get_shallow_first_reachable_vmn_stamp_tag_list(app_name)
+            # This is the only usecase where we must perform a remote operation
+            # because otherwise even show will not work
+            self.perform_cached_fetch()
+            (
+                tag_names,
+                cobj,
+                ver_infos,
+            ) = self._get_shallow_first_reachable_vmn_stamp_tag_list(
+                app_name,
+                cmd_suffix,
+                msg_filter,
+            )
         else:
-            tag_names = self._get_first_reachable_vmn_stamp_tag_list(
-                cmd_suffix, msg_filter
+            tag_names, cobj, ver_infos = self._get_first_reachable_vmn_stamp_tag_list(
+                app_name, cmd_suffix, msg_filter
             )
 
-        return tag_names
+        return tag_names, cobj, ver_infos
 
-    def _get_first_reachable_vmn_stamp_tag_list(self, cmd_suffix, msg_filter):
-        tag_objects = []
-        res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
-        while res:
-            items = res[0].split(",,,")
-            _tag_objects = []
-            for t in items[1].split(","):
-                if "tag:" not in t:
-                    continue
-
-                tname = t.split("tag:")[1].strip()
-                # TODO:: add call desearilize here
-                o = self.get_tag_object_from_tag_name(tname)
-                if o:
-                    _tag_objects.append(o)
-
-            if _tag_objects:
-                tag_objects = _tag_objects
+    def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
+        cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+        bug_limit = 0
+        while not ver_infos and bug_limit < 100:
+            if cobj is None:
                 break
 
-            if cmd_suffix == "HEAD":
-                cmd_suffix = f"{items[0]}~1"
-                res = self._get_top_vmn_commit(cmd_suffix, msg_filter)
-            else:
-                res = []
+            cmd_suffix = f"{cobj.hexsha}~1"
+            cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+
+            bug_limit += 1
+            if bug_limit == 100:
+                LOGGER.warning(
+                    f"Probable bug: vmn failed to find "
+                    f"vmn's commit after 100 interations."
+                )
+                ver_infos = {}
+                break
+
+        tag_objects = []
+        for k in ver_infos:
+            tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
@@ -514,9 +867,29 @@ class GitBackend(VMNBackend):
         for tag_object in tag_objects:
             tag_names.append(tag_object.name)
 
-        return tag_names
+        return tag_names, cobj, ver_infos
 
-    def _get_shallow_first_reachable_vmn_stamp_tag_list(self, app_name):
+    def _get_shallow_first_reachable_vmn_stamp_tag_list(
+            self, app_name, cmd_suffix, msg_filter
+    ):
+        cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
+
+        if ver_infos:
+            tag_objects = []
+            for k in ver_infos:
+                tag_objects.append(ver_infos[k]["tag_object"])
+
+            # We want the newest tag on top because we skip "buildmetadata tags"
+            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
+            tag_objects = sorted(
+                tag_objects, key=lambda t: t.object.tagged_date, reverse=True
+            )
+            tag_names = []
+            for tag_object in tag_objects:
+                tag_names.append(tag_object.name)
+
+            return tag_names, cobj, ver_infos
+
         tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
         tag_names = self._be.git.tag(*cmd).split("\n")
@@ -525,16 +898,16 @@ class GitBackend(VMNBackend):
             tag_names.pop(0)
 
         if not tag_names:
-            return tag_names
+            return tag_names, cobj, ver_infos
 
         latest_tag = tag_names[-1]
         head_date = self._be.head.commit.committed_date
         for tname in reversed(tag_names):
-            o = self.get_tag_object_from_tag_name(tname)
+            tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                    self._be.head.commit.hexsha != o.commit.hexsha
-                    and head_date < o.object.tagged_date
+                        self._be.head.commit.hexsha != o.commit.hexsha
+                        and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -545,15 +918,14 @@ class GitBackend(VMNBackend):
             found_tag = self._be.tag(f"refs/tags/{latest_tag}")
         except Exception as exc:
             LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
-            return []
+            return [], cobj, ver_infos
 
-        head_tags = self.get_all_commit_tags(found_tag.commit.hexsha)
+        ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
         tag_objects = []
 
-        for tname in head_tags:
-            o = self.get_tag_object_from_tag_name(tname)
-            if o:
-                tag_objects.append(o)
+        for k in ver_infos.keys():
+            if ver_infos[k]["tag_object"]:
+                tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
         # TODO:: solve the weird coupling between here and get_first_reachable_version_info
@@ -565,9 +937,9 @@ class GitBackend(VMNBackend):
         for tag_object in tag_objects:
             final_list_of_tag_names.append(tag_object.name)
 
-        return final_list_of_tag_names
+        return final_list_of_tag_names, found_tag.commit, ver_infos
 
-    def _get_top_vmn_commit(self, cmd_suffix, msg_filter):
+    def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
             f"-1",
@@ -577,10 +949,24 @@ class GitBackend(VMNBackend):
             cmd_suffix,
         ]
         LOGGER.debug(f"Going to run: git log {' '.join(cmd)}")
-        res = self._be.git.log(*cmd).split("\n")
-        if len(res) == 1 and res[0] == "":
-            res.pop(0)
-        return res
+        log_res = self._be.git.log(*cmd).split("\n")
+        if len(log_res) == 1 and log_res[0] == "":
+            log_res.pop(0)
+
+        if not log_res:
+            return None, {}
+
+        items = log_res[0].split(",,,")
+        tags = items[1].split(",")
+        if len(tags) == 1 and tags[0] == "":
+            tags.pop(0)
+
+        commit_hex = items[0]
+        ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
+
+        cobj = self.get_commit_object_from_commit_hex(commit_hex)
+
+        return cobj, ver_infos
 
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
@@ -605,21 +991,72 @@ class GitBackend(VMNBackend):
         )
 
     def get_tag_object_from_tag_name(self, tname):
-        o = self._be.tag(f"refs/tags/{tname}")
+        try:
+            o = self._be.tag(f"refs/tags/{tname}")
+        except Exception as exc:
+            LOGGER.debug(f"Logged exception: ", exc_info=True)
+            # Backward compatability code for vmn 0.3.9:
+            try:
+                _tag_name = f"{tname}.0"
+                o = self._be.tag(f"refs/tags/{tname}")
+                tag_name = _tag_name
+            except Exception as exc:
+                LOGGER.debug(f"Logged exception: ", exc_info=True)
+                return tname, None
+
         try:
             if o.commit.author.name != "vmn":
-                return None
+                return tname, None
         except Exception as exc:
             LOGGER.debug("Exception info: ", exc_info=True)
-            return None
+            return tname, None
 
         if o.tag is None:
-            return None
+            return tname, None
 
         if o is None:
             LOGGER.debug(f"Somehow did not find a tag object for tag: {tname}")
 
-        return o
+        return tname, o
+
+    def get_all_commit_tags_log_impl(self, hexsha, tags, app_name):
+        cleaned_tags = []
+        for t in tags:
+            if "tag:" not in t:
+                continue
+
+            tname = t.split("tag:")[1].strip()
+            cleaned_tags.append(tname)
+
+        ver_infos = {}
+        if not cleaned_tags:
+            # Maybe rebase or tag was removed. Will handle the rebase case here
+            try:
+                commit_obj = self.get_commit_object_from_commit_hex(hexsha)
+                verstr = commit_obj.message.split(" version ")[1].strip()
+                tagname = f"{app_name}_{verstr}"
+                tagname, ver_info_c = self.parse_tag_message(tagname)
+                if ver_info_c["tag_object"]:
+                    ver_infos[tagname] = ver_info_c
+
+                    cleaned_tags = self.get_all_brother_tags(tagname)
+                    cleaned_tags.pop(tagname)
+                    cleaned_tags = cleaned_tags.keys()
+            except Exception as exc:
+                LOGGER.debug(f"Skipped on {hexsha} commit")
+
+        for tname in cleaned_tags:
+            tname, ver_info_c = self.parse_tag_message(tname)
+            if ver_info_c["ver_info"] is None:
+                LOGGER.debug(
+                    f"Probably non-vmn tag - {tname} with tag msg: {ver_info_c['ver_info']}. Skipping ",
+                    exc_info=True,
+                )
+                continue
+
+            ver_infos[tname] = ver_info_c
+
+        return ver_infos
 
     def get_all_commit_tags(self, hexsha="HEAD"):
         if hexsha is None:
@@ -631,31 +1068,24 @@ class GitBackend(VMNBackend):
         if len(tags) == 1 and tags[0] == "":
             tags.pop(0)
 
-        final_tags = []
+        ver_infos = {}
         for t in tags:
-            try:
-                tagd = None
-                tagd = self.deserialize_tag_name(t)
-                if tagd["tag_msg"] is None:
-                    raise WrongTagFormatException()
-
-                final_tags.append(t)
-            except Exception as exc:
-                if tagd is None:
-                    tagd = {"tag_msg": None}
-
+            t, ver_info_c = self.parse_tag_message(t)
+            if ver_info_c["ver_info"] is None:
                 LOGGER.debug(
-                    f"Probably non-vmn tag - {t} with tag msg: {tagd['tag_msg']} ",
+                    f"Probably non-vmn tag - {t} with tag msg: {ver_info_c['ver_info']}. Skipping ",
                     exc_info=True,
                 )
                 continue
 
-        return final_tags
+            ver_infos[t] = ver_info_c
+
+        return ver_infos
 
     def get_all_brother_tags(self, tag_name):
         try:
             sha = self.changeset(tag=tag_name)
-            tags = self.get_all_commit_tags(sha)
+            ver_infos = self.get_all_commit_tags(sha)
         except Exception as exc:
             LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
@@ -664,7 +1094,7 @@ class GitBackend(VMNBackend):
             )
             return []
 
-        return tags
+        return ver_infos
 
     def in_detached_head(self):
         return self._be.head.is_detached
@@ -691,26 +1121,35 @@ class GitBackend(VMNBackend):
             err = f"Detached head in {self.root()}."
             return err
 
-        branch_name = self._be.active_branch.name
+        if self.remote_active_branch is None:
+            err = (
+         f"No upstream branch found in {self.root()}. "
+                f"for local branch {self.active_branch}. "
+                f"Probably no upstream branch is set"
+            )
+
+            return err
+
+        branch_name = self.active_branch
         try:
-            self._be.git.rev_parse("--verify", f"{self._origin.name}/{branch_name}")
+            self._be.git.rev_parse("--verify", f"{self.remote_active_branch}")
         except Exception:
             err = (
-                f"Branch {self._origin.name}/{branch_name} does not exist. "
-                "Please push or set-upstream branch to "
-                f"{self._origin.name}/{branch_name} of branch {branch_name}"
+                f"Remote branch {self.remote_active_branch} does not exist. "
+                "Please set-upstream branch to "
+                f"{self.remote_active_branch} of branch {branch_name}"
             )
             return err
 
         outgoing = tuple(
-            self._be.iter_commits(f"{self._origin.name}/{branch_name}..{branch_name}")
+            self._be.iter_commits(f"{self.remote_active_branch}..{branch_name}")
         )
 
         if len(outgoing) > 0:
             err = (
                 f"Outgoing changes in {self.root()} "
                 f"from branch {branch_name} "
-                f"({self._origin.name}/{branch_name}..{branch_name})\n"
+                f"({self.remote_active_branch}..{branch_name})\n"
                 f"The commits that are outgoing are: {outgoing}"
             )
 
@@ -721,29 +1160,82 @@ class GitBackend(VMNBackend):
     def checkout_branch(self, branch_name=None):
         try:
             if branch_name is None:
-                branch_name = self.get_active_branch(raise_on_detached_head=False)
+                branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
-        except Exception:
-            logging.info("Failed to get branch name. Trying to checkout to master")
+        except Exception as exc:
+            logging.error("Failed to get branch name")
             LOGGER.debug("Exception info: ", exc_info=True)
-            # TODO:: change to some branch name that can be retreived from repo
-            try:
-                self.checkout(branch="master")
-            except Exception as exc:
-                self.checkout(branch="main")
+
+            return None
 
         return self._be.active_branch.commit.hexsha
 
-    def get_active_branch(self, raise_on_detached_head=True):
+    def get_remote_tracking_branch(self, local_branch_name):
+        command = [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            f"{local_branch_name}@{{u}}",
+        ]
+
+        try:
+            ret = self._be.git.execute(command)
+
+            try:
+                assert ret.startswith(self.selected_remote.name)
+            except Exception as exc:
+                LOGGER.warning(
+                    f"Found remote branch {ret} however it belongs to a "
+                    f"different remote that vmn has selected to work with. "
+                    f"Will behave like no remote was found. The remote that vmn has "
+                    f"selected to work with is: {self.selected_remote.name}"
+                )
+
+                return None
+
+            return ret
+        except Exception as exc:
+            return None
+
+    def prepare_for_remote_operation(self):
+        if self.remote_active_branch is not None:
+            return 0
+
+        local_branch_name = self.active_branch
+
+        LOGGER.warning(
+            f"No remote branch for local branch: {local_branch_name} "
+            f"was found. Will try to set upstream for it"
+        )
+
+        out = self._be.git.branch("-r", "--contains", "HEAD")
+        out = out.split("\n")[0].strip()
+        if not out:
+            out = f"{self.selected_remote.name}/{local_branch_name}"
+
+        try:
+            self._be.git.execute(
+                ["git", "remote", "set-branches", "--add",
+                 self.selected_remote.name, local_branch_name]
+            )
+            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
+        except Exception as exc:
+            LOGGER.debug(
+                f"Failed to set upstream branch for {local_branch_name}:", exc_info=True
+            )
+            return 1
+
+        self.remote_active_branch = out
+
+        return 0
+
+    def get_active_branch(self):
         # TODO:: return the full ref name: refs/heads/..
         if not self.in_detached_head():
             active_branch = self._be.active_branch.name
         else:
-            if raise_on_detached_head:
-                LOGGER.error("Active branch cannot be found in detached head")
-                raise RuntimeError()
-
             active_branch = self.get_branch_from_changeset(self._be.head.commit.hexsha)
 
         return active_branch
@@ -760,11 +1252,40 @@ class GitBackend(VMNBackend):
             active_branches.append(item.strip())
         if len(active_branches) > 1:
             LOGGER.info(
-                "In detached head. Commit hash: "
                 f"{self._be.head.commit.hexsha} is "
                 f"related to multiple branches: {active_branches}. "
                 "Using the first one as the active branch"
             )
+
+        if not active_branches:
+            out = self._be.git.branch("-r", "--contains", hexsha)
+            out = out.split("\n")[0].strip()
+
+            if not out:
+                raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
+
+            assert out.startswith(self.selected_remote.name)
+
+            local_branch_name = (
+                f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
+            )
+            self._be.git.branch(local_branch_name, out)
+            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
+
+            LOGGER.debug(
+                f"Setting local branch {local_branch_name} "
+                f"to track remote branch {out}"
+            )
+
+            self.active_branch = local_branch_name
+            self.remote_active_branch = out
+
+            remote_branch_hexsha = self._be.refs[out].commit.hexsha
+            if remote_branch_hexsha == hexsha:
+                ret = self.checkout_branch()
+                assert ret is not None
+
+            active_branches.append(local_branch_name)
 
         active_branch = active_branches[0]
         return active_branch
@@ -781,25 +1302,42 @@ class GitBackend(VMNBackend):
 
         self._be.git.checkout(rev)
 
-    # TODO:: Missing impl in LocalFileBackend
+        self.detached_head = self.in_detached_head()
+
+    @staticmethod
+    def get_actual_deps_state(vmn_root_path, paths):
+        actual_deps_state = {}
+        for path in paths:
+            full_path = os.path.join(vmn_root_path, path)
+            details = GitBackend.get_repo_details(full_path)
+            if details is None:
+                continue
+
+            actual_deps_state[path] = {
+                "hash": details[0],
+                "remote": details[1],
+                "vcs_type": details[2],
+            }
+
+        return actual_deps_state
+
     def last_user_changeset(self):
         p = self._be.head.commit
         if p.author.name == VMN_USER_NAME:
             if p.message.startswith(INIT_COMMIT_MESSAGE):
                 return p.hexsha
 
-            tags = self.get_all_commit_tags(p.hexsha)
-            if not tags:
+            ver_infos = self.get_all_commit_tags(p.hexsha)
+            if not ver_infos:
                 LOGGER.warning(
                     f"Somehow vmn's commit {p.hexsha} has no tags. "
                     f"Check your repo. Assuming this commit is a user commit"
                 )
                 return p.hexsha
 
-            for t in tags:
-                _, verinfo = self.get_version_info_from_tag_name(t)
-                if "stamping" in verinfo:
-                    return verinfo["stamping"]["app"]["changesets"]["."]["hash"]
+            for t, v in ver_infos.items():
+                if "stamping" in v["ver_info"]:
+                    return v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
 
             LOGGER.warning(
                 f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
@@ -810,7 +1348,7 @@ class GitBackend(VMNBackend):
         return p.hexsha
 
     def remote(self):
-        remote = tuple(self._origin.urls)[0]
+        remote = tuple(self.selected_remote.urls)[0]
 
         if os.path.isdir(remote):
             remote = os.path.relpath(remote, self.root())
@@ -819,11 +1357,17 @@ class GitBackend(VMNBackend):
 
     def changeset(self, tag=None, short=False):
         if tag is None:
+            if short:
+                return self._be.head.commit.hexsha[:6]
+
             return self._be.head.commit.hexsha
 
         found_tag = self._be.tag(f"refs/tags/{tag}")
 
         try:
+            if short:
+                return found_tag.commit.hexsha[:6]
+
             return found_tag.commit.hexsha
         except Exception as exc:
             LOGGER.debug(f"Logged exception: ", exc_info=True)
@@ -871,16 +1415,18 @@ class GitBackend(VMNBackend):
             LOGGER.debug("Exception info: ", exc_info=True)
 
     def get_first_reachable_version_info(
-        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
-        app_tags = self.get_latest_stamp_tags(app_name, root_context, type)
-        cleaned_app_tag = None
+        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
+            app_name, root_context, type
+        )
 
         if root_context:
             regex = VMN_ROOT_TAG_REGEX
         else:
             regex = VMN_TAG_REGEX
 
+        cleaned_app_tag = None
         for tag in app_tags:
             # skip buildmetadata versions
             if "+" in tag:
@@ -899,62 +1445,58 @@ class GitBackend(VMNBackend):
             break
 
         if cleaned_app_tag is None:
-            return None, None
+            return None, {}
 
-        return self.get_version_info_from_tag_name(cleaned_app_tag)
+        if cleaned_app_tag not in ver_infos:
+            LOGGER.debug(f"Somehow {cleaned_app_tag} not in ver_infos")
+            return None, {}
 
-    def get_version_info_from_tag_name(self, tag_name):
+        VMNBackend.enhance_ver_info(ver_infos)
+
+        return cleaned_app_tag, ver_infos
+
+    def get_tag_version_info(self, tag_name):
+        ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
+        if commit_tag_obj is None:
+            LOGGER.debug(f"Tried to find {tag_name} but with no success")
+            return tag_name, ver_infos
 
+        if commit_tag_obj.author.name != VMN_USER_NAME:
+            LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
+            return tag_name, ver_infos
+
+        # "raw" ver_infos
+        ver_infos = self.get_all_brother_tags(tag_name)
+        if tag_name not in ver_infos:
+            LOGGER.debug(f"Could not find version info for {tag_name}")
+            return tag_name, None
+
+        VMNBackend.enhance_ver_info(ver_infos)
+
+        return tag_name, ver_infos
+
+    def parse_tag_message(self, tag_name):
+        tag_name, tag_obj = self.get_tag_object_from_tag_name(tag_name)
+
+        ret = {"ver_info": None, "tag_object": tag_obj, "commit_object": None}
+        if not tag_obj:
+            return tag_name, ret
+
+        commit_tag_obj = tag_obj.commit
         if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
             LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return tag_name, None
+            return tag_name, ret
 
-        tag_msg = self.get_tag_message(tag_name)
-        if not tag_msg:
-            LOGGER.debug(f"Corrupted tag msg of tag {tag_name}")
-            return tag_name, None
-
-        all_tags = {}
-
-        tags = self.get_all_brother_tags(tag_name)
-        for tag in tags:
-            tagd = self.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = self._be.tag(f"refs/tags/{tag}").object.message
-
-            all_tags[tagd["type"]] = tagd
-
-            # TODO:: Check API commit version
-
-        if "root_app" not in tag_msg["stamping"] and "root" in all_tags:
-            tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["root"]["message"])["stamping"]
-            )
-        elif "app" not in tag_msg["stamping"] and "version" in all_tags:
-            tag_msg["stamping"].update(
-                yaml.safe_load(all_tags["version"]["message"])["stamping"]
-            )
-
-        return tag_name, tag_msg
-
-    def get_tag_message(self, tag_name):
-        tag_exists = True
-        try:
-            o = self._be.tag(f"refs/tags/{tag_name}").object
-        except Exception as exc:
-            tag_exists = False
-
-        if not tag_exists:
-            return None
+        ret["commit_object"] = commit_tag_obj
 
         # TODO:: Check API commit version
         # safe_load discards any text before the YAML document (if present)
-        tag_msg = yaml.safe_load(self._be.tag(f"refs/tags/{tag_name}").object.message)
-        if tag_msg is None:
-            return None
+        ver_info = yaml.safe_load(tag_obj.object.message)
+        if ver_info is None:
+            return tag_name, ret
 
-        if type(tag_msg) is not dict and tag_msg.startswith("Automatic"):
+        if type(ver_info) is not dict and ver_info.startswith("Automatic"):
             # Code from vmn 0.3.9
             # safe_load discards any text before the YAML document (if present)
             commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
@@ -963,28 +1505,31 @@ class GitBackend(VMNBackend):
                 commit_msg["stamping"]["app"]["prerelease"] = "release"
                 commit_msg["stamping"]["app"]["prerelease_count"] = {}
 
-            tag_msg = commit_msg
-            if tag_msg is None:
-                return None
+            ver_info = commit_msg
+            if ver_info is None:
+                return tag_name, ret
 
-        if "vmn_info" not in tag_msg:
+        if "vmn_info" not in ver_info:
             LOGGER.debug(f"vmn_info key was not found in tag {tag_name}")
-            return None
+            return tag_name, ret
 
-        return tag_msg
+        ret["ver_info"] = ver_info
+
+        return tag_name, ret
+
+    def get_commit_object_from_commit_hex(self, hex):
+        return self._be.commit(hex)
 
     def get_commit_object_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except Exception as exc:
-            LOGGER.debug(f"Logged exception: ", exc_info=True)
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(_tag_name)
                 tag_name = _tag_name
             except Exception as exc:
-                LOGGER.debug(f"Logged exception: ", exc_info=True)
                 return tag_name, None
 
         return tag_name, commit_tag_obj
@@ -994,56 +1539,17 @@ class GitBackend(VMNBackend):
         git.Repo.clone_from(f"{remote}", f"{path}")
 
 
-class HostState(object):
-    @staticmethod
-    def get_repo_details(path):
-        try:
-            client = git.Repo(path, search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
-        except Exception as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
+def get_client(root_path, be_type, inherit_env=False):
+    if be_type == "local_file":
+        be = LocalFileBackend(root_path)
+        return be, None
 
-        try:
-            hash = client.head.commit.hexsha
-            remote = tuple(client.remotes[0].urls)[0]
-            if os.path.isdir(remote):
-                remote = os.path.relpath(remote, client.working_dir)
-        except Exception as exc:
-            LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
-            return None
-        finally:
-            client.close()
-
-        return hash, remote, "git"
-
-    @staticmethod
-    def get_actual_deps_state(vmn_root_path, paths):
-        actual_deps_state = {}
-        for path in paths:
-            full_path = os.path.join(vmn_root_path, path)
-            details = HostState.get_repo_details(full_path)
-            if details is None:
-                continue
-
-            actual_deps_state[path] = {
-                "hash": details[0],
-                "remote": details[1],
-                "vcs_type": details[2],
-            }
-
-        return actual_deps_state
-
-
-def get_client(path):
     try:
-        client = git.Repo(path, search_parent_directories=True)
+        client = git.Repo(root_path, search_parent_directories=True)
         client.close()
 
-        be = GitBackend(path)
+        be = GitBackend(root_path, inherit_env)
         return be, None
     except git.exc.InvalidGitRepositoryError:
-        err = f"repository path: {path} is not a functional git or repository.\n"
+        err = f"repository path: {root_path} is not a functional git or repository.\n"
         return None, err

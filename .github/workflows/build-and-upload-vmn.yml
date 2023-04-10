@@ -11,10 +11,10 @@ on:
         type: choice
         description: Version type
         options:
-        - patch
-        - minor
-        - major
-        - rc
+          - patch
+          - minor
+          - major
+          - rc
         required: true
 
 
@@ -22,39 +22,39 @@ jobs:
   build_pkg:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
+      - name: Install dependencies
+        run: |
           python3 -m pip install -U pip
           python3 -m pip install -r tests/test_requirements.txt
           python3 -m pip install -r tests/requirements.txt
           python3 -m pip list
           git config --global user.email "you@example.com"
           git config --global user.name "Your Name"
-    
-    
-    - name: run tests
-      run: |
-        make check
 
-    - name: run vmn stamp version
-      run: |
-        python3 -m pip install vmn
-        git status
-        make _${{ github.event.inputs.version_type }}
-        git status
-        cat .vmn/vmn.log
 
-    - name: build pkg
-      run: |
-        make _build
-        ls -ltrh ./dist/
-        
-    - name: Publish a Python distribution to PyPI
-      env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-      run: |
-        ls -ltrh ./dist/
-        make upload
+      - name: run tests
+        run: |
+          make check
+
+      - name: run vmn stamp version
+        run: |
+          python3 -m pip install vmn
+          git status
+          make _${{ github.event.inputs.version_type }}
+          git status
+          cat .vmn/vmn.log
+
+      - name: build pkg
+        run: |
+          make _build
+          ls -ltrh ./dist/
+
+      - name: Publish a Python distribution to PyPI
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          ls -ltrh ./dist/
+          make upload

@@ -2,24 +2,25 @@
 <h3 align="center">Automatic version management and state recovery solution for any application agnostic to language or architecture</h3>
 
 <p align="center">
-  
-  [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-  [![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn) 
-  <a href="#badge">
-    <img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/final-israel/vmn">
-  </a>
-  <a href="#badge">
-    <img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
-  </a>
-  <a href="#badge">
-    <img alt="vmn: supported platfroms" src="https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen">
-  </a>
-  
-  `vmn` is compliant with `Semver` (https://semver.org) semantics
-  
+
+[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
+<a href="#badge">
+<img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/final-israel/vmn">
+</a>
+<a href="#badge">
+<img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
+</a>
+<a href="#badge">
+<img alt="vmn: supported platfroms" src="https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen">
+</a>
+
+`vmn` is compliant with `Semver` (https://semver.org) semantics
+
 </p>
 
 ### Badge
+
 Let people know that your repository is managed by **vmn** by including this badge in your readme.
 
 [![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
@@ -35,12 +36,15 @@ Let people know that your repository is managed by **vmn** by including this bad
 </p>
 
 # What is `vmn`?
+
 `vmn` is a CLI tool and a Python library that is used for handling project versioning needs.
 
 Now go ahead and read `vmn`'s docs :)
 
 # Play around with `vmn`
+
 ## Create a playground
+
 ```sh
 # Install vmn
 pip install vmn
@@ -74,7 +78,9 @@ vmn stamp -r patch my_cool_app
 ```
 
 # Contribute
+
 ## Create a dev environment
+
 ```sh
 # After cloning vmn repo:
 cd ./vmn
@@ -87,18 +93,25 @@ pip install -e  ./
 ```
 
 # Key features
+
 - [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
-- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (see [`goto`](https://github.com/final-israel/vmn#goto) section)
-- [x] Stamping of micro-services-like project topologies (see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
-- [x] Stamping of a project depending on multiple git repositories (see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
-- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
+- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (
+  see [`goto`](https://github.com/final-israel/vmn#goto) section)
+- [x] Stamping of micro-services-like project topologies (
+  see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
+- [x] Stamping of a project depending on multiple git repositories (
+  see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
+- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (
+  see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
 - [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
 # Usage
+
 ## 1. Installation
+
 ```sh
 pip3 install vmn
 
@@ -107,17 +120,20 @@ pipx install vmn
 ```
 
 ## 2. `cd` into your git repository
+
 ```sh
 cd to/your/repository
 ```
 
 ## 3. `vmn init`
+
 ```sh
 ## Needed only once per repository.
 vmn init
 ```
 
 ## 4. `vmn stamp`
+
 ```sh
 ## Needed only once per app-name
 # will start from 0.0.0
@@ -132,7 +148,9 @@ vmn init-app -v 1.6.8 <app-name2>
 # will stamp 1.7.0
 vmn stamp -r minor <app-name2>
 ```
+
 ##### Note:
+
 `init-app` and `stamp` both support `--dry-run` flag
 
 ## You can also use vmn as a python lib by importing it
@@ -152,9 +170,11 @@ err_s = err.getvalue()
 explore `vmn_ctx` object to see what you can get from it. Vars starting with `_` are private and may change with time
 
 # Detailed Documentation
+
 ## `vmn stamp` for release candidates
 
-`vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only then release the final version.
+`vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only
+then release the final version.
 
 ```sh
 # will start from 1.6.8
@@ -175,7 +195,8 @@ vmn release -v 2.0.0-mybeta1 <app-name>
 
 ## `vmn stamp` for "root apps" or microservices
 
-`vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services that are logically located under the same solution. 
+`vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services
+that are logically located under the same solution.
 
 ##### For example:
 
@@ -242,20 +263,23 @@ vmn show --verbose <app-name>
 vmn show -v 1.0.1 <app-name>
 ```
 
-## `vmn goto` 
+## `vmn goto`
 
-Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to the **exact** state of you entire code for a specific version even when multiple git repositories are involved. 
+Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to
+the **exact** state of you entire code for a specific version even when multiple git repositories are involved.
 
 ```sh
 vmn goto -v 1.0.1 <app-name>
 ```
 
 ## `vmn gen`
+
 Generates version output file based on jinja2 template
 
 `vmn gen -t path/to/jinja_template.j2 -o path/to/output.txt app_name`
 
 #### Available jinja2 keywords
+
 ```json
 {
  "_version": "0.0.1",
@@ -283,6 +307,7 @@ Generates version output file based on jinja2 template
 ```
 
 #### `vmn gen` jinja template example
+
 ```
 "VERSION: {{version}} \n" \
 "NAME: {{name}} \n" \
@@ -297,6 +322,7 @@ Generates version output file based on jinja2 template
 ```
 
 #### `vmn gen` output example
+
 ```
 VERSION: 0.0.1
 NAME: test_app2/s1
@@ -310,15 +336,18 @@ RELEASE_MODE: patch
 ```
 
 ## Version auto-embedding
+
 `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
-| Backend | Description |
-| :-: | :-: |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) | Will embed version string to `package.json` file within the `vmn stamp` command |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) | Will embed version string to `Cargo.toml` file within the `vmn stamp` command |
+| Backend | Description | | :-: | :-: |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) |
+Will embed version string to `package.json` file within the `vmn stamp` command |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) |
+Will embed version string to `Cargo.toml` file within the `vmn stamp` command |
 
 ## Configuration
-`vmn` auto generates a `conf.yml` file that can be modified later by the user. 
+
+`vmn` auto generates a `conf.yml` file that can be modified later by the user.
 
 An example of a possible `conf.yml` file:
 
@@ -340,7 +369,6 @@ conf:
     npm:
       path: "relative_path/to/package.json"
 ```
-
 
 |         Field          | Description                                                  | Example                                                      |
 | :--------------------: | ------------------------------------------------------------ | ------------------------------------------------------------ |
