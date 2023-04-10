@@ -92,19 +92,43 @@ def custom_execute(self, *args, **kwargs):
                 traceback.print_stack(file=trace_str)
                 LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
 
-            LOGGER.debug(f"git exec:\n{' '.join(str(v) for v in args[0])}")
+            LOGGER.debug(f"git cmd:\n{' '.join(str(v) for v in args[0])}")
         except Exception as exc:
             pass
 
     original_execute = getattr(self.__class__, '_execute')
     start_time = time.perf_counter()
+    originally_extended_output = "with_extended_output" in kwargs
+    kwargs["with_extended_output"] = True
     ret = original_execute(self, *args, **kwargs)
+
+    ret_code = 0
+    sout = ''
+    serr = ''
+    if not originally_extended_output:
+        if type(ret) is tuple:
+            ret_code = ret[0]
+            sout = ret[1]
+            serr = ret[2]
+            ret = sout
+    elif type(ret) is not tuple:
+        sout = ret.stdout.read()
+        serr = ret.stdout.read()
+        ret_code = 0
+        if serr:
+            ret_code = 1
+
     end_time = time.perf_counter()
 
     time_took = end_time - start_time
 
     if LOGGER is not None:
-        LOGGER.debug(f"git exec took: {time_took:.6f} seconds. ret:\n{ret}\n")
+        LOGGER.debug(
+            f"git cmd took: {time_took:.6f} seconds.\n"
+            f"ret code: {ret_code}\n"
+            f"out: {sout}\n"
+            f"err: {serr}"
+        )
 
     return ret
 
