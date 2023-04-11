@@ -3011,3 +3011,6 @@ def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
+
+
+# TODO:: add test for app release. merge squash and show. expect the newly released version

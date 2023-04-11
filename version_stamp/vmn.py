@@ -301,14 +301,37 @@ class IVersionsStamper(object):
         self.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
             self.actual_deps_state
         )
+
+        self.ver_infos_from_repo = {}
+        self.selected_tag = None
         (
-            self.selected_tag,
-            self.ver_infos_from_repo,
-        ) = self.backend.get_first_reachable_version_info(
-            self.name,
-            self.root_context,
-            type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
-        )
+            initial_version,
+            prerelease,
+            prerelease_count,
+        ) = VersionControlStamper.get_version_number_from_file(self.version_file_path)
+        if initial_version is not None:
+            verstr = stamp_utils.VMNBackend.serialize_vmn_version(
+                initial_version,
+                prerelease,
+                prerelease_count,
+                self.hide_zero_hotfix
+            )
+            self.selected_tag, self.ver_infos_from_repo = self.get_version_info_from_verstr(verstr)
+            t = self.get_tag_name(initial_version)
+            if t != self.selected_tag and t in self.ver_infos_from_repo:
+                self.selected_tag = t
+
+        if not self.ver_infos_from_repo:
+            (
+                selected_tag,
+                self.ver_infos_from_repo,
+            ) = self.backend.get_first_reachable_version_info(
+                self.name,
+                self.root_context,
+                type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
+            )
+            if selected_tag is not None and selected_tag != self.selected_tag:
+                self.selected_tag = selected_tag
 
         self.tracked = (
             self.selected_tag in self.ver_infos_from_repo
@@ -715,6 +738,7 @@ class VersionControlStamper(IVersionsStamper):
         else:
             ver_infos = self.ver_infos_from_repo
 
+        # TODO:: just a sanity? May be removed?
         if (
             tag_formatted_app_name not in ver_infos
             or ver_infos[tag_formatted_app_name] is None
@@ -726,6 +750,7 @@ class VersionControlStamper(IVersionsStamper):
             # try to check if there is a release version on it
             for k, v in ver_infos.items():
                 if v is None:
+                    # TODO: WTF?
                     raise RuntimeError("Bug")
 
         tmp = ver_infos[tag_formatted_app_name]["ver_info"]
