@@ -49,6 +49,7 @@ LOGGER = None
 
 
 class VMNContainer(object):
+    @stamp_utils.measure_runtime_decorator
     def __init__(self, args, root_path):
         self.args = args
         root = False
@@ -77,6 +78,7 @@ class VMNContainer(object):
 
 
 class IVersionsStamper(object):
+    @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         self.app_conf_path = None
         self.params: dict = arg_params
@@ -146,6 +148,7 @@ class IVersionsStamper(object):
             # TODO:: test this
             raise RuntimeError("Failed to initialize_backend_attrs")
 
+    @stamp_utils.measure_runtime_decorator
     def update_attrs_from_app_conf_file(self):
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
@@ -177,6 +180,7 @@ class IVersionsStamper(object):
                 if "external_services" in data["conf"]:
                     self.external_services = data["conf"]["external_services"]
 
+    @stamp_utils.measure_runtime_decorator
     def initialize_paths(self):
         self.app_dir_path = os.path.join(
             self.vmn_root_path, ".vmn", self.name.replace("/", os.sep)
@@ -215,6 +219,7 @@ class IVersionsStamper(object):
                     self.root_app_dir_path, "root_conf.yml"
                 )
 
+    @stamp_utils.measure_runtime_decorator
     def initialize_configured_deps(self, self_base, self_dep):
         if self.raw_configured_deps:
             self.configured_deps = self.raw_configured_deps
@@ -237,6 +242,7 @@ class IVersionsStamper(object):
 
         self.configured_deps = flat_deps
 
+    @stamp_utils.measure_runtime_decorator
     def get_version_info_from_verstr(self, verstr):
         tag_name = self.get_tag_name(verstr)
         if self.root_context:
@@ -268,6 +274,7 @@ class IVersionsStamper(object):
 
         return tag_name, ver_infos
 
+    @stamp_utils.measure_runtime_decorator
     def get_tag_name(self, verstr):
         tag_name = f'{self.name.replace("/", "-")}'
         assert verstr is not None
@@ -275,6 +282,7 @@ class IVersionsStamper(object):
 
         return tag_name
 
+    @stamp_utils.measure_runtime_decorator
     def initialize_backend_attrs(self):
         self_base = os.path.basename(self.vmn_root_path)
         self_dep = {"remote": self.backend.remote(), "vcs_type": self.backend.type()}
@@ -377,6 +385,7 @@ class IVersionsStamper(object):
 
             self.bad_format_template = True
 
+    @stamp_utils.measure_runtime_decorator
     def __del__(self):
         if self.backend is not None:
             del self.backend
@@ -699,9 +708,11 @@ class IVersionsStamper(object):
 
 
 class VersionControlStamper(IVersionsStamper):
+    @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         IVersionsStamper.__init__(self, arg_params)
 
+    @stamp_utils.measure_runtime_decorator
     def find_matching_version(self, version, prerelease, prerelease_count):
         """
         Try to find any version of the application matching the
@@ -787,6 +798,7 @@ class VersionControlStamper(IVersionsStamper):
         return None
 
     @staticmethod
+    @stamp_utils.measure_runtime_decorator
     def get_version_number_from_file(version_file_path) -> str or None:
         if not os.path.exists(version_file_path):
             return (None, None, None)
@@ -814,6 +826,7 @@ class VersionControlStamper(IVersionsStamper):
                 ver_dict["prerelease_count"],
             )
 
+    @stamp_utils.measure_runtime_decorator
     def release_app_version(self, tag_name, ver_info):
         if ver_info is None:
             LOGGER.error(
@@ -850,6 +863,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return props["version"]
 
+    @stamp_utils.measure_runtime_decorator
     def add_metadata_to_version(self, tag_name, ver_info):
         # TODO:: merge logic with release_app_version and
         #  publish and handle reverting this way
@@ -918,6 +932,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return res_ver
 
+    @stamp_utils.measure_runtime_decorator
     def stamp_app_version(
         self, initial_version, initialprerelease, initialprerelease_count
     ):
@@ -978,6 +993,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return current_version, prerelease, prerelease_count
 
+    @stamp_utils.measure_runtime_decorator
     def update_stamping_info(
         self,
         info,
@@ -1015,6 +1031,7 @@ class VersionControlStamper(IVersionsStamper):
             "prerelease_count"
         ] = copy.deepcopy(prerelease_count)
 
+    @stamp_utils.measure_runtime_decorator
     def stamp_root_app_version(self, override_version=None):
         if self.root_app_name is None:
             return None
@@ -1076,6 +1093,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return version_files
 
+    @stamp_utils.measure_runtime_decorator
     def publish_stamp(
         self, app_version, prerelease, prerelease_count, root_app_version
     ):
@@ -1252,6 +1270,7 @@ class VersionControlStamper(IVersionsStamper):
 
         return 0
 
+    @stamp_utils.measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
         cur_branch = self.backend.active_branch
         path = os.path.join(
@@ -1291,6 +1310,7 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
+    @stamp_utils.measure_runtime_decorator
     def create_verinfo_root_file(
         self, root_app_msg, root_app_version, version_files_to_add
     ):
@@ -1310,6 +1330,7 @@ class VersionControlStamper(IVersionsStamper):
                 f.write(data)
             version_files_to_add.append(path)
 
+    @stamp_utils.measure_runtime_decorator
     def create_verinfo_file(self, app_msg, version_files_to_add, verstr):
         dir_path = os.path.join(self.app_dir_path, "verinfo")
 
@@ -1328,10 +1349,12 @@ class VersionControlStamper(IVersionsStamper):
 
             version_files_to_add.append(path)
 
+    @stamp_utils.measure_runtime_decorator
     def retrieve_remote_changes(self):
         self.backend.pull()
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_init(vmn_ctx):
     expected_status = {"repos_exist_locally"}
     optional_status = {"deps_synced_with_conf"}
@@ -1369,6 +1392,7 @@ def handle_init(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
@@ -1391,6 +1415,7 @@ def handle_init_app(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
@@ -1491,6 +1516,7 @@ def handle_stamp(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_release(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
@@ -1562,7 +1588,7 @@ def handle_release(vmn_ctx):
 
     return 0
 
-
+@stamp_utils.measure_runtime_decorator
 def handle_add(vmn_ctx):
     vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
     vmn_ctx.params["version_metadata_path"] = vmn_ctx.args.vmp
@@ -1622,6 +1648,7 @@ def handle_add(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_show(vmn_ctx):
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
 
@@ -1651,6 +1678,7 @@ def handle_show(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_gen(vmn_ctx):
     vmn_ctx.params["jinja_template"] = vmn_ctx.args.template
     vmn_ctx.params["verify_version"] = vmn_ctx.args.verify_version
@@ -1667,6 +1695,7 @@ def handle_gen(vmn_ctx):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def handle_goto(vmn_ctx):
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {
@@ -1691,6 +1720,7 @@ def handle_goto(vmn_ctx):
     )
 
 
+@stamp_utils.measure_runtime_decorator
 def _get_repo_status(vcs, expected_status, optional_status=set()):
     be = vcs.backend
     default_status = {
@@ -1919,6 +1949,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
     return status
 
 
+@stamp_utils.measure_runtime_decorator
 def _init_app(versions_be_ifc, starting_version):
     optional_status = {"modified", "detached"}
     expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
@@ -1983,6 +2014,7 @@ def _init_app(versions_be_ifc, starting_version):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def _stamp_version(
     versions_be_ifc,
     pull,
@@ -2084,6 +2116,7 @@ def _stamp_version(
     return versions_be_ifc.get_be_formatted_version(verstr)
 
 
+@stamp_utils.measure_runtime_decorator
 def show(vcs, params, verstr=None):
     dirty_states = None
     ver_infos = vcs.ver_infos_from_repo
@@ -2218,6 +2251,7 @@ def show(vcs, params, verstr=None):
     return out
 
 
+@stamp_utils.measure_runtime_decorator
 def gen(vcs, params, verstr=None):
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {
@@ -2351,6 +2385,7 @@ def get_dirty_states(optional_status, status):
     return dirty_states
 
 
+@stamp_utils.measure_runtime_decorator
 def goto_version(vcs, params, version, pull):
     unique_id = None
     check_unique = False
@@ -2466,6 +2501,7 @@ def goto_version(vcs, params, version, pull):
     return 0
 
 
+@stamp_utils.measure_runtime_decorator
 def _update_repo(args):
     global LOGGER
     root_path = stamp_utils.resolve_root_path()
@@ -2559,6 +2595,7 @@ def _update_repo(args):
     return {"repo": rel_path, "status": 0, "description": None}
 
 
+@stamp_utils.measure_runtime_decorator
 def _clone_repo(args):
     global LOGGER
     root_path = stamp_utils.resolve_root_path()
@@ -2590,6 +2627,7 @@ def _clone_repo(args):
     return {"repo": rel_path, "status": 0, "description": None}
 
 
+@stamp_utils.measure_runtime_decorator
 def _goto_version(deps, vmn_root_path, pull):
     args = []
     for rel_path, v in deps.items():
@@ -2679,6 +2717,7 @@ def _goto_version(deps, vmn_root_path, pull):
         raise RuntimeError()
 
 
+@stamp_utils.measure_runtime_decorator
 def main(command_line=None):
     # Please KEEP this function exactly like this
     # The purpose of this function is to keep the return
@@ -2687,6 +2726,7 @@ def main(command_line=None):
     return res
 
 
+@stamp_utils.measure_runtime_decorator
 def vmn_run(command_line=None):
     global LOGGER
     try:
@@ -2759,6 +2799,7 @@ def vmn_run(command_line=None):
     return err, vmnc
 
 
+@stamp_utils.measure_runtime_decorator
 def _vmn_run(args, root_path):
     err = 0
     vmnc = VMNContainer(args, root_path)

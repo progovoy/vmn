@@ -11,6 +11,7 @@ import time
 from logging.handlers import RotatingFileHandler
 import traceback
 import io
+from functools import wraps
 
 import git
 import yaml
@@ -137,6 +138,36 @@ def custom_execute(self, *args, **kwargs):
 git.cmd.Git._execute = git.cmd.Git.execute
 git.cmd.Git.execute = custom_execute
 
+# Maintain a stack to keep track of nested function calls
+call_stack = []
+
+
+def measure_runtime_decorator(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        global call_stack
+
+        start_time = time.perf_counter()
+        call_stack.append(func.__name__)
+
+        if LOGGER is not None:
+            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__}")
+
+        # Call the actual function
+        result = func(*args, **kwargs)
+
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+
+        if LOGGER is not None:
+            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__}: {elapsed_time:.6f} seconds")
+
+        call_stack.pop()
+
+        return result
+
+    return wrapper
+
 
 class WrongTagFormatException(Exception):
     pass
@@ -234,7 +265,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
 def init_log_file_handler(rotating_log_path):
     rotating_file_handler = RotatingFileHandler(
         rotating_log_path,
-        maxBytes=1024 * 1024 * 10,
+        maxBytes=1024 * 1024 * 50,
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
@@ -332,6 +363,7 @@ class VMNBackend(object):
         return "/".join(root_app_name[:-1])
 
     @staticmethod
+    @measure_runtime_decorator
     def serialize_vmn_tag_name(
             app_name,
             version,
@@ -499,6 +531,7 @@ class VMNBackend(object):
         return ret
 
     @staticmethod
+    @measure_runtime_decorator
     def enhance_ver_info(ver_infos):
         all_tags = {}
         for tag, ver_info_c in ver_infos.items():
@@ -521,6 +554,7 @@ class VMNBackend(object):
                 )
 
     @staticmethod
+    @measure_runtime_decorator
     def deserialize_vmn_tag_name(vmn_tag):
         try:
             return VMNBackend.deserialize_tag_name(vmn_tag)
@@ -628,6 +662,7 @@ class LocalFileBackend(VMNBackend):
 
 
 class GitBackend(VMNBackend):
+    @measure_runtime_decorator
     def __init__(self, repo_path, inherit_env=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
 
@@ -642,6 +677,7 @@ class GitBackend(VMNBackend):
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
         self.detached_head = self.in_detached_head()
 
+    @measure_runtime_decorator
     def perform_cached_fetch(self, force=False):
         vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
         if not os.path.exists(vmn_cache_path) or force:
@@ -661,10 +697,12 @@ class GitBackend(VMNBackend):
                 pathlib.Path(vmn_cache_path).touch()
                 self._be.git.execute(["git", "fetch", "--tags"])
 
+    @measure_runtime_decorator
     def __del__(self):
         self._be.close()
 
     @staticmethod
+    @measure_runtime_decorator
     def initialize_git_backend(repo_path, inherit_env):
         be = git.Repo(repo_path, search_parent_directories=True)
 
@@ -685,6 +723,7 @@ class GitBackend(VMNBackend):
         return be
 
     @staticmethod
+    @measure_runtime_decorator
     def get_repo_details(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
@@ -708,6 +747,7 @@ class GitBackend(VMNBackend):
 
         return hash, remote, "git"
 
+    @measure_runtime_decorator
     def is_path_tracked(self, path):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
@@ -716,6 +756,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
 
+    @measure_runtime_decorator
     def tag(self, tags, messages, ref="HEAD", push=False):
         if push and self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
@@ -734,6 +775,7 @@ class GitBackend(VMNBackend):
             except Exception:
                 self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
+    @measure_runtime_decorator
     def push(self, tags=()):
         if self.detached_head:
             raise RuntimeError("Will not push from detached head")
@@ -774,12 +816,14 @@ class GitBackend(VMNBackend):
             except Exception:
                 self.selected_remote.push(refspec=f"refs/tags/{tag}")
 
+    @measure_runtime_decorator
     def pull(self):
         if self.detached_head:
             raise RuntimeError("Will not pull in detached head")
 
         self.selected_remote.pull("--ff-only")
 
+    @measure_runtime_decorator
     def commit(self, message, user, include=None):
         if include is not None:
             for file in include:
@@ -788,9 +832,11 @@ class GitBackend(VMNBackend):
 
         self._be.index.commit(message=message, author=author)
 
+    @measure_runtime_decorator
     def root(self):
         return self._be.working_dir
 
+    @measure_runtime_decorator
     def status(self, tag):
         found_tag = self._be.tag(f"refs/tags/{tag}")
         try:
@@ -799,6 +845,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
+    @measure_runtime_decorator
     def get_latest_stamp_tags(
             self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
@@ -835,6 +882,7 @@ class GitBackend(VMNBackend):
 
         return tag_names, cobj, ver_infos
 
+    @measure_runtime_decorator
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
         bug_limit = 0
@@ -869,6 +917,7 @@ class GitBackend(VMNBackend):
 
         return tag_names, cobj, ver_infos
 
+    @measure_runtime_decorator
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
             self, app_name, cmd_suffix, msg_filter
     ):
@@ -939,6 +988,7 @@ class GitBackend(VMNBackend):
 
         return final_list_of_tag_names, found_tag.commit, ver_infos
 
+    @measure_runtime_decorator
     def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
@@ -968,6 +1018,7 @@ class GitBackend(VMNBackend):
 
         return cobj, ver_infos
 
+    @measure_runtime_decorator
     def get_latest_available_tag(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
         tag_names = self._be.git.tag(*cmd).split("\n")
@@ -977,6 +1028,7 @@ class GitBackend(VMNBackend):
 
         return tag_names[-1]
 
+    @measure_runtime_decorator
     def get_commit_object_from_branch_name(self, bname):
         # TODO:: Unfortunately, need to spend o(N) here
         for branch in self._be.branches:
@@ -990,6 +1042,7 @@ class GitBackend(VMNBackend):
             f"Somehow did not find a branch commit object for branch: {bname}"
         )
 
+    @measure_runtime_decorator
     def get_tag_object_from_tag_name(self, tname):
         try:
             o = self._be.tag(f"refs/tags/{tname}")
@@ -1019,6 +1072,7 @@ class GitBackend(VMNBackend):
 
         return tname, o
 
+    @measure_runtime_decorator
     def get_all_commit_tags_log_impl(self, hexsha, tags, app_name):
         cleaned_tags = []
         for t in tags:
@@ -1058,6 +1112,7 @@ class GitBackend(VMNBackend):
 
         return ver_infos
 
+    @measure_runtime_decorator
     def get_all_commit_tags(self, hexsha="HEAD"):
         if hexsha is None:
             hexsha = "HEAD"
@@ -1082,6 +1137,7 @@ class GitBackend(VMNBackend):
 
         return ver_infos
 
+    @measure_runtime_decorator
     def get_all_brother_tags(self, tag_name):
         try:
             sha = self.changeset(tag=tag_name)
@@ -1099,6 +1155,7 @@ class GitBackend(VMNBackend):
     def in_detached_head(self):
         return self._be.head.is_detached
 
+    @measure_runtime_decorator
     def add_git_user_cfg_if_missing(self):
         try:
             self._be.config_reader().get_value("user", "name")
@@ -1109,6 +1166,7 @@ class GitBackend(VMNBackend):
                 c=[f'user.name="{VMN_USER_NAME}"', f'user.email="{VMN_USER_NAME}"']
             )
 
+    @measure_runtime_decorator
     def check_for_pending_changes(self):
         if self._be.is_dirty():
             err = f"Pending changes in {self.root()}."
@@ -1116,6 +1174,7 @@ class GitBackend(VMNBackend):
 
         return None
 
+    @measure_runtime_decorator
     def check_for_outgoing_changes(self):
         if self.in_detached_head():
             err = f"Detached head in {self.root()}."
@@ -1157,6 +1216,7 @@ class GitBackend(VMNBackend):
 
         return None
 
+    @measure_runtime_decorator
     def checkout_branch(self, branch_name=None):
         try:
             if branch_name is None:
@@ -1171,6 +1231,7 @@ class GitBackend(VMNBackend):
 
         return self._be.active_branch.commit.hexsha
 
+    @measure_runtime_decorator
     def get_remote_tracking_branch(self, local_branch_name):
         command = [
             "git",
@@ -1199,6 +1260,7 @@ class GitBackend(VMNBackend):
         except Exception as exc:
             return None
 
+    @measure_runtime_decorator
     def prepare_for_remote_operation(self):
         if self.remote_active_branch is not None:
             return 0
@@ -1231,6 +1293,7 @@ class GitBackend(VMNBackend):
 
         return 0
 
+    @measure_runtime_decorator
     def get_active_branch(self):
         # TODO:: return the full ref name: refs/heads/..
         if not self.in_detached_head():
@@ -1240,6 +1303,7 @@ class GitBackend(VMNBackend):
 
         return active_branch
 
+    @measure_runtime_decorator
     def get_branch_from_changeset(self, hexsha):
         out = self._be.git.branch("--contains", hexsha)
         out = out.split("\n")[1:]
@@ -1290,6 +1354,7 @@ class GitBackend(VMNBackend):
         active_branch = active_branches[0]
         return active_branch
 
+    @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):
         if tag is not None:
             # TODO:: maybe it issafer to
@@ -1305,6 +1370,7 @@ class GitBackend(VMNBackend):
         self.detached_head = self.in_detached_head()
 
     @staticmethod
+    @measure_runtime_decorator
     def get_actual_deps_state(vmn_root_path, paths):
         actual_deps_state = {}
         for path in paths:
@@ -1321,6 +1387,7 @@ class GitBackend(VMNBackend):
 
         return actual_deps_state
 
+    @measure_runtime_decorator
     def last_user_changeset(self):
         p = self._be.head.commit
         if p.author.name == VMN_USER_NAME:
@@ -1347,6 +1414,7 @@ class GitBackend(VMNBackend):
 
         return p.hexsha
 
+    @measure_runtime_decorator
     def remote(self):
         remote = tuple(self.selected_remote.urls)[0]
 
@@ -1355,6 +1423,7 @@ class GitBackend(VMNBackend):
 
         return remote
 
+    @measure_runtime_decorator
     def changeset(self, tag=None, short=False):
         if tag is None:
             if short:
@@ -1373,6 +1442,7 @@ class GitBackend(VMNBackend):
             LOGGER.debug(f"Logged exception: ", exc_info=True)
             return None
 
+    @measure_runtime_decorator
     def revert_local_changes(self, files=[]):
         if files:
             try:
@@ -1386,6 +1456,7 @@ class GitBackend(VMNBackend):
             except Exception as exc:
                 LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
 
+    @measure_runtime_decorator
     def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
         self.revert_local_changes(version_files)
 
@@ -1414,6 +1485,7 @@ class GitBackend(VMNBackend):
             LOGGER.info("Failed to fetch tags")
             LOGGER.debug("Exception info: ", exc_info=True)
 
+    @measure_runtime_decorator
     def get_first_reachable_version_info(
             self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
@@ -1455,6 +1527,7 @@ class GitBackend(VMNBackend):
 
         return cleaned_app_tag, ver_infos
 
+    @measure_runtime_decorator
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
@@ -1476,6 +1549,7 @@ class GitBackend(VMNBackend):
 
         return tag_name, ver_infos
 
+    @measure_runtime_decorator
     def parse_tag_message(self, tag_name):
         tag_name, tag_obj = self.get_tag_object_from_tag_name(tag_name)
 
@@ -1517,9 +1591,11 @@ class GitBackend(VMNBackend):
 
         return tag_name, ret
 
+    @measure_runtime_decorator
     def get_commit_object_from_commit_hex(self, hex):
         return self._be.commit(hex)
 
+    @measure_runtime_decorator
     def get_commit_object_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
@@ -1539,6 +1615,7 @@ class GitBackend(VMNBackend):
         git.Repo.clone_from(f"{remote}", f"{path}")
 
 
+@measure_runtime_decorator
 def get_client(root_path, be_type, inherit_env=False):
     if be_type == "local_file":
         be = LocalFileBackend(root_path)
