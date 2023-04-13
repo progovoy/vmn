@@ -139,9 +139,11 @@ class FSAppLayoutFixture(object):
         base_cmd.extend(args)
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
-        ret = subprocess.check_output(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
+        ret = subprocess.check_output(
+            base_cmd, cwd=self._repos[repo_name]["_be"].root_path
+        )
 
-        return ret.decode('utf-8')
+        return ret.decode("utf-8")
 
     def rebase(self, target, who_to_put_on_target, no_ff=False):
         import subprocess
@@ -413,7 +415,7 @@ class GitBackend(VersionControlBackend):
             )
         except Exception as exc:
 
-            if hasattr(exc, 'stderr') and "exist" not in exc.stderr:
+            if hasattr(exc, "stderr") and "exist" not in exc.stderr:
                 raise exc
 
             self._git_backend = git.Repo(self.root_path)
@@ -470,6 +472,7 @@ def pytest_generate_tests(metafunc):
 @pytest.fixture(scope="function")
 def app_layout(request, tmpdir):
     from pathlib import Path
+
     tmpdir = Path(tmpdir)
     if "VMN_TESTS_CUSTOM_DIR" in os.environ:
         tmpdir = Path(os.environ["VMN_TESTS_CUSTOM_DIR"])
@@ -482,4 +485,3 @@ def app_layout(request, tmpdir):
 
     if "VMN_TESTS_CUSTOM_DIR" not in os.environ:
         shutil.rmtree(str(tmpdir.absolute()))
-

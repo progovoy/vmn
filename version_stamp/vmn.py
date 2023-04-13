@@ -33,7 +33,12 @@ LOCK_FILENAME = "vmn.lock"
 LOG_FILENAME = "vmn.log"
 CACHE_FILENAME = "vmn.cache"
 
-IGNORED_FILES = [LOCK_FILENAME, LOG_FILENAME, CACHE_FILENAME, stamp_utils.GLOBAL_LOG_FILENAME]
+IGNORED_FILES = [
+    LOCK_FILENAME,
+    LOG_FILENAME,
+    CACHE_FILENAME,
+    stamp_utils.GLOBAL_LOG_FILENAME,
+]
 VMN_ARGS = {
     "init": "remote",
     "init-app": "remote",
@@ -319,12 +324,12 @@ class IVersionsStamper(object):
         ) = VersionControlStamper.get_version_number_from_file(self.version_file_path)
         if initial_version is not None:
             verstr = stamp_utils.VMNBackend.serialize_vmn_version(
-                initial_version,
-                prerelease,
-                prerelease_count,
-                self.hide_zero_hotfix
+                initial_version, prerelease, prerelease_count, self.hide_zero_hotfix
             )
-            self.selected_tag, self.ver_infos_from_repo = self.get_version_info_from_verstr(verstr)
+            (
+                self.selected_tag,
+                self.ver_infos_from_repo,
+            ) = self.get_version_info_from_verstr(verstr)
             t = self.get_tag_name(initial_version)
             if t != self.selected_tag and t in self.ver_infos_from_repo:
                 self.selected_tag = t
@@ -744,7 +749,9 @@ class VersionControlStamper(IVersionsStamper):
                 tag_formatted_app_name
             )
             if not ver_infos:
-                LOGGER.error(f"Failed to get version info for tag: {tag_formatted_app_name}")
+                LOGGER.error(
+                    f"Failed to get version info for tag: {tag_formatted_app_name}"
+                )
                 return None
         else:
             ver_infos = self.ver_infos_from_repo
@@ -1588,6 +1595,7 @@ def handle_release(vmn_ctx):
 
     return 0
 
+
 @stamp_utils.measure_runtime_decorator
 def handle_add(vmn_ctx):
     vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
@@ -2173,7 +2181,7 @@ def show(vcs, params, verstr=None):
             "deps": copy.deepcopy(vcs.configured_deps),
             "template": vcs.template,
             "hide_zero_hotfix": vcs.hide_zero_hotfix,
-            "version_backends": copy.deepcopy(vcs.version_backends)
+            "version_backends": copy.deepcopy(vcs.version_backends),
         }
 
     if vcs.root_context:
@@ -2440,9 +2448,7 @@ def goto_version(vcs, params, version, pull):
             try:
                 vcs.retrieve_remote_changes()
             except Exception as exc:
-                LOGGER.error(
-                    "Failed to pull, run with --debug for more details"
-                )
+                LOGGER.error("Failed to pull, run with --debug for more details")
                 LOGGER.debug("Logged Exception message:", exc_info=True)
 
                 return 1
@@ -2588,7 +2594,9 @@ def _update_repo(args):
         try:
             client.checkout(rev=cur_changeset)
         except Exception as exc:
-            LOGGER.exception("Unexpected behaviour when tried to revert:", exc_info=True)
+            LOGGER.exception(
+                "Unexpected behaviour when tried to revert:", exc_info=True
+            )
 
         return {"repo": rel_path, "status": 1, "description": None}
 
@@ -2823,7 +2831,7 @@ def _vmn_run(args, root_path):
                 configured_repos = set(vmnc.vcs.configured_deps.keys())
                 local_repos = set(vmnc.vcs.actual_deps_state.keys())
                 common_deps = configured_repos & local_repos
-                common_deps.remove('.')
+                common_deps.remove(".")
 
                 for repo in common_deps:
                     full_path = os.path.join(vmnc.vcs.vmn_root_path, repo)

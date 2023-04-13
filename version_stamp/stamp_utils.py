@@ -96,22 +96,26 @@ def custom_execute(self, *args, **kwargs):
             if DEBUG_TRACE_ENV_VAR in os.environ:
                 trace_str = io.StringIO()
                 traceback.print_stack(file=trace_str)
-                LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}Stacktrace:\n"
-                             f"{'  ' * (len(call_stack) - 1)}{trace_str.getvalue()}")
+                LOGGER.debug(
+                    f"{'  ' * (len(call_stack) - 1)}Stacktrace:\n"
+                    f"{'  ' * (len(call_stack) - 1)}{trace_str.getvalue()}"
+                )
 
-            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}")
+            LOGGER.debug(
+                f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}"
+            )
         except Exception as exc:
             pass
 
-    original_execute = getattr(self.__class__, '_execute')
+    original_execute = getattr(self.__class__, "_execute")
     start_time = time.perf_counter()
     originally_extended_output = "with_extended_output" in kwargs
     kwargs["with_extended_output"] = True
     ret = original_execute(self, *args, **kwargs)
 
     ret_code = 0
-    sout = ''
-    serr = ''
+    sout = ""
+    serr = ""
     if not originally_extended_output:
         if type(ret) is tuple:
             ret_code = ret[0]
@@ -157,7 +161,9 @@ def measure_runtime_decorator(func):
         fcode = func.__code__
 
         if LOGGER is not None:
-            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__} at {fcode.co_filename}:{fcode.co_firstlineno}")
+            LOGGER.debug(
+                f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__} at {fcode.co_filename}:{fcode.co_firstlineno}"
+            )
 
         # Call the actual function
         result = func(*args, **kwargs)
@@ -166,7 +172,9 @@ def measure_runtime_decorator(func):
         elapsed_time = end_time - start_time
 
         if LOGGER is not None:
-            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} took {elapsed_time:.6f} seconds at {fcode.co_filename}:{fcode.co_firstlineno}")
+            LOGGER.debug(
+                f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} took {elapsed_time:.6f} seconds at {fcode.co_filename}:{fcode.co_firstlineno}"
+            )
 
         call_stack.pop()
 
@@ -234,7 +242,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     clear_logger_handlers(GLOBAL_LOGGER)
 
     GLOBAL_LOGGER.setLevel(logging.DEBUG)
-    logging.getLogger('git').setLevel(logging.WARNING)
+    logging.getLogger("git").setLevel(logging.WARNING)
 
     fmt = "[%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
@@ -261,8 +269,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
     LOGGER.addHandler(rotating_file_handler)
 
     global_log_path = os.path.join(
-        os.path.dirname(rotating_log_path),
-        GLOBAL_LOG_FILENAME
+        os.path.dirname(rotating_log_path), GLOBAL_LOG_FILENAME
     )
     global_file_handler = init_log_file_handler(global_log_path)
     GLOBAL_LOGGER.addHandler(global_file_handler)
@@ -307,7 +314,7 @@ class VMNBackend(object):
         return 0
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         return {}
 
@@ -351,8 +358,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                    f"{octat}_template" in template
-                    and template[f"{octat}_template"] is not None
+                f"{octat}_template" in template
+                and template[f"{octat}_template"] is not None
             ):
                 d = {octat: gdict[octat]}
                 formatted_version = (
@@ -373,12 +380,12 @@ class VMNBackend(object):
     @staticmethod
     @measure_runtime_decorator
     def serialize_vmn_tag_name(
-            app_name,
-            version,
-            hide_zero_hotfix,
-            prerelease=None,
-            prerelease_count=None,
-            buildmetadata=None,
+        app_name,
+        version,
+        hide_zero_hotfix,
+        prerelease=None,
+        prerelease_count=None,
+        buildmetadata=None,
     ):
         app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
@@ -403,11 +410,11 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version(
-            current_version,
-            prerelease,
-            prerelease_count,
-            hide_zero_hostfix,
-            buildmetadata=None,
+        current_version,
+        prerelease,
+        prerelease_count,
+        hide_zero_hostfix,
+        buildmetadata=None,
     ):
         vmn_version = VMNBackend.get_base_vmn_version(
             current_version, hide_zero_hostfix
@@ -456,7 +463,7 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version_hotfix(
-            hide_zero_hotfix, major, minor, patch, hotfix=None
+        hide_zero_hotfix, major, minor, patch, hotfix=None
     ):
         if hide_zero_hotfix and hotfix == "0":
             hotfix = None
@@ -604,7 +611,7 @@ class LocalFileBackend(VMNBackend):
         return
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         ver_infos = {
             "none": {
@@ -855,7 +862,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -927,7 +934,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
-            self, app_name, cmd_suffix, msg_filter
+        self, app_name, cmd_suffix, msg_filter
     ):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
@@ -963,8 +970,8 @@ class GitBackend(VMNBackend):
             tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                        self._be.head.commit.hexsha != o.commit.hexsha
-                        and head_date < o.object.tagged_date
+                    self._be.head.commit.hexsha != o.commit.hexsha
+                    and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -1190,7 +1197,7 @@ class GitBackend(VMNBackend):
 
         if self.remote_active_branch is None:
             err = (
-         f"No upstream branch found in {self.root()}. "
+                f"No upstream branch found in {self.root()}. "
                 f"for local branch {self.active_branch}. "
                 f"Probably no upstream branch is set"
             )
@@ -1287,8 +1294,14 @@ class GitBackend(VMNBackend):
 
         try:
             self._be.git.execute(
-                ["git", "remote", "set-branches", "--add",
-                 self.selected_remote.name, local_branch_name]
+                [
+                    "git",
+                    "remote",
+                    "set-branches",
+                    "--add",
+                    self.selected_remote.name,
+                    local_branch_name,
+                ]
             )
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
         except Exception as exc:
@@ -1495,7 +1508,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_first_reachable_version_info(
-            self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
             app_name, root_context, type
