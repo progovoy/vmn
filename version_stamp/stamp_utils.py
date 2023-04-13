@@ -12,6 +12,8 @@ from logging.handlers import RotatingFileHandler
 import traceback
 import io
 from functools import wraps
+import inspect
+
 
 import git
 import yaml
@@ -82,18 +84,22 @@ VMN_BE_TYPE_LOCAL_FILE = "local_file"
 GLOBAL_LOG_FILENAME = "global_vmn.log"
 
 LOGGER = None
+GLOBAL_LOGGER = None
 
 
 # Create a custom execute function
 def custom_execute(self, *args, **kwargs):
+    global LOGGER
+
     if LOGGER is not None:
         try:
             if DEBUG_TRACE_ENV_VAR in os.environ:
                 trace_str = io.StringIO()
                 traceback.print_stack(file=trace_str)
-                LOGGER.debug(f"Stacktrace:\n{trace_str.getvalue()}")
+                LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}Stacktrace:\n"
+                             f"{'  ' * (len(call_stack) - 1)}{trace_str.getvalue()}")
 
-            LOGGER.debug(f"git cmd:\n{' '.join(str(v) for v in args[0])}")
+            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}")
         except Exception as exc:
             pass
 
@@ -125,10 +131,9 @@ def custom_execute(self, *args, **kwargs):
 
     if LOGGER is not None:
         LOGGER.debug(
-            f"git cmd took: {time_took:.6f} seconds.\n"
-            f"ret code: {ret_code}\n"
-            f"out: {sout}\n"
-            f"err: {serr}"
+            f"{'  ' * (len(call_stack) - 1)}return code: {ret_code}, git cmd took: {time_took:.6f} seconds.\n"
+            f"{'  ' * (len(call_stack) - 1)}stdout: {sout}\n"
+            f"{'  ' * (len(call_stack) - 1)}stderr: {serr}"
         )
 
     return ret
@@ -149,9 +154,10 @@ def measure_runtime_decorator(func):
 
         start_time = time.perf_counter()
         call_stack.append(func.__name__)
+        fcode = func.__code__
 
         if LOGGER is not None:
-            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__}")
+            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__} at {fcode.co_filename}:{fcode.co_firstlineno}")
 
         # Call the actual function
         result = func(*args, **kwargs)
@@ -160,7 +166,7 @@ def measure_runtime_decorator(func):
         elapsed_time = end_time - start_time
 
         if LOGGER is not None:
-            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__}: {elapsed_time:.6f} seconds")
+            LOGGER.debug(f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} took {elapsed_time:.6f} seconds at {fcode.co_filename}:{fcode.co_firstlineno}")
 
         call_stack.pop()
 
@@ -220,13 +226,15 @@ class LevelFilter(logging.Filter):
 
 def init_stamp_logger(rotating_log_path=None, debug=False):
     global LOGGER
+    global GLOBAL_LOGGER
 
     LOGGER = logging.getLogger(VMN_USER_NAME)
     clear_logger_handlers(LOGGER)
-    global_logger = logging.getLogger()
-    clear_logger_handlers(global_logger)
+    GLOBAL_LOGGER = logging.getLogger()
+    clear_logger_handlers(GLOBAL_LOGGER)
 
-    global_logger.setLevel(logging.DEBUG)
+    GLOBAL_LOGGER.setLevel(logging.DEBUG)
+    logging.getLogger('git').setLevel(logging.WARNING)
 
     fmt = "[%(levelname)s] %(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
@@ -257,7 +265,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
         GLOBAL_LOG_FILENAME
     )
     global_file_handler = init_log_file_handler(global_log_path)
-    global_logger.addHandler(global_file_handler)
+    GLOBAL_LOGGER.addHandler(global_file_handler)
 
     return LOGGER
 
@@ -269,7 +277,7 @@ def init_log_file_handler(rotating_log_path):
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
-    fmt = f"%(pathname)s:%(lineno)d => %(asctime)s - [%(levelname)s] %(message)s"
+    fmt = f"[%(levelname)s] %(asctime)s %(pathname)s:%(lineno)d =>\n%(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     return rotating_file_handler
