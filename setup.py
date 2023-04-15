@@ -20,5 +20,6 @@ setuptools.setup(
     package_dir={"version_stamp": "version_stamp"},
     packages=["version_stamp"],
     entry_points={"console_scripts": ["vmn = version_stamp.vmn:main"]},
+    license="GPL-3.0-only",
     include_package_data=True,
 )
