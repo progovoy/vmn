@@ -16,11 +16,14 @@ import stamp_utils
 
 
 def _run_vmn_init():
-    return vmn.vmn_run(["init"])[0]
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["init"])[0]
+    return ret
 
 
 def _init_app(app_name, starting_version="0.0.0"):
     cmd = ["init-app", "-v", starting_version, app_name]
+    stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
@@ -45,7 +48,9 @@ def _release_app(app_name, version=None):
     if version:
         cmd.extend(["-v", version])
 
+    stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(cmd)
+
     vmn_ctx.vcs.initialize_backend_attrs()
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
@@ -74,6 +79,7 @@ def _stamp_app(app_name, release_mode=None, prerelease=None):
 
     args_list.append(app_name)
 
+    stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
@@ -124,7 +130,10 @@ def _show(
 
     args_list.append(app_name)
 
-    return vmn.vmn_run(args_list)[0]
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(args_list)[0]
+
+    return ret
 
 
 def _gen(
@@ -146,7 +155,10 @@ def _gen(
 
     args_list.append(app_name)
 
-    return vmn.vmn_run(args_list)[0]
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(args_list)[0]
+
+    return ret
 
 
 def _goto(app_name, version=None, root=False):
@@ -158,7 +170,10 @@ def _goto(app_name, version=None, root=False):
 
     args_list.append(app_name)
 
-    return vmn.vmn_run(args_list)[0]
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(args_list)[0]
+
+    return ret
 
 
 def _add_buildmetadata_to_version(
@@ -185,7 +200,10 @@ def _add_buildmetadata_to_version(
 
     args_list.append(app_name)
 
-    return vmn.vmn_run(args_list)[0]
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(args_list)[0]
+
+    return ret
 
 
 def _configure_2_deps(
@@ -643,7 +661,7 @@ def test_basic_show(app_layout, capfd):
     )
     assert err == 0
 
-    capfd.readouterr()
+    captured = capfd.readouterr()
 
     err = _show(app_layout.app_name, raw=True)
     assert err == 0
@@ -2318,7 +2336,7 @@ def test_perf_show(app_layout):
 def test_run_vmn_from_non_git_repo(app_layout, capfd):
     _run_vmn_init()
     app_layout.set_working_dir(app_layout.base_dir)
-    vmn.LOGGER = None
+    stamp_utils.VMN_LOGGER = None
     capfd.readouterr()
     ret = vmn.vmn_run([])[0]
     captured = capfd.readouterr()

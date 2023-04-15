@@ -47,10 +47,6 @@ class FSAppLayoutFixture(object):
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
-        vmn.LOGGER = stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, vmn.LOG_FILENAME), True
-        )
-
         self._repos = {
             f"{TEST_REPO_NAME}_0": {
                 "path": self.repo_path,
