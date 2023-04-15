@@ -2052,7 +2052,7 @@ def _stamp_version(
     override_main_current_version = versions_be_ifc.override_root_version
 
     if check_vmn_version:
-        newer_stamping = version_mod.version != "dev" and (
+        newer_stamping = version_mod.version != "0.0.0" and (
             pversion.parse(
                 versions_be_ifc.current_version_info["vmn_info"]["vmn_version"]
             )
@@ -2824,8 +2824,8 @@ def vmn_run(command_line=None):
             f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}"
         )
 
+        # Call the actual function
         err, vmnc = _vmn_run(args, root_path)
-
         # We only need it here. In other, Exception cases -
         # the unlock will happen naturally because the process will exit
         lock.release()
@@ -2846,46 +2846,46 @@ def vmn_run(command_line=None):
 
 @stamp_utils.measure_runtime_decorator
 def _vmn_run(args, root_path):
-    err = 0
     vmnc = VMNContainer(args, root_path)
-    if vmnc.args.command in VMN_ARGS:
-        if VMN_ARGS[vmnc.args.command] == "remote" or (
-            "pull" in vmnc.args and vmnc.args.pull
-        ):
-            err = vmnc.vcs.backend.prepare_for_remote_operation()
-            if err:
-                stamp_utils.VMN_LOGGER.error(
-                    "Failed to run prepare for remote operation.\n"
-                    "Check the log. Aborting remote operation."
-                )
-                return err, vmnc
-
-            if vmnc.vcs.name is not None:
-                # If there is no remote branch set, it is impossible
-                # to understand if there are outgoing changes. Thus this is required for
-                # remote operations.
-                # TODO:: verify that this assumaption is correct
-                configured_repos = set(vmnc.vcs.configured_deps.keys())
-                local_repos = set(vmnc.vcs.actual_deps_state.keys())
-                common_deps = configured_repos & local_repos
-                common_deps.remove(".")
-
-                for repo in common_deps:
-                    full_path = os.path.join(vmnc.vcs.vmn_root_path, repo)
-
-                    dep_be, err = stamp_utils.get_client(full_path, vmnc.vcs.be_type)
-                    if err:
-                        err_str = "Failed to create backend {0}. Exiting".format(err)
-                        stamp_utils.VMN_LOGGER.error(err)
-                        raise RuntimeError(err)
-
-                    dep_be.prepare_for_remote_operation()
-                    del dep_be
-
-        cmd = vmnc.args.command.replace("-", "_")
-        err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
-    else:
+    if vmnc.args.command not in VMN_ARGS:
         stamp_utils.VMN_LOGGER.info("Run vmn -h for help")
+        return 1, vmnc
+
+    if VMN_ARGS[vmnc.args.command] == "remote" or (
+            "pull" in vmnc.args and vmnc.args.pull
+    ):
+        err = vmnc.vcs.backend.prepare_for_remote_operation()
+        if err:
+            stamp_utils.VMN_LOGGER.error(
+                "Failed to run prepare for remote operation.\n"
+                "Check the log. Aborting remote operation."
+            )
+            return err, vmnc
+
+        if vmnc.vcs.name is not None:
+            # If there is no remote branch set, it is impossible
+            # to understand if there are outgoing changes. Thus this is required for
+            # remote operations.
+            # TODO:: verify that this assumaption is correct
+            configured_repos = set(vmnc.vcs.configured_deps.keys())
+            local_repos = set(vmnc.vcs.actual_deps_state.keys())
+            common_deps = configured_repos & local_repos
+            common_deps.remove(".")
+
+            for repo in common_deps:
+                full_path = os.path.join(vmnc.vcs.vmn_root_path, repo)
+
+                dep_be, err = stamp_utils.get_client(full_path, vmnc.vcs.be_type)
+                if err:
+                    err_str = "Failed to create backend {0}. Exiting".format(err)
+                    stamp_utils.VMN_LOGGER.error(err)
+                    raise RuntimeError(err)
+
+                dep_be.prepare_for_remote_operation()
+                del dep_be
+
+    cmd = vmnc.args.command.replace("-", "_")
+    err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
 
     return err, vmnc
 
