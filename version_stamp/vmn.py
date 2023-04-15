@@ -252,7 +252,9 @@ class IVersionsStamper(object):
             try:
                 int(verstr)
             except Exception:
-                stamp_utils.VMN_LOGGER.error("wrong version specified: root version must be an integer")
+                stamp_utils.VMN_LOGGER.error(
+                    "wrong version specified: root version must be an integer"
+                )
 
                 return tag_name, {}
         else:
@@ -266,7 +268,9 @@ class IVersionsStamper(object):
 
         tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
         if not ver_infos:
-            stamp_utils.VMN_LOGGER.error(f"Failed to get version info for tag: {tag_name}")
+            stamp_utils.VMN_LOGGER.error(
+                f"Failed to get version info for tag: {tag_name}"
+            )
 
             return tag_name, {}
 
@@ -920,7 +924,9 @@ class VersionControlStamper(IVersionsStamper):
         ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
         if buildmetadata_tag_name in tag_ver_infos:
             if tag_ver_infos[buildmetadata_tag_name]["ver_info"] != ver_info:
-                stamp_utils.VMN_LOGGER.error(f"Tried to add different metadata for the same version.")
+                stamp_utils.VMN_LOGGER.error(
+                    f"Tried to add different metadata for the same version."
+                )
                 raise RuntimeError()
 
             return res_ver
@@ -1047,7 +1053,9 @@ class VersionControlStamper(IVersionsStamper):
         )
 
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            stamp_utils.VMN_LOGGER.error(f"Version information for {self.root_app_name} was not found")
+            stamp_utils.VMN_LOGGER.error(
+                f"Version information for {self.root_app_name} was not found"
+            )
             raise RuntimeError()
 
         # TODO: think about this case
@@ -1238,7 +1246,9 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             if self.dry_run:
-                stamp_utils.VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
+                stamp_utils.VMN_LOGGER.info(
+                    "Would have pushed with tags.\n" f"tags: {all_tags} "
+                )
             else:
                 self.backend.push(all_tags)
 
@@ -1391,7 +1401,9 @@ def handle_init(vmn_ctx):
     )
     be.push()
 
-    stamp_utils.VMN_LOGGER.info(f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}")
+    stamp_utils.VMN_LOGGER.info(
+        f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}"
+    )
 
     return 0
 
@@ -1482,7 +1494,9 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.vcs.backend.perform_cached_fetch(force=True)
             vmn_ctx.vcs.retrieve_remote_changes()
         except Exception as exc:
-            stamp_utils.VMN_LOGGER.error("Failed to pull, run with --debug for more details")
+            stamp_utils.VMN_LOGGER.error(
+                "Failed to pull, run with --debug for more details"
+            )
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
             return 1
@@ -1644,7 +1658,9 @@ def handle_add(vmn_ctx):
             ver_info = None
         else:
             ver_info = ver_infos[tag_name]["ver_info"]
-        stamp_utils.VMN_LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
+        stamp_utils.VMN_LOGGER.info(
+            vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info)
+        )
     except Exception as exc:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -2044,7 +2060,9 @@ def _stamp_version(
         )
 
         if newer_stamping:
-            stamp_utils.VMN_LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
+            stamp_utils.VMN_LOGGER.error(
+                "Refusing to stamp with old vmn. Please upgrade"
+            )
             raise RuntimeError()
 
     if versions_be_ifc.bad_format_template:
@@ -2166,7 +2184,9 @@ def show(vcs, params, verstr=None):
         ver_info = ver_infos[tag_name]["ver_info"]
 
     if ver_info is None:
-        stamp_utils.VMN_LOGGER.info("Version information was not found " "for {0}.".format(vcs.name))
+        stamp_utils.VMN_LOGGER.info(
+            "Version information was not found " "for {0}.".format(vcs.name)
+        )
 
         raise RuntimeError()
 
@@ -2184,7 +2204,9 @@ def show(vcs, params, verstr=None):
     if vcs.root_context:
         data.update(ver_info["stamping"]["root_app"])
         if not data:
-            stamp_utils.VMN_LOGGER.info("App {0} does not have a root app ".format(vcs.name))
+            stamp_utils.VMN_LOGGER.info(
+                "App {0} does not have a root app ".format(vcs.name)
+            )
 
             raise RuntimeError()
 
@@ -2282,7 +2304,9 @@ def gen(vcs, params, verstr=None):
         tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-        stamp_utils.VMN_LOGGER.error("Version information was not found " "for {0}.".format(vcs.name))
+        stamp_utils.VMN_LOGGER.error(
+            "Version information was not found " "for {0}.".format(vcs.name)
+        )
 
         raise RuntimeError()
 
@@ -2316,7 +2340,9 @@ def gen(vcs, params, verstr=None):
 
         for k, v in vcs.configured_deps.items():
             if k not in vcs.actual_deps_state:
-                stamp_utils.VMN_LOGGER.error(f"{k} doesn't exist locally. Use vmn goto and rerun")
+                stamp_utils.VMN_LOGGER.error(
+                    f"{k} doesn't exist locally. Use vmn goto and rerun"
+                )
                 raise RuntimeError()
 
             data["changesets"][k] = copy.deepcopy(vcs.actual_deps_state[k])
@@ -2405,8 +2431,12 @@ def goto_version(vcs, params, version, pull):
                 try:
                     vcs.retrieve_remote_changes()
                 except Exception as exc:
-                    stamp_utils.VMN_LOGGER.error("Failed to pull, run with --debug for more details")
-                    stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+                    stamp_utils.VMN_LOGGER.error(
+                        "Failed to pull, run with --debug for more details"
+                    )
+                    stamp_utils.VMN_LOGGER.debug(
+                        "Logged Exception message:", exc_info=True
+                    )
 
                     return 1
 
@@ -2445,7 +2475,9 @@ def goto_version(vcs, params, version, pull):
             try:
                 vcs.retrieve_remote_changes()
             except Exception as exc:
-                stamp_utils.VMN_LOGGER.error("Failed to pull, run with --debug for more details")
+                stamp_utils.VMN_LOGGER.error(
+                    "Failed to pull, run with --debug for more details"
+                )
                 stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
                 return 1
@@ -2547,7 +2579,9 @@ def _update_repo(args):
         if not client.in_detached_head():
             err = client.check_for_outgoing_changes()
             if err:
-                stamp_utils.VMN_LOGGER.info("{0}. Aborting update operation".format(err))
+                stamp_utils.VMN_LOGGER.info(
+                    "{0}. Aborting update operation".format(err)
+                )
                 return {"repo": rel_path, "status": 1, "description": err}
 
         stamp_utils.VMN_LOGGER.info("Updating {0}".format(rel_path))
@@ -2563,7 +2597,9 @@ def _update_repo(args):
         if changeset is None:
             if tag is not None:
                 client.checkout(tag=tag)
-                stamp_utils.VMN_LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
+                stamp_utils.VMN_LOGGER.info(
+                    "Updated {0} to tag {1}".format(rel_path, tag)
+                )
             else:
                 rev = client.checkout_branch(branch_name=branch_name)
                 if rev is None:
@@ -2574,11 +2610,15 @@ def _update_repo(args):
                         "Updated {0} to branch {1}".format(rel_path, branch_name)
                     )
                 else:
-                    stamp_utils.VMN_LOGGER.info("Updated {0} to changeset {1}".format(rel_path, rev))
+                    stamp_utils.VMN_LOGGER.info(
+                        "Updated {0} to changeset {1}".format(rel_path, rev)
+                    )
         else:
             client.checkout(rev=changeset)
 
-            stamp_utils.VMN_LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
+            stamp_utils.VMN_LOGGER.info(
+                "Updated {0} to {1}".format(rel_path, changeset)
+            )
     except Exception as exc:
         stamp_utils.VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
@@ -2767,9 +2807,7 @@ def vmn_run(command_line=None):
         # start of non-parallel code section
         lock.acquire()
 
-        stamp_utils.init_stamp_logger(
-            os.path.join(vmn_path, LOG_FILENAME), args.debug
-        )
+        stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME), args.debug)
         command_line = copy.deepcopy(command_line)
 
         if command_line is None or not command_line:
@@ -2782,7 +2820,9 @@ def vmn_run(command_line=None):
 
         bold_char = "\033[1m"
         end_char = "\033[0m"
-        stamp_utils.VMN_LOGGER.debug(f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}")
+        stamp_utils.VMN_LOGGER.debug(
+            f"\n{bold_char}Command line: {' '.join(command_line)}{end_char}"
+        )
 
         err, vmnc = _vmn_run(args, root_path)
 
@@ -2791,7 +2831,9 @@ def vmn_run(command_line=None):
         lock.release()
 
     except Exception as exc:
-        stamp_utils.VMN_LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
+        stamp_utils.VMN_LOGGER.error(
+            "vmn_run raised exception. Run vmn --debug for details"
+        )
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
         err = 1

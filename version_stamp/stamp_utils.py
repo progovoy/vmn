@@ -1449,11 +1449,15 @@ class GitBackend(VMNBackend):
                     for f in files:
                         self._be.git.reset(f)
                 except Exception as exc:
-                    VMN_LOGGER.debug(f"Failed to git reset files: {files}", exc_info=True)
+                    VMN_LOGGER.debug(
+                        f"Failed to git reset files: {files}", exc_info=True
+                    )
 
                 self._be.index.checkout(files, force=True)
             except Exception as exc:
-                VMN_LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
+                VMN_LOGGER.debug(
+                    f"Failed to git checkout files: {files}", exc_info=True
+                )
 
     @measure_runtime_decorator
     def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
