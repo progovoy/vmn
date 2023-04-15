@@ -9,14 +9,11 @@ import re
 import sys
 import time
 from logging.handlers import RotatingFileHandler
-import traceback
 import io
 from functools import wraps
 
 import git
 import yaml
-
-DEBUG_TRACE_ENV_VAR = "VMN_DEBUG_TRACE"
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
@@ -88,26 +85,17 @@ def custom_execute(self, *args, **kwargs):
     global VMN_LOGGER
 
     if VMN_LOGGER is not None:
-        try:
-            if DEBUG_TRACE_ENV_VAR in os.environ:
-                trace_str = io.StringIO()
-                traceback.print_stack(file=trace_str)
-                VMN_LOGGER.debug(
-                    f"{'  ' * (len(call_stack) - 1)}Stacktrace:\n"
-                    f"{'  ' * (len(call_stack) - 1)}{trace_str.getvalue()}"
-                )
-
-            VMN_LOGGER.debug(
-                f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}"
-            )
-        except Exception as exc:
-            pass
+        VMN_LOGGER.debug(
+            f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}"
+        )
 
     original_execute = getattr(self.__class__, "_execute")
-    start_time = time.perf_counter()
     originally_extended_output = "with_extended_output" in kwargs
     kwargs["with_extended_output"] = True
+
+    start_time = time.perf_counter()
     ret = original_execute(self, *args, **kwargs)
+    end_time = time.perf_counter()
 
     ret_code = 0
     sout = ""
@@ -124,8 +112,6 @@ def custom_execute(self, *args, **kwargs):
         ret_code = 0
         if serr:
             ret_code = 1
-
-    end_time = time.perf_counter()
 
     time_took = end_time - start_time
 
@@ -153,7 +139,6 @@ def measure_runtime_decorator(func):
         global call_stack
         global VMN_LOGGER
 
-        start_time = time.perf_counter()
         call_stack.append(func.__name__)
         fcode = func.__code__
 
@@ -162,10 +147,11 @@ def measure_runtime_decorator(func):
                 f"{'  ' * (len(call_stack) - 1)}--> Entering {func.__name__} at {fcode.co_filename}:{fcode.co_firstlineno}"
             )
 
+        start_time = time.perf_counter()
         # Call the actual function
         result = func(*args, **kwargs)
-
         end_time = time.perf_counter()
+
         elapsed_time = end_time - start_time
 
         if VMN_LOGGER is not None:
