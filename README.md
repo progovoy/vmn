@@ -171,6 +171,7 @@ explore `vmn_ctx` object to see what you can get from it. Vars starting with `_`
 
 ## Supported env vars
 `VMN_WORKING_DIR` - Set it and `vmn` will run from this directory
+
 `VMN_LOCK_FILE_PATH` - Set this to make `vmn` use this lockfile 
   when it runs. The default is to use a lock file per repo to avoid running multiple `vmn` commands simultaneously.
 
