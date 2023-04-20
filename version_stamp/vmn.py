@@ -2201,6 +2201,9 @@ def show(vcs, params, verstr=None):
             "version_backends": copy.deepcopy(vcs.version_backends),
         }
 
+    if params.get("display_type"):
+        data["type"] = ver_info["stamping"]["app"]["prerelease"]
+
     if vcs.root_context:
         data.update(ver_info["stamping"]["root_app"])
         if not data:
