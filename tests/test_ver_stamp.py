@@ -3034,3 +3034,36 @@ def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
 
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
+
+def test_two_prs_from_same_origin(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    first_branch = "first"
+
+    app_layout.checkout(first_branch, create_new=True)
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    res = yaml.safe_load(captured.out)
+    assert "0.0.1" == res["out"]
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease=first_branch)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-{first_branch}1"
+    assert data["prerelease"] == first_branch
+    app_layout.checkout(main_branch, create_new=False)
+    second_branch = "second"
+
+    app_layout.checkout(second_branch, create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease=second_branch)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-{second_branch}1"
+    assert data["prerelease"] == second_branch
