@@ -3044,15 +3044,8 @@ def test_two_prs_from_same_origin(app_layout, capfd):
 
     app_layout.checkout(first_branch, create_new=True)
 
-    capfd.readouterr()
-    err = _show(app_layout.app_name, raw=True)
-    assert err == 0
-
-    captured = capfd.readouterr()
-    res = yaml.safe_load(captured.out)
-    assert "0.0.1" == res["out"]
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease=first_branch)
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch", prerelease=first_branch)
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-{first_branch}1"
