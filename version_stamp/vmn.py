@@ -401,7 +401,7 @@ class IVersionsStamper(object):
     def gen_advanced_version(
         self, initial_version, initialprerelease, initialprerelease_count
     ):
-        verstr = self._advance_version(initial_version)
+        verstr = self.advance_version(initial_version, self.release_mode)
 
         prerelease = self.prerelease
         # If user did not specify a change in prerelease,
@@ -458,16 +458,16 @@ class IVersionsStamper(object):
 
         return counter_key, prerelease_count
 
-    def increase_octet(self, tag_name_prefix: str, version_number_oct: str) -> str:
+    def increase_octet(self, tag_name_prefix: str, version_number_oct: str, release_mode: str, globally: bool) -> str:
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         version_number_oct = int(version_number_oct)
-        if tag:
+        if tag and globally:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
-            version_number_oct = max(version_number_oct, int(props[self.release_mode]))
+            version_number_oct = max(version_number_oct, int(props[release_mode]))
         version_number_oct += 1
         return str(version_number_oct)
 
-    def _advance_version(self, version):
+    def advance_version(self, version, release_mode, globally=True):
         # TODO: maybe move up the version validity test
         match = re.search(stamp_utils.VMN_REGEX, version)
         gdict = match.groupdict()
@@ -479,43 +479,43 @@ class IVersionsStamper(object):
         patch = gdict["patch"]
         hotfix = gdict["hotfix"]
 
-        if self.release_mode == "major":
+        if release_mode == "major":
             tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
                 self.name
             )
 
             tag_name_prefix = f"{tag_name_prefix}_*"
-            major = self.increase_octet(tag_name_prefix, major)
+            major = self.increase_octet(tag_name_prefix, major, release_mode, globally)
 
             minor = "0"
             patch = "0"
             hotfix = "0"
-        elif self.release_mode == "minor":
+        elif release_mode == "minor":
             tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
                 self.name
             )
 
             tag_name_prefix = f"{tag_name_prefix}_{major}*"
-            minor = self.increase_octet(tag_name_prefix, minor)
+            minor = self.increase_octet(tag_name_prefix, minor, release_mode, globally)
 
             patch = "0"
             hotfix = "0"
-        elif self.release_mode == "patch":
+        elif release_mode == "patch":
             tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
                 self.name
             )
 
             tag_name_prefix = f"{tag_name_prefix}_{major}.{minor}*"
-            patch = self.increase_octet(tag_name_prefix, patch)
+            patch = self.increase_octet(tag_name_prefix, patch, release_mode, globally)
 
             hotfix = "0"
-        elif self.release_mode == "hotfix":
+        elif release_mode == "hotfix":
             tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(
                 self.name
             )
 
             tag_name_prefix = f"{tag_name_prefix}_{major}.{minor}.{patch}*"
-            hotfix = self.increase_octet(tag_name_prefix, hotfix)
+            hotfix = self.increase_octet(tag_name_prefix, hotfix, release_mode, globally)
 
         return stamp_utils.VMNBackend.serialize_vmn_version_hotfix(
             self.hide_zero_hotfix,
@@ -1444,53 +1444,8 @@ def handle_stamp(vmn_ctx):
     # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
-    # TODO: Check "not and" release_mode and optional_release_mode
-    # 1.0.2             vmn stamp --orm patch --pr yuval test
-    # 1.0.3-tom.1
-    # 1.0.3-yuval.1      vmn stamp --orm patch --pr yuval test
-    # 1.0.4-ron.1
-    # 1.0.3-yuval.2
-    # orm is not None:
-    #   If we have rc tag in the orm wanted value and current is released
-    #       set prerelease by arg
-    #       If current version is released and no prerelease
-    #           Fail process
-    #       If current version is prereleased and no prerelease
-    #           Set prerelease as current prerelease
-    #       set current version to wanted-latest
-    #   Else
-    #       set r as orm
-    verstr = "0.0.2"
-    tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}-*'
-    tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
 
-    if tag and vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] == "release":
-        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
-
-        (_, temp_ver_infos_from_repo ) = vmn_ctx.vcs.get_version_info_from_verstr(f"{props['version']}-{props['prerelease']}")
-
-        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
-            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
-        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] = \
-            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
-        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease_count"] = \
-            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
-        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"] = \
-            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["release_mode"]
-
-
-
-
-    if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
-        vmn_ctx.vcs.current_version_info["stamping"]["app"][
-            "release_mode"
-        ] = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"][
-            "stamping"
-        ][
-            "app"
-        ][
-            "release_mode"
-        ]
+    assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
     optional_status = {"modified", "detached"}
     expected_status = {
@@ -1548,6 +1503,62 @@ def handle_stamp(vmn_ctx):
 
     if vmn_ctx.vcs.override_version:
         initial_version = vmn_ctx.vcs.override_version
+
+    # 1.0.2             vmn stamp --orm patch --pr yuval test
+    # 1.0.3-tom.1
+    # 1.0.3-yuval.1      vmn stamp --orm patch --pr yuval test
+    # 1.0.4-ron.1
+    # 1.0.3-yuval.2
+    # orm is not None:
+    #   If we have rc tag in the orm wanted value and current is released
+    #       set prerelease by arg
+    #       If current version is released and no prerelease
+    #           Fail process
+    #       If current version is prereleased and no prerelease
+    #           Set prerelease as current prerelease
+    #       set current version to wanted-latest
+    #   Else
+    #       set r as orm
+
+    is_release = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
+                     "prerelease"] == "release"
+    if vmn_ctx.vcs.optional_release_mode and is_release:
+        verstr = vmn_ctx.vcs.advance_version(initial_version, vmn_ctx.vcs.optional_release_mode, globally=False)
+        tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}-*'
+        tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
+        if not tag:
+            vmn_ctx.vcs.release_mode = vmn_ctx.vcs.optional_release_mode
+        else:
+            props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+
+            (_, temp_ver_infos_from_repo) = vmn_ctx.vcs.get_version_info_from_verstr(
+                f"{props['version']}-{props['prerelease']}")
+
+            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
+                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
+            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] = \
+                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
+            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
+                "prerelease_count"] = \
+                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
+            vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"] = \
+                temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["release_mode"]
+
+            initial_version = verstr
+            if prerelease == "release":
+                prerelease = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
+                prerelease_count = temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
+
+    if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
+        vmn_ctx.vcs.current_version_info["stamping"]["app"][
+            "release_mode"
+        ] = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"][
+            "stamping"
+        ][
+            "app"
+        ][
+            "release_mode"
+        ]
 
     try:
         version = _stamp_version(

@@ -69,10 +69,13 @@ def _release_app(app_name, version=None):
     return ret, ver_info, merged_dict
 
 
-def _stamp_app(app_name, release_mode=None, prerelease=None):
+def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelease=None):
     args_list = ["stamp"]
     if release_mode is not None:
         args_list.extend(["-r", release_mode])
+
+    if optional_release_mode is not None:
+        args_list.extend(["--orm", optional_release_mode])
 
     if prerelease is not None:
         args_list.extend(["--pr", prerelease])
@@ -3055,7 +3058,9 @@ def test_two_prs_from_same_origin(app_layout, capfd):
 
     app_layout.checkout(second_branch, create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease=second_branch)
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease=second_branch)
+    c = capfd.readouterr()
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-{second_branch}1"
