@@ -1436,6 +1436,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
+    vmn_ctx.vcs.optional_release_mode = vmn_ctx.args.orm
     vmn_ctx.vcs.override_root_version = vmn_ctx.args.orv
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
@@ -1443,6 +1444,42 @@ def handle_stamp(vmn_ctx):
     # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
+    # TODO: Check "not and" release_mode and optional_release_mode
+    # 1.0.2             vmn stamp --orm patch --pr yuval test
+    # 1.0.3-tom.1
+    # 1.0.3-yuval.1      vmn stamp --orm patch --pr yuval test
+    # 1.0.4-ron.1
+    # 1.0.3-yuval.2
+    # orm is not None:
+    #   If we have rc tag in the orm wanted value and current is released
+    #       set prerelease by arg
+    #       If current version is released and no prerelease
+    #           Fail process
+    #       If current version is prereleased and no prerelease
+    #           Set prerelease as current prerelease
+    #       set current version to wanted-latest
+    #   Else
+    #       set r as orm
+    verstr = "0.0.2"
+    tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}-*'
+    tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
+
+    if tag and vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] == "release":
+        props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+
+        (_, temp_ver_infos_from_repo ) = vmn_ctx.vcs.get_version_info_from_verstr(f"{props['version']}-{props['prerelease']}")
+
+        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
+            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
+        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease"] = \
+            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease"]
+        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["prerelease_count"] = \
+            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["prerelease_count"]
+        vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["release_mode"] = \
+            temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["release_mode"]
+
+
+
 
     if vmn_ctx.vcs.tracked and vmn_ctx.vcs.release_mode is None:
         vmn_ctx.vcs.current_version_info["stamping"]["app"][
@@ -2990,6 +3027,14 @@ def add_arg_stamp(subprasers):
         "-r",
         "--release-mode",
         choices=["major", "minor", "patch", "hotfix", "micro"],
+        default=None,
+        help="major / minor / patch / hotfix",
+        metavar="",
+    )
+    pstamp.add_argument(
+        "--orm",
+        "--optional-release-mode",
+        choices=["major", "minor", "patch", "hotfix"],
         default=None,
         help="major / minor / patch / hotfix",
         metavar="",
