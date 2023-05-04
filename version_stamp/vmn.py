@@ -1508,12 +1508,9 @@ def handle_stamp(vmn_ctx):
                      "prerelease"] == "release"
     if vmn_ctx.vcs.optional_release_mode and is_release:
         verstr = vmn_ctx.vcs.advance_version(initial_version, vmn_ctx.vcs.optional_release_mode, globally=False)
-        tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}-*'
+        tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}*'
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
-
-        rel_tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}'
-        rel_tag = vmn_ctx.vcs.backend.get_latest_available_tag(rel_tag_name_prefix)
-        if rel_tag is not None:
+        if tag is not None and len(tag) < len(tag_name_prefix):
             tag = None
 
         if not tag:
