@@ -1504,28 +1504,18 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.override_version:
         initial_version = vmn_ctx.vcs.override_version
 
-    # 1.0.2             vmn stamp --orm patch --pr yuval test
-    # 1.0.3-tom.1
-    # 1.0.3-yuval.1      vmn stamp --orm patch --pr yuval test
-    # 1.0.4-ron.1
-    # 1.0.3-yuval.2
-    # orm is not None:
-    #   If we have rc tag in the orm wanted value and current is released
-    #       set prerelease by arg
-    #       If current version is released and no prerelease
-    #           Fail process
-    #       If current version is prereleased and no prerelease
-    #           Set prerelease as current prerelease
-    #       set current version to wanted-latest
-    #   Else
-    #       set r as orm
-
     is_release = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
                      "prerelease"] == "release"
     if vmn_ctx.vcs.optional_release_mode and is_release:
         verstr = vmn_ctx.vcs.advance_version(initial_version, vmn_ctx.vcs.optional_release_mode, globally=False)
         tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}-*'
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
+
+        rel_tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}'
+        rel_tag = vmn_ctx.vcs.backend.get_latest_available_tag(rel_tag_name_prefix)
+        if rel_tag is not None:
+            tag = None
+
         if not tag:
             vmn_ctx.vcs.release_mode = vmn_ctx.vcs.optional_release_mode
         else:
