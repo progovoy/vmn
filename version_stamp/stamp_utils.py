@@ -180,8 +180,8 @@ def resolve_root_path():
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
         """
-    exist = os.path.exists(os.path.join(root_path, ".git")
-    )
+    exist = os.path.exists(os.path.join(root_path, ".git"))
+    exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
     while not exist:
         try:
             prev_path = root_path
@@ -190,6 +190,7 @@ def resolve_root_path():
                 raise RuntimeError()
 
             exist = os.path.exists(os.path.join(root_path, ".git"))
+            exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
         except Exception as exc:
             VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
             root_path = None
