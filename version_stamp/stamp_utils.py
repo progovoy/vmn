@@ -236,7 +236,7 @@ def init_stamp_logger(rotating_log_path=None, debug=False, supress_stdout=False)
 
     stdout_handler.addFilter(LevelFilter(min_stdout_level, logging.INFO))
 
-    if not supress_stdout:
+    if not supress_stdout or debug:
         VMN_LOGGER.addHandler(stdout_handler)
 
     stderr_handler = logging.StreamHandler(sys.stderr)
