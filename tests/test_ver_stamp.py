@@ -713,8 +713,8 @@ def test_show_from_file(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        captured.out == f"[INFO] Version information was not "
-        f"found for {app_layout.app_name}.\n"
+         f"[ERROR] Version information was not found "
+         f"for {app_layout.app_name}.\n" in captured.err
     )
 
     conf = {
@@ -850,9 +850,9 @@ def test_show_from_file(app_layout, capfd):
     rmtree(os.path.join(app_layout.repo_path, ".git"))
 
     err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
+    captured = capfd.readouterr()
     assert err == 0
 
-    captured = capfd.readouterr()
     show_file_res = yaml.safe_load(captured.out)
     assert show_file_res == show_root_res
 
@@ -955,8 +955,8 @@ def test_show_from_file_conf_changed(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        f"[INFO] Version information was not found for "
-        f"{app_layout.app_name}.\n" == captured.out
+        f"[ERROR] Version information was not found for "
+        f"{app_layout.app_name}.\n" in captured.err
     )
 
 

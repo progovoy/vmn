@@ -1671,7 +1671,9 @@ def handle_add(vmn_ctx):
 
 @stamp_utils.measure_runtime_decorator
 def handle_show(vmn_ctx):
-    stamp_utils.VMN_LOGGER.info("Test logprint in show")
+    if version_mod.version == "0.0.0":
+        stamp_utils.VMN_LOGGER.info("Test logprint in show")
+
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
 
     # root app does not have raw version number
@@ -2185,7 +2187,7 @@ def show(vcs, params, verstr=None):
         ver_info = ver_infos[tag_name]["ver_info"]
 
     if ver_info is None:
-        stamp_utils.VMN_LOGGER.info(
+        stamp_utils.VMN_LOGGER.error(
             "Version information was not found " "for {0}.".format(vcs.name)
         )
 
