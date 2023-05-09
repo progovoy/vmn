@@ -1706,6 +1706,9 @@ def handle_add(vmn_ctx):
 
 @stamp_utils.measure_runtime_decorator
 def handle_show(vmn_ctx):
+    if version_mod.version == "0.0.0":
+        stamp_utils.VMN_LOGGER.info("Test logprint in show")
+
     vmn_ctx.params["from_file"] = vmn_ctx.args.from_file
 
     # root app does not have raw version number
@@ -2219,7 +2222,7 @@ def show(vcs, params, verstr=None):
         ver_info = ver_infos[tag_name]["ver_info"]
 
     if ver_info is None:
-        stamp_utils.VMN_LOGGER.info(
+        stamp_utils.VMN_LOGGER.error(
             "Version information was not found " "for {0}.".format(vcs.name)
         )
 
@@ -2818,7 +2821,10 @@ def vmn_run(command_line=None):
         return 1, None
 
     try:
-        stamp_utils.init_stamp_logger(debug=args.debug)
+        if args.command == "show":
+            stamp_utils.init_stamp_logger(debug=args.debug, supress_stdout=True)
+        else:
+            stamp_utils.init_stamp_logger(debug=args.debug)
 
         root_path = stamp_utils.resolve_root_path()
         vmn_path = os.path.join(root_path, ".vmn")
@@ -2845,7 +2851,11 @@ def vmn_run(command_line=None):
         # start of non-parallel code section
         lock.acquire()
 
-        stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME), args.debug)
+        if args.command == "show":
+            stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME), args.debug, supress_stdout=True)
+        else:
+            stamp_utils.init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME), args.debug)
+
         command_line = copy.deepcopy(command_line)
 
         if command_line is None or not command_line:

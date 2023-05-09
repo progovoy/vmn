@@ -716,8 +716,8 @@ def test_show_from_file(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        captured.out == f"[INFO] Version information was not "
-        f"found for {app_layout.app_name}.\n"
+         f"[ERROR] Version information was not found "
+         f"for {app_layout.app_name}.\n" in captured.err
     )
 
     conf = {
@@ -853,9 +853,9 @@ def test_show_from_file(app_layout, capfd):
     rmtree(os.path.join(app_layout.repo_path, ".git"))
 
     err = _show("root_app", version="1", from_file=True, verbose=True, root=True)
+    captured = capfd.readouterr()
     assert err == 0
 
-    captured = capfd.readouterr()
     show_file_res = yaml.safe_load(captured.out)
     assert show_file_res == show_root_res
 
@@ -958,8 +958,8 @@ def test_show_from_file_conf_changed(app_layout, capfd):
     assert err == 1
     captured = capfd.readouterr()
     assert (
-        f"[INFO] Version information was not found for "
-        f"{app_layout.app_name}.\n" == captured.out
+        f"[ERROR] Version information was not found for "
+        f"{app_layout.app_name}.\n" in captured.err
     )
 
 
@@ -3035,6 +3035,22 @@ def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
 
+
+def test_show_no_log_in_stdout(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "a/b/c/f1.file", "msg1")
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, raw=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    assert "dirty:\n- modified\nout: 0.0.1\n\n" == captured.out
+
+    with open(os.path.join(app_layout.repo_path, ".vmn", "vmn.log")) as log:
+        assert 'Test logprint in show' in log.read()
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
 

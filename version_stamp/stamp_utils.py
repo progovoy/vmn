@@ -180,9 +180,8 @@ def resolve_root_path():
             ".git" is the default app's backend in this case. If other backends will be added, 
             then it can be moved to the configuration file as a default_backend or similar. 
         """
-    exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
-        os.path.join(root_path, ".git")
-    )
+    exist = os.path.exists(os.path.join(root_path, ".git"))
+    exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
     while not exist:
         try:
             prev_path = root_path
@@ -190,9 +189,8 @@ def resolve_root_path():
             if prev_path == root_path:
                 raise RuntimeError()
 
-            exist = os.path.exists(os.path.join(root_path, ".vmn")) or os.path.exists(
-                os.path.join(root_path, ".git")
-            )
+            exist = os.path.exists(os.path.join(root_path, ".git"))
+            exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
         except Exception as exc:
             VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
             root_path = None
@@ -215,7 +213,7 @@ class LevelFilter(logging.Filter):
         return False
 
 
-def init_stamp_logger(rotating_log_path=None, debug=False):
+def init_stamp_logger(rotating_log_path=None, debug=False, supress_stdout=False):
     global VMN_LOGGER
 
     VMN_LOGGER = logging.getLogger(VMN_USER_NAME)
@@ -237,7 +235,9 @@ def init_stamp_logger(rotating_log_path=None, debug=False):
         min_stdout_level = logging.DEBUG
 
     stdout_handler.addFilter(LevelFilter(min_stdout_level, logging.INFO))
-    VMN_LOGGER.addHandler(stdout_handler)
+
+    if not supress_stdout or debug:
+        VMN_LOGGER.addHandler(stdout_handler)
 
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setFormatter(formatter)
