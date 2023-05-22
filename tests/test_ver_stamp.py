@@ -1116,13 +1116,21 @@ def test_starting_version(app_layout, capfd):
     _init_app(app_layout.app_name, "1.2.3")
     captured = capfd.readouterr()
 
-    path = f"{app_layout.repo_path}/.vmn/{app_layout.app_name}"
+    path = os.path.join(app_layout.repo_path,".vmn",app_layout.app_name)
     assert f"[INFO] Initialized app tracking on {path}\n" == captured.out
+
+
+def test_stamping_continuation_version(app_layout,capfd):
+    _run_vmn_init()
+    capfd.readouterr()
+    _init_app(app_layout.app_name, "1.2.3")
+    captured = capfd.readouterr()
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "1.3.0"
+
 
 
 def test_rc_stamping(app_layout, capfd):
@@ -1435,6 +1443,7 @@ def test_version_template():
     assert formated_version == "2-0"
 
 
+
 def test_basic_goto(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
@@ -1458,12 +1467,6 @@ def test_basic_goto(app_layout, capfd):
 
     # read to clear stderr and out
     capfd.readouterr()
-
-    err, _, _ = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
-
-    captured = capfd.readouterr()
-    assert "[INFO] 1.3.0\n" == captured.out
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
@@ -1558,6 +1561,30 @@ def test_basic_goto(app_layout, capfd):
 
     captured = capfd.readouterr()
     assert "[ERROR] Wrong unique id\n" == captured.err
+
+def test_Stamping_from_previous_version(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "a.yxy", "msg")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.1"
+
+    c1 = app_layout._app_backend.be.changeset()
+    err = _goto(app_layout.app_name, version="1.3.0")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+
+    captured = capfd.readouterr()
+    assert "[INFO] 1.3.0\n" == captured.out
 
 
 def test_stamp_on_branch_merge_squash(app_layout):
