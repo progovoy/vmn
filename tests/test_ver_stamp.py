@@ -69,7 +69,7 @@ def _release_app(app_name, version=None):
     return ret, ver_info, merged_dict
 
 
-def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelease=None):
+def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelease=None, override_version=None):
     args_list = ["stamp"]
     if release_mode is not None:
         args_list.extend(["-r", release_mode])
@@ -79,6 +79,9 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelea
 
     if prerelease is not None:
         args_list.extend(["--pr", prerelease])
+
+    if override_version is not None:
+        args_list.extend(["--ov", override_version])
 
     args_list.append(app_name)
 
@@ -3166,3 +3169,46 @@ def test_no_pr_happens_after_release(app_layout, capfd):
     captured = capfd.readouterr()
     assert captured.err == '[ERROR] The version 0.0.2 was already released. Will refuse to stamp prerelease version\n'
     assert err == 1
+
+
+def test_overwrite_version_and_orm(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    c1_branch = "c1"
+    app_layout.checkout(c1_branch, create_new=True)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch", prerelease=c1_branch)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-{c1_branch}1"
+    assert data["prerelease"] == c1_branch
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease=c1_branch, override_version="0.1.0")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.1.1-{c1_branch}1"
+    assert data["prerelease"] == c1_branch
+    app_layout.checkout(main_branch, create_new=False)
+
+
+def test_override_version(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch", prerelease='rc')
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc1"
+    assert data["prerelease"] == 'rc'
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease='rc', override_version="0.1.0")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.1.1-rc1"
