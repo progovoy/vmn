@@ -84,19 +84,32 @@ vmn stamp -r patch my_cool_app
 ```sh
 # After cloning vmn repo:
 cd ./vmn
+# For Ubuntu:
+#   sudo apt install python3-venv
 python3 -m venv ./venv
 source ./venv/bin/activate
 
 pip install -r  ./tests/requirements.txt 
 pip install -r  ./tests/test_requirements.txt 
 pip install -e  ./
+vmn --version # Should see 0.0.0 if installed successfully
+```
+
+## Run tests
+
+``` sh
+# install Docker 
+#   For Ubuntu - sudo apt install docker.io
+# Then run:
+./tests/run_pytest.sh
+# If it runs successfully, you are good to go
 ```
 
 # Key features
 
-- [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g.,` 1.6.0` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g.,` 1.6.0-rc23` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g.,` 1.6.7.4` [`Semver` extension]
+- [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g., `1.6.0` [`Semver` compliant]
+- [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g., `1.6.0-rc23` [`Semver` compliant]
+- [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g., `1.6.7.4` [`Semver` extension]
 - [x] Bringing back the repository / repositories state to the state they were when the project was stamped (
   see [`goto`](https://github.com/final-israel/vmn#goto) section)
 - [x] Stamping of micro-services-like project topologies (
@@ -105,7 +118,7 @@ pip install -e  ./
   see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
 - [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (
   see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
-- [x]  Addition of `buildmetadata` for an existing version, e.g.,` 1.6.0-rc23+build01.Info` [`Semver` compliant]
+- [x]  Addition of `buildmetadata` for an existing version, e.g., `1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
 # Usage
@@ -149,12 +162,13 @@ vmn init-app -v 1.6.8 <app-name2>
 vmn stamp -r minor <app-name2>
 ```
 
-##### Note:
+### Note
 
 `init-app` and `stamp` both support `--dry-run` flag
 
 ## You can also use vmn as a python lib by importing it
-```
+
+``` python
 from contextlib import redirect_stdout, redirect_stderr
 import io
 import version_stamp.vmn as vmn
@@ -170,9 +184,10 @@ err_s = err.getvalue()
 explore `vmn_ctx` object to see what you can get from it. Vars starting with `_` are private and may change with time
 
 ## Supported env vars
+
 `VMN_WORKING_DIR` - Set it and `vmn` will run from this directory
 
-`VMN_LOCK_FILE_PATH` - Set this to make `vmn` use this lockfile 
+`VMN_LOCK_FILE_PATH` - Set this to make `vmn` use this lockfile
   when it runs. The default is to use a lock file per repo to avoid running multiple `vmn` commands simultaneously.
 
 # Detailed Documentation
@@ -204,7 +219,7 @@ vmn release -v 2.0.0-mybeta1 <app-name>
 `vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services
 that are logically located under the same solution.
 
-##### For example:
+### Example
 
 ```sh
 vmn init-app my_root_app/service1
@@ -284,7 +299,7 @@ Generates version output file based on jinja2 template
 
 `vmn gen -t path/to/jinja_template.j2 -o path/to/output.txt app_name`
 
-#### Available jinja2 keywords
+### Available jinja2 keywords
 
 ```json
 {
@@ -314,7 +329,7 @@ Generates version output file based on jinja2 template
 
 #### `vmn gen` jinja template example
 
-```
+``` text
 "VERSION: {{version}} \n" \
 "NAME: {{name}} \n" \
 "BRANCH: {{stamped_on_branch}} \n" \
@@ -329,7 +344,7 @@ Generates version output file based on jinja2 template
 
 #### `vmn gen` output example
 
-```
+``` text
 VERSION: 0.0.1
 NAME: test_app2/s1
 BRANCH: master
@@ -378,9 +393,9 @@ conf:
 
 |         Field          | Description                                                  | Example                                                      |
 | :--------------------: | ------------------------------------------------------------ | ------------------------------------------------------------ |
-|       `template`       | The template configuration string can be customized and will be applied on the "raw" vmn version.<br/>`vmn` will display the version based on the `template`. | `vmn show my_root_app/service3` will output `0.0` <br/>however running:<br/>`vmn show --raw my_root_app/service3` will output `0.0.1` |
+|       `template`       | The template configuration string can be customized and will be applied on the "raw" vmn version.<br>`vmn` will display the version based on the `template`. | `vmn show my_root_app/service3` will output `0.0` <br>however running:<br>`vmn show --raw my_root_app/service3` will output `0.0.1` |
 |         `deps`         | In `deps` you can specify other repositories as your dependencies and `vmn` will consider them when stamping and performing `goto`. | See example `conf.yml` file above                            |
-|      `extra_info`      | Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.<br/>**`Note`** This feature is not very popular and may be remove / altered in the future. | See example `conf.yml` file above                            |
+|      `extra_info`      | Setting this to `true` will make `vmn` output usefull data about the host on which `vmn` has stamped the version.<br>**`Note`** This feature is not very popular and may be remove / altered in the future. | See example `conf.yml` file above                            |
 | `create_verinfo_files` | Tells `vmn` to create file for each stamped version. `vmn show --from-file` will work with these files instead of working with `git tags`. | See example `conf.yml` file above                            |
 |   `hide_zero_hotfix`   | Tells `vmn` to hide the fourth version octa when it is equal to zero. This way you will never see the fourth octa unless you will specifically stamp with `vmn stamp -r hotfix`. `True` by default. | See example `conf.yml` file above                            |
 |   `version_backends`   | Tells `vmn` to auto-embed the version string into one of the supported backends' files during the `vmn stamp` command. For instance, `vmn` will auto-embed the version string into `package.json` file if configured for `npm` projects. | See example `conf.yml` file above                            |
