@@ -1447,6 +1447,21 @@ def handle_stamp(vmn_ctx):
 
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
+    if vmn_ctx.vcs.override_version is not None:
+        match = re.search(stamp_utils.VMN_REGEX, vmn_ctx.vcs.override_version)
+
+        if match is None:
+            err = (
+                f"Provided override {vmn_ctx.vcs.override_version} doesn't comply with: "
+                f"{stamp_utils.VMN_VERSION_FORMAT} format")
+            stamp_utils.VMN_LOGGER.error(err)
+
+            raise RuntimeError(err)
+
+        gdict = match.groupdict()
+        assert gdict["prerelease"] is None
+        assert gdict["buildmetadata"] is None
+
     optional_status = {"modified", "detached"}
     expected_status = {
         "repos_exist_locally",
@@ -1501,11 +1516,15 @@ def handle_stamp(vmn_ctx):
         vmn_ctx.vcs.version_file_path
     )
 
-    if vmn_ctx.vcs.override_version:
-        initial_version = vmn_ctx.vcs.override_version
-
     is_release = vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"][
                      "prerelease"] == "release"
+
+    if vmn_ctx.vcs.override_version:
+        initial_version = vmn_ctx.vcs.override_version
+        prerelease = 'release'
+        prerelease_count = {}
+        is_release = True
+
     if vmn_ctx.vcs.optional_release_mode and is_release:
         verstr = vmn_ctx.vcs.advance_version(initial_version, vmn_ctx.vcs.optional_release_mode, globally=False)
         tag_name_prefix = f'{vmn_ctx.vcs.name.replace("/", "-")}_{verstr}*'

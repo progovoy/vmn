@@ -17,6 +17,7 @@ import yaml
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
+# Only used for printing
 VMN_VERSION_FORMAT = (
     "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
 )
