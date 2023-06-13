@@ -8,9 +8,8 @@ import pathlib
 import re
 import sys
 import time
-from logging.handlers import RotatingFileHandler
-import io
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
 import git
 import yaml
@@ -282,8 +281,8 @@ def clear_logger_handlers(logger_obj):
 
 
 class VMNBackend(object):
-    def __init__(self, type):
-        self._type = type
+    def __init__(self, btype):
+        self._type = btype
 
     def __del__(self):
         pass
@@ -1013,14 +1012,22 @@ class GitBackend(VMNBackend):
         return cobj, ver_infos
 
     @measure_runtime_decorator
-    def get_latest_available_tag(self, tag_prefix_filter):
+    def get_latest_available_tags(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
         tag_names = self._be.git.tag(*cmd).split("\n")
 
         if len(tag_names) == 1 and tag_names[0] == "":
             return None
 
-        return tag_names[-1]
+        return tag_names
+
+    @measure_runtime_decorator
+    def get_latest_available_tag(self, tag_prefix_filter):
+        tnames = self.get_latest_available_tags(tag_prefix_filter)
+        if tnames is None:
+            return None
+
+        return tnames[-1]
 
     @measure_runtime_decorator
     def get_commit_object_from_branch_name(self, bname):

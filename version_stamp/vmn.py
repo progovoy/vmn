@@ -83,6 +83,11 @@ class VMNContainer(object):
 class IVersionsStamper(object):
     @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
+        # actual value will be assigned on handle_ functions
+        self.prerelease = None
+        self.release_mode = None
+        self.dry_run = None
+
         self.app_conf_path = None
         self.params: dict = arg_params
         self.vmn_root_path: str = arg_params["root_path"]
@@ -439,9 +444,9 @@ class IVersionsStamper(object):
         if counter_key not in prerelease_count:
             prerelease_count[counter_key] = 0
 
-        tag_name_prefix = stamp_utils.VMNBackend.app_name_to_git_tag_app_name(self.name)
-
-        tag_name_prefix = f'{self.name.replace("/", "-")}_{verstr}-{prerelease}*'
+        tag_name_prefix = \
+            f'{stamp_utils.VMNBackend.app_name_to_git_tag_app_name(self.name)}' \
+            f'_{verstr}-{prerelease}*'
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         if tag:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
@@ -1298,7 +1303,7 @@ class VersionControlStamper(IVersionsStamper):
             if list_of_files:
                 stamp_utils.VMN_LOGGER.info(
                     "Would have removed config files:\n"
-                    f"{set(list_of_files) - set([branch_conf_path])}"
+                    f"{set(list_of_files) - {branch_conf_path} }"
                 )
 
             stamp_utils.VMN_LOGGER.info(
@@ -1306,7 +1311,7 @@ class VersionControlStamper(IVersionsStamper):
                 f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
-            for f in set(list_of_files) - set([branch_conf_path]):
+            for f in set(list_of_files) - {branch_conf_path}:
                 try:
                     self.backend._be.index.remove([f], working_tree=True)
                 except Exception as exc:
@@ -1915,8 +1920,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             dep_be, err = stamp_utils.get_client(full_path, vcs.be_type)
             if err:
                 err_str = "Failed to create backend {0}. Exiting".format(err)
-                stamp_utils.VMN_LOGGER.error(err)
-                raise RuntimeError(err)
+                stamp_utils.VMN_LOGGER.error(err_str)
+                raise RuntimeError(err_str)
 
             err = dep_be.check_for_pending_changes()
             if err:
@@ -2716,8 +2721,8 @@ def _clone_repo(args):
             stamp_utils.GitBackend.clone(path, remote)
     except Exception as exc:
         try:
-            str = "already exists and is not an empty directory."
-            if str in exc.stderr:
+            s = "already exists and is not an empty directory."
+            if s in str(exc):
                 return {"repo": rel_path, "status": 0, "description": None}
         except Exception:
             pass
@@ -2945,8 +2950,8 @@ def _vmn_run(args, root_path):
                 dep_be, err = stamp_utils.get_client(full_path, vmnc.vcs.be_type)
                 if err:
                     err_str = "Failed to create backend {0}. Exiting".format(err)
-                    stamp_utils.VMN_LOGGER.error(err)
-                    raise RuntimeError(err)
+                    stamp_utils.VMN_LOGGER.error(err_str)
+                    raise RuntimeError(err_str)
 
                 dep_be.prepare_for_remote_operation()
                 del dep_be
