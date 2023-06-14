@@ -31,7 +31,7 @@ _SEMVER_VER_REGEX = (
 )
 
 _SEMVER_PRERELEASE_REGEX = rf"(?:-(?P<prerelease>(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-_VMN_PRERELEASE_REGEX = rf"{_SEMVER_PRERELEASE_REGEX[-2]}(?P<rcn>\.(?:{_DIGIT_REGEX})))?"
+_VMN_PRERELEASE_REGEX = rf"{_SEMVER_PRERELEASE_REGEX[:-2]}\.(?P<rcn>(?:{_DIGIT_REGEX})))?"
 SEMVER_BUILDMETADATA_REGEX = (
     r"(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
 )
@@ -48,7 +48,7 @@ _VMN_VER_REGEX = rf"{_SEMVER_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 VMN_VER_REGEX = rf"^{_VMN_VER_REGEX}$"
 
 _VMN_REGEX = (
-    rf"{_VMN_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
+    rf"{_VMN_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
 
 # Regex for matching versions stamped by vmn

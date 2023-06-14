@@ -3212,3 +3212,41 @@ def test_override_version(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.1.1-rc1"
+
+
+
+def test_merge_version_conflict(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    # 0.0.1
+    _stamp_app(app_layout.app_name, "patch")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+
+    app_layout.checkout('first_branch', create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease='rc')
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-rc.1"
+    assert data["prerelease"] == 'rc'
+
+    app_layout.checkout(main_branch, create_new=True)
+    app_layout.checkout('second_branch', create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease='ab')
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-ab.1"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease='ac')
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"0.0.2-ac.1"
+
+    app_layout.merge(from_rev="first_branch", to_rev="second_branch")
+    pass
