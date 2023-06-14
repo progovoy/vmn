@@ -18,54 +18,57 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 # Only used for printing
 VMN_VERSION_FORMAT = (
-    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}.{rcn}][+{buildmetadata}]"
 )
 VMN_DEFAULT_TEMPLATE = (
     "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][+{buildmetadata}]"
 )
 
+_DIGIT_REGEX = r"0|[1-9]\d*"
+
 _SEMVER_VER_REGEX = (
-    "(?P<major>0|[1-9]\d*)\." "(?P<minor>0|[1-9]\d*)\." "(?P<patch>0|[1-9]\d*)"
+    rf"(?P<major>{_DIGIT_REGEX})\.(?P<minor>{_DIGIT_REGEX})\.(?P<patch>{_DIGIT_REGEX})"
 )
 
-_SEMVER_PRERELEASE_REGEX = "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-
+_SEMVER_PRERELEASE_REGEX = rf"(?:-(?P<prerelease>(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+_VMN_PRERELEASE_REGEX = rf"{_SEMVER_PRERELEASE_REGEX[-2]}(?P<rcn>\.(?:{_DIGIT_REGEX})))?"
 SEMVER_BUILDMETADATA_REGEX = (
-    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+    r"(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
 )
 
-SEMVER_REGEX = (
-    f"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
+# Unused
+__SEMVER_REGEX = (
+    rf"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
-_VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
+_VMN_HOTFIX_REGEX = rf"(?:\.(?P<hotfix>{_DIGIT_REGEX}))?"
 
-_VMN_VER_REGEX = f"{_SEMVER_VER_REGEX}" f"{_VMN_HOTFIX_REGEX}"
+_VMN_VER_REGEX = rf"{_SEMVER_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
-VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
+VMN_VER_REGEX = rf"^{_VMN_VER_REGEX}$"
 
 _VMN_REGEX = (
-    f"{_VMN_VER_REGEX}" f"{_SEMVER_PRERELEASE_REGEX}" f"{SEMVER_BUILDMETADATA_REGEX}$"
+    rf"{_VMN_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
 # Regex for matching versions stamped by vmn
-VMN_REGEX = f"^{_VMN_REGEX}$"
+VMN_REGEX = rf"^{_VMN_REGEX}$"
 
 # TODO: create an abstraction layer on top of tag names versus the actual Semver versions
-VMN_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
+VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
 
-_VMN_ROOT_REGEX = "(?P<version>0|[1-9]\d*)"
-VMN_ROOT_REGEX = f"^{_VMN_ROOT_REGEX}$"
+_VMN_ROOT_REGEX = rf"(?P<version>{_DIGIT_REGEX})"
+VMN_ROOT_REGEX = rf"^{_VMN_ROOT_REGEX}$"
 
-VMN_ROOT_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
+VMN_ROOT_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
 
 VMN_TEMPLATE_REGEX = (
-    "^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?"
-    "(?:\[(?P<minor_template>[^\{\}]*\{minor\}[^\{\}]*)\])?"
-    "(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
-    "(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
-    "(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
-    "(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
+    r"^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?"
+    r"(?:\[(?P<minor_template>[^\{\}]*\{minor\}[^\{\}]*)\])?"
+    r"(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
+    r"(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
+    r"(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
+    r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 
 RELATIVE_TO_CURRENT_VCS_POSITION_TYPE = "current"
@@ -329,6 +332,7 @@ class VMNBackend(object):
             "patch",
             "hotfix",
             "prerelease",
+            "rcn",
             "buildmetadata",
         )
 
@@ -369,6 +373,7 @@ class VMNBackend(object):
     ):
         app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
 
+        # TODO:: use it less. since version in file already has a serialized string
         verstr = VMNBackend.serialize_vmn_version(
             version,
             prerelease,
@@ -409,7 +414,7 @@ class VMNBackend(object):
         try:
             assert prerelease in prerelease_count
             # TODO: here try to use VMN_VERSION_FORMAT somehow
-            vmn_version = f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
+            vmn_version = f"{vmn_version}-{prerelease}.{prerelease_count[prerelease]}"
 
             match = re.search(VMN_REGEX, vmn_version)
             if match is None:
@@ -482,6 +487,7 @@ class VMNBackend(object):
             "patch": None,
             "hotfix": None,
             "prerelease": None,
+            "rcn": None,
             "buildmetadata": None,
         }
 
@@ -517,6 +523,7 @@ class VMNBackend(object):
         #  something like "prerelease mode" or "prerelease prefix"
         if gdict["prerelease"] is not None:
             ret["prerelease"] = gdict["prerelease"]
+            ret["rcn"] = gdict["rcn"]
             ret["type"] = "prerelease"
 
         if gdict["buildmetadata"] is not None:

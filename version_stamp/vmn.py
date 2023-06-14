@@ -328,7 +328,7 @@ class IVersionsStamper(object):
             initial_version,
             prerelease,
             prerelease_count,
-        ) = VersionControlStamper.get_version_number_from_file(self.version_file_path)
+        ) = self.get_version_number_from_file(self.version_file_path)
         if initial_version is not None:
             verstr = stamp_utils.VMNBackend.serialize_vmn_version(
                 initial_version, prerelease, prerelease_count, self.hide_zero_hotfix
@@ -810,17 +810,36 @@ class VersionControlStamper(IVersionsStamper):
 
         return None
 
-    @staticmethod
     @stamp_utils.measure_runtime_decorator
-    def get_version_number_from_file(version_file_path) -> str or None:
+    def get_version_number_from_file(self, version_file_path) -> str or None:
         if not os.path.exists(version_file_path):
             return (None, None, None)
 
         with open(version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
             if "version_to_stamp_from" in ver_dict:
+                verstr = ver_dict["version_to_stamp_from"]
+
                 if "prerelease" not in ver_dict or "prerelease" not in ver_dict:
-                    # Backward for 0.4.0-rc6
+                    match = re.search(stamp_utils.VMN_REGEX, verstr)
+                    if match is None:
+                        err = (
+                            f"Tag {verstr} doesn't comply with: "
+                            f"{stamp_utils.VMN_VERSION_FORMAT} format"
+                        )
+                        stamp_utils.VMN_LOGGER.error(err)
+
+                        raise RuntimeError(err)
+
+                    gdict = match.groupdict()
+                    prerelease = gdict["prerelease"]
+                    prerelease_cnt = gdict["cnt"]
+
+                    tag_name_prefix = \
+                        f'{stamp_utils.VMNBackend.app_name_to_git_tag_app_name(self.name)}' \
+                        f'_{verstr}-{prerelease}.{prerelease_cnt}*'
+                    tag = self.backend.get_latest_available_tag(tag_name_prefix)
+
                     return (ver_dict["version_to_stamp_from"], "release", {})
 
                 return (
@@ -1517,7 +1536,7 @@ def handle_stamp(vmn_ctx):
         initial_version,
         prerelease,
         prerelease_count,
-    ) = VersionControlStamper.get_version_number_from_file(
+    ) = vmn_ctx.vcs.get_version_number_from_file(
         vmn_ctx.vcs.version_file_path
     )
 
@@ -1880,7 +1899,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             initial_version,
             prerelease,
             prerelease_count,
-        ) = VersionControlStamper.get_version_number_from_file(vcs.version_file_path)
+        ) = vcs.get_version_number_from_file(vcs.version_file_path)
         matched_version_info = vcs.find_matching_version(
             initial_version, prerelease, prerelease_count
         )
