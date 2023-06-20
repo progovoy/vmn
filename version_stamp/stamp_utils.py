@@ -766,9 +766,12 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
-            except Exception:
-                self.selected_remote.push(refspec=f"refs/tags/{tag}")
+                ret = self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
+            except Exception as exc:
+                ret = self.selected_remote.push(refspec=f"refs/tags/{tag}")
+                self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
+                self._be.git.execute
+                pass
 
     @measure_runtime_decorator
     def push(self, tags=()):

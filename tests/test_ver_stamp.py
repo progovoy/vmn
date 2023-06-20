@@ -3212,3 +3212,66 @@ def test_override_version(app_layout, capfd):
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.1.1-rc1"
+
+def test_rc_after_release(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, "1.2.3")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name,
+        release_mode="minor",
+        prerelease="rc"
+    )
+
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "1.3.0-rc1"
+    assert data["prerelease"] == "rc"
+
+    i = 0
+    for i in range(10):
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+        err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+
+        data = ver_info["stamping"]["app"]
+        assert data["_version"] == f"1.3.0-rc{i + 2}"
+        assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc2")
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.3.0-rc{i + 2}"
+    assert data["prerelease"] == "rc"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+    captured = capfd.readouterr()
+    assert err != 0
+    assert captured.err.startswith("[ERROR] The version 1.3.0 was already ")
+
+    app_layout._app_backend.be._be.delete_tag('test_app_1.3.0')
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == f"1.3.0-rc{i + 2 + 1}"
+    assert data["prerelease"] == "rc"
+
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc3")
+    captured = capfd.readouterr()
+    assert err == 1
+
+
+
+    pass
+'''
+    app_layout._app_backend.be._be.delete_tag(t)
+    app_layout._app_backend.be._be.git.fetch("--tags")
+    tags_after = app_layout.get_all_tags()
+    '''
+
