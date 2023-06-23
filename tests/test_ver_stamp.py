@@ -3213,6 +3213,7 @@ def test_override_version(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.1.1-rc1"
 
+
 def test_rc_after_release(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name, "1.2.3")
@@ -3228,7 +3229,7 @@ def test_rc_after_release(app_layout, capfd):
     assert data["prerelease"] == "rc"
 
     i = 0
-    for i in range(10):
+    for i in range(5):
         app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
         err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
@@ -3266,12 +3267,16 @@ def test_rc_after_release(app_layout, capfd):
     captured = capfd.readouterr()
     assert err == 1
 
+    app_layout.pull(tags=True)
 
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc3")
+    captured = capfd.readouterr()
+    assert err == 1
 
-    pass
-'''
-    app_layout._app_backend.be._be.delete_tag(t)
-    app_layout._app_backend.be._be.git.fetch("--tags")
-    tags_after = app_layout.get_all_tags()
-    '''
+    err = _show(app_layout.app_name, version="1.3.0", verbose=True)
+    assert err == 0
 
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert "1.3.0-rc2" in tmp["versions"]

@@ -196,6 +196,18 @@ class FSAppLayoutFixture(object):
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
 
+
+    def pull(self, tags=False):
+        import subprocess
+
+        base_cmd = ["git", "pull"]
+
+        if tags:
+            base_cmd.append("--tags")
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+        subprocess.call(base_cmd, cwd=self.repo_path)
+
     def get_all_tags(self):
         cmd = ["--sort", "taggerdate"]
         tags = self._app_backend._git_backend.git.tag(*cmd).split("\n")
