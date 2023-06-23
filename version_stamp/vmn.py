@@ -13,6 +13,7 @@ from multiprocessing import Pool
 from pathlib import Path
 from pprint import pformat
 
+import git
 import jinja2
 import tomlkit
 import yaml
@@ -862,7 +863,7 @@ class VersionControlStamper(IVersionsStamper):
 
         messages = [yaml.dump(ver_info, sort_keys=True)]
 
-        self.backend.tag(
+        ret = self.backend.tag(
             [release_tag_name],
             messages,
             ref=self.backend.changeset(tag=tag_name),
@@ -873,8 +874,6 @@ class VersionControlStamper(IVersionsStamper):
 
     @stamp_utils.measure_runtime_decorator
     def add_metadata_to_version(self, tag_name, ver_info):
-        # TODO:: merge logic with release_app_version and
-        #  publish and handle reverting this way
         if ver_info is None:
             stamp_utils.VMN_LOGGER.error(
                 f"Tag {tag_name} doesn't seem to exist. Wrong version specified?"
@@ -1268,7 +1267,7 @@ class VersionControlStamper(IVersionsStamper):
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
                     )
-        except Exception:
+        except Exception as exc:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
             if self.dry_run:

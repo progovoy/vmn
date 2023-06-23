@@ -760,18 +760,29 @@ class GitBackend(VMNBackend):
             # This is required in order to preserver chronological order when
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
-            self._be.create_tag(tag, ref=ref, message=message)
+
+            ret = self._be.create_tag(tag, ref=ref, message=message)
 
             if not push:
                 continue
 
             try:
-                ret = self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
+                ret = self._be.git.execute(["git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name, f"refs/tags/{tag}"])
             except Exception as exc:
-                ret = self.selected_remote.push(refspec=f"refs/tags/{tag}")
-                self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
-                self._be.git.execute
-                pass
+                try:
+                    self._be.git.execute(["git", "push", "--porcelain", self.selected_remote.name, f"refs/tags/{tag}"])
+                except Exception as exc:
+                    tag_err_str = f"Failed to tag {tag}. Reverting.."
+                    VMN_LOGGER.error(tag_err_str)
+
+                    try:
+                        self._be.delete_tag(tag)
+                    except Exception as exc:
+                        err_str = f"Failed to remove tag {tag}"
+                        VMN_LOGGER.info(err_str)
+                        VMN_LOGGER.debug("Exception info: ", exc_info=True)
+
+                    raise RuntimeError(tag_err_str)
 
     @measure_runtime_decorator
     def push(self, tags=()):
@@ -786,33 +797,51 @@ class GitBackend(VMNBackend):
         )
 
         try:
-            ret = self.selected_remote.push(
-                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
-                o="ci.skip",
+            ret = self._be.git.execute(
+                [
+                    "git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name,
+                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
+                ]
             )
         except Exception as exc:
-            ret = self.selected_remote.push(
-                refspec=f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
-            )
-
-        if ret[0].old_commit is None:
-            if "up to date" in ret[0].summary:
-                VMN_LOGGER.warning(
-                    "GitPython library has failed to push because we are "
-                    "up to date already. How can it be? "
+            try:
+                ret = self._be.git.execute(
+                    [
+                        "git",
+                        "push",
+                        "--porcelain",
+                        self.selected_remote.name,
+                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
+                     ]
                 )
-            else:
-                VMN_LOGGER.error("Push has failed. Please verify that 'git push' works")
-                raise Warning(
-                    f"Push has failed because: {ret[0].summary}.\n"
-                    "Please verify that 'git push' works"
-                )
+            except Exception as exc:
+                err_str = "Push has failed. Please verify that 'git push' works"
+                VMN_LOGGER.error(err_str, exc_info=True)
+                raise RuntimeError(err_str)
 
         for tag in tags:
             try:
-                self.selected_remote.push(refspec=f"refs/tags/{tag}", o="ci.skip")
+                ret = self._be.git.execute(
+                    [
+                        "git",
+                        "push",
+                        "--porcelain",
+                        "-o",
+                        "ci.skip",
+                        self.selected_remote.name,
+                        f"refs/tags/{tag}"
+                    ]
+                )
             except Exception:
-                self.selected_remote.push(refspec=f"refs/tags/{tag}")
+                ret = self._be.git.execute(
+                    [
+                        "git",
+                        "push",
+                        "--porcelain",
+                        self.selected_remote.name,
+                        f"refs/tags/{tag}"
+                    ]
+                )
 
     @measure_runtime_decorator
     def pull(self):
@@ -1459,6 +1488,7 @@ class GitBackend(VMNBackend):
             except Exception as exc:
                 VMN_LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
 
+
     @measure_runtime_decorator
     def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
         self.revert_local_changes(version_files)
@@ -1476,7 +1506,7 @@ class GitBackend(VMNBackend):
         for tag in tags:
             try:
                 self._be.delete_tag(tag)
-            except Exception:
+            except Exception as exc:
                 VMN_LOGGER.info(f"Failed to remove tag {tag}")
                 VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
