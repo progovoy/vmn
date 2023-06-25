@@ -510,13 +510,13 @@ class VMNBackend(object):
         gdict = match.groupdict()
         ret["app_name"] = gdict["app_name"].replace("-", "/")
         ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret["major"] = gdict["major"]
-        ret["minor"] = gdict["minor"]
-        ret["patch"] = gdict["patch"]
-        ret["hotfix"] = "0"
+        ret["major"] = int(gdict["major"])
+        ret["minor"] = int(gdict["minor"])
+        ret["patch"] = int(gdict["patch"])
+        ret["hotfix"] = 0
 
         if gdict["hotfix"] is not None:
-            ret["hotfix"] = gdict["hotfix"]
+            ret["hotfix"] = int(gdict["hotfix"])
 
         # TODO: Think about what it means that we have the whole
         #  prerelease string here (with the prerelease count).
@@ -524,7 +524,7 @@ class VMNBackend(object):
         #  something like "prerelease mode" or "prerelease prefix"
         if gdict["prerelease"] is not None:
             ret["prerelease"] = gdict["prerelease"]
-            ret["rcn"] = gdict["rcn"]
+            ret["rcn"] = int(gdict["rcn"])
             ret["type"] = "prerelease"
 
         if gdict["buildmetadata"] is not None:
@@ -629,6 +629,9 @@ class LocalFileBackend(VMNBackend):
         with open(latest_file, "r") as f:
             ver_infos["none"]["ver_info"] = yaml.safe_load(f)
             return "none", ver_infos
+
+    def get_latest_available_tag(self, tag_prefix_filter):
+        return None
 
     def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {

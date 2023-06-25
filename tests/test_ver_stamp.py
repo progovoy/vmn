@@ -1651,14 +1651,12 @@ def test_get_version(app_layout):
 
 def test_get_version_number_from_file(app_layout):
     _run_vmn_init()
-    _, _, params = _init_app(app_layout.app_name, "0.2.1")
+    _, _, params = _init_app(app_layout.app_name, "0.2.1-rc.1")
 
     with open(params["version_file_path"], "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
     assert "0.2.1" == ver_dict["version_to_stamp_from"]
-    assert ver_dict["prerelease"] == "release"
-    assert ver_dict["prerelease_count"] == {}
 
 
 def test_read_version_from_file(app_layout):
@@ -1674,8 +1672,6 @@ def test_read_version_from_file(app_layout):
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
     assert "0.2.1" == ver_dict["version_to_stamp_from"]
-    assert ver_dict["prerelease"] == "release"
-    assert ver_dict["prerelease_count"] == {}
 
 
 def test_manual_file_adjustment(app_layout):

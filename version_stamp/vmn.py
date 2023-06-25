@@ -452,7 +452,7 @@ class IVersionsStamper(object):
         if tag:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
-            global_val = int(props["rcn"])
+            global_val = props["rcn"]
             prerelease_count[counter_key] = max(
                 prerelease_count[counter_key], global_val
             )
@@ -639,18 +639,17 @@ class IVersionsStamper(object):
     def _write_version_to_vmn_version_file(
         self, prerelease, prerelease_count, version_number
     ):
+        verstr = stamp_utils.VMNBackend.serialize_vmn_version(
+            version_number,
+            prerelease,
+            prerelease_count,
+            self.hide_zero_hotfix,
+        )
+
         file_path = self.version_file_path
-        if prerelease is None:
-            prerelease = "release"
-        # this method will write the stamped ver of an app to a file,
-        # weather the file pre exists or not
         try:
             with open(file_path, "w") as fid:
-                ver_dict = {
-                    "version_to_stamp_from": version_number,
-                    "prerelease": prerelease,
-                    "prerelease_count": prerelease_count,
-                }
+                ver_dict = {"version_to_stamp_from": verstr}
                 yaml.dump(ver_dict, fid)
         except IOError as e:
             stamp_utils.VMN_LOGGER.error(f"Error writing ver file: {file_path}\n")
@@ -834,14 +833,37 @@ class VersionControlStamper(IVersionsStamper):
 
                     gdict = match.groupdict()
                     prerelease = gdict["prerelease"]
-                    prerelease_cnt = gdict["cnt"]
+                    prerelease_cnt = gdict["rcn"]
 
                     tag_name_prefix = \
                         f'{stamp_utils.VMNBackend.app_name_to_git_tag_app_name(self.name)}' \
-                        f'_{verstr}-{prerelease}.{prerelease_cnt}*'
+                        f'_{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}-*'
                     tag = self.backend.get_latest_available_tag(tag_name_prefix)
+                    if tag:
+                        t, ver_info_c = self.backend.parse_tag_message(tag)
+                    else:
+                        ver_info_c = {
+                            "ver_info": None
+                        }
 
-                    return (ver_dict["version_to_stamp_from"], "release", {})
+                    if ver_info_c["ver_info"] is None and prerelease is None:
+                        return (ver_dict["version_to_stamp_from"], "release", {})
+
+                    if ver_info_c["ver_info"] is None:
+                        return (
+                            f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}',
+                            prerelease,
+                            {prerelease: int(prerelease_cnt)},
+                        )
+
+                    tmp = ver_info_c["ver_info"]["stamping"]["app"]["prerelease_count"]
+                    tmp[prerelease] = int(prerelease_cnt)
+
+                    return (
+                        f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}',
+                        prerelease,
+                        tmp,
+                    )
 
                 return (
                     ver_dict["version_to_stamp_from"],
@@ -1542,6 +1564,7 @@ def handle_stamp(vmn_ctx):
                      "prerelease"] == "release"
 
     if vmn_ctx.vcs.override_version:
+        # TODO:: support version with rc here.
         initial_version = vmn_ctx.vcs.override_version
         prerelease = 'release'
         prerelease_count = {}
