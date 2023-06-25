@@ -18,10 +18,10 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 # Only used for printing
 VMN_VERSION_FORMAT = (
-    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}.{rcn}][+{buildmetadata}]"
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][+{buildmetadata}]"
+    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -68,6 +68,7 @@ VMN_TEMPLATE_REGEX = (
     r"(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
     r"(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
     r"(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
+    r"(?:\[(?P<rcn_template>[^\{\}]*\{rcn\}[^\{\}]*)\])?"
     r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 

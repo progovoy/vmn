@@ -451,7 +451,7 @@ class IVersionsStamper(object):
         if tag:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
-            global_val = int(props["prerelease"].split(prerelease)[1])
+            global_val = int(props["rcn"])
             prerelease_count[counter_key] = max(
                 prerelease_count[counter_key], global_val
             )
@@ -554,7 +554,7 @@ class IVersionsStamper(object):
             prerelease_count,
             self.hide_zero_hotfix,
         )
-        verstr = self.get_be_formatted_version(verstr)
+
         for backend in self.version_backends:
             try:
                 if backend == "vmn_version_file":
@@ -1505,11 +1505,10 @@ def handle_stamp(vmn_ctx):
     if status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        version = vmn_ctx.vcs.get_be_formatted_version(
-            status["matched_version_info"]["stamping"]["app"]["_version"]
-        )
+        version = status["matched_version_info"]["stamping"]["app"]["_version"]
 
-        stamp_utils.VMN_LOGGER.info(version)
+        disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
+        stamp_utils.VMN_LOGGER.info(disp_version)
 
         return 0
 
@@ -1562,7 +1561,7 @@ def handle_stamp(vmn_ctx):
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
             (_, temp_ver_infos_from_repo) = vmn_ctx.vcs.get_version_info_from_verstr(
-                f"{props['version']}-{props['prerelease']}")
+                f"{props['version']}-{props['prerelease']}.{props['rcn']}")
 
             vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
                 temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
@@ -1604,10 +1603,11 @@ def handle_stamp(vmn_ctx):
 
         return 1
 
+    disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
     if vmn_ctx.vcs.dry_run:
-        stamp_utils.VMN_LOGGER.info(f"Would have stamped {version}")
+        stamp_utils.VMN_LOGGER.info(f"Would have stamped {disp_version}")
     else:
-        stamp_utils.VMN_LOGGER.info(f"{version}")
+        stamp_utils.VMN_LOGGER.info(f"{disp_version}")
 
     return 0
 
@@ -1642,9 +1642,7 @@ def handle_release(vmn_ctx):
     if ver is None and status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        ver = vmn_ctx.vcs.get_be_formatted_version(
-            status["matched_version_info"]["stamping"]["app"]["_version"]
-        )
+        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
     elif ver is None:
         stamp_utils.VMN_LOGGER.error(
             "When running vmn release and not on a version commit, "
@@ -1719,9 +1717,7 @@ def handle_add(vmn_ctx):
     if ver is None and status["matched_version_info"] is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        ver = vmn_ctx.vcs.get_be_formatted_version(
-            status["matched_version_info"]["stamping"]["app"]["_version"]
-        )
+        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
     elif ver is None:
         stamp_utils.VMN_LOGGER.error(
             "When running vmn add and not on a version commit, "
@@ -2217,7 +2213,7 @@ def _stamp_version(
         current_version, prerelease, prerelease_count, versions_be_ifc.hide_zero_hotfix
     )
 
-    return versions_be_ifc.get_be_formatted_version(verstr)
+    return verstr
 
 
 @stamp_utils.measure_runtime_decorator
