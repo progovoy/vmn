@@ -3264,7 +3264,7 @@ def test_rc_after_release(app_layout, capfd):
     )
 
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == "1.3.0-rc1"
+    assert data["_version"] == "1.3.0-rc.1"
     assert data["prerelease"] == "rc"
 
     i = 0
@@ -3273,14 +3273,14 @@ def test_rc_after_release(app_layout, capfd):
         err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
         data = ver_info["stamping"]["app"]
-        assert data["_version"] == f"1.3.0-rc{i + 2}"
+        assert data["_version"] == f"1.3.0-rc.{i + 2}"
         assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
-    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc2")
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc.2")
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"1.3.0-rc{i + 2}"
+    assert data["_version"] == f"1.3.0-rc.{i + 2}"
     assert data["prerelease"] == "rc"
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
@@ -3298,18 +3298,18 @@ def test_rc_after_release(app_layout, capfd):
 
     assert err == 0
     data = ver_info["stamping"]["app"]
-    assert data["_version"] == f"1.3.0-rc{i + 2 + 1}"
+    assert data["_version"] == f"1.3.0-rc.{i + 2 + 1}"
     assert data["prerelease"] == "rc"
 
     capfd.readouterr()
-    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc3")
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc.3")
     captured = capfd.readouterr()
     assert err == 1
 
     app_layout.pull(tags=True)
 
     capfd.readouterr()
-    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc3")
+    err, ver_info, _ = _release_app(app_layout.app_name, f"1.3.0-rc.3")
     captured = capfd.readouterr()
     assert err == 1
 
@@ -3318,5 +3318,4 @@ def test_rc_after_release(app_layout, capfd):
 
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
-    assert "1.3.0-rc2" in tmp["versions"]
-
+    assert "1.3.0-rc.2" in tmp["versions"]
