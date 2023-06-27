@@ -272,6 +272,8 @@ class IVersionsStamper(object):
 
                 return tag_name, {}
 
+
+
         tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
         if not ver_infos:
             stamp_utils.VMN_LOGGER.error(

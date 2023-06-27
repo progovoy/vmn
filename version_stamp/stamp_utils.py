@@ -1582,6 +1582,7 @@ class GitBackend(VMNBackend):
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
+        # split tag here and support 0.8.4 tags. also, support starting from rc versions, 
         if commit_tag_obj is None:
             VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")
             return tag_name, ver_infos

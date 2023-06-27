@@ -3322,7 +3322,7 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
     app_layout.stamp_with_previous_vmn("0.8.4")
 
     capfd.readouterr()
-    err = _show(app_layout.app_name, verbose=True)
+    err = _show("app1", verbose=True)
     assert err == 0
 
     captured = capfd.readouterr()
