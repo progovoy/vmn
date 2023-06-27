@@ -260,11 +260,12 @@ class FSAppLayoutFixture(object):
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
 
-    def stamp_with_previous_vmn(self):
+    def stamp_with_previous_vmn(self, vmn_version):
         import subprocess
 
         base_cmd = [
-            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"
+            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
+            vmn_version
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
@@ -280,8 +281,8 @@ class FSAppLayoutFixture(object):
             f"{self.repo_path}:/test_repo_0",
             "-v",
             f"{self.base_dir}:{self.base_dir}",
-            "previous_vmn_stamper:latest",
-            "/stamp_with_previous_vmn.sh",
+            f"previous_vmn_stamper:{vmn_version}",
+            f"/stamp_with_{vmn_version}_vmn.sh",
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))

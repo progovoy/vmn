@@ -1960,8 +1960,9 @@ def test_version_backends_npm(app_layout, capfd):
     assert err == 0
 
 
-def test_backward_compatability_with_previous_vmn(app_layout, capfd):
-    app_layout.stamp_with_previous_vmn()
+def test_backward_compatability_with_0_3_9_vmn(app_layout, capfd):
+    app_layout.stamp_with_previous_vmn("0.3.9")
+
     capfd.readouterr()
     err, ver_info, _ = _stamp_app("app1", "major")
     captured = capfd.readouterr()
