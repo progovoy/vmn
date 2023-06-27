@@ -3316,3 +3316,15 @@ def test_rc_after_release(app_layout, capfd):
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
     assert "1.3.0-rc.2" in tmp["versions"]
+
+
+def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
+    app_layout.stamp_with_previous_vmn("0.8.4")
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert "1.0.0-alpha.1" in tmp["versions"]
