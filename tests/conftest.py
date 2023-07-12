@@ -287,6 +287,7 @@ class FSAppLayoutFixture(object):
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
+        pass
 
     def revert_changes(self, repo_name):
         if repo_name not in self._repos:

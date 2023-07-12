@@ -29,6 +29,9 @@ def _init_app(app_name, starting_version="0.0.0"):
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+
+    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
     else:
@@ -55,6 +58,9 @@ def _release_app(app_name, version=None):
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
+
+    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
     else:
@@ -91,6 +97,9 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelea
     tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
+
+    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
     else:

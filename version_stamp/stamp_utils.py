@@ -47,9 +47,16 @@ _VMN_VER_REGEX = rf"{_SEMVER_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
 VMN_VER_REGEX = rf"^{_VMN_VER_REGEX}$"
 
+_VMN_OLD_REGEX = (
+    rf"{_VMN_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
+)
+
 _VMN_REGEX = (
     rf"{_VMN_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
+
+VMN_OLD_REGEX = rf"^{_VMN_OLD_REGEX}$"
+VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 # Regex for matching versions stamped by vmn
 VMN_REGEX = rf"^{_VMN_REGEX}$"
@@ -532,29 +539,6 @@ class VMNBackend(object):
             ret["type"] = "buildmetadata"
 
         return ret
-
-    @staticmethod
-    @measure_runtime_decorator
-    def enhance_ver_info(ver_infos):
-        all_tags = {}
-        for tag, ver_info_c in ver_infos.items():
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = ver_info_c["ver_info"]
-
-            all_tags[tagd["type"]] = tagd
-
-            # TODO:: Check API commit version
-        # Enhance "raw" ver_infos so all tags will have all info
-        for t, v in ver_infos.items():
-            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["root"]["message"]["stamping"]
-                )
-            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["version"]["message"]["stamping"]
-                )
 
     @staticmethod
     @measure_runtime_decorator
@@ -1574,7 +1558,7 @@ class GitBackend(VMNBackend):
             VMN_LOGGER.debug(f"Somehow {cleaned_app_tag} not in ver_infos")
             return None, {}
 
-        VMNBackend.enhance_ver_info(ver_infos)
+        self.enhance_ver_info(ver_infos)
 
         return cleaned_app_tag, ver_infos
 
@@ -1582,10 +1566,28 @@ class GitBackend(VMNBackend):
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
-        # split tag here and support 0.8.4 tags. also, support starting from rc versions, 
+
+        # TODO:: support starting from rc versions
         if commit_tag_obj is None:
-            VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")
-            return tag_name, ver_infos
+            tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
+            if tagd['prerelease'] is not None:
+                # Find the last occurrence of '.'
+                last_dot_index = tag_name.rfind('.')
+                if last_dot_index == -1:
+                    raise RuntimeError(
+                        f"No '.' found in tag name {tag_name} "
+                        f"although it appears to be prerelease tag"
+                    )
+
+                # Remove the last dot
+                old_tag_name = f"{tag_name[:last_dot_index]}{tag_name[last_dot_index + 1:]}"
+                old_tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(old_tag_name)
+
+                if commit_tag_obj is None:
+                    VMN_LOGGER.debug(f"Tried to find {old_tag_name} but with no success")
+                    return old_tag_name, ver_infos
+
+                tag_name = old_tag_name
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
             VMN_LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
@@ -1596,8 +1598,6 @@ class GitBackend(VMNBackend):
         if tag_name not in ver_infos:
             VMN_LOGGER.debug(f"Could not find version info for {tag_name}")
             return tag_name, None
-
-        VMNBackend.enhance_ver_info(ver_infos)
 
         return tag_name, ver_infos
 

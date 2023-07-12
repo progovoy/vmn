@@ -254,6 +254,44 @@ class IVersionsStamper(object):
     @stamp_utils.measure_runtime_decorator
     def get_version_info_from_verstr(self, verstr):
         tag_name = self.get_tag_name(verstr)
+        actual_tag = tag_name
+
+        # tag_name, commit_tag_obj = self.backend.get_commit_object_from_tag_name(tag_name)
+        # if commit_tag_obj is None:
+        #     # Find the last occurrence of '.'
+        #     last_dot_index = tag_name.rfind('.')
+        #     if last_dot_index == -1:
+        #         raise RuntimeError(
+        #             f"No '.' found in tag name {tag_name} "
+        #             f"although it appears to be prerelease tag"
+        #         )
+        #
+        #     # Remove the last dot
+        #     old_tag_name = f"{tag_name[:last_dot_index]}{tag_name[last_dot_index + 1:]}"
+        #     old_tag_name, commit_tag_obj = self.backend.get_commit_object_from_tag_name(old_tag_name)
+
+        try:
+            file_content = self.backend._be.git.show(
+                f'{actual_tag}:'
+                f'{os.path.relpath(self.version_file_path, self.vmn_root_path)}'
+            )
+        except Exception as exc:
+            # Find the last occurrence of '.'
+            last_dot_index = actual_tag.rfind('.')
+            if last_dot_index == -1:
+                raise RuntimeError(
+                    f"No '.' found in tag name {actual_tag} "
+                    f"although it appears to be prerelease tag"
+                )
+
+            # Remove the last dot
+            actual_tag = f"{actual_tag[:last_dot_index]}{actual_tag[last_dot_index + 1:]}"
+            file_content = self.backend._be.git.show(
+                f'{actual_tag}:'
+                f'{os.path.relpath(self.version_file_path, self.vmn_root_path)}'
+            )
+            yaml_content = yaml.safe_load(file_content)
+
         if self.root_context:
             try:
                 int(verstr)
@@ -264,30 +302,25 @@ class IVersionsStamper(object):
 
                 return tag_name, {}
         else:
-            try:
-                stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
-            except Exception as exc:
+            match = re.search(stamp_utils.VMN_REGEX, verstr)
+            if match is None:
                 stamp_utils.VMN_LOGGER.error(f"Wrong version specified: {verstr}")
-                stamp_utils.VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
-
                 return tag_name, {}
 
-
-
-        tag_name, ver_infos = self.backend.get_tag_version_info(tag_name)
+        actual_tag, ver_infos = self.backend.get_tag_version_info(actual_tag)
         if not ver_infos:
             stamp_utils.VMN_LOGGER.error(
-                f"Failed to get version info for tag: {tag_name}"
+                f"Failed to get version info for tag: {actual_tag}"
             )
 
-            return tag_name, {}
+            return actual_tag, {}
 
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            return tag_name, {}
+        if actual_tag not in ver_infos or ver_infos[actual_tag]["ver_info"] is None:
+            return actual_tag, {}
 
-        stamp_utils.VMNBackend.enhance_ver_info(ver_infos)
+        self.backend.enhance_ver_info(ver_infos)
 
-        return tag_name, ver_infos
+        return actual_tag, ver_infos
 
     @stamp_utils.measure_runtime_decorator
     def get_tag_name(self, verstr):
@@ -353,6 +386,9 @@ class IVersionsStamper(object):
                 self.root_context,
                 type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
             )
+
+            self.backend.enhance_ver_info(self.ver_infos_from_repo)
+
             if selected_tag is not None and selected_tag != self.selected_tag:
                 self.selected_tag = selected_tag
 
@@ -761,6 +797,8 @@ class VersionControlStamper(IVersionsStamper):
                     f"Failed to get version info for tag: {tag_formatted_app_name}"
                 )
                 return None
+
+            self.backend.enhance_ver_info(ver_infos)
         else:
             ver_infos = self.ver_infos_from_repo
 
@@ -969,6 +1007,9 @@ class VersionControlStamper(IVersionsStamper):
             buildmetadata_tag_name,
             tag_ver_infos,
         ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
+
+        self.backend.enhance_ver_info(tag_ver_infos)
+
         if buildmetadata_tag_name in tag_ver_infos:
             if tag_ver_infos[buildmetadata_tag_name]["ver_info"] != ver_info:
                 stamp_utils.VMN_LOGGER.error(
@@ -1011,6 +1052,8 @@ class VersionControlStamper(IVersionsStamper):
                 release_tag_formatted_app_name,
                 ver_infos,
             ) = self.backend.get_tag_version_info(release_tag_formatted_app_name)
+
+            self.backend.enhance_ver_info(ver_infos)
 
             if (
                 release_tag_formatted_app_name in ver_infos
@@ -1098,6 +1141,8 @@ class VersionControlStamper(IVersionsStamper):
             root_context=True,
             type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
         )
+
+        self.backend.enhance_ver_info(ver_infos)
 
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
             stamp_utils.VMN_LOGGER.error(
@@ -1413,6 +1458,66 @@ class VersionControlStamper(IVersionsStamper):
     @stamp_utils.measure_runtime_decorator
     def retrieve_remote_changes(self):
         self.backend.pull()
+
+    @stamp_utils.measure_runtime_decorator
+    def enhance_ver_info(self, ver_infos):
+        all_tags = {}
+        for tag, ver_info_c in ver_infos.items():
+            new_format_tag = self.get_new_format_tag_if_old(tag)
+
+            tagd = stamp_utils.VMNBackend.deserialize_vmn_tag_name(new_format_tag)
+            tagd.update({"tag": tag})
+            tagd["message"] = ver_info_c["ver_info"]
+
+            all_tags[tagd["type"]] = tagd
+
+            # TODO:: Check API commit version
+
+        # Enhance "raw" ver_infos so all tags will have all info
+        for t, v in ver_infos.items():
+            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["root"]["message"]["stamping"]
+                )
+            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
+                v["ver_info"]["stamping"].update(
+                    all_tags["version"]["message"]["stamping"]
+                )
+
+    def get_new_format_tag_if_old(self, some_tag):
+        actual_tag = some_tag
+
+        try:
+            file_content = self.backend._be.git.show(
+                f'{actual_tag}:'
+                f'{os.path.relpath(self.version_file_path, self.vmn_root_path)}'
+            )
+        except Exception as exc:
+            # Find the last occurrence of '.'
+            last_dot_index = actual_tag.rfind('.')
+            if last_dot_index == -1:
+                raise RuntimeError(
+                    f"No '.' found in tag name {actual_tag} "
+                    f"although it appears to be prerelease tag"
+                )
+
+            # Remove the last dot
+            actual_tag = f"{actual_tag[:last_dot_index]}{actual_tag[last_dot_index + 1:]}"
+            file_content = self.backend._be.git.show(
+                f'{actual_tag}:'
+                f'{os.path.relpath(self.version_file_path, self.vmn_root_path)}'
+            )
+            yaml_content = yaml.safe_load(file_content)
+
+        match = re.search(VMN_TAG_REGEX, some_tag)
+        if match is None:
+            match = re.search(VMN_OLD_TAG_REGEX, some_tag)
+            if match is not None:
+                oc = f'{prerelease}{prerelease_count}'
+                nc = f'{prerelease}.{prerelease_count}'
+                new_tag = prerelease.replace(oc, nc, 1)
+
+        return new_tag
 
 
 @stamp_utils.measure_runtime_decorator
@@ -2101,6 +2206,9 @@ def _init_app(versions_be_ifc, starting_version):
             root_context=True,
             type=stamp_utils.RELATIVE_TO_GLOBAL_TYPE,
         )
+
+        versions_be_ifc.backend.enhance_ver_info(ver_infos)
+
         if tag_name in ver_infos and ver_infos[tag_name]["ver_info"]:
             root_app_version = (
                 int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"])
@@ -2553,6 +2661,9 @@ def goto_version(vcs, params, version, pull):
         tag_name, ver_infos = vcs.backend.get_first_reachable_version_info(
             vcs.name, vcs.root_context, stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
+
+        vcs.backend.enhance_ver_info(ver_infos)
+
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
             stamp_utils.VMN_LOGGER.error(f"No such app: {vcs.name}")
             return 1
