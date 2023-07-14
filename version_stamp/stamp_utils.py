@@ -1428,6 +1428,7 @@ class GitBackend(VMNBackend):
             if p.message.startswith(INIT_COMMIT_MESSAGE):
                 return p.hexsha
 
+            # TODO:: think how to use this tags for later in order to avoid getting all tags again.
             ver_infos = self.get_all_commit_tags(p.hexsha)
             if not ver_infos:
                 VMN_LOGGER.warning(
@@ -1520,47 +1521,6 @@ class GitBackend(VMNBackend):
             VMN_LOGGER.info("Failed to fetch tags")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-    @measure_runtime_decorator
-    def get_first_reachable_version_info(
-        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
-    ):
-        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
-            app_name, root_context, type
-        )
-
-        if root_context:
-            regex = VMN_ROOT_TAG_REGEX
-        else:
-            regex = VMN_TAG_REGEX
-
-        cleaned_app_tag = None
-        for tag in app_tags:
-            # skip buildmetadata versions
-            if "+" in tag:
-                continue
-
-            match = re.search(regex, tag)
-            if match is None:
-                continue
-
-            gdict = match.groupdict()
-
-            if gdict["app_name"] != app_name.replace("/", "-"):
-                continue
-
-            cleaned_app_tag = tag
-            break
-
-        if cleaned_app_tag is None:
-            return None, {}
-
-        if cleaned_app_tag not in ver_infos:
-            VMN_LOGGER.debug(f"Somehow {cleaned_app_tag} not in ver_infos")
-            return None, {}
-
-        self.enhance_ver_info(ver_infos)
-
-        return cleaned_app_tag, ver_infos
 
     @measure_runtime_decorator
     def get_tag_version_info(self, tag_name):
@@ -1583,11 +1543,11 @@ class GitBackend(VMNBackend):
                 old_tag_name = f"{tag_name[:last_dot_index]}{tag_name[last_dot_index + 1:]}"
                 old_tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(old_tag_name)
 
-                if commit_tag_obj is None:
-                    VMN_LOGGER.debug(f"Tried to find {old_tag_name} but with no success")
-                    return old_tag_name, ver_infos
-
                 tag_name = old_tag_name
+
+        if commit_tag_obj is None:
+            VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")
+            return tag_name, ver_infos
 
         if commit_tag_obj.author.name != VMN_USER_NAME:
             VMN_LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")

@@ -26,11 +26,11 @@ def _init_app(app_name, starting_version="0.0.0"):
     stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
-    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
 
-    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+    vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
@@ -55,11 +55,11 @@ def _release_app(app_name, version=None):
     ret, vmn_ctx = vmn.vmn_run(cmd)
 
     vmn_ctx.vcs.initialize_backend_attrs()
-    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
 
-    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+    vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
@@ -94,11 +94,12 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelea
     stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
-    tag_name, ver_infos = vmn_ctx.vcs.backend.get_first_reachable_version_info(
+    tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
 
-    vmn_ctx.vcs.backend.enhance_ver_info(ver_infos)
+
+    vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
@@ -124,6 +125,7 @@ def _show(
     ignore_dirty=False,
     unique=False,
     display_type=False,
+    template=None,
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -142,6 +144,8 @@ def _show(
         args_list.append("--unique")
     if display_type:
         args_list.append("--type")
+    if template:
+        args_list.extend(["-t", f"{template}"])
 
     args_list.append(app_name)
 
@@ -3336,4 +3340,12 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
 
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
-    assert "1.0.0-alpha.1" in tmp["versions"]
+
+    assert "1.0.0-alpha" == tmp["version"]
+
+    err = _show("app1", verbose=True, template=stamp_utils.VMN_DEFAULT_TEMPLATE)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert "1.0.0-alpha.1" == tmp["version"]
