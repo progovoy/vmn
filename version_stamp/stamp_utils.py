@@ -404,12 +404,17 @@ class VMNBackend(object):
     @staticmethod
     def serialize_vmn_version(
         base_version,
-        hide_zero_hotfix=None,
+        prerelease=None,
+        rcn=0,
         buildmetadata=None,
     ):
         vmn_version = base_version
+
+        if prerelease is not None:
+            vmn_version = f"{vmn_version}-{prerelease}.{rcn}"
+
         if buildmetadata is not None:
-            vmn_version = f"{base_version}+{buildmetadata}"
+            vmn_version = f"{vmn_version}+{buildmetadata}"
 
         return vmn_version
 
@@ -480,7 +485,6 @@ class VMNBackend(object):
     def deserialize_vmn_version(verstr):
         ret = {
             "types": set("version"),
-            "version": None,
             "root_version": None,
             "major": None,
             "minor": None,
@@ -524,18 +528,10 @@ class VMNBackend(object):
         if gdict["hotfix"] is not None:
             ret["hotfix"] = int(gdict["hotfix"])
 
-        ret["version"] = VMNBackend.serialize_vmn_version_hotfix(
-            ret["major"],
-            ret["minor"],
-            ret["patch"],
-            ret["hotfix"],
-        )
-
         if gdict["prerelease"] is not None:
             ret["prerelease"] = gdict["prerelease"]
             ret["rcn"] = int(gdict["rcn"])
             ret["types"].add("prerelease")
-            ret["version"] = VMNBackend.serialize_vmn_version(ret["version"], )
 
         if gdict["buildmetadata"] is not None:
             ret["buildmetadata"] = gdict["buildmetadata"]
