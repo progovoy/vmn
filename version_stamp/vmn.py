@@ -1010,12 +1010,6 @@ class VersionControlStamper(IVersionsStamper):
 
     @stamp_utils.measure_runtime_decorator
     def add_metadata_to_version(self, tag_name, ver_info):
-        if ver_info is None:
-            stamp_utils.VMN_LOGGER.error(
-                f"Tag {tag_name} doesn't seem to exist. Wrong version specified?"
-            )
-            raise RuntimeError()
-
         tmp = ver_info["stamping"]["app"]
         res_ver = stamp_utils.VMNBackend.serialize_vmn_version(
             tmp["_version"],
