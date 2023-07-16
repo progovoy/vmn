@@ -323,6 +323,10 @@ class VMNBackend(object):
         return app_name.replace("/", "-")
 
     @staticmethod
+    def git_tag_app_name_to_git_app_name(tag_app_name):
+        return tag_app_name.replace("-", "/")
+
+    @staticmethod
     def gen_unique_id(verstr, hash):
         return f"{verstr}+{hash}"
 
@@ -374,9 +378,7 @@ class VMNBackend(object):
     def serialize_vmn_tag_name(
         app_name,
         version,
-        hide_zero_hotfix,
-        prerelease=None,
-        prerelease_count=None,
+        hide_zero_hotfix=None,
         buildmetadata=None,
     ):
         app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
@@ -384,8 +386,6 @@ class VMNBackend(object):
         # TODO:: use it less. since version in file already has a serialized string
         verstr = VMNBackend.serialize_vmn_version(
             version,
-            prerelease,
-            prerelease_count,
             hide_zero_hotfix,
             buildmetadata,
         )
@@ -403,62 +403,21 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version(
-        current_version,
-        prerelease,
-        prerelease_count,
-        hide_zero_hostfix,
+        base_version,
+        hide_zero_hotfix=None,
         buildmetadata=None,
     ):
-        vmn_version = VMNBackend.get_base_vmn_version(
-            current_version, hide_zero_hostfix
-        )
-
-        if prerelease is None or prerelease == "release":
-            if buildmetadata is not None:
-                vmn_version = f"{vmn_version}+{buildmetadata}"
-
-            return vmn_version
-
-        try:
-            assert prerelease in prerelease_count
-            # TODO: here try to use VMN_VERSION_FORMAT somehow
-            vmn_version = f"{vmn_version}-{prerelease}.{prerelease_count[prerelease]}"
-
-            match = re.search(VMN_REGEX, vmn_version)
-            if match is None:
-                err = (
-                    f"Tag {vmn_version} doesn't comply with: "
-                    f"{VMN_VERSION_FORMAT} format"
-                )
-                VMN_LOGGER.error(err)
-
-                raise RuntimeError(err)
-        except AssertionError:
-            VMN_LOGGER.error(
-                f"{prerelease} doesn't appear in {prerelease_count} "
-                "Turn on debug mode to see traceback"
-            )
-            VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
+        vmn_version = base_version
         if buildmetadata is not None:
-            vmn_version = f"{vmn_version}+{buildmetadata}"
-
-            match = re.search(VMN_REGEX, vmn_version)
-            if match is None:
-                err = (
-                    f"Tag {vmn_version} doesn't comply with: "
-                    f"{VMN_VERSION_FORMAT} format"
-                )
-                VMN_LOGGER.error(err)
-                raise RuntimeError(err)
+            vmn_version = f"{base_version}+{buildmetadata}"
 
         return vmn_version
 
     @staticmethod
     def serialize_vmn_version_hotfix(
-        hide_zero_hotfix, major, minor, patch, hotfix=None
+        major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
-        if hide_zero_hotfix and hotfix == "0":
+        if hide_zero_hotfix is not None and hide_zero_hotfix and hotfix == "0":
             hotfix = None
 
         vmn_version = f"{major}.{minor}.{patch}"
@@ -468,17 +427,18 @@ class VMNBackend(object):
         return vmn_version
 
     @staticmethod
-    def get_base_vmn_version(current_version, hide_zero_hotfix):
-        match = re.search(VMN_REGEX, current_version)
+    def get_base_vmn_version(base_version, hide_zero_hotfix=None):
+        match = re.search(VMN_REGEX, base_version)
         gdict = match.groupdict()
         if gdict["hotfix"] is None:
             gdict["hotfix"] = str(0)
+
         vmn_version = VMNBackend.serialize_vmn_version_hotfix(
-            hide_zero_hotfix,
             gdict["major"],
             gdict["minor"],
             gdict["patch"],
             gdict["hotfix"],
+            hide_zero_hotfix,
         )
 
         return vmn_version
@@ -487,7 +447,39 @@ class VMNBackend(object):
     def deserialize_tag_name(some_tag):
         ret = {
             "app_name": None,
-            "type": "version",
+        }
+
+        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
+        if match is not None:
+            gdict = match.groupdict()
+            ret["app_name"] = gdict["app_name"]
+        else:
+            match = re.search(VMN_TAG_REGEX, some_tag)
+            old_tag_format = False
+            if match is None:
+                match = re.search(VMN_OLD_TAG_REGEX, some_tag)
+                if match is None:
+                    raise WrongTagFormatException()
+
+                old_tag_format = True
+
+            gdict = match.groupdict()
+            if old_tag_format:
+                ret["old_tag_format"] = True
+
+            ret["app_name"] = VMNBackend.git_tag_app_name_to_git_app_name(gdict["app_name"])
+
+        verstr = some_tag.split(f"{ret['app_name']}_")[1]
+        ret.update(
+            VMNBackend.deserialize_vmn_version(verstr)
+        )
+
+        return ret
+
+    @staticmethod
+    def deserialize_vmn_version(verstr):
+        ret = {
+            "types": set("version"),
             "version": None,
             "root_version": None,
             "major": None,
@@ -497,26 +489,33 @@ class VMNBackend(object):
             "prerelease": None,
             "rcn": None,
             "buildmetadata": None,
+            "old_ver_format": False,
         }
 
-        match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
+        match = re.search(VMN_ROOT_REGEX, verstr)
         if match is not None:
             gdict = match.groupdict()
 
             int(gdict["version"])
             ret["root_version"] = gdict["version"]
-            ret["app_name"] = gdict["app_name"]
-            ret["type"] = "root"
+            ret["types"].add("root")
 
             return ret
 
-        match = re.search(VMN_TAG_REGEX, some_tag)
+        match = re.search(VMN_REGEX, verstr)
+        old_ver_format = False
         if match is None:
-            raise WrongTagFormatException()
+            match = re.search(VMN_OLD_REGEX, verstr)
+            if match is None:
+                raise WrongTagFormatException()
+
+            old_ver_format = True
 
         gdict = match.groupdict()
-        ret["app_name"] = gdict["app_name"].replace("-", "/")
-        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
+        if old_ver_format:
+            gdict["rcn"] = -1
+            ret["old_ver_format"] = True
+
         ret["major"] = int(gdict["major"])
         ret["minor"] = int(gdict["minor"])
         ret["patch"] = int(gdict["patch"])
@@ -525,18 +524,22 @@ class VMNBackend(object):
         if gdict["hotfix"] is not None:
             ret["hotfix"] = int(gdict["hotfix"])
 
-        # TODO: Think about what it means that we have the whole
-        #  prerelease string here (with the prerelease count).
-        #  At least rename other prerelease prefixes to
-        #  something like "prerelease mode" or "prerelease prefix"
+        ret["version"] = VMNBackend.serialize_vmn_version_hotfix(
+            ret["major"],
+            ret["minor"],
+            ret["patch"],
+            ret["hotfix"],
+        )
+
         if gdict["prerelease"] is not None:
             ret["prerelease"] = gdict["prerelease"]
             ret["rcn"] = int(gdict["rcn"])
-            ret["type"] = "prerelease"
+            ret["types"].add("prerelease")
+            ret["version"] = VMNBackend.serialize_vmn_version(ret["version"], )
 
         if gdict["buildmetadata"] is not None:
             ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["type"] = "buildmetadata"
+            ret["types"].add("buildmetadata")
 
         return ret
 
@@ -1528,22 +1531,6 @@ class GitBackend(VMNBackend):
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
 
         # TODO:: support starting from rc versions
-        if commit_tag_obj is None:
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
-            if tagd['prerelease'] is not None:
-                # Find the last occurrence of '.'
-                last_dot_index = tag_name.rfind('.')
-                if last_dot_index == -1:
-                    raise RuntimeError(
-                        f"No '.' found in tag name {tag_name} "
-                        f"although it appears to be prerelease tag"
-                    )
-
-                # Remove the last dot
-                old_tag_name = f"{tag_name[:last_dot_index]}{tag_name[last_dot_index + 1:]}"
-                old_tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(old_tag_name)
-
-                tag_name = old_tag_name
 
         if commit_tag_obj is None:
             VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")
