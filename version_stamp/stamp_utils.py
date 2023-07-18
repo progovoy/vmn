@@ -484,13 +484,13 @@ class VMNBackend(object):
     @staticmethod
     def deserialize_vmn_version(verstr):
         ret = {
-            "types": set("version"),
+            "types": {"version"},
             "root_version": None,
             "major": None,
             "minor": None,
             "patch": None,
             "hotfix": None,
-            "prerelease": None,
+            "prerelease": 'release',
             "rcn": None,
             "buildmetadata": None,
             "old_ver_format": False,
