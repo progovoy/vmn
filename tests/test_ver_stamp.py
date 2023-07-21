@@ -98,7 +98,6 @@ def _stamp_app(app_name, release_mode=None, optional_release_mode=None, prerelea
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
 
-
     vmn_ctx.vcs.enhance_ver_info(ver_infos)
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
@@ -3341,11 +3340,11 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
 
-    assert "1.0.0-alpha" == tmp["version"]
+    assert "1.0.0-alpha1" == tmp["version"]
 
     err = _show("app1", verbose=True, template=stamp_utils.VMN_DEFAULT_TEMPLATE)
     assert err == 0
 
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
-    assert "1.0.0-alpha.1" == tmp["version"]
+    assert "1.0.0-alpha1" == tmp["version"]

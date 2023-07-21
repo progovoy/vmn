@@ -26,7 +26,7 @@ VMN_DEFAULT_TEMPLATE = (
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
 
-_SEMVER_VER_REGEX = (
+_SEMVER_BASE_VER_REGEX = (
     rf"(?P<major>{_DIGIT_REGEX})\.(?P<minor>{_DIGIT_REGEX})\.(?P<patch>{_DIGIT_REGEX})"
 )
 
@@ -38,21 +38,21 @@ SEMVER_BUILDMETADATA_REGEX = (
 
 # Unused
 __SEMVER_REGEX = (
-    rf"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
+    rf"^{_SEMVER_BASE_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
 _VMN_HOTFIX_REGEX = rf"(?:\.(?P<hotfix>{_DIGIT_REGEX}))?"
 
-_VMN_VER_REGEX = rf"{_SEMVER_VER_REGEX}{_VMN_HOTFIX_REGEX}"
+_VMN_BASE_VER_REGEX = rf"{_SEMVER_BASE_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
-VMN_VER_REGEX = rf"^{_VMN_VER_REGEX}$"
+VMN_BASE_VER_REGEX = rf"^{_VMN_BASE_VER_REGEX}$"
 
 _VMN_OLD_REGEX = (
-    rf"{_VMN_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
+    rf"{_VMN_BASE_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
 
 _VMN_REGEX = (
-    rf"{_VMN_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
+    rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
 
 VMN_OLD_REGEX = rf"^{_VMN_OLD_REGEX}$"
@@ -304,11 +304,6 @@ class VMNBackend(object):
     def prepare_for_remote_operation(self):
         return 0
 
-    def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
-    ):
-        return {}
-
     def get_active_branch(self):
         return "none"
 
@@ -319,11 +314,11 @@ class VMNBackend(object):
         return "none"
 
     @staticmethod
-    def app_name_to_git_tag_app_name(app_name):
+    def app_name_to_tag_name(app_name):
         return app_name.replace("/", "-")
 
     @staticmethod
-    def git_tag_app_name_to_git_app_name(tag_app_name):
+    def tag_name_to_app_name(tag_app_name):
         return tag_app_name.replace("-", "/")
 
     @staticmethod
@@ -332,11 +327,10 @@ class VMNBackend(object):
 
     @staticmethod
     def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
-        match = re.search(VMN_REGEX, raw_vmn_version)
+        props = VMNBackend.deserialize_vmn_version(raw_vmn_version)
 
-        gdict = match.groupdict()
-        if gdict["hotfix"] == "0" and hide_zero_hotfix:
-            gdict["hotfix"] = None
+        if props["hotfix"] == 0 and hide_zero_hotfix:
+            props["hotfix"] = None
 
         octats = (
             "major",
@@ -350,14 +344,17 @@ class VMNBackend(object):
 
         formatted_version = ""
         for octat in octats:
-            if gdict[octat] is None:
+            if props[octat] is None:
                 continue
 
             if (
                 f"{octat}_template" in template
                 and template[f"{octat}_template"] is not None
             ):
-                d = {octat: gdict[octat]}
+                d = {octat: props[octat]}
+                if 'rcn' in d and props['old_ver_format']:
+                    continue
+
                 formatted_version = (
                     f"{formatted_version}"
                     f"{template[f'{octat}_template'].format(**d)}"
@@ -377,41 +374,67 @@ class VMNBackend(object):
     @measure_runtime_decorator
     def serialize_vmn_tag_name(
         app_name,
-        version,
-        hide_zero_hotfix=None,
-        buildmetadata=None,
+        verstr,
     ):
-        app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
+        app_name = VMNBackend.app_name_to_tag_name(app_name)
+        tag_name = f"{app_name}_{verstr}"
 
-        # TODO:: use it less. since version in file already has a serialized string
-        verstr = VMNBackend.serialize_vmn_version(
-            version,
-            hide_zero_hotfix,
-            buildmetadata,
-        )
-
-        verstr = f"{app_name}_{verstr}"
-
-        match = re.search(VMN_TAG_REGEX, verstr)
-        if match is None:
-            err = f"Tag {verstr} doesn't comply with: " f"{VMN_TAG_REGEX} format"
+        try:
+            props = VMNBackend.deserialize_tag_name(tag_name)
+        except Exception as exc:
+            err = f"Tag {tag_name} doesn't comply with: " f"{VMN_TAG_REGEX} format"
             VMN_LOGGER.error(err)
 
             raise RuntimeError(err)
 
-        return verstr
+        return tag_name
 
     @staticmethod
     def serialize_vmn_version(
-        base_version,
+        base_verstr,
         prerelease=None,
-        rcn=0,
+        rcn=None,
         buildmetadata=None,
+        hide_zero_hotfix=False
     ):
-        vmn_version = base_version
+        props = VMNBackend.deserialize_vmn_version(base_verstr)
+        base_verstr = VMNBackend.serialize_vmn_base_version(
+            props['major'],
+            props['minor'],
+            props['patch'],
+            props['hotfix'],
+            hide_zero_hotfix=hide_zero_hotfix
+        )
+
+        vmn_version = base_verstr
+
+        if props['prerelease'] is not None:
+            if prerelease is not None:
+                VMN_LOGGER.warning(
+                    f"Tried to serialize verstr containing "
+                    f"prerelease component but also tried to append"
+                    f" another prerelease component. Will ignore it"
+                )
+
+            prerelease = props['prerelease']
+            if not props["old_ver_format"]:
+                rcn = props['rcn']
+
+        if props["buildmetadata"] is not None:
+            if prerelease is not None:
+                VMN_LOGGER.warning(
+                    f"Tried to serialize verstr containing "
+                    f"buildmetadata component but also tried to append"
+                    f" another buildmetadata component. Will ignore it"
+                )
+
+            buildmetadata = props['buildmetadata']
 
         if prerelease is not None:
-            vmn_version = f"{vmn_version}-{prerelease}.{rcn}"
+            vmn_version = f"{vmn_version}-{prerelease}"
+
+            if rcn is not None:
+                vmn_version = f"{vmn_version}.{rcn}"
 
         if buildmetadata is not None:
             vmn_version = f"{vmn_version}+{buildmetadata}"
@@ -419,10 +442,10 @@ class VMNBackend(object):
         return vmn_version
 
     @staticmethod
-    def serialize_vmn_version_hotfix(
+    def serialize_vmn_base_version(
         major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
-        if hide_zero_hotfix is not None and hide_zero_hotfix and hotfix == "0":
+        if hide_zero_hotfix is not None and hide_zero_hotfix and hotfix == 0:
             hotfix = None
 
         vmn_version = f"{major}.{minor}.{patch}"
@@ -432,17 +455,14 @@ class VMNBackend(object):
         return vmn_version
 
     @staticmethod
-    def get_base_vmn_version(base_version, hide_zero_hotfix=None):
-        match = re.search(VMN_REGEX, base_version)
-        gdict = match.groupdict()
-        if gdict["hotfix"] is None:
-            gdict["hotfix"] = str(0)
+    def get_base_vmn_version(some_verstr, hide_zero_hotfix=None):
+        props = VMNBackend.deserialize_vmn_version(some_verstr)
 
-        vmn_version = VMNBackend.serialize_vmn_version_hotfix(
-            gdict["major"],
-            gdict["minor"],
-            gdict["patch"],
-            gdict["hotfix"],
+        vmn_version = VMNBackend.serialize_vmn_base_version(
+            props["major"],
+            props["minor"],
+            props["patch"],
+            props["hotfix"],
             hide_zero_hotfix,
         )
 
@@ -472,11 +492,15 @@ class VMNBackend(object):
             if old_tag_format:
                 ret["old_tag_format"] = True
 
-            ret["app_name"] = VMNBackend.git_tag_app_name_to_git_app_name(gdict["app_name"])
+            ret["app_name"] = VMNBackend.tag_name_to_app_name(gdict["app_name"])
 
-        verstr = some_tag.split(f"{ret['app_name']}_")[1]
+        try:
+            res = VMNBackend.app_name_to_tag_name(ret['app_name'])
+            ret['verstr'] = some_tag.split(f"{res}_")[1]
+        except Exception as exc:
+            pass
         ret.update(
-            VMNBackend.deserialize_vmn_version(verstr)
+            VMNBackend.deserialize_vmn_version(ret['verstr'])
         )
 
         return ret
@@ -490,7 +514,7 @@ class VMNBackend(object):
             "minor": None,
             "patch": None,
             "hotfix": None,
-            "prerelease": 'release',
+            "prerelease": None,
             "rcn": None,
             "buildmetadata": None,
             "old_ver_format": False,
@@ -959,7 +983,7 @@ class GitBackend(VMNBackend):
 
             return tag_names, cobj, ver_infos
 
-        tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
+        tag_name_prefix = VMNBackend.app_name_to_tag_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
         tag_names = self._be.git.tag(*cmd).split("\n")
 
