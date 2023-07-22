@@ -739,22 +739,34 @@ class IVersionsStamper(object):
 
     def _write_version_to_generic(self, verstr):
         backend_conf = self.version_backends["generic"]
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
 
-            data["version"] = verstr
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=4, sort_keys=True)
-        except IOError as e:
-            stamp_utils.VMN_LOGGER.error(f"Error writing npm ver file: {file_path}\n")
-            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
+        self.current_version_info["stamping"]["app"]["version"] = \
+            stamp_utils.VMNBackend.get_utemplate_formatted_version(
+            self.current_version_info["stamping"]["app"]["_version"],
+                self.template,
+                self.hide_zero_hotfix
+        )
 
-            raise IOError(e)
-        except Exception as e:
-            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
-            raise RuntimeError(e)
+        self.current_version_info["stamping"]["app"]["base_version"] = \
+            stamp_utils.VMNBackend.get_base_vmn_version(
+            self.current_version_info["stamping"]["app"]["_version"],
+            self.hide_zero_hotfix,
+        )
+
+        for item in backend_conf["paths"]:
+            if len(item) == 2:
+                item.append(None)
+
+            tmplt_value = create_data_dict_for_jinja2(
+                self.current_version_info,
+                os.path.join(self.vmn_root_path, item[2]),
+            )
+
+            gen_jinja2_template_from_data(
+                tmplt_value,
+                os.path.join(self.vmn_root_path, item[0]),
+                os.path.join(self.vmn_root_path, item[1]),
+            )
 
     def _write_version_to_vmn_version_file(self, verstr):
         file_path = self.version_file_path
@@ -1184,6 +1196,14 @@ class VersionControlStamper(IVersionsStamper):
 
         for backend in self.version_backends:
             backend_conf = self.version_backends[backend]
+            if backend == "generic":
+                for item in backend_conf["paths"]:
+                    for p in item:
+                        file_path = os.path.join(self.vmn_root_path, p)
+                        version_files_to_add.append(file_path)
+
+                continue
+
             file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
             version_files_to_add.append(file_path)
 

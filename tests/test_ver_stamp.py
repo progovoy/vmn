@@ -563,6 +563,45 @@ def test_jinja2_gen_custom(app_layout, capfd):
         assert data["Custom"] == 5
 
 
+def test_jinja2_generic(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    jinja2_content = "VERSION: {{version}}\n" "Custom: {{k1}}\n"
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
+
+    custom_keys_content = "k1: 5\n"
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "custom.yml", custom_keys_content
+    )
+
+    conf = {
+        "version_backends": {"generic": {"paths": [["f1.jinja2", "jinja_out.txt", "custom.yml"]]}},
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    tpath = os.path.join(app_layout._repos["test_repo_0"]["path"], "f1.jinja2")
+    custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "jinja_out.txt")
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["VERSION"] == "0.0.2"
+        assert data["Custom"] == 5
+
+
 def test_basic_show(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
