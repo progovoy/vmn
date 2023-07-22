@@ -737,6 +737,25 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
+    def _write_version_to_generic(self, verstr):
+        backend_conf = self.version_backends["generic"]
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+
+            data["version"] = verstr
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=4, sort_keys=True)
+        except IOError as e:
+            stamp_utils.VMN_LOGGER.error(f"Error writing npm ver file: {file_path}\n")
+            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
+
     def _write_version_to_vmn_version_file(self, verstr):
         file_path = self.version_file_path
         try:
@@ -2400,6 +2419,9 @@ def gen(vcs, params, verstr=None):
             raise RuntimeError()
 
     data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
+
+    # With verstr given, we know the supposed to be deps states.
+    # If no verstr given, learn the actual deps state
     if verstr is None:
         data["changesets"] = {}
 
@@ -2422,41 +2444,58 @@ def gen(vcs, params, verstr=None):
         data["_version"], vcs.template, vcs.hide_zero_hotfix
     )
 
-    tmplt_value = {}
-    tmplt_value.update(data)
-    tmplt_value["base_version"] = stamp_utils.VMNBackend.get_base_vmn_version(
+    data["base_version"] = stamp_utils.VMNBackend.get_base_vmn_version(
         data["_version"],
         vcs.hide_zero_hotfix,
     )
-    if "root_app" in ver_infos[tag_name]["ver_info"]["stamping"]:
-        for key, v in ver_infos[tag_name]["ver_info"]["stamping"]["root_app"].items():
-            tmplt_value[f"root_{key}"] = v
 
-    if params["custom_values"] is not None:
-        with open(params["custom_values"], "r") as f:
+    tmplt_value = create_data_dict_for_jinja2(
+        ver_infos[tag_name]["ver_info"],
+        params["custom_values"],
+    )
+
+    gen_jinja2_template_from_data(
+        tmplt_value,
+        params["jinja_template"],
+        params["output"],
+    )
+
+    return 0
+
+
+def create_data_dict_for_jinja2(ver_info, custom_values_path):
+    tmplt_value = {}
+    tmplt_value.update(ver_info["stamping"]["app"])
+
+    if custom_values_path is not None:
+        with open(custom_values_path, "r") as f:
             ret = yaml.safe_load(f)
             tmplt_value.update(ret)
 
-    with open(params["jinja_template"]) as file_:
+    if "root_app" in ver_info["stamping"]:
+        for key, v in ver_info["stamping"]["root_app"].items():
+            tmplt_value[f"root_{key}"] = v
+
+    return tmplt_value
+
+
+def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
+    with open(jinja_template_path) as file_:
         template = jinja2.Template(file_.read())
 
     stamp_utils.VMN_LOGGER.debug(
-        f"Possible keywords for your Jinja template:\n" f"{pformat(tmplt_value)}"
+        f"Possible keywords for your Jinja template:\n" f"{pformat(data)}"
     )
-    out = template.render(tmplt_value)
+    out = template.render(data)
 
-    out_path = params["output"]
-
-    if os.path.exists(out_path):
-        with open(out_path) as file_:
+    if os.path.exists(output_path):
+        with open(output_path) as file_:
             current_out_content = file_.read()
             if current_out_content == out:
                 return 0
 
-    with open(out_path, "w") as f:
+    with open(output_path, "w") as f:
         f.write(out)
-
-    return 0
 
 
 def get_dirty_states(optional_status, status):
