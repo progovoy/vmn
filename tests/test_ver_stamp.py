@@ -833,8 +833,8 @@ def test_show_from_file(app_layout, capfd):
     capfd.readouterr()
     # TODO: Improve stdout in such a case
     err = _show(app_name, verbose=True, root=True)
-    assert err == 1
     captured = capfd.readouterr()
+    assert err == 0
 
     err = _show("root_app", verbose=True, root=True)
     assert err == 0
@@ -1668,7 +1668,7 @@ def test_get_version_number_from_file(app_layout):
     with open(params["version_file_path"], "r") as fid:
         ver_dict = yaml.load(fid, Loader=yaml.FullLoader)
 
-    assert "0.2.1" == ver_dict["version_to_stamp_from"]
+    assert "0.2.1-rc.1" == ver_dict["version_to_stamp_from"]
 
 
 def test_read_version_from_file(app_layout):
@@ -3068,6 +3068,7 @@ def test_show_no_log_in_stdout(app_layout, capfd):
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
 
+
 def test_two_prs_from_same_origin(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3223,7 +3224,6 @@ def test_override_version(app_layout, capfd):
     data = ver_info["stamping"]["app"]
 
     assert data["_version"] == f"0.1.1-rc.1"
-
 
 
 def test_merge_version_conflict(app_layout, capfd):

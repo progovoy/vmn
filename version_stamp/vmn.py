@@ -263,10 +263,12 @@ class IVersionsStamper(object):
                 # 0.8.4
                 if 'prerelease' in ver_dict:
                     base_verstr = verstr
+                    prerelease = None
+                    if ver_dict['prerelease'] != "release":
+                        prerelease = f"{ver_dict['prerelease']}{ver_dict['prerelease_count'][ver_dict['prerelease']]}"
                     verstr = stamp_utils.VMNBackend.serialize_vmn_version(
                         base_verstr,
-                        prerelease=f"{ver_dict['prerelease']}"
-                                   f"{ver_dict['prerelease_count'][ver_dict['prerelease']]}",
+                        prerelease=prerelease,
                         hide_zero_hotfix=self.hide_zero_hotfix,
                     )
             else:
@@ -338,13 +340,14 @@ class IVersionsStamper(object):
         if root_tag is None:
             return
 
+        if ver_tag is None:
+            return
+
         ver_infos[ver_tag]["ver_info"]["stamping"]["root_app"] = \
             ver_infos[root_tag]["ver_info"]["stamping"]["root_app"]
 
         ver_infos[root_tag]["ver_info"]["stamping"]["app"] = \
             ver_infos[ver_tag]["ver_info"]["stamping"]["app"]
-
-        pass
 
     @stamp_utils.measure_runtime_decorator
     def get_version_info_from_verstr(self, verstr):
@@ -1486,7 +1489,7 @@ def handle_stamp(vmn_ctx):
 
             raise RuntimeError(err)
 
-        assert props["prerelease"] == None
+        assert props["prerelease"] == "release"
         assert props["buildmetadata"] is None
 
     optional_status = {"modified", "detached"}
@@ -2255,13 +2258,15 @@ def show(vcs, params, verstr=None):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
 
     if vcs.root_context:
-        data.update(ver_info["stamping"]["root_app"])
-        if not data:
-            stamp_utils.VMN_LOGGER.info(
-                "App {0} does not have a root app ".format(vcs.name)
+        if "root_app" not in ver_info["stamping"]:
+            err_str = f"App {vcs.name} does not have a root app"
+            stamp_utils.VMN_LOGGER.error(
+                err_str
             )
 
             raise RuntimeError()
+
+        data.update(ver_info["stamping"]["root_app"])
 
         out = None
         if params.get("verbose"):

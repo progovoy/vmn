@@ -662,25 +662,72 @@ class LocalFileBackend(VMNBackend):
 
     def get_tag_version_info(self, tag_name):
         tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
-        if tagd["type"] == "root":
+        if "root" in tagd["types"]:
             dir_path = os.path.join(
                 self.repo_path, ".vmn", tagd["app_name"], "root_verinfo"
             )
             path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
         else:
             dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
-            path = os.path.join(dir_path, f"{tagd['version']}.yml")
+            path = os.path.join(dir_path, f"{tagd['verstr']}.yml")
 
-        ver_infos = {
-            tag_name: {"ver_info": None, "tag_object": None, "commit_object": None}
-        }
+        ver_infos = {}
         try:
             with open(path, "r") as f:
+                ver_infos = {
+                    tag_name: {
+                        "ver_info": None,
+                        "tag_object": None,
+                        "commit_object": None
+                    }
+                }
                 ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
         except Exception as exc:
-            VMN_LOGGER.error("Logged Exception message:", exc_info=True)
+            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return tag_name, ver_infos
+
+    @measure_runtime_decorator
+    def get_latest_stamp_tags(
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
+        if root_context:
+            dir_path = os.path.join(
+                self.repo_path, ".vmn", app_name, "root_verinfo"
+            )
+        else:
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
+
+        files = glob.glob(os.path.join(dir_path, '*'))
+
+        # sort the files by modification date
+        files.sort(key=os.path.getmtime, reverse=True)
+
+        ver_infos = {}
+        tag_names = []
+        if files:
+            with open(files[0], "r") as f:
+                data = yaml.safe_load(f)
+                if root_context:
+                    ver = data["stamping"]["root_app"]["version"]
+                else:
+                    ver = data["stamping"]["app"]["_version"]
+
+                tag_name = VMNBackend.serialize_vmn_tag_name(
+                    app_name,
+                    ver
+                )
+                tag_names.append(tag_name)
+                ver_infos = {
+                    tag_name: {
+                        "ver_info": None,
+                        "tag_object": None,
+                        "commit_object": None
+                    }
+                }
+                ver_infos[tag_name]["ver_info"] = data
+
+        return tag_names, None, ver_infos
 
 
 class GitBackend(VMNBackend):
