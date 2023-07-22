@@ -1376,7 +1376,7 @@ class GitBackend(VMNBackend):
 
         VMN_LOGGER.warning(
             f"No remote branch for local branch: {local_branch_name} "
-            f"was found. Will try to set upstream for it"
+            f"was found for repo {self.repo_path}. Will try to set upstream for it"
         )
 
         out = self._be.git.branch("-r", "--contains", "HEAD")
