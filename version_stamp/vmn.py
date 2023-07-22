@@ -1555,7 +1555,8 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.vcs.optional_release_mode,
             globally=False
         )
-        tag_name_prefix = f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vmn_ctx.vcs.name, verstr)}*"
+        base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(verstr)
+        tag_name_prefix = f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vmn_ctx.vcs.name, base_verstr)}-*"
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
         if tag is not None and len(tag) < len(tag_name_prefix):
             tag = None
@@ -1565,8 +1566,7 @@ def handle_stamp(vmn_ctx):
         else:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
 
-            (_, temp_ver_infos_from_repo) = vmn_ctx.vcs.get_version_info_from_verstr(
-                f"{props['version']}-{props['prerelease']}.{props['rcn']}")
+            (_, temp_ver_infos_from_repo) = vmn_ctx.vcs.get_version_info_from_verstr(f"{props['verstr']}")
 
             vmn_ctx.vcs.ver_infos_from_repo[vmn_ctx.vcs.selected_tag]["ver_info"]["stamping"]["app"]["_version"] = \
                 temp_ver_infos_from_repo[tag]["ver_info"]["stamping"]["app"]["_version"]
