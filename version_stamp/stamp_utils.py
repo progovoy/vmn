@@ -355,6 +355,9 @@ class VMNBackend(object):
                 if 'rcn' in d and props['old_ver_format']:
                     continue
 
+                if 'prerelease' in d and d['prerelease'] == 'release':
+                    continue
+
                 formatted_version = (
                     f"{formatted_version}"
                     f"{template[f'{octat}_template'].format(**d)}"
@@ -376,11 +379,18 @@ class VMNBackend(object):
         app_name,
         verstr,
     ):
-        app_name = VMNBackend.app_name_to_tag_name(app_name)
-        tag_name = f"{app_name}_{verstr}"
+        tag_app_name = VMNBackend.app_name_to_tag_name(app_name)
+        tag_name = f"{tag_app_name}_{verstr}"
 
         try:
             props = VMNBackend.deserialize_tag_name(tag_name)
+            if props['hotfix'] == 0:
+                # tags are always without zero hotfix
+                verstr = VMNBackend.serialize_vmn_version(
+                    verstr, hide_zero_hotfix=True
+                )
+                tag_name = f"{tag_app_name}_{verstr}"
+                props = VMNBackend.deserialize_tag_name(tag_name)
         except Exception as exc:
             err = f"Tag {tag_name} doesn't comply with: " f"{VMN_TAG_REGEX} format"
             VMN_LOGGER.error(err)
@@ -408,7 +418,7 @@ class VMNBackend(object):
 
         vmn_version = base_verstr
 
-        if props['prerelease'] is not None:
+        if props['prerelease'] != "release":
             if prerelease is not None:
                 VMN_LOGGER.warning(
                     f"Tried to serialize verstr containing "
@@ -472,6 +482,7 @@ class VMNBackend(object):
     def deserialize_tag_name(some_tag):
         ret = {
             "app_name": None,
+            "old_tag_format": False,
         }
 
         match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
@@ -494,11 +505,9 @@ class VMNBackend(object):
 
             ret["app_name"] = VMNBackend.tag_name_to_app_name(gdict["app_name"])
 
-        try:
-            res = VMNBackend.app_name_to_tag_name(ret['app_name'])
-            ret['verstr'] = some_tag.split(f"{res}_")[1]
-        except Exception as exc:
-            pass
+        res = VMNBackend.app_name_to_tag_name(ret['app_name'])
+        ret['verstr'] = some_tag.split(f"{res}_")[1]
+
         ret.update(
             VMNBackend.deserialize_vmn_version(ret['verstr'])
         )
@@ -514,7 +523,7 @@ class VMNBackend(object):
             "minor": None,
             "patch": None,
             "hotfix": None,
-            "prerelease": None,
+            "prerelease": "release",
             "rcn": None,
             "buildmetadata": None,
             "old_ver_format": False,
