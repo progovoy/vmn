@@ -173,6 +173,42 @@ class FSAppLayoutFixture(object):
 
         subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
 
+
+    def checkout_jekins(
+            self,
+            target,
+            repo_name=f"{TEST_REPO_NAME}_0",
+            branch_to_track=None,
+            create_new=False,
+    ):
+        import subprocess
+
+        base_cmd = ["git", "fetch", "--tags", "--force", "--", self._repos[repo_name]["_be"].selected_remote.url, "+refs/heads/*:refs/remotes/origin/*"]
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+
+        p = self._repos[repo_name]["_be"].root_path
+        subprocess.call(base_cmd, cwd=p)
+
+        base_cmd = ["git", "rev-parse", f"origin/{target}"]
+        sha = subprocess.check_output(base_cmd, cwd=p)
+        # decode output from bytes to string
+        sha = sha.decode('utf-8').strip()
+
+        base_cmd = ["git", "rev-parse", f"origin/{target}"]
+        subprocess.call(base_cmd, cwd=p)
+
+        base_cmd = ["git", "contig", "core.sparsecheckout"]
+        subprocess.call(base_cmd, cwd=p)
+
+        base_cmd = ["git", "checkout", "-f", sha]
+        subprocess.call(base_cmd, cwd=p)
+
+        base_cmd = ["git", "branch", "-D", target]
+        subprocess.call(base_cmd, cwd=p)
+
+        base_cmd = ["git", "checkout", "-b", target, sha]
+        subprocess.call(base_cmd, cwd=p)
+
     def delete_branch(
         self,
         branch_name,
@@ -195,7 +231,6 @@ class FSAppLayoutFixture(object):
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
-
 
     def pull(self, tags=False):
         import subprocess
@@ -260,11 +295,12 @@ class FSAppLayoutFixture(object):
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
 
-    def stamp_with_previous_vmn(self):
+    def stamp_with_previous_vmn(self, vmn_version):
         import subprocess
 
         base_cmd = [
-            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"
+            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
+            vmn_version,
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
@@ -280,12 +316,13 @@ class FSAppLayoutFixture(object):
             f"{self.repo_path}:/test_repo_0",
             "-v",
             f"{self.base_dir}:{self.base_dir}",
-            "previous_vmn_stamper:latest",
-            "/stamp_with_previous_vmn.sh",
+            f"previous_vmn_stamper:{vmn_version}",
+            f"/stamp_with_{vmn_version}_vmn.sh",
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
         subprocess.call(base_cmd, cwd=self.repo_path)
+        pass
 
     def revert_changes(self, repo_name):
         if repo_name not in self._repos:
