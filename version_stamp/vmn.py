@@ -3287,9 +3287,10 @@ def verify_user_input_version(args, key):
         raise RuntimeError(err)
 
     if props["buildmetadata"] is not None:
-        err = f"Option: {key} must not include buildmetadata parts"
-        stamp_utils.VMN_LOGGER.error(err)
-        raise RuntimeError(err)
+        if key == "ov":
+            err = f"Option: {key} must not include buildmetadata parts"
+            stamp_utils.VMN_LOGGER.error(err)
+            raise RuntimeError(err)
 
 
 if __name__ == "__main__":
