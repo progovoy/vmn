@@ -8,9 +8,8 @@ import pathlib
 import re
 import sys
 import time
-from logging.handlers import RotatingFileHandler
-import io
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
 import git
 import yaml
@@ -19,55 +18,75 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
 # Only used for printing
 VMN_VERSION_FORMAT = (
-    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][+{buildmetadata}]"
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]" "[-{prerelease}][+{buildmetadata}]"
+    "[{major}][.{minor}][.{patch}][.{hotfix}]"
+    "[-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 
-_SEMVER_VER_REGEX = (
-    "(?P<major>0|[1-9]\d*)\." "(?P<minor>0|[1-9]\d*)\." "(?P<patch>0|[1-9]\d*)"
+_DIGIT_REGEX = r"0|[1-9]\d*"
+
+_SEMVER_BASE_VER_REGEX = (
+    rf"(?P<major>{_DIGIT_REGEX})\.(?P<minor>{_DIGIT_REGEX})\.(?P<patch>{_DIGIT_REGEX})"
 )
 
-_SEMVER_PRERELEASE_REGEX = "(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-
+_SEMVER_PRERELEASE_REGEX = rf"(?:-(?P<prerelease>(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:{_DIGIT_REGEX}|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+_VMN_PRERELEASE_REGEX = (
+    rf"{_SEMVER_PRERELEASE_REGEX[:-2]}\.(?P<rcn>(?:{_DIGIT_REGEX})))?"
+)
 SEMVER_BUILDMETADATA_REGEX = (
-    "(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+    r"(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
 )
 
-SEMVER_REGEX = (
-    f"^{_SEMVER_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
+# Unused
+__SEMVER_REGEX = (
+    rf"^{_SEMVER_BASE_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}$"
 )
 
-_VMN_HOTFIX_REGEX = "(?:\.(?P<hotfix>0|[1-9]\d*))?"
+_VMN_HOTFIX_REGEX = rf"(?:\.(?P<hotfix>{_DIGIT_REGEX}))?"
 
-_VMN_VER_REGEX = f"{_SEMVER_VER_REGEX}" f"{_VMN_HOTFIX_REGEX}"
+_VMN_BASE_VER_REGEX = rf"{_SEMVER_BASE_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
-VMN_VER_REGEX = f"^{_VMN_VER_REGEX}$"
+VMN_BASE_VER_REGEX = rf"^{_VMN_BASE_VER_REGEX}$"
+
+_VMN_OLD_REGEX = (
+    rf"{_VMN_BASE_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
+)
+
+VMN_VERSTR_REGEX = (
+    rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}"
+)
 
 _VMN_REGEX = (
-    f"{_VMN_VER_REGEX}" f"{_SEMVER_PRERELEASE_REGEX}" f"{SEMVER_BUILDMETADATA_REGEX}$"
+    rf"{VMN_VERSTR_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
+
+VMN_OLD_REGEX = rf"^{_VMN_OLD_REGEX}$"
+VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 # Regex for matching versions stamped by vmn
-VMN_REGEX = f"^{_VMN_REGEX}$"
+VMN_REGEX = rf"^{_VMN_REGEX}$"
 
-# TODO: create an abstraction layer on top of tag names versus the actual Semver versions
-VMN_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
+VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
 
-_VMN_ROOT_REGEX = "(?P<version>0|[1-9]\d*)"
-VMN_ROOT_REGEX = f"^{_VMN_ROOT_REGEX}$"
+_VMN_ROOT_REGEX = rf"(?P<version>{_DIGIT_REGEX})"
+VMN_ROOT_REGEX = rf"^{_VMN_ROOT_REGEX}$"
 
-VMN_ROOT_TAG_REGEX = f"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
+VMN_ROOT_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
 
 VMN_TEMPLATE_REGEX = (
-    "^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?"
-    "(?:\[(?P<minor_template>[^\{\}]*\{minor\}[^\{\}]*)\])?"
-    "(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
-    "(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
-    "(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
-    "(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
+    r"^(?:\[(?P<major_template>[^\{\}]*\{major\}[^\{\}]*)\])?"
+    r"(?:\[(?P<minor_template>[^\{\}]*\{minor\}[^\{\}]*)\])?"
+    r"(?:\[(?P<patch_template>[^\{\}]*\{patch\}[^\{\}]*)\])?"
+    r"(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
+    r"(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
+    r"(?:\[(?P<rcn_template>[^\{\}]*\{rcn\}[^\{\}]*)\])?"
+    r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
+
+BOLD_CHAR = "\033[1m"
+END_CHAR = "\033[0m"
 
 RELATIVE_TO_CURRENT_VCS_POSITION_TYPE = "current"
 RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE = "branch"
@@ -87,7 +106,7 @@ def custom_execute(self, *args, **kwargs):
 
     if VMN_LOGGER is not None:
         VMN_LOGGER.debug(
-            f"{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}"
+            f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}{END_CHAR}"
         )
 
     original_execute = getattr(self.__class__, "_execute")
@@ -132,6 +151,7 @@ git.cmd.Git.execute = custom_execute
 
 # Maintain a stack to keep track of nested function calls
 call_stack = []
+call_count = {}
 
 
 def measure_runtime_decorator(func):
@@ -139,6 +159,10 @@ def measure_runtime_decorator(func):
     def wrapper(*args, **kwargs):
         global call_stack
         global VMN_LOGGER
+
+        if func.__name__ not in call_count:
+            call_count[func.__name__] = 0
+        call_count[func.__name__] += 1
 
         call_stack.append(func.__name__)
         fcode = func.__code__
@@ -157,7 +181,7 @@ def measure_runtime_decorator(func):
 
         if VMN_LOGGER is not None:
             VMN_LOGGER.debug(
-                f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} took {elapsed_time:.6f} seconds at {fcode.co_filename}:{fcode.co_firstlineno}"
+                f"{'  ' * (len(call_stack) - 1)}<-- Exiting {func.__name__} {BOLD_CHAR} took {elapsed_time:.6f} seconds {END_CHAR} at {fcode.co_filename}:{fcode.co_firstlineno}"
             )
 
         call_stack.pop()
@@ -192,8 +216,8 @@ def resolve_root_path():
 
             exist = os.path.exists(os.path.join(root_path, ".git"))
             exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             root_path = None
             break
     if root_path is None:
@@ -265,7 +289,7 @@ def init_log_file_handler(rotating_log_path):
         backupCount=1,
     )
     rotating_file_handler.setLevel(logging.DEBUG)
-    fmt = f"[%(levelname)s] %(asctime)s %(pathname)s:%(lineno)d =>\n%(message)s"
+    fmt = "[%(levelname)s] %(asctime)s %(pathname)s:%(lineno)d =>\n%(message)s"
     formatter = logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S")
     rotating_file_handler.setFormatter(formatter)
     return rotating_file_handler
@@ -282,8 +306,8 @@ def clear_logger_handlers(logger_obj):
 
 
 class VMNBackend(object):
-    def __init__(self, type):
-        self._type = type
+    def __init__(self, btype):
+        self._type = btype
 
     def __del__(self):
         pass
@@ -293,11 +317,6 @@ class VMNBackend(object):
 
     def prepare_for_remote_operation(self):
         return 0
-
-    def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
-    ):
-        return {}
 
     def get_active_branch(self):
         return "none"
@@ -309,8 +328,12 @@ class VMNBackend(object):
         return "none"
 
     @staticmethod
-    def app_name_to_git_tag_app_name(app_name):
+    def app_name_to_tag_name(app_name):
         return app_name.replace("/", "-")
+
+    @staticmethod
+    def tag_name_to_app_name(tag_app_name):
+        return tag_app_name.replace("-", "/")
 
     @staticmethod
     def gen_unique_id(verstr, hash):
@@ -318,11 +341,10 @@ class VMNBackend(object):
 
     @staticmethod
     def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
-        match = re.search(VMN_REGEX, raw_vmn_version)
+        props = VMNBackend.deserialize_vmn_version(raw_vmn_version)
 
-        gdict = match.groupdict()
-        if gdict["hotfix"] == "0" and hide_zero_hotfix:
-            gdict["hotfix"] = None
+        if props["hotfix"] == 0 and hide_zero_hotfix:
+            props["hotfix"] = None
 
         octats = (
             "major",
@@ -330,19 +352,26 @@ class VMNBackend(object):
             "patch",
             "hotfix",
             "prerelease",
+            "rcn",
             "buildmetadata",
         )
 
         formatted_version = ""
         for octat in octats:
-            if gdict[octat] is None:
+            if props[octat] is None:
                 continue
 
             if (
                 f"{octat}_template" in template
                 and template[f"{octat}_template"] is not None
             ):
-                d = {octat: gdict[octat]}
+                d = {octat: props[octat]}
+                if "rcn" in d and props["old_ver_format"]:
+                    continue
+
+                if "prerelease" in d and d["prerelease"] == "release":
+                    continue
+
                 formatted_version = (
                     f"{formatted_version}"
                     f"{template[f'{octat}_template'].format(**d)}"
@@ -359,94 +388,85 @@ class VMNBackend(object):
         return "/".join(root_app_name[:-1])
 
     @staticmethod
-    @measure_runtime_decorator
     def serialize_vmn_tag_name(
         app_name,
-        version,
-        hide_zero_hotfix,
-        prerelease=None,
-        prerelease_count=None,
-        buildmetadata=None,
+        verstr,
     ):
-        app_name = VMNBackend.app_name_to_git_tag_app_name(app_name)
+        tag_app_name = VMNBackend.app_name_to_tag_name(app_name)
+        tag_name = f"{tag_app_name}_{verstr}"
 
-        verstr = VMNBackend.serialize_vmn_version(
-            version,
-            prerelease,
-            prerelease_count,
-            hide_zero_hotfix,
-            buildmetadata,
-        )
-
-        verstr = f"{app_name}_{verstr}"
-
-        match = re.search(VMN_TAG_REGEX, verstr)
-        if match is None:
-            err = f"Tag {verstr} doesn't comply with: " f"{VMN_TAG_REGEX} format"
+        try:
+            props = VMNBackend.deserialize_tag_name(tag_name)
+            if props["hotfix"] == 0:
+                # tags are always without zero hotfix
+                verstr = VMNBackend.serialize_vmn_version(verstr, hide_zero_hotfix=True)
+                tag_name = f"{tag_app_name}_{verstr}"
+                props = VMNBackend.deserialize_tag_name(tag_name)
+        except Exception:
+            err = f"Tag {tag_name} doesn't comply with: " f"{VMN_TAG_REGEX} format"
             VMN_LOGGER.error(err)
 
             raise RuntimeError(err)
 
-        return verstr
+        return tag_name
 
     @staticmethod
     def serialize_vmn_version(
-        current_version,
-        prerelease,
-        prerelease_count,
-        hide_zero_hostfix,
+        base_verstr,
+        prerelease=None,
+        rcn=None,
         buildmetadata=None,
+        hide_zero_hotfix=False,
     ):
-        vmn_version = VMNBackend.get_base_vmn_version(
-            current_version, hide_zero_hostfix
+        props = VMNBackend.deserialize_vmn_version(base_verstr)
+        base_verstr = VMNBackend.serialize_vmn_base_version(
+            props["major"],
+            props["minor"],
+            props["patch"],
+            props["hotfix"],
+            hide_zero_hotfix=hide_zero_hotfix,
         )
 
-        if prerelease is None or prerelease == "release":
-            if buildmetadata is not None:
-                vmn_version = f"{vmn_version}+{buildmetadata}"
+        vmn_version = base_verstr
 
-            return vmn_version
-
-        try:
-            assert prerelease in prerelease_count
-            # TODO: here try to use VMN_VERSION_FORMAT somehow
-            vmn_version = f"{vmn_version}-{prerelease}{prerelease_count[prerelease]}"
-
-            match = re.search(VMN_REGEX, vmn_version)
-            if match is None:
-                err = (
-                    f"Tag {vmn_version} doesn't comply with: "
-                    f"{VMN_VERSION_FORMAT} format"
+        if props["prerelease"] != "release":
+            if prerelease is not None:
+                VMN_LOGGER.warning(
+                    "Tried to serialize verstr containing "
+                    "prerelease component but also tried to append"
+                    " another prerelease component. Will ignore it"
                 )
-                VMN_LOGGER.error(err)
 
-                raise RuntimeError(err)
-        except AssertionError:
-            VMN_LOGGER.error(
-                f"{prerelease} doesn't appear in {prerelease_count} "
-                "Turn on debug mode to see traceback"
-            )
-            VMN_LOGGER.debug("Exception info: ", exc_info=True)
+            prerelease = props["prerelease"]
+            if not props["old_ver_format"]:
+                rcn = props["rcn"]
+
+        if props["buildmetadata"] is not None:
+            if prerelease is not None:
+                VMN_LOGGER.warning(
+                    "Tried to serialize verstr containing "
+                    "buildmetadata component but also tried to append"
+                    " another buildmetadata component. Will ignore it"
+                )
+
+            buildmetadata = props["buildmetadata"]
+
+        if prerelease is not None:
+            vmn_version = f"{vmn_version}-{prerelease}"
+
+            if rcn is not None:
+                vmn_version = f"{vmn_version}.{rcn}"
 
         if buildmetadata is not None:
             vmn_version = f"{vmn_version}+{buildmetadata}"
 
-            match = re.search(VMN_REGEX, vmn_version)
-            if match is None:
-                err = (
-                    f"Tag {vmn_version} doesn't comply with: "
-                    f"{VMN_VERSION_FORMAT} format"
-                )
-                VMN_LOGGER.error(err)
-                raise RuntimeError(err)
-
         return vmn_version
 
     @staticmethod
-    def serialize_vmn_version_hotfix(
-        hide_zero_hotfix, major, minor, patch, hotfix=None
+    def serialize_vmn_base_version(
+        major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
-        if hide_zero_hotfix and hotfix == "0":
+        if hide_zero_hotfix and hotfix == 0:
             hotfix = None
 
         vmn_version = f"{major}.{minor}.{patch}"
@@ -456,17 +476,15 @@ class VMNBackend(object):
         return vmn_version
 
     @staticmethod
-    def get_base_vmn_version(current_version, hide_zero_hotfix):
-        match = re.search(VMN_REGEX, current_version)
-        gdict = match.groupdict()
-        if gdict["hotfix"] is None:
-            gdict["hotfix"] = str(0)
-        vmn_version = VMNBackend.serialize_vmn_version_hotfix(
+    def get_base_vmn_version(some_verstr, hide_zero_hotfix=None):
+        props = VMNBackend.deserialize_vmn_version(some_verstr)
+
+        vmn_version = VMNBackend.serialize_vmn_base_version(
+            props["major"],
+            props["minor"],
+            props["patch"],
+            props["hotfix"],
             hide_zero_hotfix,
-            gdict["major"],
-            gdict["minor"],
-            gdict["patch"],
-            gdict["hotfix"],
         )
 
         return vmn_version
@@ -475,82 +493,95 @@ class VMNBackend(object):
     def deserialize_tag_name(some_tag):
         ret = {
             "app_name": None,
-            "type": "version",
-            "version": None,
-            "root_version": None,
-            "major": None,
-            "minor": None,
-            "patch": None,
-            "hotfix": None,
-            "prerelease": None,
-            "buildmetadata": None,
+            "old_tag_format": False,
         }
 
         match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
         if match is not None:
             gdict = match.groupdict()
-
-            int(gdict["version"])
-            ret["root_version"] = gdict["version"]
             ret["app_name"] = gdict["app_name"]
-            ret["type"] = "root"
+        else:
+            match = re.search(VMN_TAG_REGEX, some_tag)
+            old_tag_format = False
+            if match is None:
+                match = re.search(VMN_OLD_TAG_REGEX, some_tag)
+                if match is None:
+                    raise WrongTagFormatException()
 
-            return ret
+                old_tag_format = True
 
-        match = re.search(VMN_TAG_REGEX, some_tag)
-        if match is None:
-            raise WrongTagFormatException()
+            gdict = match.groupdict()
+            if old_tag_format:
+                ret["old_tag_format"] = True
 
-        gdict = match.groupdict()
-        ret["app_name"] = gdict["app_name"].replace("-", "/")
-        ret["version"] = f'{gdict["major"]}.{gdict["minor"]}.{gdict["patch"]}'
-        ret["major"] = gdict["major"]
-        ret["minor"] = gdict["minor"]
-        ret["patch"] = gdict["patch"]
-        ret["hotfix"] = "0"
+            ret["app_name"] = VMNBackend.tag_name_to_app_name(gdict["app_name"])
 
-        if gdict["hotfix"] is not None:
-            ret["hotfix"] = gdict["hotfix"]
+        res = VMNBackend.app_name_to_tag_name(ret["app_name"])
+        ret["verstr"] = some_tag.split(f"{res}_")[1]
 
-        # TODO: Think about what it means that we have the whole
-        #  prerelease string here (with the prerelease count).
-        #  At least rename other prerelease prefixes to
-        #  something like "prerelease mode" or "prerelease prefix"
-        if gdict["prerelease"] is not None:
-            ret["prerelease"] = gdict["prerelease"]
-            ret["type"] = "prerelease"
-
-        if gdict["buildmetadata"] is not None:
-            ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["type"] = "buildmetadata"
+        ret.update(VMNBackend.deserialize_vmn_version(ret["verstr"]))
 
         return ret
 
     @staticmethod
-    @measure_runtime_decorator
-    def enhance_ver_info(ver_infos):
-        all_tags = {}
-        for tag, ver_info_c in ver_infos.items():
-            tagd = VMNBackend.deserialize_vmn_tag_name(tag)
-            tagd.update({"tag": tag})
-            tagd["message"] = ver_info_c["ver_info"]
+    def deserialize_vmn_version(verstr):
+        ret = {
+            "types": {"version"},
+            "root_version": None,
+            "major": None,
+            "minor": None,
+            "patch": None,
+            "hotfix": None,
+            "prerelease": "release",
+            "rcn": None,
+            "buildmetadata": None,
+            "old_ver_format": False,
+        }
 
-            all_tags[tagd["type"]] = tagd
+        match = re.search(VMN_ROOT_REGEX, verstr)
+        if match is not None:
+            gdict = match.groupdict()
 
-            # TODO:: Check API commit version
-        # Enhance "raw" ver_infos so all tags will have all info
-        for t, v in ver_infos.items():
-            if "root_app" not in v["ver_info"]["stamping"] and "root" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["root"]["message"]["stamping"]
-                )
-            elif "app" not in v["ver_info"]["stamping"] and "version" in all_tags:
-                v["ver_info"]["stamping"].update(
-                    all_tags["version"]["message"]["stamping"]
-                )
+            int(gdict["version"])
+            ret["root_version"] = gdict["version"]
+            ret["types"].add("root")
+
+            return ret
+
+        match = re.search(VMN_REGEX, verstr)
+        old_ver_format = False
+        if match is None:
+            match = re.search(VMN_OLD_REGEX, verstr)
+            if match is None:
+                raise WrongTagFormatException()
+
+            old_ver_format = True
+
+        gdict = match.groupdict()
+        if old_ver_format:
+            gdict["rcn"] = -1
+            ret["old_ver_format"] = True
+
+        ret["major"] = int(gdict["major"])
+        ret["minor"] = int(gdict["minor"])
+        ret["patch"] = int(gdict["patch"])
+        ret["hotfix"] = 0
+
+        if gdict["hotfix"] is not None:
+            ret["hotfix"] = int(gdict["hotfix"])
+
+        if gdict["prerelease"] is not None:
+            ret["prerelease"] = gdict["prerelease"]
+            ret["rcn"] = int(gdict["rcn"])
+            ret["types"].add("prerelease")
+
+        if gdict["buildmetadata"] is not None:
+            ret["buildmetadata"] = gdict["buildmetadata"]
+            ret["types"].add("buildmetadata")
+
+        return ret
 
     @staticmethod
-    @measure_runtime_decorator
     def deserialize_vmn_tag_name(vmn_tag):
         try:
             return VMNBackend.deserialize_tag_name(vmn_tag)
@@ -623,6 +654,9 @@ class LocalFileBackend(VMNBackend):
             ver_infos["none"]["ver_info"] = yaml.safe_load(f)
             return "none", ver_infos
 
+    def get_latest_available_tag(self, tag_prefix_filter):
+        return None
+
     def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {
             ".": {
@@ -636,25 +670,67 @@ class LocalFileBackend(VMNBackend):
 
     def get_tag_version_info(self, tag_name):
         tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
-        if tagd["type"] == "root":
+        if "root" in tagd["types"]:
             dir_path = os.path.join(
                 self.repo_path, ".vmn", tagd["app_name"], "root_verinfo"
             )
             path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
         else:
             dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
-            path = os.path.join(dir_path, f"{tagd['version']}.yml")
+            path = os.path.join(dir_path, f"{tagd['verstr']}.yml")
 
-        ver_infos = {
-            tag_name: {"ver_info": None, "tag_object": None, "commit_object": None}
-        }
+        ver_infos = {}
         try:
             with open(path, "r") as f:
+                ver_infos = {
+                    tag_name: {
+                        "ver_info": None,
+                        "tag_object": None,
+                        "commit_object": None,
+                    }
+                }
                 ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
-        except Exception as exc:
-            VMN_LOGGER.error("Logged Exception message:", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return tag_name, ver_infos
+
+    @measure_runtime_decorator
+    def get_latest_stamp_tags(
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+    ):
+        if root_context:
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
+        else:
+            dir_path = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
+
+        files = glob.glob(os.path.join(dir_path, "*"))
+
+        # sort the files by modification date
+        files.sort(key=os.path.getmtime, reverse=True)
+
+        ver_infos = {}
+        tag_names = []
+        if files:
+            with open(files[0], "r") as f:
+                data = yaml.safe_load(f)
+                if root_context:
+                    ver = data["stamping"]["root_app"]["version"]
+                else:
+                    ver = data["stamping"]["app"]["_version"]
+
+                tag_name = VMNBackend.serialize_vmn_tag_name(app_name, ver)
+                tag_names.append(tag_name)
+                ver_infos = {
+                    tag_name: {
+                        "ver_info": None,
+                        "tag_object": None,
+                        "commit_object": None,
+                    }
+                }
+                ver_infos[tag_name]["ver_info"] = data
+
+        return tag_names, None, ver_infos
 
 
 class GitBackend(VMNBackend):
@@ -722,10 +798,10 @@ class GitBackend(VMNBackend):
     def get_repo_details(path):
         try:
             client = git.Repo(path, search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError as exc:
+        except git.exc.InvalidGitRepositoryError:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
 
@@ -734,7 +810,7 @@ class GitBackend(VMNBackend):
             remote = tuple(client.remotes[0].urls)[0]
             if os.path.isdir(remote):
                 remote = os.path.relpath(remote, client.working_dir)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
         finally:
@@ -747,7 +823,7 @@ class GitBackend(VMNBackend):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])
             return True
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
 
@@ -761,23 +837,41 @@ class GitBackend(VMNBackend):
             # listing tags since the taggerdate field is in seconds resolution
             time.sleep(1.1)
 
-            ret = self._be.create_tag(tag, ref=ref, message=message)
+            self._be.create_tag(tag, ref=ref, message=message)
 
             if not push:
                 continue
 
             try:
-                ret = self._be.git.execute(["git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name, f"refs/tags/{tag}"])
-            except Exception as exc:
+                self._be.git.execute(
+                    [
+                        "git",
+                        "push",
+                        "--porcelain",
+                        "-o",
+                        "ci.skip",
+                        self.selected_remote.name,
+                        f"refs/tags/{tag}",
+                    ]
+                )
+            except Exception:
                 try:
-                    self._be.git.execute(["git", "push", "--porcelain", self.selected_remote.name, f"refs/tags/{tag}"])
-                except Exception as exc:
+                    self._be.git.execute(
+                        [
+                            "git",
+                            "push",
+                            "--porcelain",
+                            self.selected_remote.name,
+                            f"refs/tags/{tag}",
+                        ]
+                    )
+                except Exception:
                     tag_err_str = f"Failed to tag {tag}. Reverting.."
                     VMN_LOGGER.error(tag_err_str)
 
                     try:
                         self._be.delete_tag(tag)
-                    except Exception as exc:
+                    except Exception:
                         err_str = f"Failed to remove tag {tag}"
                         VMN_LOGGER.info(err_str)
                         VMN_LOGGER.debug("Exception info: ", exc_info=True)
@@ -797,31 +891,36 @@ class GitBackend(VMNBackend):
         )
 
         try:
-            ret = self._be.git.execute(
+            self._be.git.execute(
                 [
-                    "git", "push", "--porcelain", "-o", "ci.skip", self.selected_remote.name,
-                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
+                    "git",
+                    "push",
+                    "--porcelain",
+                    "-o",
+                    "ci.skip",
+                    self.selected_remote.name,
+                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
                 ]
             )
-        except Exception as exc:
+        except Exception:
             try:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
                         "--porcelain",
                         self.selected_remote.name,
-                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
-                     ]
+                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
+                    ]
                 )
-            except Exception as exc:
+            except Exception:
                 err_str = "Push has failed. Please verify that 'git push' works"
                 VMN_LOGGER.error(err_str, exc_info=True)
                 raise RuntimeError(err_str)
 
         for tag in tags:
             try:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
@@ -829,17 +928,17 @@ class GitBackend(VMNBackend):
                         "-o",
                         "ci.skip",
                         self.selected_remote.name,
-                        f"refs/tags/{tag}"
+                        f"refs/tags/{tag}",
                     ]
                 )
             except Exception:
-                ret = self._be.git.execute(
+                self._be.git.execute(
                     [
                         "git",
                         "push",
                         "--porcelain",
                         self.selected_remote.name,
-                        f"refs/tags/{tag}"
+                        f"refs/tags/{tag}",
                     ]
                 )
 
@@ -868,8 +967,8 @@ class GitBackend(VMNBackend):
         found_tag = self._be.tag(f"refs/tags/{tag}")
         try:
             return tuple(found_tag.commit.stats.files)
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             return None
 
     @measure_runtime_decorator
@@ -886,7 +985,7 @@ class GitBackend(VMNBackend):
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:
-            cmd_suffix = f"--branches"
+            cmd_suffix = "--branches"
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
@@ -923,8 +1022,8 @@ class GitBackend(VMNBackend):
             bug_limit += 1
             if bug_limit == 100:
                 VMN_LOGGER.warning(
-                    f"Probable bug: vmn failed to find "
-                    f"vmn's commit after 100 interations."
+                    "Probable bug: vmn failed to find "
+                    "vmn's commit after 100 interations."
                 )
                 ver_infos = {}
                 break
@@ -934,7 +1033,6 @@ class GitBackend(VMNBackend):
             tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
-        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
         tag_objects = sorted(
             tag_objects, key=lambda t: t.object.tagged_date, reverse=True
         )
@@ -956,7 +1054,6 @@ class GitBackend(VMNBackend):
                 tag_objects.append(ver_infos[k]["tag_object"])
 
             # We want the newest tag on top because we skip "buildmetadata tags"
-            # TODO:: solve the weird coupling between here and get_first_reachable_version_info
             tag_objects = sorted(
                 tag_objects, key=lambda t: t.object.tagged_date, reverse=True
             )
@@ -966,7 +1063,7 @@ class GitBackend(VMNBackend):
 
             return tag_names, cobj, ver_infos
 
-        tag_name_prefix = VMNBackend.app_name_to_git_tag_app_name(app_name)
+        tag_name_prefix = VMNBackend.app_name_to_tag_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
         tag_names = self._be.git.tag(*cmd).split("\n")
 
@@ -992,7 +1089,7 @@ class GitBackend(VMNBackend):
 
         try:
             found_tag = self._be.tag(f"refs/tags/{latest_tag}")
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
             return [], cobj, ver_infos
 
@@ -1004,7 +1101,6 @@ class GitBackend(VMNBackend):
                 tag_objects.append(ver_infos[k]["tag_object"])
 
         # We want the newest tag on top because we skip "buildmetadata tags"
-        # TODO:: solve the weird coupling between here and get_first_reachable_version_info
         tag_objects = sorted(
             tag_objects, key=lambda t: t.object.tagged_date, reverse=True
         )
@@ -1019,7 +1115,7 @@ class GitBackend(VMNBackend):
     def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
         cmd = [
             f"--grep={msg_filter}",
-            f"-1",
+            "-1",
             f"--author={VMN_USER_NAME}",
             "--pretty=%H,,,%D",
             "--decorate=short",
@@ -1045,14 +1141,22 @@ class GitBackend(VMNBackend):
         return cobj, ver_infos
 
     @measure_runtime_decorator
-    def get_latest_available_tag(self, tag_prefix_filter):
+    def get_latest_available_tags(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
         tag_names = self._be.git.tag(*cmd).split("\n")
 
         if len(tag_names) == 1 and tag_names[0] == "":
             return None
 
-        return tag_names[-1]
+        return tag_names
+
+    @measure_runtime_decorator
+    def get_latest_available_tag(self, tag_prefix_filter):
+        tnames = self.get_latest_available_tags(tag_prefix_filter)
+        if tnames is None:
+            return None
+
+        return tnames[-1]
 
     @measure_runtime_decorator
     def get_commit_object_from_branch_name(self, bname):
@@ -1072,21 +1176,20 @@ class GitBackend(VMNBackend):
     def get_tag_object_from_tag_name(self, tname):
         try:
             o = self._be.tag(f"refs/tags/{tname}")
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tname}.0"
                 o = self._be.tag(f"refs/tags/{tname}")
-                tag_name = _tag_name
-            except Exception as exc:
-                VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+            except Exception:
+                VMN_LOGGER.debug("Logged exception: ", exc_info=True)
                 return tname, None
 
         try:
             if o.commit.author.name != "vmn":
                 return tname, None
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
             return tname, None
 
@@ -1122,7 +1225,7 @@ class GitBackend(VMNBackend):
                     cleaned_tags = self.get_all_brother_tags(tagname)
                     cleaned_tags.pop(tagname)
                     cleaned_tags = cleaned_tags.keys()
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.debug(f"Skipped on {hexsha} commit")
 
         for tname in cleaned_tags:
@@ -1168,7 +1271,7 @@ class GitBackend(VMNBackend):
         try:
             sha = self.changeset(tag=tag_name)
             ver_infos = self.get_all_commit_tags(sha)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(
                 f"Failed to get brother tags for tag: {tag_name}. "
                 f"Logged exception: ",
@@ -1249,7 +1352,7 @@ class GitBackend(VMNBackend):
                 branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
-        except Exception as exc:
+        except Exception:
             logging.error("Failed to get branch name")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
@@ -1272,7 +1375,7 @@ class GitBackend(VMNBackend):
 
             try:
                 assert ret.startswith(self.selected_remote.name)
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.warning(
                     f"Found remote branch {ret} however it belongs to a "
                     f"different remote that vmn has selected to work with. "
@@ -1283,7 +1386,7 @@ class GitBackend(VMNBackend):
                 return None
 
             return ret
-        except Exception as exc:
+        except Exception:
             return None
 
     @measure_runtime_decorator
@@ -1295,7 +1398,7 @@ class GitBackend(VMNBackend):
 
         VMN_LOGGER.warning(
             f"No remote branch for local branch: {local_branch_name} "
-            f"was found. Will try to set upstream for it"
+            f"was found for repo {self.repo_path}. Will try to set upstream for it"
         )
 
         out = self._be.git.branch("-r", "--contains", "HEAD")
@@ -1315,7 +1418,7 @@ class GitBackend(VMNBackend):
                 ]
             )
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
-        except Exception as exc:
+        except Exception:
             VMN_LOGGER.debug(
                 f"Failed to set upstream branch for {local_branch_name}:", exc_info=True
             )
@@ -1389,10 +1492,9 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):
         if tag is not None:
-            # TODO:: maybe it issafer to
             rev = f"refs/tags/{tag}"
         elif branch is not None:
-            # TODO:: : f"refs/heads/{branch}"
+            # TODO:: f"refs/heads/{branch}"
             rev = f"{branch}"
 
         assert rev is not None
@@ -1426,6 +1528,8 @@ class GitBackend(VMNBackend):
             if p.message.startswith(INIT_COMMIT_MESSAGE):
                 return p.hexsha
 
+            # TODO:: think how to use this tags for later in order
+            #  to avoid getting all tags again. Not sure this is a problem even
             ver_infos = self.get_all_commit_tags(p.hexsha)
             if not ver_infos:
                 VMN_LOGGER.warning(
@@ -1470,8 +1574,8 @@ class GitBackend(VMNBackend):
                 return found_tag.commit.hexsha[:6]
 
             return found_tag.commit.hexsha
-        except Exception as exc:
-            VMN_LOGGER.debug(f"Logged exception: ", exc_info=True)
+        except Exception:
+            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             return None
 
     @measure_runtime_decorator
@@ -1481,13 +1585,16 @@ class GitBackend(VMNBackend):
                 try:
                     for f in files:
                         self._be.git.reset(f)
-                except Exception as exc:
-                    VMN_LOGGER.debug(f"Failed to git reset files: {files}", exc_info=True)
+                except Exception:
+                    VMN_LOGGER.debug(
+                        f"Failed to git reset files: {files}", exc_info=True
+                    )
 
                 self._be.index.checkout(files, force=True)
-            except Exception as exc:
-                VMN_LOGGER.debug(f"Failed to git checkout files: {files}", exc_info=True)
-
+            except Exception:
+                VMN_LOGGER.debug(
+                    f"Failed to git checkout files: {files}", exc_info=True
+                )
 
     @measure_runtime_decorator
     def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
@@ -1506,7 +1613,7 @@ class GitBackend(VMNBackend):
         for tag in tags:
             try:
                 self._be.delete_tag(tag)
-            except Exception as exc:
+            except Exception:
                 VMN_LOGGER.info(f"Failed to remove tag {tag}")
                 VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
@@ -1519,51 +1626,10 @@ class GitBackend(VMNBackend):
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
     @measure_runtime_decorator
-    def get_first_reachable_version_info(
-        self, app_name, root_context=False, type=RELATIVE_TO_GLOBAL_TYPE
-    ):
-        app_tags, cobj, ver_infos = self.get_latest_stamp_tags(
-            app_name, root_context, type
-        )
-
-        if root_context:
-            regex = VMN_ROOT_TAG_REGEX
-        else:
-            regex = VMN_TAG_REGEX
-
-        cleaned_app_tag = None
-        for tag in app_tags:
-            # skip buildmetadata versions
-            if "+" in tag:
-                continue
-
-            match = re.search(regex, tag)
-            if match is None:
-                continue
-
-            gdict = match.groupdict()
-
-            if gdict["app_name"] != app_name.replace("/", "-"):
-                continue
-
-            cleaned_app_tag = tag
-            break
-
-        if cleaned_app_tag is None:
-            return None, {}
-
-        if cleaned_app_tag not in ver_infos:
-            VMN_LOGGER.debug(f"Somehow {cleaned_app_tag} not in ver_infos")
-            return None, {}
-
-        VMNBackend.enhance_ver_info(ver_infos)
-
-        return cleaned_app_tag, ver_infos
-
-    @measure_runtime_decorator
     def get_tag_version_info(self, tag_name):
         ver_infos = {}
         tag_name, commit_tag_obj = self.get_commit_object_from_tag_name(tag_name)
+
         if commit_tag_obj is None:
             VMN_LOGGER.debug(f"Tried to find {tag_name} but with no success")
             return tag_name, ver_infos
@@ -1577,8 +1643,6 @@ class GitBackend(VMNBackend):
         if tag_name not in ver_infos:
             VMN_LOGGER.debug(f"Could not find version info for {tag_name}")
             return tag_name, None
-
-        VMNBackend.enhance_ver_info(ver_infos)
 
         return tag_name, ver_infos
 
@@ -1632,13 +1696,13 @@ class GitBackend(VMNBackend):
     def get_commit_object_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
-        except Exception as exc:
+        except Exception:
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tag_name}.0"
                 commit_tag_obj = self._be.commit(_tag_name)
                 tag_name = _tag_name
-            except Exception as exc:
+            except Exception:
                 return tag_name, None
 
         return tag_name, commit_tag_obj
