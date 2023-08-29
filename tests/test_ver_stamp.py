@@ -578,7 +578,7 @@ def test_jinja2_gen_custom(app_layout, capfd):
         assert data["Custom"] == 5
 
 
-def test_jinja2_generic(app_layout, capfd):
+def test_version_backends_generic_jinja(app_layout, capfd):
     _run_vmn_init()
     _, _, params = _init_app(app_layout.app_name)
 
@@ -598,11 +598,17 @@ def test_jinja2_generic(app_layout, capfd):
         "test_repo_0", "custom.yml", custom_keys_content
     )
 
-    conf = {
-        "version_backends": {
-            "generic": {"paths": [["f1.jinja2", "jinja_out.txt", "custom.yml"]]}
-        },
-    }
+    generic_jinja = {
+                'generic_jinja': [
+                    {
+                        'input_file_path': 'f1.jinja2',
+                        'output_file_path': 'jinja_out.txt',
+                        'custom_keys_path': 'custom.yml'
+                    },
+                ]
+            }
+
+    conf = {"version_backends": generic_jinja}
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
@@ -616,6 +622,72 @@ def test_jinja2_generic(app_layout, capfd):
     with open(opath, "r") as f:
         data = yaml.safe_load(f)
         assert data["VERSION"] == "0.0.2"
+        assert data["Custom"] == 5
+
+
+def test_version_backends_generic_selectors(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "in.txt",
+        yaml.safe_dump(
+            {
+                "version": "9.3.2-rc.4",
+                "Custom": 3
+            }
+        )
+    )
+
+    custom_keys_content = "k1: 5\n"
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "custom.yml", custom_keys_content
+    )
+
+    generic_selectors = {
+        'generic_selectors': [
+            {
+                'paths': {
+                    'input_file_path': 'in.txt',
+                    'output_file_path': 'in.txt',
+                    'custom_keys_path': 'custom.yml',
+                },
+                "selectors": [
+                    {
+                        'regex_selector': f"(version: ){stamp_utils._VMN_REGEX}",
+                        'regex_sub': r'\1{{version}}'
+                    },
+                    {
+                        'regex_selector': f"(Custom: )([0-9]+)",
+                        'regex_sub': r'\1{{k1}}'
+                    }
+                ]
+            },
+        ]
+    }
+
+    conf = {"version_backends": generic_selectors}
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["version"] == "0.0.2"
         assert data["Custom"] == 5
 
 
