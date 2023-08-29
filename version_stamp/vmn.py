@@ -651,20 +651,22 @@ class IVersionsStamper(object):
                     continue
 
                 handler = getattr(self, f"_write_version_to_{backend}")
-                if self.dry_run:
-                    stamp_utils.VMN_LOGGER.info(
-                        "Would have written to a version backend file:\n"
-                        f"backend: {backend}\n"
-                        f"version: {version_number}"
-                    )
-                else:
-                    handler(version_number)
+                backend_conf = self.version_backends[backend]
+                handler(version_number, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
 
-    def _write_version_to_npm(self, verstr):
-        backend_conf = self.version_backends["npm"]
+    def _write_version_to_npm(self, verstr, backend_conf):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                "Would have written to a version backend file:\n"
+                f"backend: npm\n"
+                f"version: {verstr}"
+            )
+
+            return
+
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         try:
             with open(file_path, "r") as f:
@@ -682,8 +684,16 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
-    def _write_version_to_cargo(self, verstr):
-        backend_conf = self.version_backends["cargo"]
+    def _write_version_to_cargo(self, verstr, backend_conf):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                "Would have written to a version backend file:\n"
+                f"backend: cargo\n"
+                f"version: {verstr}"
+            )
+
+            return
+
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         try:
             with open(file_path, "r") as f:
@@ -702,8 +712,16 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
-    def _write_version_to_poetry(self, verstr):
-        backend_conf = self.version_backends["poetry"]
+    def _write_version_to_poetry(self, verstr, backend_conf):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                "Would have written to a version backend file:\n"
+                f"backend: poetry\n"
+                f"version: {verstr}"
+            )
+
+            return
+
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         try:
             with open(file_path, "r") as f:
@@ -722,13 +740,24 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
-    def _write_version_to_generic(self, verstr):
-        backend_conf = self.version_backends["generic"]
+    def _write_version_to_generic_jinja(self, verstr, backend_conf):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                "Would have written to a version backend file:\n"
+                f"backend: generic_jinja\n"
+                f"version: {verstr}"
+            )
 
+            return
+
+        # TODO:: The reason we need to set "version and base_version"
+        # is because in this stage, we only have the "raw" current_version_info
+        # "version and base_version" are added only in show. maybe think
+        # about exporting to another function
         self.current_version_info["stamping"]["app"][
             "version"
         ] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-            self.current_version_info["stamping"]["app"]["_version"],
+            verstr,
             self.template,
             self.hide_zero_hotfix,
         )
@@ -736,23 +765,78 @@ class IVersionsStamper(object):
         self.current_version_info["stamping"]["app"][
             "base_version"
         ] = stamp_utils.VMNBackend.get_base_vmn_version(
-            self.current_version_info["stamping"]["app"]["_version"],
+            verstr,
             self.hide_zero_hotfix,
         )
 
-        for item in backend_conf["paths"]:
-            if len(item) == 2:
-                item.append(None)
+        for item in backend_conf:
+            if "custom_keys_path" not in item:
+                item["custom_keys_path"] = None
 
             tmplt_value = create_data_dict_for_jinja2(
                 self.current_version_info,
-                os.path.join(self.vmn_root_path, item[2]),
+                os.path.join(self.vmn_root_path, item["custom_keys_path"]),
             )
 
             gen_jinja2_template_from_data(
                 tmplt_value,
-                os.path.join(self.vmn_root_path, item[0]),
-                os.path.join(self.vmn_root_path, item[1]),
+                os.path.join(self.vmn_root_path, item["input_file_path"]),
+                os.path.join(self.vmn_root_path, item["output_file_path"]),
+            )
+
+    def _write_version_to_generic_selectors(self, verstr, backend_conf):
+        jinja_backend_conf = []
+        for item in backend_conf:
+            if "custom_keys_path" not in item["paths"]:
+                item["paths"]["custom_keys_path"] = None
+
+            input_file_path = os.path.join(
+                self.vmn_root_path,
+                item["paths"]["input_file_path"]
+            )
+            with open(input_file_path, 'r') as file:
+                content = file.read()
+
+            for d in item["selectors"]:
+                regex_selector = d["regex_selector"]
+                regex_sub = d["regex_sub"]
+                # Replace the matched version strings with regex_sub
+                content = re.sub(regex_selector, regex_sub, content)
+
+            raw_temporary_jinja_template_path = f'{item["paths"]["input_file_path"]}.tmp.jinja2'
+            temporary_jinja_template_path = os.path.join(
+                self.vmn_root_path,
+                raw_temporary_jinja_template_path
+            )
+
+            if self.dry_run:
+                stamp_utils.VMN_LOGGER.info(
+                    "Would have written to a version backend file:\n"
+                    f"backend: generic_selectors\n"
+                    f"version: {verstr}\n"
+                    f"file: {temporary_jinja_template_path}\n"
+                    f"with content: {content}\n"
+                )
+
+                return
+
+            with open(temporary_jinja_template_path, 'w') as file:
+                file.write(content)
+
+            jinja_backend_conf.append(
+                {
+                    "input_file_path": raw_temporary_jinja_template_path,
+                    "custom_keys_path": item["paths"]["custom_keys_path"],
+                    "output_file_path": item["paths"]["output_file_path"],
+                }
+            )
+
+            self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
+
+            os.remove(temporary_jinja_template_path)
+            stamp_utils.VMN_LOGGER.debug(
+                f"Removed {temporary_jinja_template_path} with content:\n"
+                f"{content}"
             )
 
     def _write_version_to_vmn_version_file(self, verstr):
@@ -1188,17 +1272,9 @@ class VersionControlStamper(IVersionsStamper):
         version_files_to_add = self.get_files_to_add_to_index(self.version_files)
 
         for backend in self.version_backends:
+            handler = getattr(self, f"_add_files_{backend}")
             backend_conf = self.version_backends[backend]
-            if backend == "generic":
-                for item in backend_conf["paths"]:
-                    for p in item:
-                        file_path = os.path.join(self.vmn_root_path, p)
-                        version_files_to_add.append(file_path)
-
-                continue
-
-            file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-            version_files_to_add.append(file_path)
+            handler(version_files_to_add, backend_conf)
 
         if self.create_verinfo_files:
             self.create_verinfo_file(app_msg, version_files_to_add, app_version)
@@ -1347,6 +1423,30 @@ class VersionControlStamper(IVersionsStamper):
             return 2
 
         return 0
+
+    def _add_files_generic_selectors(self, version_files_to_add, backend_conf):
+        for item in backend_conf:
+            for _, v in item["paths"].items():
+                file_path = os.path.join(self.vmn_root_path, v)
+                version_files_to_add.append(file_path)
+
+    def _add_files_generic_jinja(self, version_files_to_add, backend_conf):
+        for item in backend_conf:
+            for _, v in item.items():
+                file_path = os.path.join(self.vmn_root_path, v)
+                version_files_to_add.append(file_path)
+
+    def _add_files_npm(self, version_files_to_add, backend_conf):
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        version_files_to_add.append(file_path)
+
+    def _add_files_cargo(self, version_files_to_add, backend_conf):
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        version_files_to_add.append(file_path)
+
+    def _add_files_poetry(self, version_files_to_add, backend_conf):
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        version_files_to_add.append(file_path)
 
     @stamp_utils.measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
@@ -2499,8 +2599,13 @@ def create_data_dict_for_jinja2(ver_info, custom_values_path):
 
 
 def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
+    env = jinja2.Environment(keep_trailing_newline=True)
+
     with open(jinja_template_path) as file_:
-        template = jinja2.Template(file_.read())
+        template_content = file_.read()
+
+    # Create a template from the content
+    template = env.from_string(template_content)
 
     stamp_utils.VMN_LOGGER.debug(
         f"Possible keywords for your Jinja template:\n" f"{pformat(data)}"
@@ -2510,6 +2615,7 @@ def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
     if os.path.exists(output_path):
         with open(output_path) as file_:
             current_out_content = file_.read()
+
             if current_out_content == out:
                 return 0
 
