@@ -656,12 +656,12 @@ def test_version_backends_generic_selectors(app_layout, capfd):
     generic_selectors = {
         'generic_selectors': [
             {
-                'paths': {
+                'paths_section': {
                     'input_file_path': 'in.txt',
                     'output_file_path': 'in.txt',
                     'custom_keys_path': 'custom.yml',
                 },
-                "selectors": [
+                "selectors_section": [
                     {
                         'regex_selector': f"(version: ){stamp_utils._VMN_REGEX}",
                         'regex_sub': r'\1{{version}}'
