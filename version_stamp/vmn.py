@@ -787,23 +787,23 @@ class IVersionsStamper(object):
     def _write_version_to_generic_selectors(self, verstr, backend_conf):
         jinja_backend_conf = []
         for item in backend_conf:
-            if "custom_keys_path" not in item["paths"]:
-                item["paths"]["custom_keys_path"] = None
+            if "custom_keys_path" not in item["paths_section"]:
+                item["paths_section"]["custom_keys_path"] = None
 
             input_file_path = os.path.join(
                 self.vmn_root_path,
-                item["paths"]["input_file_path"]
+                item["paths_section"]["input_file_path"]
             )
             with open(input_file_path, 'r') as file:
                 content = file.read()
 
-            for d in item["selectors"]:
+            for d in item["selectors_section"]:
                 regex_selector = d["regex_selector"]
                 regex_sub = d["regex_sub"]
                 # Replace the matched version strings with regex_sub
                 content = re.sub(regex_selector, regex_sub, content)
 
-            raw_temporary_jinja_template_path = f'{item["paths"]["input_file_path"]}.tmp.jinja2'
+            raw_temporary_jinja_template_path = f'{item["paths_section"]["input_file_path"]}.tmp.jinja2'
             temporary_jinja_template_path = os.path.join(
                 self.vmn_root_path,
                 raw_temporary_jinja_template_path
@@ -826,8 +826,8 @@ class IVersionsStamper(object):
             jinja_backend_conf.append(
                 {
                     "input_file_path": raw_temporary_jinja_template_path,
-                    "custom_keys_path": item["paths"]["custom_keys_path"],
-                    "output_file_path": item["paths"]["output_file_path"],
+                    "custom_keys_path": item["paths_section"]["custom_keys_path"],
+                    "output_file_path": item["paths_section"]["output_file_path"],
                 }
             )
 
@@ -1426,7 +1426,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def _add_files_generic_selectors(self, version_files_to_add, backend_conf):
         for item in backend_conf:
-            for _, v in item["paths"].items():
+            for _, v in item["paths_section"].items():
                 file_path = os.path.join(self.vmn_root_path, v)
                 version_files_to_add.append(file_path)
 
