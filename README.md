@@ -388,7 +388,7 @@ https://regex101.com/r/JoEvaN/1
 version_backends:
     generic_selectors:
     - paths_section:
-        input_file_path: in.txt
+      - input_file_path: in.txt
         output_file_path: in.txt
         custom_keys_path: custom.yml
       selectors_section:
@@ -408,12 +408,11 @@ In this particular example, putting `{{version}}` tells vmn to inject the correc
 ### generic_jinja
 
 ```yaml
-conf:
-  version_backends:
-    generic_jinja:
-    - input_file_path: f1.jinja2
-      output_file_path: jinja_out.txt
-      custom_keys_path: custom.yml
+version_backends:
+  generic_jinja:
+  - input_file_path: f1.jinja2
+    output_file_path: jinja_out.txt
+    custom_keys_path: custom.yml
 ```
 
 The parameters here are the same but are talking about `jinja2` files.
