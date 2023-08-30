@@ -814,7 +814,7 @@ class IVersionsStamper(object):
                     f"backend: generic_selectors\n"
                     f"version: {verstr}\n"
                     f"file: {temporary_jinja_template_path}\n"
-                    f"with content: {content}\n"
+                    f"with content:\n{content}"
                 )
 
                 return
