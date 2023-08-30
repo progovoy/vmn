@@ -116,7 +116,7 @@ vmn --version # Should see 0.0.0 if installed successfully
   see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
 - [x] Stamping of a project depending on multiple git repositories (
   see [`Configuration: deps`](https://github.com/haimhm/vmn/blob/master/README.md#configuration) section)
-- [x] Version auto-embedding into supported backends (`npm`, `cargo`) during the `vmn stamp` phase (
+- [x] Version auto-embedding into supported backends during the `vmn stamp` phase (
   see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
 - [x]  Addition of `buildmetadata` for an existing version, e.g., `1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [ ] `WIP` Support "root apps" that are located in different repositories
@@ -378,6 +378,11 @@ There are two generic version backends types: `generic_jinja` and `generic_selec
 vmn has a comprehensive regex for matching any vmn compliant version string. You may use it if you'd like.
 
 `(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:\.(?P<hotfix>0|[1-9]\d*))?(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)\.(?P<rcn>(?:0|[1-9]\d*)))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?`
+
+You can play with it here:
+
+https://regex101.com/r/JoEvaN/1
+
 
 ``` yaml
 version_backends:
