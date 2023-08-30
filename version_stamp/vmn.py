@@ -770,12 +770,14 @@ class IVersionsStamper(object):
         )
 
         for item in backend_conf:
-            if "custom_keys_path" not in item:
-                item["custom_keys_path"] = None
+            custom_path = None
+            if "custom_keys_path" in item:
+                custom_path = \
+                    os.path.join(self.vmn_root_path, item["custom_keys_path"])
 
             tmplt_value = create_data_dict_for_jinja2(
                 self.current_version_info,
-                os.path.join(self.vmn_root_path, item["custom_keys_path"]),
+                custom_path,
             )
 
             gen_jinja2_template_from_data(
@@ -787,9 +789,6 @@ class IVersionsStamper(object):
     def _write_version_to_generic_selectors(self, verstr, backend_conf):
         jinja_backend_conf = []
         for item in backend_conf:
-            if "custom_keys_path" not in item["paths_section"]:
-                item["paths_section"]["custom_keys_path"] = None
-
             input_file_path = os.path.join(
                 self.vmn_root_path,
                 item["paths_section"]["input_file_path"]
@@ -823,13 +822,14 @@ class IVersionsStamper(object):
             with open(temporary_jinja_template_path, 'w') as file:
                 file.write(content)
 
-            jinja_backend_conf.append(
-                {
+            d = {
                     "input_file_path": raw_temporary_jinja_template_path,
-                    "custom_keys_path": item["paths_section"]["custom_keys_path"],
                     "output_file_path": item["paths_section"]["output_file_path"],
                 }
-            )
+            if "custom_keys_path" in item:
+                d["custom_keys_path"] = item["paths_section"]["custom_keys_path"]
+
+            jinja_backend_conf.append(d)
 
             self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
 
