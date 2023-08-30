@@ -650,7 +650,9 @@ def test_version_backends_generic_selectors(app_layout, capfd):
 
     custom_keys_content = "k1: 5\n"
     app_layout.write_file_commit_and_push(
-        "test_repo_0", "custom.yml", custom_keys_content
+        "test_repo_0",
+        "custom.yml",
+        custom_keys_content
     )
 
     generic_selectors = {
@@ -689,6 +691,62 @@ def test_version_backends_generic_selectors(app_layout, capfd):
         data = yaml.safe_load(f)
         assert data["version"] == "0.0.2"
         assert data["Custom"] == 5
+
+
+def test_version_backends_generic_selectors_no_custom_keys(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "in.txt",
+        yaml.safe_dump(
+            {
+                "version": "9.3.2-rc.4-x",
+                "Custom": 3
+            }
+        )
+    )
+
+    generic_selectors = {
+        'generic_selectors': [
+            {
+                'paths_section': {
+                    'input_file_path': 'in.txt',
+                    'output_file_path': 'in.txt',
+                },
+                "selectors_section": [
+                    {
+                        'regex_selector': f"(version: ){stamp_utils._VMN_REGEX}",
+                        'regex_sub': r'\1{{version}}'
+                    },
+                ]
+            },
+        ]
+    }
+
+    conf = {"version_backends": generic_selectors}
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    custom_path = os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["version"] == "0.0.2-x"
+        assert data["Custom"] == 3
 
 
 def test_basic_show(app_layout, capfd):
