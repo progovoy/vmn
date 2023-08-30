@@ -648,11 +648,13 @@ def test_version_backends_generic_selectors(app_layout, capfd):
     generic_selectors = {
         "generic_selectors": [
             {
-                "paths_section": {
-                    "input_file_path": "in.txt",
-                    "output_file_path": "in.txt",
-                    "custom_keys_path": "custom.yml",
-                },
+                "paths_section": [
+                    {
+                        "input_file_path": "in.txt",
+                        "output_file_path": "in.txt",
+                        "custom_keys_path": "custom.yml",
+                    }
+                ],
                 "selectors_section": [
                     {
                         "regex_selector": f"(version: ){stamp_utils._VMN_REGEX}",
@@ -701,10 +703,12 @@ def test_version_backends_generic_selectors_no_custom_keys(app_layout, capfd):
     generic_selectors = {
         "generic_selectors": [
             {
-                "paths_section": {
-                    "input_file_path": "in.txt",
-                    "output_file_path": "in.txt",
-                },
+                "paths_section": [
+                    {
+                        "input_file_path": "in.txt",
+                        "output_file_path": "in.txt",
+                    }
+                ],
                 "selectors_section": [
                     {
                         "regex_selector": f"(version: ){stamp_utils._VMN_REGEX}",
