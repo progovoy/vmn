@@ -63,8 +63,7 @@ def _release_app(app_name, version=None):
     else:
         tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(
             stamp_utils.VMNBackend.get_base_vmn_version(
-                version,
-                hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
+                version, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         )
 
@@ -599,14 +598,14 @@ def test_version_backends_generic_jinja(app_layout, capfd):
     )
 
     generic_jinja = {
-                'generic_jinja': [
-                    {
-                        'input_file_path': 'f1.jinja2',
-                        'output_file_path': 'jinja_out.txt',
-                        'custom_keys_path': 'custom.yml'
-                    },
-                ]
-            }
+        "generic_jinja": [
+            {
+                "input_file_path": "f1.jinja2",
+                "output_file_path": "jinja_out.txt",
+                "custom_keys_path": "custom.yml",
+            },
+        ]
+    }
 
     conf = {"version_backends": generic_jinja}
 
@@ -638,41 +637,29 @@ def test_version_backends_generic_selectors(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
     app_layout.write_file_commit_and_push(
-        "test_repo_0",
-        "in.txt",
-        yaml.safe_dump(
-            {
-                "version": "9.3.2-rc.4",
-                "Custom": 3
-            }
-        )
+        "test_repo_0", "in.txt", yaml.safe_dump({"version": "9.3.2-rc.4", "Custom": 3})
     )
 
     custom_keys_content = "k1: 5\n"
     app_layout.write_file_commit_and_push(
-        "test_repo_0",
-        "custom.yml",
-        custom_keys_content
+        "test_repo_0", "custom.yml", custom_keys_content
     )
 
     generic_selectors = {
-        'generic_selectors': [
+        "generic_selectors": [
             {
-                'paths_section': {
-                    'input_file_path': 'in.txt',
-                    'output_file_path': 'in.txt',
-                    'custom_keys_path': 'custom.yml',
+                "paths_section": {
+                    "input_file_path": "in.txt",
+                    "output_file_path": "in.txt",
+                    "custom_keys_path": "custom.yml",
                 },
                 "selectors_section": [
                     {
-                        'regex_selector': f"(version: ){stamp_utils._VMN_REGEX}",
-                        'regex_sub': r'\1{{version}}'
+                        "regex_selector": f"(version: ){stamp_utils._VMN_REGEX}",
+                        "regex_sub": r"\1{{version}}",
                     },
-                    {
-                        'regex_selector': f"(Custom: )([0-9]+)",
-                        'regex_sub': r'\1{{k1}}'
-                    }
-                ]
+                    {"regex_selector": f"(Custom: )([0-9]+)", "regex_sub": r"\1{{k1}}"},
+                ],
             },
         ]
     }
@@ -708,27 +695,22 @@ def test_version_backends_generic_selectors_no_custom_keys(app_layout, capfd):
     app_layout.write_file_commit_and_push(
         "test_repo_0",
         "in.txt",
-        yaml.safe_dump(
-            {
-                "version": "9.3.2-rc.4-x",
-                "Custom": 3
-            }
-        )
+        yaml.safe_dump({"version": "9.3.2-rc.4-x", "Custom": 3}),
     )
 
     generic_selectors = {
-        'generic_selectors': [
+        "generic_selectors": [
             {
-                'paths_section': {
-                    'input_file_path': 'in.txt',
-                    'output_file_path': 'in.txt',
+                "paths_section": {
+                    "input_file_path": "in.txt",
+                    "output_file_path": "in.txt",
                 },
                 "selectors_section": [
                     {
-                        'regex_selector': f"(version: ){stamp_utils._VMN_REGEX}",
-                        'regex_sub': r'\1{{version}}'
+                        "regex_selector": f"(version: ){stamp_utils._VMN_REGEX}",
+                        "regex_sub": r"\1{{version}}",
                     },
-                ]
+                ],
             },
         ]
     }
@@ -3618,8 +3600,9 @@ def test_jenkins_checkout(app_layout, capfd):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
+
 def test_orm_rc_from_release(app_layout, capfd):
-    #Prepare
+    # Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3628,8 +3611,8 @@ def test_orm_rc_from_release(app_layout, capfd):
 
     app_layout.checkout("first_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
-    # Actual Test 
+
+    # Actual Test
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
@@ -3640,7 +3623,7 @@ def test_orm_rc_from_release(app_layout, capfd):
 
 
 def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
-    #Prepare
+    # Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3649,7 +3632,7 @@ def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
 
     app_layout.checkout("first_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc1"
     )
@@ -3662,7 +3645,7 @@ def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
     app_layout.checkout(main_branch)
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc2"
     )
@@ -3673,7 +3656,7 @@ def test_orm_rc_from_release_globally_latest_other_rc(app_layout, capfd):
 
 
 def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
-    #Prepare
+    # Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3682,7 +3665,7 @@ def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
 
     app_layout.checkout("first_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
@@ -3695,7 +3678,7 @@ def test_orm_rc_from_release_globally_latest_same_rc(app_layout, capfd):
     app_layout.checkout(main_branch)
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
@@ -3742,16 +3725,15 @@ def test_orm_rc_from_rc_globally_latest_release(app_layout, capfd):
     # Actual Test
     app_layout.checkout(second_branch)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
     assert err == 1
 
 
-
 def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
-    #Prepare
+    # Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3760,7 +3742,7 @@ def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
 
     app_layout.checkout("first_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc1"
     )
@@ -3772,7 +3754,7 @@ def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
     # Actual Test
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc2"
     )
@@ -3781,8 +3763,9 @@ def test_orm_rc_from_rc_globally_latest_other_rc(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc2.1"
     assert data["prerelease"] == "rc2"
 
+
 def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
-    #Prepare
+    # Prepare
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
@@ -3791,7 +3774,7 @@ def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
 
     app_layout.checkout("first_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
@@ -3803,7 +3786,7 @@ def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
     # Actual Test
     app_layout.checkout("second_branch", create_new=True)
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    
+
     err, ver_info, _ = _stamp_app(
         app_layout.app_name, optional_release_mode="patch", prerelease="rc"
     )
@@ -3811,6 +3794,7 @@ def test_orm_rc_from_rc_globally_latest_same_rc(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.2"
     assert data["prerelease"] == "rc"
+
 
 def test_orm_rc_ending_with_dot(app_layout, capfd):
     _run_vmn_init()
@@ -3829,6 +3813,7 @@ def test_orm_rc_ending_with_dot(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.1"
     assert data["prerelease"] == "rc"
+
 
 def test_pr_rc_ending_with_dot(app_layout, capfd):
     _run_vmn_init()
@@ -3850,13 +3835,12 @@ def test_pr_rc_ending_with_dot(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, prerelease="rc."
-    )
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc.")
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.2"
     assert data["prerelease"] == "rc"
+
 
 def test_orm_use_override_in_rc(app_layout, capfd):
     _run_vmn_init()
@@ -3879,7 +3863,10 @@ def test_orm_use_override_in_rc(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, override_version="1.0.0", optional_release_mode="patch", prerelease="rc"
+        app_layout.app_name,
+        override_version="1.0.0",
+        optional_release_mode="patch",
+        prerelease="rc",
     )
 
     assert err == 0
@@ -3909,7 +3896,10 @@ def test_orm_use_override_rc_in_rc(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, override_version="1.0.1-rc.1", optional_release_mode="patch", prerelease="rc"
+        app_layout.app_name,
+        override_version="1.0.1-rc.1",
+        optional_release_mode="patch",
+        prerelease="rc",
     )
 
     assert err == 0
@@ -3939,7 +3929,10 @@ def test_orm_use_override_diff_rc_in_rc(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, override_version="1.0.1-rc1.1", optional_release_mode="patch", prerelease="rc2"
+        app_layout.app_name,
+        override_version="1.0.1-rc1.1",
+        optional_release_mode="patch",
+        prerelease="rc2",
     )
 
     assert err == 0
@@ -3976,6 +3969,7 @@ def test_orm_use_override_in_stable(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"1.0.1"
 
+
 def test_orm_rc_with_strange_name_dot(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3993,6 +3987,7 @@ def test_orm_rc_with_strange_name_dot(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == f"0.0.2-rc.1.1"
     assert data["prerelease"] == "rc.1"
+
 
 def test_orm_rc_with_strange_name_hyphen(app_layout, capfd):
     _run_vmn_init()
@@ -4012,6 +4007,7 @@ def test_orm_rc_with_strange_name_hyphen(app_layout, capfd):
     assert data["_version"] == f"0.0.2-rc-1.1"
     assert data["prerelease"] == "rc-1"
 
+
 def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4026,6 +4022,7 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
         app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
     )
     assert err == 1
+
 
 def test_jenkins_checkout(app_layout, capfd):
     _run_vmn_init()
@@ -4042,6 +4039,7 @@ def test_jenkins_checkout(app_layout, capfd):
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
+
 def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4057,11 +4055,12 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     )
     assert err == 1
 
+
 def test_problem_found_in_real_customer(app_layout, capfd):
     app_layout.stamp_with_previous_vmn("0.8.5rc2")
 
     err, ver_info, _ = _stamp_app(
-        'app1', optional_release_mode="patch", prerelease="189."
+        "app1", optional_release_mode="patch", prerelease="189."
     )
     assert err == 0
     data = ver_info["stamping"]["app"]

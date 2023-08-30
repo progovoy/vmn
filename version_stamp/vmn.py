@@ -772,8 +772,7 @@ class IVersionsStamper(object):
         for item in backend_conf:
             custom_path = None
             if "custom_keys_path" in item:
-                custom_path = \
-                    os.path.join(self.vmn_root_path, item["custom_keys_path"])
+                custom_path = os.path.join(self.vmn_root_path, item["custom_keys_path"])
 
             tmplt_value = create_data_dict_for_jinja2(
                 self.current_version_info,
@@ -790,10 +789,9 @@ class IVersionsStamper(object):
         jinja_backend_conf = []
         for item in backend_conf:
             input_file_path = os.path.join(
-                self.vmn_root_path,
-                item["paths_section"]["input_file_path"]
+                self.vmn_root_path, item["paths_section"]["input_file_path"]
             )
-            with open(input_file_path, 'r') as file:
+            with open(input_file_path, "r") as file:
                 content = file.read()
 
             for d in item["selectors_section"]:
@@ -802,10 +800,11 @@ class IVersionsStamper(object):
                 # Replace the matched version strings with regex_sub
                 content = re.sub(regex_selector, regex_sub, content)
 
-            raw_temporary_jinja_template_path = f'{item["paths_section"]["input_file_path"]}.tmp.jinja2'
+            raw_temporary_jinja_template_path = (
+                f'{item["paths_section"]["input_file_path"]}.tmp.jinja2'
+            )
             temporary_jinja_template_path = os.path.join(
-                self.vmn_root_path,
-                raw_temporary_jinja_template_path
+                self.vmn_root_path, raw_temporary_jinja_template_path
             )
 
             if self.dry_run:
@@ -819,13 +818,13 @@ class IVersionsStamper(object):
 
                 return
 
-            with open(temporary_jinja_template_path, 'w') as file:
+            with open(temporary_jinja_template_path, "w") as file:
                 file.write(content)
 
             d = {
-                    "input_file_path": raw_temporary_jinja_template_path,
-                    "output_file_path": item["paths_section"]["output_file_path"],
-                }
+                "input_file_path": raw_temporary_jinja_template_path,
+                "output_file_path": item["paths_section"]["output_file_path"],
+            }
             if "custom_keys_path" in item["paths_section"]:
                 d["custom_keys_path"] = item["paths_section"]["custom_keys_path"]
 
@@ -835,8 +834,7 @@ class IVersionsStamper(object):
 
             os.remove(temporary_jinja_template_path)
             stamp_utils.VMN_LOGGER.debug(
-                f"Removed {temporary_jinja_template_path} with content:\n"
-                f"{content}"
+                f"Removed {temporary_jinja_template_path} with content:\n" f"{content}"
             )
 
     def _write_version_to_vmn_version_file(self, verstr):
