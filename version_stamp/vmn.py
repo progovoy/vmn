@@ -826,7 +826,7 @@ class IVersionsStamper(object):
                     "input_file_path": raw_temporary_jinja_template_path,
                     "output_file_path": item["paths_section"]["output_file_path"],
                 }
-            if "custom_keys_path" in item:
+            if "custom_keys_path" in item["paths_section"]:
                 d["custom_keys_path"] = item["paths_section"]["custom_keys_path"]
 
             jinja_backend_conf.append(d)
