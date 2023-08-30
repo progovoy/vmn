@@ -14,7 +14,6 @@ from git import Repo
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
 import stamp_utils
-import vmn
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
@@ -278,7 +277,7 @@ class FSAppLayoutFixture(object):
             self._app_backend._be.git.execute(
                 ["git", "ls-files", "--error-unmatch", f"{file_path}"]
             )
-        except git.GitCommandError as exc:
+        except git.GitCommandError:
             return False
 
         return True
