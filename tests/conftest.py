@@ -173,17 +173,24 @@ class FSAppLayoutFixture(object):
 
         subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
 
-
     def checkout_jekins(
-            self,
-            target,
-            repo_name=f"{TEST_REPO_NAME}_0",
-            branch_to_track=None,
-            create_new=False,
+        self,
+        target,
+        repo_name=f"{TEST_REPO_NAME}_0",
+        branch_to_track=None,
+        create_new=False,
     ):
         import subprocess
 
-        base_cmd = ["git", "fetch", "--tags", "--force", "--", self._repos[repo_name]["_be"].selected_remote.url, "+refs/heads/*:refs/remotes/origin/*"]
+        base_cmd = [
+            "git",
+            "fetch",
+            "--tags",
+            "--force",
+            "--",
+            self._repos[repo_name]["_be"].selected_remote.url,
+            "+refs/heads/*:refs/remotes/origin/*",
+        ]
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
 
         p = self._repos[repo_name]["_be"].root_path
@@ -192,7 +199,7 @@ class FSAppLayoutFixture(object):
         base_cmd = ["git", "rev-parse", f"origin/{target}"]
         sha = subprocess.check_output(base_cmd, cwd=p)
         # decode output from bytes to string
-        sha = sha.decode('utf-8').strip()
+        sha = sha.decode("utf-8").strip()
 
         base_cmd = ["git", "rev-parse", f"origin/{target}"]
         subprocess.call(base_cmd, cwd=p)
