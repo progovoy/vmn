@@ -360,11 +360,58 @@ RELEASE_MODE: patch
 
 `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
-| Backend | Description | | :-: | :-: |
+| Backend | Description | 
+| :-: | :-: |
 | ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) |
-Will embed version string to `package.json` file within the `vmn stamp` command |
+Will embed version string to `package.json` file within the `vmn stamp` command | 
 | ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) |
 Will embed version string to `Cargo.toml` file within the `vmn stamp` command |
+| Poetry |
+Will embed version string to Poetry's `pyproject.toml` file within the `vmn stamp` command |
+
+
+## Generic version backends
+There are two generic version backends types: `generic_jinja` and `generic_selectors`.
+
+### generic_selectors
+
+vmn has a comprehensive regex for matching any vmn compliant version string. You may use it if you'd like.
+
+`(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:\.(?P<hotfix>0|[1-9]\d*))?(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)\.(?P<rcn>(?:0|[1-9]\d*)))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?`
+
+``` yaml
+version_backends:
+    generic_selectors:
+    - paths_section:
+        input_file_path: in.txt
+        output_file_path: in.txt
+        custom_keys_path: custom.yml
+      selectors_section:
+      - regex_selector: '(version: )(\d+\.\d+\.\d+)'
+        regex_sub: \1{{version}}
+      - regex_selector: '(Custom: )([0-9]+)'
+        regex_sub: \1{{k1}}
+```
+
+`input_file_path` is the file you want to read and `output_file_path` is the file you want to write to.
+
+`custom_keys_path` is a path to a `yaml` file containing any custom `jinja2` kewords you would like to use. This field is optional.
+
+A `regex_selector` is a regex that will match the desired part in the `input_file_path` file and `regex_sub` is a regex that states what the matched part should be replaced with.
+In this particular example, putting `{{version}}` tells vmn to inject the correct version while stamping. `vmn` will create an intermidiate `jinja2` template and render it to `output_file_path` file.
+
+### generic_jinja
+
+```yaml
+conf:
+  version_backends:
+    generic_jinja:
+    - input_file_path: f1.jinja2
+      output_file_path: jinja_out.txt
+      custom_keys_path: custom.yml
+```
+
+The parameters here are the same but are talking about `jinja2` files.
 
 ## Configuration
 
