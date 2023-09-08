@@ -1650,7 +1650,10 @@ def handle_stamp(vmn_ctx):
         version = status["matched_version_info"]["stamping"]["app"]["_version"]
 
         disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
-        stamp_utils.VMN_LOGGER.info(disp_version)
+        stamp_utils.VMN_LOGGER.info(
+            f"Found existing version {disp_version} "
+            f"and nothing has changed. Will not stamp"
+         )
 
         return 0
 
