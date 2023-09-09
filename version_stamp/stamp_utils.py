@@ -20,6 +20,8 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 VMN_VERSION_FORMAT = (
     "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
+
+# conf
 VMN_DEFAULT_TEMPLATE = (
     "[{major}][.{minor}][.{patch}][.{hotfix}]"
     "[-{prerelease}][.{rcn}][+{buildmetadata}]"
@@ -50,16 +52,16 @@ _VMN_BASE_VER_REGEX = rf"{_SEMVER_BASE_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
 VMN_BASE_VER_REGEX = rf"^{_VMN_BASE_VER_REGEX}$"
 
+# "old" means 0.8.4 format
 _VMN_OLD_REGEX = (
     rf"{_VMN_BASE_VER_REGEX}{_SEMVER_PRERELEASE_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 )
+VMN_OLD_REGEX = rf"^{_VMN_OLD_REGEX}$"
+VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 VMN_VERSTR_REGEX = rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}"
 
 _VMN_REGEX = rf"{VMN_VERSTR_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
-
-VMN_OLD_REGEX = rf"^{_VMN_OLD_REGEX}$"
-VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 # Regex for matching versions stamped by vmn
 VMN_REGEX = rf"^{_VMN_REGEX}$"
