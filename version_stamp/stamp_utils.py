@@ -21,11 +21,16 @@ VMN_VERSION_FORMAT = (
     "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
 )
 
-# conf
-VMN_DEFAULT_TEMPLATE = (
-    "[{major}][.{minor}][.{patch}][.{hotfix}]"
-    "[-{prerelease}][.{rcn}][+{buildmetadata}]"
-)
+VMN_DEFAULT_CONF = {
+    "template": "[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]",
+    "old_template": "[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][+{buildmetadata}]",
+    "extra_info": False,
+    "create_verinfo_files": False,
+    "hide_zero_hotfix": True,
+    "version_backends": {},
+    "deps": {},
+
+}
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
 
