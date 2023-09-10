@@ -1552,7 +1552,7 @@ def test_rc_stamping(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
     captured = capfd.readouterr()
-    assert "[INFO] 3.7.0\n" == captured.out
+    assert "[INFO] Found existing version 3.7.0 and nothing has changed. Will not stamp\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -1570,7 +1570,7 @@ def test_rc_stamping(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "[INFO] 3.8.0-rc.3\n" == captured.out
+    assert "[INFO] Found existing version 3.8.0-rc.3 and nothing has changed. Will not stamp\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
@@ -1680,7 +1680,7 @@ def test_basic_goto(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "[INFO] 1.3.0\n" == captured.out
+    assert "[INFO] Found existing version 1.3.0 and nothing has changed. Will not stamp\n" == captured.out
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
@@ -2179,7 +2179,7 @@ def test_backward_compatability_with_0_3_9_vmn(app_layout, capfd):
     err, ver_info, _ = _stamp_app("app1", "major")
     captured = capfd.readouterr()
     assert err == 0
-    assert "[INFO] 0.0.3\n" == captured.out
+    assert "[INFO] Found existing version 0.0.3 and nothing has changed. Will not stamp\n" == captured.out
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -3581,7 +3581,7 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
 
     assert "1.0.0-alpha1" == tmp["version"]
 
-    err = _show("app1", verbose=True, template=stamp_utils.VMN_DEFAULT_TEMPLATE)
+    err = _show("app1", verbose=True)
     assert err == 0
 
     captured = capfd.readouterr()

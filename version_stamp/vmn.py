@@ -35,7 +35,7 @@ CACHE_FILENAME = "vmn.cache"
 
 IGNORED_FILES = [
     LOCK_FILENAME,
-    LOG_FILENAME,
+    f"{LOG_FILENAME}*",
     CACHE_FILENAME,
     stamp_utils.GLOBAL_LOG_FILENAME,
 ]
@@ -96,13 +96,14 @@ class IVersionsStamper(object):
         self.be_type = arg_params["be_type"]
 
         # Configuration defaults
-        self.template: str = stamp_utils.VMN_DEFAULT_TEMPLATE
-        self.extra_info = False
-        self.create_verinfo_files = False
-        self.hide_zero_hotfix = True
-        self.version_backends = {}
+        self.template: str = stamp_utils.VMN_DEFAULT_CONF["template"]
+        self.extra_info = stamp_utils.VMN_DEFAULT_CONF["extra_info"]
+        self.create_verinfo_files = stamp_utils.VMN_DEFAULT_CONF["create_verinfo_files"]
+        self.hide_zero_hotfix = stamp_utils.VMN_DEFAULT_CONF["hide_zero_hotfix"]
+        self.version_backends = stamp_utils.VMN_DEFAULT_CONF["version_backends"]
         # This one will be filled with self dependency ('.') by default
-        self.raw_configured_deps = {}
+        self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
+
         self.configured_deps = {}
         self.conf_file_exists = False
         self.root_conf_file_exists = False
@@ -163,18 +164,27 @@ class IVersionsStamper(object):
 
             with open(self.app_conf_path, "r") as f:
                 data = yaml.safe_load(f)
-                if "template" in data["conf"]:
-                    self.template = data["conf"]["template"]
-                if "extra_info" in data["conf"]:
-                    self.extra_info = data["conf"]["extra_info"]
-                if "deps" in data["conf"]:
-                    self.raw_configured_deps = data["conf"]["deps"]
-                if "hide_zero_hotfix" in data["conf"]:
-                    self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
-                if "version_backends" in data["conf"]:
-                    self.version_backends = data["conf"]["version_backends"]
-                if "create_verinfo_files" in data["conf"]:
-                    self.create_verinfo_files = data["conf"]["create_verinfo_files"]
+                if "conf" in data:
+                    if "template" in data["conf"]:
+                        self.template = data["conf"]["template"]
+
+                        if stamp_utils.VMN_DEFAULT_CONF["old_template"] == self.template:
+                            stamp_utils.VMN_LOGGER.warning(
+                                "Identified old default template format. "
+                                "will ignore and use the new default format"
+                            )
+                            self.template = stamp_utils.VMN_DEFAULT_CONF["template"]
+
+                    if "extra_info" in data["conf"]:
+                        self.extra_info = data["conf"]["extra_info"]
+                    if "deps" in data["conf"]:
+                        self.raw_configured_deps = data["conf"]["deps"]
+                    if "hide_zero_hotfix" in data["conf"]:
+                        self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
+                    if "version_backends" in data["conf"]:
+                        self.version_backends = data["conf"]["version_backends"]
+                    if "create_verinfo_files" in data["conf"]:
+                        self.create_verinfo_files = data["conf"]["create_verinfo_files"]
 
                 self.set_template(self.template)
 
@@ -474,13 +484,13 @@ class IVersionsStamper(object):
         except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
-                stamp_utils.VMN_DEFAULT_TEMPLATE
+                stamp_utils.VMN_DEFAULT_CONF["template"]
             )
             self.template_err_str = (
                 "Failed to parse template: "
                 f"{template}. "
                 f"Falling back to default one: "
-                f"{stamp_utils.VMN_DEFAULT_TEMPLATE}"
+                f"{stamp_utils.VMN_DEFAULT_CONF['template']}"
             )
 
             self.bad_format_template = True
