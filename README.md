@@ -414,6 +414,21 @@ In this particular example, putting `{{version}}` tells vmn to inject the correc
 }
 ```
 
+##### Usage
+``` yaml
+version_backends:
+    generic_selectors:
+    - paths_section:
+      - input_file_path: in.txt
+        output_file_path: in.txt
+        custom_keys_path: custom.yml
+      selectors_section:
+      - regex_selector: '(version: )({{VMN_VERSION_REGEX}})'
+        regex_sub: \1{{version}}
+      - regex_selector: '(Custom: )([0-9]+)'
+        regex_sub: \1{{k1}}
+```
+
 ### generic_jinja
 
 ```yaml
