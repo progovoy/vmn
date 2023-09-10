@@ -169,6 +169,8 @@ class IVersionsStamper(object):
                         self.template = data["conf"]["template"]
 
                         if stamp_utils.VMN_DEFAULT_CONF["old_template"] == self.template:
+                            # TODO:: this means that using the old
+                            #  default template format is impossible. I am okay with this for now.
                             stamp_utils.VMN_LOGGER.warning(
                                 "Identified old default template format. "
                                 "will ignore and use the new default format"
@@ -800,6 +802,9 @@ class IVersionsStamper(object):
         for item in backend_conf:
             for d in item["selectors_section"]:
                 regex_selector = d["regex_selector"]
+                for k, v in stamp_utils.SUPPORTED_REGEX_VARS.items():
+                    regex_selector = regex_selector.replace(f"{{{{{k}}}}}", v)
+
                 regex_sub = d["regex_sub"]
 
                 for file_section in item["paths_section"]:

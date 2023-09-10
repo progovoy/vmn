@@ -29,7 +29,6 @@ VMN_DEFAULT_CONF = {
     "hide_zero_hotfix": True,
     "version_backends": {},
     "deps": {},
-
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -55,7 +54,7 @@ _VMN_HOTFIX_REGEX = rf"(?:\.(?P<hotfix>{_DIGIT_REGEX}))?"
 
 _VMN_BASE_VER_REGEX = rf"{_SEMVER_BASE_VER_REGEX}{_VMN_HOTFIX_REGEX}"
 
-VMN_BASE_VER_REGEX = rf"^{_VMN_BASE_VER_REGEX}$"
+VMN_BASE_VERSION_REGEX = rf"^{_VMN_BASE_VER_REGEX}$"
 
 # "old" means 0.8.4 format
 _VMN_OLD_REGEX = (
@@ -66,16 +65,13 @@ VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 VMN_VERSTR_REGEX = rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}"
 
-_VMN_REGEX = rf"{VMN_VERSTR_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
-
+_VMN_VERSION_REGEX = rf"{VMN_VERSTR_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 # Regex for matching versions stamped by vmn
-VMN_REGEX = rf"^{_VMN_REGEX}$"
-
-VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_REGEX}$"
+VMN_VERSION_REGEX = rf"^{_VMN_VERSION_REGEX}$"
+VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_VERSION_REGEX}$"
 
 _VMN_ROOT_REGEX = rf"(?P<version>{_DIGIT_REGEX})"
-VMN_ROOT_REGEX = rf"^{_VMN_ROOT_REGEX}$"
-
+VMN_ROOT_VERSION_REGEX = rf"^{_VMN_ROOT_REGEX}$"
 VMN_ROOT_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_ROOT_REGEX}$"
 
 VMN_TEMPLATE_REGEX = (
@@ -87,6 +83,12 @@ VMN_TEMPLATE_REGEX = (
     r"(?:\[(?P<rcn_template>[^\{\}]*\{rcn\}[^\{\}]*)\])?"
     r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
+
+SUPPORTED_REGEX_VARS = {
+    "VMN_EXACT_VERSION_REGEX": VMN_VERSION_REGEX,
+    "VMN_VERSION_REGEX": _VMN_VERSION_REGEX,
+    "VMN_ROOT_VERSION_REGEX": VMN_ROOT_VERSION_REGEX,
+}
 
 BOLD_CHAR = "\033[1m"
 END_CHAR = "\033[0m"
@@ -541,7 +543,7 @@ class VMNBackend(object):
             "old_ver_format": False,
         }
 
-        match = re.search(VMN_ROOT_REGEX, verstr)
+        match = re.search(VMN_ROOT_VERSION_REGEX, verstr)
         if match is not None:
             gdict = match.groupdict()
 
@@ -551,7 +553,7 @@ class VMNBackend(object):
 
             return ret
 
-        match = re.search(VMN_REGEX, verstr)
+        match = re.search(VMN_VERSION_REGEX, verstr)
         old_ver_format = False
         if match is None:
             match = re.search(VMN_OLD_REGEX, verstr)
