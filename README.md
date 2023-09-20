@@ -408,12 +408,11 @@ In this particular example, putting `{{version}}` tells vmn to inject the correc
 #### Supported regex vars
 ```json 
 {
-   "VMN_EXACT_VERSION_REGEX":"^(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:\\.(?P<hotfix>0|[1-9]\\d*))?(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*)\\.(?P<rcn>(?:0|[1-9]\\d*)))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
    "VMN_VERSION_REGEX":"(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:\\.(?P<hotfix>0|[1-9]\\d*))?(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*)\\.(?P<rcn>(?:0|[1-9]\\d*)))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?",
    "VMN_ROOT_VERSION_REGEX":"^(?P<version>0|[1-9]\\d*)$"
 }
 ```
-
+  
 ##### Usage
 ``` yaml
 version_backends:
