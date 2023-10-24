@@ -31,7 +31,7 @@ Let people know that your repository is managed by **vmn** by including this bad
 
 <p align="center">
   <br>
-  <img width="800" src="https://i.imgur.com/dwmhs3v.png">
+  <img width="800" src="https://i.imgur.com/g3wYIk8.png">
   <br>
 </p>
 
