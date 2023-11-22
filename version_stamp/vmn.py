@@ -798,15 +798,16 @@ class IVersionsStamper(object):
             )
 
     def _write_version_to_generic_selectors(self, verstr, backend_conf):
-        jinja_backend_conf = []
         for item in backend_conf:
-            for d in item["selectors_section"]:
-                regex_selector = d["regex_selector"]
+            for selector in item["selectors_section"]:
+                regex_selector = selector["regex_selector"]
                 for k, v in stamp_utils.SUPPORTED_REGEX_VARS.items():
                     regex_selector = regex_selector.replace(f"{{{{{k}}}}}", v)
 
-                regex_sub = d["regex_sub"]
+                regex_sub = selector["regex_sub"]
 
+                jinja_backend_conf = []
+                temporary_jinja_template_paths = []
                 for file_section in item["paths_section"]:
                     input_file_path = os.path.join(
                         self.vmn_root_path, file_section["input_file_path"]
@@ -833,10 +834,14 @@ class IVersionsStamper(object):
                             f"with content:\n{content}"
                         )
 
-                        return
+                        continue
 
                     with open(temporary_jinja_template_path, "w") as file:
                         file.write(content)
+
+                    temporary_jinja_template_paths.append(
+                        (temporary_jinja_template_path, content)
+                    )
 
                     d = {
                         "input_file_path": raw_temporary_jinja_template_path,
@@ -847,11 +852,12 @@ class IVersionsStamper(object):
 
                     jinja_backend_conf.append(d)
 
-                    self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
+                self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
 
-                    os.remove(temporary_jinja_template_path)
+                for t, c in temporary_jinja_template_paths:
+                    os.remove(t)
                     stamp_utils.VMN_LOGGER.debug(
-                        f"Removed {temporary_jinja_template_path} with content:\n" f"{content}"
+                        f"Removed {t} with content:\n" f"{c}"
                     )
 
     def _write_version_to_vmn_version_file(self, verstr):
