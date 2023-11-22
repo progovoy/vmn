@@ -640,6 +640,10 @@ def test_version_backends_generic_selectors(app_layout, capfd):
         "test_repo_0", "in.txt", yaml.safe_dump({"version": "9.3.2-rc.4", "Custom": 3})
     )
 
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "in2.txt", yaml.safe_dump({"version": "9.3.2-rc.4", "Custom": 3})
+    )
+
     custom_keys_content = "k1: 5\n"
     app_layout.write_file_commit_and_push(
         "test_repo_0", "custom.yml", custom_keys_content
@@ -653,6 +657,10 @@ def test_version_backends_generic_selectors(app_layout, capfd):
                         "input_file_path": "in.txt",
                         "output_file_path": "in.txt",
                         "custom_keys_path": "custom.yml",
+                    },
+                    {
+                        "input_file_path": "in2.txt",
+                        "output_file_path": "in2.txt",
                     }
                 ],
                 "selectors_section": [
@@ -672,6 +680,7 @@ def test_version_backends_generic_selectors(app_layout, capfd):
 
     os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
     opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+    opath2 = os.path.join(app_layout._repos["test_repo_0"]["path"], "in2.txt")
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
@@ -680,6 +689,11 @@ def test_version_backends_generic_selectors(app_layout, capfd):
         data = yaml.safe_load(f)
         assert data["version"] == "0.0.2"
         assert data["Custom"] == 5
+
+    with open(opath2, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["version"] == "0.0.2"
+        assert data["Custom"] is None
 
 
 def test_version_backends_generic_selectors_no_custom_keys(app_layout, capfd):
