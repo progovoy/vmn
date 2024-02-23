@@ -2411,8 +2411,9 @@ def show(vcs, params, verstr=None):
 
         raise RuntimeError()
 
-    data = {}
+    # Done resolving ver_info. Move it to separate function
 
+    data = {}
     if params["conf"]:
         data["conf"] = {
             "raw_deps": copy.deepcopy(vcs.raw_configured_deps),
@@ -2426,39 +2427,25 @@ def show(vcs, params, verstr=None):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
 
     if vcs.root_context:
-        if "root_app" not in ver_info["stamping"]:
-            err_str = f"App {vcs.name} does not have a root app"
-            stamp_utils.VMN_LOGGER.error(err_str)
+        out = _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info)
+    else:
+        out = _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info)
 
-            raise RuntimeError()
+    print(out)
 
-        data.update(ver_info["stamping"]["root_app"])
+    return out
 
-        out = None
-        if params.get("verbose"):
-            out = yaml.dump(data)
-        else:
-            out = data["version"]
 
-        if dirty_states:
-            out = yaml.dump(dirty_states)
-
-        print(out)
-
-        return 0
-
+def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data.update(ver_info["stamping"]["app"])
-
     props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
     verstr = props["verstr"]
-
     data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         verstr, vcs.template, vcs.hide_zero_hotfix
     )
     data["unique_id"] = stamp_utils.VMNBackend.gen_unique_id(
         verstr, data["changesets"]["."]["hash"]
     )
-
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
@@ -2501,7 +2488,33 @@ def show(vcs, params, verstr=None):
         if d_out:
             out = yaml.safe_dump(d_out)
 
-    print(out)
+    return out
+
+
+def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
+    if "root_app" not in ver_info["stamping"]:
+        err_str = f"App {vcs.name} does not have a root app"
+        stamp_utils.VMN_LOGGER.error(err_str)
+
+        raise RuntimeError()
+
+    data.update(ver_info["stamping"]["root_app"])
+    out = None
+    if params.get("verbose"):
+        out = yaml.dump(data)
+    else:
+        out = data["version"]
+
+    if dirty_states:
+        d_out = {}
+        d_out.update(
+            {
+                "out": out,
+                "dirty": dirty_states,
+            }
+        )
+
+        out = yaml.dump(d_out)
 
     return out
 

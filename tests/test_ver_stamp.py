@@ -2063,6 +2063,21 @@ def test_basic_root_show(app_layout, capfd):
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.2"
 
+    app_layout.write_file_commit_and_push(
+        'test_repo_0',
+        "abc.txt",
+        'a',
+        push=False
+    )
+
+    err = _show("root_app", root=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    out_dict = yaml.safe_load(captured.out)
+    assert out_dict["out"] == 2
+    assert out_dict["dirty"][0] == "outgoing"
+
 
 def test_version_backends_cargo(app_layout, capfd):
     _run_vmn_init()
