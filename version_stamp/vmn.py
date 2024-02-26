@@ -2415,13 +2415,18 @@ def show(vcs, params, verstr=None):
 
     data = {}
     if params["conf"]:
-        data["conf"] = {
-            "raw_deps": copy.deepcopy(vcs.raw_configured_deps),
-            "deps": copy.deepcopy(vcs.configured_deps),
-            "template": vcs.template,
-            "hide_zero_hotfix": vcs.hide_zero_hotfix,
-            "version_backends": copy.deepcopy(vcs.version_backends),
-        }
+        if not vcs.root_context:
+            data["conf"] = {
+                "raw_deps": copy.deepcopy(vcs.raw_configured_deps),
+                "deps": copy.deepcopy(vcs.configured_deps),
+                "template": vcs.template,
+                "hide_zero_hotfix": vcs.hide_zero_hotfix,
+                "version_backends": copy.deepcopy(vcs.version_backends),
+            }
+        else:
+            data["conf"] = {
+                "external_services": vcs.external_services,
+            }
 
     if params.get("display_type"):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
@@ -2501,20 +2506,39 @@ def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
     data.update(ver_info["stamping"]["root_app"])
     out = None
     if params.get("verbose"):
+        if dirty_states:
+            data["dirty"] = dirty_states
+
         out = yaml.dump(data)
     else:
         out = data["version"]
 
-    if dirty_states:
         d_out = {}
-        d_out.update(
-            {
-                "out": out,
-                "dirty": dirty_states,
-            }
-        )
+        if dirty_states:
+            d_out.update(
+                {
+                    "out": out,
+                    "dirty": dirty_states,
+                }
+            )
+        if params.get("display_type"):
+            d_out.update(
+                {
+                    "out": out,
+                    "type": data["type"],
+                }
+            )
 
-        out = yaml.dump(d_out)
+        if params.get("conf"):
+            d_out.update(
+                {
+                    "out": out,
+                    "conf": data["conf"],
+                }
+            )
+
+        if d_out:
+            out = yaml.safe_dump(d_out)
 
     return out
 
