@@ -335,12 +335,18 @@ class IVersionsStamper(object):
         ver_tag = None
         for tag, ver_info_c in ver_infos.items():
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
+            if "buildmetadata" in props["types"]:
+                continue
+
             if "root" in props["types"]:
                 root_tag = tag
                 continue
 
             if props["types"] == {"version"}:
                 ver_tag = tag
+                continue
+
+            if "prerelease" in props["types"] and ver_tag is None:
                 continue
 
             # TODO:: Check API commit version
