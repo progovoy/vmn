@@ -1692,7 +1692,7 @@ class GitBackend(VMNBackend):
         if ver_info is None:
             return tag_name, ret
 
-        if type(ver_info) is not dict and ver_info.startswith("Automatic"):
+        if not isinstance(ver_info, dict) and ver_info.startswith("Automatic"):
             # Code from vmn 0.3.9
             # safe_load discards any text before the YAML document (if present)
             commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
