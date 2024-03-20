@@ -1410,9 +1410,7 @@ class GitBackend(VMNBackend):
         out = self._be.git.branch("-r", "--contains", "HEAD")
         out = [s.strip() for s in out.split("\n")]
 
-        VMN_LOGGER.info(
-            f"The output of 'git branch -r --contains HEAD' is:\n{out}"
-        )
+        VMN_LOGGER.info(f"The output of 'git branch -r --contains HEAD' is:\n{out}")
 
         if assumed_remote in out:
             VMN_LOGGER.info(

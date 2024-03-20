@@ -661,7 +661,7 @@ def test_version_backends_generic_selectors(app_layout, capfd):
                     {
                         "input_file_path": "in2.txt",
                         "output_file_path": "in2.txt",
-                    }
+                    },
                 ],
                 "selectors_section": [
                     {
@@ -1624,7 +1624,10 @@ def test_rc_stamping(app_layout, capfd):
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
 
     captured = capfd.readouterr()
-    assert "[INFO] Found existing version 3.7.0 and nothing has changed. Will not stamp\n" == captured.out
+    assert (
+        "[INFO] Found existing version 3.7.0 and nothing has changed. Will not stamp\n"
+        == captured.out
+    )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -1642,7 +1645,10 @@ def test_rc_stamping(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "[INFO] Found existing version 3.8.0-rc.3 and nothing has changed. Will not stamp\n" == captured.out
+    assert (
+        "[INFO] Found existing version 3.8.0-rc.3 and nothing has changed. Will not stamp\n"
+        == captured.out
+    )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
     err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
@@ -1752,7 +1758,10 @@ def test_basic_goto(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "[INFO] Found existing version 1.3.0 and nothing has changed. Will not stamp\n" == captured.out
+    assert (
+        "[INFO] Found existing version 1.3.0 and nothing has changed. Will not stamp\n"
+        == captured.out
+    )
 
     c2 = app_layout._app_backend.be.changeset()
     assert c1 != c2
@@ -2063,12 +2072,7 @@ def test_basic_root_show(app_layout, capfd):
     assert app_name in out_dict["services"]
     assert out_dict["services"][app_name] == "0.2.2"
 
-    app_layout.write_file_commit_and_push(
-        'test_repo_0',
-        "abc.txt",
-        'a',
-        push=False
-    )
+    app_layout.write_file_commit_and_push("test_repo_0", "abc.txt", "a", push=False)
 
     err = _show("root_app", root=True)
     assert err == 0
@@ -2266,7 +2270,10 @@ def test_backward_compatability_with_0_3_9_vmn(app_layout, capfd):
     err, ver_info, _ = _stamp_app("app1", "major")
     captured = capfd.readouterr()
     assert err == 0
-    assert "[INFO] Found existing version 0.0.3 and nothing has changed. Will not stamp\n" == captured.out
+    assert (
+        "[INFO] Found existing version 0.0.3 and nothing has changed. Will not stamp\n"
+        == captured.out
+    )
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
@@ -3675,6 +3682,7 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
     tmp = yaml.safe_load(captured.out)
     assert "1.0.0-alpha1" == tmp["version"]
 
+
 def test_orm_rc_from_release(app_layout, capfd):
     # Prepare
     _run_vmn_init()
@@ -4097,6 +4105,7 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     )
     assert err == 1
 
+
 def test_jenkins_checkout(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4124,6 +4133,7 @@ def test_problem_found_in_real_customer(app_layout, capfd):
     assert data["_version"] == "2.3.2-189.1"
     assert data["prerelease"] == "189"
 
+
 def test_jenkins_checkout_branch_name_order_edge_case(app_layout, capfd):
     # When running in jenkins repo, the remote branch gets deleted.
     # Vmn tries to find to correct remote brach using the command "git branch -r HEAD".
@@ -4141,7 +4151,9 @@ def test_jenkins_checkout_branch_name_order_edge_case(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
 
     main_branch = app_layout._app_backend.be.get_active_branch()
-    app_layout.checkout("a_branch", create_new=True) # The name of the branch is critical because it affect "git branch -r HEAD" list order
+    app_layout.checkout(
+        "a_branch", create_new=True
+    )  # The name of the branch is critical because it affect "git branch -r HEAD" list order
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg3")
     app_layout.checkout_jekins(main_branch)

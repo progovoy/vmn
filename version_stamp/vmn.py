@@ -168,7 +168,10 @@ class IVersionsStamper(object):
                     if "template" in data["conf"]:
                         self.template = data["conf"]["template"]
 
-                        if stamp_utils.VMN_DEFAULT_CONF["old_template"] == self.template:
+                        if (
+                            stamp_utils.VMN_DEFAULT_CONF["old_template"]
+                            == self.template
+                        ):
                             # TODO:: this means that using the old
                             #  default template format is impossible. I am okay with this for now.
                             stamp_utils.VMN_LOGGER.warning(
@@ -862,9 +865,7 @@ class IVersionsStamper(object):
 
                 for t, c in temporary_jinja_template_paths:
                     os.remove(t)
-                    stamp_utils.VMN_LOGGER.debug(
-                        f"Removed {t} with content:\n" f"{c}"
-                    )
+                    stamp_utils.VMN_LOGGER.debug(f"Removed {t} with content:\n" f"{c}")
 
     def _write_version_to_vmn_version_file(self, verstr):
         file_path = self.version_file_path
@@ -1680,7 +1681,7 @@ def handle_stamp(vmn_ctx):
         stamp_utils.VMN_LOGGER.info(
             f"Found existing version {disp_version} "
             f"and nothing has changed. Will not stamp"
-         )
+        )
 
         return 0
 
@@ -2440,7 +2441,9 @@ def show(vcs, params, verstr=None):
     if vcs.root_context:
         out = _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info)
     else:
-        out = _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info)
+        out = _handle_output_to_user(
+            data, dirty_states, params, tag_name, vcs, ver_info
+        )
 
     print(out)
 
