@@ -3675,23 +3675,6 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
     tmp = yaml.safe_load(captured.out)
     assert "1.0.0-alpha1" == tmp["version"]
 
-
-def test_jenkins_checkout(app_layout, capfd):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-
-    main_branch = app_layout._app_backend.be.get_active_branch()
-    app_layout.checkout("new_branch", create_new=True)
-
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-    app_layout.checkout_jekins(main_branch)
-
-    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
-    assert err == 0
-    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
-
-
 def test_orm_rc_from_release(app_layout, capfd):
     # Prepare
     _run_vmn_init()
@@ -4114,7 +4097,6 @@ def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
     )
     assert err == 1
 
-
 def test_jenkins_checkout(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4129,22 +4111,6 @@ def test_jenkins_checkout(app_layout, capfd):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
-
-
-def test_orm_rc_with_strange_name_underscore(app_layout, capfd):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    _stamp_app(app_layout.app_name, "patch")
-
-    app_layout._app_backend.be.get_active_branch()
-
-    app_layout.checkout("first_branch", create_new=True)
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
-
-    err, ver_info, _ = _stamp_app(
-        app_layout.app_name, optional_release_mode="patch", prerelease="rc_1"
-    )
-    assert err == 1
 
 
 def test_problem_found_in_real_customer(app_layout, capfd):
