@@ -4157,3 +4157,29 @@ def test_problem_found_in_real_customer(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "2.3.2-189.1"
     assert data["prerelease"] == "189"
+
+def test_jenkins_checkout_branch_name_order_edge_case(app_layout, capfd):
+    # When running in jenkins repo, the remote branch gets deleted.
+    # Vmn tries to find to correct remote brach using the command "git branch -r HEAD".
+    # It returns a list, and we must choose the right branch, not just the first of the list.
+    # The following test creates a branch with a name above 'master' alphabetically,
+    # And we should still choose master as our rightful remote
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout.checkout("a_branch", create_new=True) # The name of the branch is critical because it affect "git branch -r HEAD" list order
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg3")
+    app_layout.checkout_jekins(main_branch)
+
+    err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"

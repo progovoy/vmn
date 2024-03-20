@@ -203,7 +203,7 @@ class FSAppLayoutFixture(object):
         base_cmd = ["git", "rev-parse", f"origin/{target}"]
         subprocess.call(base_cmd, cwd=p)
 
-        base_cmd = ["git", "contig", "core.sparsecheckout"]
+        base_cmd = ["git", "config", "core.sparsecheckout"]
         subprocess.call(base_cmd, cwd=p)
 
         base_cmd = ["git", "checkout", "-f", sha]
