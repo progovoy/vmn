@@ -3146,7 +3146,7 @@ def vmn_run(command_line=None):
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
         err = 1
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
         err = 1
 
