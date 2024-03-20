@@ -1405,10 +1405,31 @@ class GitBackend(VMNBackend):
             f"was found for repo {self.repo_path}. Will try to set upstream for it"
         )
 
+        assumed_remote = f"{self.selected_remote.name}/{local_branch_name}"
+
         out = self._be.git.branch("-r", "--contains", "HEAD")
-        out = out.split("\n")[0].strip()
+        out = [s.strip() for s in out.split("\n")]
+
+        VMN_LOGGER.info(
+            f"The output of 'git branch -r --contains HEAD' is:\n{out}"
+        )
+
+        if assumed_remote in out:
+            VMN_LOGGER.info(
+                f"Assuming remote: {assumed_remote} as it was present in the output"
+            )
+            out = assumed_remote
+        elif out:
+            VMN_LOGGER.info(
+                f"Assuming remote: {out[0]} as this is the first element in the output"
+            )
+            out = out[0]
+
         if not out:
-            out = f"{self.selected_remote.name}/{local_branch_name}"
+            VMN_LOGGER.info(
+                f"Assuming remote: {assumed_remote} as the output was empty"
+            )
+            out = assumed_remote
 
         try:
             self._be.git.execute(
