@@ -4161,3 +4161,76 @@ def test_jenkins_checkout_branch_name_order_edge_case(app_layout, capfd):
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 0
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+
+
+
+# Test overwrite in orm mode:
+# 1. create app
+# 2. stamp rc 0.0.1-staging.1
+# 3. change something
+# 4. stamp rc 0.0.2-staging.2 with overwrite with param 0.0.2-staging.1
+def test_overwrite_with_orm_from_orm(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout._app_backend.be.get_active_branch()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="staging"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.2-staging.1"
+    assert data["prerelease"] == "staging"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="0.0.3-staging.1", optional_release_mode="patch", prerelease="staging"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.3-staging.2"
+    assert data["prerelease"] == "staging"
+
+
+def test_overwrite_with_orm_from_stable(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout._app_backend.be.get_active_branch()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="staging"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.2-staging.1"
+    assert data["prerelease"] == "staging"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="staging"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.2-staging.2"
+    assert data["prerelease"] == "staging"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, override_version="0.0.2", optional_release_mode="patch", prerelease="staging"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.3-staging.1"
+    assert data["prerelease"] == "staging"

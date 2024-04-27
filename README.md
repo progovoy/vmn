@@ -43,7 +43,7 @@ Now go ahead and read `vmn`'s docs :)
 
 # Play around with `vmn`
 
-## Create a playground
+## Option 1: Create a playground
 
 ```sh
 # Install vmn
@@ -76,6 +76,10 @@ echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin mast
 # Second stamp
 vmn stamp -r patch my_cool_app
 ```
+
+## Option 2: Use VMN Action with GitHub Action
+
+Check [VMN Official GitHub Action Repo](https://github.com/progovoy/vmn-action)
 
 # Contribute
 
