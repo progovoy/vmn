@@ -103,6 +103,7 @@ class IVersionsStamper(object):
         self.version_backends = stamp_utils.VMN_DEFAULT_CONF["version_backends"]
         # This one will be filled with self dependency ('.') by default
         self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
+        self.policies = stamp_utils.VMN_DEFAULT_CONF["policies"]
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -179,7 +180,6 @@ class IVersionsStamper(object):
                                 "will ignore and use the new default format"
                             )
                             self.template = stamp_utils.VMN_DEFAULT_CONF["template"]
-
                     if "extra_info" in data["conf"]:
                         self.extra_info = data["conf"]["extra_info"]
                     if "deps" in data["conf"]:
@@ -190,6 +190,8 @@ class IVersionsStamper(object):
                         self.version_backends = data["conf"]["version_backends"]
                     if "create_verinfo_files" in data["conf"]:
                         self.create_verinfo_files = data["conf"]["create_verinfo_files"]
+                    if "policies" in data["conf"]:
+                        self.policies = data["conf"]["policies"]
 
                 self.set_template(self.template)
 
@@ -915,6 +917,7 @@ class IVersionsStamper(object):
                     "hide_zero_hotfix": self.hide_zero_hotfix,
                     "create_verinfo_files": self.create_verinfo_files,
                     "version_backends": self.version_backends,
+                    "policies": self.policies,
                 }
             }
 
@@ -1034,6 +1037,18 @@ class VersionControlStamper(IVersionsStamper):
                 f"Tag {tag_name} doesn't seem to exist. Wrong version specified?"
             )
             raise RuntimeError()
+
+        if "whitelist_release_branches" in self.policies:
+            policy_conf = self.policies["whitelist_release_branches"]
+            tag_branch = self.backend.get_branch_from_changeset(
+                self.backend.changeset(tag=tag_name)
+            )
+
+            if tag_branch not in policy_conf:
+                err_msg = "Policy: whitelist_release_branches was violated. Refusing to release"
+                stamp_utils.VMN_LOGGER.error(err_msg)
+
+                raise RuntimeError(err_msg)
 
         tmp = ver_info["stamping"]["app"]
         base_verstr = stamp_utils.VMNBackend.get_base_vmn_version(
@@ -1179,6 +1194,14 @@ class VersionControlStamper(IVersionsStamper):
 
         if cur_props["prerelease"] != "release":
             release_mode = "prerelease"
+
+        if "whitelist_release_branches" in self.policies:
+            policy_conf = self.policies["whitelist_release_branches"]
+            if release_mode != "prerelease" and self.backend.active_branch not in policy_conf:
+                err_msg = "Policy: whitelist_release_branches was violated. Refusing to stamp"
+                stamp_utils.VMN_LOGGER.error(err_msg)
+
+                raise RuntimeError(err_msg)
 
         self.update_stamping_info(
             info,
@@ -1772,7 +1795,7 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.args.check_vmn_version,
             initial_version,
         )
-    except Exception:
+    except Exception as exc:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
@@ -2370,7 +2393,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
 @stamp_utils.measure_runtime_decorator
 def show(vcs, params, verstr=None):
     dirty_states = None
-    ver_infos = vcs.ver_infos_from_repo
+    ver_infos = copy.deepcopy(vcs.ver_infos_from_repo)
     tag_name = vcs.selected_tag
     if verstr:
         tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
@@ -3061,6 +3084,8 @@ def _goto_version(deps, vmn_root_path, pull):
             "Failed to update one or more " "of the required repos. See log above"
         )
         raise RuntimeError()
+
+    return 0
 
 
 @stamp_utils.measure_runtime_decorator
