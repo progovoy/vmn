@@ -76,6 +76,8 @@ fi
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
+rm -rf ${CUR_DIR}/../version_stamp/__pycache__
+
 echo "Will run:"
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
 cmd='coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
