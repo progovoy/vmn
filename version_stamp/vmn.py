@@ -2393,7 +2393,8 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
 @stamp_utils.measure_runtime_decorator
 def show(vcs, params, verstr=None):
     dirty_states = None
-    ver_infos = copy.deepcopy(vcs.ver_infos_from_repo)
+    # TODO:: fix recusrion crash when doing copy.deepcopy(vcs.ver_infos_from_repo)
+    ver_infos = vcs.ver_infos_from_repo
     tag_name = vcs.selected_tag
     if verstr:
         tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
