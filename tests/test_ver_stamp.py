@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 
 import pytest
@@ -163,9 +164,9 @@ def _show(
     args_list.append(app_name)
 
     stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(args_list)[0]
+    ret = vmn.vmn_run(args_list)
 
-    return ret
+    return ret[0]
 
 
 def _gen(
@@ -3357,9 +3358,11 @@ def test_show_no_log_in_stdout(app_layout, capfd):
     captured = capfd.readouterr()
     assert "dirty:\n- modified\nout: 0.0.1\n\n" == captured.out
 
-    with open(os.path.join(app_layout.repo_path, ".vmn", "vmn.log")) as log:
-        assert "Test logprint in show" in log.read()
-
+    result = subprocess.run(
+        ['grep', '-q', "Test logprint in show",
+         os.path.join(app_layout.repo_path, ".vmn", "vmn.log")]
+    )
+    assert result.returncode == 0
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
 
@@ -4234,3 +4237,69 @@ def test_overwrite_with_orm_from_stable(app_layout, capfd):
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.0.3-staging.1"
     assert data["prerelease"] == "staging"
+
+
+def test_release_branch_policy(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text")
+
+    conf = {
+        "policies": {
+            "whitelist_release_branches": ["main"]
+        },
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout.checkout("new_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 1
+
+    captured = capfd.readouterr()
+    assert captured.err == "[ERROR] Policy: whitelist_release_branches was violated. Refusing to stamp\n"
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch", prerelease="staging")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.3-staging.1')
+    assert err == 1
+    captured = capfd.readouterr()
+    assert captured.err.startswith(
+        "[ERROR] Policy: whitelist_release_branches was violated. Refusing to release"
+    )
+
+    app_layout.checkout(main_branch)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch", prerelease="staging")
+    assert err == 0
+
+    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.3-staging.1')
+    assert err == 1
+
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+    assert err == 0

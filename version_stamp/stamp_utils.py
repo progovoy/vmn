@@ -29,6 +29,7 @@ VMN_DEFAULT_CONF = {
     "hide_zero_hotfix": True,
     "version_backends": {},
     "deps": {},
+    "policies": {},
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -1464,14 +1465,16 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def get_branch_from_changeset(self, hexsha):
         out = self._be.git.branch("--contains", hexsha)
-        out = out.split("\n")[1:]
-        if not out:
-            # TODO:: add debug print here
-            out = self._be.git.branch().split("\n")[1:]
 
+        branches = out.splitlines()
+
+        # Clean up each branch name by stripping whitespace and the '*' character
         active_branches = []
-        for item in out:
-            active_branches.append(item.strip())
+        for branch in branches:
+            cleaned_branch = branch.strip().lstrip('*').strip()
+            if 'HEAD detached' not in cleaned_branch:
+                active_branches.append(cleaned_branch)
+
         if len(active_branches) > 1:
             VMN_LOGGER.info(
                 f"{self._be.head.commit.hexsha} is "
@@ -1510,6 +1513,7 @@ class GitBackend(VMNBackend):
             active_branches.append(local_branch_name)
 
         active_branch = active_branches[0]
+
         return active_branch
 
     @measure_runtime_decorator
