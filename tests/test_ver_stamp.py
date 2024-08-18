@@ -4303,3 +4303,79 @@ def test_release_branch_policy(app_layout, capfd):
     err, ver_info, _ = _release_app(app_layout.app_name)
     captured = capfd.readouterr()
     assert err == 0
+
+def test_release_branch_policy_reverse(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.2"
+
+    main_branch = app_layout._app_backend.be.get_active_branch()
+    app_layout.checkout("new_branch", create_new=True)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.3"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease="staging")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.4-staging.1"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg3")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease="staging")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.4-staging.2"
+
+    conf = {
+        "policies": {
+            "whitelist_release_branches": ["main"]
+        },
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg4")
+
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.4-staging.2')
+    assert err == 1
+    captured = capfd.readouterr()
+    assert captured.err.startswith(
+        "[ERROR] Policy: whitelist_release_branches was violated. Refusing to release"
+    )
+
+    app_layout.checkout(main_branch)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
+
+    capfd.readouterr()
+    err, ver_info, params = _stamp_app(app_layout.app_name, optional_release_mode="patch", prerelease="staging")
+    assert err == 0
+
+    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.4-staging.2')
+    assert err == 1
+
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name)
+    captured = capfd.readouterr()
+    assert err == 0
