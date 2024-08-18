@@ -30,6 +30,7 @@ VMN_DEFAULT_CONF = {
     "version_backends": {},
     "deps": {},
     "policies": {},
+    "conventional_commits": {},
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"

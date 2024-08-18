@@ -4303,3 +4303,27 @@ def test_release_branch_policy(app_layout, capfd):
     err, ver_info, _ = _release_app(app_layout.app_name)
     captured = capfd.readouterr()
     assert err == 0
+
+def test_conventional_commits_simple(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    conf = {
+        "conventional_commits": {
+            "auto_recognize_release": True,
+            "default_release_mode": "optional"
+        }
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_extra="fix: ")
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.2-staging.1"
+    assert data["prerelease"] == "staging"

@@ -104,6 +104,7 @@ class IVersionsStamper(object):
         # This one will be filled with self dependency ('.') by default
         self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
         self.policies = stamp_utils.VMN_DEFAULT_CONF["policies"]
+        self.conventional_commits = stamp_utils.VMN_DEFAULT_CONF["conventional_commits"]
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -192,6 +193,8 @@ class IVersionsStamper(object):
                         self.create_verinfo_files = data["conf"]["create_verinfo_files"]
                     if "policies" in data["conf"]:
                         self.policies = data["conf"]["policies"]
+                    if "conventional_commits" in data["conf"]:
+                        self.conventional_commits = data["conf"]["conventional_commits"]
 
                 self.set_template(self.template)
 
@@ -918,6 +921,7 @@ class IVersionsStamper(object):
                     "create_verinfo_files": self.create_verinfo_files,
                     "version_backends": self.version_backends,
                     "policies": self.policies,
+                    "conventional_commits": self.conventional_commits,
                 }
             }
 
