@@ -1680,9 +1680,12 @@ def handle_stamp(vmn_ctx):
                     "fix": "patch",
                     "feat": "minor",
                     "breaking change": "major",
-                    "!": "major",
+                    "BREAKING CHANGE": "major",
                     "micro": "micro",
                 }
+
+                if res['bc'] == "!":
+                    res['type'] = "breaking change"
 
                 if max_release_mode == -1 or stamp_utils.compare_release_modes(max_release_mode, mapping[res['type']]):
                     max_release_mode = mapping[res['type']]

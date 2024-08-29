@@ -92,8 +92,8 @@ SUPPORTED_REGEX_VARS = {
 }
 
 CONVENTIONAL_COMMIT_PATTERN = re.compile(r"""
-    ^(?P<type>[a-zA-Z0-9]+)              # Commit type (e.g., feat, fix)
-    (?:\((?P<scope>[a-zA-Z0-9\-]+)\))?  # Optional scope
+    ^(?P<type>[a-zA-Z0-9 ]+)              # Commit type (e.g., feat, fix)
+    (?:\((?P<scope>[a-zA-Z0-9\-]+)\))?(?P<bc>!)?  # Optional scope
     :\s*(?P<description>.+)            # Description
     (?:\n\n(?P<body>.*))?              # Optional body
     (?:\n\n(?P<footer>.*))?            # Optional footer
