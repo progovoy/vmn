@@ -91,6 +91,15 @@ SUPPORTED_REGEX_VARS = {
     "VMN_ROOT_VERSION_REGEX": VMN_ROOT_VERSION_REGEX,
 }
 
+CONVENTIONAL_COMMIT_PATTERN = re.compile(r"""
+    ^(?P<type>[a-zA-Z0-9]+)              # Commit type (e.g., feat, fix)
+    (?:\((?P<scope>[a-zA-Z0-9\-]+)\))?  # Optional scope
+    :\s*(?P<description>.+)            # Description
+    (?:\n\n(?P<body>.*))?              # Optional body
+    (?:\n\n(?P<footer>.*))?            # Optional footer
+    $
+""", re.VERBOSE | re.DOTALL | re.MULTILINE)
+
 BOLD_CHAR = "\033[1m"
 END_CHAR = "\033[0m"
 
@@ -333,6 +342,9 @@ class VMNBackend(object):
     def last_user_changeset(self):
         return "none"
 
+    def get_actual_deps_state(self, vmn_root_path, paths):
+        raise NotImplementedError()
+
     @staticmethod
     def app_name_to_tag_name(app_name):
         return app_name.replace("/", "-")
@@ -368,8 +380,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                f"{octat}_template" in template
-                and template[f"{octat}_template"] is not None
+                    f"{octat}_template" in template
+                    and template[f"{octat}_template"] is not None
             ):
                 d = {octat: props[octat]}
                 if "rcn" in d and props["old_ver_format"]:
@@ -395,8 +407,8 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_tag_name(
-        app_name,
-        verstr,
+            app_name,
+            verstr,
     ):
         tag_app_name = VMNBackend.app_name_to_tag_name(app_name)
         tag_name = f"{tag_app_name}_{verstr}"
@@ -418,11 +430,11 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version(
-        base_verstr,
-        prerelease=None,
-        rcn=None,
-        buildmetadata=None,
-        hide_zero_hotfix=False,
+            base_verstr,
+            prerelease=None,
+            rcn=None,
+            buildmetadata=None,
+            hide_zero_hotfix=False,
     ):
         props = VMNBackend.deserialize_vmn_version(base_verstr)
         base_verstr = VMNBackend.serialize_vmn_base_version(
@@ -470,7 +482,7 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_base_version(
-        major, minor, patch, hotfix=None, hide_zero_hotfix=None
+            major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
         if hide_zero_hotfix and hotfix == 0:
             hotfix = None
@@ -629,7 +641,7 @@ class LocalFileBackend(VMNBackend):
         return
 
     def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         ver_infos = {
             "none": {
@@ -703,7 +715,7 @@ class LocalFileBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -979,7 +991,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -1017,8 +1029,9 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
-        bug_limit = 0
-        while not ver_infos and bug_limit < 100:
+        bug_limit = 1000
+        bug_limit_c = 0
+        while not ver_infos and bug_limit_c < bug_limit:
             if cobj is None:
                 break
 
@@ -1026,10 +1039,10 @@ class GitBackend(VMNBackend):
             cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
             bug_limit += 1
-            if bug_limit == 100:
+            if bug_limit_c == bug_limit:
                 VMN_LOGGER.warning(
                     "Probable bug: vmn failed to find "
-                    "vmn's commit after 100 interations."
+                    f"vmn's commit after {bug_limit} interations."
                 )
                 ver_infos = {}
                 break
@@ -1050,7 +1063,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
-        self, app_name, cmd_suffix, msg_filter
+            self, app_name, cmd_suffix, msg_filter
     ):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
@@ -1085,8 +1098,8 @@ class GitBackend(VMNBackend):
             tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                    self._be.head.commit.hexsha != o.commit.hexsha
-                    and head_date < o.object.tagged_date
+                        self._be.head.commit.hexsha != o.commit.hexsha
+                        and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -1531,9 +1544,8 @@ class GitBackend(VMNBackend):
 
         self.detached_head = self.in_detached_head()
 
-    @staticmethod
     @measure_runtime_decorator
-    def get_actual_deps_state(vmn_root_path, paths):
+    def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {}
         for path in paths:
             full_path = os.path.join(vmn_root_path, path)
@@ -1552,29 +1564,30 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def last_user_changeset(self):
         p = self._be.head.commit
-        if p.author.name == VMN_USER_NAME:
-            if p.message.startswith(INIT_COMMIT_MESSAGE):
-                return p.hexsha
+        if p.author.name != VMN_USER_NAME:
+            return p.hexsha
 
-            # TODO:: think how to use this tags for later in order
-            #  to avoid getting all tags again. Not sure this is a problem even
-            ver_infos = self.get_all_commit_tags(p.hexsha)
-            if not ver_infos:
-                VMN_LOGGER.warning(
-                    f"Somehow vmn's commit {p.hexsha} has no tags. "
-                    f"Check your repo. Assuming this commit is a user commit"
-                )
-                return p.hexsha
+        if p.message.startswith(INIT_COMMIT_MESSAGE):
+            return p.hexsha
 
-            for t, v in ver_infos.items():
-                if "stamping" in v["ver_info"]:
-                    return v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
-
+        # TODO:: think how to use this tags for later in order
+        #  to avoid getting all tags again. Not sure this is a problem even
+        ver_infos = self.get_all_commit_tags(p.hexsha)
+        if not ver_infos:
             VMN_LOGGER.warning(
-                f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
+                f"Somehow vmn's commit {p.hexsha} has no tags. "
                 f"Check your repo. Assuming this commit is a user commit"
             )
             return p.hexsha
+
+        for t, v in ver_infos.items():
+            if "stamping" in v["ver_info"]:
+                return v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
+
+        VMN_LOGGER.warning(
+            f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
+            f"Check your repo. Assuming this commit is a user commit"
+        )
 
         return p.hexsha
 
@@ -1721,6 +1734,34 @@ class GitBackend(VMNBackend):
         return self._be.commit(hex)
 
     @measure_runtime_decorator
+    def get_all_commits(self, hex):
+        return self._be.commit(hex)
+
+    def get_commits_range_iter(self, tag_name, to_hex='HEAD'):
+        # def _commit_exists_locally(self, commit_hash):
+        #     """
+        #     Check if the given commit exists locally.
+        #     """
+        #     try:
+        #         subprocess.check_output(["git", "cat-file", "-e", commit_hash])
+        #         return True
+        #     except subprocess.CalledProcessError:
+        #         return False
+
+        from_hex = self._be.tags[tag_name].commit
+
+        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
+        if shallow:
+            self._be.git.execute(["git", "fetch", "--unshallow"])
+            # if from_hex is not present because shallow,
+            # fetch incrementally with deepen until commit found
+            # self._be.git.execute(["git", "fetch", "--deepen", "1"])
+
+        i = self._be.iter_commits(f"{from_hex}..{to_hex}")
+
+        return CommitMessageIterator(i)
+
+    @measure_runtime_decorator
     def get_commit_object_from_tag_name(self, tag_name):
         try:
             commit_tag_obj = self._be.commit(tag_name)
@@ -1740,6 +1781,19 @@ class GitBackend(VMNBackend):
         git.Repo.clone_from(f"{remote}", f"{path}")
 
 
+class CommitMessageIterator:
+    def __init__(self, iter_commits):
+        self._iterator = iter(iter_commits)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        commit = next(self._iterator)
+
+        return commit.message.strip()
+
+
 @measure_runtime_decorator
 def get_client(root_path, be_type, inherit_env=False):
     if be_type == "local_file":
@@ -1755,3 +1809,22 @@ def get_client(root_path, be_type, inherit_env=False):
     except git.exc.InvalidGitRepositoryError:
         err = f"repository path: {root_path} is not a functional git or repository.\n"
         return None, err
+
+
+def parse_conventional_commit_message(message):
+    match = CONVENTIONAL_COMMIT_PATTERN.match(message)
+    if match:
+        return match.groupdict()
+    else:
+        raise ValueError("Invalid commit message format")
+
+
+def compare_release_modes(r1, r2):
+    version_map = {
+        "major": 3,
+        "minor": 2,
+        "patch": 1,
+        "micro": 0,
+    }
+
+    return version_map[r1] >= version_map[r2]

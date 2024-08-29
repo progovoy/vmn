@@ -4304,6 +4304,7 @@ def test_release_branch_policy(app_layout, capfd):
     captured = capfd.readouterr()
     assert err == 0
 
+
 def test_conventional_commits_simple(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)

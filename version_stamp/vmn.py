@@ -1667,6 +1667,34 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == ".":
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
 
+    if vmn_ctx.vcs.conventional_commits:
+        if vmn_ctx.vcs.release_mode is None and vmn_ctx.vcs.optional_release_mode is None:
+            max_release_mode = -1
+            for m in vmn_ctx.vcs.backend.get_commits_range_iter(vmn_ctx.vcs.selected_tag):
+                try:
+                    res = stamp_utils.parse_conventional_commit_message(m)
+                except ValueError as exc:
+                    continue
+
+                mapping = {
+                    "fix": "patch",
+                    "feat": "minor",
+                    "breaking change": "major",
+                    "!": "major",
+                    "micro": "micro",
+                }
+
+                if max_release_mode == -1 or stamp_utils.compare_release_modes(max_release_mode, mapping[res['type']]):
+                    max_release_mode = mapping[res['type']]
+
+            if max_release_mode == -1:
+                max_release_mode = None
+
+            if vmn_ctx.vcs.conventional_commits['default_release_mode'] == 'optional':
+                vmn_ctx.vcs.optional_release_mode = max_release_mode
+            else:
+                vmn_ctx.vcs.release_mode = max_release_mode
+
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
     if vmn_ctx.vcs.override_version is not None:
