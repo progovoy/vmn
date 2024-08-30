@@ -1670,24 +1670,36 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.conventional_commits:
         if vmn_ctx.vcs.release_mode is None and vmn_ctx.vcs.optional_release_mode is None:
             max_release_mode = -1
+            mapping = {
+                "fix": "patch",
+                "feat": "minor",
+                "breaking change": "major",
+                "BREAKING CHANGE": "major",
+                "micro": "micro",
+                'perf': "",
+                'refactor': "",
+                'docs': "",
+                'style': "",
+                'test': "",
+                'build': "",
+                'ci': "",
+                'chore': "",
+                'revert': "",
+                'config': "",
+            }
             for m in vmn_ctx.vcs.backend.get_commits_range_iter(vmn_ctx.vcs.selected_tag):
                 try:
                     res = stamp_utils.parse_conventional_commit_message(m)
                 except ValueError as exc:
                     continue
 
-                mapping = {
-                    "fix": "patch",
-                    "feat": "minor",
-                    "breaking change": "major",
-                    "BREAKING CHANGE": "major",
-                    "micro": "micro",
-                }
+                if res['type'] not in mapping or mapping[res['type']] == "":
+                    continue
 
                 if res['bc'] == "!":
                     res['type'] = "breaking change"
 
-                if max_release_mode == -1 or stamp_utils.compare_release_modes(max_release_mode, mapping[res['type']]):
+                if max_release_mode == -1 or stamp_utils.compare_release_modes(mapping[res['type']], max_release_mode):
                     max_release_mode = mapping[res['type']]
 
             if max_release_mode == -1:
