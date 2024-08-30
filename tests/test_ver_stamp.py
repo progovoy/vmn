@@ -4250,7 +4250,7 @@ def test_release_branch_policy(app_layout, capfd):
 
     conf = {
         "policies": {
-            "whitelist_release_branches": ["main"]
+            "whitelist_release_branches": ["main", "master"]
         },
     }
 
