@@ -802,8 +802,10 @@ class IVersionsStamper(object):
                 custom_path = os.path.join(self.vmn_root_path, item["custom_keys_path"])
 
             tmplt_value = create_data_dict_for_jinja2(
-                self.get_tag_name(self.current_version_info["stamping"]["app"]["previous_version"]),
-                'HEAD',
+                self.get_tag_name(
+                    self.current_version_info["stamping"]["app"]["previous_version"]
+                ),
+                "HEAD",
                 self.backend.repo_path,
                 self.current_version_info,
                 custom_path,
@@ -1205,8 +1207,13 @@ class VersionControlStamper(IVersionsStamper):
 
         if "whitelist_release_branches" in self.policies:
             policy_conf = self.policies["whitelist_release_branches"]
-            if release_mode != "prerelease" and self.backend.active_branch not in policy_conf:
-                err_msg = "Policy: whitelist_release_branches was violated. Refusing to stamp"
+            if (
+                release_mode != "prerelease"
+                and self.backend.active_branch not in policy_conf
+            ):
+                err_msg = (
+                    "Policy: whitelist_release_branches was violated. Refusing to stamp"
+                )
                 stamp_utils.VMN_LOGGER.error(err_msg)
 
                 raise RuntimeError(err_msg)
@@ -1672,7 +1679,10 @@ def handle_stamp(vmn_ctx):
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
 
     if vmn_ctx.vcs.conventional_commits:
-        if vmn_ctx.vcs.release_mode is None and vmn_ctx.vcs.optional_release_mode is None:
+        if (
+            vmn_ctx.vcs.release_mode is None
+            and vmn_ctx.vcs.optional_release_mode is None
+        ):
             max_release_mode = -1
             mapping = {
                 "fix": "patch",
@@ -1680,36 +1690,40 @@ def handle_stamp(vmn_ctx):
                 "breaking change": "major",
                 "BREAKING CHANGE": "major",
                 "micro": "micro",
-                'perf': "",
-                'refactor': "",
-                'docs': "",
-                'style': "",
-                'test': "",
-                'build': "",
-                'ci': "",
-                'chore': "",
-                'revert': "",
-                'config': "",
+                "perf": "",
+                "refactor": "",
+                "docs": "",
+                "style": "",
+                "test": "",
+                "build": "",
+                "ci": "",
+                "chore": "",
+                "revert": "",
+                "config": "",
             }
-            for m in vmn_ctx.vcs.backend.get_commits_range_iter(vmn_ctx.vcs.selected_tag):
+            for m in vmn_ctx.vcs.backend.get_commits_range_iter(
+                vmn_ctx.vcs.selected_tag
+            ):
                 try:
                     res = stamp_utils.parse_conventional_commit_message(m)
-                except ValueError as exc:
+                except ValueError:
                     continue
 
-                if res['type'] not in mapping or mapping[res['type']] == "":
+                if res["type"] not in mapping or mapping[res["type"]] == "":
                     continue
 
-                if res['bc'] == "!":
-                    res['type'] = "breaking change"
+                if res["bc"] == "!":
+                    res["type"] = "breaking change"
 
-                if max_release_mode == -1 or stamp_utils.compare_release_modes(mapping[res['type']], max_release_mode):
-                    max_release_mode = mapping[res['type']]
+                if max_release_mode == -1 or stamp_utils.compare_release_modes(
+                    mapping[res["type"]], max_release_mode
+                ):
+                    max_release_mode = mapping[res["type"]]
 
             if max_release_mode == -1:
                 max_release_mode = None
 
-            if vmn_ctx.vcs.conventional_commits['default_release_mode'] == 'optional':
+            if vmn_ctx.vcs.conventional_commits["default_release_mode"] == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
             else:
                 vmn_ctx.vcs.release_mode = max_release_mode
@@ -1846,7 +1860,7 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.args.check_vmn_version,
             initial_version,
         )
-    except Exception as exc:
+    except Exception:
         stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
         return 1
@@ -2646,15 +2660,15 @@ def gen(vcs, params, verstr_range=None):
 
         raise RuntimeError()
 
-    verstr, end_verstr = None, 'HEAD'
+    verstr, end_verstr = None, "HEAD"
     end_tag_name = end_verstr
     # Check if the version string contains a range (two dots)
-    if verstr_range is not None and '..' in verstr_range:
-        verstr, end_verstr = verstr_range.split('..')
+    if verstr_range is not None and ".." in verstr_range:
+        verstr, end_verstr = verstr_range.split("..")
     else:
         verstr = verstr_range
 
-    if end_verstr != 'HEAD':
+    if end_verstr != "HEAD":
         end_tag_name, _ = vcs.get_version_info_from_verstr(end_verstr)
 
     if verstr is None:
@@ -2742,7 +2756,9 @@ def gen(vcs, params, verstr_range=None):
     return 0
 
 
-def create_data_dict_for_jinja2(start_tag_name, end_tag_name, repo_path, ver_info, custom_values_path):
+def create_data_dict_for_jinja2(
+    start_tag_name, end_tag_name, repo_path, ver_info, custom_values_path
+):
     tmplt_value = {}
     tmplt_value.update(ver_info["stamping"]["app"])
 
@@ -2755,20 +2771,24 @@ def create_data_dict_for_jinja2(start_tag_name, end_tag_name, repo_path, ver_inf
         for key, v in ver_info["stamping"]["root_app"].items():
             tmplt_value[f"root_{key}"] = v
 
-    toml_cliff_conf_param = ''
+    toml_cliff_conf_param = ""
     if "release_notes_conf_path" in tmplt_value:
         toml_cliff_conf_param = f"-c {tmplt_value['release_notes_conf_path']}"
 
     command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
     # Run the command and capture the output
     try:
-        result = subprocess.run(command.split(), check=True, text=True, capture_output=True)
-        changelog_output = result.stdout  # This captures the standard output of the command
+        result = subprocess.run(
+            command.split(), check=True, text=True, capture_output=True
+        )
+        changelog_output = (
+            result.stdout
+        )  # This captures the standard output of the command
     except subprocess.CalledProcessError as e:
         stamp_utils.VMN_LOGGER.error(e.stderr)
         raise e
 
-    tmplt_value['release_notes'] = changelog_output
+    tmplt_value["release_notes"] = changelog_output
 
     return tmplt_value
 

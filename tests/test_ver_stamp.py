@@ -3359,10 +3359,15 @@ def test_show_no_log_in_stdout(app_layout, capfd):
     assert "dirty:\n- modified\nout: 0.0.1\n\n" == captured.out
 
     result = subprocess.run(
-        ['grep', '-q', "Test logprint in show",
-         os.path.join(app_layout.repo_path, ".vmn", "vmn.log")]
+        [
+            "grep",
+            "-q",
+            "Test logprint in show",
+            os.path.join(app_layout.repo_path, ".vmn", "vmn.log"),
+        ]
     )
     assert result.returncode == 0
+
 
 # TODO:: add test for app release. merge squash and show. expect the newly released version
 
@@ -4166,8 +4171,6 @@ def test_jenkins_checkout_branch_name_order_edge_case(app_layout, capfd):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
 
 
-
-
 # Test overwrite in orm mode:
 # 1. create app
 # 2. stamp rc 0.0.1-staging.1
@@ -4193,7 +4196,10 @@ def test_overwrite_with_orm_from_orm(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, override_version="0.0.3-staging.1", optional_release_mode="patch", prerelease="staging"
+        app_layout.app_name,
+        override_version="0.0.3-staging.1",
+        optional_release_mode="patch",
+        prerelease="staging",
     )
     assert err == 0
     data = ver_info["stamping"]["app"]
@@ -4231,7 +4237,10 @@ def test_overwrite_with_orm_from_stable(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
 
     err, ver_info, _ = _stamp_app(
-        app_layout.app_name, override_version="0.0.2", optional_release_mode="patch", prerelease="staging"
+        app_layout.app_name,
+        override_version="0.0.2",
+        optional_release_mode="patch",
+        prerelease="staging",
     )
     assert err == 0
     data = ver_info["stamping"]["app"]
@@ -4249,9 +4258,7 @@ def test_release_branch_policy(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text")
 
     conf = {
-        "policies": {
-            "whitelist_release_branches": ["main", "master"]
-        },
+        "policies": {"whitelist_release_branches": ["main", "master"]},
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
@@ -4268,10 +4275,15 @@ def test_release_branch_policy(app_layout, capfd):
     assert err == 1
 
     captured = capfd.readouterr()
-    assert captured.err == "[ERROR] Policy: whitelist_release_branches was violated. Refusing to stamp\n"
+    assert (
+        captured.err
+        == "[ERROR] Policy: whitelist_release_branches was violated. Refusing to stamp\n"
+    )
 
     capfd.readouterr()
-    err, ver_info, params = _stamp_app(app_layout.app_name, "patch", prerelease="staging")
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, "patch", prerelease="staging"
+    )
     assert err == 0
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
@@ -4281,7 +4293,7 @@ def test_release_branch_policy(app_layout, capfd):
     assert err == 0
 
     capfd.readouterr()
-    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.3-staging.1')
+    err, ver_info, _ = _release_app(app_layout.app_name, version="0.0.3-staging.1")
     assert err == 1
     captured = capfd.readouterr()
     assert captured.err.startswith(
@@ -4293,10 +4305,12 @@ def test_release_branch_policy(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg2")
 
     capfd.readouterr()
-    err, ver_info, params = _stamp_app(app_layout.app_name, "patch", prerelease="staging")
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, "patch", prerelease="staging"
+    )
     assert err == 0
 
-    err, ver_info, _ = _release_app(app_layout.app_name, version='0.0.3-staging.1')
+    err, ver_info, _ = _release_app(app_layout.app_name, version="0.0.3-staging.1")
     assert err == 1
 
     capfd.readouterr()
@@ -4315,13 +4329,15 @@ def test_conventional_commits_simple_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4340,13 +4356,15 @@ def test_conventional_commits_simple_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4365,13 +4383,15 @@ def test_conventional_commits_simple_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4390,13 +4410,15 @@ def test_conventional_commits_simple_major_ex(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4415,7 +4437,7 @@ def test_conventional_commits_simple_orm_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
@@ -4436,10 +4458,7 @@ Refs: #123
 
     for i in range(3):
         app_layout.write_file_commit_and_push(
-            "test_repo_0",
-            f"f{i}.txt",
-            "text",
-            commit_msg=commit_msg
+            "test_repo_0", f"f{i}.txt", "text", commit_msg=commit_msg
         )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
@@ -4459,13 +4478,15 @@ def test_conventional_commits_simple_orm_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4484,13 +4505,15 @@ def test_conventional_commits_simple_orm_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4509,13 +4532,15 @@ def test_conventional_commits_simple_orm_major_ex(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4534,13 +4559,15 @@ def test_conventional_commits_multi_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4548,7 +4575,9 @@ def test_conventional_commits_multi_patch(app_layout, capfd):
     assert data["_version"] == "0.0.2-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4567,13 +4596,15 @@ def test_conventional_commits_multi_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4581,7 +4612,9 @@ def test_conventional_commits_multi_minor(app_layout, capfd):
     assert data["_version"] == "0.1.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4600,13 +4633,15 @@ def test_conventional_commits_multi_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4614,7 +4649,9 @@ def test_conventional_commits_multi_major(app_layout, capfd):
     assert data["_version"] == "1.0.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4633,13 +4670,15 @@ def test_conventional_commits_multi_major_ex(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4647,7 +4686,9 @@ def test_conventional_commits_multi_major_ex(app_layout, capfd):
     assert data["_version"] == "1.0.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4666,13 +4707,15 @@ def test_conventional_commits_multi_orm_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4680,7 +4723,9 @@ def test_conventional_commits_multi_orm_patch(app_layout, capfd):
     assert data["_version"] == "0.0.2-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4699,13 +4744,15 @@ def test_conventional_commits_multi_orm_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4713,7 +4760,9 @@ def test_conventional_commits_multi_orm_minor(app_layout, capfd):
     assert data["_version"] == "0.1.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4732,13 +4781,15 @@ def test_conventional_commits_multi_orm_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4746,7 +4797,9 @@ def test_conventional_commits_multi_orm_major(app_layout, capfd):
     assert data["_version"] == "1.0.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4765,13 +4818,15 @@ def test_conventional_commits_multi_orm_major_ex(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4779,7 +4834,9 @@ def test_conventional_commits_multi_orm_major_ex(app_layout, capfd):
     assert data["_version"] == "1.0.0-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4798,13 +4855,15 @@ def test_conventional_commits_mixed(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4812,7 +4871,9 @@ def test_conventional_commits_mixed(app_layout, capfd):
     assert data["_version"] == "0.0.2-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4831,13 +4892,15 @@ def test_conventional_commits_orm_mixed(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4845,7 +4908,9 @@ def test_conventional_commits_orm_mixed(app_layout, capfd):
     assert data["_version"] == "0.0.2-staging.1"
     assert data["prerelease"] == "staging"
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4864,14 +4929,18 @@ def test_conventional_commits_simple_multi_commits_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="docs: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="docs: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4890,14 +4959,18 @@ def test_conventional_commits_simple_multi_commits_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4916,14 +4989,18 @@ def test_conventional_commits_simple_multi_commits_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4942,14 +5019,18 @@ def test_conventional_commits_simple_multi_commits_major_ex(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4968,14 +5049,18 @@ def test_conventional_commits_simple_multi_commits_orm_patch(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="docs: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="docs: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -4994,14 +5079,18 @@ def test_conventional_commits_simple_multi_commits_orm_minor(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="feat: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -5020,14 +5109,18 @@ def test_conventional_commits_simple_multi_commits_orm_major(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="BREAKING CHANGE: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -5046,14 +5139,18 @@ def test_conventional_commits_simple_multi_commits_orm_major_ex(app_layout, capf
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix!: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix!: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 0
@@ -5072,21 +5169,23 @@ def test_conventional_commits_simple_failure(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="doc: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="doc: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 1
     captured = capfd.readouterr()
     assert (
-            "[ERROR] When not in release candidate mode, a release mode must be "
-            "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
-            == captured.err
+        "[ERROR] When not in release candidate mode, a release mode must be "
+        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
+        == captured.err
     )
 
 
@@ -5100,21 +5199,23 @@ def test_conventional_commits_simple_orm_failure(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="doc: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="doc: a"
+    )
 
     err, ver_info, params = _stamp_app(app_layout.app_name, prerelease="staging")
     assert err == 1
     captured = capfd.readouterr()
     assert (
-            "[ERROR] When not in release candidate mode, a release mode must be "
-            "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
-            == captured.err
+        "[ERROR] When not in release candidate mode, a release mode must be "
+        "specified - use -r/--release-mode with one of major/minor/patch/hotfix\n"
+        == captured.err
     )
 
 
@@ -5128,15 +5229,19 @@ def test_conventional_commits_simple_overwrite(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": ""
+            "default_release_mode": "",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
-    err, ver_info, params = _stamp_app(app_layout.app_name, "minor", prerelease="staging")
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, "minor", prerelease="staging"
+    )
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.1.0-staging.1"
@@ -5153,19 +5258,24 @@ def test_conventional_commits_simple_orm_overwrite(app_layout, capfd):
     conf = {
         "conventional_commits": {
             "auto_recognize_release": True,
-            "default_release_mode": "optional"
+            "default_release_mode": "optional",
         }
     }
 
     app_layout.write_conf(params["app_conf_path"], **conf)
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "text", commit_msg="fix: a")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
+    )
 
-    err, ver_info, params = _stamp_app(app_layout.app_name, optional_release_mode="minor", prerelease="staging")
+    err, ver_info, params = _stamp_app(
+        app_layout.app_name, optional_release_mode="minor", prerelease="staging"
+    )
     assert err == 0
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.1.0-staging.1"
     assert data["prerelease"] == "staging"
+
 
 def test_jinja2_gen_rn_simple(app_layout, capfd):
     _run_vmn_init()
@@ -5178,7 +5288,9 @@ def test_jinja2_gen_rn_simple(app_layout, capfd):
     capfd.readouterr()
     commit_msg = """fix: prevent racing of requests"""
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content", commit_msg=commit_msg)
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "content", commit_msg=commit_msg
+    )
 
     jinja2_content = "{{release_notes}}\n"
     app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
@@ -5204,9 +5316,11 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
 
     commit_msg = """fix: prevent racing of requests"""
 
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content", commit_msg=commit_msg)
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "content", commit_msg=commit_msg
+    )
 
-    jinja2_content = "VERSION: {{version}}\n"  "Release Notes: {{release_notes}}\n"
+    jinja2_content = "VERSION: {{version}}\n" "Release Notes: {{release_notes}}\n"
     app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
 
     custom_keys_content = "release_notes_conf_path: cliffconf.toml\n"
@@ -5222,4 +5336,3 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
 
     with open(opath, "r") as f:
         assert "prevent racing of requests" in f.read().lower()
-

@@ -91,14 +91,17 @@ SUPPORTED_REGEX_VARS = {
     "VMN_ROOT_VERSION_REGEX": VMN_ROOT_VERSION_REGEX,
 }
 
-CONVENTIONAL_COMMIT_PATTERN = re.compile(r"""
+CONVENTIONAL_COMMIT_PATTERN = re.compile(
+    r"""
     ^(?P<type>[a-zA-Z0-9 ]+)              # Commit type (e.g., feat, fix)
     (?:\((?P<scope>[a-zA-Z0-9\-]+)\))?(?P<bc>!)?  # Optional scope
     :\s*(?P<description>.+)            # Description
     (?:\n\n(?P<body>.*))?              # Optional body
     (?:\n\n(?P<footer>.*))?            # Optional footer
     $
-""", re.VERBOSE | re.DOTALL | re.MULTILINE)
+""",
+    re.VERBOSE | re.DOTALL | re.MULTILINE,
+)
 
 BOLD_CHAR = "\033[1m"
 END_CHAR = "\033[0m"
@@ -380,8 +383,8 @@ class VMNBackend(object):
                 continue
 
             if (
-                    f"{octat}_template" in template
-                    and template[f"{octat}_template"] is not None
+                f"{octat}_template" in template
+                and template[f"{octat}_template"] is not None
             ):
                 d = {octat: props[octat]}
                 if "rcn" in d and props["old_ver_format"]:
@@ -407,8 +410,8 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_tag_name(
-            app_name,
-            verstr,
+        app_name,
+        verstr,
     ):
         tag_app_name = VMNBackend.app_name_to_tag_name(app_name)
         tag_name = f"{tag_app_name}_{verstr}"
@@ -430,11 +433,11 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_version(
-            base_verstr,
-            prerelease=None,
-            rcn=None,
-            buildmetadata=None,
-            hide_zero_hotfix=False,
+        base_verstr,
+        prerelease=None,
+        rcn=None,
+        buildmetadata=None,
+        hide_zero_hotfix=False,
     ):
         props = VMNBackend.deserialize_vmn_version(base_verstr)
         base_verstr = VMNBackend.serialize_vmn_base_version(
@@ -482,7 +485,7 @@ class VMNBackend(object):
 
     @staticmethod
     def serialize_vmn_base_version(
-            major, minor, patch, hotfix=None, hide_zero_hotfix=None
+        major, minor, patch, hotfix=None, hide_zero_hotfix=None
     ):
         if hide_zero_hotfix and hotfix == 0:
             hotfix = None
@@ -641,7 +644,7 @@ class LocalFileBackend(VMNBackend):
         return
 
     def get_first_reachable_version_info(
-            self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         ver_infos = {
             "none": {
@@ -715,7 +718,7 @@ class LocalFileBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             dir_path = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
@@ -991,7 +994,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def get_latest_stamp_tags(
-            self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
+        self, app_name, root_context, type=RELATIVE_TO_GLOBAL_TYPE
     ):
         if root_context:
             msg_filter = f"^{app_name}/.*: Stamped"
@@ -1063,7 +1066,7 @@ class GitBackend(VMNBackend):
 
     @measure_runtime_decorator
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
-            self, app_name, cmd_suffix, msg_filter
+        self, app_name, cmd_suffix, msg_filter
     ):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
@@ -1098,8 +1101,8 @@ class GitBackend(VMNBackend):
             tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                        self._be.head.commit.hexsha != o.commit.hexsha
-                        and head_date < o.object.tagged_date
+                    self._be.head.commit.hexsha != o.commit.hexsha
+                    and head_date < o.object.tagged_date
                 ):
                     continue
 
@@ -1485,8 +1488,8 @@ class GitBackend(VMNBackend):
         # Clean up each branch name by stripping whitespace and the '*' character
         active_branches = []
         for branch in branches:
-            cleaned_branch = branch.strip().lstrip('*').strip()
-            if 'HEAD detached' not in cleaned_branch:
+            cleaned_branch = branch.strip().lstrip("*").strip()
+            if "HEAD detached" not in cleaned_branch:
                 active_branches.append(cleaned_branch)
 
         if len(active_branches) > 1:
@@ -1733,11 +1736,7 @@ class GitBackend(VMNBackend):
     def get_commit_object_from_commit_hex(self, hex):
         return self._be.commit(hex)
 
-    @measure_runtime_decorator
-    def get_all_commits(self, hex):
-        return self._be.commit(hex)
-
-    def get_commits_range_iter(self, tag_name, to_hex='HEAD'):
+    def get_commits_range_iter(self, tag_name, to_hex="HEAD"):
         # def _commit_exists_locally(self, commit_hash):
         #     """
         #     Check if the given commit exists locally.
