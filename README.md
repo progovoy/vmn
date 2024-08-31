@@ -166,6 +166,20 @@ vmn init-app -v 1.6.8 <app-name2>
 vmn stamp -r minor <app-name2>
 ```
 
+In case you desire to use conventional commits for the stamp command to recognize the `release_mode` automatically, provide the following in app's `conf.yml` file:
+
+``` json
+"conventional_commits": {
+  "default_release_mode": "optional",
+}
+
+```
+
+`default_release_mode` may be `optional`(for --orm) or `strict`(for -r).
+
+Now you will be able to run:
+`vmn stamp <app-name>` and `vmn` will deduce the proper `release_mode` based on your conventional commits.
+
 ### Note
 
 `init-app` and `stamp` both support `--dry-run` flag
@@ -328,6 +342,7 @@ Generates version output file based on jinja2 template
    "test_app2/s1": "0.0.1"
  }, 
  "root_version": 1,
+  "release_notes": ""
 }
 ```
 

@@ -4,3 +4,4 @@ packaging>=21.0
 PyYAML>=5.4.1
 tomlkit>0.7.2
 Jinja2>=3.0.3
+git-cliff==2.5.0
