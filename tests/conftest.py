@@ -350,7 +350,7 @@ class FSAppLayoutFixture(object):
         commit=True,
         push=True,
         add_exec=False,
-        commit_extra="",
+        commit_msg=None,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -375,7 +375,10 @@ class FSAppLayoutFixture(object):
 
         client = Repo(self._repos[repo_name]["path"])
         client.index.add([path])
-        client.index.commit("{0}Added file {1}".format(commit_extra, path))
+        if commit_msg is None:
+            commit_msg = f"Added file {path}"
+
+        client.index.commit(commit_msg)
         self._repos[repo_name]["changesets"] = {
             "hash": client.head.commit.hexsha,
             "vcs_type": "git",

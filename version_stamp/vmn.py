@@ -7,6 +7,7 @@ import os
 import pathlib
 import random
 import re
+import subprocess
 import sys
 import time
 from multiprocessing import Pool
@@ -801,6 +802,9 @@ class IVersionsStamper(object):
                 custom_path = os.path.join(self.vmn_root_path, item["custom_keys_path"])
 
             tmplt_value = create_data_dict_for_jinja2(
+                self.get_tag_name(self.current_version_info["stamping"]["app"]["previous_version"]),
+                'HEAD',
+                self.backend.repo_path,
                 self.current_version_info,
                 custom_path,
             )
@@ -2624,7 +2628,7 @@ def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
 
 
 @stamp_utils.measure_runtime_decorator
-def gen(vcs, params, verstr=None):
+def gen(vcs, params, verstr_range=None):
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {
         "repos_exist_locally",
@@ -2641,6 +2645,17 @@ def gen(vcs, params, verstr=None):
         stamp_utils.VMN_LOGGER.debug(status, exc_info=True)
 
         raise RuntimeError()
+
+    verstr, end_verstr = None, 'HEAD'
+    end_tag_name = end_verstr
+    # Check if the version string contains a range (two dots)
+    if verstr_range is not None and '..' in verstr_range:
+        verstr, end_verstr = verstr_range.split('..')
+    else:
+        verstr = verstr_range
+
+    if end_verstr != 'HEAD':
+        end_tag_name, _ = vcs.get_version_info_from_verstr(end_verstr)
 
     if verstr is None:
         ver_infos = vcs.ver_infos_from_repo
@@ -2711,6 +2726,9 @@ def gen(vcs, params, verstr=None):
     )
 
     tmplt_value = create_data_dict_for_jinja2(
+        tag_name,
+        end_tag_name,
+        vcs.backend.repo_path,
         ver_infos[tag_name]["ver_info"],
         params["custom_values"],
     )
@@ -2724,7 +2742,7 @@ def gen(vcs, params, verstr=None):
     return 0
 
 
-def create_data_dict_for_jinja2(ver_info, custom_values_path):
+def create_data_dict_for_jinja2(start_tag_name, end_tag_name, repo_path, ver_info, custom_values_path):
     tmplt_value = {}
     tmplt_value.update(ver_info["stamping"]["app"])
 
@@ -2736,6 +2754,21 @@ def create_data_dict_for_jinja2(ver_info, custom_values_path):
     if "root_app" in ver_info["stamping"]:
         for key, v in ver_info["stamping"]["root_app"].items():
             tmplt_value[f"root_{key}"] = v
+
+    toml_cliff_conf_param = ''
+    if "release_notes_conf_path" in tmplt_value:
+        toml_cliff_conf_param = f"-c {tmplt_value['release_notes_conf_path']}"
+
+    command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
+    # Run the command and capture the output
+    try:
+        result = subprocess.run(command.split(), check=True, text=True, capture_output=True)
+        changelog_output = result.stdout  # This captures the standard output of the command
+    except subprocess.CalledProcessError as e:
+        stamp_utils.VMN_LOGGER.error(e.stderr)
+        raise e
+
+    tmplt_value['release_notes'] = changelog_output
 
     return tmplt_value
 
