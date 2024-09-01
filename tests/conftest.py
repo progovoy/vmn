@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 import shutil
 import stat
 import sys
@@ -14,6 +15,7 @@ from git import Repo
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
 import stamp_utils
+import subprocess
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
@@ -86,8 +88,6 @@ class FSAppLayoutFixture(object):
         return be
 
     def create_new_clone(self, repo_name, depth=0):
-        import subprocess
-
         base_cmd = ["git", "clone"]
         if depth:
             base_cmd.append(f"--depth={depth}")
@@ -106,8 +106,6 @@ class FSAppLayoutFixture(object):
         return local_path
 
     def merge(self, from_rev, to_rev, squash=False, no_ff=False, delete_source=False):
-        import subprocess
-
         base_cmd = ["git", "merge"]
         if squash:
             base_cmd.append("--squash")
@@ -128,8 +126,6 @@ class FSAppLayoutFixture(object):
         subprocess.call(["git", "push"], cwd=self.repo_path)
 
     def git_cmd(self, repo_name=f"{TEST_REPO_NAME}_0", args=()):
-        import subprocess
-
         base_cmd = ["git"]
         base_cmd.extend(args)
 
@@ -141,7 +137,6 @@ class FSAppLayoutFixture(object):
         return ret.decode("utf-8")
 
     def rebase(self, target, who_to_put_on_target, no_ff=False):
-        import subprocess
 
         base_cmd = ["git", "rebase", target, who_to_put_on_target]
         if no_ff:
@@ -157,8 +152,6 @@ class FSAppLayoutFixture(object):
         branch_to_track=None,
         create_new=False,
     ):
-        import subprocess
-
         base_cmd = ["git", "checkout"]
         if create_new:
             base_cmd.append("-b")
@@ -179,8 +172,6 @@ class FSAppLayoutFixture(object):
         branch_to_track=None,
         create_new=False,
     ):
-        import subprocess
-
         base_cmd = [
             "git",
             "fetch",
@@ -220,16 +211,12 @@ class FSAppLayoutFixture(object):
         branch_name,
         repo_name=f"{TEST_REPO_NAME}_0",
     ):
-        import subprocess
-
         base_cmd = ["git", "branch", "-D", branch_name]
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
 
         subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
 
     def push(self, force_lease=False):
-        import subprocess
-
         base_cmd = ["git", "push"]
 
         if force_lease:
@@ -239,8 +226,6 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def pull(self, tags=False):
-        import subprocess
-
         base_cmd = ["git", "pull"]
 
         if tags:
@@ -260,8 +245,6 @@ class FSAppLayoutFixture(object):
         return tags
 
     def create_tag(self, commit_hash, tag_name):
-        import subprocess
-
         base_cmd = ["git", "tag", tag_name, commit_hash]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
@@ -283,8 +266,6 @@ class FSAppLayoutFixture(object):
         return True
 
     def remove_tag(self, tag_name):
-        import subprocess
-
         base_cmd = ["git", "tag", "-d", tag_name]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
@@ -302,7 +283,20 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def stamp_with_previous_vmn(self, vmn_version):
-        import subprocess
+        if not os.path.exists(f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"):
+            LOGGER.info("No previous VMN stamper found")
+            return
+
+        base_cmd = f"ls -l {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh".split()
+
+        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
+        output = subprocess.run(base_cmd, capture_output=True, text=True).stdout
+        if output != 0:
+            if re.search("-........x", output) is None:
+                raise RuntimeError(
+                    f"Please run: chmod +x {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh\n"
+                    f"If running on Windows, please run in addition: dos2unix {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"
+                )
 
         base_cmd = [
             f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
