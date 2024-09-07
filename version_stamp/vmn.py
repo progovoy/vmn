@@ -628,14 +628,12 @@ class IVersionsStamper(object):
         if props["rcn"] is None:
             props["rcn"] = 0
 
-        rcn = props["rcn"]
+        rcn = 0
+        if prerelease == props["prerelease"]:
+            rcn = props["rcn"]
+
         prerelease_count = initialprerelease_count
         if prerelease not in prerelease_count:
-            if prerelease == props["prerelease"]:
-                rcn = props["rcn"]
-            else:
-                rcn = 0
-
             prerelease_count[prerelease] = rcn
 
         prerelease_count[prerelease] = max(

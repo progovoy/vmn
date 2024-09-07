@@ -3691,6 +3691,99 @@ def test_backward_compatability_with_0_8_4_vmn(app_layout, capfd):
     assert "1.0.0-alpha1" == tmp["version"]
 
 
+def test_multi_prereleases(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name, starting_version="2.13.3")
+
+    app_layout._app_backend.be.get_active_branch()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="564"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="564"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="564"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="513"
+    )
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="508"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="508"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="staging"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="513"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="rc"
+    )
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg0")
+
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, optional_release_mode="patch", prerelease="staging"
+    )
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+
+    assert "2.13.4-staging.2" == tmp["version"]
+
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+
+    captured = capfd.readouterr()
+    tmp = yaml.safe_load(captured.out)
+    assert "2.13.4-staging.2" == tmp["version"]
+
+
 def test_orm_rc_from_release(app_layout, capfd):
     # Prepare
     _run_vmn_init()
