@@ -283,23 +283,21 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def stamp_with_previous_vmn(self, vmn_version):
-        if not os.path.exists(f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"):
+        dir_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks")
+        previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
+
+        if not os.path.exists(previous_stamper_dir):
             LOGGER.info("No previous VMN stamper found")
             return
 
-        base_cmd = f"ls -l {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh".split()
-
-        LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
-        output = subprocess.run(base_cmd, capture_output=True, text=True).stdout
-        if output != 0:
-            if re.search("-........x", output) is None:
-                raise RuntimeError(
-                    f"Please run: chmod +x {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh\n"
-                    f"If running on Windows, please run in addition: dos2unix {os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh"
-                )
+        if not os.access(previous_stamper_dir, os.X_OK):
+            raise RuntimeError(
+                f"Please run: chmod +x -R {dir_path}\n"
+                f"If running on Windows, please run in addition dos2unix for every file in the {dir_path} directory"
+            )
 
         base_cmd = [
-            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
+            previous_stamper_dir,
             vmn_version,
         ]
 
