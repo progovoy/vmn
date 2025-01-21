@@ -1593,8 +1593,10 @@ class GitBackend(VMNBackend):
                     version_files_to_track_diff_off
                 )
 
-                if name in ret_d and len(ret_list) > 1 and ret_list[0] != name:
-                    return ret_d[ret_list[0]]
+                # TODO:: think if we want to support cases where file changed
+                #  multiple times but eventually it came to be the same
+                if name in ret_d and len(ret_list) > 1 and ret_list[0][0] != name:
+                    return ret_list[0][1]
 
                 return prev_user_commit
 
@@ -1767,7 +1769,7 @@ class GitBackend(VMNBackend):
 
             # Parse the log output
             log_entries = logs.splitlines()
-            result = {}
+            result = set()
             result_list = []
 
             for entry in log_entries:
@@ -1776,8 +1778,8 @@ class GitBackend(VMNBackend):
                 if match:
                     hexsha = match.group(1)
                     tag = match.group(2)
-                    result[tag] = hexsha
-                    result_list.append(tag)
+                    result.add(tag)
+                    result_list.append((tag, hexsha))
 
             return result, result_list
 
