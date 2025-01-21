@@ -808,6 +808,146 @@ def test_version_backends_generic_selectors_regex_vars(app_layout, capfd):
         assert data["Custom"] == 5
 
 
+def test_generic_selectors_multiple_apps_same_file_same_diff(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    second_app = f"{app_layout.app_name}_2"
+    _, _, params2 = _init_app(second_app)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+    assert err == 0
+
+    err, ver_info2, _ = _stamp_app(second_app, "patch")
+    assert ver_info2["stamping"]["app"]["_version"] == "0.0.1"
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "in.txt",
+        yaml.safe_dump({"version": "9.3.2-rc.4-x", "Custom": 3}),
+    )
+
+    generic_selectors = {
+        "generic_selectors": [
+            {
+                "paths_section": [
+                    {
+                        "input_file_path": "in.txt",
+                        "output_file_path": "in.txt",
+                    }
+                ],
+                "selectors_section": [
+                    {
+                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_sub": r"\1{{version}}",
+                    },
+                ],
+            },
+        ]
+    }
+
+    conf = {"version_backends": generic_selectors}
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params2["app_conf_path"], **conf)
+
+    os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+    assert err == 0
+
+    err, ver_info2, _ = _stamp_app(second_app, "patch")
+    assert ver_info2["stamping"]["app"]["_version"] == "0.0.2"
+    assert err == 0
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["version"] == "0.0.2-x"
+        assert data["Custom"] == 3
+
+
+def test_generic_selectors_multiple_apps_same_file_diff(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    second_app = f"{app_layout.app_name}_2"
+    _, _, params2 = _init_app(second_app)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
+    assert err == 0
+
+    err, ver_info2, _ = _stamp_app(second_app, "major")
+    assert ver_info2["stamping"]["app"]["_version"] == "1.0.0"
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "in.txt",
+        yaml.safe_dump({"version": "9.3.2-rc.4-x", "Custom": 3}),
+    )
+
+    generic_selectors = {
+        "generic_selectors": [
+            {
+                "paths_section": [
+                    {
+                        "input_file_path": "in.txt",
+                        "output_file_path": "in.txt",
+                    }
+                ],
+                "selectors_section": [
+                    {
+                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_sub": r"\1{{version}}",
+                    },
+                ],
+            },
+        ]
+    }
+
+    conf = {"version_backends": generic_selectors}
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(params2["app_conf_path"], **conf)
+
+    os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+    assert err == 0
+
+    err, ver_info2, _ = _stamp_app(second_app, "patch")
+    assert ver_info2["stamping"]["app"]["_version"] == "1.0.1"
+    assert err == 0
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.3"
+    assert err == 0
+
+    with open(opath, "r") as f:
+        data = yaml.safe_load(f)
+        assert data["version"] == "0.0.3-x"
+        assert data["Custom"] == 3
+
+
 def test_basic_show(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)

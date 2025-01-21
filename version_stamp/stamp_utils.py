@@ -342,7 +342,7 @@ class VMNBackend(object):
     def remote(self):
         return "none"
 
-    def last_user_changeset(self):
+    def get_last_user_changeset(self, version_files_to_track_diff, name):
         return "none"
 
     def get_actual_deps_state(self, vmn_root_path, paths):
@@ -1565,7 +1565,7 @@ class GitBackend(VMNBackend):
         return actual_deps_state
 
     @measure_runtime_decorator
-    def last_user_changeset(self):
+    def get_last_user_changeset(self, version_files_to_track_diff_off, name):
         p = self._be.head.commit
         if p.author.name != VMN_USER_NAME:
             return p.hexsha
@@ -1585,7 +1585,18 @@ class GitBackend(VMNBackend):
 
         for t, v in ver_infos.items():
             if "stamping" in v["ver_info"]:
-                return v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
+                prev_user_commit = v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
+
+                ret_d, ret_list = self.parse_git_log_to_commit_for_specific_file(
+                    prev_user_commit,
+                    p.hexsha,
+                    version_files_to_track_diff_off
+                )
+
+                if name in ret_d and len(ret_list) > 1 and ret_list[0] != name:
+                    return ret_d[ret_list[0]]
+
+                return prev_user_commit
 
         VMN_LOGGER.warning(
             f"Somehow vmn's commit {p.hexsha} has no tags that are parsable. "
@@ -1735,6 +1746,47 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def get_commit_object_from_commit_hex(self, hex):
         return self._be.commit(hex)
+
+    def parse_git_log_to_commit_for_specific_file(self, from_commit, to_commit, filenames):
+        try:
+            if not filenames:
+                return {}, []
+
+            # Define the log format and construct the git log command
+            log_format = "--format=%H %s"
+            git_log_command = [
+                "log",
+                "--ancestry-path",
+                log_format,
+                f"{from_commit}..{to_commit}",
+                "--",
+            ] + filenames
+
+            # Run the git log command
+            logs = self._be.git.execute(["git"] + git_log_command)
+
+            # Parse the log output
+            log_entries = logs.splitlines()
+            result = {}
+            result_list = []
+
+            for entry in log_entries:
+                # Use regex to extract commit hash and tag
+                match = re.match(r"^(\w{40})\s+([\w_]+):", entry)
+                if match:
+                    hexsha = match.group(1)
+                    tag = match.group(2)
+                    result[tag] = hexsha
+                    result_list.append(tag)
+
+            return result, result_list
+
+        except git.exc.GitCommandError as e:
+            VMN_LOGGER.error(f"Git command failed: {e}")
+            return {}, []
+        except Exception as e:
+            VMN_LOGGER.error(f"An error occurred when tried to parse log: {e}")
+            return {}, []
 
     def get_commits_range_iter(self, tag_name, to_hex="HEAD"):
         # def _commit_exists_locally(self, commit_hash):

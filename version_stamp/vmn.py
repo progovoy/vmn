@@ -85,6 +85,8 @@ class IVersionsStamper(object):
     @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         # actual value will be assigned on handle_ functions
+        self.actual_deps_state = None
+        self.last_user_changeset = None
         self.prerelease = None
         self.release_mode = None
         self.dry_run = None
@@ -413,7 +415,23 @@ class IVersionsStamper(object):
         if self.name is None:
             return
 
-        self.last_user_changeset = self.backend.last_user_changeset()
+        version_files_to_track_diff = []
+        for backend in self.version_backends:
+            try:
+                handler = getattr(self, f"_add_files_{backend}")
+                backend_conf = self.version_backends[backend]
+                handler(version_files_to_track_diff, backend_conf)
+            except AttributeError:
+                stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
+                continue
+
+        seen = set()
+        version_files_to_track_diff = [x for x in version_files_to_track_diff if not (x in seen or seen.add(x))]
+
+        self.last_user_changeset = self.backend.get_last_user_changeset(
+            version_files_to_track_diff,
+            self.name
+        )
         if self.last_user_changeset is None:
             raise RuntimeError(
                 "Somehow vmn was not able to get last user changeset. "
@@ -2168,6 +2186,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
         else:
             status["matched_version_info"] = matched_version_info
 
+
         configured_repos = set(vcs.configured_deps.keys())
         local_repos = set(vcs.actual_deps_state.keys())
 
@@ -2697,7 +2716,8 @@ def gen(vcs, params, verstr_range=None):
         if (
             status["matched_version_info"] is not None
             and verstr is not None
-            and status["matched_version_info"]["stamping"]["app"]["_version"]
+            # TODO:: check this statement
+            and status["matched_version_info"]["stamping"]["app"]["_version"] != verstr
         ):
             stamp_utils.VMN_LOGGER.error(
                 f"The repository is not exactly at version: {verstr}. "
