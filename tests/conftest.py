@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import re
 import shutil
 import stat
 import sys
@@ -14,6 +15,7 @@ from git import Repo
 sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
 
 import stamp_utils
+import subprocess
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
@@ -86,8 +88,6 @@ class FSAppLayoutFixture(object):
         return be
 
     def create_new_clone(self, repo_name, depth=0):
-        import subprocess
-
         base_cmd = ["git", "clone"]
         if depth:
             base_cmd.append(f"--depth={depth}")
@@ -106,8 +106,6 @@ class FSAppLayoutFixture(object):
         return local_path
 
     def merge(self, from_rev, to_rev, squash=False, no_ff=False, delete_source=False):
-        import subprocess
-
         base_cmd = ["git", "merge"]
         if squash:
             base_cmd.append("--squash")
@@ -128,8 +126,6 @@ class FSAppLayoutFixture(object):
         subprocess.call(["git", "push"], cwd=self.repo_path)
 
     def git_cmd(self, repo_name=f"{TEST_REPO_NAME}_0", args=()):
-        import subprocess
-
         base_cmd = ["git"]
         base_cmd.extend(args)
 
@@ -141,7 +137,6 @@ class FSAppLayoutFixture(object):
         return ret.decode("utf-8")
 
     def rebase(self, target, who_to_put_on_target, no_ff=False):
-        import subprocess
 
         base_cmd = ["git", "rebase", target, who_to_put_on_target]
         if no_ff:
@@ -157,8 +152,6 @@ class FSAppLayoutFixture(object):
         branch_to_track=None,
         create_new=False,
     ):
-        import subprocess
-
         base_cmd = ["git", "checkout"]
         if create_new:
             base_cmd.append("-b")
@@ -179,8 +172,6 @@ class FSAppLayoutFixture(object):
         branch_to_track=None,
         create_new=False,
     ):
-        import subprocess
-
         base_cmd = [
             "git",
             "fetch",
@@ -220,16 +211,12 @@ class FSAppLayoutFixture(object):
         branch_name,
         repo_name=f"{TEST_REPO_NAME}_0",
     ):
-        import subprocess
-
         base_cmd = ["git", "branch", "-D", branch_name]
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
 
         subprocess.call(base_cmd, cwd=self._repos[repo_name]["_be"].root_path)
 
     def push(self, force_lease=False):
-        import subprocess
-
         base_cmd = ["git", "push"]
 
         if force_lease:
@@ -239,8 +226,6 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def pull(self, tags=False):
-        import subprocess
-
         base_cmd = ["git", "pull"]
 
         if tags:
@@ -260,8 +245,6 @@ class FSAppLayoutFixture(object):
         return tags
 
     def create_tag(self, commit_hash, tag_name):
-        import subprocess
-
         base_cmd = ["git", "tag", tag_name, commit_hash]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
@@ -283,8 +266,6 @@ class FSAppLayoutFixture(object):
         return True
 
     def remove_tag(self, tag_name):
-        import subprocess
-
         base_cmd = ["git", "tag", "-d", tag_name]
 
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
@@ -302,10 +283,21 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def stamp_with_previous_vmn(self, vmn_version):
-        import subprocess
+        dir_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks")
+        previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
+
+        if not os.path.exists(previous_stamper_dir):
+            LOGGER.info("No previous VMN stamper found")
+            return
+
+        if not os.access(previous_stamper_dir, os.X_OK):
+            raise RuntimeError(
+                f"Please run: chmod +x -R {dir_path}\n"
+                f"If running on Windows, please run in addition dos2unix for every file in the {dir_path} directory"
+            )
 
         base_cmd = [
-            f"{os.path.abspath(os.path.dirname(__file__))}/build_previous_vmn_stamper.sh",
+            previous_stamper_dir,
             vmn_version,
         ]
 
@@ -350,6 +342,7 @@ class FSAppLayoutFixture(object):
         commit=True,
         push=True,
         add_exec=False,
+        commit_msg=None,
     ):
         if repo_name not in self._repos:
             raise RuntimeError("repo {0} not found".format(repo_name))
@@ -374,7 +367,10 @@ class FSAppLayoutFixture(object):
 
         client = Repo(self._repos[repo_name]["path"])
         client.index.add([path])
-        client.index.commit("Added file {0}".format(path))
+        if commit_msg is None:
+            commit_msg = f"Added file {path}"
+
+        client.index.commit(commit_msg)
         self._repos[repo_name]["changesets"] = {
             "hash": client.head.commit.hexsha,
             "vcs_type": "git",
@@ -418,6 +414,7 @@ class FSAppLayoutFixture(object):
         version_backends=None,
         create_verinfo_files=None,
         policies=None,
+        conventional_commits=None,
     ):
         with open(app_conf_path, "w") as f:
             f.write("# Autogenerated by vmn. \n")
@@ -436,6 +433,8 @@ class FSAppLayoutFixture(object):
                 data["conf"]["create_verinfo_files"] = create_verinfo_files
             if policies is not None:
                 data["conf"]["policies"] = policies
+            if conventional_commits is not None:
+                data["conf"]["conventional_commits"] = conventional_commits
 
             yaml.dump(data, f, sort_keys=False)
             f.truncate()

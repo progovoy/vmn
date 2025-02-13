@@ -14,6 +14,8 @@
 <a href="#badge">
 <img alt="vmn: supported platfroms" src="https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen">
 </a>
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
+
 
 `vmn` is compliant with `Semver` (https://semver.org) semantics
 
@@ -34,6 +36,40 @@ Let people know that your repository is managed by **vmn** by including this bad
   <img width="800" src="https://i.imgur.com/g3wYIk8.png">
   <br>
 </p>
+
+- [What is VMN?](#what-is-vmn)
+- [Play around with VMN](#play-around-with-vmn)
+  - [Create a playground](#option-1-create-a-playground)
+  - [Use VMN Action with GitHub Action](#option-2-use-vmn-action-with-github-action)
+- [Contribute](#contribute)
+  - [Create a dev environment](#create-a-dev-environment)
+  - [Run tests](#run-tests)
+- [Key features](#key-features)
+- [Usage by Lean Examples](#usage-by-lean-examples)
+  - [Pre-requisites](#pre-requisites)
+  - [1. vmn init](#1-vmn-init)
+  - [2. vmn init-app](#2-vmn-init-app)
+  - [3. vmn stamp](#3-vmn-stamp)
+  - [4. vmn release](#4-vmn-release)
+  - [5. vmn show](#5-vmn-show)
+  - [6. vmn gen](#6-vmn-gen)
+  - [7. vmn goto](#7-vmn-goto)
+  - [8. vmn add](#8-vmn-add)
+  - [Other usages](#other-usages)
+- [Detailed Documentation](#detailed-documentation)
+  - [vmn init](#vmn-init)
+  - [vmn init-app](#vmn-init-app)
+  - [vmn stamp](#vmn-stamp)
+  - [vmn release](#vmn-release)
+  - [vmn show](#vmn-show)
+  - [vmn goto](#vmn-goto)
+  - [vmn gen](#vmn-gen)
+  - [vmn add](#vmn-add)
+  - [Other usages](#other-usages)
+- [Version auto-embedding](#version-auto-embedding)
+- [Generic version backends](#generic-version-backends)
+- [Configuration](#configuration)
+- [Thank yous and Contributors](#thank-yous-and-contributors)
 
 # What is `vmn`?
 
@@ -123,11 +159,15 @@ vmn --version # Should see 0.0.0 if installed successfully
 - [x] Version auto-embedding into supported backends during the `vmn stamp` phase (
   see [`Version auto-embedding`](https://github.com/haimhm/vmn/blob/master/README.md#version-auto-embedding) section)
 - [x]  Addition of `buildmetadata` for an existing version, e.g., `1.6.0-rc23+build01.Info` [`Semver` compliant]
+- [x]  Support for `conventional commits` for automatic release mode detection (`optional` or `strict`)
+- [x]  Support for `conventional commits` for automatic release notes generation
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
-# Usage
+# Usage by Lean Examples
 
-## 1. Installation
+Note: `init-app` and `stamp` both support `--dry-run` flag for testing purposes.
+
+## Pre-requisites
 
 ```sh
 pip3 install vmn
@@ -136,20 +176,50 @@ pip3 install vmn
 pipx install vmn
 ```
 
-## 2. `cd` into your git repository
+## 1. `vmn init`
 
 ```sh
 cd to/your/repository
-```
-
-## 3. `vmn init`
-
-```sh
 ## Needed only once per repository.
 vmn init
 ```
 
-## 4. `vmn stamp`
+## 2. `vmn init-app`
+
+```sh
+## Needed only once per app-name
+# will start from 0.0.0
+vmn init-app <app-name>
+
+# example for starting from version 1.6.8
+vmn init-app -v 1.6.8 <app-name2>
+````
+
+## 3. `vmn stamp`
+
+```sh
+# will stamp 0.0.1
+vmn stamp -r patch <app-name>
+
+# will stamp 1.7.0
+vmn stamp -r minor <app-name2>
+```
+
+In case you desire to use conventional commits for the stamp command to recognize the `release_mode` automatically, provide the following in app's `conf.yml` file:
+
+``` json
+"conventional_commits": {
+  "default_release_mode": "optional",
+}
+
+```
+
+`default_release_mode` may be `optional`(for --orm) or `strict`(for -r).
+
+Now you will be able to run:
+`vmn stamp <app-name>` and `vmn` will deduce the proper `release_mode` based on your conventional commits.
+
+## 4. `vmn release`
 
 ```sh
 ## Needed only once per app-name
@@ -166,11 +236,78 @@ vmn init-app -v 1.6.8 <app-name2>
 vmn stamp -r minor <app-name2>
 ```
 
-### Note
+## 5. `vmn show`
 
-`init-app` and `stamp` both support `--dry-run` flag
+```sh
+## Needed only once per app-name
+# will start from 0.0.0
+vmn init-app <app-name>
 
-## You can also use vmn as a python lib by importing it
+# will stamp 0.0.1
+vmn stamp -r patch <app-name>
+
+# example for starting from version 1.6.8
+vmn init-app -v 1.6.8 <app-name2>
+
+# will stamp 1.7.0
+vmn stamp -r minor <app-name2>
+```
+
+## 6. `vmn gen`
+
+```sh
+## Needed only once per app-name
+# will start from 0.0.0
+vmn init-app <app-name>
+
+# will stamp 0.0.1
+vmn stamp -r patch <app-name>
+
+# example for starting from version 1.6.8
+vmn init-app -v 1.6.8 <app-name2>
+
+# will stamp 1.7.0
+vmn stamp -r minor <app-name2>
+```
+
+## 7. `vmn goto`
+
+```sh
+## Needed only once per app-name
+# will start from 0.0.0
+vmn init-app <app-name>
+
+# will stamp 0.0.1
+vmn stamp -r patch <app-name>
+
+# example for starting from version 1.6.8
+vmn init-app -v 1.6.8 <app-name2>
+
+# will stamp 1.7.0
+vmn stamp -r minor <app-name2>
+```
+
+## 8. `vmn add`
+
+```sh
+## Needed only once per app-name
+# will start from 0.0.0
+vmn init-app <app-name>
+
+# will stamp 0.0.1
+vmn stamp -r patch <app-name>
+
+# example for starting from version 1.6.8
+vmn init-app -v 1.6.8 <app-name2>
+
+# will stamp 1.7.0
+vmn stamp -r minor <app-name2>
+```
+
+
+## Other usages
+
+### You can also use vmn as a python lib by importing it
 
 ``` python
 from contextlib import redirect_stdout, redirect_stderr
@@ -196,7 +333,13 @@ explore `vmn_ctx` object to see what you can get from it. Vars starting with `_`
 
 # Detailed Documentation
 
-## `vmn stamp` for release candidates
+## vmn init
+## vmn init-app
+
+
+## vmn stamp
+
+### release candidates
 
 `vmn` supports `Semver`'s `prerelease` notion of version stamping, enabling you to release non-mature versions and only
 then release the final version.
@@ -218,7 +361,7 @@ vmn stamp --pr mybeta <app-name>
 vmn release -v 2.0.0-mybeta1 <app-name>
 ```
 
-## `vmn stamp` for "root apps" or microservices
+### "root apps" or microservices
 
 `vmn` supports stamping of something called a "root app" which can be useful for managing version of multiple services
 that are logically located under the same solution.
@@ -278,7 +421,16 @@ stamping:
 
 `vmn show --root my_root_app` will output `5`
 
-## `vmn show`
+## vmn release
+Use `vmn show` for displaying version information of previous `vmn stamp` commands
+
+```sh
+vmn show <app-name>
+vmn show --verbose <app-name>
+vmn show -v 1.0.1 <app-name>
+```
+
+## vmn show
 
 Use `vmn show` for displaying version information of previous `vmn stamp` commands
 
@@ -288,7 +440,7 @@ vmn show --verbose <app-name>
 vmn show -v 1.0.1 <app-name>
 ```
 
-## `vmn goto`
+## vmn goto
 
 Similar to `git checkout` but also supports checking out all configured dependencies. This way you can easily go back to
 the **exact** state of you entire code for a specific version even when multiple git repositories are involved.
@@ -297,7 +449,7 @@ the **exact** state of you entire code for a specific version even when multiple
 vmn goto -v 1.0.1 <app-name>
 ```
 
-## `vmn gen`
+## vmn gen
 
 Generates version output file based on jinja2 template
 
@@ -311,7 +463,7 @@ Generates version output file based on jinja2 template
  "base_version": "0.0.1",
  "changesets": {".": {"hash": "d6377170ae767cd025f6c623b838c7a99efbe7f8",
                       "remote": "../test_repo_remote",
-                      "state": {"modified"},
+                      "state": ["modified"],
                       "vcs_type": "git"}},
  "info": {},
  "name": "test_app2/s1",
@@ -328,6 +480,7 @@ Generates version output file based on jinja2 template
    "test_app2/s1": "0.0.1"
  }, 
  "root_version": 1,
+  "release_notes": ""
 }
 ```
 
@@ -360,19 +513,27 @@ RELEASE_MODE: patch
     <h2>VCS_TYPE: git</h2>
 ```
 
+## vmn add
+Use `vmn show` for displaying version information of previous `vmn stamp` commands
+
+```sh
+vmn show <app-name>
+vmn show --verbose <app-name>
+vmn show -v 1.0.1 <app-name>
+```
+
 ## Version auto-embedding
 
 `vmn` supports auto-embedding the version string during the `vmn stamp` phase for supported backends:
 
-| Backend | Description | 
-| :-: | :-: |
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) |
-Will embed version string to `package.json` file within the `vmn stamp` command | 
-| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) |
-Will embed version string to `Cargo.toml` file within the `vmn stamp` command |
-| Poetry |
-Will embed version string to Poetry's `pyproject.toml` file within the `vmn stamp` command |
-
+|                                                      Backend                                                      | Description | 
+|:-----------------------------------------------------------------------------------------------------------------:|:-----------:|
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626161-2a7bdc4a-5d42-4012-ae42-b460ddf7ea88.png) |             |
+|                  Will embed version string to `package.json` file within the `vmn stamp` command                  |             |
+| ![alt text](https://user-images.githubusercontent.com/5350434/136626484-0a8e4890-42f1-4437-b306-28f190d095ee.png) |             |
+|                   Will embed version string to `Cargo.toml` file within the `vmn stamp` command                   |             |
+|                                                      Poetry                                                       |             |
+|            Will embed version string to Poetry's `pyproject.toml` file within the `vmn stamp` command             |             |
 
 ## Generic version backends
 There are two generic version backends types: `generic_jinja` and `generic_selectors`.
@@ -477,5 +638,22 @@ conf:
 | `create_verinfo_files` | Tells `vmn` to create file for each stamped version. `vmn show --from-file` will work with these files instead of working with `git tags`. | See example `conf.yml` file above                            |
 |   `hide_zero_hotfix`   | Tells `vmn` to hide the fourth version octa when it is equal to zero. This way you will never see the fourth octa unless you will specifically stamp with `vmn stamp -r hotfix`. `True` by default. | See example `conf.yml` file above                            |
 |   `version_backends`   | Tells `vmn` to auto-embed the version string into one of the supported backends' files during the `vmn stamp` command. For instance, `vmn` will auto-embed the version string into `package.json` file if configured for `npm` projects. | See example `conf.yml` file above                            |
+
+<<<<<<< HEAD
+# Thank yous and Contributors
+
+To [Pavel Rogovoy](https://github.com/progovoy) for being the main contributor for this project.
+
+To [Final Israel](https://github.com/final-israel) to host this important project.
+
+To semver.org: we used semver.org as a blueprint for the structure of this specification.
+
+Thanks goes to these wonderful people ✨
+
+<a href="https://github.com/orhun/git-cliff/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=final-israel/vmn" />
+</a>
+
+If you like and use this project, please consider starring it ✨
 
 Thanks!
