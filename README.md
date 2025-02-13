@@ -639,6 +639,7 @@ conf:
 |   `hide_zero_hotfix`   | Tells `vmn` to hide the fourth version octa when it is equal to zero. This way you will never see the fourth octa unless you will specifically stamp with `vmn stamp -r hotfix`. `True` by default. | See example `conf.yml` file above                            |
 |   `version_backends`   | Tells `vmn` to auto-embed the version string into one of the supported backends' files during the `vmn stamp` command. For instance, `vmn` will auto-embed the version string into `package.json` file if configured for `npm` projects. | See example `conf.yml` file above                            |
 
+<<<<<<< HEAD
 # Thank yous and Contributors
 
 To [Pavel Rogovoy](https://github.com/progovoy) for being the main contributor for this project.
@@ -654,3 +655,5 @@ Thanks goes to these wonderful people ✨
 </a>
 
 If you like and use this project, please consider starring it ✨
+
+Thanks!
