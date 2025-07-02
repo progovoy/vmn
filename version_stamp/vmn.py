@@ -7,6 +7,7 @@ import os
 import pathlib
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -851,6 +852,8 @@ class IVersionsStamper(object):
                     with open(input_file_path, "r") as file:
                         content = file.read()
 
+                        content = stamp_utils.comment_out_jinja(content)
+
                     # Replace the matched version strings with regex_sub
                     content = re.sub(regex_selector, regex_sub, content)
 
@@ -881,7 +884,8 @@ class IVersionsStamper(object):
 
                     d = {
                         "input_file_path": raw_temporary_jinja_template_path,
-                        "output_file_path": file_section["output_file_path"],
+                        "output_file_path": raw_temporary_jinja_template_path,
+                        "_output_file_path": file_section["output_file_path"],
                     }
                     if "custom_keys_path" in file_section:
                         d["custom_keys_path"] = file_section["custom_keys_path"]
@@ -889,6 +893,14 @@ class IVersionsStamper(object):
                     jinja_backend_conf.append(d)
 
                 self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
+
+                for item in jinja_backend_conf:
+                    tmp_path = Path(self.vmn_root_path) / item["output_file_path"]
+                    final_path = Path(self.vmn_root_path) / item["_output_file_path"]
+
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    shutil.copy2(tmp_path, final_path)
 
                 for t, c in temporary_jinja_template_paths:
                     os.remove(t)
