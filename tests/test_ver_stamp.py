@@ -4789,3 +4789,67 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
 
     with open(opath, "r") as f:
         assert "prevent racing of requests" in f.read().lower()
+
+
+def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layout, capfd):
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # read to clear stderr and out
+    capfd.readouterr()
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
+
+    # Simulate a file that is a jinja template with a jinja expression that will fail
+    jinja_expr_content = (
+        'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"\n'
+        'version: 1.0.2\nCustom: 3\n'
+    )
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "in.txt",
+        jinja_expr_content,
+    )
+
+    generic_selectors = {
+        "generic_selectors": [
+            {
+                "paths_section": [
+                    {
+                        "input_file_path": "in.txt",
+                        "output_file_path": "in.txt",
+                    }
+                ],
+                "selectors_section": [
+                    {
+                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_sub": r"\1{{version}}",
+                    },
+                ],
+            },
+        ]
+    }
+
+    conf = {"version_backends": generic_selectors}
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    os.path.join(app_layout._repos["test_repo_0"]["path"], "custom.yml")
+    opath = os.path.join(app_layout._repos["test_repo_0"]["path"], "in.txt")
+
+    capfd.readouterr()
+    # Run the stamp and check for nonzero error code and error message in stderr
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    captured = capfd.readouterr()
+    assert ("lookup" not in captured.err and "undefined" not in captured.err)
+
+    assert err == 0
+
+    # Check the output file: version should be replaced, lookup should be preserved
+    with open(opath, "r") as f:
+        content = f.read()
+        assert 'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"' in content
+        assert 'version: 0.0.2' in content

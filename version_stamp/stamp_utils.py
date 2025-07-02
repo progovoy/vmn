@@ -103,6 +103,14 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
     re.VERBOSE | re.DOTALL | re.MULTILINE,
 )
 
+
+# Patterns for live Jinja code we need to protect
+JINJA_TAG_RE = re.compile(
+    r'(\{\{.*?\}\}|\{%.*?%\})',
+    re.DOTALL,
+)
+
+
 BOLD_CHAR = "\033[1m"
 END_CHAR = "\033[0m"
 
@@ -116,6 +124,14 @@ VMN_BE_TYPE_LOCAL_FILE = "local_file"
 
 GLOBAL_LOG_FILENAME = "global_vmn.log"
 VMN_LOGGER = None
+
+
+def comment_out_jinja(text: str) -> str:
+    """
+    Wrap every live tag so it survives rendering, e.g.
+        {{ foo }}  →  {% raw %}{{ foo }}{% endraw %}
+    """
+    return JINJA_TAG_RE.sub(lambda m: '{% raw %}' + m.group(1) + '{% endraw %}', text)
 
 
 # Create a custom execute function
