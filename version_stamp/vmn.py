@@ -1489,10 +1489,20 @@ class VersionControlStamper(IVersionsStamper):
             return 1
 
         try:
-            if push:
-                if self.dry_run:
-                    stamp_utils.VMN_LOGGER.info(
-                        "Would have pushed with tags.\n" f"tags: {all_tags} "
+            if self.dry_run:
+                stamp_utils.VMN_LOGGER.info(
+                    "Would have pushed with tags.\n" f"tags: {all_tags} "
+                )
+            else:
+                self.backend.push(all_tags, atomic=True)
+
+                count = 0
+                res = self.backend.check_for_outgoing_changes()
+                while count < 5 and res:
+                    count += 1
+                    stamp_utils.VMN_LOGGER.error(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
                     )
                 else:
                     self.backend.push(all_tags, atomic=True)
@@ -2460,7 +2470,7 @@ def _init_app(versions_be_ifc, starting_version):
 
 
 @stamp_utils.measure_runtime_decorator
-def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_bump=True, push=True):
+def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_bump=True):
     stamped = False
     retries = 3
     override_verstr = verstr
@@ -2578,8 +2588,7 @@ def stamp_stable_version(vcs, branch=None):
         raise RuntimeError("HEAD prerelease tag is not the latest available")
     vcs.prerelease = "release"
 
-    prev_changeset = vcs.backend.changeset()
-    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False, push=False)
+    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False)
 
     if vcs.dry_run:
         return version
@@ -2587,11 +2596,11 @@ def stamp_stable_version(vcs, branch=None):
     tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(vcs.name, base_ver)
     msg = yaml.dump(vcs.current_version_info, sort_keys=True)
 
+    prev_changeset = vcs.backend.changeset()
     try:
         vcs.backend.tag([tag_name], [msg])
-        if branch is None:
-            branch = vcs.backend.active_branch
-        vcs.backend.atomic_push(f"HEAD:refs/heads/{branch}")
+        vcs.backend.push([tag_name], branch=branch, atomic=True)
+
     except Exception:
         vcs.backend.revert_vmn_commit(prev_changeset, vcs.version_files, [tag_name])
         raise
@@ -3547,6 +3556,7 @@ def add_arg_release(subprasers):
     )
     group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
     prelease.set_defaults(stamp=False)
+                      
     prelease.add_argument("--dry", dest="dry", action="store_true")
     prelease.set_defaults(dry=False)
     prelease.add_argument("name", help="The application's name")

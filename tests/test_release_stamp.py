@@ -28,7 +28,22 @@ def _release_with_stamp(app_name, dry=False):
         merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
     return ret, ver_info, merged_dict
 
+  
+def test_branch_policy_violation(app_layout, monkeypatch):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, release_mode="patch", prerelease="rc")
 
+    app_layout.checkout("feature", create_new=True)
+
+    monkeypatch.setenv("RELEASE_BRANCHES", "main")
+    cwd = os.getcwd()
+    os.chdir(app_layout.repo_path)
+    res = rel.main(["--stamp"])
+    os.chdir(cwd)
+    assert res == 1
+ 
+  
 def test_release_stamp_happy(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -90,4 +105,3 @@ def test_release_stamp_flag_conflict(app_layout):
     _init_app(app_layout.app_name)
     with pytest.raises(SystemExit):
         vmn.vmn_run(["release", "--stamp", "-v", "1.0.0", app_layout.app_name])
-
