@@ -1484,7 +1484,7 @@ class VersionControlStamper(IVersionsStamper):
                     "Would have pushed with tags.\n" f"tags: {all_tags} "
                 )
             else:
-                self.backend.push(all_tags)
+                self.backend.push(all_tags, atomic=True)
 
                 count = 0
                 res = self.backend.check_for_outgoing_changes()
@@ -2408,7 +2408,7 @@ def _init_app(versions_be_ifc, starting_version):
 
 
 @stamp_utils.measure_runtime_decorator
-def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
+def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_bump=True):
     stamped = False
     retries = 3
     override_verstr = verstr
@@ -2453,6 +2453,9 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
             break
 
         if err == 1:
+            if not allow_auto_bump:
+                break
+
             override_verstr = current_version
 
             override_main_current_version = main_ver
@@ -2482,6 +2485,64 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
         raise RuntimeError(err)
 
     return current_version
+
+
+@stamp_utils.measure_runtime_decorator
+def stamp_stable_version(vcs, branch=None):
+    """Stamp a stable version based on the prerelease tag on HEAD."""
+    tags_info = vcs.backend.get_all_commit_tags("HEAD")
+
+    app_tags = []
+    for tname, info in tags_info.items():
+        try:
+            props = stamp_utils.VMNBackend.deserialize_tag_name(tname)
+        except Exception:
+            continue
+
+        if props.get("app_name") != vcs.name:
+            continue
+
+        if (
+            info.get("ver_info")
+            and info["ver_info"]["stamping"]["app"]["prerelease"] != "release"
+        ):
+            app_tags.append((tname, info))
+
+    if len(app_tags) != 1:
+        raise RuntimeError("Expected exactly one prerelease tag on HEAD")
+
+    prerelease_tag, prerelease_info = app_tags[0]
+    prerelease_ver = prerelease_info["ver_info"]["stamping"]["app"]["_version"]
+
+    base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
+        prerelease_ver, hide_zero_hotfix=vcs.hide_zero_hotfix
+    )
+
+    tag_prefix = (
+        f"{stamp_utils.VMNBackend.serialize_vmn_tag_name(vcs.name, base_ver)}-*"
+    )
+    latest_tag = vcs.backend.get_latest_available_tag(tag_prefix)
+    if latest_tag and latest_tag != prerelease_tag:
+        raise RuntimeError("HEAD prerelease tag is not the latest available")
+    vcs.prerelease = "release"
+
+    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False)
+
+    if vcs.dry_run:
+        return version
+
+    tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(vcs.name, base_ver)
+    msg = yaml.dump(vcs.current_version_info, sort_keys=True)
+
+    prev_changeset = vcs.backend.changeset()
+    try:
+        vcs.backend.tag([tag_name], [msg])
+        vcs.backend.push([tag_name], branch=branch, atomic=True)
+    except Exception:
+        vcs.backend.revert_vmn_commit(prev_changeset, vcs.version_files, [tag_name])
+        raise
+
+    return version
 
 
 @stamp_utils.measure_runtime_decorator
@@ -3421,7 +3482,8 @@ def add_arg_gen(subprasers):
 
 def add_arg_release(subprasers):
     prelease = subprasers.add_parser("release", help="Release app version")
-    prelease.add_argument(
+    group = prelease.add_mutually_exclusive_group()
+    group.add_argument(
         "-v",
         "--version",
         default=None,
@@ -3429,6 +3491,8 @@ def add_arg_release(subprasers):
         help=f"The version to release in the format: "
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
+    group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
+    prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
 
 
