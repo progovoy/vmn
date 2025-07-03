@@ -2574,22 +2574,12 @@ def stamp_stable_version(vcs):
         raise RuntimeError("HEAD prerelease tag is not the latest available")
     vcs.prerelease = "release"
 
-    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False)
-
-    if vcs.dry_run:
-        return version
-
-    tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(vcs.name, base_ver)
-    msg = yaml.dump(vcs.current_version_info, sort_keys=True)
-
-    prev_changeset = vcs.backend.changeset()
     try:
-        vcs.backend.tag([tag_name], [msg])
-        vcs.backend.push([tag_name], atomic=True)
+        version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False)
+    except Exception as exc:
+        stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
-    except Exception:
-        vcs.backend.revert_vmn_commit(prev_changeset, vcs.version_files, [tag_name])
-        raise
+        raise RuntimeError("Failed to stamp release")
 
     return version
 

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import sys
 sys.path.append("{0}/../version_stamp".format(__file__.rsplit('/',2)[0]))
@@ -78,7 +80,7 @@ def test_release_stamp_push_fail(app_layout, monkeypatch):
     def fail_push(self, branch_spec):
         raise RuntimeError("fail")
 
-    monkeypatch.setattr(stamp_utils.GitBackend, "atomic_push", fail_push)
+    monkeypatch.setattr(stamp_utils.GitBackend, "push", fail_push)
     err, ver_info, _ = _release_with_stamp(app_layout.app_name)
     assert err == 1
     assert app_layout._app_backend.be.changeset() == prev
