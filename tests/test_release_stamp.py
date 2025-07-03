@@ -31,19 +31,16 @@ def _release_with_stamp(app_name, dry=False):
     return ret, ver_info, merged_dict
 
   
-def test_branch_policy_violation(app_layout, monkeypatch):
+def test_branch_policy_violation(app_layout):
     _run_vmn_init()
-    _init_app(app_layout.app_name)
+    _, _, params = _init_app(app_layout.app_name)
+    policy_conf = {"policies": {"whitelist_release_branches": ["main"]}}
+    app_layout.write_conf(params["app_conf_path"], **policy_conf)
+    app_layout.checkout("feature", create_new=True)
     _stamp_app(app_layout.app_name, release_mode="patch", prerelease="rc")
 
-    app_layout.checkout("feature", create_new=True)
-
-    monkeypatch.setenv("RELEASE_BRANCHES", "main")
-    cwd = os.getcwd()
-    os.chdir(app_layout.repo_path)
-    res = rel.main(["--stamp"])
-    os.chdir(cwd)
-    assert res == 1
+    err, _, _ = _release_with_stamp(app_layout.app_name)
+    assert err == 1
  
   
 def test_release_stamp_happy(app_layout):
