@@ -894,9 +894,9 @@ class IVersionsStamper(object):
 
                 self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
 
-                for item in jinja_backend_conf:
-                    tmp_path = Path(self.vmn_root_path) / item["output_file_path"]
-                    final_path = Path(self.vmn_root_path) / item["_output_file_path"]
+                for jinja_backend_conf_item in jinja_backend_conf:
+                    tmp_path = Path(self.vmn_root_path) / jinja_backend_conf_item["output_file_path"]
+                    final_path = Path(self.vmn_root_path) / jinja_backend_conf_item["_output_file_path"]
 
                     final_path.parent.mkdir(parents=True, exist_ok=True)
 
