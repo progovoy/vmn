@@ -1917,7 +1917,48 @@ def _determine_initial_version(vmn_ctx):
 
 
 @stamp_utils.measure_runtime_decorator
+def _release_with_stamp(vmn_ctx):
+    """Create a stable release directly from the prerelease on HEAD."""
+    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
+    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
+
+    vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
+
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status["error"]:
+        stamp_utils.VMN_LOGGER.debug(
+            f"Error occured when getting the repo status: {status}", exc_info=True
+        )
+        return 1
+
+    if "whitelist_release_branches" in vmn_ctx.vcs.policies:
+        policy_conf = vmn_ctx.vcs.policies["whitelist_release_branches"]
+        if vmn_ctx.vcs.backend.active_branch not in policy_conf:
+            err_msg = (
+                "Policy: whitelist_release_branches was violated. Refusing to release"
+            )
+            stamp_utils.VMN_LOGGER.error(err_msg)
+            return 1
+
+    try:
+        version = stamp_stable_version(vmn_ctx.vcs)
+    except Exception:
+        stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+        return 1
+
+    disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
+    if vmn_ctx.vcs.dry_run:
+        stamp_utils.VMN_LOGGER.info(f"Would have released {disp_version}")
+    else:
+        stamp_utils.VMN_LOGGER.info(f"{disp_version}")
+
+    return 0
+
+
+@stamp_utils.measure_runtime_decorator
 def handle_release(vmn_ctx):
+    if vmn_ctx.args.stamp:
+        return _release_with_stamp(vmn_ctx)
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
 
@@ -2537,7 +2578,9 @@ def stamp_stable_version(vcs, branch=None):
     prev_changeset = vcs.backend.changeset()
     try:
         vcs.backend.tag([tag_name], [msg])
-        vcs.backend.push([tag_name], branch=branch, atomic=True)
+        if branch is None:
+            branch = vcs.backend.active_branch
+        vcs.backend.atomic_push(f"HEAD:refs/heads/{branch}")
     except Exception:
         vcs.backend.revert_vmn_commit(prev_changeset, vcs.version_files, [tag_name])
         raise
@@ -3493,6 +3536,8 @@ def add_arg_release(subprasers):
     )
     group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
     prelease.set_defaults(stamp=False)
+    prelease.add_argument("--dry", dest="dry", action="store_true")
+    prelease.set_defaults(dry=False)
     prelease.add_argument("name", help="The application's name")
 
 

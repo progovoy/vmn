@@ -1885,3 +1885,17 @@ def compare_release_modes(r1, r2):
     }
 
     return version_map[r1] >= version_map[r2]
+
+# Provide an atomic push helper if missing. This mirrors the CLI logic for
+# pushing both the current HEAD and all tags in a single transaction.
+if not hasattr(GitBackend, "atomic_push"):
+    def atomic_push(self, branch_spec):
+        """Push branch and tags atomically using git's --atomic flag."""
+        self._be.git.push(
+            "--atomic",
+            self.selected_remote.name,
+            branch_spec,
+            "--follow-tags",
+        )
+
+    GitBackend.atomic_push = atomic_push
