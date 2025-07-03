@@ -916,18 +916,16 @@ class GitBackend(VMNBackend):
                     raise RuntimeError(tag_err_str)
 
     @measure_runtime_decorator
-    def push(self, tags=(), branch=None, atomic=False):
+    def push(self, tags=(), atomic=False):
         if self.detached_head:
             raise RuntimeError("Will not push from detached head")
 
         if self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
 
-        remote_branch_name_no_remote_name = branch
-        if remote_branch_name_no_remote_name is None:
-            remote_branch_name_no_remote_name = "".join(
-                self.remote_active_branch.split(f"{self.selected_remote.name}/")
-            )
+        remote_branch_name_no_remote_name = "".join(
+            self.remote_active_branch.split(f"{self.selected_remote.name}/")
+        )
 
         def _push_once(ci_skip=True, do_branch=True, do_tags=(), use_atomic=False):
             cmd = ["git", "push", "--porcelain"]
@@ -956,9 +954,9 @@ class GitBackend(VMNBackend):
                     raise RuntimeError(err_str)
         else:
             try:
-                _push_once(True, True)
+                _push_once()
             except Exception:
-                _push_once(False, True)
+                _push_once(False)
 
         for tag in tags:
             try:
@@ -1885,17 +1883,3 @@ def compare_release_modes(r1, r2):
     }
 
     return version_map[r1] >= version_map[r2]
-
-# Provide an atomic push helper if missing. This mirrors the CLI logic for
-# pushing both the current HEAD and all tags in a single transaction.
-if not hasattr(GitBackend, "atomic_push"):
-    def atomic_push(self, branch_spec):
-        """Push branch and tags atomically using git's --atomic flag."""
-        self._be.git.push(
-            "--atomic",
-            self.selected_remote.name,
-            branch_spec,
-            "--follow-tags",
-        )
-
-    GitBackend.atomic_push = atomic_push

@@ -1359,7 +1359,7 @@ class VersionControlStamper(IVersionsStamper):
         return version_files
 
     @stamp_utils.measure_runtime_decorator
-    def publish_stamp(self, app_version, root_app_version, push=True):
+    def publish_stamp(self, app_version, root_app_version):
         app_msg = {
             "vmn_info": self.current_version_info["vmn_info"],
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
@@ -1437,9 +1437,6 @@ class VersionControlStamper(IVersionsStamper):
 
             return 3
 
-        if not push:
-            return 0
-
         tags = [tag]
         msgs = [app_msg]
 
@@ -1504,25 +1501,14 @@ class VersionControlStamper(IVersionsStamper):
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
                     )
-                else:
-                    self.backend.push(all_tags, atomic=True)
-
-                    count = 0
+                    time.sleep(60)
                     res = self.backend.check_for_outgoing_changes()
-                    while count < 5 and res:
-                        count += 1
-                        stamp_utils.VMN_LOGGER.error(
-                            f"BUG: Somehow we have outgoing changes right "
-                            f"after publishing:\n{res}"
-                        )
-                        time.sleep(60)
-                        res = self.backend.check_for_outgoing_changes()
 
-                    if count == 5 and res:
-                        raise RuntimeError(
-                            f"BUG: Somehow we have outgoing changes right "
-                            f"after publishing:\n{res}"
-                        )
+                if count == 5 and res:
+                    raise RuntimeError(
+                        f"BUG: Somehow we have outgoing changes right "
+                        f"after publishing:\n{res}"
+                    )
         except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
@@ -1941,7 +1927,7 @@ def _determine_initial_version(vmn_ctx):
 def _release_with_stamp(vmn_ctx):
     """Create a stable release directly from the prerelease on HEAD."""
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
+    optional_status = {"deps_synced_with_conf"}
 
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
@@ -2501,7 +2487,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_
         main_ver = versions_be_ifc.stamp_root_app_version(override_main_current_version)
 
         try:
-            err = versions_be_ifc.publish_stamp(current_version, main_ver, push=push)
+            err = versions_be_ifc.publish_stamp(current_version, main_ver)
         except Exception as exc:
             stamp_utils.VMN_LOGGER.error(
                 f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
@@ -2550,7 +2536,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_
 
 
 @stamp_utils.measure_runtime_decorator
-def stamp_stable_version(vcs, branch=None):
+def stamp_stable_version(vcs):
     """Stamp a stable version based on the prerelease tag on HEAD."""
     tags_info = vcs.backend.get_all_commit_tags("HEAD")
 
@@ -2599,7 +2585,7 @@ def stamp_stable_version(vcs, branch=None):
     prev_changeset = vcs.backend.changeset()
     try:
         vcs.backend.tag([tag_name], [msg])
-        vcs.backend.push([tag_name], branch=branch, atomic=True)
+        vcs.backend.push([tag_name], atomic=True)
 
     except Exception:
         vcs.backend.revert_vmn_commit(prev_changeset, vcs.version_files, [tag_name])
