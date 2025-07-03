@@ -916,68 +916,56 @@ class GitBackend(VMNBackend):
                     raise RuntimeError(tag_err_str)
 
     @measure_runtime_decorator
-    def push(self, tags=()):
+    def push(self, tags=(), branch=None, atomic=False):
         if self.detached_head:
             raise RuntimeError("Will not push from detached head")
 
         if self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
 
-        remote_branch_name_no_remote_name = "".join(
-            self.remote_active_branch.split(f"{self.selected_remote.name}/")
-        )
-
-        try:
-            self._be.git.execute(
-                [
-                    "git",
-                    "push",
-                    "--porcelain",
-                    "-o",
-                    "ci.skip",
-                    self.selected_remote.name,
-                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
-                ]
+        remote_branch_name_no_remote_name = branch
+        if remote_branch_name_no_remote_name is None:
+            remote_branch_name_no_remote_name = "".join(
+                self.remote_active_branch.split(f"{self.selected_remote.name}/")
             )
-        except Exception:
-            try:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        self.selected_remote.name,
-                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
-                    ]
+
+        def _push_once(ci_skip=True, do_branch=True, do_tags=(), use_atomic=False):
+            cmd = ["git", "push", "--porcelain"]
+            if ci_skip:
+                cmd += ["-o", "ci.skip"]
+            if use_atomic:
+                cmd.append("--atomic")
+            cmd.append(self.selected_remote.name)
+            if do_branch:
+                cmd.append(
+                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
                 )
+            for t in do_tags:
+                cmd.append(f"refs/tags/{t}")
+            self._be.git.execute(cmd)
+
+        if atomic:
+            try:
+                _push_once(True, True, tags, True)
             except Exception:
-                err_str = "Push has failed. Please verify that 'git push' works"
-                VMN_LOGGER.error(err_str, exc_info=True)
-                raise RuntimeError(err_str)
+                try:
+                    _push_once(False, True, tags, True)
+                except Exception:
+                    err_str = "Push has failed. Please verify that 'git push' works"
+                    VMN_LOGGER.error(err_str, exc_info=True)
+                    raise RuntimeError(err_str)
+        else:
+            try:
+                _push_once(True, True)
+            except Exception:
+                _push_once(False, True)
 
         for tag in tags:
             try:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        "-o",
-                        "ci.skip",
-                        self.selected_remote.name,
-                        f"refs/tags/{tag}",
-                    ]
-                )
+                _push_once(True, False, [tag])
             except Exception:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        self.selected_remote.name,
-                        f"refs/tags/{tag}",
-                    ]
-                )
+                _push_once(False, False, [tag])
+
 
     @measure_runtime_decorator
     def pull(self):
