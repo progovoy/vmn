@@ -1,0 +1,29 @@
+name: 'vmn-action'
+description: 'Run vmn commands'
+inputs:
+  command:
+    description: 'vmn command to run'
+    required: true
+  args:
+    description: 'additional arguments passed to vmn'
+    required: false
+  stamp_release:
+    description: 'use --stamp when running release'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: run vmn
+      shell: bash
+      run: |
+        cmd="vmn ${{ inputs.command }}"
+        if [[ "${{ inputs.command }}" == "release" && "${{ inputs.stamp_release }}" == "true" ]]; then
+          cmd="$cmd --stamp"
+        fi
+        if [ "${{ inputs.args }}" != "" ]; then
+          cmd="$cmd ${{ inputs.args }}"
+        fi
+        echo "Running: $cmd"
+        $cmd
+
