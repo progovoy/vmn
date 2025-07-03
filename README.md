@@ -359,6 +359,9 @@ vmn stamp --pr mybeta <app-name>
 
 # Run release when you ready - will stamp 2.0.0 (from the same commit)
 vmn release -v 2.0.0-mybeta1 <app-name>
+
+# Release directly from the prerelease commit
+vmn release --stamp <app-name>
 ```
 
 ### "root apps" or microservices
