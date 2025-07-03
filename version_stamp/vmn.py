@@ -3421,7 +3421,8 @@ def add_arg_gen(subprasers):
 
 def add_arg_release(subprasers):
     prelease = subprasers.add_parser("release", help="Release app version")
-    prelease.add_argument(
+    group = prelease.add_mutually_exclusive_group()
+    group.add_argument(
         "-v",
         "--version",
         default=None,
@@ -3429,6 +3430,8 @@ def add_arg_release(subprasers):
         help=f"The version to release in the format: "
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
+    group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
+    prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
 
 
