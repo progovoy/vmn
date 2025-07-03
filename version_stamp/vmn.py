@@ -3388,6 +3388,20 @@ def parse_user_commands(command_line):
     verify_user_input_version(args, "ov")
     verify_user_input_version(args, "orv")
 
+    if args.command == "release" and getattr(args, "stamp", False):
+        conflicts = []
+        if getattr(args, "version", None) is not None:
+            conflicts.append("-v/--version")
+
+        for flag in ["major", "minor", "patch", "hotfix", "micro"]:
+            if hasattr(args, flag) and getattr(args, flag):
+                conflicts.append(f"--{flag}")
+
+        if conflicts:
+            err = f"--stamp cannot be used with {' '.join(conflicts)}"
+            stamp_utils.VMN_LOGGER.error(err)
+            raise RuntimeError(err)
+
     return args
 
 
@@ -3421,7 +3435,8 @@ def add_arg_gen(subprasers):
 
 def add_arg_release(subprasers):
     prelease = subprasers.add_parser("release", help="Release app version")
-    prelease.add_argument(
+    group = prelease.add_mutually_exclusive_group()
+    group.add_argument(
         "-v",
         "--version",
         default=None,
@@ -3429,6 +3444,8 @@ def add_arg_release(subprasers):
         help=f"The version to release in the format: "
         f" {stamp_utils.VMN_VERSION_FORMAT}",
     )
+    group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
+    prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
 
 
