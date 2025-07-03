@@ -3388,20 +3388,6 @@ def parse_user_commands(command_line):
     verify_user_input_version(args, "ov")
     verify_user_input_version(args, "orv")
 
-    if args.command == "release" and getattr(args, "stamp", False):
-        conflicts = []
-        if getattr(args, "version", None) is not None:
-            conflicts.append("-v/--version")
-
-        for flag in ["major", "minor", "patch", "hotfix", "micro"]:
-            if hasattr(args, flag) and getattr(args, flag):
-                conflicts.append(f"--{flag}")
-
-        if conflicts:
-            err = f"--stamp cannot be used with {' '.join(conflicts)}"
-            stamp_utils.VMN_LOGGER.error(err)
-            raise RuntimeError(err)
-
     return args
 
 
