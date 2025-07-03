@@ -61,7 +61,12 @@ class VMNContainer(object):
         if "root" in self.args:
             root = self.args.root
 
-        initial_params = {"root": root, "name": None, "root_path": root_path}
+        initial_params = {
+            "root": root,
+            "name": None,
+            "root_path": root_path,
+            "extra_commit_message": "",
+        }
 
         if "name" in self.args and self.args.name:
             validate_app_name(self.args)
@@ -91,6 +96,8 @@ class IVersionsStamper(object):
         self.prerelease = None
         self.release_mode = None
         self.dry_run = None
+        self.override_version = None
+        self.override_root_version = None
 
         self.app_conf_path = None
         self.params: dict = arg_params
@@ -1352,7 +1359,7 @@ class VersionControlStamper(IVersionsStamper):
         return version_files
 
     @stamp_utils.measure_runtime_decorator
-    def publish_stamp(self, app_version, root_app_version):
+    def publish_stamp(self, app_version, root_app_version, push=True):
         app_msg = {
             "vmn_info": self.current_version_info["vmn_info"],
             "stamping": {"app": self.current_version_info["stamping"]["app"]},
@@ -1430,6 +1437,9 @@ class VersionControlStamper(IVersionsStamper):
 
             return 3
 
+        if not push:
+            return 0
+
         tags = [tag]
         msgs = [app_msg]
 
@@ -1479,29 +1489,30 @@ class VersionControlStamper(IVersionsStamper):
             return 1
 
         try:
-            if self.dry_run:
-                stamp_utils.VMN_LOGGER.info(
-                    "Would have pushed with tags.\n" f"tags: {all_tags} "
-                )
-            else:
-                self.backend.push(all_tags, atomic=True)
-
-                count = 0
-                res = self.backend.check_for_outgoing_changes()
-                while count < 5 and res:
-                    count += 1
-                    stamp_utils.VMN_LOGGER.error(
-                        f"BUG: Somehow we have outgoing changes right "
-                        f"after publishing:\n{res}"
+            if push:
+                if self.dry_run:
+                    stamp_utils.VMN_LOGGER.info(
+                        "Would have pushed with tags.\n" f"tags: {all_tags} "
                     )
-                    time.sleep(60)
+                else:
+                    self.backend.push(all_tags, atomic=True)
+
+                    count = 0
                     res = self.backend.check_for_outgoing_changes()
+                    while count < 5 and res:
+                        count += 1
+                        stamp_utils.VMN_LOGGER.error(
+                            f"BUG: Somehow we have outgoing changes right "
+                            f"after publishing:\n{res}"
+                        )
+                        time.sleep(60)
+                        res = self.backend.check_for_outgoing_changes()
 
-                if count == 5 and res:
-                    raise RuntimeError(
-                        f"BUG: Somehow we have outgoing changes right "
-                        f"after publishing:\n{res}"
-                    )
+                    if count == 5 and res:
+                        raise RuntimeError(
+                            f"BUG: Somehow we have outgoing changes right "
+                            f"after publishing:\n{res}"
+                        )
         except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             stamp_utils.VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
@@ -2449,7 +2460,7 @@ def _init_app(versions_be_ifc, starting_version):
 
 
 @stamp_utils.measure_runtime_decorator
-def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_bump=True):
+def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_bump=True, push=True):
     stamped = False
     retries = 3
     override_verstr = verstr
@@ -2480,7 +2491,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr, allow_auto_
         main_ver = versions_be_ifc.stamp_root_app_version(override_main_current_version)
 
         try:
-            err = versions_be_ifc.publish_stamp(current_version, main_ver)
+            err = versions_be_ifc.publish_stamp(current_version, main_ver, push=push)
         except Exception as exc:
             stamp_utils.VMN_LOGGER.error(
                 f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
@@ -2567,7 +2578,8 @@ def stamp_stable_version(vcs, branch=None):
         raise RuntimeError("HEAD prerelease tag is not the latest available")
     vcs.prerelease = "release"
 
-    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False)
+    prev_changeset = vcs.backend.changeset()
+    version = _stamp_version(vcs, False, True, prerelease_ver, allow_auto_bump=False, push=False)
 
     if vcs.dry_run:
         return version
@@ -2575,7 +2587,6 @@ def stamp_stable_version(vcs, branch=None):
     tag_name = stamp_utils.VMNBackend.serialize_vmn_tag_name(vcs.name, base_ver)
     msg = yaml.dump(vcs.current_version_info, sort_keys=True)
 
-    prev_changeset = vcs.backend.changeset()
     try:
         vcs.backend.tag([tag_name], [msg])
         if branch is None:
