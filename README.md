@@ -670,7 +670,6 @@ policies:
 Attempting to stamp or release from branches that are not listed will trigger an error.
 
 
-<<<<<<< HEAD
 # Thank yous and Contributors
 
 To [Pavel Rogovoy](https://github.com/progovoy) for being the main contributor for this project.
