@@ -437,12 +437,17 @@ stamping:
 `vmn show --root my_root_app` will output `5`
 
 ## vmn release
-Use `vmn show` for displaying version information of previous `vmn stamp` commands
+
+Promote a prerelease stamped with `vmn stamp` to a final release.
+Use `-v`/`--version` to specify the prerelease version or
+`--stamp` to release the most recently stamped prerelease.
 
 ```sh
-vmn show <app-name>
-vmn show --verbose <app-name>
-vmn show -v 1.0.1 <app-name>
+# Run release when you ready - will stamp 2.0.0 (from the same commit)
+vmn release -v 2.0.0-mybeta1 <app-name>
+
+# Or release directly from the prerelease commit using --stamp
+vmn release --stamp <app-name>
 ```
 
 ## vmn show
