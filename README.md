@@ -580,7 +580,7 @@ version_backends:
 
 `input_file_path` is the file you want to read and `output_file_path` is the file you want to write to.
 
-`custom_keys_path` is a path to a `yaml` file containing any custom `jinja2` kewords you would like to use. This field is optional.
+`custom_keys_path` is a path to a `yaml` file containing any custom `jinja2` keywords you would like to use. This field is optional.
 
 A `regex_selector` is a regex that will match the desired part in the `input_file_path` file and `regex_sub` is a regex that states what the matched part should be replaced with.
 In this particular example, putting `{{version}}` tells vmn to inject the correct version while stamping. `vmn` will create an intermidiate `jinja2` template and render it to `output_file_path` file.
