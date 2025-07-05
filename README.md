@@ -117,6 +117,18 @@ vmn stamp -r patch my_cool_app
 
 Check [VMN Official GitHub Action Repo](https://github.com/progovoy/vmn-action)
 
+Example workflow snippet:
+
+```yaml
+steps:
+  - uses: actions/checkout@v3
+  - uses: progovoy/vmn-action@v1
+    with:
+      app-name: my_cool_app
+      do-stamp: true
+      stamp_release: true
+```
+
 # Contribute
 
 ## Create a dev environment
@@ -359,6 +371,9 @@ vmn stamp --pr mybeta <app-name>
 
 # Run release when you ready - will stamp 2.0.0 (from the same commit)
 vmn release -v 2.0.0-mybeta1 <app-name>
+
+# Or release directly from the prerelease commit using --stamp
+vmn release --stamp <app-name>
 ```
 
 ### "root apps" or microservices
