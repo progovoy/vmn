@@ -674,8 +674,6 @@ Attempting to stamp or release from branches that are not listed will trigger an
 
 To [Pavel Rogovoy](https://github.com/progovoy) for being the main contributor for this project.
 
-To [Final Israel](https://github.com/final-israel) to host this important project.
-
 To semver.org: we used semver.org as a blueprint for the structure of this specification.
 
 Thanks goes to these wonderful people ✨
