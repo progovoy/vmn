@@ -532,7 +532,7 @@ class IVersionsStamper(object):
             self.bad_format_template = True
 
     def __del__(self):
-        if self.backend is not None:
+        if hasattr(self, 'backend') and self.backend is not None:
             del self.backend
             self.backend = None
 

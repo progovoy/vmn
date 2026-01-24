@@ -109,6 +109,9 @@ def _stamp_app(
     stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(args_list)
 
+    if vmn_ctx is None:
+        return ret, None, {}
+
     tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
         app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
