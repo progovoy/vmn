@@ -1517,7 +1517,12 @@ class GitBackend(VMNBackend):
 
         if not active_branches:
             out = self._be.git.branch("-r", "--contains", hexsha)
-            out = out.split("\n")[0].strip()
+            # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
+            remote_branches = [
+                b.strip() for b in out.split("\n")
+                if b.strip() and "->" not in b
+            ]
+            out = remote_branches[0] if remote_branches else None
 
             if not out:
                 raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
