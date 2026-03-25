@@ -784,6 +784,34 @@ class IVersionsStamper(object):
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
 
+    def _write_version_to_pep621(self, verstr, backend_conf):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                "Would have written to a version backend file:\n"
+                f"backend: pep621\n"
+                f"version: {verstr}"
+            )
+
+            return
+
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        try:
+            with open(file_path, "r") as f:
+                data = tomlkit.loads(f.read())
+
+            data["project"]["version"] = verstr
+            with open(file_path, "w") as f:
+                data = tomlkit.dumps(data)
+                f.write(data)
+        except IOError as e:
+            stamp_utils.VMN_LOGGER.error(f"Error writing pep621 ver file: {file_path}\n")
+            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
+
+            raise IOError(e)
+        except Exception as e:
+            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
+            raise RuntimeError(e)
+
     def _write_version_to_generic_jinja(self, verstr, backend_conf):
         if self.dry_run:
             stamp_utils.VMN_LOGGER.info(
@@ -1540,6 +1568,10 @@ class VersionControlStamper(IVersionsStamper):
         version_files_to_add.append(file_path)
 
     def _add_files_poetry(self, version_files_to_add, backend_conf):
+        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
+        version_files_to_add.append(file_path)
+
+    def _add_files_pep621(self, version_files_to_add, backend_conf):
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         version_files_to_add.append(file_path)
 

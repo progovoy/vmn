@@ -554,6 +554,8 @@ vmn show -v 1.0.1 <app-name>
 |                   Will embed version string to `Cargo.toml` file within the `vmn stamp` command                   |             |
 |                                                      Poetry                                                       |             |
 |            Will embed version string to Poetry's `pyproject.toml` file within the `vmn stamp` command             |             |
+|                                                      PEP 621                                                      |             |
+|      Will embed version string to PEP 621 compliant `pyproject.toml` `[project]` section within `vmn stamp`       |             |
 
 ## Generic version backends
 There are two generic version backends types: `generic_jinja` and `generic_selectors`.
