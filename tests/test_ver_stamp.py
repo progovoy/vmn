@@ -2307,6 +2307,42 @@ def test_version_backends_poetry(app_layout, capfd):
     assert err == 0
 
 
+def test_version_backends_pep621(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0",
+        "pyproject.toml",
+        toml.dumps(
+            {"project": {"name": "test_app", "version": "some ignored string"}}
+        ),
+    )
+
+    conf = {
+        "version_backends": {"pep621": {"path": "pyproject.toml"}},
+    }
+
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    full_path = os.path.join(
+        params["root_path"], params["version_backends"]["pep621"]["path"]
+    )
+
+    with open(full_path, "r") as f:
+        data = toml.load(f)
+        assert data["project"]["version"] == "0.0.2"
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
 def test_conf(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
