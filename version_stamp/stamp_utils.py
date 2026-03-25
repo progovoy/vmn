@@ -1442,7 +1442,8 @@ class GitBackend(VMNBackend):
         assumed_remote = f"{self.selected_remote.name}/{local_branch_name}"
 
         out = self._be.git.branch("-r", "--contains", "HEAD")
-        out = [s.strip() for s in out.split("\n")]
+        # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
+        out = [s.strip() for s in out.split("\n") if s.strip() and "->" not in s]
 
         VMN_LOGGER.info(f"The output of 'git branch -r --contains HEAD' is:\n{out}")
 
@@ -1519,8 +1520,8 @@ class GitBackend(VMNBackend):
             out = self._be.git.branch("-r", "--contains", hexsha)
             # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
             remote_branches = [
-                b.strip() for b in out.split("\n")
-                if b.strip() and "->" not in b
+                stripped for b in out.split("\n")
+                if (stripped := b.strip()) and "->" not in stripped
             ]
             out = remote_branches[0] if remote_branches else None
 
