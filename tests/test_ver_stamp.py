@@ -345,9 +345,9 @@ def test_stamp_multiple_apps(app_layout):
     app_layout.write_file_commit_and_push(
         f"{repo_name}", os.path.join("a", "b", "c", "f1.file"), "msg1"
     )
-    os.environ[
-        "VMN_WORKING_DIR"
-    ] = f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
+    os.environ["VMN_WORKING_DIR"] = (
+        f"{os.path.join(app_layout.repo_path, 'a', 'b', 'c')}"
+    )
 
     for i in range(2):
         err, ver_info, _ = _stamp_app(new_name, "hotfix")
@@ -563,7 +563,7 @@ def test_jinja2_gen_custom(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
-    jinja2_content = "VERSION: {{version}}\n" "Custom: {{k1}}\n"
+    jinja2_content = "VERSION: {{version}}\nCustom: {{k1}}\n"
     app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
 
     custom_keys_content = "k1: 5\n"
@@ -595,7 +595,7 @@ def test_version_backends_generic_jinja(app_layout, capfd):
 
     app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "content")
 
-    jinja2_content = "VERSION: {{version}}\n" "Custom: {{k1}}\n"
+    jinja2_content = "VERSION: {{version}}\nCustom: {{k1}}\n"
     app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
 
     custom_keys_content = "k1: 5\n"
@@ -1097,12 +1097,12 @@ def test_basic_show(app_layout, capfd):
 
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
-    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(tmp["unique_id"])
+    assert f"0.0.2+{tmp['changesets']['.']['hash']}".startswith(tmp["unique_id"])
 
     err = _show(app_layout.app_name, unique=True)
     assert err == 0
     captured = capfd.readouterr()
-    assert f'0.0.2+{tmp["changesets"]["."]["hash"]}'.startswith(captured.out[:-1])
+    assert f"0.0.2+{tmp['changesets']['.']['hash']}".startswith(captured.out[:-1])
 
     err = _show(app_layout.app_name, display_type=True)
     assert err == 0
@@ -1287,7 +1287,7 @@ def test_show_from_file(app_layout, capfd):
     err = _show(app_name, version="0.0.1", from_file=True, unique=True)
     assert err == 0
     captured = capfd.readouterr()
-    assert f'0.0.1+{show_file_res["changesets"]["."]["hash"]}'.startswith(
+    assert f"0.0.1+{show_file_res['changesets']['.']['hash']}".startswith(
         captured.out[:-1]
     )
 
@@ -2766,7 +2766,10 @@ def test_perf_show(app_layout):
     import shutil
 
     base_cmd = [
-        "curl", "-sL", "-o", "perf.tgz",
+        "curl",
+        "-sL",
+        "-o",
+        "perf.tgz",
         "https://github.com/progovoy/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz",
     ]
     subprocess.call(base_cmd, cwd=app_layout.base_dir)
@@ -4668,60 +4671,128 @@ def test_release_branch_policy(app_layout, capfd):
     captured = capfd.readouterr()
     assert err == 0
 
-@pytest.mark.parametrize("default_release_mode,separate,first_commit_msg,first_expected_version,second_commit_msg,second_expected_version",
-                         [
-                             # Simple recognize release
-                             ("", False, "fix: a", "0.0.2-staging.1", None, None),
-                             ("", False, "feat: a", "0.1.0-staging.1", None, None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", None, None),
-                             # Simple recognize optional release
-                             ("optional", False, "fix: a", "0.0.2-staging.1", None, None),
-                             ("optional", False, "feat: a", "0.1.0-staging.1", None, None),
-                             ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
-                             ("optional", False, "fix!: a", "1.0.0-staging.1", None, None),
-                             # Recognize release same version types
-                             ("", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
-                             ("", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
-                             # Recognize optional release same version types
-                             ("optional", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
-                             ("optional", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
-                             ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("optional", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
-                             # Recognize release different version types
-                             ("", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
-                             ("", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
-                             # Recognize optional release different version types
-                             ("optional", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
-                             ("optional", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
-                             ("optional", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
-                             # Recognize release same version types
-                             ("", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.3-staging.1"),
-                             ("", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.2.0-staging.1"),
-                             ("", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", "2.0.0-staging.1"),
-                             ("", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
-                             # Recognize optional release same version types
-                             ("optional", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.2-staging.2"),
-                             ("optional", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.1.0-staging.2"),
-                             ("optional", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", "1.0.0-staging.2"),
-                             ("optional", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "1.0.0-staging.2"),
-                             # Recognize release different version types
-                             ("", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.1.0-staging.1"),
-                             ("", True, "feat: a", "0.1.0-staging.1", "BREAKING CHANGE: a", "1.0.0-staging.1"),
-                             ("", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
-                             ("", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.1-staging.1"),
-                             # Recognize optional release different version types
-                             ("optional", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.0.2-staging.2"),
-                             ("optional", True, "feat: a", "0.1.0-staging.1", "BREAKING CHANGE: a", "0.1.0-staging.2"),
-                             ("optional", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", "1.0.0-staging.2"),
-                             ("optional", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.0-staging.2"),
-                          ])
-def test_conventional_commits(app_layout, capfd, default_release_mode, separate, first_commit_msg, first_expected_version, second_commit_msg, second_expected_version):
+
+@pytest.mark.parametrize(
+    "default_release_mode,separate,first_commit_msg,first_expected_version,second_commit_msg,second_expected_version",
+    [
+        # Simple recognize release
+        ("", False, "fix: a", "0.0.2-staging.1", None, None),
+        ("", False, "feat: a", "0.1.0-staging.1", None, None),
+        ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
+        ("", False, "fix!: a", "1.0.0-staging.1", None, None),
+        # Simple recognize optional release
+        ("optional", False, "fix: a", "0.0.2-staging.1", None, None),
+        ("optional", False, "feat: a", "0.1.0-staging.1", None, None),
+        ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
+        ("optional", False, "fix!: a", "1.0.0-staging.1", None, None),
+        # Recognize release same version types
+        ("", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
+        ("", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
+        (
+            "",
+            False,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "BREAKING CHANGE: a",
+            None,
+        ),
+        ("", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
+        # Recognize optional release same version types
+        ("optional", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
+        ("optional", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
+        (
+            "optional",
+            False,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "BREAKING CHANGE: a",
+            None,
+        ),
+        ("optional", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
+        # Recognize release different version types
+        ("", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
+        ("", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
+        ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
+        ("", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
+        # Recognize optional release different version types
+        ("optional", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
+        ("optional", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
+        ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
+        ("optional", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
+        # Recognize release same version types
+        ("", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.3-staging.1"),
+        ("", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.2.0-staging.1"),
+        (
+            "",
+            True,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "BREAKING CHANGE: a",
+            "2.0.0-staging.1",
+        ),
+        ("", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
+        # Recognize optional release same version types
+        ("optional", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.2-staging.2"),
+        ("optional", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.1.0-staging.2"),
+        (
+            "optional",
+            True,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.2",
+        ),
+        ("optional", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "1.0.0-staging.2"),
+        # Recognize release different version types
+        ("", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.1.0-staging.1"),
+        (
+            "",
+            True,
+            "feat: a",
+            "0.1.0-staging.1",
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+        ),
+        (
+            "",
+            True,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "fix!: a",
+            "2.0.0-staging.1",
+        ),
+        ("", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.1-staging.1"),
+        # Recognize optional release different version types
+        ("optional", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.0.2-staging.2"),
+        (
+            "optional",
+            True,
+            "feat: a",
+            "0.1.0-staging.1",
+            "BREAKING CHANGE: a",
+            "0.1.0-staging.2",
+        ),
+        (
+            "optional",
+            True,
+            "BREAKING CHANGE: a",
+            "1.0.0-staging.1",
+            "fix!: a",
+            "1.0.0-staging.2",
+        ),
+        ("optional", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.0-staging.2"),
+    ],
+)
+def test_conventional_commits(
+    app_layout,
+    capfd,
+    default_release_mode,
+    separate,
+    first_commit_msg,
+    first_expected_version,
+    second_commit_msg,
+    second_expected_version,
+):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -4789,7 +4860,14 @@ def test_conventional_commits(app_layout, capfd, default_release_mode, separate,
     assert data["_version"] == second_expected_version
     assert data["prerelease"] == "staging"
 
-@pytest.mark.parametrize("default_release_mode", ["","optional",])
+
+@pytest.mark.parametrize(
+    "default_release_mode",
+    [
+        "",
+        "optional",
+    ],
+)
 def test_conventional_commits_simple_failure(app_layout, capfd, default_release_mode):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4818,7 +4896,14 @@ def test_conventional_commits_simple_failure(app_layout, capfd, default_release_
         == captured.err
     )
 
-@pytest.mark.parametrize("default_release_mode", ["","optional",])
+
+@pytest.mark.parametrize(
+    "default_release_mode",
+    [
+        "",
+        "optional",
+    ],
+)
 def test_conventional_commits_simple_overwrite(app_layout, capfd, default_release_mode):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -4890,7 +4975,7 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
         "test_repo_0", "f1.txt", "content", commit_msg=commit_msg
     )
 
-    jinja2_content = "VERSION: {{version}}\n" "Release Notes: {{release_notes}}\n"
+    jinja2_content = "VERSION: {{version}}\nRelease Notes: {{release_notes}}\n"
     app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", jinja2_content)
 
     custom_keys_content = "release_notes_conf_path: cliffconf.toml\n"
@@ -4908,7 +4993,9 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
         assert "prevent racing of requests" in f.read().lower()
 
 
-def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layout, capfd):
+def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(
+    app_layout, capfd
+):
     _run_vmn_init()
     _, _, params = _init_app(app_layout.app_name)
 
@@ -4922,8 +5009,8 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
 
     # Simulate a file that is a jinja template with a jinja expression that will fail
     jinja_expr_content = (
-        'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"\n'
-        'version: 1.0.2\nCustom: 3\n'
+        "INTEGRATION_LAB: \"{{ lookup('env', 'INTEGRATION_LAB') | default(false) }}\"\n"
+        "version: 1.0.2\nCustom: 3\n"
     )
     app_layout.write_file_commit_and_push(
         "test_repo_0",
@@ -4961,12 +5048,15 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
     # Run the stamp and check for nonzero error code and error message in stderr
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     captured = capfd.readouterr()
-    assert ("lookup" not in captured.err and "undefined" not in captured.err)
+    assert "lookup" not in captured.err and "undefined" not in captured.err
 
     assert err == 0
 
     # Check the output file: version should be replaced, lookup should be preserved
     with open(opath, "r") as f:
         content = f.read()
-        assert 'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"' in content
-        assert 'version: 0.0.2' in content
+        assert (
+            "INTEGRATION_LAB: \"{{ lookup('env', 'INTEGRATION_LAB') | default(false) }}\""
+            in content
+        )
+        assert "version: 0.0.2" in content

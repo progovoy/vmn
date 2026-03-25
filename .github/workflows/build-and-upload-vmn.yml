@@ -1,10 +1,9 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# This workflow builds and uploads vmn to PyPI
+# Triggered manually with version type selection
 
 name: Build vmn package and upload to PyPI
 
 on:
-
   workflow_dispatch:
     inputs:
       version_type:
@@ -17,44 +16,51 @@ on:
           - rc
         required: true
 
-
 jobs:
   build_pkg:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for vmn git operations
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: true
 
       - name: Install dependencies
         run: |
-          python3 -m pip install -U pip
-          python3 -m pip install -r tests/test_requirements.txt
-          python3 -m pip install -r tests/requirements.txt
-          python3 -m pip list
+          uv sync --extra dev
           git config --global user.email "you@example.com"
           git config --global user.name "Your Name"
 
-
-      - name: run tests
+      - name: Run lint checks
         run: |
-          make check
+          uvx ruff check .
+          uvx ruff format --check .
 
-      - name: run vmn stamp version
+      - name: Run tests
+        # Skip Docker-dependent tests (backward compatibility tests)
+        run: uv run pytest tests/ -v --ignore=tests/test_perf_show.py -k "not (backward_compatability or problem_found_in_real)" -n auto
+
+      - name: Run vmn stamp version
         run: |
-          python3 -m pip install vmn
+          uv pip install vmn
           git status
           make _${{ github.event.inputs.version_type }}
           git status
           cat .vmn/vmn.log
 
-      - name: build pkg
+      - name: Build package
         run: |
           make _build
           ls -ltrh ./dist/
 
-      - name: Publish a Python distribution to PyPI
+      - name: Publish to PyPI
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
-          ls -ltrh ./dist/
           make upload

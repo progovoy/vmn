@@ -133,18 +133,28 @@ steps:
 
 ## Create a dev environment
 
+Using [uv](https://docs.astral.sh/uv/) (recommended):
 ```sh
 # After cloning vmn repo:
 cd ./vmn
-# For Ubuntu:
-#   sudo apt install python3-venv
+uv sync --extra dev
+uv run vmn --version  # Should see 0.0.0 if installed successfully
+```
+
+Or with pip:
+```sh
+cd ./vmn
 python3 -m venv ./venv
 source ./venv/bin/activate
+pip install -e ".[dev]"
+vmn --version
+```
 
-pip install -r  ./tests/requirements.txt 
-pip install -r  ./tests/test_requirements.txt 
-pip install -e  ./
-vmn --version # Should see 0.0.0 if installed successfully
+## Linting and Formatting
+
+```sh
+uvx ruff check .       # Check for lint errors
+uvx ruff format .      # Format code
 ```
 
 ## Run tests
