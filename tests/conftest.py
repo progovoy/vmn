@@ -1,7 +1,6 @@
 import logging
 import os
 import pathlib
-import re
 import shutil
 import stat
 import sys
@@ -20,7 +19,7 @@ import subprocess
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
 TEST_REPO_NAME = "test_repo"
-format = "[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] " "%(message)s"
+format = "[%(asctime)s.%(msecs)03d] [%(name)s] [%(levelname)s] %(message)s"
 
 formatter = logging.Formatter(format, "%Y-%m-%d %H:%M:%S")
 
@@ -283,7 +282,9 @@ class FSAppLayoutFixture(object):
         subprocess.call(base_cmd, cwd=self.repo_path)
 
     def stamp_with_previous_vmn(self, vmn_version):
-        dir_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks")
+        dir_path = os.path.join(
+            os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks"
+        )
         previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
 
         if not os.path.exists(previous_stamper_dir):
@@ -327,7 +328,7 @@ class FSAppLayoutFixture(object):
             raise RuntimeError("repo {0} not found".format(repo_name))
         if self._repos[repo_name]["type"] != "git":
             raise RuntimeError(
-                f"Unsupported repo type: " f"{self._repos[repo_name]['type']}"
+                f"Unsupported repo type: {self._repos[repo_name]['type']}"
             )
 
         client = Repo(self._repos[repo_name]["path"])
@@ -348,7 +349,7 @@ class FSAppLayoutFixture(object):
             raise RuntimeError("repo {0} not found".format(repo_name))
         if self._repos[repo_name]["type"] != "git":
             raise RuntimeError(
-                f"Unsupported repo type: " f"{self._repos[repo_name]['type']}"
+                f"Unsupported repo type: {self._repos[repo_name]['type']}"
             )
 
         path = os.path.join(self._repos[repo_name]["path"], file_relative_path)
@@ -467,7 +468,6 @@ class GitBackend(VersionControlBackend):
                 # depth=1,
             )
         except Exception as exc:
-
             if hasattr(exc, "stderr") and "exist" not in exc.stderr:
                 raise exc
 
