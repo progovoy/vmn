@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Run ruff check
+        run: uvx ruff check .
+      - name: Run ruff format check
+        run: uvx ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.10"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            tests/requirements.txt
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+      - name: Configure git
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+      - name: Run tests
+        run: uv run pytest tests/ -v --ignore=tests/test_perf_show.py -x
