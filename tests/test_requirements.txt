@@ -2,10 +2,8 @@ pytest
 pytest-html
 pytest-xdist
 coverage
-black==22.8.0
-flake8
 wheel
 twine
 toml
-ruff; python_version >= "3.7"
+ruff
 mypy
