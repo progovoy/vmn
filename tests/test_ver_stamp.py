@@ -2766,8 +2766,8 @@ def test_perf_show(app_layout):
     import shutil
 
     base_cmd = [
-        "wget",
-        "https://github.com/final-israel/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz",
+        "curl", "-sL", "-o", "perf.tgz",
+        "https://github.com/progovoy/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz",
     ]
     subprocess.call(base_cmd, cwd=app_layout.base_dir)
     shutil.rmtree(app_layout.test_app_remote)
