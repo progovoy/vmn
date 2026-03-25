@@ -47,10 +47,12 @@ def _init_app(app_name, starting_version="0.0.0"):
     return ret, ver_info, merged_dict
 
 
-def _release_app(app_name, version=None):
+def _release_app(app_name, version=None, stamp=False):
     cmd = ["release", app_name]
     if version:
         cmd.extend(["-v", version])
+    if stamp:
+        cmd.append("--stamp")
 
     stamp_utils.VMN_LOGGER = None
     ret, vmn_ctx = vmn.vmn_run(cmd)
@@ -3227,8 +3229,120 @@ def test_double_release_works(app_layout, capfd):
     assert captured.out == ""
     assert (
         captured.err == "[ERROR] When running vmn release and not on a version commit, "
-        "you must specify a specific version using -v flag\n"
+        "you must specify a specific version using -v flag or use --stamp\n"
     )
+
+
+def test_release_with_stamp_creates_commit(app_layout, capfd):
+    """Test that vmn release --stamp creates a new commit with version files."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    # Create prerelease
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1-rc.1"
+    prerelease_commit = app_layout._app_backend.be.changeset()
+
+    # Release with --stamp
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, stamp=True)
+    captured = capfd.readouterr()
+
+    assert err == 0
+    assert captured.out == "[INFO] 0.0.1\n"
+    assert captured.err == ""
+
+    # Verify new commit was created
+    release_commit = app_layout._app_backend.be.changeset()
+    assert release_commit != prerelease_commit
+
+    # Verify version info
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+    assert data["prerelease"] == "release"
+
+
+def test_release_with_stamp_detached_head_fails(app_layout, capfd):
+    """Test that vmn release --stamp fails in detached HEAD state."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    # Create prerelease
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+
+    # Detach HEAD
+    app_layout._app_backend.be._be.git.checkout("--detach")
+
+    # Try release with --stamp - should fail
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, stamp=True)
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert captured.err == "[ERROR] Cannot use --stamp in detached HEAD state\n"
+
+
+def test_release_with_stamp_from_release_version_fails(app_layout, capfd):
+    """Test that vmn release --stamp fails when already on a release version."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    # Create a release version (not prerelease)
+    err, ver_info, _ = _stamp_app(app_layout.app_name, release_mode="patch")
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.0.1"
+
+    # Try release with --stamp - should fail
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, stamp=True)
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert "Cannot use --stamp to release 0.0.1" in captured.err
+    assert "Version must be a prerelease" in captured.err
+
+
+def test_release_with_stamp_fails_when_not_on_version_commit(app_layout, capfd):
+    """Test that vmn release --stamp fails when not on the latest RC.
+
+    Scenario: User creates rc.1, then rc.2, then makes more commits and tries
+    to release with --stamp. This should fail because the user is not on a
+    version commit (HEAD doesn't match any version).
+    """
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    # Create rc.1
+    err, ver_info, _ = _stamp_app(
+        app_layout.app_name, release_mode="patch", prerelease="rc"
+    )
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1-rc.1"
+
+    # Create rc.2 (new commit + stamp)
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
+    err, ver_info, _ = _stamp_app(app_layout.app_name, prerelease="rc")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1-rc.2"
+
+    # Make another commit after rc.2
+    app_layout.write_file_commit_and_push("test_repo_0", "f2.file", "msg2")
+
+    # Now we're not on any version commit
+    capfd.readouterr()
+    err, ver_info, _ = _release_app(app_layout.app_name, stamp=True)
+    captured = capfd.readouterr()
+
+    assert err == 1
+    assert "Cannot use --stamp when not on a version commit" in captured.err
 
 
 @pytest.mark.parametrize(

@@ -1929,6 +1929,37 @@ def handle_release(vmn_ctx):
 
         return 1
 
+    # Handle --stamp flag: must be on branch tip with a version commit (prerelease)
+    if vmn_ctx.args.stamp:
+        # --stamp creates a new commit + tag and pushes both,
+        # so it cannot work in detached HEAD
+        if "detached" in status["state"]:
+            stamp_utils.VMN_LOGGER.error(
+                "Cannot use --stamp in detached HEAD state"
+            )
+            return 1
+
+        # Deps must be clean — same requirement as regular stamp
+        if status["dirty_deps"]:
+            stamp_utils.VMN_LOGGER.error(
+                "Cannot use --stamp with dirty dependencies"
+            )
+            return 1
+
+        if "deps_synced_with_conf" not in status["state"]:
+            stamp_utils.VMN_LOGGER.error(
+                "Cannot use --stamp when dependencies are not synced with configuration"
+            )
+            return 1
+
+        # N-2 scenario protection: must be on a version commit
+        if status["matched_version_info"] is None:
+            stamp_utils.VMN_LOGGER.error(
+                "Cannot use --stamp when not on a version commit. "
+                "Make sure you are on the exact commit of the prerelease version."
+            )
+            return 1
+
     ver = vmn_ctx.args.version
 
     if ver:
@@ -1946,11 +1977,21 @@ def handle_release(vmn_ctx):
         # the actual_deps_state
         ver = status["matched_version_info"]["stamping"]["app"]["_version"]
     elif ver is None:
+        # For --stamp, we already validated matched_version_info exists above
         stamp_utils.VMN_LOGGER.error(
             "When running vmn release and not on a version commit, "
-            "you must specify a specific version using -v flag"
+            "you must specify a specific version using -v flag or use --stamp"
         )
 
+        return 1
+
+    # Validate that we're releasing from a prerelease
+    props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
+    if vmn_ctx.args.stamp and props["prerelease"] == "release":
+        stamp_utils.VMN_LOGGER.error(
+            f"Cannot use --stamp to release {ver}. "
+            f"Version must be a prerelease (e.g., 1.0.0-rc.1)"
+        )
         return 1
 
     try:
@@ -1972,6 +2013,35 @@ def handle_release(vmn_ctx):
 
         if tag_formatted_app_name in ver_infos:
             stamp_utils.VMN_LOGGER.info(base_ver)
+            return 0
+
+        # Handle --stamp: use stamp flow for release
+        if vmn_ctx.args.stamp:
+            vmn_ctx.vcs.prerelease = "release"
+            vmn_ctx.vcs.release_mode = None
+            vmn_ctx.vcs.buildmetadata = None
+            vmn_ctx.vcs.override_version = None
+            vmn_ctx.vcs.override_root_version = None
+            vmn_ctx.vcs.dry_run = False
+
+            # Set extra_commit_message - required by publish_stamp
+            vmn_ctx.params["extra_commit_message"] = ""
+
+            vmn_ctx.vcs.backend.perform_cached_fetch()
+
+            try:
+                version = _stamp_version(
+                    vmn_ctx.vcs,
+                    pull=False,
+                    check_vmn_version=False,
+                    verstr=ver,
+                )
+            except Exception:
+                stamp_utils.VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+                return 1
+
+            disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
+            stamp_utils.VMN_LOGGER.info(f"{disp_version}")
             return 0
 
         stamp_utils.VMN_LOGGER.info(vmn_ctx.vcs.release_app_version(tag_name, ver_info))
