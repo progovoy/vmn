@@ -8,13 +8,26 @@ vmn is a CLI tool and Python library for automatic semantic versioning of softwa
 
 ## Development Setup
 
+Using [uv](https://docs.astral.sh/uv/) (recommended):
+```sh
+uv sync --extra dev
+uv run vmn --version  # Should see 0.0.0 if installed successfully
+```
+
+Or with pip:
 ```sh
 python3 -m venv ./venv
 source ./venv/bin/activate
-pip install -r ./tests/requirements.txt
-pip install -r ./tests/test_requirements.txt
-pip install -e ./
-vmn --version  # Should see 0.0.0 if installed successfully
+pip install -e ".[dev]"
+vmn --version
+```
+
+## Linting and Formatting
+
+```sh
+uvx ruff check .       # Check for lint errors
+uvx ruff format .      # Format code
+uvx ruff check --fix . # Auto-fix lint errors
 ```
 
 ## Running Tests

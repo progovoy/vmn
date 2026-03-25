@@ -1,9 +1,12 @@
 ARG distro_var
 FROM ubuntu:$distro_var
-RUN apt update && apt install -y python3-pip git wget
-COPY requirements.txt /var/
-COPY test_requirements.txt /var/
-RUN pip3 install -r /var/requirements.txt
-RUN pip3 install -r /var/test_requirements.txt
+RUN apt update && apt install -y python3 python3-pip git wget curl
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+COPY pyproject.toml uv.lock /var/
+COPY version_stamp /var/version_stamp/
+WORKDIR /var
+RUN uv pip install --system -e ".[dev]"
 RUN git config --global user.email "you@example.com"
 RUN git config --global user.name "Your Name"

@@ -1,6 +1,6 @@
 NAME=vmn
 
-.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _run_black
+.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _run_ruff lint format
 
 build: check
 
@@ -39,13 +39,19 @@ _rc:
 	vmn stamp ${NAME}
 	$(eval EXTRA_SHOW_ARGS := --template [{major}][.{minor}][.{patch}][{prerelease}])
 
-_run_black:
-	@echo "-~      Run Black                              --"
-	black --version
-	black --diff ${PWD}
-	black ${PWD}
+_run_ruff:
+	@echo "-~      Run Ruff                               --"
+	uvx ruff --version
+	uvx ruff check ${PWD}
+	uvx ruff format ${PWD}
 
-check: _run_black
+lint:
+	uvx ruff check ${PWD}
+
+format:
+	uvx ruff format ${PWD}
+
+check: _run_ruff
 	@echo "-------------------------------------------------------------"
 	@echo "-------------------------------------------------------------"
 	@echo "-~      Running static checks                              --"

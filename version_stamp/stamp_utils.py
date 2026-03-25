@@ -106,7 +106,7 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 
 # Patterns for live Jinja code we need to protect
 JINJA_TAG_RE = re.compile(
-    r'(\{\{.*?\}\}|\{%.*?%\})',
+    r"(\{\{.*?\}\}|\{%.*?%\})",
     re.DOTALL,
 )
 
@@ -131,7 +131,7 @@ def comment_out_jinja(text: str) -> str:
     Wrap every live tag so it survives rendering, e.g.
         {{ foo }}  →  {% raw %}{{ foo }}{% endraw %}
     """
-    return JINJA_TAG_RE.sub(lambda m: '{% raw %}' + m.group(1) + '{% endraw %}', text)
+    return JINJA_TAG_RE.sub(lambda m: "{% raw %}" + m.group(1) + "{% endraw %}", text)
 
 
 # Create a custom execute function
@@ -236,8 +236,8 @@ def resolve_root_path():
 
     root_path = os.path.realpath(os.path.expanduser(cwd))
     """
-            ".git" is the default app's backend in this case. If other backends will be added, 
-            then it can be moved to the configuration file as a default_backend or similar. 
+            ".git" is the default app's backend in this case. If other backends will be added,
+            then it can be moved to the configuration file as a default_backend or similar.
         """
     exist = os.path.exists(os.path.join(root_path, ".git"))
     exist = exist or os.path.exists(os.path.join(root_path, ".vmn"))
@@ -410,8 +410,7 @@ class VMNBackend(object):
                     continue
 
                 formatted_version = (
-                    f"{formatted_version}"
-                    f"{template[f'{octat}_template'].format(**d)}"
+                    f"{formatted_version}{template[f'{octat}_template'].format(**d)}"
                 )
 
         return formatted_version
@@ -440,7 +439,7 @@ class VMNBackend(object):
                 tag_name = f"{tag_app_name}_{verstr}"
                 props = VMNBackend.deserialize_tag_name(tag_name)
         except Exception:
-            err = f"Tag {tag_name} doesn't comply with: " f"{VMN_TAG_REGEX} format"
+            err = f"Tag {tag_name} doesn't comply with: {VMN_TAG_REGEX} format"
             VMN_LOGGER.error(err)
 
             raise RuntimeError(err)
@@ -1311,8 +1310,7 @@ class GitBackend(VMNBackend):
             ver_infos = self.get_all_commit_tags(sha)
         except Exception:
             VMN_LOGGER.debug(
-                f"Failed to get brother tags for tag: {tag_name}. "
-                f"Logged exception: ",
+                f"Failed to get brother tags for tag: {tag_name}. Logged exception: ",
                 exc_info=True,
             )
             return []
@@ -1519,8 +1517,7 @@ class GitBackend(VMNBackend):
             out = self._be.git.branch("-r", "--contains", hexsha)
             # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
             remote_branches = [
-                b.strip() for b in out.split("\n")
-                if b.strip() and "->" not in b
+                b.strip() for b in out.split("\n") if b.strip() and "->" not in b
             ]
             out = remote_branches[0] if remote_branches else None
 
@@ -1536,8 +1533,7 @@ class GitBackend(VMNBackend):
             self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
 
             VMN_LOGGER.debug(
-                f"Setting local branch {local_branch_name} "
-                f"to track remote branch {out}"
+                f"Setting local branch {local_branch_name} to track remote branch {out}"
             )
 
             self.active_branch = local_branch_name
@@ -1606,12 +1602,12 @@ class GitBackend(VMNBackend):
 
         for t, v in ver_infos.items():
             if "stamping" in v["ver_info"]:
-                prev_user_commit = v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
+                prev_user_commit = v["ver_info"]["stamping"]["app"]["changesets"]["."][
+                    "hash"
+                ]
 
                 ret_d, ret_list = self.parse_git_log_to_commit_for_specific_file(
-                    prev_user_commit,
-                    p.hexsha,
-                    version_files_to_track_diff_off
+                    prev_user_commit, p.hexsha, version_files_to_track_diff_off
                 )
 
                 # TODO:: think if we want to support cases where file changed
@@ -1770,7 +1766,9 @@ class GitBackend(VMNBackend):
     def get_commit_object_from_commit_hex(self, hex):
         return self._be.commit(hex)
 
-    def parse_git_log_to_commit_for_specific_file(self, from_commit, to_commit, filenames):
+    def parse_git_log_to_commit_for_specific_file(
+        self, from_commit, to_commit, filenames
+    ):
         try:
             if not filenames:
                 return {}, []

@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git operations
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -25,19 +27,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for vmn git tag operations
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.10"
+          python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-            tests/requirements.txt
-      - name: Install dependencies
-        run: uv pip install -e ".[dev]"
+            uv.lock
+      - name: Install project
+        run: uv sync --extra dev
       - name: Configure git
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "CI"
       - name: Run tests
-        run: uv run pytest tests/ -v --ignore=tests/test_perf_show.py -x
+        # Skip tests that require special setup:
+        # - test_perf_show.py: requires specific performance environment
+        # - Docker-dependent tests: require building old vmn versions in Docker
+        #   (backward_compatability_*, test_problem_found_in_real_customer)
+        run: uv run pytest tests/ -v --ignore=tests/test_perf_show.py -k "not (backward_compatability or problem_found_in_real)" -n auto
