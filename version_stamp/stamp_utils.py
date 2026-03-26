@@ -126,6 +126,13 @@ GLOBAL_LOG_FILENAME = "global_vmn.log"
 VMN_LOGGER = None
 
 
+def _clean_split_result(items):
+    """Remove the single empty string that split() produces from empty output."""
+    if len(items) == 1 and items[0] == "":
+        items.pop(0)
+    return items
+
+
 def comment_out_jinja(text: str) -> str:
     """
     Wrap every live tag so it survives rendering, e.g.
@@ -1103,10 +1110,7 @@ class GitBackend(VMNBackend):
 
         tag_name_prefix = VMNBackend.app_name_to_tag_name(app_name)
         cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
-        tag_names = self._be.git.tag(*cmd).split("\n")
-
-        if len(tag_names) == 1 and tag_names[0] == "":
-            tag_names.pop(0)
+        tag_names = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
 
         if not tag_names:
             return tag_names, cobj, ver_infos
@@ -1159,17 +1163,13 @@ class GitBackend(VMNBackend):
             "--decorate=short",
             cmd_suffix,
         ]
-        log_res = self._be.git.log(*cmd).split("\n")
-        if len(log_res) == 1 and log_res[0] == "":
-            log_res.pop(0)
+        log_res = _clean_split_result(self._be.git.log(*cmd).split("\n"))
 
         if not log_res:
             return None, {}
 
         items = log_res[0].split(",,,")
-        tags = items[1].split(",")
-        if len(tags) == 1 and tags[0] == "":
-            tags.pop(0)
+        tags = _clean_split_result(items[1].split(","))
 
         commit_hex = items[0]
         ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
@@ -1181,9 +1181,9 @@ class GitBackend(VMNBackend):
     @measure_runtime_decorator
     def get_latest_available_tags(self, tag_prefix_filter):
         cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
-        tag_names = self._be.git.tag(*cmd).split("\n")
+        tag_names = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
 
-        if len(tag_names) == 1 and tag_names[0] == "":
+        if not tag_names:
             return None
 
         return tag_names
@@ -1285,10 +1285,7 @@ class GitBackend(VMNBackend):
             hexsha = "HEAD"
 
         cmd = ["--points-at", hexsha]
-        tags = self._be.git.tag(*cmd).split("\n")
-
-        if len(tags) == 1 and tags[0] == "":
-            tags.pop(0)
+        tags = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
 
         ver_infos = {}
         for t in tags:
