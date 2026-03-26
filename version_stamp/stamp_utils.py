@@ -1057,11 +1057,11 @@ class GitBackend(VMNBackend):
             cmd_suffix = f"{cobj.hexsha}~1"
             cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
-            bug_limit += 1
+            bug_limit_c += 1
             if bug_limit_c == bug_limit:
                 VMN_LOGGER.warning(
                     "Probable bug: vmn failed to find "
-                    f"vmn's commit after {bug_limit} interations."
+                    f"vmn's commit after {bug_limit} iterations."
                 )
                 ver_infos = {}
                 break
