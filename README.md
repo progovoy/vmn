@@ -4,9 +4,9 @@
 <p align="center">
 
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![codecov](https://codecov.io/gh/final-israel/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/final-israel/vmn)
+[![codecov](https://codecov.io/gh/progovoy/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/progovoy/vmn)
 <a href="#badge">
-<img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/final-israel/vmn">
+<img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/progovoy/vmn">
 </a>
 <a href="#badge">
 <img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
@@ -25,10 +25,10 @@
 
 Let people know that your repository is managed by **vmn** by including this badge in your readme.
 
-[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
 
 ```md
-[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/final-israel/vmn)
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
 ```
 
 <p align="center">
@@ -163,7 +163,7 @@ vmn --version # Should see 0.0.0 if installed successfully
 - [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g., `1.6.0-rc23` [`Semver` compliant]
 - [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g., `1.6.7.4` [`Semver` extension]
 - [x] Bringing back the repository / repositories state to the state they were when the project was stamped (
-  see [`goto`](https://github.com/final-israel/vmn#goto) section)
+  see [`goto`](https://github.com/progovoy/vmn#goto) section)
 - [x] Stamping of micro-services-like project topologies (
   see [`Root apps`](https://github.com/haimhm/vmn/blob/master/README.md#root-apps) section)
 - [x] Stamping of a project depending on multiple git repositories (
@@ -681,7 +681,7 @@ To semver.org: we used semver.org as a blueprint for the structure of this speci
 Thanks goes to these wonderful people ✨
 
 <a href="https://github.com/orhun/git-cliff/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=final-israel/vmn" />
+  <img src="https://contrib.rocks/image?repo=progovoy/vmn" />
 </a>
 
 If you like and use this project, please consider starring it ✨
