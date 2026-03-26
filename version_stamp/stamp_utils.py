@@ -864,6 +864,31 @@ class GitBackend(VMNBackend):
             VMN_LOGGER.debug(f"Logged exception for path {path}: ", exc_info=True)
             return False
 
+    def _push_with_ci_skip_fallback(self, refspec):
+        """Push a refspec, trying with -o ci.skip first, falling back to without."""
+        try:
+            self._be.git.execute(
+                [
+                    "git",
+                    "push",
+                    "--porcelain",
+                    "-o",
+                    "ci.skip",
+                    self.selected_remote.name,
+                    refspec,
+                ]
+            )
+        except Exception:
+            self._be.git.execute(
+                [
+                    "git",
+                    "push",
+                    "--porcelain",
+                    self.selected_remote.name,
+                    refspec,
+                ]
+            )
+
     @measure_runtime_decorator
     def tag(self, tags, messages, ref="HEAD", push=False):
         if push and self.remote_active_branch is None:
@@ -880,40 +905,19 @@ class GitBackend(VMNBackend):
                 continue
 
             try:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        "-o",
-                        "ci.skip",
-                        self.selected_remote.name,
-                        f"refs/tags/{tag}",
-                    ]
-                )
+                self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
             except Exception:
+                tag_err_str = f"Failed to tag {tag}. Reverting.."
+                VMN_LOGGER.error(tag_err_str)
+
                 try:
-                    self._be.git.execute(
-                        [
-                            "git",
-                            "push",
-                            "--porcelain",
-                            self.selected_remote.name,
-                            f"refs/tags/{tag}",
-                        ]
-                    )
+                    self._be.delete_tag(tag)
                 except Exception:
-                    tag_err_str = f"Failed to tag {tag}. Reverting.."
-                    VMN_LOGGER.error(tag_err_str)
+                    err_str = f"Failed to remove tag {tag}"
+                    VMN_LOGGER.info(err_str)
+                    VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-                    try:
-                        self._be.delete_tag(tag)
-                    except Exception:
-                        err_str = f"Failed to remove tag {tag}"
-                        VMN_LOGGER.info(err_str)
-                        VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
-                    raise RuntimeError(tag_err_str)
+                raise RuntimeError(tag_err_str)
 
     @measure_runtime_decorator
     def push(self, tags=()):
@@ -928,56 +932,16 @@ class GitBackend(VMNBackend):
         )
 
         try:
-            self._be.git.execute(
-                [
-                    "git",
-                    "push",
-                    "--porcelain",
-                    "-o",
-                    "ci.skip",
-                    self.selected_remote.name,
-                    f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
-                ]
+            self._push_with_ci_skip_fallback(
+                f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
             )
         except Exception:
-            try:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        self.selected_remote.name,
-                        f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}",
-                    ]
-                )
-            except Exception:
-                err_str = "Push has failed. Please verify that 'git push' works"
-                VMN_LOGGER.error(err_str, exc_info=True)
-                raise RuntimeError(err_str)
+            err_str = "Push has failed. Please verify that 'git push' works"
+            VMN_LOGGER.error(err_str, exc_info=True)
+            raise RuntimeError(err_str)
 
         for tag in tags:
-            try:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        "-o",
-                        "ci.skip",
-                        self.selected_remote.name,
-                        f"refs/tags/{tag}",
-                    ]
-                )
-            except Exception:
-                self._be.git.execute(
-                    [
-                        "git",
-                        "push",
-                        "--porcelain",
-                        self.selected_remote.name,
-                        f"refs/tags/{tag}",
-                    ]
-                )
+            self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
 
     @measure_runtime_decorator
     def pull(self):
