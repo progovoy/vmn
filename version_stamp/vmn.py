@@ -83,6 +83,13 @@ class VMNContainer(object):
 
 
 class IVersionsStamper(object):
+    _STRUCTURED_BACKEND_SPEC = {
+        "npm":    {"format": "json", "key_path": ["version"]},
+        "cargo":  {"format": "toml", "key_path": ["package", "version"]},
+        "poetry": {"format": "toml", "key_path": ["tool", "poetry", "version"]},
+        "pep621": {"format": "toml", "key_path": ["project", "version"]},
+    }
+
     @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         # actual value will be assigned on handle_ functions
@@ -701,11 +708,13 @@ class IVersionsStamper(object):
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
 
-    def _write_version_to_npm(self, verstr, backend_conf):
+    def _write_version_to_structured(self, verstr, backend_conf, backend_name):
+        spec = self._STRUCTURED_BACKEND_SPEC[backend_name]
+
         if self.dry_run:
             stamp_utils.VMN_LOGGER.info(
                 "Would have written to a version backend file:\n"
-                f"backend: npm\n"
+                f"backend: {backend_name}\n"
                 f"version: {verstr}"
             )
 
@@ -714,103 +723,43 @@ class IVersionsStamper(object):
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         try:
             with open(file_path, "r") as f:
-                data = json.load(f)
+                if spec["format"] == "json":
+                    data = json.load(f)
+                else:
+                    data = tomlkit.loads(f.read())
 
-            data["version"] = verstr
+            node = data
+            for key in spec["key_path"][:-1]:
+                node = node[key]
+            node[spec["key_path"][-1]] = verstr
+
             with open(file_path, "w") as f:
-                json.dump(data, f, indent=4, sort_keys=True)
+                if spec["format"] == "json":
+                    json.dump(data, f, indent=4, sort_keys=True)
+                else:
+                    f.write(tomlkit.dumps(data))
         except IOError as e:
-            stamp_utils.VMN_LOGGER.error(f"Error writing npm ver file: {file_path}\n")
+            stamp_utils.VMN_LOGGER.error(
+                f"Error writing {backend_name} ver file: {file_path}\n"
+            )
             stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
             raise IOError(e)
         except Exception as e:
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
+
+    def _write_version_to_npm(self, verstr, backend_conf):
+        self._write_version_to_structured(verstr, backend_conf, "npm")
 
     def _write_version_to_cargo(self, verstr, backend_conf):
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to a version backend file:\n"
-                f"backend: cargo\n"
-                f"version: {verstr}"
-            )
-
-            return
-
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        try:
-            with open(file_path, "r") as f:
-                data = tomlkit.loads(f.read())
-
-            data["package"]["version"] = verstr
-            with open(file_path, "w") as f:
-                data = tomlkit.dumps(data)
-                f.write(data)
-        except IOError as e:
-            stamp_utils.VMN_LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
-            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
-            raise IOError(e)
-        except Exception as e:
-            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
-            raise RuntimeError(e)
+        self._write_version_to_structured(verstr, backend_conf, "cargo")
 
     def _write_version_to_poetry(self, verstr, backend_conf):
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to a version backend file:\n"
-                f"backend: poetry\n"
-                f"version: {verstr}"
-            )
-
-            return
-
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        try:
-            with open(file_path, "r") as f:
-                data = tomlkit.loads(f.read())
-
-            data["tool"]["poetry"]["version"] = verstr
-            with open(file_path, "w") as f:
-                data = tomlkit.dumps(data)
-                f.write(data)
-        except IOError as e:
-            stamp_utils.VMN_LOGGER.error(f"Error writing cargo ver file: {file_path}\n")
-            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
-            raise IOError(e)
-        except Exception as e:
-            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
-            raise RuntimeError(e)
+        self._write_version_to_structured(verstr, backend_conf, "poetry")
 
     def _write_version_to_pep621(self, verstr, backend_conf):
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to a version backend file:\n"
-                f"backend: pep621\n"
-                f"version: {verstr}"
-            )
-
-            return
-
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        try:
-            with open(file_path, "r") as f:
-                data = tomlkit.loads(f.read())
-
-            data["project"]["version"] = verstr
-            with open(file_path, "w") as f:
-                data = tomlkit.dumps(data)
-                f.write(data)
-        except IOError as e:
-            stamp_utils.VMN_LOGGER.error(f"Error writing pep621 ver file: {file_path}\n")
-            stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
-
-            raise IOError(e)
-        except Exception as e:
-            stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
-            raise RuntimeError(e)
+        self._write_version_to_structured(verstr, backend_conf, "pep621")
 
     def _write_version_to_generic_jinja(self, verstr, backend_conf):
         if self.dry_run:
