@@ -1394,9 +1394,13 @@ class VersionControlStamper(IVersionsStamper):
         version_files_to_add = self.get_files_to_add_to_index(self.version_files)
 
         for backend in self.version_backends:
-            handler = getattr(self, f"_add_files_{backend}")
-            backend_conf = self.version_backends[backend]
-            handler(version_files_to_add, backend_conf)
+            try:
+                handler = getattr(self, f"_add_files_{backend}")
+                backend_conf = self.version_backends[backend]
+                handler(version_files_to_add, backend_conf)
+            except AttributeError:
+                stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
+                continue
 
         if self.create_verinfo_files:
             self.create_verinfo_file(app_msg, version_files_to_add, app_version)
@@ -1559,21 +1563,21 @@ class VersionControlStamper(IVersionsStamper):
                 file_path = os.path.join(self.vmn_root_path, v)
                 version_files_to_add.append(file_path)
 
-    def _add_files_npm(self, version_files_to_add, backend_conf):
+    def _add_files_simple_backend(self, version_files_to_add, backend_conf):
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         version_files_to_add.append(file_path)
+
+    def _add_files_npm(self, version_files_to_add, backend_conf):
+        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     def _add_files_cargo(self, version_files_to_add, backend_conf):
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        version_files_to_add.append(file_path)
+        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     def _add_files_poetry(self, version_files_to_add, backend_conf):
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        version_files_to_add.append(file_path)
+        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     def _add_files_pep621(self, version_files_to_add, backend_conf):
-        file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
-        version_files_to_add.append(file_path)
+        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     @stamp_utils.measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
