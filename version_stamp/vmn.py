@@ -90,6 +90,16 @@ class IVersionsStamper(object):
         "pep621": {"format": "toml", "key_path": ["project", "version"]},
     }
 
+    _CONF_KEY_TO_ATTR = {
+        "extra_info": "extra_info",
+        "deps": "raw_configured_deps",
+        "hide_zero_hotfix": "hide_zero_hotfix",
+        "version_backends": "version_backends",
+        "create_verinfo_files": "create_verinfo_files",
+        "policies": "policies",
+        "conventional_commits": "conventional_commits",
+    }
+
     @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         # actual value will be assigned on handle_ functions
@@ -192,20 +202,9 @@ class IVersionsStamper(object):
                                 "will ignore and use the new default format"
                             )
                             self.template = stamp_utils.VMN_DEFAULT_CONF["template"]
-                    if "extra_info" in data["conf"]:
-                        self.extra_info = data["conf"]["extra_info"]
-                    if "deps" in data["conf"]:
-                        self.raw_configured_deps = data["conf"]["deps"]
-                    if "hide_zero_hotfix" in data["conf"]:
-                        self.hide_zero_hotfix = data["conf"]["hide_zero_hotfix"]
-                    if "version_backends" in data["conf"]:
-                        self.version_backends = data["conf"]["version_backends"]
-                    if "create_verinfo_files" in data["conf"]:
-                        self.create_verinfo_files = data["conf"]["create_verinfo_files"]
-                    if "policies" in data["conf"]:
-                        self.policies = data["conf"]["policies"]
-                    if "conventional_commits" in data["conf"]:
-                        self.conventional_commits = data["conf"]["conventional_commits"]
+                    for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
+                        if conf_key in data["conf"]:
+                            setattr(self, attr_name, data["conf"][conf_key])
 
                 self.set_template(self.template)
 
