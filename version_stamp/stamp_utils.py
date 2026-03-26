@@ -1009,6 +1009,16 @@ class GitBackend(VMNBackend):
 
         return tag_names, cobj, ver_infos
 
+    @staticmethod
+    def _sorted_tag_names_from_ver_infos(ver_infos, filter_none=False):
+        """Extract tag names from ver_infos, sorted newest first by tagged_date."""
+        tag_objects = [
+            vi["tag_object"] for vi in ver_infos.values()
+            if not filter_none or vi["tag_object"] is not None
+        ]
+        tag_objects.sort(key=lambda t: t.object.tagged_date, reverse=True)
+        return [t.name for t in tag_objects]
+
     @measure_runtime_decorator
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
@@ -1030,17 +1040,7 @@ class GitBackend(VMNBackend):
                 ver_infos = {}
                 break
 
-        tag_objects = []
-        for k in ver_infos:
-            tag_objects.append(ver_infos[k]["tag_object"])
-
-        # We want the newest tag on top because we skip "buildmetadata tags"
-        tag_objects = sorted(
-            tag_objects, key=lambda t: t.object.tagged_date, reverse=True
-        )
-        tag_names = []
-        for tag_object in tag_objects:
-            tag_names.append(tag_object.name)
+        tag_names = self._sorted_tag_names_from_ver_infos(ver_infos)
 
         return tag_names, cobj, ver_infos
 
@@ -1051,17 +1051,7 @@ class GitBackend(VMNBackend):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
 
         if ver_infos:
-            tag_objects = []
-            for k in ver_infos:
-                tag_objects.append(ver_infos[k]["tag_object"])
-
-            # We want the newest tag on top because we skip "buildmetadata tags"
-            tag_objects = sorted(
-                tag_objects, key=lambda t: t.object.tagged_date, reverse=True
-            )
-            tag_names = []
-            for tag_object in tag_objects:
-                tag_names.append(tag_object.name)
+            tag_names = self._sorted_tag_names_from_ver_infos(ver_infos)
 
             return tag_names, cobj, ver_infos
 
@@ -1096,20 +1086,7 @@ class GitBackend(VMNBackend):
             return [], cobj, ver_infos
 
         ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
-        tag_objects = []
-
-        for k in ver_infos.keys():
-            if ver_infos[k]["tag_object"]:
-                tag_objects.append(ver_infos[k]["tag_object"])
-
-        # We want the newest tag on top because we skip "buildmetadata tags"
-        tag_objects = sorted(
-            tag_objects, key=lambda t: t.object.tagged_date, reverse=True
-        )
-
-        final_list_of_tag_names = []
-        for tag_object in tag_objects:
-            final_list_of_tag_names.append(tag_object.name)
+        final_list_of_tag_names = self._sorted_tag_names_from_ver_infos(ver_infos, filter_none=True)
 
         return final_list_of_tag_names, found_tag.commit, ver_infos
 
