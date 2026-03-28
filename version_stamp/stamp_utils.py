@@ -35,6 +35,7 @@ VMN_DEFAULT_CONF = {
     "conventional_commits": {},
     "default_release_mode": "optional",
     "changelog": {},
+    "github_release": {},
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -383,6 +384,7 @@ class AppConf:
     conventional_commits: dict = field(default_factory=dict)
     default_release_mode: str = "optional"
     changelog: dict = field(default_factory=dict)
+    github_release: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.template:

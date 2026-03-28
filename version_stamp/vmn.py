@@ -223,6 +223,7 @@ class IVersionsStamper(object):
         self.conventional_commits = _defaults.conventional_commits
         self.default_release_mode = _defaults.default_release_mode
         self.changelog = _defaults.changelog
+        self.github_release = _defaults.github_release
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -288,6 +289,7 @@ class IVersionsStamper(object):
         "conventional_commits": "conventional_commits",
         "default_release_mode": "default_release_mode",
         "changelog": "changelog",
+        "github_release": "github_release",
     }
 
     def update_attrs_from_app_conf_file(self):
@@ -1050,6 +1052,7 @@ class IVersionsStamper(object):
                     "conventional_commits": self.conventional_commits,
                     "default_release_mode": self.default_release_mode,
                     "changelog": self.changelog,
+                    "github_release": self.github_release,
                 }
             }
 
@@ -1619,6 +1622,9 @@ class VersionControlStamper(IVersionsStamper):
 
             return 2
 
+        # Best-effort GitHub Release creation after successful push
+        self._create_github_release(tags[0], app_version)
+
         return 0
 
     def _generate_changelog(self, app_version, version_files_to_add):
@@ -1759,6 +1765,112 @@ class VersionControlStamper(IVersionsStamper):
             stamp_utils.VMN_LOGGER.debug(
                 "Failed to write changelog file", exc_info=True
             )
+
+    def _create_github_release(self, tag, app_version):
+        """Create a GitHub Release via gh CLI. Best-effort -- failures log warnings."""
+        try:
+            if not self.github_release or not self.github_release.get("enabled"):
+                return
+
+            if self.dry_run:
+                stamp_utils.VMN_LOGGER.info(
+                    f"Would have created GitHub Release for tag {tag}"
+                )
+                return
+
+            if not shutil.which("gh"):
+                stamp_utils.VMN_LOGGER.warning(
+                    "gh CLI not found. Skipping GitHub Release creation."
+                )
+                return
+
+            if not os.environ.get("GITHUB_TOKEN") and not os.environ.get("GH_TOKEN"):
+                stamp_utils.VMN_LOGGER.warning(
+                    "Neither GITHUB_TOKEN nor GH_TOKEN is set. "
+                    "Skipping GitHub Release creation."
+                )
+                return
+
+            body = self._build_release_body(app_version)
+
+            cmd = [
+                "gh", "release", "create", tag,
+                "--title", f"v{app_version}",
+                "--notes", body,
+            ]
+
+            if self.github_release.get("draft", False):
+                cmd.append("--draft")
+
+            if self.prerelease:
+                cmd.append("--prerelease")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.vmn_root_path,
+            )
+
+            if result.returncode != 0:
+                stamp_utils.VMN_LOGGER.warning(
+                    f"Failed to create GitHub Release: {result.stderr.strip()}"
+                )
+            else:
+                stamp_utils.VMN_LOGGER.info(
+                    f"Created GitHub Release for {tag}"
+                )
+        except Exception:
+            stamp_utils.VMN_LOGGER.warning(
+                "GitHub Release creation failed (best-effort).",
+                exc_info=True,
+            )
+
+    def _build_release_body(self, app_version):
+        """Build release notes body for a GitHub Release."""
+        # Try to extract the relevant section from CHANGELOG.md
+        changelog_path = os.path.join(self.vmn_root_path, "CHANGELOG.md")
+        if os.path.isfile(changelog_path):
+            try:
+                with open(changelog_path, "r") as f:
+                    content = f.read()
+
+                # Look for a section header like ## [1.2.3] or ## [v1.2.3]
+                section_pattern = (
+                    rf"## \[v?{re.escape(app_version)}\][^\n]*\n"
+                )
+                match = re.search(section_pattern, content)
+                if match:
+                    start = match.end()
+                    # Find the next ## heading or end of file
+                    next_section = re.search(r"\n## \[", content[start:])
+                    end = start + next_section.start() if next_section else len(content)
+                    section_body = content[start:end].strip()
+                    if section_body:
+                        return section_body
+            except Exception:
+                stamp_utils.VMN_LOGGER.debug(
+                    "Could not read CHANGELOG.md for release notes.",
+                    exc_info=True,
+                )
+
+        # Fall back to listing commits since the previous tag
+        try:
+            prev_tag = self.selected_tag
+            if prev_tag:
+                lines = []
+                for msg in self.backend.get_commits_range_iter(prev_tag):
+                    first_line = msg.split("\n", 1)[0]
+                    lines.append(f"- {first_line}")
+                if lines:
+                    return "\n".join(lines)
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Could not generate commit list for release notes.",
+                exc_info=True,
+            )
+
+        return f"Release {app_version}"
 
     def _add_files_generic_selectors(self, version_files_to_add, backend_conf):
         for item in backend_conf:
