@@ -77,6 +77,9 @@ DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
 rm -rf ${CUR_DIR}/../version_stamp/__pycache__
+# macOS caches .pyc files outside __pycache__ — stale cache from a build
+# (where version.py transiently holds the real version) breaks tests
+rm -rf ~/Library/Caches/com.apple.python/*/version_stamp/version.*.pyc 2>/dev/null
 
 echo "Will run:"
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \

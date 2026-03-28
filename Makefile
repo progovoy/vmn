@@ -60,6 +60,7 @@ clean:
 	git checkout -- ${PWD}/version_stamp/version.py
 	rm -rf ${PWD}/dist
 	rm -rf ${PWD}/build
+	rm -rf ~/Library/Caches/com.apple.python/*/version_stamp/version.*.pyc 2>/dev/null || true
 
 package: _package
 _package: 

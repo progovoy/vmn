@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import copy
+import datetime
 import glob
 import json
 import os
@@ -11,15 +12,22 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from multiprocessing import Pool
 from pathlib import Path
 from pprint import pformat
+from typing import Any, Dict, Optional, Set
 
 import jinja2
+import questionary
 import tomlkit
 import yaml
 from filelock import FileLock
 from packaging import version as pversion
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 sys.path.append(CUR_PATH)
@@ -50,7 +58,106 @@ VMN_ARGS = {
     "release": "remote",
     "gen": "local",
     "add": "remote",
+    "config": "local",
 }
+
+_CONFIG_DESCRIPTIONS = {
+    "template": {
+        "description": (
+            "Version display format. Use placeholders: {major}, {minor}, {patch}, "
+            "{hotfix}, {prerelease}, {rcn}, {buildmetadata}. "
+            "Wrap in [] for optional sections."
+        ),
+        "type": "string",
+        "example": "[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]",
+    },
+    "extra_info": {
+        "description": "Include host/environment information during stamping.",
+        "type": "bool",
+    },
+    "create_verinfo_files": {
+        "description": (
+            "Create a version info file per stamp. "
+            "Enables 'vmn show --from-file' without git tags."
+        ),
+        "type": "bool",
+    },
+    "hide_zero_hotfix": {
+        "description": "Hide the hotfix octet when it equals zero (e.g. 1.2.3 instead of 1.2.3.0).",
+        "type": "bool",
+    },
+    "default_release_mode": {
+        "description": (
+            "How conventional commits determine release mode. "
+            "'optional' uses --orm behavior, 'strict' uses -r behavior."
+        ),
+        "type": "choice",
+        "choices": ["optional", "strict"],
+    },
+    "conventional_commits": {
+        "description": (
+            "Enable automatic release mode detection from conventional commit messages. "
+            "Works with default_release_mode."
+        ),
+        "type": "bool_or_dict",
+    },
+    "version_backends": {
+        "description": (
+            "Auto-embed version into files during stamping. "
+            "Backends: npm, cargo, poetry, pep621, generic_jinja, generic_selectors."
+        ),
+        "type": "nested_dict",
+        "nested_key": "version_backends",
+    },
+    "deps": {
+        "description": (
+            "External repository dependencies tracked during stamping. "
+            "vmn auto-detects remote URLs from existing git repos."
+        ),
+        "type": "nested_dict",
+        "nested_key": "deps",
+    },
+    "policies": {
+        "description": (
+            "Enforce policies during stamping/releasing. "
+            "Supports whitelist_release_branches."
+        ),
+        "type": "nested_dict",
+        "nested_key": "policies",
+    },
+}
+
+_ROOT_CONFIG_DESCRIPTIONS = {
+    "external_services": {
+        "description": "External services tracked by the root app.",
+        "type": "nested_dict",
+        "nested_key": "external_services",
+    },
+}
+
+
+@dataclass
+class RepoStatus:
+    pending: bool = False
+    detached: bool = False
+    outgoing: bool = False
+    state: Set[str] = field(default_factory=set)
+    error: bool = False
+    repos_exist_locally: bool = True
+    deps_synced_with_conf: bool = True
+    repo_tracked: bool = True
+    app_tracked: bool = True
+    modified: bool = False
+    dirty_deps: bool = False
+    err_msgs: Dict[str, str] = field(default_factory=lambda: {
+        "dirty_deps": "",
+        "deps_synced_with_conf": "",
+        "repo_tracked": "vmn repo tracking is already initialized",
+        "app_tracked": "vmn app tracking is already initialized",
+    })
+    repos: Dict[str, Any] = field(default_factory=dict)
+    matched_version_info: Optional[dict] = None
+    local_repos_diff: Set[str] = field(default_factory=set)
 
 
 class VMNContainer(object):
@@ -90,16 +197,6 @@ class IVersionsStamper(object):
         "pep621": {"format": "toml", "key_path": ["project", "version"]},
     }
 
-    _CONF_KEY_TO_ATTR = {
-        "extra_info": "extra_info",
-        "deps": "raw_configured_deps",
-        "hide_zero_hotfix": "hide_zero_hotfix",
-        "version_backends": "version_backends",
-        "create_verinfo_files": "create_verinfo_files",
-        "policies": "policies",
-        "conventional_commits": "conventional_commits",
-    }
-
     @stamp_utils.measure_runtime_decorator
     def __init__(self, arg_params):
         # actual value will be assigned on handle_ functions
@@ -116,16 +213,21 @@ class IVersionsStamper(object):
         self.name: str = arg_params["name"]
         self.be_type = arg_params["be_type"]
 
-        # Configuration defaults
-        self.template: str = stamp_utils.VMN_DEFAULT_CONF["template"]
-        self.extra_info = stamp_utils.VMN_DEFAULT_CONF["extra_info"]
-        self.create_verinfo_files = stamp_utils.VMN_DEFAULT_CONF["create_verinfo_files"]
-        self.hide_zero_hotfix = stamp_utils.VMN_DEFAULT_CONF["hide_zero_hotfix"]
-        self.version_backends = stamp_utils.VMN_DEFAULT_CONF["version_backends"]
-        # This one will be filled with self dependency ('.') by default
-        self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
-        self.policies = stamp_utils.VMN_DEFAULT_CONF["policies"]
-        self.conventional_commits = stamp_utils.VMN_DEFAULT_CONF["conventional_commits"]
+        # Configuration defaults — AppConf is the schema and default source.
+        # Individual attributes remain on self for backward compatibility
+        # (tests and external code access self.__dict__).
+        _defaults = stamp_utils.AppConf()
+        self.template = _defaults.template
+        self.extra_info = _defaults.extra_info
+        self.create_verinfo_files = _defaults.create_verinfo_files
+        self.hide_zero_hotfix = _defaults.hide_zero_hotfix
+        self.version_backends = _defaults.version_backends
+        self.raw_configured_deps = _defaults.deps
+        self.policies = _defaults.policies
+        self.conventional_commits = _defaults.conventional_commits
+        self.default_release_mode = _defaults.default_release_mode
+        self.changelog = _defaults.changelog
+        self.github_release = _defaults.github_release
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -180,6 +282,20 @@ class IVersionsStamper(object):
             # TODO:: test this
             raise RuntimeError("Failed to initialize_backend_attrs")
 
+    # Maps conf.yml keys to AppConf field names (only where they differ)
+    _CONF_KEY_TO_ATTR = {
+        "deps": "raw_configured_deps",
+        "extra_info": "extra_info",
+        "hide_zero_hotfix": "hide_zero_hotfix",
+        "version_backends": "version_backends",
+        "create_verinfo_files": "create_verinfo_files",
+        "policies": "policies",
+        "conventional_commits": "conventional_commits",
+        "default_release_mode": "default_release_mode",
+        "changelog": "changelog",
+        "github_release": "github_release",
+    }
+
     def update_attrs_from_app_conf_file(self):
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
@@ -205,6 +321,21 @@ class IVersionsStamper(object):
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
+
+                    cc = data["conf"].get("conventional_commits")
+                    if (
+                        isinstance(cc, dict)
+                        and "default_release_mode" in cc
+                    ):
+                        raise RuntimeError(
+                            "Detected 'default_release_mode' nested inside "
+                            "'conventional_commits' in your conf.yml. "
+                            "This is no longer supported. Please move it to "
+                            "a top-level key:\n\n"
+                            "  conf:\n"
+                            "    default_release_mode: optional\n"
+                            "    conventional_commits: {}\n"
+                        )
 
                 self.set_template(self.template)
 
@@ -330,7 +461,7 @@ class IVersionsStamper(object):
             props = stamp_utils.VMNBackend.deserialize_tag_name(tag)
 
             # can happen in case of a root app
-            if props["app_name"] != app_name:
+            if props.app_name != app_name:
                 continue
 
             cleaned_app_tag = tag
@@ -353,18 +484,18 @@ class IVersionsStamper(object):
         ver_tag = None
         for tag, ver_info_c in ver_infos.items():
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
-            if "buildmetadata" in props["types"]:
+            if "buildmetadata" in props.types:
                 continue
 
-            if "root" in props["types"]:
+            if "root" in props.types:
                 root_tag = tag
                 continue
 
-            if props["types"] == {"version"}:
+            if props.types == {"version"}:
                 ver_tag = tag
                 continue
 
-            if "prerelease" in props["types"] and ver_tag is None:
+            if "prerelease" in props.types and ver_tag is None:
                 continue
 
             # TODO:: Check API commit version
@@ -425,15 +556,17 @@ class IVersionsStamper(object):
         version_files_to_track_diff = []
         for backend in self.version_backends:
             try:
-                handler = getattr(self, f"_add_files_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_files_to_track_diff, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._add_files_simple_backend(version_files_to_track_diff, backend_conf)
+                else:
+                    handler = getattr(self, f"_add_files_{backend}")
+                    handler(version_files_to_track_diff, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
 
-        seen = set()
-        version_files_to_track_diff = [x for x in version_files_to_track_diff if not (x in seen or seen.add(x))]
+        version_files_to_track_diff = list(dict.fromkeys(version_files_to_track_diff))
 
         self.last_user_changeset = self.backend.get_last_user_changeset(
             version_files_to_track_diff,
@@ -522,7 +655,7 @@ class IVersionsStamper(object):
     def set_template(self, template):
         try:
             self.template = IVersionsStamper.parse_template(template)
-            self.bad_format_template = False
+            self.template_err_str = None
         except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
@@ -534,8 +667,6 @@ class IVersionsStamper(object):
                 f"Falling back to default one: "
                 f"{stamp_utils.VMN_DEFAULT_CONF['template']}"
             )
-
-            self.bad_format_template = True
 
     def __del__(self):
         if hasattr(self, 'backend') and self.backend is not None:
@@ -558,7 +689,7 @@ class IVersionsStamper(object):
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         if tag and globally:
             props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag)
-            version_number_oct = max(version_number_oct, int(props[release_mode]))
+            version_number_oct = max(version_number_oct, int(getattr(props, release_mode)))
         version_number_oct += 1
 
         return version_number_oct
@@ -571,10 +702,10 @@ class IVersionsStamper(object):
 
         props = stamp_utils.VMNBackend.deserialize_vmn_version(version)
 
-        major = props["major"]
-        minor = props["minor"]
-        patch = props["patch"]
-        hotfix = props["hotfix"]
+        major = props.major
+        minor = props.minor
+        patch = props.patch
+        hotfix = props.hotfix
 
         if release_mode == "major":
             tag_name_prefix = stamp_utils.VMNBackend.app_name_to_tag_name(self.name)
@@ -617,7 +748,7 @@ class IVersionsStamper(object):
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
 
-        initialprerelease = props["prerelease"]
+        initialprerelease = props.prerelease
         prerelease = self.prerelease
         # If user did not specify a change in prerelease,
         # stay with the previous one
@@ -650,12 +781,12 @@ class IVersionsStamper(object):
                 "app"
             ]["prerelease_count"]
 
-        if props["rcn"] is None:
-            props["rcn"] = 0
+        if props.rcn is None:
+            props.rcn = 0
 
         rcn = 0
-        if prerelease == props["prerelease"]:
-            rcn = props["rcn"]
+        if prerelease == props.prerelease:
+            rcn = props.rcn
 
         prerelease_count = initialprerelease_count
         if prerelease not in prerelease_count:
@@ -700,9 +831,12 @@ class IVersionsStamper(object):
                     )
                     continue
 
-                handler = getattr(self, f"_write_version_to_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_number, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._write_version_to_structured(version_number, backend_conf, backend)
+                else:
+                    handler = getattr(self, f"_write_version_to_{backend}")
+                    handler(version_number, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -747,18 +881,6 @@ class IVersionsStamper(object):
         except Exception as e:
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
-
-    def _write_version_to_npm(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "npm")
-
-    def _write_version_to_cargo(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "cargo")
-
-    def _write_version_to_poetry(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "poetry")
-
-    def _write_version_to_pep621(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "pep621")
 
     def _write_version_to_generic_jinja(self, verstr, backend_conf):
         if self.dry_run:
@@ -932,6 +1054,9 @@ class IVersionsStamper(object):
                     "version_backends": self.version_backends,
                     "policies": self.policies,
                     "conventional_commits": self.conventional_commits,
+                    "default_release_mode": self.default_release_mode,
+                    "changelog": self.changelog,
+                    "github_release": self.github_release,
                 }
             }
 
@@ -1099,7 +1224,7 @@ class VersionControlStamper(IVersionsStamper):
     def add_metadata_to_version(self, tag_name, ver_info):
         props = stamp_utils.VMNBackend.deserialize_tag_name(tag_name)
         res_ver = stamp_utils.VMNBackend.serialize_vmn_version(
-            props["verstr"],
+            props.verstr,
             buildmetadata=self.params["buildmetadata"],
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
@@ -1159,7 +1284,7 @@ class VersionControlStamper(IVersionsStamper):
     @stamp_utils.measure_runtime_decorator
     def stamp_app_version(self, from_verstr):
         props = stamp_utils.VMNBackend.deserialize_vmn_version(from_verstr)
-        initialprerelease = props["prerelease"]
+        initialprerelease = props.prerelease
 
         if initialprerelease == "release" and self.release_mode is None:
             stamp_utils.VMN_LOGGER.error(
@@ -1206,7 +1331,7 @@ class VersionControlStamper(IVersionsStamper):
         release_mode = self.release_mode
         cur_props = stamp_utils.VMNBackend.deserialize_vmn_version(current_version)
 
-        if cur_props["prerelease"] != "release":
+        if cur_props.prerelease != "release":
             release_mode = "prerelease"
 
         if "whitelist_release_branches" in self.policies:
@@ -1244,7 +1369,7 @@ class VersionControlStamper(IVersionsStamper):
         props = stamp_utils.VMNBackend.deserialize_vmn_version(current_version)
 
         self.current_version_info["stamping"]["app"]["_version"] = current_version
-        self.current_version_info["stamping"]["app"]["prerelease"] = props["prerelease"]
+        self.current_version_info["stamping"]["app"]["prerelease"] = props.prerelease
 
         self.current_version_info["stamping"]["app"][
             "previous_version"
@@ -1343,9 +1468,12 @@ class VersionControlStamper(IVersionsStamper):
 
         for backend in self.version_backends:
             try:
-                handler = getattr(self, f"_add_files_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_files_to_add, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._add_files_simple_backend(version_files_to_add, backend_conf)
+                else:
+                    handler = getattr(self, f"_add_files_{backend}")
+                    handler(version_files_to_add, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -1369,6 +1497,8 @@ class VersionControlStamper(IVersionsStamper):
                 self.create_verinfo_root_file(
                     root_app_msg, root_app_version, version_files_to_add
                 )
+
+        self._generate_changelog(app_version, version_files_to_add)
 
         commit_msg = None
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
@@ -1496,7 +1626,255 @@ class VersionControlStamper(IVersionsStamper):
 
             return 2
 
+        # Best-effort GitHub Release creation after successful push
+        self._create_github_release(tags[0], app_version)
+
         return 0
+
+    def _generate_changelog(self, app_version, version_files_to_add):
+        """Generate a changelog entry from conventional commits and prepend to CHANGELOG.md."""
+        if not self.changelog:
+            return
+
+        if self.selected_tag is None:
+            stamp_utils.VMN_LOGGER.debug(
+                "No previous version tag found, skipping changelog generation"
+            )
+            return
+
+        changelog_path_rel = self.changelog.get("path", "CHANGELOG.md")
+        changelog_path = os.path.join(self.vmn_root_path, changelog_path_rel)
+
+        # Collect commits grouped by type
+        type_labels = {
+            "feat": "Features",
+            "fix": "Bug Fixes",
+            "perf": "Performance Improvements",
+            "refactor": "Refactoring",
+            "docs": "Documentation",
+            "style": "Style",
+            "test": "Tests",
+            "build": "Build",
+            "ci": "CI",
+            "chore": "Chores",
+            "revert": "Reverts",
+        }
+
+        breaking_changes = []
+        grouped_commits = {}
+
+        try:
+            for msg, short_hash in self.backend.get_commits_info_iter(
+                self.selected_tag
+            ):
+                try:
+                    res = stamp_utils.parse_conventional_commit_message(msg)
+                except ValueError:
+                    continue
+
+                description = res["description"].strip()
+                scope = res.get("scope")
+                is_breaking = res.get("bc") == "!"
+
+                # Check footer for BREAKING CHANGE
+                footer = res.get("footer") or ""
+                if "BREAKING CHANGE" in footer or "BREAKING-CHANGE" in footer:
+                    is_breaking = True
+
+                prefix = f"**{scope}:** " if scope else ""
+                entry = f"- {prefix}{description} ({short_hash})"
+
+                if is_breaking:
+                    breaking_changes.append(entry)
+                else:
+                    commit_type = res["type"].strip()
+                    label = type_labels.get(commit_type, "Other Changes")
+                    grouped_commits.setdefault(label, []).append(entry)
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Failed to iterate commits for changelog", exc_info=True
+            )
+            return
+
+        if not grouped_commits and not breaking_changes:
+            stamp_utils.VMN_LOGGER.debug(
+                "No conventional commits found, skipping changelog generation"
+            )
+            return
+
+        # Build the changelog entry
+        today = datetime.date.today().isoformat()
+        lines = [f"## [{app_version}] - {today}", ""]
+
+        # Section ordering: Breaking Changes first, then Features, Bug Fixes, rest
+        section_order = ["Breaking Changes", "Features", "Bug Fixes"]
+
+        if breaking_changes:
+            lines.append("### Breaking Changes")
+            lines.extend(breaking_changes)
+            lines.append("")
+
+        for section in section_order:
+            if section == "Breaking Changes":
+                continue
+            if section in grouped_commits:
+                lines.append(f"### {section}")
+                lines.extend(grouped_commits.pop(section))
+                lines.append("")
+
+        for section in sorted(grouped_commits.keys()):
+            lines.append(f"### {section}")
+            lines.extend(grouped_commits[section])
+            lines.append("")
+
+        new_entry = "\n".join(lines)
+
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                f"Would have written changelog entry to {changelog_path}:\n{new_entry}"
+            )
+            return
+
+        # Read existing content or start fresh
+        existing_content = ""
+        if os.path.exists(changelog_path):
+            try:
+                with open(changelog_path, "r") as f:
+                    existing_content = f.read()
+            except Exception:
+                stamp_utils.VMN_LOGGER.debug(
+                    "Failed to read existing changelog", exc_info=True
+                )
+
+        if existing_content:
+            # Insert after the first header line if present, otherwise prepend
+            header_match = re.match(r"^(# .+\n(?:\n)?)", existing_content)
+            if header_match:
+                header = header_match.group(1)
+                rest = existing_content[len(header):]
+                updated = header + "\n" + new_entry + "\n" + rest
+            else:
+                updated = new_entry + "\n\n" + existing_content
+        else:
+            updated = "# Changelog\n\n" + new_entry + "\n"
+
+        try:
+            with open(changelog_path, "w") as f:
+                f.write(updated)
+            version_files_to_add.append(changelog_path)
+            stamp_utils.VMN_LOGGER.info(
+                f"Generated changelog entry for version {app_version}"
+            )
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Failed to write changelog file", exc_info=True
+            )
+
+    def _create_github_release(self, tag, app_version):
+        """Create a GitHub Release via gh CLI. Best-effort -- failures log warnings."""
+        try:
+            if not self.github_release:
+                return
+
+            if self.dry_run:
+                stamp_utils.VMN_LOGGER.info(
+                    f"Would have created GitHub Release for tag {tag}"
+                )
+                return
+
+            if not shutil.which("gh"):
+                stamp_utils.VMN_LOGGER.warning(
+                    "gh CLI not found. Skipping GitHub Release creation."
+                )
+                return
+
+            if not os.environ.get("GITHUB_TOKEN") and not os.environ.get("GH_TOKEN"):
+                stamp_utils.VMN_LOGGER.warning(
+                    "Neither GITHUB_TOKEN nor GH_TOKEN is set. "
+                    "Skipping GitHub Release creation."
+                )
+                return
+
+            body = self._build_release_body(app_version)
+
+            cmd = [
+                "gh", "release", "create", tag,
+                "--title", f"v{app_version}",
+                "--notes", body,
+            ]
+
+            if self.github_release.get("draft", False):
+                cmd.append("--draft")
+
+            if self.prerelease:
+                cmd.append("--prerelease")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.vmn_root_path,
+            )
+
+            if result.returncode != 0:
+                stamp_utils.VMN_LOGGER.warning(
+                    f"Failed to create GitHub Release: {result.stderr.strip()}"
+                )
+            else:
+                stamp_utils.VMN_LOGGER.info(
+                    f"Created GitHub Release for {tag}"
+                )
+        except Exception:
+            stamp_utils.VMN_LOGGER.warning(
+                "GitHub Release creation failed (best-effort).",
+                exc_info=True,
+            )
+
+    def _build_release_body(self, app_version):
+        """Build release notes body for a GitHub Release."""
+        # Try to extract the relevant section from CHANGELOG.md
+        changelog_path = os.path.join(self.vmn_root_path, "CHANGELOG.md")
+        if os.path.isfile(changelog_path):
+            try:
+                with open(changelog_path, "r") as f:
+                    content = f.read()
+
+                # Look for a section header like ## [1.2.3] or ## [v1.2.3]
+                section_pattern = (
+                    rf"## \[v?{re.escape(app_version)}\][^\n]*\n"
+                )
+                match = re.search(section_pattern, content)
+                if match:
+                    start = match.end()
+                    # Find the next ## heading or end of file
+                    next_section = re.search(r"\n## \[", content[start:])
+                    end = start + next_section.start() if next_section else len(content)
+                    section_body = content[start:end].strip()
+                    if section_body:
+                        return section_body
+            except Exception:
+                stamp_utils.VMN_LOGGER.debug(
+                    "Could not read CHANGELOG.md for release notes.",
+                    exc_info=True,
+                )
+
+        # Fall back to listing commits since the previous tag
+        try:
+            prev_tag = self.selected_tag
+            if prev_tag:
+                lines = []
+                for msg in self.backend.get_commits_range_iter(prev_tag):
+                    first_line = msg.split("\n", 1)[0]
+                    lines.append(f"- {first_line}")
+                if lines:
+                    return "\n".join(lines)
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Could not generate commit list for release notes.",
+                exc_info=True,
+            )
+
+        return f"Release {app_version}"
 
     def _add_files_generic_selectors(self, version_files_to_add, backend_conf):
         for item in backend_conf:
@@ -1514,18 +1892,6 @@ class VersionControlStamper(IVersionsStamper):
     def _add_files_simple_backend(self, version_files_to_add, backend_conf):
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         version_files_to_add.append(file_path)
-
-    def _add_files_npm(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_cargo(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_poetry(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_pep621(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     @stamp_utils.measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
@@ -1567,44 +1933,31 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
+    def _write_verinfo_file(self, msg, version_id, dir_path, label, version_files_to_add):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                f"Would have written to {label} verinfo file:\n"
+                f"path: {dir_path} version: {version_id}\n"
+                f"message: {msg}"
+            )
+        else:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(dir_path, f"{version_id}.yml")
+            with open(path, "w") as f:
+                f.write(yaml.dump(msg, sort_keys=True))
+            version_files_to_add.append(path)
+
     @stamp_utils.measure_runtime_decorator
     def create_verinfo_root_file(
         self, root_app_msg, root_app_version, version_files_to_add
     ):
         dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
-
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to root verinfo file:\n"
-                f"path: {dir_path} version: {root_app_version}\n"
-                f"message: {root_app_msg}"
-            )
-        else:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{root_app_version}.yml")
-            with open(path, "w") as f:
-                data = yaml.dump(root_app_msg, sort_keys=True)
-                f.write(data)
-            version_files_to_add.append(path)
+        self._write_verinfo_file(root_app_msg, root_app_version, dir_path, "root", version_files_to_add)
 
     @stamp_utils.measure_runtime_decorator
     def create_verinfo_file(self, app_msg, version_files_to_add, verstr):
         dir_path = os.path.join(self.app_dir_path, "verinfo")
-
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to verinfo file:\n"
-                f"path: {dir_path} version: {verstr}\n"
-                f"message: {app_msg}"
-            )
-        else:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{verstr}.yml")
-            with open(path, "w") as f:
-                data = yaml.dump(app_msg, sort_keys=True)
-                f.write(data)
-
-            version_files_to_add.append(path)
+        self._write_verinfo_file(app_msg, verstr, dir_path, "app", version_files_to_add)
 
     @stamp_utils.measure_runtime_decorator
     def retrieve_remote_changes(self):
@@ -1617,7 +1970,7 @@ def handle_init(vmn_ctx):
     optional_status = {"deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
         )
@@ -1654,6 +2007,7 @@ def handle_init(vmn_ctx):
 @stamp_utils.measure_runtime_decorator
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
+    vmn_ctx.vcs.default_release_mode = vmn_ctx.args.orm
 
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
@@ -1735,7 +2089,7 @@ def handle_stamp(vmn_ctx):
             if max_release_mode == -1:
                 max_release_mode = None
 
-            if vmn_ctx.vcs.conventional_commits["default_release_mode"] == "optional":
+            if vmn_ctx.vcs.default_release_mode == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
             else:
                 vmn_ctx.vcs.release_mode = max_release_mode
@@ -1765,17 +2119,61 @@ def handle_stamp(vmn_ctx):
     }
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status["error"]:
-        stamp_utils.VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
+    if status.error:
+        # Auto-initialize only for truly new repos/apps — check git history
+        # to distinguish "never initialized" from "initialized but tags removed"
+        auto_initialized = False
+        be = vmn_ctx.vcs.backend
+        vmn_path = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn")
 
-        return 1
+        if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_path):
+            stamp_utils.VMN_LOGGER.info(
+                "vmn tracking not initialized. Auto-initializing repository..."
+            )
+            ret = handle_init(vmn_ctx)
+            if ret != 0:
+                stamp_utils.VMN_LOGGER.error(
+                    "Auto-initialization of repository failed"
+                )
+                return 1
+            auto_initialized = True
 
-    if status["matched_version_info"] is not None:
+        if "app_tracked" not in status.state and not be.is_path_tracked(
+            vmn_ctx.vcs.app_dir_path
+        ):
+            stamp_utils.VMN_LOGGER.info(
+                f"App '{vmn_ctx.vcs.name}' not tracked. Auto-initializing app..."
+            )
+            err = _init_app(vmn_ctx.vcs, "0.0.0")
+            if err:
+                stamp_utils.VMN_LOGGER.error(
+                    f"Auto-initialization of app '{vmn_ctx.vcs.name}' failed"
+                )
+                return 1
+            auto_initialized = True
+
+        if auto_initialized:
+            # Re-check status after auto-init
+            status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+            if status.error:
+                stamp_utils.VMN_LOGGER.debug(
+                    f"Error occurred when getting the repo status after auto-init: "
+                    f"{status}",
+                    exc_info=True,
+                )
+                return 1
+        else:
+            # Error was not due to missing init — original behavior
+            stamp_utils.VMN_LOGGER.debug(
+                f"Error occured when getting the repo status: {status}",
+                exc_info=True,
+            )
+            return 1
+
+    if status.matched_version_info is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        version = status["matched_version_info"]["stamping"]["app"]["_version"]
+        version = status.matched_version_info["stamping"]["app"]["_version"]
 
         disp_version = vmn_ctx.vcs.get_be_formatted_version(version)
         stamp_utils.VMN_LOGGER.info(
@@ -1785,7 +2183,7 @@ def handle_stamp(vmn_ctx):
 
         return 0
 
-    if "detached" in status["state"]:
+    if "detached" in status.state:
         stamp_utils.VMN_LOGGER.error("In detached head. Will not stamp new version")
         return 1
 
@@ -1807,7 +2205,7 @@ def handle_stamp(vmn_ctx):
     initial_version = _determine_initial_version(vmn_ctx)
 
     props = stamp_utils.VMNBackend.deserialize_vmn_version(initial_version)
-    is_from_release = props["prerelease"] == "release"
+    is_from_release = props.prerelease == "release"
 
     # optional_release_mode should advance only in case the starting_from
     # version is release, otherwise it should be ignored
@@ -1849,8 +2247,8 @@ def handle_stamp(vmn_ctx):
 
             initial_version = stamp_utils.VMNBackend.serialize_vmn_version(
                 base_verstr,
-                prerelease=props["prerelease"],
-                rcn=prerelease_count[props["prerelease"]] - 1,
+                prerelease=props.prerelease,
+                rcn=prerelease_count[props.prerelease] - 1,
                 hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix,
             )
 
@@ -1900,13 +2298,49 @@ def _determine_initial_version(vmn_ctx):
     return initial_version
 
 
+def _validate_and_resolve_version(ver, status, command_name):
+    """Validate buildmetadata and resolve version from status if needed.
+
+    Returns (ver, error_code). error_code is non-zero on failure.
+    """
+    if ver:
+        props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
+        if props.buildmetadata is not None:
+            stamp_utils.VMN_LOGGER.error(
+                f"Failed to {command_name} {ver}. "
+                f"Operating on metadata versions is not supported"
+            )
+            return ver, 1
+
+    if ver is None and status.matched_version_info is not None:
+        ver = status.matched_version_info["stamping"]["app"]["_version"]
+    elif ver is None:
+        stamp_utils.VMN_LOGGER.error(
+            f"When running vmn {command_name} and not on a version commit, "
+            "you must specify a specific version using -v flag"
+        )
+        return ver, 1
+
+    return ver, 0
+
+
+def _extract_ver_info(vcs, ver):
+    """Look up ver_info for a version string. Returns (tag_name, ver_infos, ver_info)."""
+    tag_name, ver_infos = vcs.get_version_info_from_verstr(ver)
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
+    return tag_name, ver_infos, ver_info
+
+
 @stamp_utils.measure_runtime_decorator
 def handle_release(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
         )
@@ -1917,27 +2351,27 @@ def handle_release(vmn_ctx):
     if vmn_ctx.args.stamp:
         # --stamp creates a new commit + tag and pushes both,
         # so it cannot work in detached HEAD
-        if "detached" in status["state"]:
+        if "detached" in status.state:
             stamp_utils.VMN_LOGGER.error(
                 "Cannot use --stamp in detached HEAD state"
             )
             return 1
 
         # Deps must be clean — same requirement as regular stamp
-        if status["dirty_deps"]:
+        if status.dirty_deps:
             stamp_utils.VMN_LOGGER.error(
                 "Cannot use --stamp with dirty dependencies"
             )
             return 1
 
-        if "deps_synced_with_conf" not in status["state"]:
+        if "deps_synced_with_conf" not in status.state:
             stamp_utils.VMN_LOGGER.error(
                 "Cannot use --stamp when dependencies are not synced with configuration"
             )
             return 1
 
         # N-2 scenario protection: must be on a version commit
-        if status["matched_version_info"] is None:
+        if status.matched_version_info is None:
             stamp_utils.VMN_LOGGER.error(
                 "Cannot use --stamp when not on a version commit. "
                 "Make sure you are on the exact commit of the prerelease version."
@@ -1948,7 +2382,7 @@ def handle_release(vmn_ctx):
 
     if ver:
         props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
-        if props["buildmetadata"] is not None:
+        if props.buildmetadata is not None:
             stamp_utils.VMN_LOGGER.error(
                 f"Failed to release {ver}. "
                 f"Releasing metadata versions is not supported"
@@ -1956,10 +2390,10 @@ def handle_release(vmn_ctx):
 
             return 1
 
-    if ver is None and status["matched_version_info"] is not None:
+    if ver is None and status.matched_version_info is not None:
         # Good we have found an existing version matching
         # the actual_deps_state
-        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
+        ver = status.matched_version_info["stamping"]["app"]["_version"]
     elif ver is None:
         # For --stamp, we already validated matched_version_info exists above
         stamp_utils.VMN_LOGGER.error(
@@ -1971,7 +2405,7 @@ def handle_release(vmn_ctx):
 
     # Validate that we're releasing from a prerelease
     props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
-    if vmn_ctx.args.stamp and props["prerelease"] == "release":
+    if vmn_ctx.args.stamp and props.prerelease == "release":
         stamp_utils.VMN_LOGGER.error(
             f"Cannot use --stamp to release {ver}. "
             f"Version must be a prerelease (e.g., 1.0.0-rc.1)"
@@ -1979,11 +2413,7 @@ def handle_release(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            ver_info = None
-        else:
-            ver_info = ver_infos[tag_name]["ver_info"]
+        tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
 
         base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
             ver,
@@ -2039,6 +2469,599 @@ def handle_release(vmn_ctx):
 
 
 @stamp_utils.measure_runtime_decorator
+def _read_raw_conf(conf_path):
+    if not os.path.isfile(conf_path):
+        return {}
+    with open(conf_path, "r") as f:
+        data = yaml.safe_load(f)
+    if data and "conf" in data:
+        return data["conf"]
+    return {}
+
+
+def _write_full_config(conf_path, raw_conf):
+    pathlib.Path(os.path.dirname(conf_path)).mkdir(parents=True, exist_ok=True)
+    ver_conf_yml = {"conf": raw_conf}
+    with open(conf_path, "w+") as f:
+        f.write("# Autogenerated by vmn. You can edit this configuration file\n")
+        yaml.dump(ver_conf_yml, f, sort_keys=True)
+
+
+@stamp_utils.measure_runtime_decorator
+def handle_config(vmn_ctx):
+    vmn_root_path = vmn_ctx.vcs.vmn_root_path
+
+    # --global mode: edit repo-level .vmn/conf.yml
+    if vmn_ctx.args.global_conf:
+        conf_path = os.path.join(vmn_root_path, ".vmn", INIT_FILENAME)
+        if vmn_ctx.args.vim:
+            return _config_vim(conf_path)
+        return _config_interactive(conf_path, _CONFIG_DESCRIPTIONS, vmn_root_path)
+
+    # No app name: list managed apps
+    if vmn_ctx.vcs.name is None:
+        return _config_list_apps(vmn_root_path)
+
+    # --vim mode
+    if vmn_ctx.args.vim:
+        if vmn_ctx.args.root:
+            if vmn_ctx.vcs.root_app_conf_path is None:
+                stamp_utils.VMN_LOGGER.error(
+                    f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
+                )
+                return 1
+            return _config_vim(vmn_ctx.vcs.root_app_conf_path)
+        return _config_vim(vmn_ctx.vcs.app_conf_path)
+
+    # --root mode: edit root_conf.yml
+    if vmn_ctx.args.root:
+        if vmn_ctx.vcs.root_app_conf_path is None:
+            stamp_utils.VMN_LOGGER.error(
+                f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
+            )
+            return 1
+        return _config_interactive(
+            vmn_ctx.vcs.root_app_conf_path, _ROOT_CONFIG_DESCRIPTIONS, vmn_root_path
+        )
+
+    # Default: interactive TUI for per-app conf.yml
+    if not vmn_ctx.vcs.conf_file_exists:
+        stamp_utils.VMN_LOGGER.error(
+            f"No config file found for '{vmn_ctx.vcs.name}'. "
+            f"Run 'vmn init-app {vmn_ctx.vcs.name}' first."
+        )
+        return 1
+
+    return _config_interactive(
+        vmn_ctx.vcs.app_conf_path, _CONFIG_DESCRIPTIONS, vmn_root_path
+    )
+
+
+def _config_list_apps(vmn_root_path):
+    vmn_dir = os.path.join(vmn_root_path, ".vmn")
+    if not os.path.isdir(vmn_dir):
+        stamp_utils.VMN_LOGGER.error(
+            "vmn is not initialized in this repository. Run 'vmn init' first."
+        )
+        return 1
+
+    apps = []
+    for dirpath, dirnames, filenames in os.walk(vmn_dir):
+        has_conf = any(
+            f == "conf.yml" or f.endswith("_conf.yml")
+            for f in filenames
+            if f != "root_conf.yml" and not f.endswith("_root_conf.yml")
+        )
+        if has_conf:
+            rel = os.path.relpath(dirpath, vmn_dir)
+            if rel != ".":
+                apps.append(rel.replace(os.sep, "/"))
+
+    if not apps:
+        print("No managed apps found. Use 'vmn init-app <name>' to initialize an app.")
+        return 0
+
+    console = Console()
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    for app in sorted(apps):
+        table.add_row(Text(app, style="cyan"))
+    console.print(Panel(table, title="Managed apps", border_style="blue"))
+    return 0
+
+
+_rich_console = Console()
+
+
+def _render_config_panel(raw_conf, descriptions, modified, conf_path):
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    table.add_column("Setting", style="cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    table.add_column("Description", style="dim", max_width=44)
+
+    for key in descriptions:
+        meta = descriptions[key]
+        current = raw_conf.get(key, stamp_utils.VMN_DEFAULT_CONF.get(key))
+        short = _format_value_short(current)
+
+        if isinstance(current, bool):
+            val_style = "green" if current else "red"
+        elif isinstance(current, dict) and not current:
+            val_style = "dim"
+        else:
+            val_style = "yellow"
+
+        table.add_row(key, Text(short, style=val_style), meta["description"])
+
+    title = os.path.relpath(conf_path)
+    if modified:
+        title += " [bold red]*[/bold red]"
+    _rich_console.print()
+    _rich_console.print(Panel(table, title=title, border_style="blue"))
+
+
+def _config_interactive(conf_path, descriptions, vmn_root_path):
+    if not sys.stdin.isatty():
+        stamp_utils.VMN_LOGGER.error(
+            "Interactive config requires a terminal. Use --vim instead."
+        )
+        return 1
+
+    raw_conf = _read_raw_conf(conf_path)
+    modified = False
+    keys = list(descriptions.keys())
+
+    while True:
+        _render_config_panel(raw_conf, descriptions, modified, conf_path)
+
+        choices = []
+        for key in keys:
+            meta = descriptions[key]
+            current = raw_conf.get(key, stamp_utils.VMN_DEFAULT_CONF.get(key))
+            short = _format_value_short(current)
+            pad = "." * max(1, 40 - len(key) - len(short))
+            choices.append(
+                questionary.Choice(
+                    title=f"  {key} {pad} {short}",
+                    value=key,
+                )
+            )
+        choices.append(questionary.Choice(title="  Save & quit", value="_save"))
+        choices.append(questionary.Choice(title="  Quit without saving", value="_quit"))
+
+        choice = questionary.select(
+            "Select a setting to edit",
+            choices=choices,
+            use_shortcuts=False,
+        ).ask()
+
+        if choice is None or choice == "_quit":
+            if modified:
+                confirm = questionary.confirm(
+                    "Discard unsaved changes?", default=False
+                ).ask()
+                if not confirm:
+                    continue
+            return 0
+
+        if choice == "_save":
+            _write_full_config(conf_path, raw_conf)
+            _rich_console.print(
+                f"\n  [green]Configuration saved to[/green] [bold]{conf_path}[/bold]"
+            )
+            return 0
+
+        new_val = _edit_key(choice, raw_conf, descriptions, vmn_root_path)
+        if new_val is not _SENTINEL:
+            raw_conf[choice] = new_val
+            modified = True
+
+
+_SENTINEL = object()
+
+
+def _edit_key(key, raw_conf, descriptions, vmn_root_path):
+    meta = descriptions[key]
+    current = raw_conf.get(key, stamp_utils.VMN_DEFAULT_CONF.get(key))
+    config_type = meta["type"]
+
+    _rich_console.print(f"\n  [dim]{meta['description']}[/dim]")
+
+    if config_type == "bool":
+        return _edit_bool(key, current)
+    elif config_type == "string":
+        return _edit_string(key, current, meta)
+    elif config_type == "choice":
+        return _edit_choice(key, current, meta)
+    elif config_type == "bool_or_dict":
+        return _edit_bool_or_dict(key, current)
+    elif config_type == "nested_dict":
+        return _edit_nested_dict(key, current, meta, vmn_root_path)
+    return _SENTINEL
+
+
+def _edit_bool(key, current):
+    default = current if isinstance(current, bool) else False
+    result = questionary.confirm(f"  {key}", default=default).ask()
+    if result is None:
+        return _SENTINEL
+    return result
+
+
+def _edit_string(key, current, meta):
+    default = current if isinstance(current, str) else ""
+    if key == "template":
+        print(
+            "  Placeholders: {major}, {minor}, {patch}, {hotfix}, "
+            "{prerelease}, {rcn}, {buildmetadata}"
+        )
+        print("  Wrap in [] for optional sections.")
+        if "example" in meta:
+            print(f"  Example: {meta['example']}")
+
+    def validate_template(val):
+        if key != "template":
+            return True
+        try:
+            IVersionsStamper.parse_template(val)
+            return True
+        except Exception:
+            return "Invalid template format."
+
+    result = questionary.text(
+        f"  {key}",
+        default=default,
+        validate=validate_template,
+    ).ask()
+    if result is None:
+        return _SENTINEL
+    return result
+
+
+def _edit_choice(key, current, meta):
+    choices = meta["choices"]
+    default = current if current in choices else choices[0]
+    result = questionary.select(
+        f"  {key}",
+        choices=choices,
+        default=default,
+    ).ask()
+    if result is None:
+        return _SENTINEL
+    return result
+
+
+def _edit_bool_or_dict(key, current):
+    is_enabled = bool(current) if not isinstance(current, dict) else bool(current)
+    result = questionary.confirm(f"  Enable {key}?", default=is_enabled).ask()
+    if result is None:
+        return _SENTINEL
+    return True if result else {}
+
+
+def _edit_nested_dict(key, current, meta, vmn_root_path):
+    if current is None:
+        current = {}
+    current = copy.deepcopy(current)
+    nested_key = meta.get("nested_key", key)
+
+    if nested_key == "version_backends":
+        return _edit_version_backends(current, vmn_root_path)
+    elif nested_key == "deps":
+        return _edit_deps(current, vmn_root_path)
+    elif nested_key == "policies":
+        return _edit_policies(current)
+    elif nested_key == "external_services":
+        return _edit_external_services(current)
+
+    return _edit_generic_dict(key, current)
+
+
+def _edit_version_backends(current, vmn_root_path):
+    known_structured = ["npm", "cargo", "poetry", "pep621"]
+    known_generic = ["generic_jinja", "generic_selectors"]
+
+    while True:
+        choices = []
+        if current:
+            for name in current:
+                choices.append(questionary.Choice(
+                    title=f"  {name}: {_format_value_short(current[name])}",
+                    value=f"view:{name}",
+                ))
+        else:
+            choices.append(questionary.Choice(
+                title="  (no backends configured)", value="_noop", disabled="empty"
+            ))
+
+        choices.append(questionary.Choice(title="  + Add backend", value="_add"))
+        if current:
+            choices.append(questionary.Choice(title="  - Remove backend", value="_remove"))
+        choices.append(questionary.Choice(title="  Back", value="_back"))
+
+        action = questionary.select("  version_backends", choices=choices).ask()
+
+        if action is None or action == "_back":
+            return current
+
+        if action == "_add":
+            all_types = known_structured + known_generic
+            be_type = questionary.select(
+                "  Backend type", choices=all_types
+            ).ask()
+            if be_type is None:
+                continue
+
+            if be_type in known_structured:
+                path = questionary.text(
+                    f"  Path to file (relative to repo root)"
+                ).ask()
+                if path is None:
+                    continue
+                full = os.path.join(vmn_root_path, path)
+                if not os.path.isfile(full):
+                    print(f"  Warning: file not found at {full}")
+                    proceed = questionary.confirm("  Add anyway?", default=False).ask()
+                    if not proceed:
+                        continue
+                current[be_type] = {"path": path}
+
+            elif be_type == "generic_jinja":
+                inp = questionary.text("  Input template file path").ask()
+                if inp is None:
+                    continue
+                out = questionary.text("  Output file path").ask()
+                if out is None:
+                    continue
+                full_inp = os.path.join(vmn_root_path, inp)
+                if not os.path.isfile(full_inp):
+                    print(f"  Warning: input file not found at {full_inp}")
+                entry = {"input_file_path": inp, "output_file_path": out}
+                custom = questionary.text(
+                    "  Custom keys YAML path (Enter to skip)"
+                ).ask()
+                if custom:
+                    entry["custom_keys_path"] = custom
+                existing = current.get("generic_jinja", [])
+                existing.append(entry)
+                current["generic_jinja"] = existing
+
+            elif be_type == "generic_selectors":
+                inp = questionary.text("  Input file path").ask()
+                if inp is None:
+                    continue
+                out = questionary.text(
+                    "  Output file path", default=inp
+                ).ask()
+                if out is None:
+                    continue
+                full_inp = os.path.join(vmn_root_path, inp)
+                if not os.path.isfile(full_inp):
+                    print(f"  Warning: input file not found at {full_inp}")
+                regex_sel = questionary.text("  Regex selector pattern").ask()
+                if regex_sel is None:
+                    continue
+                regex_sub = questionary.text("  Regex substitution (use {{version}})").ask()
+                if regex_sub is None:
+                    continue
+                entry = {
+                    "paths_section": [
+                        {"input_file_path": inp, "output_file_path": out}
+                    ],
+                    "selectors_section": [
+                        {"regex_selector": regex_sel, "regex_sub": regex_sub}
+                    ],
+                }
+                existing = current.get("generic_selectors", [])
+                existing.append(entry)
+                current["generic_selectors"] = existing
+
+        elif action == "_remove":
+            names = list(current.keys())
+            to_remove = questionary.select("  Remove which backend?", choices=names).ask()
+            if to_remove:
+                del current[to_remove]
+
+    return current
+
+
+def _edit_deps(current, vmn_root_path):
+    while True:
+        choices = []
+        if current:
+            for path, dep_conf in current.items():
+                vcs = dep_conf.get("vcs_type", "git") if isinstance(dep_conf, dict) else "git"
+                choices.append(questionary.Choice(
+                    title=f"  {path} ({vcs})",
+                    value=f"view:{path}",
+                ))
+        else:
+            choices.append(questionary.Choice(
+                title="  (no dependencies configured)", value="_noop", disabled="empty"
+            ))
+
+        choices.append(questionary.Choice(title="  + Add dependency", value="_add"))
+        if current:
+            choices.append(questionary.Choice(title="  - Remove dependency", value="_remove"))
+        choices.append(questionary.Choice(title="  Back", value="_back"))
+
+        action = questionary.select("  deps", choices=choices).ask()
+
+        if action is None or action == "_back":
+            return current
+
+        if action == "_add":
+            rel_path = questionary.text(
+                "  Relative path to dependency repo (e.g. ../other_repo)"
+            ).ask()
+            if rel_path is None:
+                continue
+
+            full_path = os.path.join(vmn_root_path, rel_path)
+            dep_conf = {"vcs_type": "git"}
+
+            if os.path.isdir(full_path):
+                details = stamp_utils.GitBackend.get_repo_details(full_path)
+                if details is not None:
+                    _hash, remote, vcs_type = details
+                    print(f"  Detected: remote={remote}, vcs_type={vcs_type}")
+                    dep_conf["vcs_type"] = vcs_type
+                else:
+                    print(f"  Warning: {full_path} exists but is not a git repo")
+            else:
+                print(f"  Warning: directory not found at {full_path}")
+                proceed = questionary.confirm("  Add anyway?", default=False).ask()
+                if not proceed:
+                    continue
+
+            pin = questionary.select(
+                "  Pin to specific ref?",
+                choices=["none", "branch", "tag", "hash"],
+                default="none",
+            ).ask()
+            if pin == "branch":
+                val = questionary.text("  Branch name").ask()
+                if val:
+                    dep_conf["branch"] = val
+            elif pin == "tag":
+                val = questionary.text("  Tag name").ask()
+                if val:
+                    dep_conf["tag"] = val
+            elif pin == "hash":
+                val = questionary.text("  Commit hash").ask()
+                if val:
+                    dep_conf["hash"] = val
+
+            current[rel_path] = dep_conf
+
+        elif action == "_remove":
+            paths = list(current.keys())
+            to_remove = questionary.select("  Remove which dep?", choices=paths).ask()
+            if to_remove:
+                del current[to_remove]
+
+    return current
+
+
+def _edit_policies(current):
+    while True:
+        branches = current.get("whitelist_release_branches", [])
+        branch_str = ", ".join(branches) if branches else "(none)"
+
+        choices = [
+            questionary.Choice(
+                title=f"  whitelist_release_branches: {branch_str}",
+                value="_edit_branches",
+            ),
+            questionary.Choice(title="  Clear all policies", value="_clear"),
+            questionary.Choice(title="  Back", value="_back"),
+        ]
+
+        action = questionary.select("  policies", choices=choices).ask()
+
+        if action is None or action == "_back":
+            return current
+        elif action == "_clear":
+            current.clear()
+        elif action == "_edit_branches":
+            default = ", ".join(branches)
+            val = questionary.text(
+                "  Branch names (comma-separated, empty to clear)",
+                default=default,
+            ).ask()
+            if val is None:
+                continue
+            val = val.strip()
+            if val:
+                current["whitelist_release_branches"] = [
+                    b.strip() for b in val.split(",") if b.strip()
+                ]
+            else:
+                current.pop("whitelist_release_branches", None)
+
+    return current
+
+
+def _edit_external_services(current):
+    while True:
+        choices = []
+        if current:
+            for name, conf in current.items():
+                choices.append(questionary.Choice(
+                    title=f"  {name}: {_format_value_short(conf)}",
+                    value=f"view:{name}",
+                ))
+        else:
+            choices.append(questionary.Choice(
+                title="  (no external services configured)",
+                value="_noop",
+                disabled="empty",
+            ))
+
+        choices.append(questionary.Choice(title="  + Add service", value="_add"))
+        if current:
+            choices.append(questionary.Choice(title="  - Remove service", value="_remove"))
+        choices.append(questionary.Choice(title="  Back", value="_back"))
+
+        action = questionary.select("  external_services", choices=choices).ask()
+
+        if action is None or action == "_back":
+            return current
+        elif action == "_add":
+            name = questionary.text("  Service name").ask()
+            if name is None:
+                continue
+            current[name] = {}
+        elif action == "_remove":
+            names = list(current.keys())
+            to_remove = questionary.select("  Remove which?", choices=names).ask()
+            if to_remove:
+                del current[to_remove]
+
+    return current
+
+
+def _edit_generic_dict(key, current):
+    print(f"  Current value: {yaml.dump(current, default_flow_style=False).strip()}")
+    val = questionary.text(
+        f"  Enter YAML value (or Enter to keep current)",
+    ).ask()
+    if val is None or val.strip() == "":
+        return _SENTINEL
+    try:
+        parsed = yaml.safe_load(val)
+        if isinstance(parsed, dict):
+            return parsed
+        print("  Expected a dict value.")
+    except Exception:
+        print("  Invalid YAML.")
+    return _SENTINEL
+
+
+def _config_vim(conf_path):
+    editor = os.environ.get("EDITOR", "vim")
+    if not os.path.isfile(conf_path):
+        stamp_utils.VMN_LOGGER.error(f"Config file not found: {conf_path}")
+        return 1
+    return subprocess.call([editor, conf_path])
+
+
+def _format_value_short(val):
+    if isinstance(val, bool):
+        return str(val).lower()
+    if isinstance(val, dict):
+        if not val:
+            return "(not set)"
+        return f"({len(val)} entries)"
+    if isinstance(val, list):
+        if not val:
+            return "(not set)"
+        return f"[{len(val)} items]"
+    s = str(val)
+    if len(s) > 50:
+        return s[:47] + "..."
+    return s
+
+
 def handle_add(vmn_ctx):
     vmn_ctx.params["buildmetadata"] = vmn_ctx.args.bm
     vmn_ctx.params["version_metadata_path"] = vmn_ctx.args.vmp
@@ -2048,7 +3071,7 @@ def handle_add(vmn_ctx):
     optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
         )
@@ -2056,35 +3079,12 @@ def handle_add(vmn_ctx):
         return 1
 
     ver = vmn_ctx.args.version
-
-    if ver:
-        props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
-        if props["buildmetadata"] is not None:
-            stamp_utils.VMN_LOGGER.error(
-                f"Failed to add to {ver}. "
-                f"Adding metadata versions to metadata versions is not supported"
-            )
-
-            return 1
-
-    if ver is None and status["matched_version_info"] is not None:
-        # Good we have found an existing version matching
-        # the actual_deps_state
-        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
-    elif ver is None:
-        stamp_utils.VMN_LOGGER.error(
-            "When running vmn add and not on a version commit, "
-            "you must specify a specific version using -v flag"
-        )
-
-        return 1
+    ver, err = _validate_and_resolve_version(ver, status, "add")
+    if err:
+        return err
 
     try:
-        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            ver_info = None
-        else:
-            ver_info = ver_infos[tag_name]["ver_info"]
+        tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
         stamp_utils.VMN_LOGGER.info(
             vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info)
         )
@@ -2159,7 +3159,7 @@ def handle_goto(vmn_ctx):
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
         )
@@ -2174,84 +3174,63 @@ def handle_goto(vmn_ctx):
 @stamp_utils.measure_runtime_decorator
 def _get_repo_status(vcs, expected_status, optional_status=set()):
     be = vcs.backend
-    default_status = {
+    default_dep_status = {
         "pending": False,
         "detached": False,
         "outgoing": False,
         "state": set(),
         "error": False,
     }
-    status = copy.deepcopy(default_status)
-    status.update(
-        {
-            "repos_exist_locally": True,
-            "deps_synced_with_conf": True,
-            "repo_tracked": True,
-            "app_tracked": True,
-            # TODO: rename to on_stamped_version and turn to True
-            "modified": False,
-            "dirty_deps": False,
-            "err_msgs": {
-                "dirty_deps": "",
-                "deps_synced_with_conf": "",
-                "repo_tracked": "vmn repo tracking is already initialized",
-                "app_tracked": "vmn app tracking is already initialized",
-            },
-            "repos": {},
-            "matched_version_info": None,
-            # Assumed state
-            "state": {
-                "repos_exist_locally",
-                "deps_synced_with_conf",
-                "repo_tracked",
-                "app_tracked",
-            },
-            "local_repos_diff": set(),
-        }
+    status = RepoStatus(
+        state={
+            "repos_exist_locally",
+            "deps_synced_with_conf",
+            "repo_tracked",
+            "app_tracked",
+        },
     )
 
     path = os.path.join(vcs.vmn_root_path, ".vmn")
     if not vcs.tracked:
-        status["app_tracked"] = False
-        status["err_msgs"]["app_tracked"] = "Untracked app. Run vmn init-app first"
-        status["state"].remove("app_tracked")
+        status.app_tracked = False
+        status.err_msgs["app_tracked"] = "Untracked app. Run vmn init-app first"
+        status.state.remove("app_tracked")
 
         if not vcs.backend.is_path_tracked(path):
-            status["repo_tracked"] = False
-            status["err_msgs"][
+            status.repo_tracked = False
+            status.err_msgs[
                 "repo_tracked"
             ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
-            status["state"].remove("repo_tracked")
+            status.state.remove("repo_tracked")
 
     err = be.check_for_pending_changes()
     if err:
-        status["pending"] = True
-        status["err_msgs"]["pending"] = err
-        status["state"].add("pending")
+        status.pending = True
+        status.err_msgs["pending"] = err
+        status.state.add("pending")
 
     err = be.check_for_outgoing_changes()
     if err:
         # TODO:: Check for errcode instead of startswith
         if err.startswith("Detached head"):
-            status["detached"] = True
-            status["err_msgs"]["detached"] = err
-            status["state"].add("detached")
+            status.detached = True
+            status.err_msgs["detached"] = err
+            status.state.add("detached")
         else:
             # Outgoing changes cannot be in detached head
             # TODO: is it really?
-            status["outgoing"] = True
-            status["err_msgs"]["outgoing"] = err
-            status["state"].add("outgoing")
+            status.outgoing = True
+            status.err_msgs["outgoing"] = err
+            status.state.add("outgoing")
 
     if "name" in vcs.current_version_info["stamping"]["app"]:
         verstr = vcs.verstr_from_file
         matched_version_info = vcs.find_matching_version(verstr)
         if matched_version_info is None:
-            status["modified"] = True
-            status["state"].add("modified")
+            status.modified = True
+            status.state.add("modified")
         else:
-            status["matched_version_info"] = matched_version_info
-
+            status.matched_version_info = matched_version_info
 
         configured_repos = set(vcs.configured_deps.keys())
         local_repos = set(vcs.actual_deps_state.keys())
@@ -2262,13 +3241,13 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             for path in missing_deps:
                 paths.append(os.path.join(vcs.vmn_root_path, path))
 
-            status["repos_exist_locally"] = False
-            status["err_msgs"]["repos_exist_locally"] = (
+            status.repos_exist_locally = False
+            status.err_msgs["repos_exist_locally"] = (
                 f"Dependency repository were specified in conf.yml file. "
                 f"However repos: {paths} do not exist. Please clone and rerun"
             )
-            status["local_repos_diff"] = missing_deps
-            status["state"].remove("repos_exist_locally")
+            status.local_repos_diff = missing_deps
+            status.state.remove("repos_exist_locally")
 
         err = 0
         common_deps = configured_repos & local_repos
@@ -2277,7 +3256,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             if repo == ".":
                 continue
 
-            status["repos"][repo] = copy.deepcopy(default_status)
+            status.repos[repo] = copy.deepcopy(default_dep_status)
             full_path = os.path.join(vcs.vmn_root_path, repo)
 
             dep_be, err = stamp_utils.get_client(full_path, vcs.be_type)
@@ -2288,13 +3267,13 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
             err = dep_be.check_for_pending_changes()
             if err:
-                status["dirty_deps"] = True
-                status["err_msgs"][
+                status.dirty_deps = True
+                status.err_msgs[
                     "dirty_deps"
-                ] = f"{status['err_msgs']['dirty_deps']}\n{err}"
-                status["state"].add("dirty_deps")
-                status["repos"][repo]["pending"] = True
-                status["repos"][repo]["state"].add("pending")
+                ] = f"{status.err_msgs['dirty_deps']}\n{err}"
+                status.state.add("dirty_deps")
+                status.repos[repo]["pending"] = True
+                status.repos[repo]["state"].add("pending")
 
             if "branch" in vcs.configured_deps[repo]:
                 try:
@@ -2306,15 +3285,15 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     )
                     assert branch_name == vcs.configured_deps[repo]["branch"]
                 except Exception:
-                    status["deps_synced_with_conf"] = False
-                    status["err_msgs"][
+                    status.deps_synced_with_conf = False
+                    status.err_msgs[
                         "deps_synced_with_conf"
-                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status["state"]:
-                        status["state"].remove("deps_synced_with_conf")
+                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status.state:
+                        status.state.remove("deps_synced_with_conf")
 
-                    status["repos"][repo]["branch_synced_error"] = True
-                    status["repos"][repo]["state"].add("not_synced_with_conf")
+                    status.repos[repo]["branch_synced_error"] = True
+                    status.repos[repo]["state"].add("not_synced_with_conf")
 
             if "tag" in vcs.configured_deps[repo]:
                 try:
@@ -2326,15 +3305,15 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     c2 = dep_be.changeset()
                     assert c1 == c2
                 except Exception:
-                    status["deps_synced_with_conf"] = False
-                    status["err_msgs"][
+                    status.deps_synced_with_conf = False
+                    status.err_msgs[
                         "deps_synced_with_conf"
-                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status["state"]:
-                        status["state"].remove("deps_synced_with_conf")
+                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status.state:
+                        status.state.remove("deps_synced_with_conf")
 
-                    status["repos"][repo]["tag_synced_error"] = True
-                    status["repos"][repo]["state"].add("not_synced_with_conf")
+                    status.repos[repo]["tag_synced_error"] = True
+                    status.repos[repo]["state"].add("not_synced_with_conf")
 
             if "hash" in vcs.configured_deps[repo]:
                 try:
@@ -2344,51 +3323,51 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
                     )
                     assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
                 except Exception:
-                    status["deps_synced_with_conf"] = False
-                    status["err_msgs"][
+                    status.deps_synced_with_conf = False
+                    status.err_msgs[
                         "deps_synced_with_conf"
-                    ] = f"{status['err_msgs']['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status["state"]:
-                        status["state"].remove("deps_synced_with_conf")
+                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
+                    if "deps_synced_with_conf" in status.state:
+                        status.state.remove("deps_synced_with_conf")
 
-                    status["repos"][repo]["hash_synced_error"] = True
-                    status["repos"][repo]["state"].add("not_synced_with_conf")
+                    status.repos[repo]["hash_synced_error"] = True
+                    status.repos[repo]["state"].add("not_synced_with_conf")
 
             if not dep_be.in_detached_head():
                 err = dep_be.check_for_outgoing_changes()
                 if err:
-                    status["dirty_deps"] = True
-                    status["err_msgs"][
+                    status.dirty_deps = True
+                    status.err_msgs[
                         "dirty_deps"
-                    ] = f"{status['err_msgs']['dirty_deps']}\n{err}"
-                    status["state"].add("dirty_deps")
-                    status["repos"][repo]["outgoing"] = True
-                    status["repos"][repo]["state"].add("outgoing")
+                    ] = f"{status.err_msgs['dirty_deps']}\n{err}"
+                    status.state.add("dirty_deps")
+                    status.repos[repo]["outgoing"] = True
+                    status.repos[repo]["state"].add("outgoing")
             else:
-                status["repos"][repo]["detached"] = True
-                status["repos"][repo]["state"].add("detached")
+                status.repos[repo]["detached"] = True
+                status.repos[repo]["state"].add("detached")
 
-    if (expected_status & status["state"]) != expected_status:
-        for msg in expected_status - status["state"]:
-            if msg in status["err_msgs"] and status["err_msgs"][msg]:
-                stamp_utils.VMN_LOGGER.error(status["err_msgs"][msg])
+    if (expected_status & status.state) != expected_status:
+        for msg in expected_status - status.state:
+            if msg in status.err_msgs and status.err_msgs[msg]:
+                stamp_utils.VMN_LOGGER.error(status.err_msgs[msg])
 
-        status["error"] = True
+        status.error = True
 
         return status
 
-    if ((optional_status | status["state"]) - expected_status) != optional_status:
-        for msg in (optional_status | status["state"]) - expected_status:
-            if msg in status["err_msgs"] and status["err_msgs"][msg]:
-                stamp_utils.VMN_LOGGER.error(status["err_msgs"][msg])
+    if ((optional_status | status.state) - expected_status) != optional_status:
+        for msg in (optional_status | status.state) - expected_status:
+            if msg in status.err_msgs and status.err_msgs[msg]:
+                stamp_utils.VMN_LOGGER.error(status.err_msgs[msg])
 
         stamp_utils.VMN_LOGGER.error(
             f"Repository status is in unexpected state:\n"
-            f"{((optional_status | status['state']) - expected_status)}\n"
+            f"{((optional_status | status.state) - expected_status)}\n"
             f"versus optional:\n{optional_status}"
         )
 
-        status["error"] = True
+        status.error = True
 
         return status
 
@@ -2401,7 +3380,7 @@ def _init_app(versions_be_ifc, starting_version):
     expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
 
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.debug(
             f"Error occured when getting the repo status: {status}", exc_info=True
         )
@@ -2483,7 +3462,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
             )
             raise RuntimeError()
 
-    if versions_be_ifc.bad_format_template:
+    if versions_be_ifc.template_err_str:
         stamp_utils.VMN_LOGGER.warning(versions_be_ifc.template_err_str)
 
     while retries:
@@ -2559,7 +3538,7 @@ def show(vcs, params, verstr=None):
             "deps_synced_with_conf",
         }
         status = _get_repo_status(vcs, expected_status, optional_status)
-        if status["error"]:
+        if status.error:
             stamp_utils.VMN_LOGGER.error("Error occured when getting the repo status")
             stamp_utils.VMN_LOGGER.debug(status, exc_info=True)
 
@@ -2625,7 +3604,7 @@ def show(vcs, params, verstr=None):
 def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data.update(ver_info["stamping"]["app"])
     props = stamp_utils.VMNBackend.deserialize_vmn_tag_name(tag_name)
-    verstr = props["verstr"]
+    verstr = props.verstr
     data["version"] = stamp_utils.VMNBackend.get_utemplate_formatted_version(
         verstr, vcs.template, vcs.hide_zero_hotfix
     )
@@ -2737,7 +3716,7 @@ def gen(vcs, params, verstr_range=None):
         "deps_synced_with_conf",
     }
     status = _get_repo_status(vcs, expected_status, optional_status)
-    if status["error"]:
+    if status.error:
         stamp_utils.VMN_LOGGER.error("Error occured when getting the repo status")
         stamp_utils.VMN_LOGGER.debug(status, exc_info=True)
 
@@ -2774,16 +3753,16 @@ def gen(vcs, params, verstr_range=None):
             stamp_utils.VMN_LOGGER.error(
                 f"The repository and maybe some of its dependencies are in dirty state."
                 f"Dirty states found: {dirty_states}.\nError messages collected for dependencies:\n"
-                f"{status['err_msgs']['dirty_deps']}\n"
+                f"{status.err_msgs['dirty_deps']}\n"
                 f"Refusing to gen."
             )
             raise RuntimeError()
 
         if (
-            status["matched_version_info"] is not None
+            status.matched_version_info is not None
             and verstr is not None
             # TODO:: check this statement
-            and status["matched_version_info"]["stamping"]["app"]["_version"] != verstr
+            and status.matched_version_info["stamping"]["app"]["_version"] != verstr
         ):
             stamp_utils.VMN_LOGGER.error(
                 f"The repository is not exactly at version: {verstr}. "
@@ -2809,8 +3788,8 @@ def gen(vcs, params, verstr_range=None):
             data["changesets"][k] = copy.deepcopy(vcs.actual_deps_state[k])
             data["changesets"][k]["state"] = {"clean"}
 
-            if status["repos"] and vcs.repo_name != k:
-                data["changesets"][k]["state"] = status["repos"][k]["state"]
+            if status.repos and vcs.repo_name != k:
+                data["changesets"][k]["state"] = status.repos[k]["state"]
             elif vcs.repo_name == k:
                 data["changesets"][k]["state"] = dirty_states
 
@@ -2903,7 +3882,7 @@ def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
 
 
 def get_dirty_states(optional_status, status):
-    dirty_states = (optional_status & status["state"]) | {
+    dirty_states = (optional_status & status.state) | {
         "repos_exist_locally",
         "detached",
     }
@@ -2911,9 +3890,9 @@ def get_dirty_states(optional_status, status):
 
     try:
         debug_msg = ""
-        for k in status["err_msgs"].keys():
+        for k in status.err_msgs.keys():
             if k in dirty_states:
-                debug_msg = f"{debug_msg}\n{status['err_msgs'][k]}"
+                debug_msg = f"{debug_msg}\n{status.err_msgs[k]}"
 
         if debug_msg:
             stamp_utils.VMN_LOGGER.debug(f"Debug for dirty states call:{debug_msg}")
@@ -3359,9 +4338,6 @@ def vmn_run(command_line=None):
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
         err = 1
-    except Exception:
-        stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
-        err = 1
 
     stamp_utils.VMN_LOGGER.debug(pformat(stamp_utils.call_count))
 
@@ -3613,6 +4589,16 @@ def add_arg_init_app(subprasers):
     pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
     pinitapp.set_defaults(dry=False)
     pinitapp.add_argument(
+        "--orm",
+        "--default-release-mode",
+        dest="orm",
+        choices=["optional", "strict"],
+        default="optional",
+        help="Set the default_release_mode for the app config. "
+        "'optional' uses --orm behavior, 'strict' uses -r behavior. "
+        "Default: optional",
+    )
+    pinitapp.add_argument(
         "name", help="The application's name to initialize version tracking for"
     )
 
@@ -3660,6 +4646,40 @@ def add_arg_add(subprasers):
     padd.add_argument("name", help="The application's name")
 
 
+def add_arg_config(subprasers):
+    pconfig = subprasers.add_parser(
+        "config",
+        help="View and edit application configuration interactively",
+    )
+    pconfig.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        help="The application name. If omitted, lists all managed apps.",
+    )
+    pconfig.add_argument(
+        "--vim",
+        dest="vim",
+        action="store_true",
+        help="Open the config file in $EDITOR (default: vim) instead of the TUI",
+    )
+    pconfig.set_defaults(vim=False)
+    pconfig.add_argument(
+        "--root",
+        dest="root",
+        action="store_true",
+        help="Edit the root app config (root_conf.yml) instead of per-app conf.yml",
+    )
+    pconfig.set_defaults(root=False)
+    pconfig.add_argument(
+        "--global",
+        dest="global_conf",
+        action="store_true",
+        help="Edit the repo-level .vmn/conf.yml",
+    )
+    pconfig.set_defaults(global_conf=False)
+
+
 def verify_user_input_version(args, key):
     if key not in args or getattr(args, key) is None:
         return
@@ -3676,7 +4696,7 @@ def verify_user_input_version(args, key):
 
         raise RuntimeError(err)
 
-    if props["buildmetadata"] is not None:
+    if props.buildmetadata is not None:
         if key == "ov":
             err = f"Option: {key} must not include buildmetadata parts"
             stamp_utils.VMN_LOGGER.error(err)
