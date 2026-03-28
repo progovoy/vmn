@@ -8,8 +8,10 @@ import pathlib
 import re
 import sys
 import time
+from dataclasses import dataclass, field
 from functools import wraps
 from logging.handlers import RotatingFileHandler
+from typing import Optional, Set
 
 import git
 import yaml
@@ -347,6 +349,44 @@ def clear_logger_handlers(logger_obj):
         logger_obj.removeFilter(logger_obj.filters[0])
 
 
+@dataclass
+class VersionProps:
+    types: Set[str] = field(default_factory=lambda: {"version"})
+    root_version: Optional[int] = None
+    major: Optional[int] = None
+    minor: Optional[int] = None
+    patch: Optional[int] = None
+    hotfix: Optional[int] = None
+    prerelease: str = "release"
+    rcn: Optional[int] = None
+    buildmetadata: Optional[str] = None
+    old_ver_format: bool = False
+
+
+@dataclass
+class TagProps(VersionProps):
+    app_name: Optional[str] = None
+    old_tag_format: bool = False
+    verstr: Optional[str] = None
+
+
+@dataclass
+class AppConf:
+    template: str = ""
+    extra_info: bool = False
+    create_verinfo_files: bool = False
+    hide_zero_hotfix: bool = True
+    version_backends: dict = field(default_factory=dict)
+    deps: dict = field(default_factory=dict)
+    policies: dict = field(default_factory=dict)
+    conventional_commits: dict = field(default_factory=dict)
+    default_release_mode: str = "optional"
+
+    def __post_init__(self):
+        if not self.template:
+            self.template = VMN_DEFAULT_CONF["template"]
+
+
 class VMNBackend(object):
     def __init__(self, btype):
         self._type = btype
@@ -388,8 +428,8 @@ class VMNBackend(object):
     def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix):
         props = VMNBackend.deserialize_vmn_version(raw_vmn_version)
 
-        if props["hotfix"] == 0 and hide_zero_hotfix:
-            props["hotfix"] = None
+        if props.hotfix == 0 and hide_zero_hotfix:
+            props.hotfix = None
 
         octats = (
             "major",
@@ -403,15 +443,16 @@ class VMNBackend(object):
 
         formatted_version = ""
         for octat in octats:
-            if props[octat] is None:
+            val = getattr(props, octat)
+            if val is None:
                 continue
 
             if (
                 f"{octat}_template" in template
                 and template[f"{octat}_template"] is not None
             ):
-                d = {octat: props[octat]}
-                if "rcn" in d and props["old_ver_format"]:
+                d = {octat: val}
+                if "rcn" in d and props.old_ver_format:
                     continue
 
                 if "prerelease" in d and d["prerelease"] == "release":
@@ -442,7 +483,7 @@ class VMNBackend(object):
 
         try:
             props = VMNBackend.deserialize_tag_name(tag_name)
-            if props["hotfix"] == 0:
+            if props.hotfix == 0:
                 # tags are always without zero hotfix
                 verstr = VMNBackend.serialize_vmn_version(verstr, hide_zero_hotfix=True)
                 tag_name = f"{tag_app_name}_{verstr}"
@@ -465,16 +506,16 @@ class VMNBackend(object):
     ):
         props = VMNBackend.deserialize_vmn_version(base_verstr)
         base_verstr = VMNBackend.serialize_vmn_base_version(
-            props["major"],
-            props["minor"],
-            props["patch"],
-            props["hotfix"],
+            props.major,
+            props.minor,
+            props.patch,
+            props.hotfix,
             hide_zero_hotfix=hide_zero_hotfix,
         )
 
         vmn_version = base_verstr
 
-        if props["prerelease"] != "release":
+        if props.prerelease != "release":
             if prerelease is not None:
                 VMN_LOGGER.warning(
                     "Tried to serialize verstr containing "
@@ -482,11 +523,11 @@ class VMNBackend(object):
                     " another prerelease component. Will ignore it"
                 )
 
-            prerelease = props["prerelease"]
-            if not props["old_ver_format"]:
-                rcn = props["rcn"]
+            prerelease = props.prerelease
+            if not props.old_ver_format:
+                rcn = props.rcn
 
-        if props["buildmetadata"] is not None:
+        if props.buildmetadata is not None:
             if prerelease is not None:
                 VMN_LOGGER.warning(
                     "Tried to serialize verstr containing "
@@ -494,7 +535,7 @@ class VMNBackend(object):
                     " another buildmetadata component. Will ignore it"
                 )
 
-            buildmetadata = props["buildmetadata"]
+            buildmetadata = props.buildmetadata
 
         if prerelease is not None:
             vmn_version = f"{vmn_version}-{prerelease}"
@@ -525,10 +566,10 @@ class VMNBackend(object):
         props = VMNBackend.deserialize_vmn_version(some_verstr)
 
         vmn_version = VMNBackend.serialize_vmn_base_version(
-            props["major"],
-            props["minor"],
-            props["patch"],
-            props["hotfix"],
+            props.major,
+            props.minor,
+            props.patch,
+            props.hotfix,
             hide_zero_hotfix,
         )
 
@@ -536,18 +577,15 @@ class VMNBackend(object):
 
     @staticmethod
     def deserialize_tag_name(some_tag):
-        ret = {
-            "app_name": None,
-            "old_tag_format": False,
-        }
+        app_name = None
+        old_tag_format = False
 
         match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
         if match is not None:
             gdict = match.groupdict()
-            ret["app_name"] = gdict["app_name"]
+            app_name = gdict["app_name"]
         else:
             match = re.search(VMN_TAG_REGEX, some_tag)
-            old_tag_format = False
             if match is None:
                 match = re.search(VMN_OLD_TAG_REGEX, some_tag)
                 if match is None:
@@ -556,40 +594,42 @@ class VMNBackend(object):
                 old_tag_format = True
 
             gdict = match.groupdict()
-            if old_tag_format:
-                ret["old_tag_format"] = True
+            app_name = VMNBackend.tag_name_to_app_name(gdict["app_name"])
 
-            ret["app_name"] = VMNBackend.tag_name_to_app_name(gdict["app_name"])
+        res = VMNBackend.app_name_to_tag_name(app_name)
+        verstr = some_tag.split(f"{res}_")[1]
 
-        res = VMNBackend.app_name_to_tag_name(ret["app_name"])
-        ret["verstr"] = some_tag.split(f"{res}_")[1]
+        ver_props = VMNBackend.deserialize_vmn_version(verstr)
 
-        ret.update(VMNBackend.deserialize_vmn_version(ret["verstr"]))
+        ret = TagProps(
+            types=ver_props.types,
+            root_version=ver_props.root_version,
+            major=ver_props.major,
+            minor=ver_props.minor,
+            patch=ver_props.patch,
+            hotfix=ver_props.hotfix,
+            prerelease=ver_props.prerelease,
+            rcn=ver_props.rcn,
+            buildmetadata=ver_props.buildmetadata,
+            old_ver_format=ver_props.old_ver_format,
+            app_name=app_name,
+            old_tag_format=old_tag_format,
+            verstr=verstr,
+        )
 
         return ret
 
     @staticmethod
     def deserialize_vmn_version(verstr):
-        ret = {
-            "types": {"version"},
-            "root_version": None,
-            "major": None,
-            "minor": None,
-            "patch": None,
-            "hotfix": None,
-            "prerelease": "release",
-            "rcn": None,
-            "buildmetadata": None,
-            "old_ver_format": False,
-        }
+        ret = VersionProps()
 
         match = re.search(VMN_ROOT_VERSION_REGEX, verstr)
         if match is not None:
             gdict = match.groupdict()
 
             int(gdict["version"])
-            ret["root_version"] = gdict["version"]
-            ret["types"].add("root")
+            ret.root_version = gdict["version"]
+            ret.types.add("root")
 
             return ret
 
@@ -605,24 +645,24 @@ class VMNBackend(object):
         gdict = match.groupdict()
         if old_ver_format:
             gdict["rcn"] = -1
-            ret["old_ver_format"] = True
+            ret.old_ver_format = True
 
-        ret["major"] = int(gdict["major"])
-        ret["minor"] = int(gdict["minor"])
-        ret["patch"] = int(gdict["patch"])
-        ret["hotfix"] = 0
+        ret.major = int(gdict["major"])
+        ret.minor = int(gdict["minor"])
+        ret.patch = int(gdict["patch"])
+        ret.hotfix = 0
 
         if gdict["hotfix"] is not None:
-            ret["hotfix"] = int(gdict["hotfix"])
+            ret.hotfix = int(gdict["hotfix"])
 
         if gdict["prerelease"] is not None:
-            ret["prerelease"] = gdict["prerelease"]
-            ret["rcn"] = int(gdict["rcn"])
-            ret["types"].add("prerelease")
+            ret.prerelease = gdict["prerelease"]
+            ret.rcn = int(gdict["rcn"])
+            ret.types.add("prerelease")
 
         if gdict["buildmetadata"] is not None:
-            ret["buildmetadata"] = gdict["buildmetadata"]
-            ret["types"].add("buildmetadata")
+            ret.buildmetadata = gdict["buildmetadata"]
+            ret.types.add("buildmetadata")
 
         return ret
 
@@ -715,14 +755,14 @@ class LocalFileBackend(VMNBackend):
 
     def get_tag_version_info(self, tag_name):
         tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
-        if "root" in tagd["types"]:
+        if "root" in tagd.types:
             dir_path = os.path.join(
-                self.repo_path, ".vmn", tagd["app_name"], "root_verinfo"
+                self.repo_path, ".vmn", tagd.app_name, "root_verinfo"
             )
-            path = os.path.join(dir_path, f"{tagd['root_version']}.yml")
+            path = os.path.join(dir_path, f"{tagd.root_version}.yml")
         else:
-            dir_path = os.path.join(self.repo_path, ".vmn", tagd["app_name"], "verinfo")
-            path = os.path.join(dir_path, f"{tagd['verstr']}.yml")
+            dir_path = os.path.join(self.repo_path, ".vmn", tagd.app_name, "verinfo")
+            path = os.path.join(dir_path, f"{tagd.verstr}.yml")
 
         ver_infos = {}
         try:

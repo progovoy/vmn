@@ -14,7 +14,7 @@ setuptools.setup(
     author_email="p.rogovoy@gmail.com",
     description=description,
     long_description=description,
-    python_requires=">=3.6.0",
+    python_requires=">=3.8",
     url="https://github.com/progovoy/vmn",
     install_requires=install_requires,
     package_dir={"version_stamp": "version_stamp"},
