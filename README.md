@@ -140,6 +140,7 @@ vmn stamp <app-name>                    # 0.0.2-rc.3  (still continues)
 ```
 
 If the current version is a **release** (e.g. `0.0.1`), omitting `-r` errors out — vmn needs to know which segment to bump.
+**Exception:** with [`conventional_commits`](#stamp-automation-conventional-commits-changelog-github-releases) enabled, `-r` can always be omitted — the release mode is auto-detected from commit messages.
 
 #### `-r` vs `--orm`
 
