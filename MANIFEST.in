@@ -1,3 +1,6 @@
 include README.md
 include LICENSE.txt
 include tests/requirements.txt
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+recursive-include docs *.md
