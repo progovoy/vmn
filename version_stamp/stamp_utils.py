@@ -1176,9 +1176,6 @@ class GitBackend(VMNBackend):
         if o.tag is None:
             return tname, None
 
-        if o is None:
-            VMN_LOGGER.debug(f"Somehow did not find a tag object for tag: {tname}")
-
         return tname, o
 
     @measure_runtime_decorator

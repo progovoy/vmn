@@ -442,9 +442,12 @@ class IVersionsStamper(object):
         version_files_to_track_diff = []
         for backend in self.version_backends:
             try:
-                handler = getattr(self, f"_add_files_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_files_to_track_diff, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._add_files_simple_backend(version_files_to_track_diff, backend_conf)
+                else:
+                    handler = getattr(self, f"_add_files_{backend}")
+                    handler(version_files_to_track_diff, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -714,9 +717,12 @@ class IVersionsStamper(object):
                     )
                     continue
 
-                handler = getattr(self, f"_write_version_to_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_number, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._write_version_to_structured(version_number, backend_conf, backend)
+                else:
+                    handler = getattr(self, f"_write_version_to_{backend}")
+                    handler(version_number, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -761,18 +767,6 @@ class IVersionsStamper(object):
         except Exception as e:
             stamp_utils.VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
-
-    def _write_version_to_npm(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "npm")
-
-    def _write_version_to_cargo(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "cargo")
-
-    def _write_version_to_poetry(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "poetry")
-
-    def _write_version_to_pep621(self, verstr, backend_conf):
-        self._write_version_to_structured(verstr, backend_conf, "pep621")
 
     def _write_version_to_generic_jinja(self, verstr, backend_conf):
         if self.dry_run:
@@ -1358,9 +1352,12 @@ class VersionControlStamper(IVersionsStamper):
 
         for backend in self.version_backends:
             try:
-                handler = getattr(self, f"_add_files_{backend}")
                 backend_conf = self.version_backends[backend]
-                handler(version_files_to_add, backend_conf)
+                if backend in self._STRUCTURED_BACKEND_SPEC:
+                    self._add_files_simple_backend(version_files_to_add, backend_conf)
+                else:
+                    handler = getattr(self, f"_add_files_{backend}")
+                    handler(version_files_to_add, backend_conf)
             except AttributeError:
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
@@ -1529,18 +1526,6 @@ class VersionControlStamper(IVersionsStamper):
     def _add_files_simple_backend(self, version_files_to_add, backend_conf):
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         version_files_to_add.append(file_path)
-
-    def _add_files_npm(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_cargo(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_poetry(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
-
-    def _add_files_pep621(self, version_files_to_add, backend_conf):
-        self._add_files_simple_backend(version_files_to_add, backend_conf)
 
     @stamp_utils.measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
