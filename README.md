@@ -10,7 +10,7 @@
   <a href="https://github.com/progovoy/vmn/blob/master/LICENSE"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="License"></a>
 </p>
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/python-3.7+-3776AB?logo=python&logoColor=white" alt="Python 3.7+"></a>
+  <a href="#"><img src="https://img.shields.io/badge/python-3.8+-3776AB?logo=python&logoColor=white" alt="Python 3.8+"></a>
   <a href="#"><img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-brightgreen" alt="Platforms"></a>
   <a href="https://semver.org"><img src="https://img.shields.io/badge/semver-2.0.0-blue?logo=semver&logoColor=white" alt="Semver"></a>
   <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
@@ -27,22 +27,21 @@
 
 ---
 
-🚀 [Quick Start](#-quick-start) · ⚖️ [Why vmn?](#%EF%B8%8F-why-vmn) · 🔄 [CI Integration](#-ci-integration) · 📖 [Commands](#-commands) · ⚙️ [Configuration](#%EF%B8%8F-configuration) · 🤝 [Contributing](CONTRIBUTING.md)
+🚀 [Quick Start](#-quick-start) · ⚖️ [Why vmn?](#%EF%B8%8F-why-vmn) · 📖 [Commands](#-commands) · 🔌 [Auto-Embedding](#-version-auto-embedding) · ⚙️ [Configuration](#%EF%B8%8F-configuration) · 🔄 [CI](#-ci-integration) · 🤝 [Contributing](CONTRIBUTING.md)
 
 ---
 
 ## 🚀 Quick Start
 
 ```sh
-# Install (pick your favorite)
-pipx install vmn          # recommended
-pip install vmn           # classic
-uvx vmn stamp ...         # zero-install via uv
+pip install vmn                 # or: pipx install vmn / uvx vmn
 
-# Version your app (auto-initializes on first run)
+# That's it — vmn auto-initializes on first stamp (no init needed)
 vmn stamp -r patch my_app
 # => 0.0.1
 ```
+
+No separate `vmn init` or `vmn init-app` required — when you run `vmn stamp` on a fresh repo, vmn automatically initializes the repository and app for you.
 
 ## ⚖️ Why vmn?
 
@@ -56,10 +55,11 @@ vmn stamp -r patch my_app
 | State recovery (`vmn goto`) | :white_check_mark: | :x: | :x: | :x: |
 | Microservice / root app topology | :white_check_mark: | :x: | :x: | monorepo only |
 | 4-segment hotfix versioning | :white_check_mark: | :x: | :x: | :x: |
-| Auto-embed version (<img src="https://img.shields.io/badge/-npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm"> <img src="https://img.shields.io/badge/-Cargo-000?style=flat-square&logo=rust&logoColor=white" alt="Cargo"> <img src="https://img.shields.io/badge/-pyproject-3776AB?style=flat-square&logo=python&logoColor=white" alt="pyproject"> + any file) | :white_check_mark: | per-plugin | :x: | JS only |
+| Auto-embed version (npm, Cargo, pyproject, any file) | :white_check_mark: | per-plugin | :x: | JS only |
 | Conventional commits | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
 | Changelog generation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | GitHub Release creation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| Zero-config start (auto-init) | :white_check_mark: | :x: | :x: | :x: |
 | Offline / local file backend | :white_check_mark: | :x: | :x: | :x: |
 | Zero lock-in (pure git tags) | :white_check_mark: | :x: | :x: | :x: |
 
@@ -74,35 +74,21 @@ vmn stamp -r patch my_app
 
 </details>
 
-## 🔄 CI Integration
-
-Use the official <img src="https://img.shields.io/badge/GitHub%20Action-2088FF?style=flat-square&logo=githubactions&logoColor=white" alt="GitHub Action"> &mdash; [progovoy/vmn-action](https://github.com/progovoy/vmn-action):
-
-```yaml
-steps:
-  - uses: actions/checkout@v4
-    with:
-      fetch-depth: 0
-  - uses: progovoy/vmn-action@latest
-    with:
-      app-name: my_app
-      do-stamp: true
-      stamp-mode: patch
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-```
-
 ## ✨ Features
 
-- 🔢 **Version formats** — `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info` (<a href="https://semver.org"><img src="https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square&logo=semver&logoColor=white" alt="Semver" height="18"></a> compliant + hotfix extension)
-- ⏪ **[State recovery](#vmn-goto)** — `vmn goto` restores the exact repo state for any stamped version
-- 🧩 **[Microservice topologies](#root-apps-or-microservices)** — root apps with independent service versions
-- 🔗 **[Multi-repo dependencies](#configuration)** — track and lock versions across repositories
-- 📦 **[Version auto-embedding](#version-auto-embedding)** — <img src="https://img.shields.io/badge/-npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm" height="18"> <img src="https://img.shields.io/badge/-Cargo-000?style=flat-square&logo=rust&logoColor=white" alt="Cargo" height="18"> <img src="https://img.shields.io/badge/-pyproject-3776AB?style=flat-square&logo=python&logoColor=white" alt="pyproject" height="18"> or any file via regex/<img src="https://img.shields.io/badge/-Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" height="18">
-- 📝 **[Conventional commits](#conventional-commits)** — automatic release mode detection and release notes
-- 📋 **[Changelog generation](#configuration)** — built-in CHANGELOG.md output on stamp
-- 🚀 **[GitHub Release creation](#configuration)** — optionally create <img src="https://img.shields.io/badge/GitHub%20Releases-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub" height="18"> on stamp
-- ⚡ **[uv / hatchling](#hatchling--uv)** — dynamic versioning from <img src="https://img.shields.io/badge/-git-F05032?style=flat-square&logo=git&logoColor=white" alt="git" height="18"> tags via `hatch-vcs`
+| | Feature | Description |
+|:-:|:--------|:------------|
+| 🔢 | **Version formats** | `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info` — [Semver](https://semver.org) + hotfix extension |
+| 🪄 | **[Zero-config start](#-quick-start)** | Auto-initializes repo and app on first `vmn stamp` — no init step needed |
+| 📝 | **[Conventional commits](#conventional-commits)** | Auto-detect release mode from `fix:`, `feat:`, `BREAKING CHANGE` commits |
+| 📋 | **[Changelog generation](#changelog-generation)** | Built-in CHANGELOG.md from conventional commits on each stamp |
+| 🚀 | **[GitHub Releases](#github-release-creation)** | Optionally create GitHub Releases after stamp (via `gh` CLI) |
+| 📦 | **[Version auto-embedding](#-version-auto-embedding)** | Write version into `package.json`, `Cargo.toml`, `pyproject.toml`, or any file |
+| ⏪ | **[State recovery](#vmn-goto)** | `vmn goto` restores the exact repo state for any stamped version |
+| 🧩 | **[Microservices](#root-apps-or-microservices)** | Root apps with independent service versions |
+| 🔗 | **[Multi-repo deps](#configuration)** | Track and lock versions across repositories |
+| ⚡ | **[uv / hatchling](#hatchling--uv)** | Dynamic versioning from git tags via `hatch-vcs` |
+| 🔧 | **[Interactive config](#vmn-config)** | TUI editor for app configuration (`vmn config`) |
 
 <details>
 <summary><strong>Try it locally (playground)</strong></summary>
@@ -131,26 +117,14 @@ vmn stamp -r patch my_app   # => 0.0.2
 
 > `init-app` and `stamp` both support `--dry-run` for safe testing.
 
-### Install
+### vmn init / init-app
+
+Usually not needed — `vmn stamp` auto-initializes on first run. Use these only for explicit control:
 
 ```sh
-pipx install vmn       # recommended
-pip install vmn        # alternative
-uvx vmn stamp ...      # run without installing (via uv)
-```
-
-### vmn init
-
-```sh
-cd to/your/repository
-vmn init               # once per repository
-```
-
-### vmn init-app
-
-```sh
-vmn init-app <app-name>             # starts from 0.0.0
-vmn init-app -v 1.6.8 <app-name>   # start from specific version
+vmn init                            # initialize vmn in a repository
+vmn init-app <app-name>             # initialize an app (starts from 0.0.0)
+vmn init-app -v 1.6.8 <app-name>   # initialize from a specific version
 ```
 
 ### vmn stamp
@@ -163,7 +137,10 @@ vmn stamp -r patch <app-name>
 vmn stamp -r minor <app-name2>
 ```
 
-### Stamping without `-r`
+<details>
+<summary><strong>Stamping without <code>-r</code> and <code>-r</code> vs <code>--orm</code></strong></summary>
+
+#### Stamping without `-r`
 
 Running `vmn stamp <app-name>` without `-r` (and without `--orm`) works only when the current version is a **prerelease**. In that case `vmn` continues the existing prerelease sequence without changing the base version:
 
@@ -187,7 +164,7 @@ If the current version is a **released** version (e.g., `0.0.1`), running `vmn s
 
 The same error occurs when conventional commits are configured but no recognized conventional commit types (`fix`, `feat`, etc.) are found in the commit range since the last stamp.
 
-### `-r` vs `--orm`
+#### `-r` vs `--orm`
 
 Both flags specify the release mode (major/minor/patch/hotfix), but they differ in how they handle existing prereleases:
 
@@ -195,6 +172,8 @@ Both flags specify the release mode (major/minor/patch/hotfix), but they differ 
 |:----:|:---------|
 | `-r patch` | **Strict** — always advances the base version. From `0.0.1` → `0.0.2`. From `0.0.2-rc.3` → `0.0.3`. |
 | `--orm patch` | **Optional** — advances the base version only if the target version has no existing prereleases. From `0.0.1` → `0.0.2`. From `0.0.1` when `0.0.2-rc.1` already exists → `0.0.2-rc.2` (continues the prerelease instead of bumping). |
+
+</details>
 
 ### Conventional commits
 
@@ -216,6 +195,35 @@ conf:
 | `strict` | `-r` | Always advances the base version unconditionally. |
 
 Now you can run `vmn stamp <app-name>` and `vmn` will deduce the proper release mode automatically.
+
+### Changelog generation
+
+`vmn stamp` can automatically generate a [Keep a Changelog](https://keepachangelog.com)-formatted CHANGELOG.md from conventional commits:
+
+```yaml
+# .vmn/<app-name>/conf.yml
+conf:
+  conventional_commits: true
+  changelog:
+    enabled: true
+    path: "CHANGELOG.md"   # optional, defaults to CHANGELOG.md
+```
+
+On each stamp, vmn collects commits since the last version, groups them by type (Features, Bug Fixes, Breaking Changes, etc.), and prepends a new `## [version] - date` entry to the changelog. The changelog file is automatically included in the stamp commit.
+
+### GitHub Release creation
+
+`vmn stamp` can automatically create a GitHub Release after pushing tags:
+
+```yaml
+# .vmn/<app-name>/conf.yml
+conf:
+  github_release:
+    enabled: true
+    draft: false           # optional, create as draft release
+```
+
+**Requirements:** the [`gh` CLI](https://cli.github.com/) must be installed and either `GITHUB_TOKEN` or `GH_TOKEN` must be set. If a CHANGELOG.md exists, the release body is extracted from it; otherwise vmn falls back to listing commits. Prereleases are automatically marked as such. Failures are best-effort — they log a warning but don't fail the stamp.
 
 ### vmn release
 
@@ -268,6 +276,17 @@ vmn add -v 0.0.1 -b build42 <app-name>
 # results in: 0.0.1+build42
 ```
 
+### vmn config
+
+Interactive TUI for viewing and editing app configuration without manually editing YAML:
+
+```sh
+vmn config <app-name>           # interactive TUI editor
+vmn config <app-name> --vim     # open in $EDITOR instead
+vmn config                      # list all managed apps
+vmn config --global             # edit repo-level .vmn/conf.yml
+vmn config <app-name> --root    # edit root app config (root_conf.yml)
+```
 
 ### 🐍 Python Library Usage
 
@@ -292,6 +311,7 @@ Explore the `vmn_ctx` object for available fields. Attributes starting with `_` 
 |:---------|:------------|
 | `VMN_WORKING_DIR` | Override the working directory for vmn |
 | `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo lock to prevent concurrent vmn commands) |
+| `GITHUB_TOKEN` / `GH_TOKEN` | Required for [GitHub Release creation](#github-release-creation) via `gh` CLI |
 
 ---
 
@@ -366,13 +386,7 @@ vmn show my_root_app/service3      # => 0.0.1
 vmn show --root my_root_app        # => 5
 ```
 
-### 📄 vmn gen — Template Engine
-
-Generate version files from Jinja2 templates:
-
-```sh
-vmn gen -t version.j2 -o version.txt <app-name>
-```
+### 📄 Template Variables for `vmn gen`
 
 <details>
 <summary>Available template variables</summary>
@@ -418,14 +432,6 @@ REPO: . | HASH: ef4c6f43... | REMOTE: ../test_repo_remote
 ```
 
 </details>
-
-### 🏗️ vmn add — Build Metadata
-
-Attach build metadata to an existing stamped version:
-
-```sh
-vmn add -v 1.0.1 -b build42 <app-name>   # => 1.0.1+build42
-```
 
 ---
 
@@ -504,7 +510,7 @@ This writes the version directly into `[project].version` on each `vmn stamp`.
 
 ### 🔧 Generic Version Backends
 
-For any file format not covered by built-in backends, use `generic_selectors` (regex-based) or `generic_jinja` (<img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" height="18"> template-based):
+For any file format not covered by built-in backends, use `generic_selectors` (regex-based) or `generic_jinja` (Jinja2 template-based):
 
 <details>
 <summary><strong>generic_selectors</strong> — regex find-and-replace</summary>
@@ -554,6 +560,14 @@ Same template variables as `vmn gen` are available.
 conf:
   template: '[{major}][.{minor}]'
   hide_zero_hotfix: true
+  conventional_commits: true
+  default_release_mode: optional
+  changelog:
+    enabled: true
+    path: "CHANGELOG.md"
+  github_release:
+    enabled: true
+    draft: false
   deps:
     ../:
       <repo dir name>:
@@ -566,15 +580,39 @@ conf:
 ```
 
 | Field | Description |
-|:-----:|:------------|
-| `template` | Display format for versions. `[{major}][.{minor}]` shows `0.0` instead of `0.0.1`. Use `vmn show --raw` for the full version. |
-| `deps` | External repo dependencies — vmn tracks them during `stamp` and checks them out during `goto` |
+|:------|:------------|
+| `template` | Display format for versions. `[{major}][.{minor}]` shows `0.0` instead of `0.0.1`. Use `vmn show --raw` for the full version |
 | `hide_zero_hotfix` | Hide the 4th version segment when it's `0` (default: `true`) |
-| `version_backends` | Auto-embed versions into project files on `vmn stamp` |
+| `conventional_commits` | Enable automatic release mode detection from commit messages |
+| `default_release_mode` | `optional` (default) or `strict` — controls how auto-detected mode behaves ([details](#conventional-commits)) |
+| `changelog` | `{enabled: true, path: "CHANGELOG.md"}` — generate changelog on stamp ([details](#changelog-generation)) |
+| `github_release` | `{enabled: true, draft: false}` — create GitHub Release on stamp ([details](#github-release-creation)) |
+| `version_backends` | Auto-embed versions into project files on `vmn stamp` ([details](#-version-auto-embedding)) |
+| `deps` | External repo dependencies — vmn tracks them during `stamp` and checks them out during `goto` |
+| `policies` | Branch restrictions — `whitelist_release_branches` prevents stamping/releasing from unauthorized branches |
 | `extra_info` | Include host/environment metadata in stamp info |
 | `create_verinfo_files` | Create version info files (enables `vmn show --from-file`) |
-| `policies` | Branch restrictions — `whitelist_release_branches` prevents stamping/releasing from unauthorized branches |
 
+
+---
+
+## 🔄 CI Integration
+
+Use the official <img src="https://img.shields.io/badge/GitHub%20Action-2088FF?style=flat-square&logo=githubactions&logoColor=white" alt="GitHub Action"> &mdash; [progovoy/vmn-action](https://github.com/progovoy/vmn-action):
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+  - uses: progovoy/vmn-action@latest
+    with:
+      app-name: my_app
+      do-stamp: true
+      stamp-mode: patch
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+```
 
 ---
 
