@@ -5000,3 +5000,187 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
         content = f.read()
         assert 'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"' in content
         assert 'version: 0.0.2' in content
+
+
+def test_config_list_apps(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config"])[0]
+    captured = capfd.readouterr()
+
+    assert ret == 0
+    assert app_layout.app_name in captured.out
+
+
+def test_config_list_apps_empty(app_layout, capfd):
+    _run_vmn_init()
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config"])[0]
+    captured = capfd.readouterr()
+
+    assert ret == 0
+    assert "No managed apps found" in captured.out
+
+
+def test_config_no_tty(app_layout, capfd):
+    """Interactive mode should fail when stdin is not a TTY."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+    captured = capfd.readouterr()
+
+    assert ret == 1
+    assert "terminal" in captured.err.lower() or "terminal" in captured.out.lower()
+
+
+def test_config_no_app(app_layout, capfd):
+    """Config for non-existent app should error."""
+    _run_vmn_init()
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config", "nonexistent_app"])[0]
+
+    assert ret == 1
+
+
+def test_config_interactive_save(app_layout, capfd, monkeypatch):
+    """Test interactive mode: change hide_zero_hotfix, then save."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    # Mock questionary interactions:
+    # 1st select: pick "hide_zero_hotfix" key
+    # 2nd confirm: set to False
+    # 3rd select: pick "Save & quit"
+    import questionary as q
+
+    call_count = {"select": 0, "confirm": 0}
+    original_select = q.select
+    original_confirm = q.confirm
+
+    class FakeResult:
+        def __init__(self, val):
+            self._val = val
+        def ask(self):
+            return self._val
+
+    def mock_select(message, choices=None, **kwargs):
+        call_count["select"] += 1
+        if call_count["select"] == 1:
+            # Pick hide_zero_hotfix
+            return FakeResult("hide_zero_hotfix")
+        else:
+            # Save & quit
+            return FakeResult("_save")
+
+    def mock_confirm(message, **kwargs):
+        call_count["confirm"] += 1
+        # Set hide_zero_hotfix to False
+        return FakeResult(False)
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(q, "select", mock_select)
+    monkeypatch.setattr(q, "confirm", mock_confirm)
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+    captured = capfd.readouterr()
+
+    assert ret == 0
+    assert "saved" in captured.out.lower() or "Saved" in captured.out
+
+    # Verify the conf.yml was actually updated
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    with open(conf_path, "r") as f:
+        data = yaml.safe_load(f)
+
+    assert data["conf"]["hide_zero_hotfix"] is False
+
+
+def test_config_interactive_quit_no_save(app_layout, capfd, monkeypatch):
+    """Test interactive mode: quit without saving preserves original config."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    import questionary as q
+
+    class FakeResult:
+        def __init__(self, val):
+            self._val = val
+        def ask(self):
+            return self._val
+
+    select_count = {"n": 0}
+
+    def mock_select(message, choices=None, **kwargs):
+        select_count["n"] += 1
+        return FakeResult("_quit")
+
+    def mock_confirm(message, **kwargs):
+        # No unsaved changes, so this shouldn't be called,
+        # but return True (discard) just in case
+        return FakeResult(True)
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(q, "select", mock_select)
+    monkeypatch.setattr(q, "confirm", mock_confirm)
+
+    # Read original config
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    with open(conf_path, "r") as f:
+        original_data = yaml.safe_load(f)
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+
+    assert ret == 0
+
+    # Config should be unchanged
+    with open(conf_path, "r") as f:
+        after_data = yaml.safe_load(f)
+
+    assert original_data == after_data
+
+
+def test_config_global(app_layout, capfd, monkeypatch):
+    """Test --global flag targets .vmn/conf.yml."""
+    _run_vmn_init()
+
+    import questionary as q
+
+    class FakeResult:
+        def __init__(self, val):
+            self._val = val
+        def ask(self):
+            return self._val
+
+    def mock_select(message, choices=None, **kwargs):
+        return FakeResult("_quit")
+
+    def mock_confirm(message, **kwargs):
+        return FakeResult(True)
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(q, "select", mock_select)
+    monkeypatch.setattr(q, "confirm", mock_confirm)
+
+    capfd.readouterr()
+    stamp_utils.VMN_LOGGER = None
+    ret = vmn.vmn_run(["config", "--global"])[0]
+
+    assert ret == 0
