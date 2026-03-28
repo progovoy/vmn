@@ -223,17 +223,60 @@ vmn stamp -r patch <app-name>
 vmn stamp -r minor <app-name2>
 ```
 
-In case you desire to use conventional commits for the stamp command to recognize the `release_mode` automatically, provide the following in app's `conf.yml` file:
+### Stamping without `-r`
 
-```yaml
-conventional_commits:
-  default_release_mode: optional
+Running `vmn stamp <app-name>` without `-r` (and without `--orm`) works only when the current version is a **prerelease**. In that case `vmn` continues the existing prerelease sequence without changing the base version:
+
+```sh
+vmn stamp -r patch --pr rc <app-name>
+# 0.0.2-rc.1
+
+vmn stamp --pr rc <app-name>
+# 0.0.2-rc.2  (no -r needed, continues the prerelease)
+
+vmn stamp <app-name>
+# 0.0.2-rc.3  (even without --pr, stays on the same prerelease)
 ```
 
-`default_release_mode` may be `optional`(for --orm) or `strict`(for -r).
+If the current version is a **released** version (e.g., `0.0.1`), running `vmn stamp` without `-r` or `--orm` will error:
 
-Now you will be able to run:
-`vmn stamp <app-name>` and `vmn` will deduce the proper `release_mode` based on your conventional commits.
+```
+[ERROR] When not in release candidate mode, a release mode must be specified
+       - use -r/--release-mode with one of major/minor/patch/hotfix
+```
+
+The same error occurs when conventional commits are configured but no recognized conventional commit types (`fix`, `feat`, etc.) are found in the commit range since the last stamp.
+
+### `-r` vs `--orm`
+
+Both flags specify the release mode (major/minor/patch/hotfix), but they differ in how they handle existing prereleases:
+
+| Flag | Behavior |
+|:----:|:---------|
+| `-r patch` | **Strict** — always advances the base version. From `0.0.1` → `0.0.2`. From `0.0.2-rc.3` → `0.0.3`. |
+| `--orm patch` | **Optional** — advances the base version only if the target version has no existing prereleases. From `0.0.1` → `0.0.2`. From `0.0.1` when `0.0.2-rc.1` already exists → `0.0.2-rc.2` (continues the prerelease instead of bumping). |
+
+### Conventional commits
+
+To have `vmn stamp` deduce the release mode automatically from commit messages, configure your app's `conf.yml`:
+
+```yaml
+conf:
+  default_release_mode: optional
+  conventional_commits:
+    enabled: true
+```
+
+`vmn` scans commits since the last stamp and picks the highest release mode based on conventional commit types: `fix` → patch, `feat` → minor, `BREAKING CHANGE` or `!` → major.
+
+`default_release_mode` controls which stamping behavior is used for the auto-detected mode:
+
+| Value | Equivalent flag | Behavior |
+|:-----:|:---------------:|:---------|
+| `optional` (default) | `--orm` | Only advances the base version if no prerelease already exists for the target version. If a prerelease exists, continues from it. |
+| `strict` | `-r` | Always advances the base version unconditionally. |
+
+Now you can run `vmn stamp <app-name>` and `vmn` will deduce the proper release mode automatically.
 
 ## 4. `vmn release`
 
