@@ -24,6 +24,10 @@ import tomlkit
 import yaml
 from filelock import FileLock
 from packaging import version as pversion
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 CUR_PATH = "{0}/".format(os.path.dirname(__file__))
 sys.path.append(CUR_PATH)
@@ -2557,10 +2561,42 @@ def _config_list_apps(vmn_root_path):
         print("No managed apps found. Use 'vmn init-app <name>' to initialize an app.")
         return 0
 
-    print("Managed apps:")
+    console = Console()
+    table = Table(show_header=False, box=None, padding=(0, 2))
     for app in sorted(apps):
-        print(f"  {app}")
+        table.add_row(Text(app, style="cyan"))
+    console.print(Panel(table, title="Managed apps", border_style="blue"))
     return 0
+
+
+_rich_console = Console()
+
+
+def _render_config_panel(raw_conf, descriptions, modified, conf_path):
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    table.add_column("Setting", style="cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    table.add_column("Description", style="dim", max_width=44)
+
+    for key in descriptions:
+        meta = descriptions[key]
+        current = raw_conf.get(key, stamp_utils.VMN_DEFAULT_CONF.get(key))
+        short = _format_value_short(current)
+
+        if isinstance(current, bool):
+            val_style = "green" if current else "red"
+        elif isinstance(current, dict) and not current:
+            val_style = "dim"
+        else:
+            val_style = "yellow"
+
+        table.add_row(key, Text(short, style=val_style), meta["description"])
+
+    title = os.path.relpath(conf_path)
+    if modified:
+        title += " [bold red]*[/bold red]"
+    _rich_console.print()
+    _rich_console.print(Panel(table, title=title, border_style="blue"))
 
 
 def _config_interactive(conf_path, descriptions, vmn_root_path):
@@ -2575,6 +2611,8 @@ def _config_interactive(conf_path, descriptions, vmn_root_path):
     keys = list(descriptions.keys())
 
     while True:
+        _render_config_panel(raw_conf, descriptions, modified, conf_path)
+
         choices = []
         for key in keys:
             meta = descriptions[key]
@@ -2591,7 +2629,7 @@ def _config_interactive(conf_path, descriptions, vmn_root_path):
         choices.append(questionary.Choice(title="  Quit without saving", value="_quit"))
 
         choice = questionary.select(
-            "Configuration" + (" *" if modified else ""),
+            "Select a setting to edit",
             choices=choices,
             use_shortcuts=False,
         ).ask()
@@ -2607,7 +2645,9 @@ def _config_interactive(conf_path, descriptions, vmn_root_path):
 
         if choice == "_save":
             _write_full_config(conf_path, raw_conf)
-            print(f"Configuration saved to {conf_path}")
+            _rich_console.print(
+                f"\n  [green]Configuration saved to[/green] [bold]{conf_path}[/bold]"
+            )
             return 0
 
         new_val = _edit_key(choice, raw_conf, descriptions, vmn_root_path)
@@ -2624,7 +2664,7 @@ def _edit_key(key, raw_conf, descriptions, vmn_root_path):
     current = raw_conf.get(key, stamp_utils.VMN_DEFAULT_CONF.get(key))
     config_type = meta["type"]
 
-    print(f"\n  {meta['description']}")
+    _rich_console.print(f"\n  [dim]{meta['description']}[/dim]")
 
     if config_type == "bool":
         return _edit_bool(key, current)
