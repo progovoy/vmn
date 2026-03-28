@@ -31,6 +31,7 @@ VMN_DEFAULT_CONF = {
     "deps": {},
     "policies": {},
     "conventional_commits": {},
+    "github_release": {},
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
