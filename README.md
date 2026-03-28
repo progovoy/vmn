@@ -1,197 +1,112 @@
-<h1 align="center" style="border-bottom: none;">🥇🏷️Automatic version management solution</h1>
-<h3 align="center">Automatic version management and state recovery solution for any application agnostic to language or architecture</h3>
+# vmn — Automatic Semantic Versioning
 
-<p align="center">
-
-[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![codecov](https://codecov.io/gh/progovoy/vmn/branch/master/graph/badge.svg)](https://codecov.io/gh/progovoy/vmn)
-<a href="#badge">
-<img alt="vmn" src="https://img.shields.io/github/pipenv/locked/python-version/progovoy/vmn">
-</a>
-<a href="#badge">
-<img alt="vmn: pypi downloads" src="https://img.shields.io/pypi/dw/vmn">
-</a>
-<a href="#badge">
-<img alt="vmn: supported platforms" src="https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen">
-</a>
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
+[![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![PyPI downloads](https://img.shields.io/pypi/dw/vmn)](https://pypi.org/project/vmn/)
+[![Platforms](https://img.shields.io/badge/vmn-linux%20%7C%20macos%20%7C%20windows%20-brightgreen)](#)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
+Language-agnostic, git-tag-based semantic versioning for any project. Supports monorepos, multi-repo dependencies, microservice topologies, release candidates, and conventional commits.
 
-`vmn` is compliant with `Semver` (https://semver.org) semantics
-
-</p>
-
-### Badge
-
-Let people know that your repository is managed by **vmn** by including this badge in your readme.
-
-[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
-
-```md
-[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
-```
-
-<p align="center">
-  <br>
-  <img width="800" src="https://i.imgur.com/g3wYIk8.png">
-  <br>
-</p>
-
-- [What is VMN?](#what-is-vmn)
-- [Play around with VMN](#play-around-with-vmn)
-  - [Create a playground](#option-1-create-a-playground)
-  - [Use VMN Action with GitHub Action](#option-2-use-vmn-action-with-github-action)
-- [Contribute](#contribute)
-  - [Create a dev environment](#create-a-dev-environment)
-  - [Run tests](#run-tests)
-- [Key features](#key-features)
-- [Usage by Lean Examples](#usage-by-lean-examples)
-  - [Pre-requisites](#pre-requisites)
-  - [1. vmn init](#1-vmn-init)
-  - [2. vmn init-app](#2-vmn-init-app)
-  - [3. vmn stamp](#3-vmn-stamp)
-  - [4. vmn release](#4-vmn-release)
-  - [5. vmn show](#5-vmn-show)
-  - [6. vmn gen](#6-vmn-gen)
-  - [7. vmn goto](#7-vmn-goto)
-  - [8. vmn add](#8-vmn-add)
-  - [Other usages](#other-usages)
-- [Detailed Documentation](#detailed-documentation)
-  - [vmn init](#vmn-init)
-  - [vmn init-app](#vmn-init-app)
-  - [vmn stamp](#vmn-stamp)
-  - [vmn release](#vmn-release)
-  - [vmn show](#vmn-show)
-  - [vmn goto](#vmn-goto)
-  - [vmn gen](#vmn-gen)
-  - [vmn add](#vmn-add)
-- [Version auto-embedding](#version-auto-embedding)
-  - [Hatchling / uv](#hatchling--uv)
-- [Generic version backends](#generic-version-backends)
-- [Configuration](#configuration)
-- [Thank yous and Contributors](#thank-yous-and-contributors)
-
-# What is `vmn`?
-
-`vmn` is a CLI tool and Python library for automatic semantic versioning of any project, regardless of language or architecture. It uses **git tags** as the source of truth for version state — no version files to maintain manually.
-
-Key capabilities:
-- Stamp `major.minor.patch` versions with optional `hotfix`, `prerelease`, and `buildmetadata` segments
-- Auto-embed versions into `package.json`, `Cargo.toml`, `pyproject.toml`, or any file via regex/jinja2 backends — works with **uv** and **hatchling** out of the box
-- Manage multi-repo dependencies and microservice topologies
-- Recover the exact repository state for any previously stamped version
-- Detect release mode automatically from conventional commits
-
-# Play around with `vmn`
-
-## Option 1: Create a playground
+## Quick Start
 
 ```sh
-# Install vmn
-pip install vmn
+# Install
+pipx install vmn    # or: pip install vmn / uvx vmn
 
-# Create fake remote
-mkdir remote
-cd remote
-git init --bare
-
-# Clone from fake remote
-cd ..
-git clone ./remote ./local
-cd local
-
-# Mimic user commit
-echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
-
-# Initialize vmn for first time
-vmn init
-# Initialize app for first time
-vmn init-app my_cool_app
-
-# First stamp
-vmn stamp -r patch my_cool_app
-
-# Mimic user commit
-echo a >> ./a.txt ; git add ./a.txt ; git commit -m "wip" ; git push origin master
-
-# Second stamp
-vmn stamp -r patch my_cool_app
+# Version your app (auto-initializes on first run)
+vmn stamp -r patch my_app
+# => 0.0.1
 ```
 
-## Option 2: Use VMN Action with GitHub Action
+## Why vmn?
 
-Check [VMN Official GitHub Action Repo](https://github.com/progovoy/vmn-action)
+| Capability | vmn | semantic-release | release-please | changesets |
+|:-----------|:---:|:----------------:|:--------------:|:----------:|
+| Language-agnostic | Y | JS-centric | JS-centric | JS-only |
+| Git-tag source of truth | Y | Y | Y | N |
+| Multi-repo dependency tracking | Y | N | N | N |
+| State recovery (`vmn goto`) | Y | N | N | N |
+| Microservice / root app topology | Y | N | N | monorepo only |
+| 4-segment hotfix versioning | Y | N | N | N |
+| Version auto-embedding (npm, Cargo, pyproject, any file) | Y | per-plugin | N | JS only |
+| Conventional commits | Y | Y | Y | N |
+| Changelog generation | Y | Y | Y | Y |
+| GitHub Release creation | Y | Y | Y | N |
+| Offline / local file backend | Y | N | N | N |
+| Zero lock-in (pure git tags) | Y | N | N | N |
 
-Example workflow snippet:
+See also: [vmn vs semantic-release](docs/vmn-vs-semantic-release.md) | [vmn vs release-please](docs/vmn-vs-release-please.md) | [vmn vs setuptools-scm](docs/vmn-vs-setuptools-scm.md)
+
+Migrating? [from standard-version](docs/migrating-from-standard-version.md) | [from bump2version](docs/migrating-from-bump2version.md)
+
+## CI Integration
+
+Use the official [GitHub Action](https://github.com/progovoy/vmn-action):
 
 ```yaml
 steps:
-  - uses: actions/checkout@v3
-  - uses: progovoy/vmn-action@v1
+  - uses: actions/checkout@v4
     with:
-      app-name: my_cool_app
+      fetch-depth: 0
+  - uses: progovoy/vmn-action@latest
+    with:
+      app-name: my_app
       do-stamp: true
-      stamp_release: true
+      stamp-mode: patch
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
 ```
 
-# Contribute
-
-## Create a dev environment
+# Try It Out
 
 ```sh
-# After cloning vmn repo:
-cd ./vmn
-# For Ubuntu:
-#   sudo apt install python3-venv
-python3 -m venv ./venv
-source ./venv/bin/activate
+pip install vmn
 
-pip install -r  ./tests/requirements.txt 
-pip install -r  ./tests/test_requirements.txt 
-pip install -e  ./
-vmn --version # Should see 0.0.0 if installed successfully
+# Create a playground repo
+mkdir remote && cd remote && git init --bare && cd ..
+git clone ./remote ./local && cd local
+echo a >> ./a.txt && git add ./a.txt && git commit -m "first commit" && git push origin master
+
+# Stamp your first version
+vmn stamp -r patch my_app
+# => 0.0.1
+
+# Make a change and stamp again
+echo b >> ./a.txt && git add ./a.txt && git commit -m "feat: add b" && git push origin master
+vmn stamp -r patch my_app
+# => 0.0.2
 ```
 
-## Run tests
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and running tests.
 
-``` sh
-# install Docker 
-#   For Ubuntu - sudo apt install docker.io
-# Then run:
-./tests/run_pytest.sh
-# If it runs successfully, you are good to go
-```
+## Features
 
-# Key features
+- `major.minor.patch` versioning, e.g., `1.6.0` (Semver compliant)
+- Prerelease versions, e.g., `1.6.0-rc.23` (Semver compliant)
+- Hotfix versions (4th segment), e.g., `1.6.7.4` (Semver extension)
+- Build metadata, e.g., `1.6.0-rc.23+build01.Info` (Semver compliant)
+- [State recovery](#vmn-goto) — `vmn goto` restores exact repo state for any stamped version
+- [Microservice topologies](#root-apps-or-microservices) — root apps with independent service versions
+- [Multi-repo dependencies](#configuration) — track versions across repositories
+- [Version auto-embedding](#version-auto-embedding) — npm, Cargo, pyproject.toml, or any file
+- [Conventional commits](#conventional-commits) — automatic release mode detection and release notes
+- [Changelog generation](#configuration) — built-in CHANGELOG.md output
+- [GitHub Release creation](#configuration) — create releases on stamp
+- [uv / hatchling](#hatchling--uv) — dynamic versioning from git tags via `hatch-vcs`
 
-- [x] Stamping of versions of type: **`major`. `minor`.`patch`** , e.g., `1.6.0` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`**-`prerelease`** , e.g., `1.6.0-rc23` [`Semver` compliant]
-- [x] Stamping of versions of type: `major`. `minor`.`patch`.**`hotfix`** , e.g., `1.6.7.4` [`Semver` extension]
-- [x] Bringing back the repository / repositories state to the state they were when the project was stamped (
-  see [`goto`](https://github.com/progovoy/vmn#goto) section)
-- [x] Stamping of micro-services-like project topologies (
-  see [`Root apps`](#root-apps-or-microservices) section)
-- [x] Stamping of a project depending on multiple git repositories (
-  see [`Configuration: deps`](#configuration) section)
-- [x] Version auto-embedding into supported backends during the `vmn stamp` phase (
-  see [`Version auto-embedding`](#version-auto-embedding) section)
-- [x]  Addition of `buildmetadata` for an existing version, e.g., `1.6.0-rc23+build01.Info` [`Semver` compliant]
-- [x]  Support for `conventional commits` for automatic release mode detection (`optional` or `strict`)
-- [x]  Support for `conventional commits` for automatic release notes generation
-- [x]  Support for `uv` and `hatchling` via `hatch-vcs` integration (dynamic versioning from vmn tags)
-- [ ] `WIP` Support "root apps" that are located in different repositories
+# Usage
 
-# Usage by Lean Examples
+`init-app` and `stamp` both support `--dry-run` flag for testing purposes.
 
-Note: `init-app` and `stamp` both support `--dry-run` flag for testing purposes.
-
-## Pre-requisites
+## Install
 
 ```sh
-pip3 install vmn
-
-# Another option (and a better one) is to use pipX (https://github.com/pypa/pipx):
-pipx install vmn
+pipx install vmn       # recommended
+# or
+pip install vmn
+# or
+uvx vmn stamp ...      # run without installing
 ```
 
 ## 1. `vmn init`
@@ -763,18 +678,18 @@ policies:
 Attempting to stamp or release from branches that are not listed will trigger an error.
 
 
-# Thank yous and Contributors
+# Badge
 
-To [Pavel Rogovoy](https://github.com/progovoy) for being the main contributor for this project.
+Let people know your project uses vmn:
 
-To semver.org: we used semver.org as a blueprint for the structure of this specification.
+```md
+[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)
+```
 
-Thanks goes to these wonderful people ✨
+# Contributors
 
 <a href="https://github.com/progovoy/vmn/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=progovoy/vmn" />
 </a>
 
-If you like and use this project, please consider starring it ✨
-
-Thanks!
+`vmn` is [Semver](https://semver.org) compliant. We used semver.org as a blueprint for the structure of this specification.
