@@ -124,20 +124,45 @@ vmn stamp -r patch my_app   # => 0.0.2
 Usually not needed — `vmn stamp` auto-initializes on first run. Use these only for explicit control:
 
 ```sh
-vmn init                            # initialize vmn in a repository
+vmn init                            # initialize vmn in a repository (creates .vmn/, commits, pushes)
 vmn init-app <app-name>             # initialize an app (starts from 0.0.0)
 vmn init-app -v 1.6.8 <app-name>   # initialize from a specific version
+vmn init-app --dry-run <app-name>   # preview without making changes
+vmn init-app --orm strict <app-name> # set default_release_mode to strict (default: optional)
 ```
 
 ### vmn stamp
 
 ```sh
-# will stamp 0.0.1
-vmn stamp -r patch <app-name>
-
-# will stamp 1.7.0
-vmn stamp -r minor <app-name2>
+vmn stamp -r patch <app-name>                 # => 0.0.1
+vmn stamp -r minor <app-name>                 # => 0.1.0
+vmn stamp -r patch --pr rc <app-name>         # => 0.0.2-rc.1 (prerelease)
+vmn stamp --dry-run -r patch <app-name>       # preview without committing
+vmn stamp -r patch -e '[skip ci]' <app-name>  # append text to commit message
+vmn stamp --pull -r patch <app-name>          # pull before stamping (retries on push conflict)
 ```
+
+<details>
+<summary><strong>All stamp flags</strong></summary>
+
+| Flag | Description |
+|:-----|:------------|
+| `-r`, `--release-mode` | Release mode: `major` / `minor` / `patch` / `hotfix` (also accepts `micro` as alias for `hotfix`) |
+| `--orm`, `--optional-release-mode` | Like `-r` but only advances if no prerelease exists at target version ([details below](#-r-vs---orm)) |
+| `--pr`, `--prerelease` | Prerelease identifier (e.g. `alpha`, `rc`, `beta.1`). Trailing `.` is auto-stripped |
+| `--dry-run` | Preview the version that would be stamped without committing or pushing |
+| `--pull` | Pull remote changes before stamping. Enables retry on push conflicts (up to 3 retries with 1-5s delay) |
+| `-e`, `--extra-commit-message` | Append text to the stamp commit message (e.g. `[skip ci]`) |
+| `--ov`, `--override-version` | Force a specific version string (bypasses release mode logic) |
+| `--orv`, `--override-root-version` | Force root app version to a specific integer |
+| `--dont-check-vmn-version` | Skip check that the vmn binary is at least as new as the version in metadata |
+
+**Behaviors:**
+- **Idempotent** — if the current commit already has a matching version, vmn returns 0 without re-stamping
+- **Detached HEAD** — vmn refuses to stamp in detached HEAD state
+- **Auto-init** — automatically runs `vmn init` + `vmn init-app` on first stamp if repo/app not yet tracked
+
+</details>
 
 <details>
 <summary><strong>Stamping without <code>-r</code> and <code>-r</code> vs <code>--orm</code></strong></summary>
@@ -246,43 +271,69 @@ vmn release --stamp <app-name>          # => 0.0.1
 
 Modes 1 and 2 create a lightweight tag pointing to the original prerelease commit — no new commit is created. Mode 2 auto-detects the version from the current commit (you must be on a version commit).
 
-`--stamp` runs the full stamp pipeline (new commit, tag, push, version backends, changelog) but requires being on a branch tip (not detached HEAD) at the exact prerelease commit, with clean dependencies. `-v` and `--stamp` are mutually exclusive.
+`--stamp` (`-s`) runs the full stamp pipeline (new commit, tag, push, version backends, changelog) but requires being on a branch tip (not detached HEAD) at the exact prerelease commit, with clean dependencies. `-v` and `-s`/`--stamp` are mutually exclusive.
+
+**Notes:**
+- Cannot release a version that contains build metadata (e.g. `1.0.0+build42`)
+- `whitelist_release_branches` policy is enforced — release is rejected if the version was stamped on a non-whitelisted branch
+- Idempotent — if the release version already exists, returns 0 without creating a duplicate tag
 
 ### vmn show
 
 ```sh
-# Show current version
-vmn show <app-name>
-# outputs: 0.0.1
-
-# Show verbose version info (YAML)
-vmn show --verbose <app-name>
-
-# Show a specific version's info
-vmn show -v 0.0.1 <app-name>
+vmn show <app-name>                    # current version (formatted)
+vmn show --raw <app-name>              # raw version without template formatting
+vmn show --verbose <app-name>          # full YAML metadata dump
+vmn show -v 0.0.1 <app-name>          # show info for a specific version
+vmn show --root my_root_app            # show root app version (integer)
+vmn show --conf <app-name>             # include configuration (deps, template, backends)
+vmn show --from-file <app-name>        # read from file instead of git (faster, no repo validation)
+vmn show --type <app-name>             # show version type: release / prerelease / metadata
+vmn show -u <app-name>                 # show unique ID (version+commit_hash)
+vmn show --ignore-dirty <app-name>     # suppress dirty repo warnings in output
+vmn show -t '[{major}]' <app-name>    # override display template for this invocation
 ```
 
 ### vmn gen
 
+Generate a version file from a Jinja2 template:
+
 ```sh
-# Generate a version file from a jinja2 template
-vmn gen -t version.j2 -o version.txt <app-name>
+vmn gen -t version.j2 -o version.txt <app-name>               # basic generation
+vmn gen -t version.j2 -o version.txt -v 1.0.0 <app-name>     # generate for a specific version
+vmn gen -t notes.j2 -o notes.txt -c custom.yml <app-name>     # merge custom YAML values into template
+vmn gen -t notes.j2 -o notes.txt --verify-version <app-name>  # fail if repo is dirty or not at version
 ```
+
+`--verify-version` ensures the repository is clean and checked out at the exact target version before generating. Output is idempotent — the file is not rewritten if content is identical.
+
+See [Template Variables](#-template-variables-for-vmn-gen) for available Jinja2 variables.
 
 ### vmn goto
 
+Checkout the repository (and its dependencies) to the exact state at a stamped version:
+
 ```sh
-# Checkout the repository state at a specific version
-vmn goto -v 0.0.1 <app-name>
+vmn goto -v 0.0.1 <app-name>              # checkout app + deps to version 0.0.1
+vmn goto -v 0.0.1 --deps-only <app-name>  # only checkout dependencies, leave main app as-is
+vmn goto -v 5 --root my_root_app          # checkout to root app version
+vmn goto --pull -v 0.0.1 <app-name>       # pull from remote before checkout
 ```
+
+Dependencies are cloned automatically if missing (up to 10 in parallel) and checked out to the exact hash recorded at stamp time.
 
 ### vmn add
 
+Attach build metadata to an existing stamped version:
+
 ```sh
-# Add build metadata to an existing version
-vmn add -v 0.0.1 -b build42 <app-name>
-# results in: 0.0.1+build42
+vmn add -v 0.0.1 --bm build42 <app-name>                          # => 0.0.1+build42
+vmn add --bm build42 <app-name>                                    # auto-detect version from current commit
+vmn add -v 0.0.1 --bm build42 --vmp metadata.yml <app-name>       # attach a YAML file as metadata
+vmn add -v 0.0.1 --bm build42 --vmu https://ci/build/42 <app-name> # attach a URL as metadata
 ```
+
+Idempotent — if the same metadata already exists, returns 0. Cannot add metadata to a version that already has different metadata attached.
 
 ### vmn config
 
@@ -290,11 +341,13 @@ Interactive TUI for viewing and editing app configuration without manually editi
 
 ```sh
 vmn config <app-name>           # interactive TUI editor
-vmn config <app-name> --vim     # open in $EDITOR instead
+vmn config <app-name> --vim     # open in $EDITOR (default: vim) instead of TUI
 vmn config                      # list all managed apps
 vmn config --global             # edit repo-level .vmn/conf.yml
-vmn config <app-name> --root    # edit root app config (root_conf.yml)
+vmn config <app-name> --root    # edit root app config (requires app name with /)
 ```
+
+The TUI supports editing most config fields (template, version_backends, deps, policies, conventional_commits, etc.) with validation and auto-detection. `changelog` and `github_release` are not yet editable in the TUI — use `--vim` to edit those. Requires a terminal (TTY); falls back to `--vim` if not available.
 
 ### 🐍 Python Library Usage
 
