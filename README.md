@@ -66,6 +66,7 @@ Let people know that your repository is managed by **vmn** by including this bad
   - [vmn gen](#vmn-gen)
   - [vmn add](#vmn-add)
 - [Version auto-embedding](#version-auto-embedding)
+  - [Hatchling / uv](#hatchling--uv)
 - [Generic version backends](#generic-version-backends)
 - [Configuration](#configuration)
 - [Thank yous and Contributors](#thank-yous-and-contributors)
@@ -76,7 +77,7 @@ Let people know that your repository is managed by **vmn** by including this bad
 
 Key capabilities:
 - Stamp `major.minor.patch` versions with optional `hotfix`, `prerelease`, and `buildmetadata` segments
-- Auto-embed versions into `package.json`, `Cargo.toml`, `pyproject.toml`, or any file via regex/jinja2 backends
+- Auto-embed versions into `package.json`, `Cargo.toml`, `pyproject.toml`, or any file via regex/jinja2 backends — works with **uv** and **hatchling** out of the box
 - Manage multi-repo dependencies and microservice topologies
 - Recover the exact repository state for any previously stamped version
 - Detect release mode automatically from conventional commits
@@ -177,6 +178,7 @@ vmn --version # Should see 0.0.0 if installed successfully
 - [x]  Addition of `buildmetadata` for an existing version, e.g., `1.6.0-rc23+build01.Info` [`Semver` compliant]
 - [x]  Support for `conventional commits` for automatic release mode detection (`optional` or `strict`)
 - [x]  Support for `conventional commits` for automatic release notes generation
+- [x]  Support for `uv` and `hatchling` via `hatch-vcs` integration (dynamic versioning from vmn tags)
 - [ ] `WIP` Support "root apps" that are located in different repositories
 
 # Usage by Lean Examples
@@ -540,6 +542,68 @@ vmn add -v 1.0.1 -b build42 <app-name>
 | Cargo | `Cargo.toml` | Embeds version string into `Cargo.toml` during `vmn stamp` |
 | Poetry | `pyproject.toml` | Embeds version string into Poetry's `[tool.poetry]` section during `vmn stamp` |
 | PEP 621 | `pyproject.toml` | Embeds version string into PEP 621 `[project]` section during `vmn stamp` |
+
+### Hatchling / uv
+
+Projects using [hatchling](https://hatch.pypa.io/) (the default build backend for [uv](https://github.com/astral-sh/uv)) can use vmn's git tags as the version source with zero file injection. This is done by configuring hatchling's [hatch-vcs](https://github.com/ofek/hatch-vcs) plugin to read vmn tags directly.
+
+This approach also supports **multiple apps per repository** — each app's tag pattern is distinct, so hatchling resolves the correct version for each package.
+
+#### Setup
+
+1. Install the plugin:
+
+```sh
+uv add --dev hatch-vcs
+# or: pip install hatch-vcs
+```
+
+2. Configure `pyproject.toml` to use dynamic versioning from vmn tags:
+
+```toml
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-package"
+dynamic = ["version"]
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "my_app_(?P<version>.*)"
+```
+
+Replace `my_app` with your vmn app name. For root app services like `my_root_app/service1`, use the tag form where `/` becomes `-`:
+
+```toml
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "my_root_app-service1_(?P<version>.*)"
+```
+
+3. Stamp and build:
+
+```sh
+vmn stamp -r patch my_app
+uv build
+```
+
+`hatch-vcs` will read the version from vmn's git tag — no version file to maintain.
+
+#### Static version alternative
+
+If you prefer a static version in `pyproject.toml` instead of dynamic resolution, use the `pep621` version backend:
+
+```yaml
+# .vmn/my_app/conf.yml
+conf:
+  version_backends:
+    pep621:
+      path: "pyproject.toml"
+```
+
+This writes the version directly into `[project].version` on each `vmn stamp`.
 
 ## Generic version backends
 There are two generic version backends types: `generic_jinja` and `generic_selectors`.
