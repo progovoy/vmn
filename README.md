@@ -227,18 +227,21 @@ conf:
 
 ### vmn release
 
+Promote a prerelease to its final version:
+
 ```sh
-# Stamp a prerelease
-vmn stamp -r patch --pr rc <app-name>
-# outputs: 0.0.1-rc.1
+vmn stamp -r patch --pr rc <app-name>   # => 0.0.1-rc.1
 
-# Release it (promote to final version)
-vmn release -v 0.0.1-rc.1 <app-name>
-# outputs: 0.0.1
+# Option 1: release by version — just adds a tag, no new commit
+# Can be run from any branch or detached HEAD
+vmn release -v 0.0.1-rc.1 <app-name>   # => 0.0.1
 
-# Or release directly from the prerelease commit
-vmn release --stamp <app-name>
+# Option 2: release via stamp — creates a new commit + tag and pushes
+# Must be on the exact prerelease commit, on a branch (not detached)
+vmn release --stamp <app-name>          # => 0.0.1
 ```
+
+**`-v` vs `--stamp`**: `-v` creates a lightweight tag pointing to the original prerelease commit — no new commit, works from anywhere. `--stamp` runs the full stamp flow (new commit, tag, push, version backends, changelog) but requires you to be on a branch tip at the exact prerelease commit, with clean dependencies.
 
 ### vmn show
 
@@ -328,8 +331,8 @@ vmn stamp -r major --pr alpha <app-name>    # 2.0.0-alpha.1
 vmn stamp --pr alpha <app-name>             # 2.0.0-alpha.2
 vmn stamp --pr mybeta <app-name>            # 2.0.0-mybeta.1
 
-vmn release -v 2.0.0-mybeta.1 <app-name>   # 2.0.0 (final)
-# or: vmn release --stamp <app-name>
+vmn release -v 2.0.0-mybeta.1 <app-name>   # 2.0.0 (tag only)
+# or: vmn release --stamp <app-name>      # 2.0.0 (full stamp flow)
 ```
 
 ### 🧩 Root Apps (Microservices)
@@ -446,7 +449,7 @@ REPO: . | HASH: ef4c6f43... | REMOTE: ../test_repo_remote
 | <img src="https://img.shields.io/badge/Poetry-60A5FA?style=flat-square&logo=poetry&logoColor=white" alt="Poetry"> | `pyproject.toml` | Updates `[tool.poetry].version` |
 | <img src="https://img.shields.io/badge/PEP_621-3776AB?style=flat-square&logo=python&logoColor=white" alt="PEP 621"> | `pyproject.toml` | Updates `[project].version` |
 
-### <img src="https://img.shields.io/badge/Hatchling-FFC107?style=flat-square&logo=hatch&logoColor=black" alt="Hatchling"> / <img src="https://img.shields.io/badge/uv-DE5FE9?style=flat-square&logo=uv&logoColor=white" alt="uv">
+### 🥚 Hatchling / <img src="https://img.shields.io/badge/uv-DE5FE9?style=flat-square&logo=uv&logoColor=white" alt="uv">
 
 Projects using [hatchling](https://hatch.pypa.io/) (the default build backend for [uv](https://github.com/astral-sh/uv)) can use vmn's git tags as the version source with zero file injection. This is done by configuring hatchling's [hatch-vcs](https://github.com/ofek/hatch-vcs) plugin to read vmn tags directly.
 
