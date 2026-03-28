@@ -31,6 +31,7 @@ VMN_DEFAULT_CONF = {
     "deps": {},
     "policies": {},
     "conventional_commits": {},
+    "changelog": {},
 }
 
 _DIGIT_REGEX = r"0|[1-9]\d*"
@@ -1750,29 +1751,22 @@ class GitBackend(VMNBackend):
             VMN_LOGGER.error(f"An error occurred when tried to parse log: {e}")
             return {}, []
 
-    def get_commits_range_iter(self, tag_name, to_hex="HEAD"):
-        # def _commit_exists_locally(self, commit_hash):
-        #     """
-        #     Check if the given commit exists locally.
-        #     """
-        #     try:
-        #         subprocess.check_output(["git", "cat-file", "-e", commit_hash])
-        #         return True
-        #     except subprocess.CalledProcessError:
-        #         return False
-
+    def _iter_commits_in_range(self, tag_name, to_hex="HEAD"):
+        """Return a raw GitPython commit iterator for the range tag..to_hex."""
         from_hex = self._be.tags[tag_name].commit
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
             self._be.git.execute(["git", "fetch", "--unshallow"])
-            # if from_hex is not present because shallow,
-            # fetch incrementally with deepen until commit found
-            # self._be.git.execute(["git", "fetch", "--deepen", "1"])
 
-        i = self._be.iter_commits(f"{from_hex}..{to_hex}")
+        return self._be.iter_commits(f"{from_hex}..{to_hex}")
 
-        return CommitMessageIterator(i)
+    def get_commits_range_iter(self, tag_name, to_hex="HEAD"):
+        return CommitMessageIterator(self._iter_commits_in_range(tag_name, to_hex))
+
+    def get_commits_info_iter(self, tag_name, to_hex="HEAD"):
+        """Like get_commits_range_iter but yields (message, short_hash) tuples."""
+        return CommitInfoIterator(self._iter_commits_in_range(tag_name, to_hex))
 
     @measure_runtime_decorator
     def get_commit_object_from_tag_name(self, tag_name):
@@ -1805,6 +1799,21 @@ class CommitMessageIterator:
         commit = next(self._iterator)
 
         return commit.message.strip()
+
+
+class CommitInfoIterator:
+    """Iterator that yields (message, short_hash) tuples for changelog generation."""
+
+    def __init__(self, iter_commits):
+        self._iterator = iter(iter_commits)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        commit = next(self._iterator)
+
+        return commit.message.strip(), commit.hexsha[:7]
 
 
 @measure_runtime_decorator

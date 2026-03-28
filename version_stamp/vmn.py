@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import copy
+import datetime
 import glob
 import json
 import os
@@ -98,6 +99,7 @@ class IVersionsStamper(object):
         "create_verinfo_files": "create_verinfo_files",
         "policies": "policies",
         "conventional_commits": "conventional_commits",
+        "changelog": "changelog",
     }
 
     @stamp_utils.measure_runtime_decorator
@@ -126,6 +128,7 @@ class IVersionsStamper(object):
         self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
         self.policies = stamp_utils.VMN_DEFAULT_CONF["policies"]
         self.conventional_commits = stamp_utils.VMN_DEFAULT_CONF["conventional_commits"]
+        self.changelog = stamp_utils.VMN_DEFAULT_CONF["changelog"]
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -932,6 +935,7 @@ class IVersionsStamper(object):
                     "version_backends": self.version_backends,
                     "policies": self.policies,
                     "conventional_commits": self.conventional_commits,
+                    "changelog": self.changelog,
                 }
             }
 
@@ -1370,6 +1374,8 @@ class VersionControlStamper(IVersionsStamper):
                     root_app_msg, root_app_version, version_files_to_add
                 )
 
+        self._generate_changelog(app_version, version_files_to_add)
+
         commit_msg = None
         if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
             commit_msg = f"{self.name}: Stamped initial version {app_version}\n\n"
@@ -1497,6 +1503,145 @@ class VersionControlStamper(IVersionsStamper):
             return 2
 
         return 0
+
+    def _generate_changelog(self, app_version, version_files_to_add):
+        """Generate a changelog entry from conventional commits and prepend to CHANGELOG.md."""
+        if not self.changelog or not self.changelog.get("enabled"):
+            return
+
+        if self.selected_tag is None:
+            stamp_utils.VMN_LOGGER.debug(
+                "No previous version tag found, skipping changelog generation"
+            )
+            return
+
+        changelog_path_rel = self.changelog.get("path", "CHANGELOG.md")
+        changelog_path = os.path.join(self.vmn_root_path, changelog_path_rel)
+
+        # Collect commits grouped by type
+        type_labels = {
+            "feat": "Features",
+            "fix": "Bug Fixes",
+            "perf": "Performance Improvements",
+            "refactor": "Refactoring",
+            "docs": "Documentation",
+            "style": "Style",
+            "test": "Tests",
+            "build": "Build",
+            "ci": "CI",
+            "chore": "Chores",
+            "revert": "Reverts",
+        }
+
+        breaking_changes = []
+        grouped_commits = {}
+
+        try:
+            for msg, short_hash in self.backend.get_commits_info_iter(
+                self.selected_tag
+            ):
+                try:
+                    res = stamp_utils.parse_conventional_commit_message(msg)
+                except ValueError:
+                    continue
+
+                description = res["description"].strip()
+                scope = res.get("scope")
+                is_breaking = res.get("bc") == "!"
+
+                # Check footer for BREAKING CHANGE
+                footer = res.get("footer") or ""
+                if "BREAKING CHANGE" in footer or "BREAKING-CHANGE" in footer:
+                    is_breaking = True
+
+                prefix = f"**{scope}:** " if scope else ""
+                entry = f"- {prefix}{description} ({short_hash})"
+
+                if is_breaking:
+                    breaking_changes.append(entry)
+                else:
+                    commit_type = res["type"].strip()
+                    label = type_labels.get(commit_type, "Other Changes")
+                    grouped_commits.setdefault(label, []).append(entry)
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Failed to iterate commits for changelog", exc_info=True
+            )
+            return
+
+        if not grouped_commits and not breaking_changes:
+            stamp_utils.VMN_LOGGER.debug(
+                "No conventional commits found, skipping changelog generation"
+            )
+            return
+
+        # Build the changelog entry
+        today = datetime.date.today().isoformat()
+        lines = [f"## [{app_version}] - {today}", ""]
+
+        # Section ordering: Breaking Changes first, then Features, Bug Fixes, rest
+        section_order = ["Breaking Changes", "Features", "Bug Fixes"]
+
+        if breaking_changes:
+            lines.append("### Breaking Changes")
+            lines.extend(breaking_changes)
+            lines.append("")
+
+        for section in section_order:
+            if section == "Breaking Changes":
+                continue
+            if section in grouped_commits:
+                lines.append(f"### {section}")
+                lines.extend(grouped_commits.pop(section))
+                lines.append("")
+
+        for section in sorted(grouped_commits.keys()):
+            lines.append(f"### {section}")
+            lines.extend(grouped_commits[section])
+            lines.append("")
+
+        new_entry = "\n".join(lines)
+
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                f"Would have written changelog entry to {changelog_path}:\n{new_entry}"
+            )
+            return
+
+        # Read existing content or start fresh
+        existing_content = ""
+        if os.path.exists(changelog_path):
+            try:
+                with open(changelog_path, "r") as f:
+                    existing_content = f.read()
+            except Exception:
+                stamp_utils.VMN_LOGGER.debug(
+                    "Failed to read existing changelog", exc_info=True
+                )
+
+        if existing_content:
+            # Insert after the first header line if present, otherwise prepend
+            header_match = re.match(r"^(# .+\n(?:\n)?)", existing_content)
+            if header_match:
+                header = header_match.group(1)
+                rest = existing_content[len(header):]
+                updated = header + "\n" + new_entry + "\n" + rest
+            else:
+                updated = new_entry + "\n\n" + existing_content
+        else:
+            updated = "# Changelog\n\n" + new_entry + "\n"
+
+        try:
+            with open(changelog_path, "w") as f:
+                f.write(updated)
+            version_files_to_add.append(changelog_path)
+            stamp_utils.VMN_LOGGER.info(
+                f"Generated changelog entry for version {app_version}"
+            )
+        except Exception:
+            stamp_utils.VMN_LOGGER.debug(
+                "Failed to write changelog file", exc_info=True
+            )
 
     def _add_files_generic_selectors(self, version_files_to_add, backend_conf):
         for item in backend_conf:
