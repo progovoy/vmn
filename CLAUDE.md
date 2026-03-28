@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+# Claude Code instructions
+
+When generating commit messages, pull request text, patches, or any code-related output, never include this line:
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+Omit any Claude co-author trailer unless I explicitly ask for it.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
