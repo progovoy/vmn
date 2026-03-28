@@ -194,8 +194,7 @@ To have `vmn stamp` deduce the release mode automatically from commit messages, 
 ```yaml
 conf:
   default_release_mode: optional
-  conventional_commits:
-    enabled: true
+  conventional_commits: true
 ```
 
 `vmn` scans commits since the last stamp and picks the highest release mode based on conventional commit types: `fix` → patch, `feat` → minor, `BREAKING CHANGE` or `!` → major.
@@ -300,7 +299,7 @@ vmn stamp -r major --pr alpha <app-name>    # 2.0.0-alpha.1
 vmn stamp --pr alpha <app-name>             # 2.0.0-alpha.2
 vmn stamp --pr mybeta <app-name>            # 2.0.0-mybeta.1
 
-vmn release -v 2.0.0-mybeta1 <app-name>    # 2.0.0 (final)
+vmn release -v 2.0.0-mybeta.1 <app-name>   # 2.0.0 (final)
 # or: vmn release --stamp <app-name>
 ```
 
