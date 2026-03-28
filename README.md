@@ -27,7 +27,7 @@
 
 ---
 
-🚀 [Quick Start](#-quick-start) · ⚖️ [Why vmn?](#%EF%B8%8F-why-vmn) · 📖 [Commands](#-commands) · 🔌 [Auto-Embedding](#-version-auto-embedding) · ⚙️ [Configuration](#%EF%B8%8F-configuration) · 🔄 [CI](#-ci-integration) · 🤝 [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) · [Why vmn?](#%EF%B8%8F-why-vmn) · [What makes vmn unique](#-what-makes-vmn-unique) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#%EF%B8%8F-configuration) · [CI](#-ci-integration) · [Contributing](CONTRIBUTING.md)
 
 ---
 
@@ -41,56 +41,9 @@ vmn stamp -r patch my_app
 # => 0.0.1
 ```
 
-No separate `vmn init` or `vmn init-app` required — when you run `vmn stamp` on a fresh repo, vmn automatically initializes the repository and app for you.
+No separate `vmn init` or `vmn init-app` required — `vmn stamp` auto-initializes the repository and app on first run.
 
-> **Shallow clones**: vmn works with shallow repositories (e.g. `git clone --depth 1` or CI's `fetch-depth: 1`). It automatically detects shallow clones and fetches the missing history it needs. For best performance, prefer a full clone (`fetch-depth: 0` in CI).
-
-## ⚖️ Why vmn?
-
-> 💡 **tl;dr** — vmn does what semantic-release/release-please do, but works with *any* language and adds multi-repo tracking, state recovery, and microservice topologies that no competitor offers.
-
-| Capability | <img src="https://img.shields.io/badge/vmn-blue?style=flat-square" alt="vmn"> | <img src="https://img.shields.io/badge/semantic--release-494949?style=flat-square&logo=semanticrelease&logoColor=white" alt="semantic-release"> | <img src="https://img.shields.io/badge/release--please-4285F4?style=flat-square&logo=google&logoColor=white" alt="release-please"> | <img src="https://img.shields.io/badge/changesets-purple?style=flat-square" alt="changesets"> |
-|:-----------|:---:|:----------------:|:--------------:|:----------:|
-| Language-agnostic | :white_check_mark: | JS-centric | JS-centric | JS-only |
-| Git-tag source of truth | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Multi-repo dependency tracking | :white_check_mark: | :x: | :x: | :x: |
-| State recovery (`vmn goto`) | :white_check_mark: | :x: | :x: | :x: |
-| Microservice / root app topology | :white_check_mark: | :x: | :x: | monorepo only |
-| 4-segment hotfix versioning | :white_check_mark: | :x: | :x: | :x: |
-| Auto-embed version (npm, Cargo, pyproject, any file) | :white_check_mark: | per-plugin | :x: | JS only |
-| Conventional commits | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Changelog generation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| GitHub Release creation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Zero-config start (auto-init) | :white_check_mark: | :x: | :x: | :x: |
-| Offline / local file backend | :white_check_mark: | :x: | :x: | :x: |
-| Zero lock-in (pure git tags) | :white_check_mark: | :x: | :x: | :x: |
-
-<details>
-<summary>Detailed comparisons & migration guides</summary>
-
-- [vmn vs semantic-release](docs/vmn-vs-semantic-release.md)
-- [vmn vs release-please](docs/vmn-vs-release-please.md)
-- [vmn vs setuptools-scm](docs/vmn-vs-setuptools-scm.md)
-- [Migrating from standard-version](docs/migrating-from-standard-version.md)
-- [Migrating from bump2version](docs/migrating-from-bump2version.md)
-
-</details>
-
-## ✨ Features
-
-| | Feature | Description |
-|:-:|:--------|:------------|
-| 🔢 | **Version formats** | `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info` — [Semver](https://semver.org) + hotfix extension |
-| 🪄 | **[Zero-config start](#-quick-start)** | Auto-initializes repo and app on first `vmn stamp` — no init step needed |
-| 📝 | **[Conventional commits](#conventional-commits)** | Auto-detect release mode from `fix:`, `feat:`, `BREAKING CHANGE` commits |
-| 📋 | **[Changelog generation](#changelog-generation)** | Built-in CHANGELOG.md from conventional commits on each stamp |
-| 🚀 | **[GitHub Releases](#github-release-creation)** | Optionally create GitHub Releases after stamp (via `gh` CLI) |
-| 📦 | **[Version auto-embedding](#-version-auto-embedding)** | Write version into `package.json`, `Cargo.toml`, `pyproject.toml`, or any file |
-| ⏪ | **[State recovery](#vmn-goto)** | `vmn goto` restores the exact repo state for any stamped version |
-| 🧩 | **[Microservices](#root-apps-or-microservices)** | Root apps with independent service versions |
-| 🔗 | **[Multi-repo deps](#configuration)** | Track and lock versions across repositories |
-| ⚡ | **[uv / hatchling](#hatchling--uv)** | Dynamic versioning from git tags via `hatch-vcs` |
-| 🔧 | **[Interactive config](#vmn-config)** | TUI editor for app configuration (`vmn config`) |
+> **Shallow clones**: vmn works with shallow repositories (e.g. `git clone --depth 1` or CI's `fetch-depth: 1`). It automatically fetches the missing history it needs. For best performance, prefer a full clone (`fetch-depth: 0` in CI).
 
 <details>
 <summary><strong>Try it locally (playground)</strong></summary>
@@ -113,23 +66,55 @@ vmn stamp -r patch my_app   # => 0.0.2
 
 </details>
 
+## ⚖️ Why vmn?
+
+vmn does what semantic-release / release-please do, but works with **any language** and adds capabilities no competitor offers.
+
+| Capability | vmn | semantic-release | release-please | changesets |
+|:-----------|:---:|:----------------:|:--------------:|:----------:|
+| Language-agnostic | :white_check_mark: | JS-centric | JS-centric | JS-only |
+| Git-tag source of truth | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| Multi-repo dependency tracking | :white_check_mark: | :x: | :x: | :x: |
+| State recovery (`vmn goto`) | :white_check_mark: | :x: | :x: | :x: |
+| Microservice / root app topology | :white_check_mark: | :x: | :x: | monorepo only |
+| 4-segment hotfix versioning | :white_check_mark: | :x: | :x: | :x: |
+| Auto-embed version (npm, Cargo, pyproject, any file) | :white_check_mark: | per-plugin | :x: | JS only |
+| Conventional commits + changelog | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: / :white_check_mark: |
+| GitHub Release creation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| Zero-config start (auto-init) | :white_check_mark: | :x: | :x: | :x: |
+| Offline / local file backend | :white_check_mark: | :x: | :x: | :x: |
+| Zero lock-in (pure git tags) | :white_check_mark: | :x: | :x: | :x: |
+
+<details>
+<summary>Detailed comparisons & migration guides</summary>
+
+- [vmn vs semantic-release](docs/vmn-vs-semantic-release.md)
+- [vmn vs release-please](docs/vmn-vs-release-please.md)
+- [vmn vs setuptools-scm](docs/vmn-vs-setuptools-scm.md)
+- [Migrating from standard-version](docs/migrating-from-standard-version.md)
+- [Migrating from bump2version](docs/migrating-from-bump2version.md)
+
+</details>
+
+## 🌟 What makes vmn unique
+
+**State recovery** — `vmn goto -v 1.2.3 my_app` checks out the entire repository (and all tracked dependencies) to the exact state when that version was stamped. No other versioning tool can do this.
+
+**Multi-repo dependency tracking** — vmn records the commit hash of every dependency repo at stamp time. `vmn goto` then restores all of them in parallel, giving you a reproducible snapshot across repositories.
+
+**Microservice topology** — version multiple services under one umbrella (`my_root_app/service1`, `my_root_app/service2`). Each service has its own semver; the root app gets an auto-incrementing integer version on every service stamp. See [Root Apps](#root-apps-microservices).
+
+**Zero lock-in** — all version state lives in git tags and their messages. Remove vmn and your tags still make sense. No config files, databases, or SaaS dependencies required.
+
+**Offline mode** — a local file backend lets you version without a git remote.
+
+**Version formats** — full [Semver 2.0](https://semver.org) plus an optional 4th hotfix segment: `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info`
+
 ---
 
 ## 📖 Commands
 
 > `init-app` and `stamp` both support `--dry-run` for safe testing.
-
-### vmn init / init-app
-
-Usually not needed — `vmn stamp` auto-initializes on first run. Use these only for explicit control:
-
-```sh
-vmn init                            # initialize vmn in a repository (creates .vmn/, commits, pushes)
-vmn init-app <app-name>             # initialize an app (starts from 0.0.0)
-vmn init-app -v 1.6.8 <app-name>   # initialize from a specific version
-vmn init-app --dry-run <app-name>   # preview without making changes
-vmn init-app --orm strict <app-name> # set default_release_mode to strict (default: optional)
-```
 
 ### vmn stamp
 
@@ -142,113 +127,76 @@ vmn stamp -r patch -e '[skip ci]' <app-name>  # append text to commit message
 vmn stamp --pull -r patch <app-name>          # pull before stamping (retries on push conflict)
 ```
 
+**Behaviors:** idempotent (won't re-stamp if current commit already matches), refuses detached HEAD, auto-initializes repo/app on first run.
+
+#### Stamping without `-r`
+
+Running `vmn stamp <app-name>` without `-r` works **only during a prerelease sequence**. It continues the existing prerelease without changing the base version:
+
+```sh
+vmn stamp -r patch --pr rc <app-name>   # 0.0.2-rc.1
+vmn stamp --pr rc <app-name>            # 0.0.2-rc.2  (continues prerelease)
+vmn stamp <app-name>                    # 0.0.2-rc.3  (still continues)
+```
+
+If the current version is a **release** (e.g. `0.0.1`), omitting `-r` errors out — vmn needs to know which segment to bump.
+
+#### `-r` vs `--orm`
+
+This is an important distinction:
+
+| Flag | Behavior |
+|:----:|:---------|
+| `-r patch` | **Strict** — always advances the base version. `0.0.1` → `0.0.2`. `0.0.2-rc.3` → `0.0.3`. |
+| `--orm patch` | **Optional** — advances only if no prerelease exists at the target. `0.0.1` → `0.0.2`. But if `0.0.2-rc.1` already exists → `0.0.2-rc.2` (continues it instead of bumping). |
+
+`--orm` is useful in CI where you want to bump on new work but continue an existing prerelease series if one is in flight.
+
 <details>
 <summary><strong>All stamp flags</strong></summary>
 
 | Flag | Description |
 |:-----|:------------|
-| `-r`, `--release-mode` | Release mode: `major` / `minor` / `patch` / `hotfix` (also accepts `micro` as alias for `hotfix`) |
-| `--orm`, `--optional-release-mode` | Like `-r` but only advances if no prerelease exists at target version ([details below](#-r-vs---orm)) |
+| `-r`, `--release-mode` | `major` / `minor` / `patch` / `hotfix` (also accepts `micro` as alias for `hotfix`) |
+| `--orm`, `--optional-release-mode` | Like `-r` but only advances if no prerelease exists at target version |
 | `--pr`, `--prerelease` | Prerelease identifier (e.g. `alpha`, `rc`, `beta.1`). Trailing `.` is auto-stripped |
-| `--dry-run` | Preview the version that would be stamped without committing or pushing |
-| `--pull` | Pull remote changes before stamping. Enables retry on push conflicts (up to 3 retries with 1-5s delay) |
+| `--dry-run` | Preview the version without committing or pushing |
+| `--pull` | Pull remote before stamping; retries on push conflict (up to 3 retries, 1-5s delay) |
 | `-e`, `--extra-commit-message` | Append text to the stamp commit message (e.g. `[skip ci]`) |
 | `--ov`, `--override-version` | Force a specific version string (bypasses release mode logic) |
 | `--orv`, `--override-root-version` | Force root app version to a specific integer |
 | `--dont-check-vmn-version` | Skip check that the vmn binary is at least as new as the version in metadata |
 
-**Behaviors:**
-- **Idempotent** — if the current commit already has a matching version, vmn returns 0 without re-stamping
-- **Detached HEAD** — vmn refuses to stamp in detached HEAD state
-- **Auto-init** — automatically runs `vmn init` + `vmn init-app` on first stamp if repo/app not yet tracked
-
 </details>
 
-<details>
-<summary><strong>Stamping without <code>-r</code> and <code>-r</code> vs <code>--orm</code></strong></summary>
+#### Stamp automation (conventional commits, changelog, GitHub releases)
 
-#### Stamping without `-r`
+All of these are configured per-app in `.vmn/<app-name>/conf.yml`:
 
-Running `vmn stamp <app-name>` without `-r` (and without `--orm`) works only when the current version is a **prerelease**. In that case `vmn` continues the existing prerelease sequence without changing the base version:
-
-```sh
-vmn stamp -r patch --pr rc <app-name>
-# 0.0.2-rc.1
-
-vmn stamp --pr rc <app-name>
-# 0.0.2-rc.2  (no -r needed, continues the prerelease)
-
-vmn stamp <app-name>
-# 0.0.2-rc.3  (even without --pr, stays on the same prerelease)
-```
-
-If the current version is a **released** version (e.g., `0.0.1`), running `vmn stamp` without `-r` or `--orm` will error:
-
-```
-[ERROR] When not in release candidate mode, a release mode must be specified
-       - use -r/--release-mode with one of major/minor/patch/hotfix
-```
-
-The same error occurs when conventional commits are configured but no recognized conventional commit types (`fix`, `feat`, etc.) are found in the commit range since the last stamp.
-
-#### `-r` vs `--orm`
-
-Both flags specify the release mode (major/minor/patch/hotfix), but they differ in how they handle existing prereleases:
-
-| Flag | Behavior |
-|:----:|:---------|
-| `-r patch` | **Strict** — always advances the base version. From `0.0.1` → `0.0.2`. From `0.0.2-rc.3` → `0.0.3`. |
-| `--orm patch` | **Optional** — advances the base version only if the target version has no existing prereleases. From `0.0.1` → `0.0.2`. From `0.0.1` when `0.0.2-rc.1` already exists → `0.0.2-rc.2` (continues the prerelease instead of bumping). |
-
-</details>
-
-### Conventional commits
-
-To have `vmn stamp` deduce the release mode automatically from commit messages, configure your app's `conf.yml`:
+**Conventional commits** — auto-detect release mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` / `!` → major). With this enabled, `vmn stamp <app-name>` works without `-r`:
 
 ```yaml
 conf:
-  default_release_mode: optional
   conventional_commits: true
+  default_release_mode: optional   # "optional" uses --orm behavior; "strict" uses -r behavior
 ```
 
-`vmn` scans commits since the last stamp and picks the highest release mode based on conventional commit types: `fix` → patch, `feat` → minor, `BREAKING CHANGE` or `!` → major.
-
-`default_release_mode` controls which stamping behavior is used for the auto-detected mode:
-
-| Value | Equivalent flag | Behavior |
-|:-----:|:---------------:|:---------|
-| `optional` (default) | `--orm` | Only advances the base version if no prerelease already exists for the target version. If a prerelease exists, continues from it. |
-| `strict` | `-r` | Always advances the base version unconditionally. |
-
-Now you can run `vmn stamp <app-name>` and `vmn` will deduce the proper release mode automatically.
-
-### Changelog generation
-
-`vmn stamp` can automatically generate a [Keep a Changelog](https://keepachangelog.com)-formatted CHANGELOG.md from conventional commits:
+**Changelog** — generate a [Keep a Changelog](https://keepachangelog.com)-formatted `CHANGELOG.md` on each stamp. Requires `conventional_commits: true`. Commits are grouped by type (Features, Bug Fixes, Breaking Changes, etc.):
 
 ```yaml
-# .vmn/<app-name>/conf.yml
 conf:
   conventional_commits: true
   changelog:
     path: "CHANGELOG.md"   # optional, defaults to CHANGELOG.md
 ```
 
-On each stamp, vmn collects commits since the last version, groups them by type (Features, Bug Fixes, Breaking Changes, etc.), and prepends a new `## [version] - date` entry to the changelog. The changelog file is automatically included in the stamp commit.
-
-### GitHub Release creation
-
-`vmn stamp` can automatically create a GitHub Release after pushing tags:
+**GitHub Releases** — create a GitHub Release after pushing tags. Requires the [`gh` CLI](https://cli.github.com/) and `GITHUB_TOKEN` / `GH_TOKEN`. Uses changelog content if available, otherwise lists commits. Prereleases auto-marked. Failures are best-effort (warning, not failure):
 
 ```yaml
-# .vmn/<app-name>/conf.yml
 conf:
   github_release:
-    draft: false           # optional, create as draft release
+    draft: false   # optional, create as draft
 ```
-
-**Requirements:** the [`gh` CLI](https://cli.github.com/) must be installed and either `GITHUB_TOKEN` or `GH_TOKEN` must be set. If a CHANGELOG.md exists, the release body is extracted from it; otherwise vmn falls back to listing commits. Prereleases are automatically marked as such. Failures are best-effort — they log a warning but don't fail the stamp.
 
 ### vmn release
 
@@ -267,14 +215,9 @@ vmn release <app-name>                  # => 0.0.1
 vmn release --stamp <app-name>          # => 0.0.1
 ```
 
-Modes 1 and 2 create a lightweight tag pointing to the original prerelease commit — no new commit is created. Mode 2 auto-detects the version from the current commit (you must be on a version commit).
+Modes 1 & 2 create a lightweight tag on the original prerelease commit (no new commit). Mode 2 requires you to be on the version commit. `--stamp` runs the full pipeline (commit + tag + push) but requires branch tip at the prerelease commit. `-v` and `--stamp` are mutually exclusive.
 
-`--stamp` (`-s`) runs the full stamp pipeline (new commit, tag, push, version backends, changelog) but requires being on a branch tip (not detached HEAD) at the exact prerelease commit, with clean dependencies. `-v` and `-s`/`--stamp` are mutually exclusive.
-
-**Notes:**
-- Cannot release a version that contains build metadata (e.g. `1.0.0+build42`)
-- `whitelist_release_branches` policy is enforced — release is rejected if the version was stamped on a non-whitelisted branch
-- Idempotent — if the release version already exists, returns 0 without creating a duplicate tag
+Idempotent. Cannot release versions with build metadata. `whitelist_release_branches` policy is enforced.
 
 ### vmn show
 
@@ -284,28 +227,12 @@ vmn show --raw <app-name>              # raw version without template formatting
 vmn show --verbose <app-name>          # full YAML metadata dump
 vmn show -v 0.0.1 <app-name>          # show info for a specific version
 vmn show --root my_root_app            # show root app version (integer)
-vmn show --conf <app-name>             # include configuration (deps, template, backends)
-vmn show --from-file <app-name>        # read from file instead of git (faster, no repo validation)
-vmn show --type <app-name>             # show version type: release / prerelease / metadata
-vmn show -u <app-name>                 # show unique ID (version+commit_hash)
-vmn show --ignore-dirty <app-name>     # suppress dirty repo warnings in output
-vmn show -t '[{major}]' <app-name>    # override display template for this invocation
+vmn show --conf <app-name>             # include configuration
+vmn show --from-file <app-name>        # read from file instead of git (faster)
+vmn show --type <app-name>             # version type: release / prerelease / metadata
+vmn show -u <app-name>                 # unique ID (version+commit_hash)
+vmn show -t '[{major}]' <app-name>    # override display template
 ```
-
-### vmn gen
-
-Generate a version file from a Jinja2 template:
-
-```sh
-vmn gen -t version.j2 -o version.txt <app-name>               # basic generation
-vmn gen -t version.j2 -o version.txt -v 1.0.0 <app-name>     # generate for a specific version
-vmn gen -t notes.j2 -o notes.txt -c custom.yml <app-name>     # merge custom YAML values into template
-vmn gen -t notes.j2 -o notes.txt --verify-version <app-name>  # fail if repo is dirty or not at version
-```
-
-`--verify-version` ensures the repository is clean and checked out at the exact target version before generating. Output is idempotent — the file is not rewritten if content is identical.
-
-See [Template Variables](#-template-variables-for-vmn-gen) for available Jinja2 variables.
 
 ### vmn goto
 
@@ -313,12 +240,25 @@ Checkout the repository (and its dependencies) to the exact state at a stamped v
 
 ```sh
 vmn goto -v 0.0.1 <app-name>              # checkout app + deps to version 0.0.1
-vmn goto -v 0.0.1 --deps-only <app-name>  # only checkout dependencies, leave main app as-is
+vmn goto -v 0.0.1 --deps-only <app-name>  # only checkout dependencies
 vmn goto -v 5 --root my_root_app          # checkout to root app version
 vmn goto --pull -v 0.0.1 <app-name>       # pull from remote before checkout
 ```
 
 Dependencies are cloned automatically if missing (up to 10 in parallel) and checked out to the exact hash recorded at stamp time.
+
+### vmn gen
+
+Generate a version file from a Jinja2 template:
+
+```sh
+vmn gen -t version.j2 -o version.txt <app-name>               # basic generation
+vmn gen -t version.j2 -o version.txt -v 1.0.0 <app-name>     # for a specific version
+vmn gen -t notes.j2 -o notes.txt -c custom.yml <app-name>     # merge custom YAML values
+vmn gen -t notes.j2 -o notes.txt --verify-version <app-name>  # fail if repo is dirty
+```
+
+Output is idempotent. See [Template Variables](#template-variables-for-vmn-gen) for available Jinja2 variables.
 
 ### vmn add
 
@@ -326,59 +266,63 @@ Attach build metadata to an existing stamped version:
 
 ```sh
 vmn add -v 0.0.1 --bm build42 <app-name>                          # => 0.0.1+build42
-vmn add --bm build42 <app-name>                                    # auto-detect version from current commit
-vmn add -v 0.0.1 --bm build42 --vmp metadata.yml <app-name>       # attach a YAML file as metadata
-vmn add -v 0.0.1 --bm build42 --vmu https://ci/build/42 <app-name> # attach a URL as metadata
+vmn add --bm build42 <app-name>                                    # auto-detect version
+vmn add -v 0.0.1 --bm build42 --vmp metadata.yml <app-name>       # attach YAML metadata
+vmn add -v 0.0.1 --bm build42 --vmu https://ci/build/42 <app-name> # attach URL metadata
 ```
 
-Idempotent — if the same metadata already exists, returns 0. Cannot add metadata to a version that already has different metadata attached.
+Idempotent. Cannot add metadata to a version that already has different metadata.
 
 ### vmn config
 
-Interactive TUI for viewing and editing app configuration without manually editing YAML:
+Interactive TUI for editing app configuration:
 
 ```sh
-vmn config <app-name>           # interactive TUI editor
-vmn config <app-name> --vim     # open in $EDITOR (default: vim) instead of TUI
+vmn config <app-name>           # TUI editor
+vmn config <app-name> --vim     # open in $EDITOR instead
 vmn config                      # list all managed apps
 vmn config --global             # edit repo-level .vmn/conf.yml
-vmn config <app-name> --root    # edit root app config (requires app name with /)
+vmn config <app-name> --root    # edit root app config
 ```
 
-The TUI supports editing most config fields (template, version_backends, deps, policies, conventional_commits, etc.) with validation and auto-detection. `changelog` and `github_release` are not yet editable in the TUI — use `--vim` to edit those. Requires a terminal (TTY); falls back to `--vim` if not available.
+The TUI supports most config fields with validation. `changelog` and `github_release` are not yet TUI-editable — use `--vim`. Falls back to `--vim` if no TTY.
 
-### 🐍 Python Library Usage
+### vmn init / init-app
+
+Usually not needed — `vmn stamp` auto-initializes. Use for explicit control:
+
+```sh
+vmn init                            # initialize vmn in a repository
+vmn init-app <app-name>             # initialize an app (starts from 0.0.0)
+vmn init-app -v 1.6.8 <app-name>   # start from a specific version
+vmn init-app --dry-run <app-name>   # preview without making changes
+vmn init-app --orm strict <app-name> # set default_release_mode to strict
+```
+
+### Python library
 
 ```python
 from contextlib import redirect_stdout, redirect_stderr
-import io
-import version_stamp.vmn as vmn
+import io, version_stamp.vmn as vmn
 
-out = io.StringIO()
-err = io.StringIO()
+out, err = io.StringIO(), io.StringIO()
 with redirect_stdout(out), redirect_stderr(err):
     ret, vmn_ctx = vmn.vmn_run(["show", "vmn"])
-out_s = out.getvalue()
-err_s = err.getvalue()
 ```
 
-Explore the `vmn_ctx` object for available fields. Attributes starting with `_` are private and may change.
-
-### 🌐 Environment Variables
+### Environment variables
 
 | Variable | Description |
 |:---------|:------------|
-| `VMN_WORKING_DIR` | Override the working directory for vmn |
-| `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo lock to prevent concurrent vmn commands) |
-| `GITHUB_TOKEN` / `GH_TOKEN` | Required for [GitHub Release creation](#github-release-creation) via `gh` CLI |
+| `VMN_WORKING_DIR` | Override working directory |
+| `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo) |
+| `GITHUB_TOKEN` / `GH_TOKEN` | Required for [GitHub Releases](#stamp-automation-conventional-commits-changelog-github-releases) |
 
 ---
 
-## 🔬 Advanced Topics
+## 🏗️ Release Candidates
 
-### 🏗️ Release Candidates
-
-`vmn` supports Semver prerelease versions, letting you iterate on release candidates before promoting to a final release:
+Iterate on prereleases before promoting to a final release:
 
 ```sh
 vmn init-app -v 1.6.8 <app-name>
@@ -391,64 +335,51 @@ vmn release -v 2.0.0-mybeta.1 <app-name>   # 2.0.0 (tag only)
 # or: vmn release --stamp <app-name>      # 2.0.0 (full stamp flow)
 ```
 
-### 🧩 Root Apps (Microservices)
+## 🧩 Root Apps (Microservices)
 
-Manage versions for multiple services under one umbrella:
+Version multiple services under one umbrella. Each service has its own semver; the root app gets an auto-incrementing integer version on every service stamp:
 
 ```sh
 vmn init-app my_root_app/service1
 vmn init-app my_root_app/service2
-vmn init-app my_root_app/service3
 
-vmn stamp -r patch my_root_app/service1
-vmn stamp -r patch my_root_app/service2
-vmn stamp -r patch my_root_app/service3
+vmn stamp -r patch my_root_app/service1   # service1 => 0.0.1, root => 1
+vmn stamp -r patch my_root_app/service2   # service2 => 0.0.1, root => 2
+
+vmn show my_root_app/service1             # => 0.0.1
+vmn show --root my_root_app               # => 2
 ```
 
 <details>
 <summary>Example <code>vmn show --verbose</code> output</summary>
 
 ```yaml
-vmn_info:
-  description_message_version: '1'
-  vmn_version: <vmn version>
 stamping:
-  msg: 'my_root_app/service3: update to version 0.0.1'
   app:
-    name: my_root_app/service3
+    name: my_root_app/service2
     _version: 0.0.1
     release_mode: patch
-    prerelease: release
-    previous_version: 0.0.0
     stamped_on_branch: master
     changesets:
       .:
-        hash: 8bbeb8a4d3ba8499423665ba94687b551309ea64
+        hash: 8bbeb8a...
         remote: <remote url>
         vcs_type: git
-    info: {}
   root_app:
     name: my_root_app
-    version: 5
-    latest_service: my_root_app/service3
+    version: 2
+    latest_service: my_root_app/service2
     services:
       my_root_app/service1: 0.0.1
       my_root_app/service2: 0.0.1
-      my_root_app/service3: 0.0.1
-    external_services: {}
 ```
 
 </details>
 
-```sh
-vmn show my_root_app/service3      # => 0.0.1
-vmn show --root my_root_app        # => 5
-```
-
-### 📄 Template Variables for `vmn gen`
+## Template Variables for `vmn gen`
 
 <details>
-<summary>Available template variables</summary>
+<summary>Available variables and example</summary>
 
 ```json
 {
@@ -467,11 +398,6 @@ vmn show --root my_root_app        # => 5
 }
 ```
 
-</details>
-
-<details>
-<summary>Template example</summary>
-
 **Template** (`version.j2`):
 ```text
 VERSION: {{version}}
@@ -482,45 +408,29 @@ REPO: {{k}} | HASH: {{v.hash}} | REMOTE: {{v.remote}}
 {% endfor %}
 ```
 
-**Output**:
-```text
-VERSION: 0.0.1
-NAME: test_app2/s1
-BRANCH: master
-REPO: . | HASH: ef4c6f43... | REMOTE: ../test_repo_remote
-```
-
 </details>
 
 ---
 
 ## 🔌 Version Auto-Embedding
 
-`vmn stamp` can automatically write the version string into your project files:
+`vmn stamp` can automatically write the version into your project files:
 
-| Backend | File | Description |
-|:-------:|:----:|:------------|
-| <img src="https://img.shields.io/badge/npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm"> | `package.json` | Updates `version` field |
-| <img src="https://img.shields.io/badge/Cargo-000000?style=flat-square&logo=rust&logoColor=white" alt="Cargo"> | `Cargo.toml` | Updates `version` field |
-| <img src="https://img.shields.io/badge/Poetry-60A5FA?style=flat-square&logo=poetry&logoColor=white" alt="Poetry"> | `pyproject.toml` | Updates `[tool.poetry].version` |
-| <img src="https://img.shields.io/badge/PEP_621-3776AB?style=flat-square&logo=python&logoColor=white" alt="PEP 621"> | `pyproject.toml` | Updates `[project].version` |
+| Backend | File | What it updates |
+|:--------|:-----|:----------------|
+| npm | `package.json` | `version` field |
+| Cargo | `Cargo.toml` | `version` field |
+| Poetry | `pyproject.toml` | `[tool.poetry].version` |
+| PEP 621 | `pyproject.toml` | `[project].version` |
 
-### 🥚 Hatchling / <img src="https://img.shields.io/badge/uv-DE5FE9?style=flat-square&logo=uv&logoColor=white" alt="uv">
+<details>
+<summary><strong>Hatchling / uv — dynamic versioning from git tags</strong></summary>
 
-Projects using [hatchling](https://hatch.pypa.io/) (the default build backend for [uv](https://github.com/astral-sh/uv)) can use vmn's git tags as the version source with zero file injection. This is done by configuring hatchling's [hatch-vcs](https://github.com/ofek/hatch-vcs) plugin to read vmn tags directly.
-
-This approach also supports **multiple apps per repository** — each app's tag pattern is distinct, so hatchling resolves the correct version for each package.
-
-#### Setup
-
-1. Install the plugin:
+Use [hatch-vcs](https://github.com/ofek/hatch-vcs) to read vmn's tags directly (zero file injection). Works with multiple apps per repo.
 
 ```sh
-uv add --dev hatch-vcs
-# or: pip install hatch-vcs
+uv add --dev hatch-vcs   # or: pip install hatch-vcs
 ```
-
-2. Configure `pyproject.toml` to use dynamic versioning from vmn tags:
 
 ```toml
 [build-system]
@@ -533,46 +443,18 @@ dynamic = ["version"]
 
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "my_app_(?P<version>.*)"
+tag-pattern = "my_app_(?P<version>.*)"    # replace my_app with your app name
+# For root apps: "my_root_app-service1_(?P<version>.*)"  (/ becomes -)
 ```
 
-Replace `my_app` with your vmn app name. For root app services like `my_root_app/service1`, use the tag form where `/` becomes `-`:
+Or use the `pep621` backend to write a static version into `[project].version` on each stamp instead.
 
-```toml
-[tool.hatch.version]
-source = "vcs"
-tag-pattern = "my_root_app-service1_(?P<version>.*)"
-```
-
-3. Stamp and build:
-
-```sh
-vmn stamp -r patch my_app
-uv build
-```
-
-`hatch-vcs` will read the version from vmn's git tag — no version file to maintain.
-
-#### Static version alternative
-
-If you prefer a static version in `pyproject.toml` instead of dynamic resolution, use the `pep621` version backend:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    pep621:
-      path: "pyproject.toml"
-```
-
-This writes the version directly into `[project].version` on each `vmn stamp`.
-
-### 🔧 Generic Version Backends
-
-For any file format not covered by built-in backends, use `generic_selectors` (regex-based) or `generic_jinja` (Jinja2 template-based):
+</details>
 
 <details>
-<summary><strong>generic_selectors</strong> — regex find-and-replace</summary>
+<summary><strong>Generic backends — regex or Jinja2 for any file format</strong></summary>
+
+**generic_selectors** — regex find-and-replace:
 
 ```yaml
 version_backends:
@@ -580,22 +462,14 @@ version_backends:
     - paths_section:
         - input_file_path: in.txt
           output_file_path: in.txt
-          custom_keys_path: custom.yml    # optional
       selectors_section:
         - regex_selector: '(version: )(\d+\.\d+\.\d+)'
           regex_sub: \1{{version}}
-        - regex_selector: '(Custom: )([0-9]+)'
-          regex_sub: \1{{k1}}
 ```
 
-- `regex_selector` matches the target text; `regex_sub` defines the replacement
-- Use `{{version}}` to inject the stamped version
-- Use `{{VMN_VERSION_REGEX}}` as a built-in pattern for matching any vmn-compliant version string ([playground](https://regex101.com/r/JoEvaN/1))
+Use `{{VMN_VERSION_REGEX}}` to match any vmn version string ([playground](https://regex101.com/r/JoEvaN/1)).
 
-</details>
-
-<details>
-<summary><strong>generic_jinja</strong> — Jinja2 template rendering</summary>
+**generic_jinja** — Jinja2 template rendering:
 
 ```yaml
 version_backends:
@@ -605,7 +479,7 @@ version_backends:
       custom_keys_path: custom.yml    # optional
 ```
 
-Same template variables as `vmn gen` are available.
+Same variables as `vmn gen`.
 
 </details>
 
@@ -613,55 +487,44 @@ Same template variables as `vmn gen` are available.
 
 ## ⚙️ Configuration
 
-`vmn` auto-generates a `conf.yml` file per app (`.vmn/<app-name>/conf.yml`). Edit it to customize behavior:
+vmn auto-generates `.vmn/<app-name>/conf.yml` per app. Full example with inline docs:
 
 ```yaml
 conf:
-  template: '[{major}][.{minor}]'
-  hide_zero_hotfix: true
-  conventional_commits: true
-  default_release_mode: optional
+  template: '[{major}][.{minor}]'       # display format ({major}, {minor}, {patch}, {hotfix}, {prerelease}, {rcn}, {buildmetadata})
+  hide_zero_hotfix: true                 # hide 4th segment when 0 (default: true)
+  conventional_commits: true             # auto-detect release mode from commits
+  default_release_mode: optional         # "optional" (--orm) or "strict" (-r) for auto-detected mode
   changelog:
-    path: "CHANGELOG.md"
+    path: "CHANGELOG.md"                 # generate changelog on stamp (presence enables it)
   github_release:
-    draft: false
-  deps:
+    draft: false                         # create GitHub Release on stamp (presence enables it)
+  deps:                                  # multi-repo dependencies — tracked on stamp, restored on goto
     ../:
       <repo dir name>:
         vcs_type: git
-  version_backends:
+  version_backends:                      # auto-embed version into project files
     npm:
       path: "relative_path/to/package.json"
   policies:
-    whitelist_release_branches: ["main"]
+    whitelist_release_branches: ["main"] # restrict which branches can stamp/release
+  extra_info: false                      # include host/environment metadata in stamp
+  create_verinfo_files: false            # enable vmn show --from-file
 ```
 
-| Field | Description |
-|:------|:------------|
-| `template` | Display format for versions. `[{major}][.{minor}]` shows `0.0` instead of `0.0.1`. Use `vmn show --raw` for the full version |
-| `hide_zero_hotfix` | Hide the 4th version segment when it's `0` (default: `true`) |
-| `conventional_commits` | Enable automatic release mode detection from commit messages |
-| `default_release_mode` | `optional` (default) or `strict` — controls how auto-detected mode behaves ([details](#conventional-commits)) |
-| `changelog` | `{path: "CHANGELOG.md"}` — generate changelog on stamp; presence enables the feature ([details](#changelog-generation)) |
-| `github_release` | `{draft: false}` — create GitHub Release on stamp; presence enables the feature ([details](#github-release-creation)) |
-| `version_backends` | Auto-embed versions into project files on `vmn stamp` ([details](#-version-auto-embedding)) |
-| `deps` | External repo dependencies — vmn tracks them during `stamp` and checks them out during `goto` |
-| `policies` | Branch restrictions — `whitelist_release_branches` prevents stamping/releasing from unauthorized branches |
-| `extra_info` | Include host/environment metadata in stamp info |
-| `create_verinfo_files` | Create version info files (enables `vmn show --from-file`) |
-
+Use `vmn config <app-name>` for a TUI editor, or edit YAML directly.
 
 ---
 
 ## 🔄 CI Integration
 
-Use the official <img src="https://img.shields.io/badge/GitHub%20Action-2088FF?style=flat-square&logo=githubactions&logoColor=white" alt="GitHub Action"> &mdash; [progovoy/vmn-action](https://github.com/progovoy/vmn-action):
+Use the official GitHub Action — [progovoy/vmn-action](https://github.com/progovoy/vmn-action):
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
     with:
-      fetch-depth: 0   # recommended for performance; vmn handles shallow clones but will auto-unshallow
+      fetch-depth: 0   # recommended; vmn handles shallow clones but full is faster
   - uses: progovoy/vmn-action@latest
     with:
       app-name: my_app
@@ -683,17 +546,6 @@ steps:
 
 <p align="center">
   <a href="https://github.com/progovoy/vmn/graphs/contributors"><img src="https://contrib.rocks/image?repo=progovoy/vmn" /></a>
-</p>
-
-<h3 align="center">Works with your stack</h3>
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js">
-  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java">
-  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++">
-  <img src="https://img.shields.io/badge/Any_Language-gray?style=for-the-badge" alt="Any language">
 </p>
 
 <p align="center">
