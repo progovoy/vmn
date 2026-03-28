@@ -4,8 +4,15 @@
 <p align="center">
   <a href="https://github.com/progovoy/vmn"><img src="https://img.shields.io/badge/vmn-automatic%20versioning-blue" alt="vmn"></a>
   <a href="https://www.repostatus.org/#active"><img src="https://www.repostatus.org/badges/latest/active.svg" alt="Active"></a>
-  <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/dw/vmn" alt="PyPI downloads"></a>
+  <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/dw/vmn?logo=pypi&logoColor=white" alt="PyPI downloads"></a>
+  <a href="https://github.com/progovoy/vmn"><img src="https://img.shields.io/github/stars/progovoy/vmn?style=flat&logo=github" alt="GitHub stars"></a>
+  <a href="https://github.com/progovoy/vmn/blob/master/LICENSE"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="License"></a>
+</p>
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/python-3.7+-3776AB?logo=python&logoColor=white" alt="Python 3.7+"></a>
   <a href="#"><img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-brightgreen" alt="Platforms"></a>
+  <a href="https://semver.org"><img src="https://img.shields.io/badge/semver-2.0.0-blue?logo=semver&logoColor=white" alt="Semver"></a>
   <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
 </p>
 
@@ -27,8 +34,10 @@
 ## 🚀 Quick Start
 
 ```sh
-# Install
-pipx install vmn    # or: pip install vmn / uvx vmn
+# Install (pick your favorite)
+pipx install vmn          # recommended
+pip install vmn           # classic
+uvx vmn stamp ...         # zero-install via uv
 
 # Version your app (auto-initializes on first run)
 vmn stamp -r patch my_app
@@ -39,7 +48,7 @@ vmn stamp -r patch my_app
 
 > 💡 **tl;dr** — vmn does what semantic-release/release-please do, but works with *any* language and adds multi-repo tracking, state recovery, and microservice topologies that no competitor offers.
 
-| Capability | vmn | semantic-release | release-please | changesets |
+| Capability | <img src="https://img.shields.io/badge/vmn-blue?style=flat-square" alt="vmn"> | <img src="https://img.shields.io/badge/semantic--release-494949?style=flat-square&logo=semanticrelease&logoColor=white" alt="semantic-release"> | <img src="https://img.shields.io/badge/release--please-4285F4?style=flat-square&logo=google&logoColor=white" alt="release-please"> | <img src="https://img.shields.io/badge/changesets-purple?style=flat-square" alt="changesets"> |
 |:-----------|:---:|:----------------:|:--------------:|:----------:|
 | Language-agnostic | :white_check_mark: | JS-centric | JS-centric | JS-only |
 | Git-tag source of truth | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
@@ -47,7 +56,7 @@ vmn stamp -r patch my_app
 | State recovery (`vmn goto`) | :white_check_mark: | :x: | :x: | :x: |
 | Microservice / root app topology | :white_check_mark: | :x: | :x: | monorepo only |
 | 4-segment hotfix versioning | :white_check_mark: | :x: | :x: | :x: |
-| Auto-embed version (npm, Cargo, pyproject, any file) | :white_check_mark: | per-plugin | :x: | JS only |
+| Auto-embed version (<img src="https://img.shields.io/badge/-npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm"> <img src="https://img.shields.io/badge/-Cargo-000?style=flat-square&logo=rust&logoColor=white" alt="Cargo"> <img src="https://img.shields.io/badge/-pyproject-3776AB?style=flat-square&logo=python&logoColor=white" alt="pyproject"> + any file) | :white_check_mark: | per-plugin | :x: | JS only |
 | Conventional commits | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
 | Changelog generation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | GitHub Release creation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
@@ -67,7 +76,7 @@ vmn stamp -r patch my_app
 
 ## 🔄 CI Integration
 
-Use the official [GitHub Action](https://github.com/progovoy/vmn-action):
+Use the official <img src="https://img.shields.io/badge/GitHub%20Action-2088FF?style=flat-square&logo=githubactions&logoColor=white" alt="GitHub Action"> &mdash; [progovoy/vmn-action](https://github.com/progovoy/vmn-action):
 
 ```yaml
 steps:
@@ -85,15 +94,15 @@ steps:
 
 ## ✨ Features
 
-- 🔢 **Version formats** — `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info` ([Semver](https://semver.org) compliant + hotfix extension)
+- 🔢 **Version formats** — `1.6.0` / `1.6.0-rc.23` / `1.6.7.4` / `1.6.0-rc.23+build01.Info` (<a href="https://semver.org"><img src="https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square&logo=semver&logoColor=white" alt="Semver" height="18"></a> compliant + hotfix extension)
 - ⏪ **[State recovery](#vmn-goto)** — `vmn goto` restores the exact repo state for any stamped version
 - 🧩 **[Microservice topologies](#root-apps-or-microservices)** — root apps with independent service versions
 - 🔗 **[Multi-repo dependencies](#configuration)** — track and lock versions across repositories
-- 📦 **[Version auto-embedding](#version-auto-embedding)** — npm, Cargo, pyproject.toml, or any file via regex/jinja2
+- 📦 **[Version auto-embedding](#version-auto-embedding)** — <img src="https://img.shields.io/badge/-npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm" height="18"> <img src="https://img.shields.io/badge/-Cargo-000?style=flat-square&logo=rust&logoColor=white" alt="Cargo" height="18"> <img src="https://img.shields.io/badge/-pyproject-3776AB?style=flat-square&logo=python&logoColor=white" alt="pyproject" height="18"> or any file via regex/<img src="https://img.shields.io/badge/-Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" height="18">
 - 📝 **[Conventional commits](#conventional-commits)** — automatic release mode detection and release notes
 - 📋 **[Changelog generation](#configuration)** — built-in CHANGELOG.md output on stamp
-- 🚀 **[GitHub Release creation](#configuration)** — optionally create GitHub Releases on stamp
-- ⚡ **[uv / hatchling](#hatchling--uv)** — dynamic versioning from git tags via `hatch-vcs`
+- 🚀 **[GitHub Release creation](#configuration)** — optionally create <img src="https://img.shields.io/badge/GitHub%20Releases-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub" height="18"> on stamp
+- ⚡ **[uv / hatchling](#hatchling--uv)** — dynamic versioning from <img src="https://img.shields.io/badge/-git-F05032?style=flat-square&logo=git&logoColor=white" alt="git" height="18"> tags via `hatch-vcs`
 
 <details>
 <summary><strong>Try it locally (playground)</strong></summary>
@@ -127,7 +136,7 @@ vmn stamp -r patch my_app   # => 0.0.2
 ```sh
 pipx install vmn       # recommended
 pip install vmn        # alternative
-uvx vmn stamp ...      # run without installing
+uvx vmn stamp ...      # run without installing (via uv)
 ```
 
 ### vmn init
@@ -426,12 +435,12 @@ vmn add -v 1.0.1 -b build42 <app-name>   # => 1.0.1+build42
 
 | Backend | File | Description |
 |:-------:|:----:|:------------|
-| **npm** | `package.json` | Updates `version` field |
-| **Cargo** | `Cargo.toml` | Updates `version` field |
-| **Poetry** | `pyproject.toml` | Updates `[tool.poetry].version` |
-| **PEP 621** | `pyproject.toml` | Updates `[project].version` |
+| <img src="https://img.shields.io/badge/npm-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm"> | `package.json` | Updates `version` field |
+| <img src="https://img.shields.io/badge/Cargo-000000?style=flat-square&logo=rust&logoColor=white" alt="Cargo"> | `Cargo.toml` | Updates `version` field |
+| <img src="https://img.shields.io/badge/Poetry-60A5FA?style=flat-square&logo=poetry&logoColor=white" alt="Poetry"> | `pyproject.toml` | Updates `[tool.poetry].version` |
+| <img src="https://img.shields.io/badge/PEP_621-3776AB?style=flat-square&logo=python&logoColor=white" alt="PEP 621"> | `pyproject.toml` | Updates `[project].version` |
 
-### Hatchling / uv
+### <img src="https://img.shields.io/badge/Hatchling-FFC107?style=flat-square&logo=hatch&logoColor=black" alt="Hatchling"> / <img src="https://img.shields.io/badge/uv-DE5FE9?style=flat-square&logo=uv&logoColor=white" alt="uv">
 
 Projects using [hatchling](https://hatch.pypa.io/) (the default build backend for [uv](https://github.com/astral-sh/uv)) can use vmn's git tags as the version source with zero file injection. This is done by configuring hatchling's [hatch-vcs](https://github.com/ofek/hatch-vcs) plugin to read vmn tags directly.
 
@@ -495,7 +504,7 @@ This writes the version directly into `[project].version` on each `vmn stamp`.
 
 ### 🔧 Generic Version Backends
 
-For any file format not covered by built-in backends, use `generic_selectors` (regex-based) or `generic_jinja` (template-based):
+For any file format not covered by built-in backends, use `generic_selectors` (regex-based) or `generic_jinja` (<img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" height="18"> template-based):
 
 <details>
 <summary><strong>generic_selectors</strong> — regex find-and-replace</summary>
@@ -570,15 +579,29 @@ conf:
 ---
 
 <p align="center">
-
-**[Contributing](CONTRIBUTING.md)** | **[Report an issue](https://github.com/progovoy/vmn/issues)**
-
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-guide-blue?style=for-the-badge" alt="Contributing"></a>
+  &nbsp;
+  <a href="https://github.com/progovoy/vmn/issues"><img src="https://img.shields.io/badge/Report-Issue-red?style=for-the-badge&logo=github" alt="Report an issue"></a>
+  &nbsp;
+  <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/badge/Install-PyPI-3776AB?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/progovoy/vmn/graphs/contributors"><img src="https://contrib.rocks/image?repo=progovoy/vmn" /></a>
 </p>
 
+<h3 align="center">Works with your stack</h3>
 <p align="center">
-  Add the badge to your project: <code>[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)</code>
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++">
+  <img src="https://img.shields.io/badge/Any_Language-gray?style=for-the-badge" alt="Any language">
+</p>
+
+<p align="center">
+  <sub>Add the badge to your project:</sub><br>
+  <code>[![vmn: automatic versioning](https://img.shields.io/badge/vmn-automatic%20versioning-blue)](https://github.com/progovoy/vmn)</code>
 </p>
