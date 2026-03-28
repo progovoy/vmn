@@ -201,7 +201,9 @@ conf:
 
 ### vmn release
 
-Promote a prerelease to its final version. Three modes:
+Promote a prerelease to its final version.
+
+`-v` is optional. Without it, vmn auto-detects the version from the current commit — but **you must be on a version commit**, otherwise it errors. `-v` and `--stamp` are mutually exclusive.
 
 ```sh
 vmn stamp -r patch --pr rc <app-name>   # => 0.0.1-rc.1
@@ -209,24 +211,26 @@ vmn stamp -r patch --pr rc <app-name>   # => 0.0.1-rc.1
 # 1. Explicit version — tag-only, no new commit, works from anywhere
 vmn release -v 0.0.1-rc.1 <app-name>   # => 0.0.1
 
-# 2. Auto-detect — omit -v when on the prerelease commit (tag-only)
+# 2. Auto-detect — omit -v, must be on the prerelease commit (tag-only)
 vmn release <app-name>                  # => 0.0.1
 
 # 3. Full stamp flow — new commit + tag + push (runs version backends, changelog, etc.)
 vmn release --stamp <app-name>          # => 0.0.1
 ```
 
-Modes 1 & 2 create a lightweight tag on the original prerelease commit (no new commit). Mode 2 requires you to be on the version commit. `--stamp` runs the full pipeline (commit + tag + push) but requires branch tip at the prerelease commit. `-v` and `--stamp` are mutually exclusive.
+Modes 1 & 2 create a lightweight tag on the original prerelease commit (no new commit). `--stamp` runs the full pipeline (commit + tag + push) but requires branch tip at the prerelease commit.
 
 Idempotent. Cannot release versions with build metadata. `whitelist_release_branches` policy is enforced.
 
 ### vmn show
 
+`-v` is optional. Without it, vmn shows the version reachable from the current HEAD:
+
 ```sh
-vmn show <app-name>                    # current version (formatted)
+vmn show <app-name>                    # current version from HEAD (formatted)
+vmn show -v 0.0.1 <app-name>          # show info for a specific version
 vmn show --raw <app-name>              # raw version without template formatting
 vmn show --verbose <app-name>          # full YAML metadata dump
-vmn show -v 0.0.1 <app-name>          # show info for a specific version
 vmn show --root my_root_app            # show root app version (integer)
 vmn show --conf <app-name>             # include configuration
 vmn show --from-file <app-name>        # read from file instead of git (faster)
@@ -237,9 +241,12 @@ vmn show -t '[{major}]' <app-name>    # override display template
 
 ### vmn goto
 
-Checkout the repository (and its dependencies) to the exact state at a stamped version:
+Checkout the repository (and its dependencies) to the exact state at a stamped version.
+
+`-v` is optional. Without it, vmn uses the first reachable version from the current branch:
 
 ```sh
+vmn goto <app-name>                        # checkout to latest version on current branch
 vmn goto -v 0.0.1 <app-name>              # checkout app + deps to version 0.0.1
 vmn goto -v 0.0.1 --deps-only <app-name>  # only checkout dependencies
 vmn goto -v 5 --root my_root_app          # checkout to root app version
@@ -250,11 +257,13 @@ Dependencies are cloned automatically if missing (up to 10 in parallel) and chec
 
 ### vmn gen
 
-Generate a version file from a Jinja2 template:
+Generate a version file from a Jinja2 template.
+
+`-v` is optional. Without it, vmn uses the version at the current HEAD:
 
 ```sh
-vmn gen -t version.j2 -o version.txt <app-name>               # basic generation
-vmn gen -t version.j2 -o version.txt -v 1.0.0 <app-name>     # for a specific version
+vmn gen -t version.j2 -o version.txt <app-name>               # uses current HEAD version
+vmn gen -t version.j2 -o version.txt -v 1.0.0 <app-name>     # generate for a specific version
 vmn gen -t notes.j2 -o notes.txt -c custom.yml <app-name>     # merge custom YAML values
 vmn gen -t notes.j2 -o notes.txt --verify-version <app-name>  # fail if repo is dirty
 ```
@@ -263,11 +272,13 @@ Output is idempotent. See [Template Variables](#template-variables-for-vmn-gen) 
 
 ### vmn add
 
-Attach build metadata to an existing stamped version:
+Attach build metadata to an existing stamped version.
+
+`-v` is optional. Without it, vmn auto-detects from the current commit — but **you must be on a version commit**, otherwise it errors:
 
 ```sh
+vmn add --bm build42 <app-name>                                    # auto-detect from current commit
 vmn add -v 0.0.1 --bm build42 <app-name>                          # => 0.0.1+build42
-vmn add --bm build42 <app-name>                                    # auto-detect version
 vmn add -v 0.0.1 --bm build42 --vmp metadata.yml <app-name>       # attach YAML metadata
 vmn add -v 0.0.1 --bm build42 --vmu https://ci/build/42 <app-name> # attach URL metadata
 ```
@@ -290,7 +301,9 @@ The TUI supports most config fields with validation. `changelog` and `github_rel
 
 ### vmn init / init-app
 
-Usually not needed — `vmn stamp` auto-initializes. Use for explicit control:
+Usually not needed — `vmn stamp` auto-initializes. Use for explicit control.
+
+`-v` defaults to `0.0.0` for `init-app`:
 
 ```sh
 vmn init                            # initialize vmn in a repository
