@@ -168,6 +168,7 @@ Standard [Semver 2.0](https://semver.org) plus an optional 4th hotfix segment fo
 vmn stamp -r patch my_app                 # => 0.0.1
 vmn stamp -r minor my_app                 # => 0.1.0
 vmn stamp -r patch --pr rc my_app         # => 0.0.2-rc.1 (prerelease)
+vmn stamp my_app                          # => 0.0.3 (with conventional_commits — no -r needed)
 vmn stamp --dry-run -r patch my_app       # preview without committing
 vmn stamp --pull -r patch my_app          # pull before stamping (retries on conflict)
 ```
@@ -212,20 +213,25 @@ vmn stamp my_app                    # 0.0.2-rc.3  (still continues)
 
 #### Stamp automation (conventional commits, changelog, GitHub releases)
 
+Enable `conventional_commits` and **never type `-r` again** — vmn reads your commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` / `!` → major) and picks the release mode automatically:
+
+```sh
+# with conventional_commits enabled:
+git commit -m "feat: add search endpoint"
+vmn stamp my_app    # => 0.2.0 (minor, auto-detected from "feat:")
+```
+
 Configure per-app in `.vmn/<app-name>/conf.yml`:
 
 ```yaml
 conf:
-  # Auto-detect release mode from commits (fix: → patch, feat: → minor, BREAKING CHANGE → major)
-  conventional_commits: true
-  default_release_mode: optional     # "optional" (--orm behavior) or "strict" (-r behavior)
+  conventional_commits: true             # auto-detect release mode — no -r flag needed
+  default_release_mode: optional         # "optional" (--orm behavior) or "strict" (-r behavior)
 
-  # Generate Keep-a-Changelog formatted CHANGELOG.md (requires conventional_commits)
-  changelog:
+  changelog:                             # generate CHANGELOG.md on each stamp (requires conventional_commits)
     path: "CHANGELOG.md"
 
-  # Create GitHub Release after push (requires gh CLI + GITHUB_TOKEN)
-  github_release:
+  github_release:                        # create GitHub Release after push (requires gh CLI + GITHUB_TOKEN)
     draft: false
 ```
 
