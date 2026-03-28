@@ -14,6 +14,10 @@
   Monorepos, multi-repo dependencies, microservices, release candidates, conventional commits — all built in.
 </p>
 
+<p align="center">
+  <img width="500" src="https://i.imgur.com/g3wYIk8.png" alt="vmn workflow: Work → git push → vmn stamp">
+</p>
+
 ---
 
 🚀 [Quick Start](#-quick-start) · ⚖️ [Why vmn?](#%EF%B8%8F-why-vmn) · 🔄 [CI Integration](#-ci-integration) · 📖 [Commands](#-commands) · ⚙️ [Configuration](#%EF%B8%8F-configuration) · 🤝 [Contributing](CONTRIBUTING.md)
