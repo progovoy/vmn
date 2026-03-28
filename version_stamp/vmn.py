@@ -2116,10 +2116,13 @@ def handle_stamp(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
-        # Check if we can auto-initialize
+        # Auto-initialize only for truly new repos/apps — check git history
+        # to distinguish "never initialized" from "initialized but tags removed"
         auto_initialized = False
+        be = vmn_ctx.vcs.backend
+        vmn_path = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn")
 
-        if "repo_tracked" not in status.state:
+        if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_path):
             stamp_utils.VMN_LOGGER.info(
                 "vmn tracking not initialized. Auto-initializing repository..."
             )
@@ -2131,7 +2134,9 @@ def handle_stamp(vmn_ctx):
                 return 1
             auto_initialized = True
 
-        if "app_tracked" not in status.state:
+        if "app_tracked" not in status.state and not be.is_path_tracked(
+            vmn_ctx.vcs.app_dir_path
+        ):
             stamp_utils.VMN_LOGGER.info(
                 f"App '{vmn_ctx.vcs.name}' not tracked. Auto-initializing app..."
             )
