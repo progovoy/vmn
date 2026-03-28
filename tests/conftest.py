@@ -282,6 +282,12 @@ class FSAppLayoutFixture(object):
         LOGGER.info(f"going to run: {' '.join(base_cmd)}")
         subprocess.call(base_cmd, cwd=self.repo_path)
 
+    _VMN_VERSION_TO_GIT_TAG = {
+        "0.3.9": "vmn_0.3.9.0",
+        "0.8.4": "vmn_0.8.4",
+        "0.8.5rc2": "vmn_0.8.5-rc2",
+    }
+
     def stamp_with_previous_vmn(self, vmn_version):
         dir_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks")
         previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
@@ -296,9 +302,17 @@ class FSAppLayoutFixture(object):
                 f"If running on Windows, please run in addition dos2unix for every file in the {dir_path} directory"
             )
 
+        git_tag = self._VMN_VERSION_TO_GIT_TAG.get(vmn_version)
+        if git_tag is None:
+            raise RuntimeError(
+                f"No git tag mapping for vmn version '{vmn_version}'. "
+                f"Add it to _VMN_VERSION_TO_GIT_TAG in conftest.py"
+            )
+
         base_cmd = [
             previous_stamper_dir,
             vmn_version,
+            git_tag,
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
