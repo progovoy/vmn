@@ -108,8 +108,7 @@ conventional commit messages, enable the same behavior in vmn:
 ```yaml
 # .vmn/my_app/conf.yml
 conf:
-  conventional_commits:
-    enabled: true
+  conventional_commits: true
 ```
 
 With this enabled, `vmn stamp my_app` (without `-r`) reads commit messages

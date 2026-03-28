@@ -161,8 +161,7 @@ messages:
 ```yaml
 # .vmn/my_app/conf.yml
 conf:
-  conventional_commits:
-    enabled: true
+  conventional_commits: true
 ```
 
 ### 6. Stamp Your First vmn Version

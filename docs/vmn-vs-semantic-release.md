@@ -116,8 +116,7 @@ If you want vmn to detect the release mode automatically from commit messages
 
 ```yaml
 conf:
-  conventional_commits:
-    enabled: true
+  conventional_commits: true
 ```
 
 Then stamp without specifying `-r`:

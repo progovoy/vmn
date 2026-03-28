@@ -232,7 +232,6 @@ Now you can run `vmn stamp <app-name>` and `vmn` will deduce the proper release 
 conf:
   conventional_commits: true
   changelog:
-    enabled: true
     path: "CHANGELOG.md"   # optional, defaults to CHANGELOG.md
 ```
 
@@ -246,7 +245,6 @@ On each stamp, vmn collects commits since the last version, groups them by type 
 # .vmn/<app-name>/conf.yml
 conf:
   github_release:
-    enabled: true
     draft: false           # optional, create as draft release
 ```
 
@@ -624,10 +622,8 @@ conf:
   conventional_commits: true
   default_release_mode: optional
   changelog:
-    enabled: true
     path: "CHANGELOG.md"
   github_release:
-    enabled: true
     draft: false
   deps:
     ../:
@@ -646,8 +642,8 @@ conf:
 | `hide_zero_hotfix` | Hide the 4th version segment when it's `0` (default: `true`) |
 | `conventional_commits` | Enable automatic release mode detection from commit messages |
 | `default_release_mode` | `optional` (default) or `strict` — controls how auto-detected mode behaves ([details](#conventional-commits)) |
-| `changelog` | `{enabled: true, path: "CHANGELOG.md"}` — generate changelog on stamp ([details](#changelog-generation)) |
-| `github_release` | `{enabled: true, draft: false}` — create GitHub Release on stamp ([details](#github-release-creation)) |
+| `changelog` | `{path: "CHANGELOG.md"}` — generate changelog on stamp; presence enables the feature ([details](#changelog-generation)) |
+| `github_release` | `{draft: false}` — create GitHub Release on stamp; presence enables the feature ([details](#github-release-creation)) |
 | `version_backends` | Auto-embed versions into project files on `vmn stamp` ([details](#-version-auto-embedding)) |
 | `deps` | External repo dependencies — vmn tracks them during `stamp` and checks them out during `goto` |
 | `policies` | Branch restrictions — `whitelist_release_branches` prevents stamping/releasing from unauthorized branches |

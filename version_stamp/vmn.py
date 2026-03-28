@@ -1629,7 +1629,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def _generate_changelog(self, app_version, version_files_to_add):
         """Generate a changelog entry from conventional commits and prepend to CHANGELOG.md."""
-        if not self.changelog or not self.changelog.get("enabled"):
+        if not self.changelog:
             return
 
         if self.selected_tag is None:
@@ -1769,7 +1769,7 @@ class VersionControlStamper(IVersionsStamper):
     def _create_github_release(self, tag, app_version):
         """Create a GitHub Release via gh CLI. Best-effort -- failures log warnings."""
         try:
-            if not self.github_release or not self.github_release.get("enabled"):
+            if not self.github_release:
                 return
 
             if self.dry_run:
