@@ -1859,11 +1859,50 @@ def handle_stamp(vmn_ctx):
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
-        stamp_utils.VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
+        # Check if we can auto-initialize
+        auto_initialized = False
 
-        return 1
+        if "repo_tracked" not in status.state:
+            stamp_utils.VMN_LOGGER.info(
+                "vmn tracking not initialized. Auto-initializing repository..."
+            )
+            ret = handle_init(vmn_ctx)
+            if ret != 0:
+                stamp_utils.VMN_LOGGER.error(
+                    "Auto-initialization of repository failed"
+                )
+                return 1
+            auto_initialized = True
+
+        if "app_tracked" not in status.state:
+            stamp_utils.VMN_LOGGER.info(
+                f"App '{vmn_ctx.vcs.name}' not tracked. Auto-initializing app..."
+            )
+            err = _init_app(vmn_ctx.vcs, "0.0.0")
+            if err:
+                stamp_utils.VMN_LOGGER.error(
+                    f"Auto-initialization of app '{vmn_ctx.vcs.name}' failed"
+                )
+                return 1
+            auto_initialized = True
+
+        if auto_initialized:
+            # Re-check status after auto-init
+            status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+            if status.error:
+                stamp_utils.VMN_LOGGER.debug(
+                    f"Error occurred when getting the repo status after auto-init: "
+                    f"{status}",
+                    exc_info=True,
+                )
+                return 1
+        else:
+            # Error was not due to missing init — original behavior
+            stamp_utils.VMN_LOGGER.debug(
+                f"Error occured when getting the repo status: {status}",
+                exc_info=True,
+            )
+            return 1
 
     if status.matched_version_info is not None:
         # Good we have found an existing version matching
