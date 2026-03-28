@@ -229,21 +229,24 @@ conf:
 
 ### vmn release
 
-Promote a prerelease to its final version:
+Promote a prerelease to its final version. Three modes:
 
 ```sh
 vmn stamp -r patch --pr rc <app-name>   # => 0.0.1-rc.1
 
-# Option 1: release by version — just adds a tag, no new commit
-# Can be run from any branch or detached HEAD
+# 1. Explicit version — tag-only, no new commit, works from anywhere
 vmn release -v 0.0.1-rc.1 <app-name>   # => 0.0.1
 
-# Option 2: release via stamp — creates a new commit + tag and pushes
-# Must be on the exact prerelease commit, on a branch (not detached)
+# 2. Auto-detect — omit -v when on the prerelease commit (tag-only)
+vmn release <app-name>                  # => 0.0.1
+
+# 3. Full stamp flow — new commit + tag + push (runs version backends, changelog, etc.)
 vmn release --stamp <app-name>          # => 0.0.1
 ```
 
-**`-v` vs `--stamp`**: `-v` creates a lightweight tag pointing to the original prerelease commit — no new commit, works from anywhere. `--stamp` runs the full stamp flow (new commit, tag, push, version backends, changelog) but requires you to be on a branch tip at the exact prerelease commit, with clean dependencies.
+Modes 1 and 2 create a lightweight tag pointing to the original prerelease commit — no new commit is created. Mode 2 auto-detects the version from the current commit (you must be on a version commit).
+
+`--stamp` runs the full stamp pipeline (new commit, tag, push, version backends, changelog) but requires being on a branch tip (not detached HEAD) at the exact prerelease commit, with clean dependencies. `-v` and `--stamp` are mutually exclusive.
 
 ### vmn show
 
