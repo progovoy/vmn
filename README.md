@@ -43,6 +43,8 @@ vmn stamp -r patch my_app
 
 No separate `vmn init` or `vmn init-app` required — when you run `vmn stamp` on a fresh repo, vmn automatically initializes the repository and app for you.
 
+> **Shallow clones**: vmn works with shallow repositories (e.g. `git clone --depth 1` or CI's `fetch-depth: 1`). It automatically detects shallow clones and fetches the missing history it needs. For best performance, prefer a full clone (`fetch-depth: 0` in CI).
+
 ## ⚖️ Why vmn?
 
 > 💡 **tl;dr** — vmn does what semantic-release/release-please do, but works with *any* language and adds multi-repo tracking, state recovery, and microservice topologies that no competitor offers.
@@ -607,7 +609,7 @@ Use the official <img src="https://img.shields.io/badge/GitHub%20Action-2088FF?s
 steps:
   - uses: actions/checkout@v4
     with:
-      fetch-depth: 0
+      fetch-depth: 0   # recommended for performance; vmn handles shallow clones but will auto-unshallow
   - uses: progovoy/vmn-action@latest
     with:
       app-name: my_app
