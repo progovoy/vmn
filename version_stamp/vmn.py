@@ -98,6 +98,7 @@ class IVersionsStamper(object):
         "create_verinfo_files": "create_verinfo_files",
         "policies": "policies",
         "conventional_commits": "conventional_commits",
+        "default_release_mode": "default_release_mode",
     }
 
     @stamp_utils.measure_runtime_decorator
@@ -126,6 +127,7 @@ class IVersionsStamper(object):
         self.raw_configured_deps = stamp_utils.VMN_DEFAULT_CONF["deps"]
         self.policies = stamp_utils.VMN_DEFAULT_CONF["policies"]
         self.conventional_commits = stamp_utils.VMN_DEFAULT_CONF["conventional_commits"]
+        self.default_release_mode = stamp_utils.VMN_DEFAULT_CONF["default_release_mode"]
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -205,6 +207,21 @@ class IVersionsStamper(object):
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
+
+                    cc = data["conf"].get("conventional_commits")
+                    if (
+                        isinstance(cc, dict)
+                        and "default_release_mode" in cc
+                    ):
+                        raise RuntimeError(
+                            "Detected 'default_release_mode' nested inside "
+                            "'conventional_commits' in your conf.yml. "
+                            "This is no longer supported. Please move it to "
+                            "a top-level key:\n\n"
+                            "  conf:\n"
+                            "    default_release_mode: optional\n"
+                            "    conventional_commits: {}\n"
+                        )
 
                 self.set_template(self.template)
 
@@ -932,6 +949,7 @@ class IVersionsStamper(object):
                     "version_backends": self.version_backends,
                     "policies": self.policies,
                     "conventional_commits": self.conventional_commits,
+                    "default_release_mode": self.default_release_mode,
                 }
             }
 
@@ -1654,6 +1672,7 @@ def handle_init(vmn_ctx):
 @stamp_utils.measure_runtime_decorator
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
+    vmn_ctx.vcs.default_release_mode = vmn_ctx.args.orm
 
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
@@ -1735,7 +1754,7 @@ def handle_stamp(vmn_ctx):
             if max_release_mode == -1:
                 max_release_mode = None
 
-            if vmn_ctx.vcs.conventional_commits["default_release_mode"] == "optional":
+            if vmn_ctx.vcs.default_release_mode == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
             else:
                 vmn_ctx.vcs.release_mode = max_release_mode
@@ -3612,6 +3631,16 @@ def add_arg_init_app(subprasers):
     )
     pinitapp.add_argument("--dry-run", dest="dry", action="store_true")
     pinitapp.set_defaults(dry=False)
+    pinitapp.add_argument(
+        "--orm",
+        "--default-release-mode",
+        dest="orm",
+        choices=["optional", "strict"],
+        default="optional",
+        help="Set the default_release_mode for the app config. "
+        "'optional' uses --orm behavior, 'strict' uses -r behavior. "
+        "Default: optional",
+    )
     pinitapp.add_argument(
         "name", help="The application's name to initialize version tracking for"
     )

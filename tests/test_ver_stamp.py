@@ -4764,13 +4764,11 @@ def test_conventional_commits(app_layout, capfd, default_release_mode, separate,
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "conventional_commits": {
-            "default_release_mode": default_release_mode,
-        }
-    }
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        default_release_mode=default_release_mode,
+    )
 
     first_commit_msg += """prevent racing of requests
 
@@ -4833,13 +4831,11 @@ def test_conventional_commits_simple_failure(app_layout, capfd, default_release_
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "conventional_commits": {
-            "default_release_mode": default_release_mode,
-        }
-    }
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        default_release_mode=default_release_mode,
+    )
 
     app_layout.write_file_commit_and_push(
         "test_repo_0", "f1.txt", "text", commit_msg="doc: a"
@@ -4862,13 +4858,11 @@ def test_conventional_commits_simple_overwrite(app_layout, capfd, default_releas
     err, _, params = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    conf = {
-        "conventional_commits": {
-            "default_release_mode": default_release_mode,
-        }
-    }
-
-    app_layout.write_conf(params["app_conf_path"], **conf)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        default_release_mode=default_release_mode,
+    )
 
     app_layout.write_file_commit_and_push(
         "test_repo_0", "f1.txt", "text", commit_msg="fix: a"
