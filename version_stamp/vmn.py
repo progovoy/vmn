@@ -449,8 +449,7 @@ class IVersionsStamper(object):
                 stamp_utils.VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
 
-        seen = set()
-        version_files_to_track_diff = [x for x in version_files_to_track_diff if not (x in seen or seen.add(x))]
+        version_files_to_track_diff = list(dict.fromkeys(version_files_to_track_diff))
 
         self.last_user_changeset = self.backend.get_last_user_changeset(
             version_files_to_track_diff,
@@ -539,7 +538,7 @@ class IVersionsStamper(object):
     def set_template(self, template):
         try:
             self.template = IVersionsStamper.parse_template(template)
-            self.bad_format_template = False
+            self.template_err_str = None
         except Exception:
             stamp_utils.VMN_LOGGER.debug("Logged exception: ", exc_info=True)
             self.template = IVersionsStamper.parse_template(
@@ -551,8 +550,6 @@ class IVersionsStamper(object):
                 f"Falling back to default one: "
                 f"{stamp_utils.VMN_DEFAULT_CONF['template']}"
             )
-
-            self.bad_format_template = True
 
     def __del__(self):
         if hasattr(self, 'backend') and self.backend is not None:
@@ -1585,44 +1582,31 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
+    def _write_verinfo_file(self, msg, version_id, dir_path, label, version_files_to_add):
+        if self.dry_run:
+            stamp_utils.VMN_LOGGER.info(
+                f"Would have written to {label} verinfo file:\n"
+                f"path: {dir_path} version: {version_id}\n"
+                f"message: {msg}"
+            )
+        else:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(dir_path, f"{version_id}.yml")
+            with open(path, "w") as f:
+                f.write(yaml.dump(msg, sort_keys=True))
+            version_files_to_add.append(path)
+
     @stamp_utils.measure_runtime_decorator
     def create_verinfo_root_file(
         self, root_app_msg, root_app_version, version_files_to_add
     ):
         dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
-
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to root verinfo file:\n"
-                f"path: {dir_path} version: {root_app_version}\n"
-                f"message: {root_app_msg}"
-            )
-        else:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{root_app_version}.yml")
-            with open(path, "w") as f:
-                data = yaml.dump(root_app_msg, sort_keys=True)
-                f.write(data)
-            version_files_to_add.append(path)
+        self._write_verinfo_file(root_app_msg, root_app_version, dir_path, "root", version_files_to_add)
 
     @stamp_utils.measure_runtime_decorator
     def create_verinfo_file(self, app_msg, version_files_to_add, verstr):
         dir_path = os.path.join(self.app_dir_path, "verinfo")
-
-        if self.dry_run:
-            stamp_utils.VMN_LOGGER.info(
-                "Would have written to verinfo file:\n"
-                f"path: {dir_path} version: {verstr}\n"
-                f"message: {app_msg}"
-            )
-        else:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{verstr}.yml")
-            with open(path, "w") as f:
-                data = yaml.dump(app_msg, sort_keys=True)
-                f.write(data)
-
-            version_files_to_add.append(path)
+        self._write_verinfo_file(app_msg, verstr, dir_path, "app", version_files_to_add)
 
     @stamp_utils.measure_runtime_decorator
     def retrieve_remote_changes(self):
@@ -1919,6 +1903,42 @@ def _determine_initial_version(vmn_ctx):
     return initial_version
 
 
+def _validate_and_resolve_version(ver, status, command_name):
+    """Validate buildmetadata and resolve version from status if needed.
+
+    Returns (ver, error_code). error_code is non-zero on failure.
+    """
+    if ver:
+        props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
+        if props["buildmetadata"] is not None:
+            stamp_utils.VMN_LOGGER.error(
+                f"Failed to {command_name} {ver}. "
+                f"Operating on metadata versions is not supported"
+            )
+            return ver, 1
+
+    if ver is None and status["matched_version_info"] is not None:
+        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
+    elif ver is None:
+        stamp_utils.VMN_LOGGER.error(
+            f"When running vmn {command_name} and not on a version commit, "
+            "you must specify a specific version using -v flag"
+        )
+        return ver, 1
+
+    return ver, 0
+
+
+def _extract_ver_info(vcs, ver):
+    """Look up ver_info for a version string. Returns (tag_name, ver_infos, ver_info)."""
+    tag_name, ver_infos = vcs.get_version_info_from_verstr(ver)
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        ver_info = None
+    else:
+        ver_info = ver_infos[tag_name]["ver_info"]
+    return tag_name, ver_infos, ver_info
+
+
 @stamp_utils.measure_runtime_decorator
 def handle_release(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
@@ -1998,11 +2018,7 @@ def handle_release(vmn_ctx):
         return 1
 
     try:
-        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            ver_info = None
-        else:
-            ver_info = ver_infos[tag_name]["ver_info"]
+        tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
 
         base_ver = stamp_utils.VMNBackend.get_base_vmn_version(
             ver,
@@ -2075,35 +2091,12 @@ def handle_add(vmn_ctx):
         return 1
 
     ver = vmn_ctx.args.version
-
-    if ver:
-        props = stamp_utils.VMNBackend.deserialize_vmn_version(ver)
-        if props["buildmetadata"] is not None:
-            stamp_utils.VMN_LOGGER.error(
-                f"Failed to add to {ver}. "
-                f"Adding metadata versions to metadata versions is not supported"
-            )
-
-            return 1
-
-    if ver is None and status["matched_version_info"] is not None:
-        # Good we have found an existing version matching
-        # the actual_deps_state
-        ver = status["matched_version_info"]["stamping"]["app"]["_version"]
-    elif ver is None:
-        stamp_utils.VMN_LOGGER.error(
-            "When running vmn add and not on a version commit, "
-            "you must specify a specific version using -v flag"
-        )
-
-        return 1
+    ver, err = _validate_and_resolve_version(ver, status, "add")
+    if err:
+        return err
 
     try:
-        tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(ver)
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            ver_info = None
-        else:
-            ver_info = ver_infos[tag_name]["ver_info"]
+        tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
         stamp_utils.VMN_LOGGER.info(
             vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info)
         )
@@ -2502,7 +2495,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
             )
             raise RuntimeError()
 
-    if versions_be_ifc.bad_format_template:
+    if versions_be_ifc.template_err_str:
         stamp_utils.VMN_LOGGER.warning(versions_be_ifc.template_err_str)
 
     while retries:
@@ -3377,9 +3370,6 @@ def vmn_run(command_line=None):
         )
         stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-        err = 1
-    except Exception:
-        stamp_utils.VMN_LOGGER.debug("Exception info: ", exc_info=True)
         err = 1
 
     stamp_utils.VMN_LOGGER.debug(pformat(stamp_utils.call_count))

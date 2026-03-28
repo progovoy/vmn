@@ -1161,7 +1161,7 @@ class GitBackend(VMNBackend):
             # Backward compatability code for vmn 0.3.9:
             try:
                 _tag_name = f"{tname}.0"
-                o = self._be.tag(f"refs/tags/{tname}")
+                o = self._be.tag(f"refs/tags/{_tag_name}")
             except Exception:
                 VMN_LOGGER.debug("Logged exception: ", exc_info=True)
                 return tname, None
