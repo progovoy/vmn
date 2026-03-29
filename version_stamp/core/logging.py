@@ -45,6 +45,11 @@ _logger_holder = [None]
 VMN_LOGGER = _LoggerProxy()
 
 
+def reset_logger():
+    """Reset VMN_LOGGER to uninitialized state."""
+    _logger_holder[0] = None
+
+
 # ── Thread-local runtime context (ARCH-4 fix) ───────────────────────
 
 class _RuntimeContext(threading.local):

@@ -12,10 +12,10 @@ import pytest
 import yaml
 from git import Repo
 
-sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
-
-import stamp_utils
 import subprocess
+
+from version_stamp.backends.git import GitBackend as VmnGitBackend
+from version_stamp.core.utils import resolve_root_path
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.DEBUG)
@@ -44,7 +44,7 @@ class FSAppLayoutFixture(object):
 
         self.set_working_dir(self.repo_path)
 
-        root_path = stamp_utils.resolve_root_path()
+        root_path = resolve_root_path()
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 
@@ -501,7 +501,7 @@ class GitBackend(VersionControlBackend):
             self.selected_remote = self._git_backend.remotes[0]
             self.selected_remote.push()
 
-        self.be = stamp_utils.GitBackend(versions_root_path)
+        self.be = VmnGitBackend(versions_root_path)
 
     def __del__(self):
         self._git_backend.close()

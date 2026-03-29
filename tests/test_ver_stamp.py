@@ -10,25 +10,31 @@ import pytest
 import toml
 import yaml
 
-sys.path.append("{0}/../version_stamp".format(os.path.dirname(__file__)))
-
-import vmn
-import stamp_utils
+from version_stamp.backends.base import VMNBackend
+from version_stamp.cli.constants import VER_FILE_NAME
+from version_stamp.cli.entry import vmn_run
+from version_stamp.core.constants import (
+    RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
+    RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
+    _VMN_VERSION_REGEX,
+)
+from version_stamp.core.logging import reset_logger
+from version_stamp.stamping.base import IVersionsStamper
 
 
 def _run_vmn_init():
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["init"])[0]
+    reset_logger()
+    ret = vmn_run(["init"])[0]
     return ret
 
 
 def _init_app(app_name, starting_version="0.0.0"):
     cmd = ["init-app", "-v", starting_version, app_name]
-    stamp_utils.VMN_LOGGER = None
-    ret, vmn_ctx = vmn.vmn_run(cmd)
+    reset_logger()
+    ret, vmn_ctx = vmn_run(cmd)
 
     tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+        app_name, type=RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
     )
 
     vmn_ctx.vcs.enhance_ver_info(ver_infos)
@@ -54,18 +60,18 @@ def _release_app(app_name, version=None, stamp=False):
     if stamp:
         cmd.append("--stamp")
 
-    stamp_utils.VMN_LOGGER = None
-    ret, vmn_ctx = vmn.vmn_run(cmd)
+    reset_logger()
+    ret, vmn_ctx = vmn_run(cmd)
 
     vmn_ctx.vcs.initialize_backend_attrs()
 
     if version is None:
         tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
-            app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+            app_name, type=RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
         )
     else:
         tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(
-            stamp_utils.VMNBackend.get_base_vmn_version(
+            VMNBackend.get_base_vmn_version(
                 version, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         )
@@ -108,14 +114,14 @@ def _stamp_app(
 
     args_list.append(app_name)
 
-    stamp_utils.VMN_LOGGER = None
-    ret, vmn_ctx = vmn.vmn_run(args_list)
+    reset_logger()
+    ret, vmn_ctx = vmn_run(args_list)
 
     if vmn_ctx is None:
         return ret, None, {}
 
     tag_name, ver_infos = vmn_ctx.vcs.get_first_reachable_version_info(
-        app_name, type=stamp_utils.RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+        app_name, type=RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
     )
 
     vmn_ctx.vcs.enhance_ver_info(ver_infos)
@@ -168,8 +174,8 @@ def _show(
 
     args_list.append(app_name)
 
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(args_list)
+    reset_logger()
+    ret = vmn_run(args_list)
 
     return ret[0]
 
@@ -193,8 +199,8 @@ def _gen(
 
     args_list.append(app_name)
 
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(args_list)[0]
+    reset_logger()
+    ret = vmn_run(args_list)[0]
 
     return ret
 
@@ -208,8 +214,8 @@ def _goto(app_name, version=None, root=False):
 
     args_list.append(app_name)
 
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(args_list)[0]
+    reset_logger()
+    ret = vmn_run(args_list)[0]
 
     return ret
 
@@ -238,8 +244,8 @@ def _add_buildmetadata_to_version(
 
     args_list.append(app_name)
 
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(args_list)[0]
+    reset_logger()
+    ret = vmn_run(args_list)[0]
 
     return ret
 
@@ -671,7 +677,7 @@ def test_version_backends_generic_selectors(app_layout, capfd):
                 ],
                 "selectors_section": [
                     {
-                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_selector": f"(version: ){_VMN_VERSION_REGEX}",
                         "regex_sub": r"\1{{version}}",
                     },
                     {"regex_selector": "(Custom: )([0-9]+)", "regex_sub": r"\1{{k1}}"},
@@ -731,7 +737,7 @@ def test_version_backends_generic_selectors_no_custom_keys(app_layout, capfd):
                 ],
                 "selectors_section": [
                     {
-                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_selector": f"(version: ){_VMN_VERSION_REGEX}",
                         "regex_sub": r"\1{{version}}",
                     },
                 ],
@@ -849,7 +855,7 @@ def test_generic_selectors_multiple_apps_same_file_same_diff(app_layout, capfd):
                 ],
                 "selectors_section": [
                     {
-                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_selector": f"(version: ){_VMN_VERSION_REGEX}",
                         "regex_sub": r"\1{{version}}",
                     },
                 ],
@@ -919,7 +925,7 @@ def test_generic_selectors_multiple_apps_same_file_diff(app_layout, capfd):
                 ],
                 "selectors_section": [
                     {
-                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_selector": f"(version: ){_VMN_VERSION_REGEX}",
                         "regex_sub": r"\1{{version}}",
                     },
                 ],
@@ -1857,20 +1863,20 @@ def test_goto_print(app_layout, capfd):
 
 
 def test_version_template():
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-        "2.0.9", vmn.IVersionsStamper.parse_template("[{major}][-{prerelease}]"), True
+    formated_version = VMNBackend.get_utemplate_formatted_version(
+        "2.0.9", IVersionsStamper.parse_template("[{major}][-{prerelease}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-        "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
+    formated_version = VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0", IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = stamp_utils.VMNBackend.get_utemplate_formatted_version(
-        "2.0.9.0", vmn.IVersionsStamper.parse_template("[{major}][-{hotfix}]"), False
+    formated_version = VMNBackend.get_utemplate_formatted_version(
+        "2.0.9.0", IVersionsStamper.parse_template("[{major}][-{hotfix}]"), False
     )
 
     assert formated_version == "2-0"
@@ -2100,7 +2106,7 @@ def test_manual_file_adjustment(app_layout):
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
         "test_repo_0",
-        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        ".vmn/test_app/{}".format(VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
 
@@ -2125,7 +2131,7 @@ def test_manual_file_adjustment_with_major_version(app_layout):
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
         "test_repo_0",
-        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        ".vmn/test_app/{}".format(VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
 
@@ -2153,7 +2159,7 @@ def test_manual_file_adjustment_rc(app_layout):
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
         "test_repo_0",
-        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        ".vmn/test_app/{}".format(VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
 
@@ -2815,7 +2821,7 @@ def test_perf_show(app_layout):
                     app_layout.write_file_commit_and_push(
                         "test_repo_0", f"file_{i}.txt", f"change {i}"
                     )
-                    stamp_utils.VMN_LOGGER = None
+                    reset_logger()
                     err, _, _ = _stamp_app(app_layout.app_name, "patch")
                     assert err == 0
 
@@ -2841,9 +2847,9 @@ def test_perf_show(app_layout):
 def test_run_vmn_from_non_git_repo(app_layout, capfd):
     _run_vmn_init()
     app_layout.set_working_dir(app_layout.base_dir)
-    stamp_utils.VMN_LOGGER = None
+    reset_logger()
     capfd.readouterr()
-    ret = vmn.vmn_run([])[0]
+    ret = vmn_run([])[0]
     capfd.readouterr()
     assert ret == 1
 
@@ -2999,7 +3005,7 @@ def test_removed_vmn_tag_and_version_file_repo_stamp(app_layout, manual_version)
     # now we want to override the version by changing the file version:
     app_layout.write_file_commit_and_push(
         "test_repo_0",
-        ".vmn/test_app/{}".format(vmn.VER_FILE_NAME),
+        ".vmn/test_app/{}".format(VER_FILE_NAME),
         yaml.dump(verfile_manual_content),
     )
 
@@ -4986,7 +4992,7 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
                 ],
                 "selectors_section": [
                     {
-                        "regex_selector": f"(version: ){stamp_utils._VMN_VERSION_REGEX}",
+                        "regex_selector": f"(version: ){_VMN_VERSION_REGEX}",
                         "regex_sub": r"\1{{version}}",
                     },
                 ],
@@ -5021,8 +5027,8 @@ def test_config_list_apps(app_layout, capfd):
     _init_app(app_layout.app_name)
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config"])[0]
+    reset_logger()
+    ret = vmn_run(["config"])[0]
     captured = capfd.readouterr()
 
     assert ret == 0
@@ -5033,8 +5039,8 @@ def test_config_list_apps_empty(app_layout, capfd):
     _run_vmn_init()
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config"])[0]
+    reset_logger()
+    ret = vmn_run(["config"])[0]
     captured = capfd.readouterr()
 
     assert ret == 0
@@ -5047,8 +5053,8 @@ def test_config_no_tty(app_layout, capfd):
     _init_app(app_layout.app_name)
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+    reset_logger()
+    ret = vmn_run(["config", app_layout.app_name])[0]
     captured = capfd.readouterr()
 
     assert ret == 1
@@ -5060,8 +5066,8 @@ def test_config_no_app(app_layout, capfd):
     _run_vmn_init()
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config", "nonexistent_app"])[0]
+    reset_logger()
+    ret = vmn_run(["config", "nonexistent_app"])[0]
 
     assert ret == 1
 
@@ -5106,8 +5112,8 @@ def test_config_interactive_save(app_layout, capfd, monkeypatch):
     monkeypatch.setattr(q, "confirm", mock_confirm)
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+    reset_logger()
+    ret = vmn_run(["config", app_layout.app_name])[0]
     captured = capfd.readouterr()
 
     assert ret == 0
@@ -5159,8 +5165,8 @@ def test_config_interactive_quit_no_save(app_layout, capfd, monkeypatch):
         original_data = yaml.safe_load(f)
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config", app_layout.app_name])[0]
+    reset_logger()
+    ret = vmn_run(["config", app_layout.app_name])[0]
 
     assert ret == 0
 
@@ -5194,7 +5200,7 @@ def test_config_global(app_layout, capfd, monkeypatch):
     monkeypatch.setattr(q, "confirm", mock_confirm)
 
     capfd.readouterr()
-    stamp_utils.VMN_LOGGER = None
-    ret = vmn.vmn_run(["config", "--global"])[0]
+    reset_logger()
+    ret = vmn_run(["config", "--global"])[0]
 
     assert ret == 0
