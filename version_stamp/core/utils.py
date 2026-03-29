@@ -48,5 +48,10 @@ def resolve_root_path():
     return root_path
 
 
+def branch_to_conf_prefix(branch_name):
+    """Sanitize branch name for use in conf filenames (abc/feat → abc-feat)."""
+    return branch_name.replace("/", "-")
+
+
 class WrongTagFormatException(Exception):
     pass

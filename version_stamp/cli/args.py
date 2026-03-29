@@ -293,6 +293,13 @@ def add_arg_config(subprasers):
         help="Edit the repo-level .vmn/conf.yml",
     )
     pconfig.set_defaults(global_conf=False)
+    pconfig.add_argument(
+        "--branch",
+        dest="branch",
+        action="store_true",
+        help="Edit the branch-specific config (<current-branch>_conf.yml) instead of the default",
+    )
+    pconfig.set_defaults(branch=False)
 
 
 def verify_user_input_version(args, key):

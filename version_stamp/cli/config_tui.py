@@ -16,6 +16,7 @@ from rich.text import Text
 from version_stamp.backends.git import GitBackend
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
+from version_stamp.core.utils import branch_to_conf_prefix
 from version_stamp.cli.constants import (
     INIT_FILENAME,
     _CONFIG_DESCRIPTIONS,
@@ -57,6 +58,30 @@ def handle_config(vmn_ctx):
     # No app name: list managed apps
     if vmn_ctx.vcs.name is None:
         return _config_list_apps(vmn_root_path)
+
+    # --branch mode: edit branch-specific config
+    if vmn_ctx.args.branch:
+        prefix = branch_to_conf_prefix(vmn_ctx.vcs.backend.active_branch)
+        if vmn_ctx.args.root:
+            if vmn_ctx.vcs.root_app_conf_path is None:
+                VMN_LOGGER.error(
+                    f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
+                )
+                return 1
+            conf_path = os.path.join(
+                vmn_ctx.vcs.root_app_dir_path,
+                f"{prefix}_root_conf.yml",
+            )
+            descriptions = _ROOT_CONFIG_DESCRIPTIONS
+        else:
+            conf_path = os.path.join(
+                vmn_ctx.vcs.app_dir_path,
+                f"{prefix}_conf.yml",
+            )
+            descriptions = _CONFIG_DESCRIPTIONS
+        if vmn_ctx.args.vim:
+            return _config_vim(conf_path, create_if_missing=True)
+        return _config_interactive(conf_path, descriptions, vmn_root_path)
 
     # --vim mode
     if vmn_ctx.args.vim:
@@ -423,14 +448,40 @@ def _edit_version_backends(current, vmn_root_path):
     return current
 
 
+_PIN_FIELDS = ("branch", "tag", "hash")
+
+
+def _set_dep_pin(dep_conf, kind, value):
+    for f in _PIN_FIELDS:
+        dep_conf.pop(f, None)
+    if kind and value:
+        dep_conf[kind] = value
+
+
+def _get_dep_branch(full_path):
+    try:
+        import git
+        client = git.Repo(full_path, search_parent_directories=True)
+        if not client.head.is_detached:
+            branch = client.active_branch.name
+        else:
+            branch = None
+        client.close()
+        return branch
+    except (git.InvalidGitRepositoryError, git.GitCommandNotFound, OSError):
+        return None
+
+
 def _edit_deps(current, vmn_root_path):
     while True:
         choices = []
         if current:
             for path, dep_conf in current.items():
                 vcs = dep_conf.get("vcs_type", "git") if isinstance(dep_conf, dict) else "git"
+                pinned = dep_conf.get("branch") or dep_conf.get("tag") or dep_conf.get("hash")
+                pin_info = f", pinned: {pinned}" if pinned else ""
                 choices.append(questionary.Choice(
-                    title=f"  {path} ({vcs})",
+                    title=f"  {path} ({vcs}{pin_info})",
                     value=f"view:{path}",
                 ))
         else:
@@ -447,6 +498,39 @@ def _edit_deps(current, vmn_root_path):
 
         if action is None or action == "_back":
             return current
+
+        if action.startswith("view:"):
+            dep_path = action[5:]
+            dep_conf = current[dep_path]
+            full_path = os.path.join(vmn_root_path, dep_path)
+
+            print(f"\n  Path: {dep_path}")
+            print(f"  VCS:  {dep_conf.get('vcs_type', 'git')}")
+            for field in _PIN_FIELDS:
+                if field in dep_conf:
+                    print(f"  Pinned {field}: {dep_conf[field]}")
+
+            detected_branch = _get_dep_branch(full_path)
+            if detected_branch:
+                print(f"  Current branch on disk: {detected_branch}")
+
+            pin = questionary.select(
+                "  Update pin?",
+                choices=["keep current", "branch", "tag", "hash", "remove pin"],
+                default="keep current",
+            ).ask()
+            if pin == "branch":
+                val = questionary.text("  Branch name", default=detected_branch or "").ask()
+                _set_dep_pin(dep_conf, "branch", val)
+            elif pin == "tag":
+                val = questionary.text("  Tag name").ask()
+                _set_dep_pin(dep_conf, "tag", val)
+            elif pin == "hash":
+                val = questionary.text("  Commit hash").ask()
+                _set_dep_pin(dep_conf, "hash", val)
+            elif pin == "remove pin":
+                _set_dep_pin(dep_conf, None, None)
+            continue
 
         if action == "_add":
             rel_path = questionary.text(
@@ -472,23 +556,24 @@ def _edit_deps(current, vmn_root_path):
                 if not proceed:
                     continue
 
+            detected_branch = _get_dep_branch(full_path)
+            if detected_branch:
+                print(f"  Current branch: {detected_branch}")
+
             pin = questionary.select(
                 "  Pin to specific ref?",
                 choices=["none", "branch", "tag", "hash"],
-                default="none",
+                default="branch" if detected_branch else "none",
             ).ask()
             if pin == "branch":
-                val = questionary.text("  Branch name").ask()
-                if val:
-                    dep_conf["branch"] = val
+                val = questionary.text("  Branch name", default=detected_branch or "").ask()
+                _set_dep_pin(dep_conf, "branch", val)
             elif pin == "tag":
                 val = questionary.text("  Tag name").ask()
-                if val:
-                    dep_conf["tag"] = val
+                _set_dep_pin(dep_conf, "tag", val)
             elif pin == "hash":
                 val = questionary.text("  Commit hash").ask()
-                if val:
-                    dep_conf["hash"] = val
+                _set_dep_pin(dep_conf, "hash", val)
 
             current[rel_path] = dep_conf
 
@@ -596,11 +681,14 @@ def _edit_generic_dict(key, current):
     return _SENTINEL
 
 
-def _config_vim(conf_path):
+def _config_vim(conf_path, create_if_missing=False):
     editor = os.environ.get("EDITOR", "vim")
     if not os.path.isfile(conf_path):
-        VMN_LOGGER.error(f"Config file not found: {conf_path}")
-        return 1
+        if not create_if_missing:
+            VMN_LOGGER.error(f"Config file not found: {conf_path}")
+            return 1
+        _write_full_config(conf_path, {})
+        VMN_LOGGER.info(f"Created new config file: {conf_path}")
     return subprocess.call([editor, conf_path])
 
 

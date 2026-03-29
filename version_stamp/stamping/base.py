@@ -26,7 +26,7 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
-from version_stamp.core.utils import comment_out_jinja
+from version_stamp.core.utils import branch_to_conf_prefix, comment_out_jinja
 from version_stamp.stamping.template_data import (
     create_data_dict_for_jinja2,
     gen_jinja2_template_from_data,
@@ -186,7 +186,7 @@ class IVersionsStamper(object):
 
         self.app_conf_path = os.path.join(
             self.app_dir_path,
-            f"{self.backend.active_branch}_conf.yml",
+            f"{branch_to_conf_prefix(self.backend.active_branch)}_conf.yml",
         )
         if not os.path.isfile(self.app_conf_path):
             self.app_conf_path = os.path.join(self.app_dir_path, "conf.yml")
@@ -208,7 +208,7 @@ class IVersionsStamper(object):
 
             self.root_app_conf_path = os.path.join(
                 self.root_app_dir_path,
-                f"{self.backend.active_branch}_root_conf.yml",
+                f"{branch_to_conf_prefix(self.backend.active_branch)}_root_conf.yml",
             )
             if not os.path.isfile(self.root_app_conf_path):
                 self.root_app_conf_path = os.path.join(

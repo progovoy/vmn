@@ -298,6 +298,7 @@ vmn add -v 0.0.1 --bm build42 my_app   # => 0.0.1+build42
 vmn config                  # list all managed apps in the repo
 vmn config my_app           # interactive TUI editor
 vmn config my_app --vim     # open in $EDITOR
+vmn config --branch my_app  # edit/create branch-specific config for current branch
 vmn config --global         # repo-level .vmn/conf.yml
 ```
 

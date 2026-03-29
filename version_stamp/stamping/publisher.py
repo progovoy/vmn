@@ -20,6 +20,7 @@ from version_stamp.core.constants import (
     VMN_TAG_REGEX,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.utils import branch_to_conf_prefix
 from version_stamp.core.version_math import parse_conventional_commit_message
 from version_stamp.stamping.base import IVersionsStamper
 
@@ -841,7 +842,26 @@ class VersionControlStamper(IVersionsStamper):
             "*_conf.yml",
         )
         list_of_files = glob.glob(path)
-        branch_conf_path = os.path.join(self.app_dir_path, f"{cur_branch}_conf.yml")
+
+        # Detect legacy branch configs in subdirectories (created before branch
+        # name sanitization replaced "/" with "-" in conf filenames).
+        try:
+            for entry in os.scandir(self.app_dir_path):
+                if entry.is_dir():
+                    for fname in os.listdir(entry.path):
+                        if fname.endswith("_conf.yml") or fname == "conf.yml":
+                            legacy = os.path.join(entry.path, fname)
+                            VMN_LOGGER.warning(
+                                f"Found legacy branch config in subdirectory: {legacy}. "
+                                f"Branch configs should be flat files like "
+                                f"'<branch>_conf.yml'."
+                            )
+        except OSError:
+            pass
+
+        branch_conf_path = os.path.join(
+            self.app_dir_path, f"{branch_to_conf_prefix(cur_branch)}_conf.yml"
+        )
 
         if self.dry_run:
             if list_of_files:
