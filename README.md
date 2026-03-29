@@ -217,6 +217,7 @@ vmn stamp my_app                    # 0.0.2-rc.3  (still continues)
 | `--dry-run` | Preview without committing |
 | `--orm`, `--default-release-mode` | Set `default_release_mode` in app config: `optional` (default) or `strict` |
 
+
 </details>
 
 #### Stamp automation (conventional commits, changelog, GitHub releases)
@@ -509,6 +510,7 @@ vmn supports branch-specific config overrides. Place a file named `<branch>_conf
 When vmn loads configuration it checks for `<active_branch>_conf.yml` first; if that file exists it is used instead of `conf.yml`. The same applies to root app configs (`<branch>_root_conf.yml` vs `root_conf.yml`).
 
 During `vmn stamp`, branch-specific config files from other branches are automatically cleaned up so they don't accumulate in the repository.
+
 
 ---
 

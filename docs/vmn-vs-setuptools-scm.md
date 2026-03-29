@@ -1,6 +1,6 @@
 # vmn vs setuptools-scm
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This page compares vmn with [setuptools-scm](https://github.com/pypa/setuptools-scm) to help Python developers choose the right tool.
 
 ## Overview
@@ -101,7 +101,13 @@ pip install vmn
 # or: pipx install vmn
 # or: uvx vmn
 
-# Stamp a patch release (auto-initializes repo and app on first run)
+# Initialize vmn in your repository (once per repo)
+vmn init
+
+# Initialize your application (once per app)
+vmn init-app my_app
+
+# Stamp a patch release
 vmn stamp -r patch my_app
 
 # Show the current version
@@ -121,7 +127,7 @@ result to setuptools-scm's build-time version injection:
 conf:
   version_backends:
     pep621:
-      path: pyproject.toml
+      - path: pyproject.toml
 ```
 
 After each `vmn stamp`, the `version` field in your `[project]` table is
@@ -193,11 +199,11 @@ version = "1.2.3"  # maintained by vmn
 conf:
   version_backends:
     pep621:
-      path: pyproject.toml
+      - path: pyproject.toml
 ```
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
+- [vmn GitHub repository](https://github.com/final-israel/vmn)
+- [vmn README](https://github.com/final-israel/vmn#readme)
 - [setuptools-scm documentation](https://setuptools-scm.readthedocs.io/)
