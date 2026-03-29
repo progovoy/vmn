@@ -10,9 +10,35 @@ Omit any Claude co-author trailer unless I explicitly ask for it.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# Splitting tasks
+Always split big tasks into separate worktrees and do in parallel.
+Each worktree agent should write ~200-300 lines max per file. If writing more, split into additional worktrees.
+When finished - always try /simplify on the change.
+
+## Timeout handling
+If you see API timeouts, split the current task into smaller parallel worktrees rather than retrying.
+
+## Worktree hygiene
+- Never push worktree branches to remote.
+- When a worktree agent finishes, immediately remove the worktree (`git worktree remove --force`) and delete its local branch (`git branch -D`).
+- Before starting new work, check for and clean up any stale worktrees from previous sessions (`git worktree list`).
+
+## Permissions hygiene
+- Do not accumulate one-off permission rules in `.claude/settings.local.json`.
+- Prefer broad wildcards (e.g., `Bash(git:*)`) over specific subcommand rules.
+- Keep the allow list under 30 entries.
+
 ## Project Overview
 
-vmn is a CLI tool and Python library for automatic semantic versioning of software projects. It uses git tags to track versions and supports multi-repository dependencies, microservices architectures (root apps), and conventional commits for automatic release mode detection.
+vmn is a CLI tool and Python library for automatic semantic versioning. Versions live in git annotated tags — zero lock-in, zero databases.
+
+Key differentiators vs semantic-release/release-please:
+- Language-agnostic (not JS-centric)
+- Multi-repo dependency tracking with `vmn goto` state recovery
+- Microservice topology (root apps with independent service versions)
+- 4-segment hotfix versioning (`major.minor.patch.hotfix`)
+- Auto-init on first `vmn stamp` — no separate `vmn init` required
+- Works offline, with shallow clones, in air-gapped environments
 
 ## Development Setup
 
@@ -44,91 +70,54 @@ Skip a test:
 
 Tests run in parallel (29 workers by default) using pytest-xdist.
 
-## Code Architecture
-
-### Core Modules (`version_stamp/`)
-
-**vmn.py** (~3600 lines) - Main entry point and business logic:
-- Entry: `main()` → `vmn_run()` → `_vmn_run()` → `handle_<command>()`
-- `VMNContainer`: Creates VCS backend and holds args/params
-- `IVersionsStamper`: Base class for version operations
-  - Loads config from `.vmn/{app_name}/conf.yml`
-  - Version backend writers (`_write_version_to_npm`, `_write_version_to_cargo`, etc.)
-  - `gen_advanced_version()`, `advance_version()` - version incrementing logic
-- `VersionControlStamper(IVersionsStamper)`: Adds stamping/publishing
-  - `find_matching_version()` - check if current state matches existing version
-  - `stamp_app_version()` - create new version
-  - `publish_stamp()` - commit, tag, and push
-- Command handlers: `handle_init`, `handle_init_app`, `handle_stamp`, `handle_release`, `handle_show`, `handle_goto`, `handle_gen`, `handle_add`
-- Argument parsing: `parse_user_commands()` with `add_arg_*` functions
-
-**stamp_utils.py** (~1900 lines) - VCS abstraction and utilities:
-- `VMNBackend`: Base class with static version string methods
-  - `serialize_vmn_tag_name()`, `serialize_vmn_version()`, `deserialize_vmn_version()`
-  - `get_utemplate_formatted_version()` - apply display template
-- `GitBackend(VMNBackend)`: Git operations
-  - `tag()`, `push()`, `commit()`, `checkout()`
-  - `get_latest_stamp_tags()` - find version tags
-  - `parse_tag_message()` - extract version info from tag
-  - `perform_cached_fetch()` - fetch with 30-min cache
-- `LocalFileBackend(VMNBackend)`: File-based backend for offline use
-- Version regex patterns: `VMN_VERSION_REGEX`, `VMN_TAG_REGEX`, `VMN_ROOT_TAG_REGEX`
-- `parse_conventional_commit_message()` - extract type/scope from commits
-
-**version.py** - vmn's own version string
-
 ### Key Concepts
 
-- **App name**: Identifier for a versioned application (e.g., `my_app` or `root_app/service1`). Cannot contain `-` or start with `/`
-- **Root app**: Parent container for microservices, uses format `root_app/service_name`
+- **App name**: Identifier for a versioned app (e.g., `my_app` or `root_app/service1`). Cannot contain `-` or start with `/`
+- **Root app**: Parent container for microservices, format `root_app/service_name`. Root version is an auto-incrementing integer.
 - **Version format**: `major.minor.patch[.hotfix][-prerelease.rcn][+buildmetadata]`
 - **Tag format**: `{app_name}_{version}` where `/` in app names becomes `-`
 
 ### Data Flow
 
-1. Version info stored in git tag messages as YAML with structure:
-   ```yaml
-   vmn_info:
-     vmn_version: "x.x.x"
-   stamping:
-     app:
-       name: app_name
-       _version: "1.0.0"
-       changesets:
-         ".": {hash: "abc123", remote: "...", vcs_type: "git"}
-     root_app: {...}  # if microservice
-   ```
+1. Version info stored in git annotated tag messages as YAML (`vmn_info` + `stamping` sections with changesets)
 2. Local state tracked in `.vmn/{app_name}/last_known_app_version.yml`
 3. `stamp` command: increments version → writes to backends → commits → tags → pushes
 
 ### Configuration
 
-Per-app configuration stored in `.vmn/{app_name}/conf.yml`:
-- `template`: Version display format
-- `deps`: External repository dependencies
-- `version_backends`: Auto-embed version into package.json, Cargo.toml, etc.
-- `policies`: Branch restrictions for stamping/releasing
-- `conventional_commits`: Enable automatic release mode detection
+Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
+- `template`: Version display format (e.g., `[{major}][.{minor}]`)
+- `conventional_commits`: Auto-detect release mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major). When enabled, `-r` flag is optional.
+- `default_release_mode`: `optional` (--orm behavior) or `strict` (-r behavior) when using conventional_commits
+- `changelog.path`: Generate CHANGELOG.md on stamp (requires conventional_commits)
+- `github_release.draft`: Create GitHub Release on stamp (requires `gh` CLI + `GITHUB_TOKEN`)
+- `deps`: External repository dependencies for multi-repo tracking
+- `version_backends`: Auto-embed version into package.json, Cargo.toml, pyproject.toml, or any file via regex/Jinja2
+- `policies.whitelist_release_branches`: Restrict which branches can stamp/release
+- Branch-specific overrides: `<branch>_conf.yml` next to `conf.yml`
 
 ### Test Infrastructure
 
-- `tests/conftest.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repositories
+- `tests/conftest.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repos
 - Tests create temporary git repos with remotes to simulate real workflows
+
+## CLI Commands
+
+- `vmn stamp -r <mode> <name>`: Stamp a new version (mode: major/minor/patch/hotfix). Auto-inits repo/app. Idempotent.
+  - `--pr <id>`: Create prerelease (e.g., `--pr rc` → `0.0.1-rc.1`)
+  - `--orm`: Optional release mode — only advances if no prerelease exists at target
+  - `--pull`: Pull remote first, retry on conflict
+  - `--dry-run`: Preview without committing
+  - Without `-r`: works during prerelease sequence, or always with `conventional_commits` enabled
+- `vmn release <name>`: Promote prerelease to final. `-v <version>` for explicit, `--stamp` for full stamp flow.
+- `vmn show <name>`: Display version info. `--verbose` for full YAML, `--raw`, `--type`, `-u` for unique ID.
+- `vmn goto -v <version> <name>`: Checkout repo + all deps to exact state at version. `--deps-only`, `--root`.
+- `vmn gen -t <template> -o <output> <name>`: Generate file from Jinja2 template.
+- `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
+- `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config.
 
 ## Environment Variables
 
 - `VMN_WORKING_DIR`: Override the working directory for vmn
 - `VMN_LOCK_FILE_PATH`: Custom lock file path (default is per-repo lock to prevent concurrent vmn commands)
-
-## CLI Commands
-
-- `vmn init`: Initialize vmn tracking in a repository (once per repo)
-- `vmn init-app <name>`: Initialize a new app for versioning (once per app)
-- `vmn stamp -r <mode> <name>`: Stamp a new version (mode: major/minor/patch/hotfix)
-- `vmn release -v <version> <name>`: Promote a prerelease to final release
-- `vmn show <name>`: Display version information
-- `vmn goto -v <version> <name>`: Checkout repository state at a specific version
-- `vmn gen -t <template> -o <output> <name>`: Generate version file from Jinja2 template
-- `vmn add <name>`: Add build metadata to existing version
-
-Use `--dry-run` flag with `init-app` and `stamp` for testing.
+- `GITHUB_TOKEN` / `GH_TOKEN`: Required for GitHub Releases feature
