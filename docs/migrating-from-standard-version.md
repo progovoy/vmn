@@ -1,6 +1,6 @@
 # Migrating from standard-version to vmn
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This guide helps you migrate from [standard-version](https://github.com/conventional-changelog/standard-version), which was deprecated and archived in May 2023.
 
 ## Why Migrate
@@ -53,21 +53,14 @@ pip install vmn
 
 ```bash
 vmn init
-```
-
-This creates the `.vmn/` directory and a root configuration. Run this once per
-repository.
-
-### 3. Initialize Your Application
-
-```bash
 vmn init-app my_app
 ```
 
-This registers `my_app` for versioning. vmn will create
-`.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
+This creates the `.vmn/` directory, registers `my_app` for versioning, and
+creates `.vmn/my_app/conf.yml`. You can also skip this step — `vmn stamp`
+auto-initializes the repo and app on first run.
 
-### 4. Configure Version Backends
+### 3. Configure Version Backends
 
 If standard-version was updating `package.json`, configure vmn's npm backend:
 
@@ -76,7 +69,7 @@ If standard-version was updating `package.json`, configure vmn's npm backend:
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
 ```
 
 For Python projects, use the pep621 backend:
@@ -85,7 +78,7 @@ For Python projects, use the pep621 backend:
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 For Rust projects, use the cargo backend:
@@ -94,13 +87,13 @@ For Rust projects, use the cargo backend:
 conf:
   version_backends:
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
 You can combine multiple backends if your project has several files that need
 version updates.
 
-### 5. Enable Conventional Commits (Optional)
+### 4. Enable Conventional Commits (Optional)
 
 If you relied on standard-version's automatic release mode detection from
 conventional commit messages, enable the same behavior in vmn:
@@ -114,7 +107,7 @@ conf:
 With this enabled, `vmn stamp my_app` (without `-r`) reads commit messages
 since the last stamp and automatically selects major, minor, or patch.
 
-### 6. Stamp Your First vmn Version
+### 5. Stamp Your First vmn Version
 
 ```bash
 # Explicit release mode
@@ -127,7 +120,7 @@ vmn stamp my_app
 vmn creates an annotated git tag, updates configured version backends, commits
 the changes, and pushes.
 
-### 7. Remove standard-version Configuration
+### 6. Remove standard-version Configuration
 
 ```bash
 # Remove config files
@@ -138,7 +131,7 @@ npm uninstall standard-version
 # or remove from devDependencies manually
 ```
 
-### 8. Update CI Pipelines
+### 7. Update CI Pipelines
 
 Replace standard-version commands in your CI configuration:
 
@@ -161,7 +154,7 @@ Replace standard-version commands in your CI configuration:
 vmn handles the git commit, tag, and push internally (unless `--dry-run` is
 used).
 
-### 9. Update npm Scripts (If Applicable)
+### 8. Update npm Scripts (If Applicable)
 
 **Before:**
 
@@ -243,6 +236,6 @@ Node.js dependency.
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [standard-version deprecation notice](https://github.com/conventional-changelog/standard-version#deprecated)

@@ -39,8 +39,10 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 
 ## Code Structure
 
-- `version_stamp/vmn.py` — Main entry point, CLI commands, version stamping logic
-- `version_stamp/stamp_utils.py` — VCS abstraction (Git/LocalFile backends), version parsing utilities
+- `version_stamp/cli/` — CLI entry point, arg parsing, command handlers, config TUI, output/display
+- `version_stamp/stamping/` — IVersionsStamper, VersionControlStamper, Jinja2 template generation
+- `version_stamp/backends/` — VCS abstraction (Git/LocalFile backends)
+- `version_stamp/core/` — Constants, models, logging, utilities, version math
 - `version_stamp/version.py` — vmn's own version string
 - `tests/` — Test suite with Docker-based isolated git environments
 

@@ -1,6 +1,6 @@
 # Migrating from bump2version to vmn
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This guide helps you migrate from [bump2version](https://github.com/c4urself/bump2version) (and its predecessor bumpversion), which are no longer actively maintained.
 
 ## Why Migrate
@@ -53,21 +53,14 @@ pip install vmn
 
 ```bash
 vmn init
-```
-
-This creates the `.vmn/` directory and a root configuration. Run this once per
-repository.
-
-### 3. Initialize Your Application
-
-```bash
 vmn init-app my_app
 ```
 
-This registers `my_app` for versioning and creates
-`.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
+This creates the `.vmn/` directory and registers `my_app` for versioning. You
+can also skip this step — `vmn stamp` auto-initializes the repo and app on
+first run.
 
-### 4. Map Your bump2version File Patterns
+### 3. Map Your bump2version File Patterns
 
 bump2version uses `[bumpversion:file:...]` sections with `search` and `replace`
 patterns to update version strings in source files. vmn replaces this with
@@ -97,7 +90,7 @@ replace = __version__ = "{new_version}"
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 For files like `__init__.py` that are not covered by a built-in backend, use
@@ -130,7 +123,7 @@ replace = "version": "{new_version}"
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
 ```
 
 #### Rust Projects (Cargo.toml)
@@ -150,10 +143,10 @@ replace = version = "{new_version}"
 conf:
   version_backends:
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
-### 5. Enable Conventional Commits (Optional)
+### 4. Enable Conventional Commits (Optional)
 
 If you want vmn to automatically determine the release mode from commit
 messages:
@@ -164,7 +157,7 @@ conf:
   conventional_commits: true
 ```
 
-### 6. Stamp Your First vmn Version
+### 5. Stamp Your First vmn Version
 
 ```bash
 # Explicit release mode
@@ -177,7 +170,7 @@ vmn stamp my_app
 vmn creates an annotated git tag, updates configured version backends, commits
 the changes, and pushes.
 
-### 7. Remove bump2version Configuration
+### 6. Remove bump2version Configuration
 
 ```bash
 # Remove config file
@@ -189,7 +182,7 @@ rm -f .bumpversion.cfg
 pip uninstall bump2version
 ```
 
-### 8. Update CI Pipelines
+### 7. Update CI Pipelines
 
 Replace bump2version commands in your CI configuration:
 
@@ -297,6 +290,6 @@ four-segment format covers most real-world workflows.
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [bump2version repository](https://github.com/c4urself/bump2version)

@@ -1,6 +1,6 @@
 # vmn vs release-please
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This page compares vmn with [release-please](https://github.com/googleapis/release-please) to help you choose the right tool.
 
 ## Overview
@@ -99,13 +99,7 @@ pip install vmn
 # or: pipx install vmn
 # or: uvx vmn
 
-# Initialize vmn in your repository (once per repo)
-vmn init
-
-# Initialize your application (once per app)
-vmn init-app my_app
-
-# Stamp a patch release
+# Stamp a patch release (auto-initializes repo and app on first run)
 vmn stamp -r patch my_app
 
 # Show the current version
@@ -141,30 +135,30 @@ Write the version into your project files automatically:
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
 ## Migrating from release-please
 
 1. **Install vmn:** `pip install vmn`
-2. **Initialize:** `vmn init && vmn init-app my_app`
-3. **Start at your current version:** vmn will discover existing version tags
-   or you can stamp a new version to establish a baseline.
-4. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
+2. **Start at your current version:** `vmn stamp` auto-initializes the repo
+   and app on first run. vmn will discover existing version tags or you can
+   stamp a new version to establish a baseline.
+3. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
    version-file updates that release-please was performing.
-5. **Remove release-please config:** Delete `release-please-config.json`,
+4. **Remove release-please config:** Delete `release-please-config.json`,
    `.release-please-manifest.json`, and the GitHub Actions workflow that runs
    release-please.
-6. **Update CI:** Replace the release-please action with
+5. **Update CI:** Replace the release-please action with
    `vmn stamp -r <mode> my_app` (or use conventional commits for automatic
    mode detection).
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [release-please documentation](https://github.com/googleapis/release-please)

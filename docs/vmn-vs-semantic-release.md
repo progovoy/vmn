@@ -1,6 +1,6 @@
 # vmn vs semantic-release
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This page compares vmn with [semantic-release](https://github.com/semantic-release/semantic-release) to help you choose the right tool.
 
 ## Overview
@@ -93,13 +93,7 @@ pip install vmn
 # or: pipx install vmn
 # or: uvx vmn
 
-# Initialize vmn in your repository (once per repo)
-vmn init
-
-# Initialize your application (once per app)
-vmn init-app my_app
-
-# Stamp a patch release
+# Stamp a patch release (auto-initializes repo and app on first run)
 vmn stamp -r patch my_app
 
 # Show the current version
@@ -145,18 +139,18 @@ conf:
 ## Migrating from semantic-release
 
 1. **Install vmn:** `pip install vmn`
-2. **Initialize:** `vmn init && vmn init-app my_app`
-3. **Start at your current version:** vmn will pick up existing version tags
-   or you can stamp a new version to establish a baseline.
-4. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
+2. **Start at your current version:** `vmn stamp` auto-initializes the repo
+   and app on first run. vmn will pick up existing version tags or you can
+   stamp a new version to establish a baseline.
+3. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
    semantic-release publish plugins that write version numbers into files.
-5. **Remove semantic-release config:** Delete `.releaserc`, `.releaserc.json`,
+4. **Remove semantic-release config:** Delete `.releaserc`, `.releaserc.json`,
    or `release.config.js` and uninstall the Node.js dependencies.
-6. **Update CI:** Replace the semantic-release step with `vmn stamp -r <mode> my_app`
+5. **Update CI:** Replace the semantic-release step with `vmn stamp -r <mode> my_app`
    (or use conventional commits for automatic mode detection).
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [semantic-release documentation](https://semantic-release.gitbook.io/)
