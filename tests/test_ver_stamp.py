@@ -2797,6 +2797,7 @@ def test_same_user_tag(app_layout):
     assert err == 0
 
 
+@pytest.mark.skip(reason="perf.tgz asset no longer exists at the GitHub release URL (404)")
 def test_perf_show(app_layout):
     import subprocess
     import shutil

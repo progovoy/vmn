@@ -61,71 +61,8 @@ VMN_ARGS = {
     "config": "local",
 }
 
-_CONFIG_DESCRIPTIONS = {
-    "template": {
-        "description": (
-            "Version display format. Use placeholders: {major}, {minor}, {patch}, "
-            "{hotfix}, {prerelease}, {rcn}, {buildmetadata}. "
-            "Wrap in [] for optional sections."
-        ),
-        "type": "string",
-        "example": "[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]",
-    },
-    "extra_info": {
-        "description": "Include host/environment information during stamping.",
-        "type": "bool",
-    },
-    "create_verinfo_files": {
-        "description": (
-            "Create a version info file per stamp. "
-            "Enables 'vmn show --from-file' without git tags."
-        ),
-        "type": "bool",
-    },
-    "hide_zero_hotfix": {
-        "description": "Hide the hotfix octet when it equals zero (e.g. 1.2.3 instead of 1.2.3.0).",
-        "type": "bool",
-    },
-    "default_release_mode": {
-        "description": (
-            "How conventional commits determine release mode. "
-            "'optional' uses --orm behavior, 'strict' uses -r behavior."
-        ),
-        "type": "choice",
-        "choices": ["optional", "strict"],
-    },
-    "conventional_commits": {
-        "description": (
-            "Enable automatic release mode detection from conventional commit messages. "
-            "Works with default_release_mode."
-        ),
-        "type": "bool_or_dict",
-    },
-    "version_backends": {
-        "description": (
-            "Auto-embed version into files during stamping. "
-            "Backends: npm, cargo, poetry, pep621, generic_jinja, generic_selectors."
-        ),
-        "type": "nested_dict",
-        "nested_key": "version_backends",
-    },
-    "deps": {
-        "description": (
-            "External repository dependencies tracked during stamping. "
-            "vmn auto-detects remote URLs from existing git repos."
-        ),
-        "type": "nested_dict",
-        "nested_key": "deps",
-    },
-    "policies": {
-        "description": (
-            "Enforce policies during stamping/releasing. "
-            "Supports whitelist_release_branches."
-        ),
-        "type": "nested_dict",
-        "nested_key": "policies",
-    },
-}
+# Derived from AppConf field metadata — no manual sync needed.
+_CONFIG_DESCRIPTIONS = stamp_utils.AppConf.config_descriptions()
 
 _ROOT_CONFIG_DESCRIPTIONS = {
     "external_services": {
@@ -213,21 +150,13 @@ class IVersionsStamper(object):
         self.name: str = arg_params["name"]
         self.be_type = arg_params["be_type"]
 
-        # Configuration defaults — AppConf is the schema and default source.
+        # Configuration defaults — AppConf is the single source of truth.
         # Individual attributes remain on self for backward compatibility
         # (tests and external code access self.__dict__).
         _defaults = stamp_utils.AppConf()
-        self.template = _defaults.template
-        self.extra_info = _defaults.extra_info
-        self.create_verinfo_files = _defaults.create_verinfo_files
-        self.hide_zero_hotfix = _defaults.hide_zero_hotfix
-        self.version_backends = _defaults.version_backends
-        self.raw_configured_deps = _defaults.deps
-        self.policies = _defaults.policies
-        self.conventional_commits = _defaults.conventional_commits
-        self.default_release_mode = _defaults.default_release_mode
-        self.changelog = _defaults.changelog
-        self.github_release = _defaults.github_release
+        _key_to_attr = stamp_utils.AppConf.conf_key_to_attr()
+        for _f in stamp_utils.fields(stamp_utils.AppConf):
+            setattr(self, _key_to_attr[_f.name], getattr(_defaults, _f.name))
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -282,19 +211,8 @@ class IVersionsStamper(object):
             # TODO:: test this
             raise RuntimeError("Failed to initialize_backend_attrs")
 
-    # Maps conf.yml keys to AppConf field names (only where they differ)
-    _CONF_KEY_TO_ATTR = {
-        "deps": "raw_configured_deps",
-        "extra_info": "extra_info",
-        "hide_zero_hotfix": "hide_zero_hotfix",
-        "version_backends": "version_backends",
-        "create_verinfo_files": "create_verinfo_files",
-        "policies": "policies",
-        "conventional_commits": "conventional_commits",
-        "default_release_mode": "default_release_mode",
-        "changelog": "changelog",
-        "github_release": "github_release",
-    }
+    # Derived from AppConf field metadata — no manual sync needed.
+    _CONF_KEY_TO_ATTR = stamp_utils.AppConf.conf_key_to_attr()
 
     def update_attrs_from_app_conf_file(self):
         # TODO:: handle deleted app with missing conf file
@@ -308,7 +226,7 @@ class IVersionsStamper(object):
                         self.template = data["conf"]["template"]
 
                         if (
-                            stamp_utils.VMN_DEFAULT_CONF["old_template"]
+                            stamp_utils.VMN_OLD_TEMPLATE
                             == self.template
                         ):
                             # TODO:: this means that using the old
@@ -319,6 +237,8 @@ class IVersionsStamper(object):
                             )
                             self.template = stamp_utils.VMN_DEFAULT_CONF["template"]
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
+                        if conf_key == "template":
+                            continue  # handled above with old-template detection
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
 
@@ -1041,24 +961,15 @@ class IVersionsStamper(object):
                 parents=True, exist_ok=True
             )
 
-            tmp = copy.deepcopy(self.configured_deps)
-            tmp.pop(".")
-
-            ver_conf_yml = {
-                "conf": {
-                    "template": self.template,
-                    "deps": tmp,
-                    "extra_info": self.extra_info,
-                    "hide_zero_hotfix": self.hide_zero_hotfix,
-                    "create_verinfo_files": self.create_verinfo_files,
-                    "version_backends": self.version_backends,
-                    "policies": self.policies,
-                    "conventional_commits": self.conventional_commits,
-                    "default_release_mode": self.default_release_mode,
-                    "changelog": self.changelog,
-                    "github_release": self.github_release,
-                }
+            _key_to_attr = stamp_utils.AppConf.conf_key_to_attr()
+            conf_dict = {
+                key: getattr(self, attr) for key, attr in _key_to_attr.items()
             }
+            # Remove the internal "." entry from deps before writing
+            conf_dict["deps"] = copy.deepcopy(self.configured_deps)
+            conf_dict["deps"].pop(".", None)
+
+            ver_conf_yml = {"conf": conf_dict}
 
             with open(self.app_conf_path, "w+") as f:
                 msg = (
@@ -2738,20 +2649,23 @@ def _edit_bool_or_dict(key, current):
     return True if result else {}
 
 
+_NESTED_EDITORS = {
+    "version_backends": lambda cur, root: _edit_version_backends(cur, root),
+    "deps": lambda cur, root: _edit_deps(cur, root),
+    "policies": lambda cur, _root: _edit_policies(cur),
+    "external_services": lambda cur, _root: _edit_external_services(cur),
+}
+
+
 def _edit_nested_dict(key, current, meta, vmn_root_path):
     if current is None:
         current = {}
     current = copy.deepcopy(current)
-    nested_key = meta.get("nested_key", key)
+    editor_name = meta.get("ui_editor", meta.get("nested_key", key))
 
-    if nested_key == "version_backends":
-        return _edit_version_backends(current, vmn_root_path)
-    elif nested_key == "deps":
-        return _edit_deps(current, vmn_root_path)
-    elif nested_key == "policies":
-        return _edit_policies(current)
-    elif nested_key == "external_services":
-        return _edit_external_services(current)
+    editor = _NESTED_EDITORS.get(editor_name)
+    if editor:
+        return editor(current, vmn_root_path)
 
     return _edit_generic_dict(key, current)
 
