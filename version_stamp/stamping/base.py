@@ -32,7 +32,7 @@ from version_stamp.stamping.template_data import (
     gen_jinja2_template_from_data,
 )
 
-VER_FILE_NAME = "last_known_app_version.yml"
+from version_stamp.core.constants import VER_FILE_NAME
 
 
 class IVersionsStamper(object):
@@ -63,9 +63,8 @@ class IVersionsStamper(object):
         # Individual attributes remain on self for backward compatibility
         # (tests and external code access self.__dict__).
         _defaults = AppConf()
-        _key_to_attr = AppConf.conf_key_to_attr()
         for _f in fields(AppConf):
-            setattr(self, _key_to_attr[_f.name], getattr(_defaults, _f.name))
+            setattr(self, self._CONF_KEY_TO_ATTR[_f.name], getattr(_defaults, _f.name))
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -366,11 +365,9 @@ class IVersionsStamper(object):
         return actual_tag, ver_infos
 
     def get_tag_name(self, verstr):
-        tag_name = f'{self.name.replace("/", "-")}'
         assert verstr is not None
-        tag_name = f"{tag_name}_{verstr}"
-
-        return tag_name
+        tag_app_name = VMNBackend.app_name_to_tag_name(self.name)
+        return f"{tag_app_name}_{verstr}"
 
     @measure_runtime_decorator
     def initialize_backend_attrs(self):
@@ -502,7 +499,6 @@ class IVersionsStamper(object):
             del self.backend
             self.backend = None
 
-    # Note: this function generates a version (including prerelease)
     def gen_advanced_version(self, verstr):
         verstr, prerelease_count = self.advance_version(verstr, self.release_mode)
 
@@ -870,9 +866,8 @@ class IVersionsStamper(object):
                 parents=True, exist_ok=True
             )
 
-            _key_to_attr = AppConf.conf_key_to_attr()
             conf_dict = {
-                key: getattr(self, attr) for key, attr in _key_to_attr.items()
+                key: getattr(self, attr) for key, attr in self._CONF_KEY_TO_ATTR.items()
             }
             # Remove the internal "." entry from deps before writing
             conf_dict["deps"] = copy.deepcopy(self.configured_deps)

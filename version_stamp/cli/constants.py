@@ -3,11 +3,10 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
 
-from version_stamp.core.constants import GLOBAL_LOG_FILENAME
+from version_stamp.core.constants import GLOBAL_LOG_FILENAME, VER_FILE_NAME  # noqa: F401
 from version_stamp.core.models import AppConf
 
 LOCK_FILE_ENV = "VMN_LOCK_FILE_PATH"
-VER_FILE_NAME = "last_known_app_version.yml"
 INIT_FILENAME = "conf.yml"
 LOCK_FILENAME = "vmn.lock"
 LOG_FILENAME = "vmn.log"

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Git backend mixin: core operations (tag, push, pull, commit, clone)."""
-import logging
 import time
 
 import git

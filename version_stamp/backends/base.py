@@ -27,9 +27,6 @@ class VMNBackend(ABC):
     def __init__(self, btype):
         self._type = btype
 
-    def __del__(self):
-        pass
-
     def type(self):
         return self._type
 

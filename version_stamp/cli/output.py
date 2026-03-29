@@ -9,7 +9,12 @@ import yaml
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
 from version_stamp.backends.git import GitBackend
-from version_stamp.core.constants import RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE
+from version_stamp.core.constants import (
+    POOL_SIZE_CLONES,
+    POOL_SIZE_UPDATES,
+    RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
+    VMN_BE_TYPE_GIT,
+)
 from version_stamp.core.logging import VMN_LOGGER, init_stamp_logger, measure_runtime_decorator
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.cli.constants import LOG_FILENAME
@@ -480,9 +485,9 @@ def _update_repo(args):
     client = None
     try:
         if path == root_path:
-            client, err = get_client(path, "git", inherit_env=True)
+            client, err = get_client(path, VMN_BE_TYPE_GIT, inherit_env=True)
         else:
-            client, err = get_client(path, "git")
+            client, err = get_client(path, VMN_BE_TYPE_GIT)
 
         # TODO:: why this is not an error?
         if client is None:
@@ -584,7 +589,7 @@ def _clone_repo(args):
 
     VMN_LOGGER.info("Cloning {0}..".format(rel_path))
     try:
-        if vcs_type == "git":
+        if vcs_type == VMN_BE_TYPE_GIT:
             GitBackend.clone(path, remote)
     except Exception as exc:
         try:
@@ -624,7 +629,7 @@ def _goto_version(deps, vmn_root_path, pull):
                 v["vcs_type"],
             )
         )
-    with Pool(min(len(args), 10)) as p:
+    with Pool(min(len(args), POOL_SIZE_UPDATES)) as p:
         results = p.map(_clone_repo, args)
 
     err = False
@@ -668,7 +673,7 @@ def _goto_version(deps, vmn_root_path, pull):
             )
         )
 
-    with Pool(min(len(args), 20)) as p:
+    with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
         results = p.map(_update_repo, args)
 
     for res in results:

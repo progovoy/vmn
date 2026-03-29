@@ -27,9 +27,6 @@ class LocalFileBackend(VMNBackend):
         self.active_branch = "none"
         self.remote_active_branch = "remote/none"
 
-    def __del__(self):
-        pass
-
     def perform_cached_fetch(self, force=False):
         return
 

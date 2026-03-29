@@ -203,7 +203,7 @@ class GitTagsMixin:
                 return tname, None
 
         try:
-            if o.commit.author.name != "vmn":
+            if o.commit.author.name != VMN_USER_NAME:
                 return tname, None
         except Exception:
             VMN_LOGGER.debug("Exception info: ", exc_info=True)

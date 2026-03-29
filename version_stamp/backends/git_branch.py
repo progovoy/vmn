@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Git backend mixin: branch, checkout, and state-check operations."""
-import logging
-
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
@@ -102,7 +100,7 @@ class GitBranchMixin:
 
             self.checkout(branch=branch_name)
         except Exception:
-            logging.error("Failed to get branch name")
+            VMN_LOGGER.error("Failed to get branch name")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
             return None
@@ -232,15 +230,16 @@ class GitBranchMixin:
             return err
 
         outgoing = tuple(
-            self._be.iter_commits(f"{self.remote_active_branch}..{branch_name}")
+            self._be.iter_commits(
+                f"{self.remote_active_branch}..{branch_name}", max_count=1
+            )
         )
 
-        if len(outgoing) > 0:
+        if outgoing:
             err = (
                 f"Outgoing changes in {self.root()} "
                 f"from branch {branch_name} "
-                f"({self.remote_active_branch}..{branch_name})\n"
-                f"The commits that are outgoing are: {outgoing}"
+                f"({self.remote_active_branch}..{branch_name})"
             )
 
             return err

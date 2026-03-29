@@ -17,8 +17,9 @@ class GitHistoryMixin:
     @measure_runtime_decorator
     def add_git_user_cfg_if_missing(self):
         try:
-            self._be.config_reader().get_value("user", "name")
-            self._be.config_reader().get_value("user", "email")
+            reader = self._be.config_reader()
+            reader.get_value("user", "name")
+            reader.get_value("user", "email")
         except (configparser.NoSectionError, configparser.NoOptionError):
             self._be.git.set_persistent_git_options(
                 c=[f'user.name="{VMN_USER_NAME}"', f'user.email="{VMN_USER_NAME}"']

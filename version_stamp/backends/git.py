@@ -113,7 +113,7 @@ class GitBackend(
             pathlib.Path(vmn_cache_path).touch()
 
             self._be.git.execute(["git", "fetch", "--tags"])
-        elif os.path.exists(vmn_cache_path):
+        else:
             minutes_ago = datetime.datetime.now() - datetime.timedelta(
                 minutes=GIT_CACHE_TTL_MINUTES
             )

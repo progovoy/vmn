@@ -15,9 +15,12 @@ import yaml
 
 from version_stamp.backends.base import VMNBackend
 from version_stamp.core.constants import (
+    PUBLISH_MAX_RETRIES,
+    PUBLISH_RETRY_SLEEP_SECONDS,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     VMN_ROOT_TAG_REGEX,
     VMN_TAG_REGEX,
+    VMN_USER_NAME,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import branch_to_conf_prefix
@@ -467,7 +470,7 @@ class VersionControlStamper(IVersionsStamper):
             # TODO:: turn to error codes (enums). This one means - exit without retries
             return 3
 
-        tag = f'{self.name.replace("/", "-")}_{app_version}'
+        tag = self.get_tag_name(app_version)
         match = re.search(VMN_TAG_REGEX, tag)
         if match is None:
             VMN_LOGGER.error(
@@ -539,16 +542,16 @@ class VersionControlStamper(IVersionsStamper):
 
                 count = 0
                 res = self.backend.check_for_outgoing_changes()
-                while count < 5 and res:
+                while count < PUBLISH_MAX_RETRIES and res:
                     count += 1
                     VMN_LOGGER.error(
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
                     )
-                    time.sleep(60)
+                    time.sleep(PUBLISH_RETRY_SLEEP_SECONDS)
                     res = self.backend.check_for_outgoing_changes()
 
-                if count == 5 and res:
+                if count == PUBLISH_MAX_RETRIES and res:
                     raise RuntimeError(
                         f"BUG: Somehow we have outgoing changes right "
                         f"after publishing:\n{res}"
@@ -774,7 +777,9 @@ class VersionControlStamper(IVersionsStamper):
     def _build_release_body(self, app_version):
         """Build release notes body for a GitHub Release."""
         # Try to extract the relevant section from CHANGELOG.md
-        changelog_path = os.path.join(self.vmn_root_path, "CHANGELOG.md")
+        changelog_path = os.path.join(
+            self.vmn_root_path, self.changelog.get("path", "CHANGELOG.md")
+        )
         if os.path.isfile(changelog_path):
             try:
                 with open(changelog_path, "r") as f:
@@ -889,7 +894,7 @@ class VersionControlStamper(IVersionsStamper):
 
             self.backend.commit(
                 message=self.current_version_info["stamping"]["msg"],
-                user="vmn",
+                user=VMN_USER_NAME,
                 include=version_files_to_add,
             )
 

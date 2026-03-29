@@ -205,14 +205,6 @@ def _vmn_run(args, root_path):
     return err, vmnc
 
 
-def validate_app_name(args):
-    if args.name.startswith("/"):
-        VMN_LOGGER.error("App name cannot start with /")
-        raise RuntimeError()
-    if "-" in args.name:
-        VMN_LOGGER.error("App name cannot include -")
-        raise RuntimeError()
-
 
 
 if __name__ == "__main__":

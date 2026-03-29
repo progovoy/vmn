@@ -92,8 +92,7 @@ def serialize_vmn_tag_name(app_name, verstr):
             tag_name = f"{tag_app_name}_{verstr}"
             props = deserialize_tag_name(tag_name)
     except Exception:
-        from version_stamp.core.constants import VMN_TAG_REGEX as _TAG_RE
-        err = f"Tag {tag_name} doesn't comply with: {_TAG_RE} format"
+        err = f"Tag {tag_name} doesn't comply with: {VMN_TAG_REGEX} format"
         VMN_LOGGER.error(err)
         raise RuntimeError(err)
 

@@ -17,6 +17,7 @@ from version_stamp.core.constants import (
     INIT_COMMIT_MESSAGE,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     RELATIVE_TO_GLOBAL_TYPE,
+    VMN_USER_NAME,
     VMN_VERSION_FORMAT,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
@@ -62,7 +63,7 @@ def handle_init(vmn_ctx):
     # TODO:: revert in case of failure. Use the publish_commit function
     be.commit(
         message=INIT_COMMIT_MESSAGE,
-        user="vmn",
+        user=VMN_USER_NAME,
         include=[vmn_init_path, git_ignore_path],
     )
     be.push()
@@ -119,7 +120,7 @@ def handle_stamp(vmn_ctx):
             vmn_ctx.vcs.release_mode is None
             and vmn_ctx.vcs.optional_release_mode is None
         ):
-            max_release_mode = -1
+            max_release_mode = None
             mapping = {
                 "fix": "patch",
                 "feat": "minor",
@@ -151,13 +152,10 @@ def handle_stamp(vmn_ctx):
                 if res["bc"] == "!":
                     res["type"] = "breaking change"
 
-                if max_release_mode == -1 or compare_release_modes(
+                if max_release_mode is None or compare_release_modes(
                     mapping[res["type"]], max_release_mode
                 ):
                     max_release_mode = mapping[res["type"]]
-
-            if max_release_mode == -1:
-                max_release_mode = None
 
             if vmn_ctx.vcs.default_release_mode == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
