@@ -209,6 +209,15 @@ vmn stamp my_app                    # 0.0.2-rc.3  (still continues)
 | `--orv`, `--override-root-version` | Force root app version to a specific integer |
 | `--dont-check-vmn-version` | Skip vmn binary version check |
 
+**`vmn init-app` flags:**
+
+| Flag | Description |
+|:-----|:------------|
+| `-v`, `--version` | Version to start from (default: `0.0.0`) |
+| `--dry-run` | Preview without committing |
+| `--orm`, `--default-release-mode` | Set `default_release_mode` in app config: `optional` (default) or `strict` |
+
+
 </details>
 
 #### Stamp automation (conventional commits, changelog, GitHub releases)
@@ -258,6 +267,9 @@ vmn show --root my_root_app        # root app version (integer)
 vmn show --type my_app             # release / prerelease / metadata
 vmn show -u my_app                 # unique ID (version+commit_hash)
 vmn show -t '[{major}]' my_app    # override display template
+vmn show --conf my_app             # show app configuration
+vmn show --ignore-dirty my_app     # ignore dirty working tree
+vmn show --from-file my_app        # read from local verinfo file (requires create_verinfo_files)
 ```
 
 ### vmn goto
@@ -269,6 +281,7 @@ vmn goto -v 1.2.3 my_app              # repo + deps restored to version 1.2.3
 vmn goto my_app                        # latest version on current branch
 vmn goto -v 1.2.3 --deps-only my_app  # only checkout dependencies
 vmn goto -v 5 --root my_root_app      # checkout to root app version
+vmn goto --pull -v 1.2.3 my_app       # pull remote before checking out
 ```
 
 Dependencies are auto-cloned if missing (up to 10 in parallel).
@@ -280,6 +293,8 @@ Generate a version file from a Jinja2 template:
 ```sh
 vmn gen -t version.j2 -o version.txt my_app           # current HEAD version
 vmn gen -t version.j2 -o version.txt -v 1.0.0 my_app  # specific version
+vmn gen -t version.j2 -o version.txt -c custom.yml my_app  # with custom template values
+vmn gen -t version.j2 -o version.txt --verify-version my_app  # verify version exists
 ```
 
 See [Template Variables](#template-variables-for-vmn-gen) for available Jinja2 variables.
@@ -289,14 +304,19 @@ See [Template Variables](#template-variables-for-vmn-gen) for available Jinja2 v
 Attach build metadata to an existing version:
 
 ```sh
-vmn add -v 0.0.1 --bm build42 my_app   # => 0.0.1+build42
+vmn add -v 0.0.1 --bm build42 my_app                    # => 0.0.1+build42
+vmn add -v 0.0.1 --bm build42 --vmp meta.yml my_app     # attach metadata file
+vmn add -v 0.0.1 --bm build42 --vmu https://ci/42 my_app  # attach metadata URL
 ```
 
 ### vmn config
 
 ```sh
+vmn config                  # list all managed apps in the repo
 vmn config my_app           # interactive TUI editor
 vmn config my_app --vim     # open in $EDITOR
+vmn config --branch my_app  # edit/create branch-specific config for current branch
+vmn config --root my_app    # edit root app config (root_conf.yml)
 vmn config --global         # repo-level .vmn/conf.yml
 ```
 
@@ -476,6 +496,21 @@ conf:
 ```
 
 Use `vmn config <app-name>` for a TUI editor, or edit YAML directly.
+
+### Per-branch configuration
+
+vmn supports branch-specific config overrides. Place a file named `<branch>_conf.yml` next to the default `conf.yml` in `.vmn/<app-name>/`:
+
+```
+.vmn/my_app/
+  conf.yml              # fallback when no branch-specific file exists
+  feature-x_conf.yml    # used when on branch "feature-x"
+```
+
+When vmn loads configuration it checks for `<active_branch>_conf.yml` first; if that file exists it is used instead of `conf.yml`. The same applies to root app configs (`<branch>_root_conf.yml` vs `root_conf.yml`).
+
+During `vmn stamp`, branch-specific config files from other branches are automatically cleaned up so they don't accumulate in the repository.
+
 
 ---
 
