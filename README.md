@@ -295,6 +295,7 @@ vmn add -v 0.0.1 --bm build42 my_app   # => 0.0.1+build42
 ### vmn config
 
 ```sh
+vmn config                  # list all managed apps in the repo
 vmn config my_app           # interactive TUI editor
 vmn config my_app --vim     # open in $EDITOR
 vmn config --global         # repo-level .vmn/conf.yml
@@ -476,6 +477,20 @@ conf:
 ```
 
 Use `vmn config <app-name>` for a TUI editor, or edit YAML directly.
+
+### Per-branch configuration
+
+vmn supports branch-specific config overrides. Place a file named `<branch>_conf.yml` next to the default `conf.yml` in `.vmn/<app-name>/`:
+
+```
+.vmn/my_app/
+  conf.yml              # fallback when no branch-specific file exists
+  feature-x_conf.yml    # used when on branch "feature-x"
+```
+
+When vmn loads configuration it checks for `<active_branch>_conf.yml` first; if that file exists it is used instead of `conf.yml`. The same applies to root app configs (`<branch>_root_conf.yml` vs `root_conf.yml`).
+
+During `vmn stamp`, branch-specific config files from other branches are automatically cleaned up so they don't accumulate in the repository.
 
 ---
 

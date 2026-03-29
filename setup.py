@@ -22,8 +22,14 @@ setuptools.setup(
     url="https://github.com/progovoy/vmn",
     install_requires=install_requires,
     package_dir={"version_stamp": "version_stamp"},
-    packages=["version_stamp"],
-    entry_points={"console_scripts": ["vmn = version_stamp.vmn:main"]},
+    packages=[
+        "version_stamp",
+        "version_stamp.core",
+        "version_stamp.backends",
+        "version_stamp.stamping",
+        "version_stamp.cli",
+    ],
+    entry_points={"console_scripts": ["vmn = version_stamp.cli:main"]},
     license="MIT",
     include_package_data=True,
 )
