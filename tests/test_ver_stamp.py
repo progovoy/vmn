@@ -2797,24 +2797,37 @@ def test_same_user_tag(app_layout):
     assert err == 0
 
 
-@pytest.mark.skip(reason="perf.tgz asset no longer exists at the GitHub release URL (404)")
 def test_perf_show(app_layout):
-    import subprocess
-    import shutil
-
-    base_cmd = [
-        "curl", "-sL", "-o", "perf.tgz",
-        "https://github.com/progovoy/vmn/releases/download/vmn_stamping_action_0.0.1/perf.tgz",
-    ]
-    subprocess.call(base_cmd, cwd=app_layout.base_dir)
-    shutil.rmtree(app_layout.test_app_remote)
-    shutil.rmtree(app_layout.repo_path)
-    base_cmd = ["tar", "-xzf", "./perf.tgz"]
-    subprocess.call(base_cmd, cwd=app_layout.base_dir)
-    base_cmd = ["git", "clone", app_layout.test_app_remote, app_layout.repo_path]
-    subprocess.call(base_cmd, cwd=app_layout.base_dir)
-
     import time
+    import filelock
+
+    cache_dir = "/tmp/vmn_perf_repo"
+    cache_remote = os.path.join(cache_dir, "test_repo_remote")
+    lock_path = f"{cache_dir}.lock"
+
+    if not os.path.isdir(cache_remote):
+        with filelock.FileLock(lock_path):
+            if not os.path.isdir(cache_remote):
+                _run_vmn_init()
+                _init_app(app_layout.app_name)
+
+                for i in range(200):
+                    app_layout.write_file_commit_and_push(
+                        "test_repo_0", f"file_{i}.txt", f"change {i}"
+                    )
+                    stamp_utils.VMN_LOGGER = None
+                    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+                    assert err == 0
+
+                os.makedirs(cache_dir, exist_ok=True)
+                shutil.copytree(app_layout.test_app_remote, cache_remote)
+
+    shutil.rmtree(app_layout.repo_path)
+    subprocess.call(
+        ["git", "clone", cache_remote, app_layout.repo_path],
+        cwd=app_layout.base_dir,
+    )
+    app_layout.set_working_dir(app_layout.repo_path)
 
     t1 = time.perf_counter()
     err = _show(app_layout.app_name, raw=True)

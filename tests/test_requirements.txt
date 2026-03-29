@@ -7,5 +7,6 @@ flake8
 wheel
 twine
 toml
+filelock
 ruff; python_version >= "3.7"
 mypy
