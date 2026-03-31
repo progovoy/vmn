@@ -405,7 +405,7 @@ def test_git_hooks(app_layout, capfd, hook_name):
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "0.0.1"
-    assert "modified" in tmp["dirty"]
+    assert "version_not_matched" in tmp["dirty"]
 
     err, ver_info, _ = _stamp_app(f"{app_layout.app_name}", "patch")
     assert err == 1
@@ -419,7 +419,7 @@ def test_git_hooks(app_layout, capfd, hook_name):
     captured = capfd.readouterr()
     tmp = yaml.safe_load(captured.out)
     assert tmp["out"] == "0.0.1"
-    assert "modified" in tmp["dirty"]
+    assert "version_not_matched" in tmp["dirty"]
 
     app_layout.remove_file(
         os.path.join(params["root_path"], f".git/hooks/{hook_name}"), from_git=False
@@ -492,7 +492,7 @@ def test_jinja2_gen(app_layout, capfd):
     assert (
         "[ERROR] The repository and maybe"
         " some of its dependencies are in dirty state.Dirty states"
-        " found: {'modified'}" in captured.err
+        " found: {'version_not_matched'}" in captured.err
     )
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -552,7 +552,7 @@ def test_jinja2_gen(app_layout, capfd):
         assert data["VERSION"] == "0.0.3"
         assert data["RELEASE_MODE"] == "patch"
         assert "dirty_deps" in data["."]["state"]
-        assert "modified" in data["."]["state"]
+        assert "version_not_matched" in data["."]["state"]
         assert "pending" in data[os.path.join("..", "repo1")]["state"]
         assert "outgoing" in data[os.path.join("..", "repo2")]["state"]
 
@@ -1012,7 +1012,7 @@ def test_basic_show(app_layout, capfd):
     captured = capfd.readouterr()
     try:
         tmp = yaml.safe_load(captured.out)
-        assert "modified" in tmp["dirty"]
+        assert "version_not_matched" in tmp["dirty"]
         assert "pending" in tmp["dirty"]
         assert len(tmp["dirty"]) == 2
     except Exception:
@@ -1025,7 +1025,7 @@ def test_basic_show(app_layout, capfd):
     captured = capfd.readouterr()
     try:
         tmp = yaml.safe_load(captured.out)
-        assert "modified" in tmp["dirty"]
+        assert "version_not_matched" in tmp["dirty"]
         assert "outgoing" in tmp["dirty"]
         assert len(tmp["dirty"]) == 2
     except Exception:
@@ -1038,7 +1038,7 @@ def test_basic_show(app_layout, capfd):
     captured = capfd.readouterr()
     try:
         tmp = yaml.safe_load(captured.out)
-        assert "modified" in tmp["dirty"]
+        assert "version_not_matched" in tmp["dirty"]
         assert len(tmp["dirty"]) == 1
     except Exception:
         assert False
@@ -1450,7 +1450,7 @@ def test_multi_repo_dependency(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert captured.out == "dirty:\n- modified\nout: 0.0.3\n\n"
+    assert captured.out == "dirty:\n- version_not_matched\nout: 0.0.3\n\n"
 
     err = _goto(app_layout.app_name)
     assert err == 0
@@ -2917,7 +2917,7 @@ def test_show_after_1_tag_removed(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "dirty:\n- modified\nout: 0.0.0\n\n" == captured.out
+    assert "dirty:\n- version_not_matched\nout: 0.0.0\n\n" == captured.out
 
 
 def test_show_after_multiple_tags_removed_1_tag_left(app_layout, capfd):
@@ -2940,7 +2940,7 @@ def test_show_after_multiple_tags_removed_1_tag_left(app_layout, capfd):
 
     res = yaml.safe_load(captured.out)
     assert res["out"] == "0.0.0"
-    assert res["dirty"][0] == "modified"
+    assert res["dirty"][0] == "version_not_matched"
 
 
 def test_show_after_multiple_tags_removed_0_tags_left(app_layout, capfd):
@@ -3574,7 +3574,7 @@ def test_dirty_no_ff_rebase(app_layout, capfd):
     res = yaml.safe_load(captured.out)
     assert "0.1.2" == res["out"]
     assert len(res["dirty"]) == 2
-    assert "modified" in res["dirty"]
+    assert "version_not_matched" in res["dirty"]
     assert "outgoing" in res["dirty"]
 
 
@@ -3600,7 +3600,7 @@ def test_show_on_local_only_branch_1_commit_after(app_layout, capfd):
     res = yaml.safe_load(captured.out)
     assert "0.1.0" == res["out"]
     assert len(res["dirty"]) == 2
-    assert "modified" in res["dirty"]
+    assert "version_not_matched" in res["dirty"]
     assert "outgoing" in res["dirty"]
 
 
@@ -3624,7 +3624,7 @@ def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
     res = yaml.safe_load(captured.out)
     assert "0.1.0" == res["out"]
     assert len(res["dirty"]) == 2
-    assert "modified" in res["dirty"]
+    assert "version_not_matched" in res["dirty"]
     assert "outgoing" in res["dirty"]
 
 
@@ -3669,7 +3669,7 @@ def test_show_no_log_in_stdout(app_layout, capfd):
     assert err == 0
 
     captured = capfd.readouterr()
-    assert "dirty:\n- modified\nout: 0.0.1\n\n" == captured.out
+    assert "dirty:\n- version_not_matched\nout: 0.0.1\n\n" == captured.out
 
     result = subprocess.run(
         [
@@ -5204,3 +5204,12 @@ def test_config_global(app_layout, capfd, monkeypatch):
     ret = vmn_run(["config", "--global"])[0]
 
     assert ret == 0
+
+
+def test_stamp_auto_init(app_layout):
+    """vmn stamp on a completely fresh repo should auto-init repo + app and stamp 0.0.1."""
+    # Do NOT call _run_vmn_init() or _init_app() — that's the whole point.
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert ver_info is not None
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.1"

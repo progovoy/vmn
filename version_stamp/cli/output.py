@@ -40,7 +40,7 @@ def show(vcs, params, verstr=None):
             "detached",
             "pending",
             "outgoing",
-            "modified",
+            "version_not_matched",
             "dirty_deps",
             "deps_synced_with_conf",
         }
@@ -220,7 +220,7 @@ def gen(vcs, params, verstr_range=None):
         "detached",
         "pending",
         "outgoing",
-        "modified",
+        "version_not_matched",
         "dirty_deps",
         "deps_synced_with_conf",
     }

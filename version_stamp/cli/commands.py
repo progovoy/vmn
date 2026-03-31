@@ -34,11 +34,23 @@ from version_stamp.cli.constants import (
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 
+_STATUS_DESCRIPTIONS = {
+    "repos_exist_locally": "all dependency repos are cloned locally",
+    "deps_synced_with_conf": "dependency repos match conf.yml settings",
+    "repo_tracked": "vmn tracking is initialized (.vmn/ committed)",
+    "app_tracked": "app has been initialized with vmn",
+    "version_not_matched": "current repo state does not match any stamped version",
+    "pending": "uncommitted changes exist in the working tree",
+    "detached": "HEAD is detached (not on a branch)",
+    "outgoing": "local commits not yet pushed to remote",
+    "dirty_deps": "dependency repos have uncommitted or unpushed changes",
+}
+
 
 @measure_runtime_decorator
 def handle_init(vmn_ctx):
     expected_status = {"repos_exist_locally"}
-    optional_status = {"deps_synced_with_conf"}
+    optional_status = {"deps_synced_with_conf", "version_not_matched"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -178,7 +190,7 @@ def handle_stamp(vmn_ctx):
 
             raise RuntimeError(err)
 
-    optional_status = {"modified", "detached"}
+    optional_status = {"version_not_matched", "detached"}
     expected_status = {
         "repos_exist_locally",
         "repo_tracked",
@@ -193,8 +205,9 @@ def handle_stamp(vmn_ctx):
         auto_initialized = False
         be = vmn_ctx.vcs.backend
         vmn_path = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn")
+        vmn_init_file = os.path.join(vmn_path, INIT_FILENAME)
 
-        if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_path):
+        if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
             VMN_LOGGER.info(
                 "vmn tracking not initialized. Auto-initializing repository..."
             )
@@ -221,6 +234,9 @@ def handle_stamp(vmn_ctx):
             auto_initialized = True
 
         if auto_initialized:
+            # Refresh vcs state — auto-init created new commits/tags
+            vmn_ctx.vcs.update_attrs_from_app_conf_file()
+            vmn_ctx.vcs.initialize_backend_attrs()
             # Re-check status after auto-init
             status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
             if status.error:
@@ -405,7 +421,7 @@ def _extract_ver_info(vcs, ver):
 @measure_runtime_decorator
 def handle_release(vmn_ctx):
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
+    optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -542,7 +558,7 @@ def handle_add(vmn_ctx):
     vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "modified", "dirty_deps", "deps_synced_with_conf"}
+    optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -630,7 +646,7 @@ def handle_goto(vmn_ctx):
     optional_status = {
         "detached",
         "repos_exist_locally",
-        "modified",
+        "version_not_matched",
         "deps_synced_with_conf",
     }
 
@@ -670,13 +686,14 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
         },
     )
 
-    path = os.path.join(vcs.vmn_root_path, ".vmn")
+    vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
+    vmn_init_file = os.path.join(vmn_path, INIT_FILENAME)
     if not vcs.tracked:
         status.app_tracked = False
         status.err_msgs["app_tracked"] = "Untracked app. Run vmn init-app first"
         status.state.remove("app_tracked")
 
-        if not vcs.backend.is_path_tracked(path):
+        if not vcs.backend.is_path_tracked(vmn_init_file):
             status.repo_tracked = False
             status.err_msgs[
                 "repo_tracked"
@@ -707,8 +724,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
         verstr = vcs.verstr_from_file
         matched_version_info = vcs.find_matching_version(verstr)
         if matched_version_info is None:
-            status.modified = True
-            status.state.add("modified")
+            status.version_not_matched = True
+            status.state.add("version_not_matched")
         else:
             status.matched_version_info = matched_version_info
 
@@ -836,16 +853,17 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
         return status
 
-    if ((optional_status | status.state) - expected_status) != optional_status:
+    unexpected = (status.state - expected_status) - optional_status
+    if unexpected:
         for msg in (optional_status | status.state) - expected_status:
             if msg in status.err_msgs and status.err_msgs[msg]:
                 VMN_LOGGER.error(status.err_msgs[msg])
 
-        VMN_LOGGER.error(
-            f"Repository status is in unexpected state:\n"
-            f"{((optional_status | status.state) - expected_status)}\n"
-            f"versus optional:\n{optional_status}"
+        desc = ", ".join(
+            f"{s} ({_STATUS_DESCRIPTIONS[s]})" if s in _STATUS_DESCRIPTIONS else s
+            for s in sorted(unexpected)
         )
+        VMN_LOGGER.error(f"Unexpected repository status: {desc}")
 
         status.error = True
 
@@ -856,7 +874,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
 @measure_runtime_decorator
 def _init_app(versions_be_ifc, starting_version):
-    optional_status = {"modified", "detached"}
+    optional_status = {"version_not_matched", "detached"}
     expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
 
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)

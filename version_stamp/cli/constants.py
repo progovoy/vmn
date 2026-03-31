@@ -53,7 +53,7 @@ class RepoStatus:
     deps_synced_with_conf: bool = True
     repo_tracked: bool = True
     app_tracked: bool = True
-    modified: bool = False
+    version_not_matched: bool = False
     dirty_deps: bool = False
     err_msgs: Dict[str, str] = field(default_factory=lambda: {
         "dirty_deps": "",

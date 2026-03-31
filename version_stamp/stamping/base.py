@@ -215,8 +215,9 @@ class IVersionsStamper(object):
                 )
 
     def initialize_configured_deps(self, self_base, self_dep):
+        self.configured_deps = {}
         if self.raw_configured_deps:
-            self.configured_deps = self.raw_configured_deps
+            self.configured_deps = copy.deepcopy(self.raw_configured_deps)
 
         if os.path.join("../") not in self.configured_deps:
             self.configured_deps[os.path.join("../")] = {}
