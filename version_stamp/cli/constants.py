@@ -29,6 +29,7 @@ VMN_ARGS = {
     "gen": "local",
     "add": "remote",
     "config": "local",
+    "snapshot": "local",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()

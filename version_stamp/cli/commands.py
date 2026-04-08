@@ -609,6 +609,11 @@ def handle_show(vmn_ctx):
 
     vmn_ctx.params["display_unique_id"] = vmn_ctx.args.display_unique_id
     vmn_ctx.params["display_type"] = vmn_ctx.args.display_type
+    vmn_ctx.params["dev"] = vmn_ctx.args.dev
+
+    if vmn_ctx.args.dev and vmn_ctx.args.from_file:
+        VMN_LOGGER.error("--dev cannot be used with --from-file")
+        return 1
 
     from version_stamp.cli.output import show
 
@@ -665,6 +670,36 @@ def handle_goto(vmn_ctx):
     return goto_version(
         vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.pull
     )
+
+
+@measure_runtime_decorator
+def handle_snapshot(vmn_ctx):
+    from version_stamp.cli.snapshot import (
+        snapshot_create,
+        snapshot_list,
+        snapshot_show,
+        snapshot_note,
+    )
+
+    vmn_ctx.params["backend"] = vmn_ctx.args.backend
+    vmn_ctx.params["bucket"] = vmn_ctx.args.bucket
+    vmn_ctx.params["project"] = vmn_ctx.args.project
+
+    action = vmn_ctx.args.action
+
+    if action == "create":
+        return snapshot_create(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.note)
+    elif action == "list":
+        return snapshot_list(vmn_ctx.vcs, vmn_ctx.params)
+    elif action == "show":
+        return snapshot_show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    elif action == "note":
+        return snapshot_note(
+            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.note
+        )
+    else:
+        VMN_LOGGER.error(f"Unknown snapshot action: {action}")
+        return 1
 
 
 @measure_runtime_decorator

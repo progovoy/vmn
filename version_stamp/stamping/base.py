@@ -144,6 +144,14 @@ class IVersionsStamper(object):
                                 "will ignore and use the new default format"
                             )
                             self.template = VMN_DEFAULT_CONF["template"]
+                    # Backward compat: old key maps to new one
+                    if "create_verinfo_files" in data["conf"] and "create_snapshots" not in data["conf"]:
+                        data["conf"]["create_snapshots"] = data["conf"]["create_verinfo_files"]
+                        VMN_LOGGER.warning(
+                            "Config key 'create_verinfo_files' is deprecated. "
+                            "Use 'create_snapshots' instead."
+                        )
+
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
                         if conf_key == "template":
                             continue  # handled above with old-template detection

@@ -2,6 +2,7 @@
 """Display, generation, and repository navigation functions."""
 import copy
 import os
+import subprocess
 from multiprocessing import Pool
 
 import yaml
@@ -96,6 +97,18 @@ def show(vcs, params, verstr=None):
     if params.get("display_type"):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
 
+    if params.get("dev") and not params["from_file"] and dirty_states:
+        try:
+            from version_stamp.cli.snapshot import _compute_diff_hash
+
+            commit_hash = vcs.backend.changeset()[:7]
+            diff_output = vcs.backend._be.git.diff("HEAD")
+            diff_hash = _compute_diff_hash(diff_output)
+            params["_dev_commit"] = commit_hash
+            params["_dev_diff_hash"] = diff_hash
+        except Exception:
+            VMN_LOGGER.debug("Failed to compute dev hashes", exc_info=True)
+
     if vcs.root_context:
         out = _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info)
     else:
@@ -108,6 +121,10 @@ def show(vcs, params, verstr=None):
     return out
 
 
+def _build_dev_version(base_version, dev_commit, dev_diff_hash):
+    return f"{base_version}-dev.{dev_commit}.{dev_diff_hash}"
+
+
 def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data.update(ver_info["stamping"]["app"])
     props = VMNBackend.deserialize_vmn_tag_name(tag_name)
@@ -118,9 +135,15 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data["unique_id"] = VMNBackend.gen_unique_id(
         verstr, data["changesets"]["."]["hash"]
     )
+    is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
+
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
+        if is_dev:
+            data["dev_version"] = _build_dev_version(
+                data["version"], params["_dev_commit"], params["_dev_diff_hash"]
+            )
         out = yaml.dump(data)
     else:
         out = data["version"]
@@ -133,8 +156,13 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
                 out, data["changesets"]["."]["hash"]
             )
 
+        if is_dev:
+            out = _build_dev_version(
+                out, params["_dev_commit"], params["_dev_diff_hash"]
+            )
+
         d_out = {}
-        if dirty_states:
+        if dirty_states and not is_dev:
             d_out.update(
                 {
                     "out": out,
@@ -171,17 +199,28 @@ def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
         raise RuntimeError()
 
     data.update(ver_info["stamping"]["root_app"])
+    is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
+
     out = None
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
+        if is_dev:
+            data["dev_version"] = _build_dev_version(
+                str(data["version"]), params["_dev_commit"], params["_dev_diff_hash"]
+            )
 
         out = yaml.dump(data)
     else:
         out = data["version"]
 
+        if is_dev:
+            out = _build_dev_version(
+                str(out), params["_dev_commit"], params["_dev_diff_hash"]
+            )
+
         d_out = {}
-        if dirty_states:
+        if dirty_states and not is_dev:
             d_out.update(
                 {
                     "out": out,
@@ -350,11 +389,68 @@ def get_dirty_states(optional_status, status):
     return dirty_states
 
 
+def _goto_dev_version(vcs, params, version):
+    """Handle goto for dev versions: checkout base commit + apply snapshot patches."""
+    from version_stamp.cli.snapshot import LocalSnapshotStorage
+
+    storage = LocalSnapshotStorage(vcs.vmn_root_path)
+    metadata, patches = storage.load(vcs.name, version)
+
+    if metadata is None:
+        VMN_LOGGER.error(f"Snapshot {version} not found locally")
+        return 1
+
+    base_commit = metadata["base_commit"]
+
+    if not params.get("deps_only"):
+        try:
+            vcs.backend.checkout(rev=base_commit)
+        except Exception:
+            VMN_LOGGER.error(
+                f"Failed to checkout base commit {base_commit[:7]}"
+            )
+            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+            return 1
+
+        if patches.get("local_commits"):
+            result = subprocess.run(
+                ["git", "am", "--3way"],
+                input=patches["local_commits"],
+                capture_output=True, text=True,
+                cwd=vcs.vmn_root_path,
+            )
+            if result.returncode != 0:
+                VMN_LOGGER.error(
+                    f"Failed to apply local commits patch: {result.stderr}"
+                )
+                return 1
+
+        if patches.get("working_tree"):
+            result = subprocess.run(
+                ["git", "apply", "--3way"],
+                input=patches["working_tree"],
+                capture_output=True, text=True,
+                cwd=vcs.vmn_root_path,
+            )
+            if result.returncode != 0:
+                VMN_LOGGER.error(
+                    f"Failed to apply working tree patch: {result.stderr}"
+                )
+                return 1
+
+    VMN_LOGGER.info(f"Restored dev version {version} of {vcs.name}")
+    return 0
+
+
 @measure_runtime_decorator
 def goto_version(vcs, params, version, pull):
     unique_id = None
     check_unique = False
     status_str = ""
+
+    # Handle dev versions via snapshot restore
+    if version is not None and "-dev." in version:
+        return _goto_dev_version(vcs, params, version)
 
     if version is None:
         if not params["deps_only"]:

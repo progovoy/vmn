@@ -18,6 +18,8 @@ class VersionProps:
     prerelease: str = "release"
     rcn: Optional[int] = None
     buildmetadata: Optional[str] = None
+    dev_commit: Optional[str] = None
+    dev_diff_hash: Optional[str] = None
     old_ver_format: bool = False
 
 
@@ -32,7 +34,7 @@ class TagProps(VersionProps):
 
 _DEFAULT_TEMPLATE = (
     "[{major}][.{minor}][.{patch}][.{hotfix}]"
-    "[-{prerelease}][.{rcn}][+{buildmetadata}]"
+    "[-{prerelease}][.{rcn}][-dev.{dev_commit}.{dev_diff_hash}][+{buildmetadata}]"
 )
 
 
@@ -64,7 +66,8 @@ class AppConf:
             "ui_type": "string",
             "ui_example": (
                 "[{major}][.{minor}][.{patch}][.{hotfix}]"
-                "[-{prerelease}][.{rcn}][+{buildmetadata}]"
+                "[-{prerelease}][.{rcn}][-dev.{dev_commit}.{dev_diff_hash}]"
+                "[+{buildmetadata}]"
             ),
         },
     )
@@ -75,11 +78,11 @@ class AppConf:
             "ui_type": "bool",
         },
     )
-    create_verinfo_files: bool = field(
+    create_snapshots: bool = field(
         default=False,
         metadata={
             "ui_desc": (
-                "Create a version info file per stamp. "
+                "Create a snapshot (version info file) per stamp. "
                 "Enables 'vmn show --from-file' without git tags."
             ),
             "ui_type": "bool",

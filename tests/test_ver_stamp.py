@@ -2811,9 +2811,11 @@ def test_perf_show(app_layout):
     cache_remote = os.path.join(cache_dir, "test_repo_remote")
     lock_path = f"{cache_dir}.lock"
 
-    if not os.path.isdir(cache_remote):
+    cache_valid = os.path.isfile(os.path.join(cache_remote, "HEAD"))
+    if not cache_valid:
+        shutil.rmtree(cache_dir, ignore_errors=True)
         with filelock.FileLock(lock_path):
-            if not os.path.isdir(cache_remote):
+            if not os.path.isfile(os.path.join(cache_remote, "HEAD")):
                 _run_vmn_init()
                 _init_app(app_layout.app_name)
 

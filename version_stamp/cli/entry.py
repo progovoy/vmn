@@ -27,6 +27,7 @@ from version_stamp.cli.commands import (  # noqa: F401
     handle_gen,
     handle_goto,
     handle_add,
+    handle_snapshot,
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 

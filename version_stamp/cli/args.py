@@ -185,6 +185,8 @@ def add_arg_show(subprasers):
     pshow.set_defaults(display_unique_id=False)
     pshow.add_argument("--type", dest="display_type", action="store_true")
     pshow.set_defaults(display_type=False)
+    pshow.add_argument("--dev", dest="dev", action="store_true")
+    pshow.set_defaults(dev=False)
 
 
 def add_arg_init_app(subprasers):
@@ -300,6 +302,52 @@ def add_arg_config(subprasers):
         help="Edit the branch-specific config (<current-branch>_conf.yml) instead of the default",
     )
     pconfig.set_defaults(branch=False)
+
+
+def add_arg_snapshot(subprasers):
+    psnap = subprasers.add_parser(
+        "snapshot",
+        help="Create and manage local snapshots of uncommitted/unpushed changes",
+    )
+    psnap.add_argument(
+        "action",
+        nargs="?",
+        default="create",
+        choices=["create", "list", "show", "note"],
+        help="Snapshot action: create (default), list, show, note",
+    )
+    psnap.add_argument("name", help="The application's name")
+    psnap.add_argument(
+        "-v",
+        "--version",
+        default=None,
+        required=False,
+        help="The dev version string (for show/note actions)",
+    )
+    psnap.add_argument(
+        "--note",
+        default=None,
+        required=False,
+        help="A description note for the snapshot",
+    )
+    psnap.add_argument(
+        "--backend",
+        default="local",
+        choices=["local", "s3", "wandb", "mlflow"],
+        help="Storage backend for snapshots (default: local)",
+    )
+    psnap.add_argument(
+        "--bucket",
+        default=None,
+        required=False,
+        help="S3 bucket name (required for s3 backend)",
+    )
+    psnap.add_argument(
+        "--project",
+        default=None,
+        required=False,
+        help="Project name (for wandb/mlflow backends)",
+    )
 
 
 def verify_user_input_version(args, key):

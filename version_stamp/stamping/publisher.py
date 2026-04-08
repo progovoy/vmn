@@ -422,8 +422,8 @@ class VersionControlStamper(IVersionsStamper):
                 VMN_LOGGER.warning(f"Unsupported version backend {backend}")
                 continue
 
-        if self.create_verinfo_files:
-            self.create_verinfo_file(app_msg, version_files_to_add, app_version)
+        if self.create_snapshots:
+            self.create_snapshot_file(app_msg, version_files_to_add, app_version)
 
         if self.root_app_name is not None:
             root_app_msg = {
@@ -437,8 +437,8 @@ class VersionControlStamper(IVersionsStamper):
             if tmp:
                 version_files_to_add.extend(tmp)
 
-            if self.create_verinfo_files:
-                self.create_verinfo_root_file(
+            if self.create_snapshots:
+                self.create_snapshot_root_file(
                     root_app_msg, root_app_version, version_files_to_add
                 )
 
@@ -898,31 +898,32 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
-    def _write_verinfo_file(self, msg, version_id, dir_path, label, version_files_to_add):
+    def _write_snapshot_file(self, msg, version_id, dir_path, label, version_files_to_add):
         if self.dry_run:
             VMN_LOGGER.info(
-                f"Would have written to {label} verinfo file:\n"
+                f"Would have written to {label} snapshot file:\n"
                 f"path: {dir_path} version: {version_id}\n"
                 f"message: {msg}"
             )
         else:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            path = os.path.join(dir_path, f"{version_id}.yml")
+            snap_dir = os.path.join(dir_path, str(version_id))
+            Path(snap_dir).mkdir(parents=True, exist_ok=True)
+            path = os.path.join(snap_dir, "metadata.yml")
             with open(path, "w") as f:
                 f.write(yaml.dump(msg, sort_keys=True))
             version_files_to_add.append(path)
 
     @measure_runtime_decorator
-    def create_verinfo_root_file(
+    def create_snapshot_root_file(
         self, root_app_msg, root_app_version, version_files_to_add
     ):
-        dir_path = os.path.join(self.root_app_dir_path, "root_verinfo")
-        self._write_verinfo_file(root_app_msg, root_app_version, dir_path, "root", version_files_to_add)
+        dir_path = os.path.join(self.root_app_dir_path, "root_snapshots")
+        self._write_snapshot_file(root_app_msg, root_app_version, dir_path, "root", version_files_to_add)
 
     @measure_runtime_decorator
-    def create_verinfo_file(self, app_msg, version_files_to_add, verstr):
-        dir_path = os.path.join(self.app_dir_path, "verinfo")
-        self._write_verinfo_file(app_msg, verstr, dir_path, "app", version_files_to_add)
+    def create_snapshot_file(self, app_msg, version_files_to_add, verstr):
+        dir_path = os.path.join(self.app_dir_path, "snapshots")
+        self._write_snapshot_file(app_msg, verstr, dir_path, "app", version_files_to_add)
 
     @measure_runtime_decorator
     def retrieve_remote_changes(self):

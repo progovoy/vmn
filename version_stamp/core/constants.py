@@ -5,7 +5,8 @@ import re
 
 # Only used for printing
 VMN_VERSION_FORMAT = (
-    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}][+{buildmetadata}]"
+    "{major}.{minor}.{patch}[.{hotfix}][-{prerelease}][.{rcn}]"
+    "[-dev.{dev_commit}.{dev_diff_hash}][+{buildmetadata}]"
 )
 
 VMN_OLD_TEMPLATE = (
@@ -45,7 +46,9 @@ VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 VMN_VERSTR_REGEX = rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}"
 
-_VMN_VERSION_REGEX = rf"{VMN_VERSTR_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
+_VMN_DEV_REGEX = r"(?:-dev\.(?P<dev_commit>[0-9a-f]{7})\.(?P<dev_diff_hash>[0-9a-f]{7}))?"
+
+_VMN_VERSION_REGEX = rf"{VMN_VERSTR_REGEX}{_VMN_DEV_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 # Regex for matching versions stamped by vmn
 VMN_VERSION_REGEX = rf"^{_VMN_VERSION_REGEX}$"
 VMN_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_VERSION_REGEX}$"
@@ -61,6 +64,7 @@ VMN_TEMPLATE_REGEX = (
     r"(?:\[(?P<hotfix_template>[^\{\}]*\{hotfix\}[^\{\}]*)\])?"
     r"(?:\[(?P<prerelease_template>[^\{\}]*\{prerelease\}[^\{\}]*)\])?"
     r"(?:\[(?P<rcn_template>[^\{\}]*\{rcn\}[^\{\}]*)\])?"
+    r"(?:\[(?P<dev_commit_template>[^\[\]]*\{dev_commit\}[^\[\]]*)\])?"
     r"(?:\[(?P<buildmetadata_template>[^\{\}]*\{buildmetadata\}[^\{\}]*)\])?$"
 )
 
