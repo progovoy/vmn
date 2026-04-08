@@ -5706,10 +5706,11 @@ def test_snapshot_metadata_hooks(app_layout, capfd):
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    # Create dirty state
-    app_layout.write_file_commit_and_push(
-        "test_repo_0", "dirty_file.txt", "dirty content", commit=False, push=False
-    )
+    # Create dirty state: commit file first, then modify it
+    app_layout.write_file_commit_and_push("test_repo_0", "dirty_file.txt", "initial")
+    dirty_file = os.path.join(app_layout.repo_path, "dirty_file.txt")
+    with open(dirty_file, "w") as f:
+        f.write("dirty content")
 
     # Create snapshot with metadata
     capfd.readouterr()
@@ -5733,11 +5734,10 @@ def test_snapshot_metadata_hooks(app_layout, capfd):
     assert "user_meta" in show_out
 
     # Create a second snapshot with different metadata
-    capfd.readouterr()
     # Need different dirty content for a different hash
-    dirty_file = os.path.join(app_layout.repo_path, "dirty_file.txt")
     with open(dirty_file, "w") as f:
         f.write("different dirty content")
+    capfd.readouterr()
     ret = _snapshot(
         app_layout.app_name,
         action="create",
@@ -5772,10 +5772,11 @@ def test_snapshot_metadata_file(app_layout, capfd):
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    # Create dirty state
-    app_layout.write_file_commit_and_push(
-        "test_repo_0", "dirty_file.txt", "dirty content", commit=False, push=False
-    )
+    # Create dirty state: commit file first, then modify it
+    app_layout.write_file_commit_and_push("test_repo_0", "dirty_file.txt", "initial")
+    dirty_file = os.path.join(app_layout.repo_path, "dirty_file.txt")
+    with open(dirty_file, "w") as f:
+        f.write("dirty content")
 
     # Write a YAML metadata file
     meta_path = os.path.join(app_layout.repo_path, "meta.yml")
@@ -5843,120 +5844,104 @@ def test_snapshot_export(app_layout, capfd):
         assert any("working_tree.patch" in n for n in names)
 
 
-from unittest.mock import MagicMock, patch as mock_patch
+import boto3
+from moto import mock_aws
+from unittest.mock import patch as mock_patch
 
 
+@mock_aws
 def test_s3_snapshot_save():
-    """Test S3 backend save with mocked boto3."""
-    with mock_patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
+    """Test S3 backend save — full round-trip via moto."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket="test-bucket")
 
-        from version_stamp.cli.snapshot import S3SnapshotStorage
+    from version_stamp.cli.snapshot import S3SnapshotStorage
+    storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
-        storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
+    metadata = {"verstr": "1.0.0-dev.abc1234.def5678", "base_version": "1.0.0"}
+    patches = {"working_tree": "diff --git a/f.txt b/f.txt\n+hello\n"}
 
-        metadata = {"verstr": "1.0.0-dev.abc1234.def5678", "base_version": "1.0.0"}
-        patches = {"working_tree": "diff --git a/f.txt b/f.txt\n+hello\n"}
+    storage.save("my_app", "1.0.0-dev.abc1234.def5678", metadata, patches)
 
-        storage.save("my_app", "1.0.0-dev.abc1234.def5678", metadata, patches)
+    # Verify objects were actually written
+    meta_resp = s3.get_object(
+        Bucket="test-bucket",
+        Key="test-prefix/my_app/1.0.0-dev.abc1234.def5678/metadata.yml",
+    )
+    loaded = yaml.safe_load(meta_resp["Body"].read().decode("utf-8"))
+    assert loaded["verstr"] == "1.0.0-dev.abc1234.def5678"
 
-        assert mock_s3.put_object.call_count == 2
-        calls = mock_s3.put_object.call_args_list
-        keys = [c.kwargs["Key"] for c in calls]
-        assert any("metadata.yml" in k for k in keys)
-        assert any("working_tree.patch" in k for k in keys)
+    patch_resp = s3.get_object(
+        Bucket="test-bucket",
+        Key="test-prefix/my_app/1.0.0-dev.abc1234.def5678/working_tree.patch",
+    )
+    assert b"+hello" in patch_resp["Body"].read()
 
 
+@mock_aws
 def test_s3_snapshot_load():
-    """Test S3 backend load with mocked boto3."""
-    with mock_patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
+    """Test S3 backend load — full round-trip via moto."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket="test-bucket")
 
-        metadata = {"verstr": "1.0.0-dev.abc1234.def5678", "base_version": "1.0.0"}
-        meta_body = MagicMock()
-        meta_body.read.return_value = yaml.dump(metadata).encode("utf-8")
+    # Seed data
+    metadata = {"verstr": "1.0.0-dev.abc1234.def5678", "base_version": "1.0.0"}
+    s3.put_object(
+        Bucket="test-bucket",
+        Key="test-prefix/my_app/1.0.0-dev.abc1234.def5678/metadata.yml",
+        Body=yaml.dump(metadata).encode("utf-8"),
+    )
+    s3.put_object(
+        Bucket="test-bucket",
+        Key="test-prefix/my_app/1.0.0-dev.abc1234.def5678/working_tree.patch",
+        Body=b"diff content",
+    )
 
-        patch_body = MagicMock()
-        patch_body.read.return_value = b"diff content"
+    from version_stamp.cli.snapshot import S3SnapshotStorage
+    storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
-        def get_side_effect(**kwargs):
-            key = kwargs["Key"]
-            if "metadata.yml" in key:
-                return {"Body": meta_body}
-            elif "working_tree.patch" in key:
-                return {"Body": patch_body}
-            else:
-                raise Exception("NoSuchKey")
-
-        mock_s3.get_object.side_effect = get_side_effect
-
-        from version_stamp.cli.snapshot import S3SnapshotStorage
-        storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
-
-        loaded_meta, loaded_patches = storage.load("my_app", "1.0.0-dev.abc1234.def5678")
-        assert loaded_meta["verstr"] == "1.0.0-dev.abc1234.def5678"
-        assert loaded_patches["working_tree"] == "diff content"
+    loaded_meta, loaded_patches = storage.load("my_app", "1.0.0-dev.abc1234.def5678")
+    assert loaded_meta["verstr"] == "1.0.0-dev.abc1234.def5678"
+    assert loaded_patches["working_tree"] == "diff content"
 
 
+@mock_aws
 def test_s3_snapshot_load_not_found():
     """Test S3 backend returns None for missing snapshot."""
-    with mock_patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
-        mock_s3.get_object.side_effect = Exception("NoSuchKey")
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket="test-bucket")
 
-        from version_stamp.cli.snapshot import S3SnapshotStorage
-        storage = S3SnapshotStorage("test-bucket")
+    from version_stamp.cli.snapshot import S3SnapshotStorage
+    storage = S3SnapshotStorage("test-bucket")
 
-        meta, patches = storage.load("my_app", "nonexistent")
-        assert meta is None
-        assert patches is None
+    meta, patches = storage.load("my_app", "nonexistent")
+    assert meta is None
+    assert patches is None
 
 
+@mock_aws
 def test_s3_snapshot_list():
-    """Test S3 backend list_snapshots with mocked paginator."""
-    with mock_patch("boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_boto.return_value = mock_s3
+    """Test S3 backend list_snapshots — full round-trip via moto."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket="test-bucket")
 
-        meta1 = {"verstr": "1.0.0-dev.aaa.bbb", "timestamp": "2025-01-01T00:00:00Z"}
-        meta2 = {"verstr": "1.0.0-dev.ccc.ddd", "timestamp": "2025-01-02T00:00:00Z"}
+    from version_stamp.cli.snapshot import S3SnapshotStorage
+    storage = S3SnapshotStorage("test-bucket")
 
-        mock_paginator = MagicMock()
-        mock_s3.get_paginator.return_value = mock_paginator
-        mock_paginator.paginate.return_value = [
-            {
-                "CommonPrefixes": [
-                    {"Prefix": "vmn-snapshots/my_app/1.0.0-dev.aaa.bbb/"},
-                    {"Prefix": "vmn-snapshots/my_app/1.0.0-dev.ccc.ddd/"},
-                ]
-            }
-        ]
+    # Save two snapshots
+    meta1 = {"verstr": "1.0.0-dev.aaa.bbb", "timestamp": "2025-01-01T00:00:00Z"}
+    meta2 = {"verstr": "1.0.0-dev.ccc.ddd", "timestamp": "2025-01-02T00:00:00Z"}
+    storage.save("my_app", "1.0.0-dev.aaa.bbb", meta1, {})
+    storage.save("my_app", "1.0.0-dev.ccc.ddd", meta2, {})
 
-        def get_side_effect(**kwargs):
-            key = kwargs["Key"]
-            body = MagicMock()
-            if "aaa.bbb" in key:
-                body.read.return_value = yaml.dump(meta1).encode("utf-8")
-            else:
-                body.read.return_value = yaml.dump(meta2).encode("utf-8")
-            return {"Body": body}
-
-        mock_s3.get_object.side_effect = get_side_effect
-
-        from version_stamp.cli.snapshot import S3SnapshotStorage
-        storage = S3SnapshotStorage("test-bucket")
-
-        snapshots = storage.list_snapshots("my_app")
-        assert len(snapshots) == 2
-        assert snapshots[0]["verstr"] == "1.0.0-dev.aaa.bbb"
-        assert snapshots[1]["verstr"] == "1.0.0-dev.ccc.ddd"
+    snapshots = storage.list_snapshots("my_app")
+    assert len(snapshots) == 2
+    assert snapshots[0]["verstr"] == "1.0.0-dev.aaa.bbb"
+    assert snapshots[1]["verstr"] == "1.0.0-dev.ccc.ddd"
 
 
 def test_s3_snapshot_endpoint_url():
-    """Test S3 backend with custom endpoint URL (MinIO)."""
+    """Test S3 backend passes endpoint_url to boto3."""
     with mock_patch("boto3.client") as mock_boto:
         from version_stamp.cli.snapshot import S3SnapshotStorage
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
