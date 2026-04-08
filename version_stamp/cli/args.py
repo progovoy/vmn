@@ -313,8 +313,8 @@ def add_arg_snapshot(subprasers):
         "action",
         nargs="?",
         default="create",
-        choices=["create", "list", "show", "note"],
-        help="Snapshot action: create (default), list, show, note",
+        choices=["create", "list", "show", "note", "restore", "diff", "export"],
+        help="Snapshot action: create (default), list, show, note, restore, diff, export",
     )
     psnap.add_argument("name", help="The application's name")
     psnap.add_argument(
@@ -322,7 +322,7 @@ def add_arg_snapshot(subprasers):
         "--version",
         default=None,
         required=False,
-        help="The dev version string (for show/note actions)",
+        help="The dev version string (for show/note/diff/export actions)",
     )
     psnap.add_argument(
         "--note",
@@ -347,6 +347,57 @@ def add_arg_snapshot(subprasers):
         default=None,
         required=False,
         help="Project name (for wandb/mlflow backends)",
+    )
+    psnap.add_argument(
+        "--endpoint-url",
+        default=None,
+        required=False,
+        help="Custom S3 endpoint URL (for MinIO, DigitalOcean Spaces, etc.)",
+    )
+    psnap.add_argument(
+        "--prefix",
+        default="vmn-snapshots",
+        required=False,
+        help="S3 key prefix for snapshot storage (default: vmn-snapshots)",
+    )
+    psnap.add_argument(
+        "--to",
+        default=None,
+        required=False,
+        help="Second version for diff comparison (or 'current' for working state)",
+    )
+    psnap.add_argument(
+        "--tool",
+        default=None,
+        required=False,
+        help="External diff tool (e.g., bcompare, meld, vimdiff). Env: VMN_DIFFTOOL",
+    )
+    psnap.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        required=False,
+        help="Output path for export (default: {verstr}.tar.gz)",
+    )
+    psnap.add_argument(
+        "--meta",
+        action="append",
+        default=None,
+        required=False,
+        help="Key=value metadata pair (can be specified multiple times)",
+    )
+    psnap.add_argument(
+        "--meta-file",
+        default=None,
+        required=False,
+        help="Path to YAML file containing metadata key-value pairs",
+    )
+    psnap.add_argument(
+        "--filter",
+        action="append",
+        default=None,
+        required=False,
+        help="Filter snapshots by key=value metadata (for list action, can be repeated)",
     )
 
 

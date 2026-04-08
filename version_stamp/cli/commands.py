@@ -675,20 +675,32 @@ def handle_goto(vmn_ctx):
 @measure_runtime_decorator
 def handle_snapshot(vmn_ctx):
     from version_stamp.cli.snapshot import (
+        _build_user_meta,
         snapshot_create,
+        snapshot_diff,
+        snapshot_export,
         snapshot_list,
-        snapshot_show,
         snapshot_note,
+        snapshot_restore,
+        snapshot_show,
     )
 
     vmn_ctx.params["backend"] = vmn_ctx.args.backend
     vmn_ctx.params["bucket"] = vmn_ctx.args.bucket
     vmn_ctx.params["project"] = vmn_ctx.args.project
+    vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
+    vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
+    vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
 
     action = vmn_ctx.args.action
 
     if action == "create":
-        return snapshot_create(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.note)
+        user_meta = _build_user_meta(
+            vmn_ctx.args.meta, getattr(vmn_ctx.args, "meta_file", None)
+        )
+        return snapshot_create(
+            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.note, user_meta=user_meta
+        )
     elif action == "list":
         return snapshot_list(vmn_ctx.vcs, vmn_ctx.params)
     elif action == "show":
@@ -696,6 +708,21 @@ def handle_snapshot(vmn_ctx):
     elif action == "note":
         return snapshot_note(
             vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.note
+        )
+    elif action == "restore":
+        return snapshot_restore(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
+    elif action == "diff":
+        return snapshot_diff(
+            vmn_ctx.vcs, vmn_ctx.params,
+            vmn_ctx.args.version,
+            getattr(vmn_ctx.args, "to", None),
+            getattr(vmn_ctx.args, "tool", None),
+        )
+    elif action == "export":
+        return snapshot_export(
+            vmn_ctx.vcs, vmn_ctx.params,
+            vmn_ctx.args.version,
+            getattr(vmn_ctx.args, "output", None),
         )
     else:
         VMN_LOGGER.error(f"Unknown snapshot action: {action}")
