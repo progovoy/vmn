@@ -1,5 +1,6 @@
 <h1 align="center">vmn</h1>
 <p align="center"><strong>One command. Any language. Versions that live in git — not in your way.</strong></p>
+<p align="center"><em>The only versioning tool with built-in experiment snapshots for AI/ML reproducibility.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
@@ -24,18 +25,20 @@ vmn stamp -r minor my_app              # => 0.1.0
 vmn stamp -r patch --pr rc my_app      # => 0.1.1-rc.1
 vmn release my_app                     # => 0.1.1
 vmn goto -v 0.1.0 my_app              # entire repo + deps restored to 0.1.0
+vmn snapshot create my_model           # => 0.1.1-dev.abc1234.def5678 (capture uncommitted experiments)
 ```
 
-That last line? **No other versioning tool can do that.**
+That snapshot line? **No other versioning tool can do that.** Capture your exact working state — uncommitted code, local commits, everything — and restore it later. Built for AI/ML researchers who iterate faster than they commit.
 
 ---
 
-[Why vmn?](#why-vmn) · [Only in vmn](#what-only-vmn-can-do) · [Commands](#commands) · [Auto-Embedding](#version-auto-embedding) · [Configuration](#configuration) · [CI](#ci-integration) · [Migration](#already-using-another-tool) · [Contributing](CONTRIBUTING.md)
+[Why vmn?](#why-vmn) · [Only in vmn](#what-only-vmn-can-do) · [AI/ML Snapshots](#reproducible-aiml-experiments---dev-snapshots) · [Commands](#commands) · [Auto-Embedding](#version-auto-embedding) · [Configuration](#configuration) · [CI](#ci-integration) · [Migration](#already-using-another-tool) · [Contributing](CONTRIBUTING.md)
 
 ---
 
 ### vmn is for you if:
 
+- You're an **AI/ML researcher** who needs reproducible experiment snapshots — without committing half-finished code
 - You version projects in **Python, Rust, Go, C++, Java** — or any language (not just JavaScript)
 - You manage **microservices** and need coordinated versions across services
 - You work across **multiple repos** and need reproducible cross-repo snapshots
@@ -67,7 +70,7 @@ vmn stamp -r patch my_app   # => 0.0.2
 
 ## Why vmn?
 
-vmn does everything semantic-release and release-please do — plus **6 things nothing else can**.
+vmn does everything semantic-release and release-please do — plus **8 things nothing else can**.
 
 | Capability | vmn | semantic-release | release-please | changesets |
 |:-----------|:---:|:----------------:|:--------------:|:----------:|
@@ -83,6 +86,7 @@ vmn does everything semantic-release and release-please do — plus **6 things n
 | **Zero-config start (auto-init)** | :white_check_mark: | :x: | :x: | :x: |
 | **Offline / local file backend** | :white_check_mark: | :x: | :x: | :x: |
 | **Zero lock-in (pure git tags)** | :white_check_mark: | :x: | :x: | :x: |
+| **Dev snapshots (uncommitted state capture)** | :white_check_mark: | :x: | :x: | :x: |
 
 > **Bold rows = only vmn.** That's the moat.
 
@@ -141,9 +145,51 @@ All version state lives in annotated git tag messages. Uninstall vmn tomorrow an
 
 ### Version formats — full semver plus hotfix
 
-Standard [Semver 2.0](https://semver.org) plus an optional 4th hotfix segment for when you need it:
+Standard [Semver 2.0](https://semver.org) plus an optional 4th hotfix segment and dev snapshots:
 
-`1.6.0` · `1.6.0-rc.23` · `1.6.7.4` · `1.6.0-rc.23+build01.Info`
+`1.6.0` · `1.6.0-rc.23` · `1.6.7.4` · `1.6.0-rc.23+build01.Info` · `1.6.0-dev.a1b2c3d.e4f5g6h`
+
+---
+
+## Reproducible AI/ML experiments - dev snapshots
+
+`vmn snapshot` captures your exact working state — uncommitted changes, local commits that haven't been pushed, everything — into a deterministic dev version you can restore later. No WIP commits, no git noise.
+
+```sh
+# You're mid-experiment, code is dirty, results look promising
+vmn snapshot create my_model --note "batch_size=32, lr=3e-4, best val_loss so far"
+# => 1.2.0-dev.a1b2c3d.e4f5g6h
+
+# Days later — reproduce that exact state
+vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model
+# Code restored: base commit + local commits + working tree changes
+```
+
+### Dev version format
+
+Dev versions follow the pattern: `{base_version}-dev.{commit_hash}.{diff_hash}`
+
+- **base_version**: Last stamped version (e.g., `1.2.0`)
+- **commit_hash**: Current HEAD (7 chars)
+- **diff_hash**: SHA1 of uncommitted changes (7 chars) — same changes always produce the same hash
+
+This means: **identical code state = identical version string**. Deterministic, reproducible, auditable.
+
+Snapshots are stored locally by default in `.vmn/{app}/snapshots/`.
+
+<details>
+<summary><strong>Planned: cloud snapshot backends (S3, W&B, MLflow)</strong></summary>
+
+| Backend | Status | Use case |
+|:--------|:-------|:---------|
+| `local` | Available | Default. Stored in `.vmn/{app}/snapshots/` |
+| `s3` | Planned | Team-shared snapshots via S3 bucket |
+| `wandb` | Planned | Link snapshots to W&B experiment runs |
+| `mlflow` | Planned | Link snapshots to MLflow tracking |
+
+Cloud backends will allow team-wide snapshot sharing and integration with experiment tracking platforms.
+
+</details>
 
 ---
 
@@ -157,6 +203,7 @@ Standard [Semver 2.0](https://semver.org) plus an optional 4th hotfix segment fo
 | `vmn release` | Promote prerelease to final | `vmn release my_app` |
 | `vmn show` | Display version info | `vmn show my_app` |
 | `vmn goto` | Checkout repo at a version | `vmn goto -v 1.2.3 my_app` |
+| `vmn snapshot` | Capture dev state (uncommitted work) | `vmn snapshot create my_app` |
 | `vmn gen` | Generate file from template | `vmn gen -t ver.j2 -o ver.txt my_app` |
 | `vmn add` | Attach build metadata | `vmn add -v 1.0.0 --bm build42 my_app` |
 | `vmn config` | Edit app config (TUI) | `vmn config my_app` |
@@ -244,6 +291,8 @@ conf:
     draft: false
 ```
 
+> `default_release_mode` is a top-level config key (not nested under `conventional_commits`). If you have it nested from an older version, vmn will ask you to move it.
+
 ### vmn release
 
 Promote a prerelease to its final version. Three modes:
@@ -260,6 +309,7 @@ Idempotent. `-v` and `--stamp` are mutually exclusive.
 
 ```sh
 vmn show my_app                    # current version from HEAD
+vmn show --dev my_app              # dev version with commit+diff hash (for dirty working trees)
 vmn show -v 0.0.1 my_app          # specific version info
 vmn show --verbose my_app          # full YAML metadata dump
 vmn show --raw my_app              # without template formatting
@@ -269,7 +319,7 @@ vmn show -u my_app                 # unique ID (version+commit_hash)
 vmn show -t '[{major}]' my_app    # override display template
 vmn show --conf my_app             # show app configuration
 vmn show --ignore-dirty my_app     # ignore dirty working tree
-vmn show --from-file my_app        # read from local verinfo file (requires create_verinfo_files)
+vmn show --from-file my_app        # read from local snapshot file (requires create_snapshots)
 ```
 
 ### vmn goto
@@ -282,9 +332,12 @@ vmn goto my_app                        # latest version on current branch
 vmn goto -v 1.2.3 --deps-only my_app  # only checkout dependencies
 vmn goto -v 5 --root my_root_app      # checkout to root app version
 vmn goto --pull -v 1.2.3 my_app       # pull remote before checking out
+
+# Restore a dev snapshot (uncommitted experiment state)
+vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model  # checkout + apply patches
 ```
 
-Dependencies are auto-cloned if missing (up to 10 in parallel).
+Dependencies are auto-cloned if missing (up to 10 in parallel). Dev version restore checks out the base commit, applies local commits, then applies the working tree patch — recreating your exact experimental state.
 
 ### vmn gen
 
@@ -319,6 +372,55 @@ vmn config --branch my_app  # edit/create branch-specific config for current bra
 vmn config --root my_app    # edit root app config (root_conf.yml)
 vmn config --global         # repo-level .vmn/conf.yml
 ```
+
+### vmn snapshot
+
+Capture, list, inspect, and annotate dev snapshots of your working state — without committing.
+
+```sh
+# Create a snapshot of your current dirty state
+vmn snapshot create my_model                           # => 1.2.0-dev.a1b2c3d.e4f5g6h
+vmn snapshot create my_model --note "best run so far"  # with annotation
+
+# List all snapshots for an app
+vmn snapshot list my_model
+# 1.2.0-dev.a1b2c3d.e4f5g6h  [2025-01-15T10:30:00Z] - best run so far
+# 1.2.0-dev.x9y8z7w.q1r2s3t  [2025-01-14T16:45:00Z]
+
+# Inspect a snapshot (metadata + patches)
+vmn snapshot show -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model
+
+# Add/update a note on an existing snapshot
+vmn snapshot note -v 1.2.0-dev.a1b2c3d.e4f5g6h --note "confirmed: overfitting after epoch 12" my_model
+```
+
+<details>
+<summary><strong>What's stored in a snapshot</strong></summary>
+
+```
+.vmn/my_model/snapshots/1.2.0-dev.a1b2c3d.e4f5g6h/
+  metadata.yml          # version, branch, timestamp, note, dirty states
+  working_tree.patch    # uncommitted changes (git diff HEAD)
+  local_commits.patch   # local commits not yet pushed (git format-patch)
+```
+
+The metadata captures everything needed for reproducibility: base commit, branch, remote URL, timestamp, and which types of changes were captured. Patches are standard git format — you can apply them manually if needed.
+
+</details>
+
+<details>
+<summary><strong>All snapshot flags</strong></summary>
+
+| Flag | Description |
+|:-----|:------------|
+| `action` | `create` (default), `list`, `show`, `note` |
+| `-v`, `--version` | Dev version string (for `show` and `note` actions) |
+| `--note` | Description note for the snapshot |
+| `--backend` | Storage backend: `local` (default), `s3`, `wandb`, `mlflow` |
+| `--bucket` | S3 bucket name (required for `s3` backend) |
+| `--project` | Project name (for `wandb`/`mlflow` backends) |
+
+</details>
 
 ### vmn init / init-app
 
@@ -477,7 +579,7 @@ conf:
   template: '[{major}][.{minor}]'       # display format ({major}, {minor}, {patch}, {hotfix}, {prerelease}, {rcn}, {buildmetadata})
   hide_zero_hotfix: true                 # hide 4th segment when 0 (default: true)
   conventional_commits: true             # auto-detect release mode from commits
-  default_release_mode: optional         # "optional" (--orm) or "strict" (-r) for auto-detected mode
+  default_release_mode: optional         # "optional" (--orm) or "strict" (-r) for auto-detected mode (top-level key)
   changelog:
     path: "CHANGELOG.md"                 # generate changelog on stamp (presence enables it)
   github_release:
@@ -492,8 +594,10 @@ conf:
   policies:
     whitelist_release_branches: ["main"] # restrict which branches can stamp/release
   extra_info: false                      # include host/environment metadata in stamp
-  create_verinfo_files: false            # enable vmn show --from-file
+  create_snapshots: false                # write local snapshot files on stamp (enables vmn show --from-file)
 ```
+
+> **Migration note:** `create_verinfo_files` has been renamed to `create_snapshots`. The old key still works but will show a deprecation warning. Snapshot files now live in `.vmn/{app}/snapshots/{version}/metadata.yml` instead of `.vmn/{app}/verinfo/{version}.yml`.
 
 Use `vmn config <app-name>` for a TUI editor, or edit YAML directly.
 

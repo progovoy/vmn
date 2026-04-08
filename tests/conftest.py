@@ -427,6 +427,7 @@ class FSAppLayoutFixture(object):
         extra_info=None,
         version_backends=None,
         create_verinfo_files=None,
+        create_snapshots=None,
         policies=None,
         conventional_commits=None,
         default_release_mode=None,
@@ -446,6 +447,8 @@ class FSAppLayoutFixture(object):
                 data["conf"]["version_backends"] = version_backends
             if create_verinfo_files is not None:
                 data["conf"]["create_verinfo_files"] = create_verinfo_files
+            if create_snapshots is not None:
+                data["conf"]["create_snapshots"] = create_snapshots
             if policies is not None:
                 data["conf"]["policies"] = policies
             if conventional_commits is not None:
