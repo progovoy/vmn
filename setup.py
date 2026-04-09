@@ -30,6 +30,7 @@ setuptools.setup(
         "version_stamp.cli",
     ],
     entry_points={"console_scripts": ["vmn = version_stamp.cli:main"]},
+    data_files=[("share/doc/vmn", ["README.md"])],
     license="MIT",
     include_package_data=True,
 )
