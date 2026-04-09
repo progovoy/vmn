@@ -333,7 +333,7 @@ def add_arg_snapshot(subprasers):
     psnap.add_argument(
         "--backend",
         default="local",
-        choices=["local", "s3", "wandb", "mlflow"],
+        choices=["local", "s3"],
         help="Storage backend for snapshots (default: local)",
     )
     psnap.add_argument(
@@ -341,12 +341,6 @@ def add_arg_snapshot(subprasers):
         default=None,
         required=False,
         help="S3 bucket name (required for s3 backend)",
-    )
-    psnap.add_argument(
-        "--project",
-        default=None,
-        required=False,
-        help="Project name (for wandb/mlflow backends)",
     )
     psnap.add_argument(
         "--endpoint-url",

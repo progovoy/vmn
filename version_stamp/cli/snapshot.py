@@ -3,7 +3,6 @@
 import datetime
 import difflib
 import hashlib
-import io
 import os
 import shutil
 import subprocess
@@ -166,7 +165,9 @@ class S3SnapshotStorage(SnapshotStorage):
             )
             metadata = yaml.safe_load(resp["Body"].read().decode("utf-8"))
         except Exception as e:
-            if "NoSuchKey" in str(type(e).__name__) or "NoSuchKey" in str(e):
+            resp = getattr(e, "response", None)
+            error_code = (resp or {}).get("Error", {}).get("Code") if resp else None
+            if error_code == "NoSuchKey" or "NoSuchKey" in str(e):
                 return None, None
             VMN_LOGGER.debug("S3 load failed", exc_info=True)
             return None, None
@@ -223,55 +224,7 @@ class S3SnapshotStorage(SnapshotStorage):
         return True
 
 
-class WandbSnapshotStorage(SnapshotStorage):
-    def __init__(self, project):
-        try:
-            import wandb  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "wandb is required for Weights & Biases snapshot storage. "
-                "Install it with: pip install wandb"
-            )
-        self.project = project
-
-    def save(self, app_name, verstr, metadata, patches):
-        raise NotImplementedError("W&B snapshot storage is not yet implemented")
-
-    def load(self, app_name, verstr):
-        raise NotImplementedError("W&B snapshot storage is not yet implemented")
-
-    def list_snapshots(self, app_name):
-        raise NotImplementedError("W&B snapshot storage is not yet implemented")
-
-    def update_note(self, app_name, verstr, note):
-        raise NotImplementedError("W&B snapshot storage is not yet implemented")
-
-
-class MLflowSnapshotStorage(SnapshotStorage):
-    def __init__(self, project):
-        try:
-            import mlflow  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "mlflow is required for MLflow snapshot storage. "
-                "Install it with: pip install mlflow"
-            )
-        self.project = project
-
-    def save(self, app_name, verstr, metadata, patches):
-        raise NotImplementedError("MLflow snapshot storage is not yet implemented")
-
-    def load(self, app_name, verstr):
-        raise NotImplementedError("MLflow snapshot storage is not yet implemented")
-
-    def list_snapshots(self, app_name):
-        raise NotImplementedError("MLflow snapshot storage is not yet implemented")
-
-    def update_note(self, app_name, verstr, note):
-        raise NotImplementedError("MLflow snapshot storage is not yet implemented")
-
-
-def get_snapshot_storage(backend, vmn_root_path=None, bucket=None, project=None,
+def get_snapshot_storage(backend, vmn_root_path=None, bucket=None,
                          prefix="vmn-snapshots", endpoint_url=None):
     if backend == "local":
         if not vmn_root_path:
@@ -281,14 +234,6 @@ def get_snapshot_storage(backend, vmn_root_path=None, bucket=None, project=None,
         if not bucket:
             raise ValueError("--bucket is required for s3 backend")
         return S3SnapshotStorage(bucket, prefix=prefix, endpoint_url=endpoint_url)
-    elif backend == "wandb":
-        if not project:
-            raise ValueError("--project is required for wandb backend")
-        return WandbSnapshotStorage(project)
-    elif backend == "mlflow":
-        if not project:
-            raise ValueError("--project is required for mlflow backend")
-        return MLflowSnapshotStorage(project)
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
@@ -298,16 +243,9 @@ def _get_storage(vcs, params):
         params.get("backend", "local"),
         vmn_root_path=vcs.vmn_root_path,
         bucket=params.get("bucket"),
-        project=params.get("project"),
         prefix=params.get("prefix", "vmn-snapshots"),
         endpoint_url=params.get("endpoint_url"),
     )
-
-
-def _compute_diff_hash(diff_output):
-    if not diff_output:
-        return "0000000"
-    return hashlib.sha1(diff_output.encode()).hexdigest()[:7]
 
 
 def _generate_patches(backend):
@@ -346,6 +284,50 @@ def _compute_verstr(base_version, commit_hash, patches):
 
     diff_hash = h.hexdigest()[:7] if has_content else "0000000"
     return f"{base_version}-dev.{commit_hash[:7]}.{diff_hash}"
+
+
+def _apply_snapshot_patches(vcs, params, metadata, patches):
+    """Apply snapshot patches to restore a dev version state."""
+    base_commit = metadata["base_commit"]
+
+    if not params.get("deps_only"):
+        try:
+            vcs.backend.checkout(rev=base_commit)
+        except Exception:
+            VMN_LOGGER.error(
+                f"Failed to checkout base commit {base_commit[:7]}"
+            )
+            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+            return 1
+
+        if patches.get("local_commits"):
+            result = subprocess.run(
+                ["git", "am", "--3way"],
+                input=patches["local_commits"],
+                capture_output=True, text=True,
+                cwd=vcs.vmn_root_path,
+            )
+            if result.returncode != 0:
+                VMN_LOGGER.error(
+                    f"Failed to apply local commits patch: {result.stderr}"
+                )
+                return 1
+
+        if patches.get("working_tree"):
+            result = subprocess.run(
+                ["git", "apply", "--3way"],
+                input=patches["working_tree"],
+                capture_output=True, text=True,
+                cwd=vcs.vmn_root_path,
+            )
+            if result.returncode != 0:
+                VMN_LOGGER.error(
+                    f"Failed to apply working tree patch: {result.stderr}"
+                )
+                return 1
+
+    VMN_LOGGER.info(f"Restored dev version {metadata['verstr']} of {vcs.name}")
+    return 0
 
 
 def _parse_meta_args(meta_list):
@@ -435,7 +417,7 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
         "base_commit": commit_hash,
         "branch": be.active_branch,
         "remote": remote_url,
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "note": note,
         "app_name": vcs.name,
         "dirty_states": dirty_states,
@@ -444,6 +426,10 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     }
     if user_meta:
         metadata["user_meta"] = user_meta
+
+    changesets = ver_info["stamping"]["app"].get("changesets", {})
+    if changesets:
+        metadata["changesets"] = changesets
 
     storage.save(vcs.name, verstr, metadata, patches)
 
@@ -454,9 +440,25 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
 
 @measure_runtime_decorator
 def snapshot_list(vcs, params):
-    storage = _get_storage(vcs, params)
+    local_storage = LocalSnapshotStorage(vcs.vmn_root_path)
+    local_snaps = local_storage.list_snapshots(vcs.name)
+    all_snaps = {m["verstr"]: m for m in local_snaps}
 
-    snapshots = storage.list_snapshots(vcs.name)
+    bucket = params.get("bucket")
+    if bucket:
+        try:
+            s3_storage = S3SnapshotStorage(
+                bucket,
+                prefix=params.get("prefix", "vmn-snapshots"),
+                endpoint_url=params.get("endpoint_url"),
+            )
+            for m in s3_storage.list_snapshots(vcs.name):
+                if m["verstr"] not in all_snaps:
+                    all_snaps[m["verstr"]] = m
+        except Exception:
+            VMN_LOGGER.debug("S3 listing failed", exc_info=True)
+
+    snapshots = sorted(all_snaps.values(), key=lambda m: m.get("timestamp", ""))
     if not snapshots:
         VMN_LOGGER.info(f"No snapshots found for {vcs.name}")
         return 0
@@ -529,8 +531,13 @@ def snapshot_restore(vcs, params, verstr):
         VMN_LOGGER.error("Must specify version with -v")
         return 1
 
-    from version_stamp.cli.output import _goto_dev_version
-    return _goto_dev_version(vcs, params, verstr)
+    storage = _get_storage(vcs, params)
+    metadata, patches = storage.load(vcs.name, verstr)
+    if metadata is None:
+        VMN_LOGGER.error(f"Snapshot {verstr} not found")
+        return 1
+
+    return _apply_snapshot_patches(vcs, params, metadata, patches)
 
 
 @measure_runtime_decorator
@@ -567,7 +574,7 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
 
     if tool:
         return _diff_with_external_tool(
-            tool, verstr1, meta1, patches1, verstr2, meta2, patches2
+            tool, vcs, verstr1, meta1, patches1, verstr2, meta2, patches2
         )
     else:
         return _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2)
@@ -615,17 +622,25 @@ def _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2):
     return 0
 
 
-def _diff_with_external_tool(tool, verstr1, meta1, patches1, verstr2, meta2, patches2):
-    """Write snapshots to temp dirs and launch external diff tool."""
+def _diff_with_external_tool(tool, vcs, verstr1, meta1, patches1,
+                              verstr2, meta2, patches2):
+    """Materialize both snapshots as workdirs and launch external diff tool."""
     tmpdir = tempfile.mkdtemp(prefix="vmn-diff-")
     try:
         left_dir = os.path.join(tmpdir, verstr1.replace("+", "_plus_"))
         right_dir = os.path.join(tmpdir, verstr2.replace("+", "_plus_"))
-        os.makedirs(left_dir)
-        os.makedirs(right_dir)
 
-        _write_snapshot_to_dir(left_dir, meta1, patches1)
-        _write_snapshot_to_dir(right_dir, meta2, patches2)
+        left_ok = _materialize_workdir(vcs, meta1, patches1, left_dir) == 0
+        right_ok = _materialize_workdir(vcs, meta2, patches2, right_dir) == 0
+
+        if not left_ok or not right_ok:
+            # Fallback: write patches to dirs
+            if not left_ok:
+                os.makedirs(left_dir, exist_ok=True)
+                _write_snapshot_to_dir(left_dir, meta1, patches1)
+            if not right_ok:
+                os.makedirs(right_dir, exist_ok=True)
+                _write_snapshot_to_dir(right_dir, meta2, patches2)
 
         result = subprocess.run([tool, left_dir, right_dir])
         return result.returncode
@@ -634,7 +649,7 @@ def _diff_with_external_tool(tool, verstr1, meta1, patches1, verstr2, meta2, pat
 
 
 def _write_snapshot_to_dir(directory, metadata, patches):
-    """Write snapshot metadata and patches to a directory."""
+    """Write snapshot metadata and patches to a directory (fallback)."""
     with open(os.path.join(directory, "metadata.yml"), "w") as f:
         yaml.dump(metadata, f, sort_keys=True)
     if patches.get("working_tree"):
@@ -645,49 +660,173 @@ def _write_snapshot_to_dir(directory, metadata, patches):
             f.write(patches["local_commits"])
 
 
-def _add_string_to_tar(tar, name, content):
-    """Add a string as a file to a tarball."""
-    data = content.encode("utf-8")
-    info = tarfile.TarInfo(name=name)
-    info.size = len(data)
-    tar.addfile(info, io.BytesIO(data))
+def _shallow_clone_at(dest, remote, commit_hash):
+    """Create a shallow clone at a specific commit."""
+    # Try shallow fetch first (works with servers that support it)
+    os.makedirs(dest, exist_ok=True)
+    result = subprocess.run(
+        ["git", "init"],
+        capture_output=True, text=True, cwd=dest,
+    )
+    if result.returncode != 0:
+        VMN_LOGGER.error(f"git init failed in {dest}: {result.stderr}")
+        return 1
+
+    result = subprocess.run(
+        ["git", "fetch", "--depth", "1", remote, commit_hash],
+        capture_output=True, text=True, cwd=dest,
+    )
+    if result.returncode == 0:
+        result = subprocess.run(
+            ["git", "checkout", "FETCH_HEAD"],
+            capture_output=True, text=True, cwd=dest,
+        )
+        if result.returncode == 0:
+            return 0
+
+    # Fallback: full clone + checkout (for local repos / servers without SHA1 fetch)
+    shutil.rmtree(dest, ignore_errors=True)
+    result = subprocess.run(
+        ["git", "clone", "--no-checkout", remote, dest],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        VMN_LOGGER.error(f"git clone failed: {result.stderr}")
+        return 1
+
+    result = subprocess.run(
+        ["git", "checkout", commit_hash],
+        capture_output=True, text=True, cwd=dest,
+    )
+    if result.returncode != 0:
+        VMN_LOGGER.error(f"git checkout {commit_hash[:7]} failed: {result.stderr}")
+        return 1
+
+    return 0
 
 
-def _generate_restore_script(metadata, patches):
-    """Generate a shell script that restores the snapshot state."""
-    base_commit = metadata.get("base_commit", "UNKNOWN")
-    lines = [
-        "#!/bin/bash",
-        "# vmn snapshot restore script",
-        f"# Snapshot: {metadata.get('verstr', 'unknown')}",
-        f"# Created: {metadata.get('timestamp', 'unknown')}",
-        f"# Branch: {metadata.get('branch', 'unknown')}",
-        "",
-        "set -e",
-        "",
-        f'echo "Checking out base commit {base_commit[:12]}..."',
-        f"git checkout {base_commit}",
-        "",
-    ]
+def _apply_patches_to_workdir(dest, patches):
+    """Apply local_commits and working_tree patches to a workdir."""
     if patches.get("local_commits"):
-        lines.extend([
-            'echo "Applying local commits..."',
-            "git am --3way < local_commits.patch",
-            "",
-        ])
+        result = subprocess.run(
+            ["git", "am", "--3way"],
+            input=patches["local_commits"],
+            capture_output=True, text=True, cwd=dest,
+        )
+        if result.returncode != 0:
+            VMN_LOGGER.warning(f"Failed to apply local commits: {result.stderr}")
+
     if patches.get("working_tree"):
-        lines.extend([
-            'echo "Applying working tree changes..."',
-            "git apply --3way < working_tree.patch",
-            "",
-        ])
-    lines.append('echo "Snapshot restored successfully."')
-    return "\n".join(lines) + "\n"
+        result = subprocess.run(
+            ["git", "apply"],
+            input=patches["working_tree"],
+            capture_output=True, text=True, cwd=dest,
+        )
+        if result.returncode != 0:
+            VMN_LOGGER.warning(f"Failed to apply working tree patch: {result.stderr}")
+
+
+def _copy_untracked_files(repo_path, dest):
+    """Copy untracked non-ignored files from repo to dest."""
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    if result.returncode != 0:
+        return
+
+    for rel_path in result.stdout.strip().split("\n"):
+        if not rel_path:
+            continue
+        src = os.path.join(repo_path, rel_path)
+        dst = os.path.join(dest, rel_path)
+        if os.path.isfile(src):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+
+
+def _resolve_remote(remote, vcs):
+    """Resolve a remote URL, converting relative paths to absolute."""
+    if not remote:
+        return remote
+    vmn_root = vcs.vmn_root_path if vcs and hasattr(vcs, 'vmn_root_path') else None
+    if vmn_root and not remote.startswith(("http://", "https://", "git://", "ssh://", "git@")):
+        # Relative or local path — resolve against vmn_root
+        resolved = os.path.normpath(os.path.join(vmn_root, remote))
+        if os.path.exists(resolved):
+            return resolved
+    return remote
+
+
+def _materialize_workdir(vcs, metadata, patches, output_path):
+    """Materialize a patch snapshot into a complete working directory."""
+    base_commit = metadata.get("base_commit")
+    remote = metadata.get("remote")
+
+    if not base_commit:
+        VMN_LOGGER.error("Snapshot metadata missing base_commit")
+        return 1
+
+    if not remote:
+        VMN_LOGGER.error("Snapshot metadata missing remote URL")
+        return 1
+
+    remote = _resolve_remote(remote, vcs)
+
+    err = _shallow_clone_at(output_path, remote, base_commit)
+    if err:
+        return err
+
+    _apply_patches_to_workdir(output_path, patches)
+
+    # Copy untracked files if current working tree matches the snapshot
+    if vcs and hasattr(vcs, 'vmn_root_path'):
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, cwd=vcs.vmn_root_path,
+            )
+            current_head = result.stdout.strip()
+            if current_head.startswith(base_commit[:7]) or base_commit.startswith(current_head[:7]):
+                _copy_untracked_files(vcs.vmn_root_path, output_path)
+            else:
+                VMN_LOGGER.debug(
+                    f"HEAD ({current_head[:7]}) != base_commit ({base_commit[:7]}), "
+                    "skipping untracked files"
+                )
+        except Exception:
+            VMN_LOGGER.debug("Failed to copy untracked files", exc_info=True)
+
+    # Export dependencies
+    changesets = metadata.get("changesets", {})
+    for dep_path, dep_info in changesets.items():
+        if dep_path == ".":
+            continue
+
+        dep_hash = dep_info.get("hash")
+        dep_remote = dep_info.get("remote")
+        if not dep_hash or not dep_remote:
+            VMN_LOGGER.warning(f"Dependency {dep_path} missing hash or remote, skipping")
+            continue
+
+        dep_remote = _resolve_remote(dep_remote, vcs)
+
+        dep_dest = os.path.join(output_path, dep_path)
+        err = _shallow_clone_at(dep_dest, dep_remote, dep_hash)
+        if err:
+            VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
+
+    # Write metadata
+    meta_path = os.path.join(output_path, "vmn_metadata.yml")
+    with open(meta_path, "w") as f:
+        yaml.dump(metadata, f, sort_keys=True)
+
+    return 0
 
 
 @measure_runtime_decorator
 def snapshot_export(vcs, params, verstr, output_path):
-    """Export a snapshot as a self-contained .tar.gz archive."""
+    """Export a snapshot as a complete working directory or tarball."""
     if verstr is None:
         VMN_LOGGER.error("Must specify version with -v")
         return 1
@@ -700,30 +839,29 @@ def snapshot_export(vcs, params, verstr, output_path):
 
     safe_verstr = verstr.replace("+", "_plus_")
     if output_path is None:
-        output_path = f"{safe_verstr}.tar.gz"
+        output_path = safe_verstr
 
-    restore_script = _generate_restore_script(metadata, patches)
+    is_tarball = output_path.endswith(".tar.gz") or output_path.endswith(".tgz")
 
-    with tarfile.open(output_path, "w:gz") as tar:
-        _add_string_to_tar(
-            tar, f"{safe_verstr}/metadata.yml",
-            yaml.dump(metadata, sort_keys=True),
-        )
-        if patches.get("working_tree"):
-            _add_string_to_tar(
-                tar, f"{safe_verstr}/working_tree.patch",
-                patches["working_tree"],
-            )
-        if patches.get("local_commits"):
-            _add_string_to_tar(
-                tar, f"{safe_verstr}/local_commits.patch",
-                patches["local_commits"],
-            )
-        _add_string_to_tar(
-            tar, f"{safe_verstr}/restore.sh",
-            restore_script,
-        )
+    if is_tarball:
+        tmpdir = tempfile.mkdtemp(prefix="vmn-export-")
+        dest = os.path.join(tmpdir, safe_verstr)
+    else:
+        tmpdir = None
+        dest = output_path
 
-    VMN_LOGGER.info(f"Exported snapshot to {output_path}")
-    print(output_path)
-    return 0
+    try:
+        err = _materialize_workdir(vcs, metadata, patches, dest)
+        if err:
+            return err
+
+        if is_tarball:
+            with tarfile.open(output_path, "w:gz") as tar:
+                tar.add(dest, arcname=safe_verstr)
+
+        VMN_LOGGER.info(f"Exported snapshot to {output_path}")
+        print(output_path)
+        return 0
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)

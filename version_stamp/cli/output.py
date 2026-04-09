@@ -2,7 +2,6 @@
 """Display, generation, and repository navigation functions."""
 import copy
 import os
-import subprocess
 from multiprocessing import Pool
 
 import yaml
@@ -97,15 +96,20 @@ def show(vcs, params, verstr=None):
     if params.get("display_type"):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
 
-    if params.get("dev") and not params["from_file"] and dirty_states:
+    if params.get("dev") and not params.get("from_file") and dirty_states:
         try:
-            from version_stamp.cli.snapshot import _compute_diff_hash
+            from version_stamp.cli.snapshot import _generate_patches, _compute_verstr
 
-            commit_hash = vcs.backend.changeset()[:7]
-            diff_output = vcs.backend._be.git.diff("HEAD")
-            diff_hash = _compute_diff_hash(diff_output)
-            params["_dev_commit"] = commit_hash
-            params["_dev_diff_hash"] = diff_hash
+            commit_hash = vcs.backend.changeset()
+            patches = _generate_patches(vcs.backend)
+            if patches:
+                base_version = ver_info["stamping"]["app"]["_version"]
+                dev_ver = _compute_verstr(base_version, commit_hash, patches)
+                parts = dev_ver.rsplit("-dev.", 1)
+                if len(parts) == 2:
+                    dev_parts = parts[1].split(".")
+                    params["_dev_commit"] = dev_parts[0]
+                    params["_dev_diff_hash"] = dev_parts[1]
         except Exception:
             VMN_LOGGER.debug("Failed to compute dev hashes", exc_info=True)
 
@@ -391,55 +395,36 @@ def get_dirty_states(optional_status, status):
 
 def _goto_dev_version(vcs, params, version):
     """Handle goto for dev versions: checkout base commit + apply snapshot patches."""
-    from version_stamp.cli.snapshot import LocalSnapshotStorage
+    from version_stamp.cli.snapshot import (
+        LocalSnapshotStorage,
+        get_snapshot_storage,
+        _apply_snapshot_patches,
+    )
 
     storage = LocalSnapshotStorage(vcs.vmn_root_path)
     metadata, patches = storage.load(vcs.name, version)
 
     if metadata is None:
-        VMN_LOGGER.error(f"Snapshot {version} not found locally")
+        conf_storage = getattr(vcs, 'snapshot_storage', None) or {}
+        if conf_storage.get("bucket"):
+            try:
+                s3_storage = get_snapshot_storage(
+                    "s3",
+                    bucket=conf_storage["bucket"],
+                    prefix=conf_storage.get("prefix", "vmn-snapshots"),
+                    endpoint_url=conf_storage.get("endpoint_url"),
+                )
+                metadata, patches = s3_storage.load(vcs.name, version)
+            except Exception:
+                VMN_LOGGER.debug("S3 snapshot load failed", exc_info=True)
+
+    if metadata is None:
+        VMN_LOGGER.error(
+            f"Snapshot {version} not found locally or in configured storage"
+        )
         return 1
 
-    base_commit = metadata["base_commit"]
-
-    if not params.get("deps_only"):
-        try:
-            vcs.backend.checkout(rev=base_commit)
-        except Exception:
-            VMN_LOGGER.error(
-                f"Failed to checkout base commit {base_commit[:7]}"
-            )
-            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
-            return 1
-
-        if patches.get("local_commits"):
-            result = subprocess.run(
-                ["git", "am", "--3way"],
-                input=patches["local_commits"],
-                capture_output=True, text=True,
-                cwd=vcs.vmn_root_path,
-            )
-            if result.returncode != 0:
-                VMN_LOGGER.error(
-                    f"Failed to apply local commits patch: {result.stderr}"
-                )
-                return 1
-
-        if patches.get("working_tree"):
-            result = subprocess.run(
-                ["git", "apply", "--3way"],
-                input=patches["working_tree"],
-                capture_output=True, text=True,
-                cwd=vcs.vmn_root_path,
-            )
-            if result.returncode != 0:
-                VMN_LOGGER.error(
-                    f"Failed to apply working tree patch: {result.stderr}"
-                )
-                return 1
-
-    VMN_LOGGER.info(f"Restored dev version {version} of {vcs.name}")
-    return 0
+    return _apply_snapshot_patches(vcs, params, metadata, patches)
 
 
 @measure_runtime_decorator
@@ -449,8 +434,14 @@ def goto_version(vcs, params, version, pull):
     status_str = ""
 
     # Handle dev versions via snapshot restore
-    if version is not None and "-dev." in version:
-        return _goto_dev_version(vcs, params, version)
+    if version is not None:
+        try:
+            from version_stamp.core.version_math import deserialize_vmn_version
+            _props = deserialize_vmn_version(version)
+            if "dev" in _props.types:
+                return _goto_dev_version(vcs, params, version)
+        except Exception:
+            pass
 
     if version is None:
         if not params["deps_only"]:

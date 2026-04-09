@@ -12,17 +12,6 @@ from version_stamp.core.constants import (
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
-def _find_snapshot_files(base_dir):
-    """Find metadata.yml files in snapshot directories."""
-    pattern = os.path.join(base_dir, "*", "metadata.yml")
-    return glob.glob(pattern)
-
-
-def _find_verinfo_files(base_dir):
-    """Find .yml files in verinfo directories (backward compat)."""
-    return glob.glob(os.path.join(base_dir, "*.yml"))
-
-
 class LocalFileBackend(VMNBackend):
     def __init__(self, repo_path):
         VMNBackend.__init__(self, VMN_BE_TYPE_LOCAL_FILE)
@@ -37,6 +26,17 @@ class LocalFileBackend(VMNBackend):
         self.repo_path = repo_path
         self.active_branch = "none"
         self.remote_active_branch = "remote/none"
+
+    @staticmethod
+    def _find_snapshot_files(base_dir):
+        """Find metadata.yml files in snapshot directories."""
+        pattern = os.path.join(base_dir, "*", "metadata.yml")
+        return glob.glob(pattern)
+
+    @staticmethod
+    def _find_verinfo_files(base_dir):
+        """Find .yml files in verinfo directories (backward compat)."""
+        return glob.glob(os.path.join(base_dir, "*.yml"))
 
     def perform_cached_fetch(self, force=False):
         return
@@ -63,12 +63,12 @@ class LocalFileBackend(VMNBackend):
             verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
 
         # Check snapshots first
-        snap_files = _find_snapshot_files(snap_dir)
+        snap_files = self._find_snapshot_files(snap_dir)
         if snap_files:
             return max(snap_files, key=os.path.getmtime)
 
         # Fall back to verinfo
-        verinfo_files = _find_verinfo_files(verinfo_dir)
+        verinfo_files = self._find_verinfo_files(verinfo_dir)
         if verinfo_files:
             return max(verinfo_files, key=os.path.getmtime)
 
@@ -110,7 +110,7 @@ class LocalFileBackend(VMNBackend):
             snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "snapshots")
             verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
 
-        files = _find_snapshot_files(snap_dir) + _find_verinfo_files(verinfo_dir)
+        files = self._find_snapshot_files(snap_dir) + self._find_verinfo_files(verinfo_dir)
         return files
 
     def get_first_reachable_version_info(

@@ -686,11 +686,31 @@ def handle_snapshot(vmn_ctx):
     )
 
     vmn_ctx.params["backend"] = vmn_ctx.args.backend
-    vmn_ctx.params["bucket"] = vmn_ctx.args.bucket
-    vmn_ctx.params["project"] = vmn_ctx.args.project
+    vmn_ctx.params["bucket"] = getattr(vmn_ctx.args, "bucket", None)
     vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
     vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
     vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
+
+    # Read snapshot_storage from app conf, CLI args override
+    conf_storage = getattr(vmn_ctx.vcs, 'snapshot_storage', None) or {}
+    if not vmn_ctx.params.get("bucket") and conf_storage.get("bucket"):
+        vmn_ctx.params["bucket"] = conf_storage["bucket"]
+    if vmn_ctx.params.get("backend") == "local" and conf_storage.get("backend"):
+        vmn_ctx.params["backend"] = conf_storage["backend"]
+    if not vmn_ctx.params.get("prefix") or vmn_ctx.params["prefix"] == "vmn-snapshots":
+        vmn_ctx.params["prefix"] = conf_storage.get("prefix", "vmn-snapshots")
+    if not vmn_ctx.params.get("endpoint_url") and conf_storage.get("endpoint_url"):
+        vmn_ctx.params["endpoint_url"] = conf_storage["endpoint_url"]
+
+    # Guard: all snapshot actions require repo_tracked + app_tracked
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {
+        "repos_exist_locally", "detached", "pending", "outgoing",
+        "version_not_matched", "dirty_deps", "deps_synced_with_conf",
+    }
+    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    if status.error:
+        return 1
 
     action = vmn_ctx.args.action
 

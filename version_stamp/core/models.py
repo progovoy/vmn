@@ -174,6 +174,16 @@ class AppConf:
             "ui_type": "nested_dict",
         },
     )
+    snapshot_storage: dict = field(
+        default_factory=dict,
+        metadata={
+            "ui_desc": (
+                "Snapshot storage configuration. "
+                "Supports: backend (local/s3), bucket, prefix, endpoint_url."
+            ),
+            "ui_type": "nested_dict",
+        },
+    )
 
     def __post_init__(self):
         if not self.template:
