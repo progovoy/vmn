@@ -11,7 +11,7 @@ from moto import mock_aws
 
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
-from test_ver_stamp import (
+from helpers import (
     _init_app,
     _goto,
     _run_vmn_init,
