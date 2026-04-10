@@ -789,3 +789,172 @@ def test_snapshot_export_tarball(app_layout, capfd):
     with tarfile.open(tar_path, "r:gz") as tar:
         names = tar.getnames()
         assert any("vmn_metadata.yml" in n for n in names)
+
+
+def test_snapshot_untracked_files_roundtrip(app_layout, capfd):
+    """Untracked non-ignored files should be captured and restored."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Create a committed+pushed file so we have a dirty tracked change too
+    app_layout.write_file_commit_and_push("test_repo_0", "tracked.txt", "initial")
+    tracked_file = os.path.join(app_layout.repo_path, "tracked.txt")
+    with open(tracked_file, "w") as f:
+        f.write("dirty tracked")
+
+    # Create untracked non-ignored files
+    untracked1 = os.path.join(app_layout.repo_path, "new_script.py")
+    with open(untracked1, "w") as f:
+        f.write("print('hello')\n")
+
+    subdir = os.path.join(app_layout.repo_path, "data")
+    os.makedirs(subdir, exist_ok=True)
+    untracked2 = os.path.join(subdir, "config.json")
+    with open(untracked2, "w") as f:
+        f.write('{"key": "value"}\n')
+
+    # Create snapshot
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="with untracked")
+    assert err == 0
+    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    # Verify snapshot show lists untracked files
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, action="show", version=verstr)
+    assert err == 0
+    show_out = capfd.readouterr().out
+    assert "Untracked files" in show_out
+    assert "new_script.py" in show_out
+    assert "data/config.json" in show_out
+
+    # Remove untracked files and revert tracked changes
+    os.remove(untracked1)
+    import shutil
+    shutil.rmtree(subdir)
+    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+
+    assert not os.path.exists(untracked1)
+    assert not os.path.exists(untracked2)
+    with open(tracked_file) as f:
+        assert f.read() == "initial"
+
+    # Restore snapshot
+    err = _snapshot(app_layout.app_name, action="restore", version=verstr)
+    assert err == 0
+
+    # Verify untracked files restored
+    assert os.path.isfile(untracked1)
+    with open(untracked1) as f:
+        assert f.read() == "print('hello')\n"
+
+    assert os.path.isfile(untracked2)
+    with open(untracked2) as f:
+        assert f.read() == '{"key": "value"}\n'
+
+    # Verify tracked dirty change also restored
+    with open(tracked_file) as f:
+        assert f.read() == "dirty tracked"
+
+
+def test_snapshot_untracked_ignores_gitignored(app_layout, capfd):
+    """Gitignored files should not appear in the snapshot."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Add .gitignore
+    gitignore_path = os.path.join(app_layout.repo_path, ".gitignore")
+    with open(gitignore_path, "w") as f:
+        f.write("*.log\n.env\nsecrets/\n")
+    app_layout.write_file_commit_and_push("test_repo_0", ".gitignore", "", commit=True)
+
+    # Create ignored files
+    with open(os.path.join(app_layout.repo_path, ".env"), "w") as f:
+        f.write("SECRET=xyz")
+    with open(os.path.join(app_layout.repo_path, "debug.log"), "w") as f:
+        f.write("log data")
+    os.makedirs(os.path.join(app_layout.repo_path, "secrets"), exist_ok=True)
+    with open(os.path.join(app_layout.repo_path, "secrets", "key.txt"), "w") as f:
+        f.write("private")
+
+    # Create a non-ignored untracked file + dirty tracked file
+    with open(os.path.join(app_layout.repo_path, "visible.py"), "w") as f:
+        f.write("visible")
+    tracked = os.path.join(app_layout.repo_path, ".gitignore")
+    with open(tracked, "a") as f:
+        f.write("# dirty\n")
+
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="gitignore test")
+    assert err == 0
+    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, action="show", version=verstr)
+    assert err == 0
+    show_out = capfd.readouterr().out
+
+    # Extract just the untracked files section
+    assert "Untracked files" in show_out
+    untracked_section = show_out.split("Untracked files")[1]
+
+    # visible.py should be listed as untracked
+    assert "visible.py" in untracked_section
+
+    # Ignored files must NOT appear in untracked section
+    assert "debug.log" not in untracked_section
+    assert "secrets" not in untracked_section
+    assert "key.txt" not in untracked_section
+
+
+def test_snapshot_diff_dev_vs_stamped(app_layout, capfd):
+    """Diff between a dev snapshot and a stamped (non-dev) version."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0  # 0.0.1
+
+    # Create dirty state and snapshot
+    app_layout.write_file_commit_and_push("test_repo_0", "dev_file.txt", "initial")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "dev_file.txt", "dev changes", commit=False
+    )
+
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="dev snapshot")
+    assert err == 0
+    dev_verstr = _extract_dev_verstr(capfd.readouterr().out)
+    assert dev_verstr is not None
+
+    # Reset dirty state
+    subprocess.run(
+        ["git", "checkout", "."],
+        cwd=app_layout.repo_path,
+        check=True,
+    )
+
+    # Diff: stamped version vs dev snapshot
+    capfd.readouterr()
+    err = _snapshot(
+        app_layout.app_name, action="diff", version="0.0.1", to_version=dev_verstr
+    )
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "0.0.1" in captured.out
+    assert dev_verstr in captured.out
+
+    # Diff: dev snapshot vs stamped version
+    capfd.readouterr()
+    err = _snapshot(
+        app_layout.app_name, action="diff", version=dev_verstr, to_version="0.0.1"
+    )
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "0.0.1" in captured.out
+    assert dev_verstr in captured.out

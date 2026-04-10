@@ -3,6 +3,7 @@
 import datetime
 import difflib
 import hashlib
+import io
 import os
 import shutil
 import subprocess
@@ -63,6 +64,10 @@ class LocalSnapshotStorage(SnapshotStorage):
             with open(os.path.join(snap_dir, "local_commits.patch"), "w") as f:
                 f.write(patches["local_commits"])
 
+        if patches.get("untracked_files"):
+            with open(os.path.join(snap_dir, "untracked_files.tar.gz"), "wb") as f:
+                f.write(patches["untracked_files"])
+
     def load(self, app_name, verstr):
         snap_dir = self._snapshot_dir(app_name, verstr)
         if not os.path.isdir(snap_dir):
@@ -81,6 +86,11 @@ class LocalSnapshotStorage(SnapshotStorage):
         if os.path.isfile(lc_path):
             with open(lc_path) as f:
                 patches["local_commits"] = f.read()
+
+        ut_path = os.path.join(snap_dir, "untracked_files.tar.gz")
+        if os.path.isfile(ut_path):
+            with open(ut_path, "rb") as f:
+                patches["untracked_files"] = f.read()
 
         return metadata, patches
 
@@ -156,6 +166,12 @@ class S3SnapshotStorage(SnapshotStorage):
                 Key=f"{prefix}/local_commits.patch",
                 Body=patches["local_commits"].encode("utf-8"),
             )
+        if patches.get("untracked_files"):
+            self._s3.put_object(
+                Bucket=self.bucket,
+                Key=f"{prefix}/untracked_files.tar.gz",
+                Body=patches["untracked_files"],
+            )
 
     def load(self, app_name, verstr):
         prefix = self._key_prefix(app_name, verstr)
@@ -182,6 +198,15 @@ class S3SnapshotStorage(SnapshotStorage):
                 patches[patch_name] = resp["Body"].read().decode("utf-8")
             except Exception:
                 pass
+
+        try:
+            resp = self._s3.get_object(
+                Bucket=self.bucket,
+                Key=f"{prefix}/untracked_files.tar.gz",
+            )
+            patches["untracked_files"] = resp["Body"].read()
+        except Exception:
+            pass
 
         return metadata, patches
 
@@ -248,13 +273,18 @@ def _get_storage(vcs, params):
     )
 
 
+def _ensure_trailing_newline(s):
+    """git apply/am require patches to end with a newline."""
+    return s if s.endswith("\n") else s + "\n"
+
+
 def _generate_patches(backend):
     patches = {}
 
     try:
         wt_diff = backend._be.git.diff("HEAD")
         if wt_diff.strip():
-            patches["working_tree"] = wt_diff
+            patches["working_tree"] = _ensure_trailing_newline(wt_diff)
     except Exception:
         VMN_LOGGER.debug("Failed to generate working tree diff", exc_info=True)
 
@@ -265,13 +295,62 @@ def _generate_patches(backend):
                 f"{backend.remote_active_branch}..{backend.active_branch}",
             )
             if local_commits_diff.strip():
-                patches["local_commits"] = local_commits_diff
+                patches["local_commits"] = _ensure_trailing_newline(local_commits_diff)
         except Exception:
             VMN_LOGGER.debug(
                 "Failed to generate local commits patch", exc_info=True
             )
 
+    try:
+        untracked_tar = _collect_untracked_tarball(backend.repo_path)
+        if untracked_tar:
+            patches["untracked_files"] = untracked_tar
+    except Exception:
+        VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
+
     return patches
+
+
+def _collect_untracked_tarball(repo_path):
+    """Collect untracked non-ignored files into an in-memory tar.gz."""
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    buf = io.BytesIO()
+    file_count = 0
+    with tarfile.open(mode="w:gz", fileobj=buf) as tar:
+        for rel_path in result.stdout.strip().split("\n"):
+            if not rel_path:
+                continue
+            # Skip vmn's own state directory
+            if rel_path.startswith(".vmn/") or rel_path == ".vmn":
+                continue
+            abs_path = os.path.join(repo_path, rel_path)
+            if os.path.isfile(abs_path):
+                tar.add(abs_path, arcname=rel_path)
+                file_count += 1
+
+    if file_count == 0:
+        return None
+    return buf.getvalue()
+
+
+def _extract_untracked_tarball(dest, tarball_bytes):
+    """Extract untracked files tarball into dest directory."""
+    buf = io.BytesIO(tarball_bytes)
+    with tarfile.open(mode="r:gz", fileobj=buf) as tar:
+        tar.extractall(path=dest)
+
+
+def _list_tarball_members(tarball_bytes):
+    """List file names in a tarball."""
+    buf = io.BytesIO(tarball_bytes)
+    with tarfile.open(mode="r:gz", fileobj=buf) as tar:
+        return sorted(m.name for m in tar.getmembers())
 
 
 def _compute_verstr(base_version, commit_hash, patches):
@@ -281,6 +360,9 @@ def _compute_verstr(base_version, commit_hash, patches):
         if patches.get(key):
             h.update(patches[key].encode())
             has_content = True
+    if patches.get("untracked_files"):
+        h.update(patches["untracked_files"])
+        has_content = True
 
     diff_hash = h.hexdigest()[:7] if has_content else "0000000"
     return f"{base_version}-dev.{commit_hash[:7]}.{diff_hash}"
@@ -303,7 +385,7 @@ def _apply_snapshot_patches(vcs, params, metadata, patches):
         if patches.get("local_commits"):
             result = subprocess.run(
                 ["git", "am", "--3way"],
-                input=patches["local_commits"],
+                input=_ensure_trailing_newline(patches["local_commits"]),
                 capture_output=True, text=True,
                 cwd=vcs.vmn_root_path,
             )
@@ -316,7 +398,7 @@ def _apply_snapshot_patches(vcs, params, metadata, patches):
         if patches.get("working_tree"):
             result = subprocess.run(
                 ["git", "apply", "--3way"],
-                input=patches["working_tree"],
+                input=_ensure_trailing_newline(patches["working_tree"]),
                 capture_output=True, text=True,
                 cwd=vcs.vmn_root_path,
             )
@@ -325,6 +407,13 @@ def _apply_snapshot_patches(vcs, params, metadata, patches):
                     f"Failed to apply working tree patch: {result.stderr}"
                 )
                 return 1
+
+        if patches.get("untracked_files"):
+            try:
+                _extract_untracked_tarball(vcs.vmn_root_path, patches["untracked_files"])
+            except Exception:
+                VMN_LOGGER.warning("Failed to extract untracked files from snapshot")
+                VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
     VMN_LOGGER.info(f"Restored dev version {metadata['verstr']} of {vcs.name}")
     return 0
@@ -423,6 +512,7 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
         "dirty_states": dirty_states,
         "has_working_tree_patch": "working_tree" in patches,
         "has_local_commits_patch": "local_commits" in patches,
+        "has_untracked_files": "untracked_files" in patches,
     }
     if user_meta:
         metadata["user_meta"] = user_meta
@@ -502,6 +592,10 @@ def snapshot_show(vcs, params, verstr):
     if patches.get("local_commits"):
         print("--- Local commits patch ---")
         print(patches["local_commits"])
+    if patches.get("untracked_files"):
+        print("--- Untracked files ---")
+        for name in _list_tarball_members(patches["untracked_files"]):
+            print(f"  {name}")
 
     return 0
 
@@ -540,6 +634,58 @@ def snapshot_restore(vcs, params, verstr):
     return _apply_snapshot_patches(vcs, params, metadata, patches)
 
 
+def _synthesize_stamped_version(vcs, verstr):
+    """Synthesize empty snapshot metadata for a stamped (non-dev) version.
+
+    A stamped version is a clean checkout at a tag — no patches.
+    Returns (metadata, patches) or (None, None) if not resolvable.
+    """
+    if "-dev." in verstr:
+        return None, None
+
+    try:
+        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
+    except Exception:
+        VMN_LOGGER.debug(f"Failed to resolve stamped version {verstr}", exc_info=True)
+        return None, None
+
+    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+        return None, None
+
+    ver_info = ver_infos[tag_name]["ver_info"]
+    changesets = ver_info["stamping"]["app"].get("changesets", {})
+    commit_hash = changesets.get(".", {}).get("hash", "")
+    if not commit_hash:
+        return None, None
+
+    metadata = {
+        "verstr": verstr,
+        "base_version": verstr,
+        "base_commit": commit_hash,
+        "branch": changesets.get(".", {}).get("branch", ""),
+        "remote": changesets.get(".", {}).get("remote", ""),
+        "timestamp": "stamped",
+        "note": None,
+        "app_name": vcs.name,
+        "changesets": changesets,
+    }
+    return metadata, {}
+
+
+def _load_or_synthesize(storage, vcs, verstr):
+    """Load a snapshot from storage, or synthesize for stamped versions."""
+    meta, patches = storage.load(vcs.name, verstr)
+    if meta is not None:
+        return meta, patches
+
+    # Not in storage — try to resolve as a stamped version
+    meta, patches = _synthesize_stamped_version(vcs, verstr)
+    if meta is not None:
+        return meta, patches
+
+    return None, None
+
+
 @measure_runtime_decorator
 def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
     """Compare two snapshots. verstr2 can be 'current' to diff against working state."""
@@ -552,7 +698,7 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
 
     storage = _get_storage(vcs, params)
 
-    meta1, patches1 = storage.load(vcs.name, verstr1)
+    meta1, patches1 = _load_or_synthesize(storage, vcs, verstr1)
     if meta1 is None:
         VMN_LOGGER.error(f"Snapshot {verstr1} not found")
         return 1
@@ -565,7 +711,7 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
             "branch": vcs.backend.active_branch,
         }
     else:
-        meta2, patches2 = storage.load(vcs.name, verstr2)
+        meta2, patches2 = _load_or_synthesize(storage, vcs, verstr2)
         if meta2 is None:
             VMN_LOGGER.error(f"Snapshot {verstr2} not found")
             return 1
@@ -619,6 +765,24 @@ def _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2):
             print(line, end="")
         print()
 
+    ut1 = patches1.get("untracked_files")
+    ut2 = patches2.get("untracked_files")
+    if ut1 or ut2:
+        names1 = _list_tarball_members(ut1) if ut1 else []
+        names2 = _list_tarball_members(ut2) if ut2 else []
+        if names1 != names2:
+            print("--- untracked files ---")
+            for line in difflib.unified_diff(
+                [n + "\n" for n in names1],
+                [n + "\n" for n in names2],
+                fromfile=f"{verstr1}/untracked",
+                tofile=f"{verstr2}/untracked",
+            ):
+                print(line, end="")
+            print()
+        elif names1:
+            print("untracked files: identical file list")
+
     return 0
 
 
@@ -658,6 +822,9 @@ def _write_snapshot_to_dir(directory, metadata, patches):
     if patches.get("local_commits"):
         with open(os.path.join(directory, "local_commits.patch"), "w") as f:
             f.write(patches["local_commits"])
+    if patches.get("untracked_files"):
+        with open(os.path.join(directory, "untracked_files.tar.gz"), "wb") as f:
+            f.write(patches["untracked_files"])
 
 
 def _shallow_clone_at(dest, remote, commit_hash):
@@ -710,7 +877,7 @@ def _apply_patches_to_workdir(dest, patches):
     if patches.get("local_commits"):
         result = subprocess.run(
             ["git", "am", "--3way"],
-            input=patches["local_commits"],
+            input=_ensure_trailing_newline(patches["local_commits"]),
             capture_output=True, text=True, cwd=dest,
         )
         if result.returncode != 0:
@@ -719,11 +886,17 @@ def _apply_patches_to_workdir(dest, patches):
     if patches.get("working_tree"):
         result = subprocess.run(
             ["git", "apply"],
-            input=patches["working_tree"],
+            input=_ensure_trailing_newline(patches["working_tree"]),
             capture_output=True, text=True, cwd=dest,
         )
         if result.returncode != 0:
             VMN_LOGGER.warning(f"Failed to apply working tree patch: {result.stderr}")
+
+    if patches.get("untracked_files"):
+        try:
+            _extract_untracked_tarball(dest, patches["untracked_files"])
+        except Exception:
+            VMN_LOGGER.debug("Failed to extract untracked files in workdir", exc_info=True)
 
 
 def _copy_untracked_files(repo_path, dest):
@@ -779,8 +952,9 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
 
     _apply_patches_to_workdir(output_path, patches)
 
-    # Copy untracked files if current working tree matches the snapshot
-    if vcs and hasattr(vcs, 'vmn_root_path'):
+    # Fallback for old snapshots without stored untracked files:
+    # copy from live working tree if HEAD matches base_commit
+    if not patches.get("untracked_files") and vcs and hasattr(vcs, 'vmn_root_path'):
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],

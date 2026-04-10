@@ -710,6 +710,18 @@ def handle_snapshot(vmn_ctx):
     }
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
+        app_name = vmn_ctx.vcs.name
+        if "repo_tracked" not in status.state:
+            VMN_LOGGER.error(
+                "Repository not initialized. Run:\n\n"
+                "  vmn init\n"
+                f"  vmn stamp -r patch {app_name}\n"
+            )
+        elif "app_tracked" not in status.state:
+            VMN_LOGGER.error(
+                f"App '{app_name}' not initialized. Run:\n\n"
+                f"  vmn stamp -r patch {app_name}\n"
+            )
         return 1
 
     action = vmn_ctx.args.action
