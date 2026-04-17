@@ -25,7 +25,7 @@ from version_stamp.cli.snapshot import (
 @dataclass
 class _VersionStub:
     version: Optional[List[str]] = None
-    latest: Optional[int] = None
+    latest: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -146,9 +146,9 @@ def _get_latest_metrics(log):
 def _resolve_experiment_version(storage, vcs, args):
     """Resolve version for experiment actions. Returns (verstr, error_msg)."""
     versions = getattr(args, "version", None)
-    latest = getattr(args, "latest", None)
+    latest = getattr(args, "latest", False)
 
-    if latest is not None:
+    if latest:
         snaps = storage.list_snapshots(vcs.name)
         if not snaps:
             return None, f"No experiments found for {vcs.name}"
@@ -224,16 +224,18 @@ def handle_experiment(vmn_ctx):
             vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
             vmn_init_file = os.path.join(vmn_path, "conf.yml")
 
+            _dirty_ok = {"pending", "outgoing"}
+
             if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
                 VMN_LOGGER.info("Auto-initializing repository...")
-                ret = handle_init(vmn_ctx)
+                ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
                 if ret != 0:
                     return 1
                 auto_initialized = True
 
             if "app_tracked" not in status.state and not be.is_path_tracked(vcs.app_dir_path):
                 VMN_LOGGER.info(f"Auto-initializing app '{vcs.name}'...")
-                err = _init_app(vcs, "0.0.0")
+                err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
                 if err:
                     return 1
                 auto_initialized = True
@@ -528,12 +530,15 @@ def experiment_show(vcs, params, storage, args):
 @measure_runtime_decorator
 def experiment_compare(vcs, params, storage, args):
     versions = getattr(args, "version", None) or []
-    latest_n = getattr(args, "latest", None)
+    use_latest = getattr(args, "latest", False)
 
     experiments = []
-    if latest_n:
+    if use_latest:
         snaps = storage.list_snapshots(vcs.name)
-        n = latest_n if latest_n > 1 else 2
+        n = getattr(args, "top", None) or 2
+        if n < 2:
+            VMN_LOGGER.error(f"Need at least 2 to compare, got {n}")
+            return 1
         if len(snaps) < 2:
             VMN_LOGGER.error("Need at least 2 experiments to compare")
             return 1
@@ -555,7 +560,7 @@ def experiment_compare(vcs, params, storage, args):
             log = _load_log(storage, vcs.name, resolved)
             experiments.append((meta, patches, log))
     else:
-        VMN_LOGGER.error("Specify -v <v1> -v <v2> or --latest N")
+        VMN_LOGGER.error("Specify -v <v1> -v <v2> or --latest")
         return 1
 
     # Metrics comparison table
@@ -723,10 +728,13 @@ def experiment_prune(vcs, params, storage, args):
 
     to_delete = []
     if keep is not None:
-        if len(experiments) <= keep:
+        if keep == 0:
+            to_delete = list(experiments)
+        elif len(experiments) <= keep:
             print(f"Only {len(experiments)} experiments, nothing to prune (--keep {keep})")
             return 0
-        to_delete = experiments[:-keep]
+        else:
+            to_delete = experiments[:-keep]
     elif older_than is not None:
         try:
             delta = _parse_duration(older_than)

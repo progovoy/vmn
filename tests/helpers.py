@@ -347,11 +347,8 @@ def _experiment(app_name, action="create", version=None, note=None,
         args_list.extend(["--sort", sort])
     if top is not None:
         args_list.extend(["--top", str(top)])
-    if latest is not None:
-        if isinstance(latest, int) and latest > 1:
-            args_list.extend(["--latest", str(latest)])
-        else:
-            args_list.append("--latest")
+    if latest:
+        args_list.append("--latest")
     if tool is not None:
         args_list.extend(["--tool", tool])
     if output is not None:

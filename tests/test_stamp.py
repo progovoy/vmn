@@ -24,6 +24,23 @@ def test_vmn_init(app_layout, capfd):
     assert "" == captured.out
 
 
+def test_vmn_init_gitignores_snapshot_dirs(app_layout):
+    """vmn init should gitignore snapshot and experiment directories."""
+    res = _run_vmn_init()
+    assert res == 0
+
+    gitignore_path = os.path.join(app_layout.repo_path, ".vmn", ".gitignore")
+    assert os.path.exists(gitignore_path)
+    with open(gitignore_path) as f:
+        content = f.read()
+    assert "snapshots" in content.lower(), (
+        f".vmn/.gitignore missing snapshots pattern: {content}"
+    )
+    assert "experiments" in content.lower(), (
+        f".vmn/.gitignore missing experiments pattern: {content}"
+    )
+
+
 def test_double_stamp_no_commit(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)

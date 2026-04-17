@@ -440,11 +440,9 @@ def _add_experiment_parser(subprasers, name):
     pexp.add_argument("--top", type=int, default=None, help="Show top N results in list")
     pexp.add_argument(
         "--latest",
-        nargs="?",
-        const=1,
-        type=int,
-        default=None,
-        help="Use latest N experiments (default 1)",
+        action="store_true",
+        default=False,
+        help="Use the most recent experiment (for show/compare/restore/export)",
     )
     pexp.add_argument("--tool", default=None, help="External diff tool for compare")
     pexp.add_argument("-o", "--output", default=None, help="Output path for export")

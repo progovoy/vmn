@@ -48,9 +48,11 @@ _STATUS_DESCRIPTIONS = {
 
 
 @measure_runtime_decorator
-def handle_init(vmn_ctx):
+def handle_init(vmn_ctx, extra_optional=None):
     expected_status = {"repos_exist_locally"}
     optional_status = {"deps_synced_with_conf", "version_not_matched"}
+    if extra_optional:
+        optional_status |= extra_optional
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -994,8 +996,10 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
 
 @measure_runtime_decorator
-def _init_app(versions_be_ifc, starting_version):
+def _init_app(versions_be_ifc, starting_version, extra_optional=None):
     optional_status = {"version_not_matched", "detached"}
+    if extra_optional:
+        optional_status |= extra_optional
     expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
 
     status = _get_repo_status(versions_be_ifc, expected_status, optional_status)

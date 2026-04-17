@@ -7,6 +7,7 @@ import io
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from abc import ABC, abstractmethod
@@ -446,6 +447,7 @@ class CachedSnapshotStorage(SnapshotStorage):
             except Exception:
                 VMN_LOGGER.warning("Failed to sync snapshot to remote storage")
                 VMN_LOGGER.debug("Remote save failed", exc_info=True)
+                raise
 
     def load(self, app_name, verstr):
         meta, patches = self._local.load(app_name, verstr)
@@ -487,6 +489,7 @@ class CachedSnapshotStorage(SnapshotStorage):
                 self._remote.update_note(app_name, verstr, note)
             except Exception:
                 VMN_LOGGER.debug("Failed to update note on remote", exc_info=True)
+                raise
         return ok
 
     def delete(self, app_name, verstr):
@@ -496,6 +499,7 @@ class CachedSnapshotStorage(SnapshotStorage):
                 self._remote.delete(app_name, verstr)
             except Exception:
                 VMN_LOGGER.debug("Failed to delete from remote", exc_info=True)
+                raise
 
     def load_file(self, app_name, verstr, filename):
         data = self._local.load_file(app_name, verstr, filename)
@@ -515,6 +519,7 @@ class CachedSnapshotStorage(SnapshotStorage):
                 self._remote.save_file(app_name, verstr, filename, data)
             except Exception:
                 VMN_LOGGER.debug("Failed to save file to remote", exc_info=True)
+                raise
 
     def save_artifact_file(self, app_name, verstr, src_path):
         self._local.save_artifact_file(app_name, verstr, src_path)
@@ -523,6 +528,7 @@ class CachedSnapshotStorage(SnapshotStorage):
                 self._remote.save_artifact_file(app_name, verstr, src_path)
             except Exception:
                 VMN_LOGGER.debug("Failed to save artifact to remote", exc_info=True)
+                raise
 
     def list_artifact_files(self, app_name, verstr):
         return self._local.list_artifact_files(app_name, verstr)
@@ -913,7 +919,7 @@ def gather_create_data(vcs):
         any(k != "deps" for k in patches) or bool(dep_patches)
     )
     if not patches or not has_content:
-        print("No local changes to snapshot (working tree is clean)")
+        print("No local changes to snapshot (working tree is clean)", file=sys.stderr)
         return None, None, None, None, None, 0
 
     return base_version, commit_hash, patches, dirty_states, ver_info, None

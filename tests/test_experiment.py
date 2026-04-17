@@ -271,6 +271,23 @@ def test_experiment_compare(app_layout, capfd):
     assert "metric" in captured.out
 
 
+def test_experiment_compare_latest_top_one_errors(app_layout, capfd):
+    """--latest --top 1 should error because comparing requires at least 2."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    for i, fname in enumerate(["lat1_a.txt", "lat1_b.txt"]):
+        _make_dirty(app_layout, fname, f"latest1_{i}")
+        err = _experiment(app_layout.app_name, note=f"exp{i}")
+        assert err == 0
+
+    # --latest --top 1 means compare only 1 experiment, which is not enough
+    err = _experiment(app_layout.app_name, action="compare", latest=True, top=1)
+    assert err != 0
+
+
 def test_experiment_restore(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -349,6 +366,92 @@ def test_experiment_prune(app_layout, capfd):
     captured = capfd.readouterr()
     lines = [l for l in captured.out.strip().split("\n") if l.strip().startswith("[")]
     assert len(lines) == 1
+
+
+def test_experiment_prune_keep_zero(app_layout, capfd):
+    """--keep 0 should delete all experiments."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    for i, fname in enumerate(["prune_z1.txt", "prune_z2.txt", "prune_z3.txt"]):
+        _make_dirty(app_layout, fname, f"prune_zero_{i}")
+        err = _experiment(app_layout.app_name, note=f"prune_zero_{i}")
+        assert err == 0
+
+    capfd.readouterr()
+    err = _experiment(app_layout.app_name, action="list")
+    assert err == 0
+    captured = capfd.readouterr()
+    lines = [l for l in captured.out.strip().split("\n") if l.strip().startswith("[")]
+    assert len(lines) == 3
+
+    capfd.readouterr()
+    err = _experiment(app_layout.app_name, action="prune", keep=0)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "Pruned 3" in captured.out
+    assert "kept 0" in captured.out
+
+    capfd.readouterr()
+    err = _experiment(app_layout.app_name, action="list")
+    assert err == 0
+    captured = capfd.readouterr()
+    lines = [l for l in captured.out.strip().split("\n") if l.strip().startswith("[")]
+    assert len(lines) == 0
+
+
+def test_experiment_create_auto_init_dirty_tree(app_layout, capfd):
+    """Experiment create should auto-init repo and app even when the working tree is dirty."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    _make_dirty(app_layout, "auto_init_dirty.txt", "dirty content")
+
+    capfd.readouterr()
+    err = _experiment("new_dirty_app", note="dirty tree auto init")
+    assert err == 0, (
+        "experiment create should succeed on uninitialized app with dirty tree"
+    )
+    captured = capfd.readouterr()
+    verstr = extract_dev_verstr(captured.out)
+    assert verstr is not None, f"Expected dev verstr in output, got: {captured.out}"
+
+
+def test_experiment_argparse_latest_before_name():
+    """Argparse should not consume app name as --latest value."""
+    from version_stamp.cli.args import parse_user_commands
+    args = parse_user_commands(["experiment", "--latest", "my_app"])
+    assert args.name == "my_app"
+    assert args.latest is True
+
+    args = parse_user_commands(["experiment", "show", "my_app", "--latest"])
+    assert args.name == "my_app"
+    assert args.latest is True
+    assert args.action == "show"
+
+
+def test_experiment_show_latest_before_name(app_layout, capfd):
+    """--latest before positional name should not consume the name as its value."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    _make_dirty(app_layout, "latest_flag.txt", "latest flag content")
+
+    capfd.readouterr()
+    err = _experiment(app_layout.app_name, note="latest flag test")
+    assert err == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    reset_logger()
+    ret = vmn_run(["experiment", "show", app_layout.app_name, "--latest"])[0]
+    assert ret == 0, f"show <name> --latest failed with exit code {ret}"
 
 
 def test_exp_alias(app_layout, capfd):

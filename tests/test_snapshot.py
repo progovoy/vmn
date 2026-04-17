@@ -1,7 +1,8 @@
 import os
 import subprocess
 import tarfile
-from unittest.mock import patch as mock_patch
+import tempfile
+from unittest.mock import MagicMock, patch as mock_patch
 
 import boto3
 import pytest
@@ -9,7 +10,8 @@ import yaml
 from moto import mock_aws
 
 from version_stamp.cli.entry import vmn_run
-from version_stamp.core.logging import reset_logger
+from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from version_stamp.core.logging import init_stamp_logger, reset_logger
 from helpers import (
     DEV_VERSION_RE,
     extract_dev_verstr,
@@ -101,6 +103,22 @@ def test_show_dev_from_file_error(app_layout, capfd):
     assert ret == 1
     captured = capfd.readouterr()
     assert "--dev cannot be used with --from-file" in captured.err
+
+
+def test_snapshot_create_clean_tree_message_on_stderr(app_layout, capfd):
+    """'No local changes' message should go to stderr, not stdout."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Tree is clean after stamp — no dirty changes
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+    # The "No local changes" message must NOT appear on stdout
+    assert "No local changes" not in captured.out
 
 
 def test_snapshot_create_and_list(app_layout, capfd):
@@ -1041,3 +1059,76 @@ def test_snapshot_diff_dev_vs_stamped(app_layout, capfd):
     captured = capfd.readouterr()
     assert "0.0.1" in captured.out
     assert dev_verstr in captured.out
+
+
+@pytest.fixture
+def cached_storage_with_mock_remote(tmp_path):
+    """Provide a CachedSnapshotStorage wired to a real local and a mock remote."""
+    try:
+        init_stamp_logger()
+    except Exception:
+        pass
+    local = LocalSnapshotStorage(str(tmp_path))
+    remote = MagicMock()
+    cached = CachedSnapshotStorage(local, remote)
+    return local, remote, cached
+
+
+_TEST_VERSTR = "1.0.0-dev.abc1234.def5678"
+_TEST_APP = "test_app"
+_TEST_META = {"verstr": _TEST_VERSTR, "app_name": "test"}
+
+
+def test_cached_storage_raises_on_remote_save_failure(cached_storage_with_mock_remote):
+    """CachedSnapshotStorage must propagate write errors from remote storage."""
+    _, remote, cached = cached_storage_with_mock_remote
+    remote.save.side_effect = Exception("S3 bucket not found")
+
+    with pytest.raises(Exception, match="S3 bucket not found"):
+        cached.save(_TEST_APP, _TEST_VERSTR, _TEST_META, {"working_tree": "patch"})
+
+
+def test_cached_storage_raises_on_remote_delete_failure(cached_storage_with_mock_remote):
+    """CachedSnapshotStorage must propagate delete errors from remote storage."""
+    local, remote, cached = cached_storage_with_mock_remote
+    remote.delete.side_effect = Exception("S3 access denied")
+
+    local.save(_TEST_APP, _TEST_VERSTR, _TEST_META, {"working_tree": "data"})
+
+    with pytest.raises(Exception, match="S3 access denied"):
+        cached.delete(_TEST_APP, _TEST_VERSTR)
+
+
+def test_cached_storage_raises_on_remote_update_note_failure(cached_storage_with_mock_remote):
+    """CachedSnapshotStorage must propagate update_note errors from remote storage."""
+    local, remote, cached = cached_storage_with_mock_remote
+    remote.update_note.side_effect = Exception("S3 timeout")
+
+    local.save(_TEST_APP, _TEST_VERSTR, _TEST_META, {})
+
+    with pytest.raises(Exception, match="S3 timeout"):
+        cached.update_note(_TEST_APP, _TEST_VERSTR, "my note")
+
+
+def test_cached_storage_raises_on_remote_save_file_failure(cached_storage_with_mock_remote):
+    """CachedSnapshotStorage must propagate save_file errors from remote storage."""
+    _, remote, cached = cached_storage_with_mock_remote
+    remote.save_file.side_effect = Exception("S3 write failed")
+
+    with pytest.raises(Exception, match="S3 write failed"):
+        cached.save_file(_TEST_APP, _TEST_VERSTR, "out.txt", b"data")
+
+
+def test_cached_storage_raises_on_remote_save_artifact_file_failure(
+    cached_storage_with_mock_remote, tmp_path
+):
+    """CachedSnapshotStorage must propagate save_artifact_file errors from remote."""
+    _, remote, cached = cached_storage_with_mock_remote
+    remote.save_artifact_file.side_effect = Exception("S3 permission denied")
+
+    artifact_path = str(tmp_path / "artifact.bin")
+    with open(artifact_path, "wb") as f:
+        f.write(b"artifact data")
+
+    with pytest.raises(Exception, match="S3 permission denied"):
+        cached.save_artifact_file(_TEST_APP, _TEST_VERSTR, artifact_path)
