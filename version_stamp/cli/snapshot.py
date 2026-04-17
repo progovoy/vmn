@@ -586,6 +586,11 @@ def _resolve_verstr(storage, app_name, verstr, latest=False):
     if storage.exists(app_name, verstr):
         return verstr, None
 
+    # Stamped (non-dev) versions are not stored as snapshots but are
+    # synthesized on-demand by _load_or_synthesize(). Pass them through.
+    if "-dev." not in verstr:
+        return verstr, None
+
     # Try prefix match
     snapshots = storage.list_snapshots(app_name)
     matches = [m for m in snapshots if m["verstr"].startswith(verstr)]
@@ -1148,11 +1153,11 @@ def _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2):
     print(f"+++ {verstr2}")
     print()
 
-    all_keys = sorted(set(list(meta1.keys()) + list(meta2.keys())))
+    common_keys = sorted(set(meta1.keys()) & set(meta2.keys()))
     meta_changes = []
-    for key in all_keys:
-        v1 = meta1.get(key)
-        v2 = meta2.get(key)
+    for key in common_keys:
+        v1 = meta1[key]
+        v2 = meta2[key]
         if v1 != v2:
             meta_changes.append(f"  {key}: {v1} -> {v2}")
     if meta_changes:

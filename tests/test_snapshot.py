@@ -520,6 +520,32 @@ def test_snapshot_diff_current(app_layout, capfd):
     assert "+++" in captured.out
 
 
+def test_snapshot_diff_current_no_noise(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "noise_test.txt", "initial")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "noise_test.txt", "dirty content", commit=False
+    )
+
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="noise test")
+    assert err == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    capfd.readouterr()
+    err = _snapshot(
+        app_layout.app_name, action="diff", version=verstr, to_version="current"
+    )
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "-> None" not in captured.out
+
+
 def test_snapshot_metadata_hooks(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
