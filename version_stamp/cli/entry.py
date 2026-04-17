@@ -30,6 +30,9 @@ from version_stamp.cli.commands import (  # noqa: F401
     handle_snapshot,
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
+from version_stamp.cli.experiment import handle_experiment  # noqa: F401
+
+handle_exp = handle_experiment  # alias  # noqa: F811
 
 
 class VMNContainer(object):

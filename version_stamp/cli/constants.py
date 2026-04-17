@@ -30,6 +30,8 @@ VMN_ARGS = {
     "add": "remote",
     "config": "local",
     "snapshot": "local",
+    "experiment": "remote",
+    "exp": "remote",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()

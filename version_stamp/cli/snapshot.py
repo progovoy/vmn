@@ -17,6 +17,26 @@ import yaml
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
+def _relative_timestamp(iso_ts):
+    """Convert ISO timestamp to relative format like '2m ago', '3h ago', '5d ago'."""
+    try:
+        dt = datetime.datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        delta = now - dt
+        seconds = int(delta.total_seconds())
+        if seconds < 0:
+            return iso_ts
+        if seconds < 60:
+            return f"{seconds}s ago"
+        if seconds < 3600:
+            return f"{seconds // 60}m ago"
+        if seconds < 86400:
+            return f"{seconds // 3600}h ago"
+        return f"{seconds // 86400}d ago"
+    except Exception:
+        return iso_ts
+
+
 class SnapshotStorage(ABC):
     @abstractmethod
     def save(self, app_name, verstr, metadata, patches):
@@ -30,24 +50,63 @@ class SnapshotStorage(ABC):
     def list_snapshots(self, app_name):
         ...
 
+    def exists(self, app_name, verstr):
+        """Check if a snapshot exists without loading its full content."""
+        metadata, _ = self.load(app_name, verstr)
+        return metadata is not None
+
     @abstractmethod
     def update_note(self, app_name, verstr, note):
         ...
 
 
+def _write_patches_to_dir(directory, patches):
+    if patches.get("working_tree"):
+        with open(os.path.join(directory, "working_tree.patch"), "w") as f:
+            f.write(patches["working_tree"])
+    if patches.get("local_commits"):
+        with open(os.path.join(directory, "local_commits.patch"), "w") as f:
+            f.write(patches["local_commits"])
+    if patches.get("untracked_files"):
+        with open(os.path.join(directory, "untracked_files.tar.gz"), "wb") as f:
+            f.write(patches["untracked_files"])
+
+
+def _read_patches_from_dir(directory):
+    patches = {}
+    wt_path = os.path.join(directory, "working_tree.patch")
+    if os.path.isfile(wt_path):
+        with open(wt_path) as f:
+            patches["working_tree"] = f.read()
+    lc_path = os.path.join(directory, "local_commits.patch")
+    if os.path.isfile(lc_path):
+        with open(lc_path) as f:
+            patches["local_commits"] = f.read()
+    ut_path = os.path.join(directory, "untracked_files.tar.gz")
+    if os.path.isfile(ut_path):
+        with open(ut_path, "rb") as f:
+            patches["untracked_files"] = f.read()
+    return patches
+
+
 class LocalSnapshotStorage(SnapshotStorage):
-    def __init__(self, vmn_root_path):
+    def __init__(self, vmn_root_path, subdir="snapshots"):
         self.vmn_root_path = vmn_root_path
+        self._subdir = subdir
 
     def _snapshot_base_dir(self, app_name):
         return os.path.join(
             self.vmn_root_path, ".vmn",
-            app_name.replace("/", os.sep), "snapshots",
+            app_name.replace("/", os.sep), self._subdir,
         )
 
     def _snapshot_dir(self, app_name, verstr):
         safe_verstr = verstr.replace("+", "_plus_")
         return os.path.join(self._snapshot_base_dir(app_name), safe_verstr)
+
+    def exists(self, app_name, verstr):
+        meta_path = os.path.join(self._snapshot_dir(app_name, verstr), "metadata.yml")
+        return os.path.isfile(meta_path)
 
     def save(self, app_name, verstr, metadata, patches):
         snap_dir = self._snapshot_dir(app_name, verstr)
@@ -56,17 +115,14 @@ class LocalSnapshotStorage(SnapshotStorage):
         with open(os.path.join(snap_dir, "metadata.yml"), "w") as f:
             yaml.dump(metadata, f, sort_keys=True)
 
-        if patches.get("working_tree"):
-            with open(os.path.join(snap_dir, "working_tree.patch"), "w") as f:
-                f.write(patches["working_tree"])
+        _write_patches_to_dir(snap_dir, patches)
 
-        if patches.get("local_commits"):
-            with open(os.path.join(snap_dir, "local_commits.patch"), "w") as f:
-                f.write(patches["local_commits"])
-
-        if patches.get("untracked_files"):
-            with open(os.path.join(snap_dir, "untracked_files.tar.gz"), "wb") as f:
-                f.write(patches["untracked_files"])
+        dep_patches = patches.get("deps", {})
+        for dep_path, dp in dep_patches.items():
+            safe_dep = dep_path.replace(os.sep, "_").replace("/", "_")
+            dep_dir = os.path.join(snap_dir, "deps", safe_dep)
+            Path(dep_dir).mkdir(parents=True, exist_ok=True)
+            _write_patches_to_dir(dep_dir, dp)
 
     def load(self, app_name, verstr):
         snap_dir = self._snapshot_dir(app_name, verstr)
@@ -76,21 +132,19 @@ class LocalSnapshotStorage(SnapshotStorage):
         with open(os.path.join(snap_dir, "metadata.yml")) as f:
             metadata = yaml.safe_load(f)
 
-        patches = {}
-        wt_path = os.path.join(snap_dir, "working_tree.patch")
-        if os.path.isfile(wt_path):
-            with open(wt_path) as f:
-                patches["working_tree"] = f.read()
+        patches = _read_patches_from_dir(snap_dir)
 
-        lc_path = os.path.join(snap_dir, "local_commits.patch")
-        if os.path.isfile(lc_path):
-            with open(lc_path) as f:
-                patches["local_commits"] = f.read()
-
-        ut_path = os.path.join(snap_dir, "untracked_files.tar.gz")
-        if os.path.isfile(ut_path):
-            with open(ut_path, "rb") as f:
-                patches["untracked_files"] = f.read()
+        deps_dir = os.path.join(snap_dir, "deps")
+        if os.path.isdir(deps_dir):
+            dep_patches = {}
+            for dep_name in os.listdir(deps_dir):
+                dep_dir = os.path.join(deps_dir, dep_name)
+                if os.path.isdir(dep_dir):
+                    dp = _read_patches_from_dir(dep_dir)
+                    if dp:
+                        dep_patches[dep_name] = dp
+            if dep_patches:
+                patches["deps"] = dep_patches
 
         return metadata, patches
 
@@ -100,12 +154,13 @@ class LocalSnapshotStorage(SnapshotStorage):
             return []
 
         results = []
-        for entry in sorted(os.listdir(base)):
+        for entry in os.listdir(base):
             meta_path = os.path.join(base, entry, "metadata.yml")
             if os.path.isfile(meta_path):
                 with open(meta_path) as f:
                     meta = yaml.safe_load(f)
                 results.append(meta)
+        results.sort(key=lambda m: m.get("timestamp", ""))
         return results
 
     def update_note(self, app_name, verstr, note):
@@ -154,6 +209,14 @@ class S3SnapshotStorage(SnapshotStorage):
             Key=f"{prefix}/metadata.yml",
             Body=yaml.dump(metadata, sort_keys=True).encode("utf-8"),
         )
+        self._put_patches(prefix, patches)
+
+        dep_patches = patches.get("deps", {})
+        for dep_path, dp in dep_patches.items():
+            safe_dep = dep_path.replace(os.sep, "_").replace("/", "_")
+            self._put_patches(f"{prefix}/deps/{safe_dep}", dp)
+
+    def _put_patches(self, prefix, patches):
         if patches.get("working_tree"):
             self._s3.put_object(
                 Bucket=self.bucket,
@@ -185,9 +248,33 @@ class S3SnapshotStorage(SnapshotStorage):
             error_code = (resp or {}).get("Error", {}).get("Code") if resp else None
             if error_code == "NoSuchKey" or "NoSuchKey" in str(e):
                 return None, None
+            VMN_LOGGER.warning(f"S3 error loading snapshot: {e}")
             VMN_LOGGER.debug("S3 load failed", exc_info=True)
             return None, None
 
+        patches = self._get_patches(prefix)
+
+        dep_patches = {}
+        dep_prefix = f"{prefix}/deps/"
+        try:
+            paginator = self._s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=self.bucket, Prefix=dep_prefix, Delimiter="/"
+            ):
+                for cp in page.get("CommonPrefixes", []):
+                    dep_name = cp["Prefix"][len(dep_prefix):].rstrip("/")
+                    dp = self._get_patches(cp["Prefix"].rstrip("/"))
+                    if dp:
+                        dep_patches[dep_name] = dp
+        except Exception:
+            VMN_LOGGER.debug("Failed to list S3 dep patches", exc_info=True)
+
+        if dep_patches:
+            patches["deps"] = dep_patches
+
+        return metadata, patches
+
+    def _get_patches(self, prefix):
         patches = {}
         for patch_name in ("working_tree", "local_commits"):
             try:
@@ -198,7 +285,6 @@ class S3SnapshotStorage(SnapshotStorage):
                 patches[patch_name] = resp["Body"].read().decode("utf-8")
             except Exception:
                 pass
-
         try:
             resp = self._s3.get_object(
                 Bucket=self.bucket,
@@ -207,8 +293,7 @@ class S3SnapshotStorage(SnapshotStorage):
             patches["untracked_files"] = resp["Body"].read()
         except Exception:
             pass
-
-        return metadata, patches
+        return patches
 
     def list_snapshots(self, app_name):
         prefix = self._key_prefix(app_name)
@@ -229,6 +314,9 @@ class S3SnapshotStorage(SnapshotStorage):
                     )
                     results.append(meta)
                 except Exception:
+                    VMN_LOGGER.warning(
+                        f"Failed to read S3 snapshot metadata: {meta_key}"
+                    )
                     VMN_LOGGER.debug(
                         f"Failed to read {meta_key}", exc_info=True
                     )
@@ -249,16 +337,109 @@ class S3SnapshotStorage(SnapshotStorage):
         return True
 
 
+class CachedSnapshotStorage(SnapshotStorage):
+    """Local-first storage with optional S3 sync. All ops hit local disk;
+    S3 provides durability and distribution."""
+
+    def __init__(self, local_storage, remote_storage=None):
+        self._local = local_storage
+        self._remote = remote_storage
+
+    def save(self, app_name, verstr, metadata, patches):
+        self._local.save(app_name, verstr, metadata, patches)
+        if self._remote:
+            try:
+                self._remote.save(app_name, verstr, metadata, patches)
+            except Exception:
+                VMN_LOGGER.warning("Failed to sync snapshot to remote storage")
+                VMN_LOGGER.debug("Remote save failed", exc_info=True)
+
+    def load(self, app_name, verstr):
+        meta, patches = self._local.load(app_name, verstr)
+        if meta is not None:
+            return meta, patches
+        if self._remote:
+            meta, patches = self._remote.load(app_name, verstr)
+            if meta is not None:
+                self._local.save(app_name, verstr, meta, patches)
+            return meta, patches
+        return None, None
+
+    def exists(self, app_name, verstr):
+        if self._local.exists(app_name, verstr):
+            return True
+        if self._remote:
+            return self._remote.exists(app_name, verstr)
+        return False
+
+    def list_snapshots(self, app_name):
+        local_snaps = self._local.list_snapshots(app_name)
+        seen = {m["verstr"] for m in local_snaps}
+        all_snaps = list(local_snaps)
+        if self._remote:
+            try:
+                for m in self._remote.list_snapshots(app_name):
+                    if m["verstr"] not in seen:
+                        all_snaps.append(m)
+                        seen.add(m["verstr"])
+            except Exception:
+                VMN_LOGGER.debug("Failed to list remote snapshots", exc_info=True)
+        all_snaps.sort(key=lambda m: m.get("timestamp", ""))
+        return all_snaps
+
+    def update_note(self, app_name, verstr, note):
+        ok = self._local.update_note(app_name, verstr, note)
+        if self._remote:
+            try:
+                self._remote.update_note(app_name, verstr, note)
+            except Exception:
+                VMN_LOGGER.debug("Failed to update note on remote", exc_info=True)
+        return ok
+
+    def delete(self, app_name, verstr):
+        """Delete a snapshot from both local and remote storage."""
+        safe_verstr = verstr.replace("+", "_plus_")
+        if hasattr(self._local, "_snapshot_dir"):
+            snap_dir = self._local._snapshot_dir(app_name, verstr)
+            if os.path.isdir(snap_dir):
+                shutil.rmtree(snap_dir, ignore_errors=True)
+        if self._remote and hasattr(self._remote, "_key_prefix"):
+            try:
+                prefix = self._remote._key_prefix(app_name, verstr)
+                paginator = self._remote._s3.get_paginator("list_objects_v2")
+                for page in paginator.paginate(
+                    Bucket=self._remote.bucket, Prefix=f"{prefix}/"
+                ):
+                    for obj in page.get("Contents", []):
+                        self._remote._s3.delete_object(
+                            Bucket=self._remote.bucket, Key=obj["Key"]
+                        )
+            except Exception:
+                VMN_LOGGER.debug("Failed to delete from remote", exc_info=True)
+
+
 def get_snapshot_storage(backend, vmn_root_path=None, bucket=None,
-                         prefix="vmn-snapshots", endpoint_url=None):
+                         prefix="vmn-snapshots", endpoint_url=None,
+                         subdir="snapshots"):
+    local = None
+    remote = None
+
+    if vmn_root_path:
+        local = LocalSnapshotStorage(vmn_root_path, subdir=subdir)
+
+    if bucket:
+        remote = S3SnapshotStorage(bucket, prefix=prefix, endpoint_url=endpoint_url)
+
     if backend == "local":
-        if not vmn_root_path:
+        if not local:
             raise ValueError("vmn_root_path is required for local backend")
-        return LocalSnapshotStorage(vmn_root_path)
+        return CachedSnapshotStorage(local, remote)
     elif backend == "s3":
-        if not bucket:
+        if not remote:
             raise ValueError("--bucket is required for s3 backend")
-        return S3SnapshotStorage(bucket, prefix=prefix, endpoint_url=endpoint_url)
+        if local:
+            return CachedSnapshotStorage(local, remote)
+        return remote
     else:
         raise ValueError(f"Unknown backend: {backend}")
 
@@ -271,6 +452,41 @@ def _get_storage(vcs, params):
         prefix=params.get("prefix", "vmn-snapshots"),
         endpoint_url=params.get("endpoint_url"),
     )
+
+
+def _resolve_verstr(storage, app_name, verstr, latest=False):
+    """Resolve a version string shorthand to a full verstr.
+
+    - If latest=True or verstr == "latest": return most recent by timestamp
+    - If verstr doesn't exactly match: try unique prefix match
+    - Otherwise: pass through as-is
+    Returns (resolved_verstr, error_message_or_None).
+    """
+    if latest or verstr == "latest":
+        snapshots = storage.list_snapshots(app_name)
+        if not snapshots:
+            return None, f"No snapshots found for {app_name}"
+        most_recent = max(snapshots, key=lambda m: m.get("timestamp", ""))
+        return most_recent["verstr"], None
+
+    if verstr is None:
+        return None, None
+
+    # Try exact match first (fast path — no need to load full data)
+    if storage.exists(app_name, verstr):
+        return verstr, None
+
+    # Try prefix match
+    snapshots = storage.list_snapshots(app_name)
+    matches = [m for m in snapshots if m["verstr"].startswith(verstr)]
+    if len(matches) == 1:
+        return matches[0]["verstr"], None
+    if len(matches) > 1:
+        return None, (
+            f"Ambiguous prefix '{verstr}': matches {len(matches)} snapshots. "
+            f"Be more specific."
+        )
+    return None, f"Snapshot '{verstr}' not found"
 
 
 def _ensure_trailing_newline(s):
@@ -309,6 +525,33 @@ def _generate_patches(backend):
         VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
 
     return patches
+
+
+def _generate_dep_patches(vcs):
+    from version_stamp.backends.factory import get_client
+
+    configured_deps = getattr(vcs, "configured_deps", None)
+    if not configured_deps:
+        return {}
+
+    dep_patches = {}
+    for dep_path in configured_deps:
+        if dep_path == ".":
+            continue
+        full_path = os.path.join(vcs.vmn_root_path, dep_path)
+        if not os.path.isdir(full_path):
+            continue
+        try:
+            dep_be, err = get_client(full_path, vcs.be_type)
+            if err or not dep_be:
+                continue
+            dp = _generate_patches(dep_be)
+            if dp:
+                dep_patches[dep_path] = dp
+        except Exception:
+            VMN_LOGGER.debug(f"Failed to generate patches for dep {dep_path}", exc_info=True)
+
+    return dep_patches
 
 
 def _collect_untracked_tarball(repo_path):
@@ -364,6 +607,16 @@ def _compute_verstr(base_version, commit_hash, patches):
         h.update(patches["untracked_files"])
         has_content = True
 
+    for dep_path in sorted(patches.get("deps", {})):
+        dp = patches["deps"][dep_path]
+        for key in ("working_tree", "local_commits"):
+            if dp.get(key):
+                h.update(dp[key].encode())
+                has_content = True
+        if dp.get("untracked_files"):
+            h.update(dp["untracked_files"])
+            has_content = True
+
     diff_hash = h.hexdigest()[:7] if has_content else "0000000"
     return f"{base_version}-dev.{commit_hash[:7]}.{diff_hash}"
 
@@ -415,8 +668,49 @@ def _apply_snapshot_patches(vcs, params, metadata, patches):
                 VMN_LOGGER.warning("Failed to extract untracked files from snapshot")
                 VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
+    _apply_dep_patches(vcs, metadata, patches)
+
     VMN_LOGGER.info(f"Restored dev version {metadata['verstr']} of {vcs.name}")
     return 0
+
+
+def _apply_dep_patches(vcs, metadata, patches):
+    dep_patches = patches.get("deps", {})
+    if not dep_patches:
+        return
+
+    changesets = metadata.get("changesets", {})
+    for dep_name, dp in dep_patches.items():
+        dep_info = None
+        for cs_path, cs_info in changesets.items():
+            safe = cs_path.replace(os.sep, "_").replace("/", "_")
+            if safe == dep_name or cs_path == dep_name:
+                dep_info = cs_info
+                dep_path = cs_path
+                break
+
+        if not dep_info:
+            VMN_LOGGER.warning(f"No changeset info for dep {dep_name}, skipping patches")
+            continue
+
+        full_path = os.path.join(vcs.vmn_root_path, dep_path)
+        if not os.path.isdir(full_path):
+            VMN_LOGGER.warning(f"Dep directory {dep_path} not found, skipping patches")
+            continue
+
+        dep_hash = dep_info.get("hash")
+        if dep_hash:
+            try:
+                result = subprocess.run(
+                    ["git", "checkout", dep_hash],
+                    capture_output=True, text=True, cwd=full_path,
+                )
+                if result.returncode != 0:
+                    VMN_LOGGER.warning(f"Failed to checkout dep {dep_path} at {dep_hash[:7]}")
+            except Exception:
+                VMN_LOGGER.debug(f"Failed to checkout dep {dep_path}", exc_info=True)
+
+        _apply_patches_to_workdir(full_path, dp)
 
 
 def _parse_meta_args(meta_list):
@@ -463,18 +757,29 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     }
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status.error:
-        VMN_LOGGER.error("Error getting repo status")
+        name = vcs.name or "<app_name>"
+        print(
+            f"Cannot create snapshot: '{name}' has not been stamped yet.\n"
+            f"\n"
+            f"Quick start:\n"
+            f"  vmn stamp -r patch {name}    # creates version 0.0.1\n"
+            f"  vmn snapshot create {name}   # now snapshot works"
+        )
         return 1
 
     dirty_states = list(get_dirty_states(optional_status, status))
     if not dirty_states:
-        VMN_LOGGER.info("No local changes to snapshot")
+        print("No local changes to snapshot (working tree is clean)")
         return 0
 
     ver_infos = vcs.ver_infos_from_repo
     tag_name = vcs.selected_tag
     if tag_name not in ver_infos:
-        VMN_LOGGER.error("No stamped version found for this app")
+        name = vcs.name or "<app_name>"
+        print(
+            f"No stamped version found for '{name}'.\n"
+            f"Run 'vmn stamp -r patch {name}' first, then retry."
+        )
         return 1
 
     ver_info = ver_infos[tag_name]["ver_info"]
@@ -487,8 +792,13 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     commit_hash = be.changeset()
 
     patches = _generate_patches(be)
-    if not patches:
-        VMN_LOGGER.info("No patch content to snapshot")
+
+    dep_patches = _generate_dep_patches(vcs)
+    if dep_patches:
+        patches["deps"] = dep_patches
+
+    if not patches or (not any(k != "deps" for k in patches) and not dep_patches):
+        print("No local changes to snapshot (working tree is clean)")
         return 0
 
     verstr = _compute_verstr(base_version, commit_hash, patches)
@@ -513,6 +823,7 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
         "has_working_tree_patch": "working_tree" in patches,
         "has_local_commits_patch": "local_commits" in patches,
         "has_untracked_files": "untracked_files" in patches,
+        "has_dep_patches": bool(patches.get("deps")),
     }
     if user_meta:
         metadata["user_meta"] = user_meta
@@ -530,44 +841,33 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
 
 @measure_runtime_decorator
 def snapshot_list(vcs, params):
-    local_storage = LocalSnapshotStorage(vcs.vmn_root_path)
-    local_snaps = local_storage.list_snapshots(vcs.name)
-    all_snaps = {m["verstr"]: m for m in local_snaps}
-
-    bucket = params.get("bucket")
-    if bucket:
-        try:
-            s3_storage = S3SnapshotStorage(
-                bucket,
-                prefix=params.get("prefix", "vmn-snapshots"),
-                endpoint_url=params.get("endpoint_url"),
-            )
-            for m in s3_storage.list_snapshots(vcs.name):
-                if m["verstr"] not in all_snaps:
-                    all_snaps[m["verstr"]] = m
-        except Exception:
-            VMN_LOGGER.debug("S3 listing failed", exc_info=True)
-
-    snapshots = sorted(all_snaps.values(), key=lambda m: m.get("timestamp", ""))
+    storage = _get_storage(vcs, params)
+    snapshots = storage.list_snapshots(vcs.name)
     if not snapshots:
         VMN_LOGGER.info(f"No snapshots found for {vcs.name}")
         return 0
 
     filters = _parse_meta_args(params.get("filter")) if params.get("filter") else None
 
+    idx = 0
     for meta in snapshots:
         if filters:
             user_meta = meta.get("user_meta", {})
             if not all(str(user_meta.get(k)) == v for k, v in filters.items()):
                 continue
 
+        idx += 1
+        if params.get("verbose"):
+            ts_display = meta["timestamp"]
+        else:
+            ts_display = _relative_timestamp(meta["timestamp"])
         note_str = f" - {meta['note']}" if meta.get("note") else ""
         meta_str = ""
         if meta.get("user_meta"):
             meta_str = " " + " ".join(
                 f"{k}={v}" for k, v in meta["user_meta"].items()
             )
-        print(f"{meta['verstr']}  [{meta['timestamp']}]{note_str}{meta_str}")
+        print(f"[{idx}] {meta['verstr']}  ({ts_display}){note_str}{meta_str}")
 
     return 0
 
@@ -597,6 +897,16 @@ def snapshot_show(vcs, params, verstr):
         for name in _list_tarball_members(patches["untracked_files"]):
             print(f"  {name}")
 
+    if patches.get("deps"):
+        for dep_name, dp in patches["deps"].items():
+            print(f"\n--- Dep: {dep_name} ---")
+            if dp.get("working_tree"):
+                print(f"  working tree patch: {len(dp['working_tree'])} bytes")
+            if dp.get("local_commits"):
+                print(f"  local commits patch: {len(dp['local_commits'])} bytes")
+            if dp.get("untracked_files"):
+                print(f"  untracked files: {len(_list_tarball_members(dp['untracked_files']))} files")
+
     return 0
 
 
@@ -617,21 +927,6 @@ def snapshot_note(vcs, params, verstr, note):
     else:
         VMN_LOGGER.error(f"Snapshot {verstr} not found")
         return 1
-
-
-@measure_runtime_decorator
-def snapshot_restore(vcs, params, verstr):
-    if verstr is None:
-        VMN_LOGGER.error("Must specify version with -v")
-        return 1
-
-    storage = _get_storage(vcs, params)
-    metadata, patches = storage.load(vcs.name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Snapshot {verstr} not found")
-        return 1
-
-    return _apply_snapshot_patches(vcs, params, metadata, patches)
 
 
 def _synthesize_stamped_version(vcs, verstr):
@@ -971,8 +1266,9 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         except Exception:
             VMN_LOGGER.debug("Failed to copy untracked files", exc_info=True)
 
-    # Export dependencies
+    # Export dependencies and apply dep patches
     changesets = metadata.get("changesets", {})
+    dep_patches = patches.get("deps", {})
     for dep_path, dep_info in changesets.items():
         if dep_path == ".":
             continue
@@ -989,6 +1285,12 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         err = _shallow_clone_at(dep_dest, dep_remote, dep_hash)
         if err:
             VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
+            continue
+
+        safe_dep = dep_path.replace(os.sep, "_").replace("/", "_")
+        dp = dep_patches.get(safe_dep) or dep_patches.get(dep_path)
+        if dp:
+            _apply_patches_to_workdir(dep_dest, dp)
 
     # Write metadata
     meta_path = os.path.join(output_path, "vmn_metadata.yml")
@@ -996,6 +1298,14 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         yaml.dump(metadata, f, sort_keys=True)
 
     return 0
+
+
+def _strip_git_dirs(root_path):
+    """Remove all .git directories to make export fully offline."""
+    for dirpath, dirnames, _ in os.walk(root_path, topdown=True):
+        if ".git" in dirnames:
+            shutil.rmtree(os.path.join(dirpath, ".git"), ignore_errors=True)
+            dirnames.remove(".git")
 
 
 @measure_runtime_decorator
@@ -1028,6 +1338,8 @@ def snapshot_export(vcs, params, verstr, output_path):
         err = _materialize_workdir(vcs, metadata, patches, dest)
         if err:
             return err
+
+        _strip_git_dirs(dest)
 
         if is_tarball:
             with tarfile.open(output_path, "w:gz") as tar:

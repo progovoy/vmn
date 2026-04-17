@@ -313,8 +313,8 @@ def add_arg_snapshot(subprasers):
         "action",
         nargs="?",
         default="create",
-        choices=["create", "list", "show", "note", "restore", "diff", "export"],
-        help="Snapshot action: create (default), list, show, note, restore, diff, export",
+        choices=["create", "list", "show", "note", "diff", "export"],
+        help="Snapshot action: create (default), list, show, note, diff, export",
     )
     psnap.add_argument("name", help="The application's name")
     psnap.add_argument(
@@ -393,14 +393,92 @@ def add_arg_snapshot(subprasers):
         required=False,
         help="Filter snapshots by key=value metadata (for list action, can be repeated)",
     )
+    psnap.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Show full ISO timestamps in list output",
+    )
+    psnap.add_argument(
+        "--latest",
+        action="store_true",
+        default=False,
+        help="Use the most recent snapshot (for show/note/diff/export)",
+    )
+
+
+def _add_experiment_parser(subprasers, name):
+    pexp = subprasers.add_parser(name, help="Experiment tracking for reproducible research")
+    pexp.add_argument(
+        "action",
+        nargs="?",
+        default="create",
+        choices=["create", "add", "list", "show", "compare", "restore", "export", "prune"],
+        help="Experiment action (default: create)",
+    )
+    pexp.add_argument("name", help="The application's name")
+    pexp.add_argument(
+        "-v", "--version",
+        action="append",
+        default=None,
+        help="Version string(s). Repeatable for compare.",
+    )
+    pexp.add_argument("--note", default=None, help="Note or description")
+    pexp.add_argument(
+        "-f", "--file",
+        default=None,
+        help="YAML file with structured notes/params",
+    )
+    pexp.add_argument(
+        "--metrics",
+        nargs="*",
+        default=None,
+        help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)",
+    )
+    pexp.add_argument("--attach", default=None, help="File to attach as artifact")
+    pexp.add_argument("--sort", default=None, help="Sort list by metric name")
+    pexp.add_argument("--top", type=int, default=None, help="Show top N results in list")
+    pexp.add_argument(
+        "--latest",
+        nargs="?",
+        const=1,
+        type=int,
+        default=None,
+        help="Use latest N experiments (default 1)",
+    )
+    pexp.add_argument("--tool", default=None, help="External diff tool for compare")
+    pexp.add_argument("-o", "--output", default=None, help="Output path for export")
+    pexp.add_argument("--keep", type=int, default=None, help="Keep latest N experiments (for prune)")
+    pexp.add_argument("--older-than", default=None, help="Prune experiments older than duration (e.g., 30d)")
+    pexp.add_argument(
+        "--backend",
+        default="local",
+        choices=["local", "s3"],
+        help="Storage backend (default: local)",
+    )
+    pexp.add_argument("--bucket", default=None, help="S3 bucket name")
+    pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
+    pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
+
+
+def add_arg_experiment(subprasers):
+    _add_experiment_parser(subprasers, "experiment")
+
+
+def add_arg_exp(subprasers):
+    _add_experiment_parser(subprasers, "exp")
 
 
 def verify_user_input_version(args, key):
     if key not in args or getattr(args, key) is None:
         return
 
+    val = getattr(args, key)
+    if isinstance(val, list):
+        return
+
     try:
-        props = VMNBackend.deserialize_vmn_version(getattr(args, key))
+        props = VMNBackend.deserialize_vmn_version(val)
     except Exception:
         if "root" not in args or not args.root:
             err = f"Version must be in format: {VMN_VERSION_FORMAT}"

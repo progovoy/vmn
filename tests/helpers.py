@@ -212,7 +212,7 @@ def _goto(app_name, version=None, root=False):
 
 def _snapshot(app_name, action="create", version=None, note=None,
               to_version=None, tool=None, output=None,
-              meta=None, meta_file=None, filter_args=None):
+              meta=None, meta_file=None, filter_args=None, latest=False):
     args_list = ["snapshot"]
     if action != "create":
         args_list.append(action)
@@ -235,6 +235,8 @@ def _snapshot(app_name, action="create", version=None, note=None,
     if filter_args:
         for f in filter_args:
             args_list.extend(["--filter", f])
+    if latest:
+        args_list.append("--latest")
 
     reset_logger()
     return vmn_run(args_list)[0]
@@ -302,6 +304,55 @@ def _configure_2_deps(
     app_layout.write_conf(params["app_conf_path"], **conf)
 
     return conf
+
+
+def _experiment(app_name, action="create", version=None, note=None,
+                metrics=None, file=None, attach=None, sort=None,
+                top=None, latest=None, tool=None, output=None,
+                keep=None, older_than=None, command="experiment"):
+    args_list = [command]
+    if action != "create":
+        args_list.append(action)
+    args_list.append(app_name)
+    if version is not None:
+        if isinstance(version, list):
+            for v in version:
+                args_list.extend(["-v", v])
+        else:
+            args_list.extend(["-v", version])
+    if note is not None:
+        args_list.extend(["--note", note])
+    if metrics is not None:
+        args_list.append("--metrics")
+        args_list.extend(metrics)
+    if file is not None:
+        args_list.extend(["-f", file])
+    if attach is not None:
+        args_list.extend(["--attach", attach])
+    if sort is not None:
+        args_list.extend(["--sort", sort])
+    if top is not None:
+        args_list.extend(["--top", str(top)])
+    if latest is not None:
+        if isinstance(latest, int) and latest > 1:
+            args_list.extend(["--latest", str(latest)])
+        else:
+            args_list.append("--latest")
+    if tool is not None:
+        args_list.extend(["--tool", tool])
+    if output is not None:
+        args_list.extend(["-o", output])
+    if keep is not None:
+        args_list.extend(["--keep", str(keep)])
+    if older_than is not None:
+        args_list.extend(["--older-than", older_than])
+
+    reset_logger()
+    return vmn_run(args_list)[0]
+
+
+def _exp(app_name, **kwargs):
+    return _experiment(app_name, command="exp", **kwargs)
 
 
 def _configure_empty_conf(app_layout, params):

@@ -142,13 +142,15 @@ def test_snapshot_create_and_list(app_layout, capfd):
     assert verstr is not None, f"No dev version found in output: {captured.out}"
     assert verstr.startswith("0.0.1-dev.")
 
-    # List snapshots
+    # List snapshots — new format: [idx] verstr  (relative_ts) - note
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, action="list")
     assert err == 0
     captured = capfd.readouterr()
     assert verstr in captured.out
     assert "test note" in captured.out
+    assert "[1]" in captured.out
+    assert "ago)" in captured.out
 
     # Show snapshot
     capfd.readouterr()
@@ -157,6 +159,68 @@ def test_snapshot_create_and_list(app_layout, capfd):
     captured = capfd.readouterr()
     assert "base_version" in captured.out
     assert "working_tree" in captured.out.lower() or "patch" in captured.out.lower()
+
+
+def test_snapshot_latest(app_layout, capfd):
+    """--latest should resolve to the most recent snapshot."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Create first snapshot
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "initial")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "change A", commit=False
+    )
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="first")
+    assert err == 0
+    verstr1 = _extract_dev_verstr(capfd.readouterr().out)
+
+    # Create second snapshot with different content
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "change B", commit=False
+    )
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, note="second")
+    assert err == 0
+    verstr2 = _extract_dev_verstr(capfd.readouterr().out)
+    assert verstr1 != verstr2
+
+    # --latest should show the second snapshot
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, action="show", latest=True)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert verstr2 in captured.out
+    assert "second" in captured.out
+
+
+def test_snapshot_prefix_match(app_layout, capfd):
+    """Prefix of version string should resolve to the full version."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", "initial")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "prefix content", commit=False
+    )
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name)
+    assert err == 0
+    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    # Use prefix (first 15 chars should be unique enough)
+    prefix = verstr[:15]
+    capfd.readouterr()
+    err = _snapshot(app_layout.app_name, action="show", version=prefix)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert verstr in captured.out
 
 
 def test_snapshot_note_update(app_layout, capfd):
@@ -371,8 +435,8 @@ def test_snapshot_restore(app_layout, capfd):
     with open(test_file) as f:
         assert f.read() == "initial"  # back to committed version
 
-    # Restore via snapshot restore command
-    err = _snapshot(app_layout.app_name, action="restore", version=verstr)
+    # Restore via vmn goto
+    err = _goto(app_layout.app_name, version=verstr)
     assert err == 0
 
     # Verify file was restored with dirty content
@@ -716,11 +780,17 @@ def test_snapshot_actions_require_init(app_layout, capfd):
 
     assert _snapshot(name, action="list") != 0
     assert _snapshot(name, action="show", version="0.0.1-dev.abc1234.def5678") != 0
-    assert _snapshot(name, action="restore", version="0.0.1-dev.abc1234.def5678") != 0
     assert _snapshot(name, action="diff", version="0.0.1-dev.abc1234.def5678",
                      to_version="current") != 0
     assert _snapshot(name, action="export", version="0.0.1-dev.abc1234.def5678",
                      output="/tmp/test_export") != 0
+
+    # Create action should show helpful guidance
+    capfd.readouterr()
+    assert _snapshot(name) != 0
+    captured = capfd.readouterr()
+    combined = captured.out + captured.err
+    assert "vmn stamp" in combined or "vmn init" in combined
 
 
 def test_snapshot_export_workdir(app_layout, capfd):
@@ -751,10 +821,10 @@ def test_snapshot_export_workdir(app_layout, capfd):
     )
     assert err == 0
 
-    # Verify the export directory has actual files
+    # Verify the export directory has actual files (no .git after Phase 0B strip)
     assert os.path.isdir(export_dir)
     assert os.path.isfile(os.path.join(export_dir, "vmn_metadata.yml"))
-    assert os.path.isdir(os.path.join(export_dir, ".git"))
+    assert not os.path.isdir(os.path.join(export_dir, ".git"))
 
 
 def test_snapshot_export_tarball(app_layout, capfd):
@@ -842,8 +912,8 @@ def test_snapshot_untracked_files_roundtrip(app_layout, capfd):
     with open(tracked_file) as f:
         assert f.read() == "initial"
 
-    # Restore snapshot
-    err = _snapshot(app_layout.app_name, action="restore", version=verstr)
+    # Restore via vmn goto
+    err = _goto(app_layout.app_name, version=verstr)
     assert err == 0
 
     # Verify untracked files restored

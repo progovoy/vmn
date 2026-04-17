@@ -681,7 +681,6 @@ def handle_snapshot(vmn_ctx):
         snapshot_export,
         snapshot_list,
         snapshot_note,
-        snapshot_restore,
         snapshot_show,
     )
 
@@ -690,6 +689,7 @@ def handle_snapshot(vmn_ctx):
     vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
     vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
     vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
+    vmn_ctx.params["verbose"] = getattr(vmn_ctx.args, "verbose", False)
 
     # Read snapshot_storage from app conf, CLI args override
     conf_storage = getattr(vmn_ctx.vcs, 'snapshot_storage', None) or {}
@@ -726,6 +726,35 @@ def handle_snapshot(vmn_ctx):
 
     action = vmn_ctx.args.action
 
+    # Resolve --latest / prefix matching for actions that take a version
+    if action in ("show", "note", "diff", "export"):
+        from version_stamp.cli.snapshot import _resolve_verstr, _get_storage
+        latest = getattr(vmn_ctx.args, "latest", False)
+        verstr = vmn_ctx.args.version
+        to_ver = getattr(vmn_ctx.args, "to", None) if action == "diff" else None
+        needs_resolve = latest or verstr is not None or (to_ver and to_ver != "current")
+
+        if needs_resolve:
+            storage = _get_storage(vmn_ctx.vcs, vmn_ctx.params)
+
+            if latest or verstr is not None:
+                resolved, err_msg = _resolve_verstr(
+                    storage, vmn_ctx.vcs.name, verstr, latest=latest
+                )
+                if err_msg:
+                    VMN_LOGGER.error(err_msg)
+                    return 1
+                vmn_ctx.args.version = resolved
+
+            if to_ver and to_ver != "current":
+                resolved_to, err_msg = _resolve_verstr(
+                    storage, vmn_ctx.vcs.name, to_ver
+                )
+                if err_msg:
+                    VMN_LOGGER.error(err_msg)
+                    return 1
+                vmn_ctx.args.to = resolved_to
+
     if action == "create":
         user_meta = _build_user_meta(
             vmn_ctx.args.meta, getattr(vmn_ctx.args, "meta_file", None)
@@ -741,8 +770,6 @@ def handle_snapshot(vmn_ctx):
         return snapshot_note(
             vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.note
         )
-    elif action == "restore":
-        return snapshot_restore(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     elif action == "diff":
         return snapshot_diff(
             vmn_ctx.vcs, vmn_ctx.params,

@@ -184,6 +184,16 @@ class AppConf:
             "ui_type": "nested_dict",
         },
     )
+    experiment: dict = field(
+        default_factory=dict,
+        metadata={
+            "ui_desc": (
+                "Experiment tracking configuration. "
+                "Supports: metrics schema (name: {type, sort, primary})."
+            ),
+            "ui_type": "nested_dict",
+        },
+    )
 
     def __post_init__(self):
         if not self.template:
