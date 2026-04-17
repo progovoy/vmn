@@ -1,5 +1,4 @@
 import os
-import re
 import tarfile
 
 import pytest
@@ -8,6 +7,8 @@ import yaml
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
 from helpers import (
+    DEV_VERSION_RE,
+    extract_dev_verstr,
     _experiment,
     _exp,
     _init_app,
@@ -15,19 +16,6 @@ from helpers import (
     _show,
     _stamp_app,
 )
-
-
-_DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}$")
-
-
-def _extract_dev_verstr(output):
-    for line in output.strip().split("\n"):
-        line = line.strip()
-        if line.startswith("["):
-            continue
-        if _DEV_VERSION_RE.match(line):
-            return line
-    return None
 
 
 def _make_dirty(app_layout, filename="dirty.txt", content="dirty"):
@@ -50,7 +38,7 @@ def test_experiment_create_and_list(app_layout, capfd):
     err = _experiment(app_layout.app_name, note="first experiment")
     assert err == 0
     captured = capfd.readouterr()
-    verstr = _extract_dev_verstr(captured.out)
+    verstr = extract_dev_verstr(captured.out)
     assert verstr is not None
     assert verstr.startswith("0.0.1-dev.")
 
@@ -78,7 +66,7 @@ def test_experiment_create_auto_init(app_layout, capfd):
     err = _experiment(app_layout.app_name, note="auto init test")
     assert err == 0
     captured = capfd.readouterr()
-    verstr = _extract_dev_verstr(captured.out)
+    verstr = extract_dev_verstr(captured.out)
     assert verstr is not None
 
 
@@ -101,7 +89,7 @@ def test_experiment_create_with_notes_file(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, file=notes_path, note="with notes file")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     capfd.readouterr()
@@ -122,7 +110,7 @@ def test_experiment_add_metrics(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="metrics test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     err = _experiment(
@@ -150,7 +138,7 @@ def test_experiment_add_note(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="initial")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
 
     err = _experiment(
         app_layout.app_name, action="add", version=verstr,
@@ -177,7 +165,7 @@ def test_experiment_add_artifact(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="artifact test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
 
     artifact_path = os.path.join(app_layout.repo_path, "weights.pt")
     with open(artifact_path, "wb") as f:
@@ -208,7 +196,7 @@ def test_experiment_show(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="show me")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
 
     capfd.readouterr()
     err = _experiment(app_layout.app_name, action="show", latest=True)
@@ -268,7 +256,7 @@ def test_experiment_compare(app_layout, capfd):
             metrics=[f"loss={0.5 - i * 0.2}"],
         )
         assert err == 0
-        v = _extract_dev_verstr(capfd.readouterr().out)
+        v = extract_dev_verstr(capfd.readouterr().out)
         assert v is not None
         verstrs.append(v)
 
@@ -294,7 +282,7 @@ def test_experiment_restore(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="restore test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
 
     import subprocess
     subprocess.run(
@@ -321,7 +309,7 @@ def test_experiment_export_tarball(app_layout, capfd):
     capfd.readouterr()
     err = _experiment(app_layout.app_name, note="export test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
 
     tar_path = os.path.join(app_layout.repo_path, "experiment_export.tar.gz")
     capfd.readouterr()
@@ -375,7 +363,7 @@ def test_exp_alias(app_layout, capfd):
     err = _exp(app_layout.app_name, note="alias works")
     assert err == 0
     captured = capfd.readouterr()
-    verstr = _extract_dev_verstr(captured.out)
+    verstr = extract_dev_verstr(captured.out)
     assert verstr is not None
 
     capfd.readouterr()

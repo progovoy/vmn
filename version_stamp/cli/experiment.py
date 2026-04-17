@@ -4,23 +4,28 @@ import datetime
 import hashlib
 import os
 import shutil
+from dataclasses import dataclass
+from typing import List, Optional
 
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.cli.snapshot import (
-    CachedSnapshotStorage,
     _apply_snapshot_patches,
     _compute_verstr,
     _diff_builtin,
     _diff_with_external_tool,
-    _generate_dep_patches,
-    _generate_patches,
     _relative_timestamp,
     _strip_git_dirs,
+    gather_create_data,
     get_snapshot_storage,
-    snapshot_export,
 )
+
+
+@dataclass
+class _VersionStub:
+    version: Optional[List[str]] = None
+    latest: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -40,28 +45,15 @@ def _get_experiment_storage(vcs, params):
 
 def _load_log(storage, app_name, verstr):
     """Load experiment log from storage."""
-    if isinstance(storage, CachedSnapshotStorage):
-        s = storage._local
-    else:
-        s = storage
-    if hasattr(s, "_snapshot_dir"):
-        log_path = os.path.join(s._snapshot_dir(app_name, verstr), "log.yml")
-        if os.path.isfile(log_path):
-            with open(log_path) as f:
-                return yaml.safe_load(f) or []
-    return []
+    data = storage.load_file(app_name, verstr, "log.yml")
+    if data is None:
+        return []
+    return yaml.safe_load(data) or []
 
 
 def _save_log(storage, app_name, verstr, log):
     """Save experiment log to storage."""
-    if isinstance(storage, CachedSnapshotStorage):
-        s = storage._local
-    else:
-        s = storage
-    if hasattr(s, "_snapshot_dir"):
-        log_path = os.path.join(s._snapshot_dir(app_name, verstr), "log.yml")
-        with open(log_path, "w") as f:
-            yaml.dump(log, f, sort_keys=False)
+    storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
 
 
 def _append_to_log(storage, app_name, verstr, entry):
@@ -125,14 +117,7 @@ def _compute_artifact_info(path):
 
 def _save_artifact(storage, app_name, verstr, src_path):
     """Copy an artifact file into the experiment directory."""
-    if isinstance(storage, CachedSnapshotStorage):
-        s = storage._local
-    else:
-        s = storage
-    if hasattr(s, "_snapshot_dir"):
-        art_dir = os.path.join(s._snapshot_dir(app_name, verstr), "artifacts")
-        os.makedirs(art_dir, exist_ok=True)
-        shutil.copy2(src_path, os.path.join(art_dir, os.path.basename(src_path)))
+    storage.save_artifact_file(app_name, verstr, src_path)
 
 
 def _get_metrics_schema(vcs):
@@ -286,47 +271,18 @@ def handle_experiment(vmn_ctx):
 
 @measure_runtime_decorator
 def experiment_create(vcs, params, storage, args):
-    from version_stamp.cli.commands import _get_repo_status
-    from version_stamp.cli.output import get_dirty_states
-
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally", "detached", "pending", "outgoing",
-        "version_not_matched", "dirty_deps", "deps_synced_with_conf",
-    }
-    status = _get_repo_status(vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.error("Failed to get repo status for experiment create")
-        return 1
-
-    ver_infos = vcs.ver_infos_from_repo
-    tag_name = vcs.selected_tag
-    if tag_name not in ver_infos:
-        VMN_LOGGER.error(f"No stamped version found for '{vcs.name}'")
-        return 1
-
-    ver_info = ver_infos[tag_name]["ver_info"]
-    if vcs.root_context:
-        base_version = str(ver_info["stamping"]["root_app"]["version"])
-    else:
-        base_version = ver_info["stamping"]["app"]["_version"]
-
-    be = vcs.backend
-    commit_hash = be.changeset()
-
-    patches = _generate_patches(be)
-    dep_patches = _generate_dep_patches(vcs)
-    if dep_patches:
-        patches["deps"] = dep_patches
+    base_version, commit_hash, patches, dirty_states, ver_info, err = \
+        gather_create_data(vcs)
+    if err is not None:
+        return err
 
     verstr = _compute_verstr(base_version, commit_hash, patches)
 
+    be = vcs.backend
     try:
         remote_url = be.remote()
     except Exception:
         remote_url = None
-
-    dirty_states = list(get_dirty_states(optional_status, status))
 
     metadata = {
         "verstr": verstr,
@@ -341,7 +297,7 @@ def experiment_create(vcs, params, storage, args):
         "has_working_tree_patch": "working_tree" in patches,
         "has_local_commits_patch": "local_commits" in patches,
         "has_untracked_files": "untracked_files" in patches,
-        "has_dep_patches": bool(dep_patches),
+        "has_dep_patches": bool(patches.get("deps")),
     }
 
     changesets = ver_info["stamping"]["app"].get("changesets", {})
@@ -453,6 +409,8 @@ def experiment_list(vcs, params, storage, args):
 
     # Sort
     sort_key = args.sort
+    if sort_key and sort_key not in all_metric_keys:
+        VMN_LOGGER.warning(f"Sort key '{sort_key}' not found in any experiment")
     if sort_key and sort_key in all_metric_keys:
         sort_desc = False
         if schema and sort_key in schema:
@@ -585,7 +543,7 @@ def experiment_compare(vcs, params, storage, args):
             experiments.append((meta, patches, log))
     elif len(versions) >= 2:
         for v in versions:
-            stub = type("A", (), {"version": [v], "latest": None})()
+            stub = _VersionStub(version=[v])
             resolved, err = _resolve_experiment_version(storage, vcs, stub)
             if err:
                 VMN_LOGGER.error(err)
@@ -733,11 +691,10 @@ def experiment_export(vcs, params, storage, args):
         with open(os.path.join(dest, "vmn_experiment.yml"), "w") as f:
             yaml.dump({"metadata": metadata, "log": log}, f, sort_keys=False)
 
-        if isinstance(storage, CachedSnapshotStorage) and hasattr(storage._local, "_snapshot_dir"):
-            art_dir = os.path.join(storage._local._snapshot_dir(vcs.name, verstr), "artifacts")
-            if os.path.isdir(art_dir):
-                dest_art = os.path.join(dest, "artifacts")
-                shutil.copytree(art_dir, dest_art, dirs_exist_ok=True)
+        art_dir = storage.list_artifact_files(vcs.name, verstr)
+        if art_dir and os.path.isdir(art_dir):
+            dest_art = os.path.join(dest, "artifacts")
+            shutil.copytree(art_dir, dest_art, dirs_exist_ok=True)
 
         if is_tarball:
             with tarfile.open(output_path, "w:gz") as tar:
@@ -796,9 +753,8 @@ def experiment_prune(vcs, params, storage, args):
 
     deleted = 0
     for meta in to_delete:
-        if hasattr(storage, "delete"):
-            storage.delete(vcs.name, meta["verstr"])
-            deleted += 1
+        storage.delete(vcs.name, meta["verstr"])
+        deleted += 1
 
     kept = len(experiments) - deleted
     print(f"Pruned {deleted} experiments, kept {kept}")

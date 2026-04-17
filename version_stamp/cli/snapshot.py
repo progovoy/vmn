@@ -34,6 +34,7 @@ def _relative_timestamp(iso_ts):
             return f"{seconds // 3600}h ago"
         return f"{seconds // 86400}d ago"
     except Exception:
+        VMN_LOGGER.debug("Failed to parse timestamp %s", iso_ts, exc_info=True)
         return iso_ts
 
 
@@ -57,6 +58,30 @@ class SnapshotStorage(ABC):
 
     @abstractmethod
     def update_note(self, app_name, verstr, note):
+        ...
+
+    @abstractmethod
+    def delete(self, app_name, verstr):
+        ...
+
+    @abstractmethod
+    def load_file(self, app_name, verstr, filename):
+        """Load an auxiliary file from a snapshot directory. Returns bytes or None."""
+        ...
+
+    @abstractmethod
+    def save_file(self, app_name, verstr, filename, data):
+        """Save an auxiliary file into a snapshot directory. data is bytes or str."""
+        ...
+
+    @abstractmethod
+    def save_artifact_file(self, app_name, verstr, src_path):
+        """Copy an artifact file into the snapshot's artifacts subdirectory."""
+        ...
+
+    @abstractmethod
+    def list_artifact_files(self, app_name, verstr):
+        """Return the filesystem path to the artifacts directory, or None."""
         ...
 
 
@@ -177,6 +202,37 @@ class LocalSnapshotStorage(SnapshotStorage):
             yaml.dump(metadata, f, sort_keys=True)
 
         return True
+
+    def delete(self, app_name, verstr):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        if os.path.isdir(snap_dir):
+            shutil.rmtree(snap_dir, ignore_errors=True)
+
+    def load_file(self, app_name, verstr, filename):
+        path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+
+    def save_file(self, app_name, verstr, filename, data):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        Path(snap_dir).mkdir(parents=True, exist_ok=True)
+        path = os.path.join(snap_dir, filename)
+        mode = "wb" if isinstance(data, bytes) else "w"
+        with open(path, mode) as f:
+            f.write(data)
+
+    def save_artifact_file(self, app_name, verstr, src_path):
+        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
+        os.makedirs(art_dir, exist_ok=True)
+        shutil.copy2(src_path, os.path.join(art_dir, os.path.basename(src_path)))
+
+    def list_artifact_files(self, app_name, verstr):
+        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
+        if os.path.isdir(art_dir):
+            return art_dir
+        return None
 
 
 class S3SnapshotStorage(SnapshotStorage):
@@ -336,6 +392,43 @@ class S3SnapshotStorage(SnapshotStorage):
         )
         return True
 
+    def delete(self, app_name, verstr):
+        prefix = self._key_prefix(app_name, verstr)
+        paginator = self._s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=f"{prefix}/"):
+            for obj in page.get("Contents", []):
+                self._s3.delete_object(Bucket=self.bucket, Key=obj["Key"])
+
+    def load_file(self, app_name, verstr, filename):
+        prefix = self._key_prefix(app_name, verstr)
+        try:
+            resp = self._s3.get_object(
+                Bucket=self.bucket, Key=f"{prefix}/{filename}"
+            )
+            return resp["Body"].read()
+        except Exception:
+            return None
+
+    def save_file(self, app_name, verstr, filename, data):
+        prefix = self._key_prefix(app_name, verstr)
+        body = data if isinstance(data, bytes) else data.encode("utf-8")
+        self._s3.put_object(
+            Bucket=self.bucket, Key=f"{prefix}/{filename}", Body=body,
+        )
+
+    def save_artifact_file(self, app_name, verstr, src_path):
+        prefix = self._key_prefix(app_name, verstr)
+        basename = os.path.basename(src_path)
+        with open(src_path, "rb") as f:
+            self._s3.put_object(
+                Bucket=self.bucket,
+                Key=f"{prefix}/artifacts/{basename}",
+                Body=f.read(),
+            )
+
+    def list_artifact_files(self, app_name, verstr):
+        return None
+
 
 class CachedSnapshotStorage(SnapshotStorage):
     """Local-first storage with optional S3 sync. All ops hit local disk;
@@ -397,25 +490,42 @@ class CachedSnapshotStorage(SnapshotStorage):
         return ok
 
     def delete(self, app_name, verstr):
-        """Delete a snapshot from both local and remote storage."""
-        safe_verstr = verstr.replace("+", "_plus_")
-        if hasattr(self._local, "_snapshot_dir"):
-            snap_dir = self._local._snapshot_dir(app_name, verstr)
-            if os.path.isdir(snap_dir):
-                shutil.rmtree(snap_dir, ignore_errors=True)
-        if self._remote and hasattr(self._remote, "_key_prefix"):
+        self._local.delete(app_name, verstr)
+        if self._remote:
             try:
-                prefix = self._remote._key_prefix(app_name, verstr)
-                paginator = self._remote._s3.get_paginator("list_objects_v2")
-                for page in paginator.paginate(
-                    Bucket=self._remote.bucket, Prefix=f"{prefix}/"
-                ):
-                    for obj in page.get("Contents", []):
-                        self._remote._s3.delete_object(
-                            Bucket=self._remote.bucket, Key=obj["Key"]
-                        )
+                self._remote.delete(app_name, verstr)
             except Exception:
                 VMN_LOGGER.debug("Failed to delete from remote", exc_info=True)
+
+    def load_file(self, app_name, verstr, filename):
+        data = self._local.load_file(app_name, verstr, filename)
+        if data is not None:
+            return data
+        if self._remote:
+            data = self._remote.load_file(app_name, verstr, filename)
+            if data is not None:
+                self._local.save_file(app_name, verstr, filename, data)
+            return data
+        return None
+
+    def save_file(self, app_name, verstr, filename, data):
+        self._local.save_file(app_name, verstr, filename, data)
+        if self._remote:
+            try:
+                self._remote.save_file(app_name, verstr, filename, data)
+            except Exception:
+                VMN_LOGGER.debug("Failed to save file to remote", exc_info=True)
+
+    def save_artifact_file(self, app_name, verstr, src_path):
+        self._local.save_artifact_file(app_name, verstr, src_path)
+        if self._remote:
+            try:
+                self._remote.save_artifact_file(app_name, verstr, src_path)
+            except Exception:
+                VMN_LOGGER.debug("Failed to save artifact to remote", exc_info=True)
+
+    def list_artifact_files(self, app_name, verstr):
+        return self._local.list_artifact_files(app_name, verstr)
 
 
 def get_snapshot_storage(backend, vmn_root_path=None, bucket=None,
@@ -597,7 +707,7 @@ def _list_tarball_members(tarball_bytes):
 
 
 def _compute_verstr(base_version, commit_hash, patches):
-    h = hashlib.sha1()
+    h = hashlib.sha256()
     has_content = False
     for key in ("working_tree", "local_commits"):
         if patches.get(key):
@@ -745,8 +855,12 @@ def _build_user_meta(meta_args, meta_file):
     return result if result else None
 
 
-@measure_runtime_decorator
-def snapshot_create(vcs, params, note=None, user_meta=None):
+def gather_create_data(vcs):
+    """Gather common data needed by snapshot/experiment create.
+
+    Returns (base_version, commit_hash, patches, dirty_states, ver_info, error_code).
+    error_code is non-None when the caller should return early.
+    """
     from version_stamp.cli.commands import _get_repo_status
     from version_stamp.cli.output import get_dirty_states
 
@@ -758,29 +872,23 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     status = _get_repo_status(vcs, expected_status, optional_status)
     if status.error:
         name = vcs.name or "<app_name>"
-        print(
-            f"Cannot create snapshot: '{name}' has not been stamped yet.\n"
-            f"\n"
-            f"Quick start:\n"
-            f"  vmn stamp -r patch {name}    # creates version 0.0.1\n"
-            f"  vmn snapshot create {name}   # now snapshot works"
+        VMN_LOGGER.error(
+            f"Cannot create snapshot: '{name}' has not been stamped yet. "
+            f"Run 'vmn stamp -r patch {name}' first."
         )
-        return 1
+        return None, None, None, None, None, 1
 
     dirty_states = list(get_dirty_states(optional_status, status))
-    if not dirty_states:
-        print("No local changes to snapshot (working tree is clean)")
-        return 0
 
     ver_infos = vcs.ver_infos_from_repo
     tag_name = vcs.selected_tag
     if tag_name not in ver_infos:
         name = vcs.name or "<app_name>"
-        print(
-            f"No stamped version found for '{name}'.\n"
-            f"Run 'vmn stamp -r patch {name}' first, then retry."
+        VMN_LOGGER.error(
+            f"No stamped version found for '{name}'. "
+            f"Run 'vmn stamp -r patch {name}' first."
         )
-        return 1
+        return None, None, None, None, None, 1
 
     ver_info = ver_infos[tag_name]["ver_info"]
     if vcs.root_context:
@@ -792,19 +900,32 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     commit_hash = be.changeset()
 
     patches = _generate_patches(be)
-
     dep_patches = _generate_dep_patches(vcs)
     if dep_patches:
         patches["deps"] = dep_patches
 
-    if not patches or (not any(k != "deps" for k in patches) and not dep_patches):
+    has_content = (
+        any(k != "deps" for k in patches) or bool(dep_patches)
+    )
+    if not patches or not has_content:
         print("No local changes to snapshot (working tree is clean)")
-        return 0
+        return None, None, None, None, None, 0
+
+    return base_version, commit_hash, patches, dirty_states, ver_info, None
+
+
+@measure_runtime_decorator
+def snapshot_create(vcs, params, note=None, user_meta=None):
+    base_version, commit_hash, patches, dirty_states, ver_info, err = \
+        gather_create_data(vcs)
+    if err is not None:
+        return err
 
     verstr = _compute_verstr(base_version, commit_hash, patches)
 
     storage = _get_storage(vcs, params)
 
+    be = vcs.backend
     try:
         remote_url = be.remote()
     except Exception:
@@ -1147,6 +1268,9 @@ def _shallow_clone_at(dest, remote, commit_hash):
             return 0
 
     # Fallback: full clone + checkout (for local repos / servers without SHA1 fetch)
+    VMN_LOGGER.warning(
+        f"Shallow fetch failed for {commit_hash[:7]}, falling back to full clone"
+    )
     shutil.rmtree(dest, ignore_errors=True)
     result = subprocess.run(
         ["git", "clone", "--no-checkout", remote, dest],

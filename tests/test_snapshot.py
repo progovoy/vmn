@@ -1,5 +1,4 @@
 import os
-import re
 import subprocess
 import tarfile
 from unittest.mock import patch as mock_patch
@@ -12,6 +11,8 @@ from moto import mock_aws
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
 from helpers import (
+    DEV_VERSION_RE,
+    extract_dev_verstr,
     _init_app,
     _goto,
     _run_vmn_init,
@@ -19,20 +20,6 @@ from helpers import (
     _snapshot,
     _stamp_app,
 )
-
-
-_DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}$")
-
-
-def _extract_dev_verstr(output):
-    """Extract a dev version string from output that may contain [INFO] lines."""
-    for line in output.strip().split("\n"):
-        line = line.strip()
-        if line.startswith("["):
-            continue
-        if _DEV_VERSION_RE.match(line):
-            return line
-    return None
 
 
 def test_show_dev(app_layout, capfd):
@@ -60,7 +47,7 @@ def test_show_dev(app_layout, capfd):
     assert err == 0
     captured = capfd.readouterr()
     dev_ver = captured.out.strip()
-    assert _DEV_VERSION_RE.match(dev_ver), f"Expected dev version format, got: {dev_ver}"
+    assert DEV_VERSION_RE.match(dev_ver), f"Expected dev version format, got: {dev_ver}"
     assert dev_ver.startswith("0.0.1-dev.")
 
     # --dev verbose: should have dev_version key
@@ -70,7 +57,7 @@ def test_show_dev(app_layout, capfd):
     captured = capfd.readouterr()
     out_dict = yaml.safe_load(captured.out)
     assert "dev_version" in out_dict
-    assert _DEV_VERSION_RE.match(out_dict["dev_version"])
+    assert DEV_VERSION_RE.match(out_dict["dev_version"])
 
     # Without --dev: should show dirty dict but no dev version
     capfd.readouterr()
@@ -98,7 +85,7 @@ def test_show_dev_outgoing(app_layout, capfd):
     assert err == 0
     captured = capfd.readouterr()
     dev_ver = captured.out.strip()
-    assert _DEV_VERSION_RE.match(dev_ver), f"Expected dev version format, got: {dev_ver}"
+    assert DEV_VERSION_RE.match(dev_ver), f"Expected dev version format, got: {dev_ver}"
     assert dev_ver.startswith("0.0.1-dev.")
 
 
@@ -138,7 +125,7 @@ def test_snapshot_create_and_list(app_layout, capfd):
     err = _snapshot(app_layout.app_name, note="test note")
     assert err == 0
     captured = capfd.readouterr()
-    verstr = _extract_dev_verstr(captured.out)
+    verstr = extract_dev_verstr(captured.out)
     assert verstr is not None, f"No dev version found in output: {captured.out}"
     assert verstr.startswith("0.0.1-dev.")
 
@@ -176,7 +163,7 @@ def test_snapshot_latest(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="first")
     assert err == 0
-    verstr1 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr1 = extract_dev_verstr(capfd.readouterr().out)
 
     # Create second snapshot with different content
     app_layout.write_file_commit_and_push(
@@ -185,7 +172,7 @@ def test_snapshot_latest(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="second")
     assert err == 0
-    verstr2 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr2 = extract_dev_verstr(capfd.readouterr().out)
     assert verstr1 != verstr2
 
     # --latest should show the second snapshot
@@ -211,7 +198,7 @@ def test_snapshot_prefix_match(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name)
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Use prefix (first 15 chars should be unique enough)
@@ -237,7 +224,7 @@ def test_snapshot_note_update(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="original note")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Update note
@@ -267,14 +254,14 @@ def test_snapshot_content_addressable(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name)
     assert err == 0
-    verstr1 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr1 = extract_dev_verstr(capfd.readouterr().out)
     assert verstr1 is not None
 
     # Second snapshot of same state
     capfd.readouterr()
     err = _snapshot(app_layout.app_name)
     assert err == 0
-    verstr2 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr2 = extract_dev_verstr(capfd.readouterr().out)
     assert verstr2 is not None
 
     assert verstr1 == verstr2
@@ -385,7 +372,7 @@ def test_goto_dev_version(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name)
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Discard local changes
@@ -423,7 +410,7 @@ def test_snapshot_restore(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="test restore")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Discard local changes
@@ -460,7 +447,7 @@ def test_snapshot_diff(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="snapshot A")
     assert err == 0
-    verstr1 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr1 = extract_dev_verstr(capfd.readouterr().out)
     assert verstr1 is not None
 
     # Reset changes
@@ -478,7 +465,7 @@ def test_snapshot_diff(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="snapshot B")
     assert err == 0
-    verstr2 = _extract_dev_verstr(capfd.readouterr().out)
+    verstr2 = extract_dev_verstr(capfd.readouterr().out)
     assert verstr2 is not None
 
     # Reset changes for clean diff
@@ -514,7 +501,7 @@ def test_snapshot_diff_current(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="for current diff")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Now modify the file differently (still uncommitted)
@@ -557,7 +544,7 @@ def test_snapshot_metadata_hooks(app_layout, capfd):
     assert "0.0.1" in captured.out
 
     # Show snapshot and verify user_meta appears
-    verstr = _extract_dev_verstr(captured.out)
+    verstr = extract_dev_verstr(captured.out)
     capfd.readouterr()
     ret = _snapshot(app_layout.app_name, action="show", version=verstr)
     assert ret == 0
@@ -630,7 +617,7 @@ def test_snapshot_metadata_file(app_layout, capfd):
     assert ret == 0
 
     # Show snapshot and verify nested structure
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     capfd.readouterr()
     ret = _snapshot(app_layout.app_name, action="show", version=verstr)
     assert ret == 0
@@ -657,7 +644,7 @@ def test_snapshot_export(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="export test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Export as tarball (new behavior: materializes workdir into tarball)
@@ -810,7 +797,7 @@ def test_snapshot_export_workdir(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="export workdir test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Export to directory
@@ -844,7 +831,7 @@ def test_snapshot_export_tarball(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="tarball test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Export as tarball
@@ -889,7 +876,7 @@ def test_snapshot_untracked_files_roundtrip(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="with untracked")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     # Verify snapshot show lists untracked files
@@ -962,7 +949,7 @@ def test_snapshot_untracked_ignores_gitignored(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="gitignore test")
     assert err == 0
-    verstr = _extract_dev_verstr(capfd.readouterr().out)
+    verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
     capfd.readouterr()
@@ -999,7 +986,7 @@ def test_snapshot_diff_dev_vs_stamped(app_layout, capfd):
     capfd.readouterr()
     err = _snapshot(app_layout.app_name, note="dev snapshot")
     assert err == 0
-    dev_verstr = _extract_dev_verstr(capfd.readouterr().out)
+    dev_verstr = extract_dev_verstr(capfd.readouterr().out)
     assert dev_verstr is not None
 
     # Reset dirty state

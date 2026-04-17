@@ -1,4 +1,5 @@
 import os
+import re
 
 from version_stamp.backends.base import VMNBackend
 from version_stamp.cli.entry import vmn_run
@@ -7,6 +8,19 @@ from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
 )
 from version_stamp.core.logging import reset_logger
+
+DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}$")
+
+
+def extract_dev_verstr(output):
+    """Extract a dev version string from output that may contain [INFO] lines."""
+    for line in output.strip().split("\n"):
+        line = line.strip()
+        if line.startswith("["):
+            continue
+        if DEV_VERSION_RE.match(line):
+            return line
+    return None
 
 
 def _run_vmn_init():
