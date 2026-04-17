@@ -115,7 +115,7 @@ Both workflows store everything in git -- uninstall vmn tomorrow and your tags s
 ---
 ## Why vmn?
 
-vmn does everything semantic-release and release-please do — plus **9 things nothing else can**.
+vmn does everything semantic-release and release-please do — plus **9 things nothing else does**.
 
 | Capability | vmn | semantic-release | release-please | changesets |
 |:-----------|:---:|:----------------:|:--------------:|:----------:|
@@ -213,7 +213,7 @@ Eight subcommands cover the full experiment lifecycle:
 | `vmn exp prune` | Clean up old experiments (keep N or older than duration) |
 
 ---
-## What only vmn can do
+## What only vmn does
 
 ### State recovery -- a time machine for your repo
 
