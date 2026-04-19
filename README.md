@@ -1,7 +1,7 @@
 <h1 align="center">vmn</h1>
 
-<p align="center"><strong>Version your code. Track your experiments. One tool, zero lock-in.</strong></p>
-<p align="center"><em>The only CLI that does semantic versioning AND ML experiment tracking -- stored in git, not in your way.</em></p>
+<p align="center"><strong>Automatic semantic versioning powered by git tags. Zero lock-in.</strong></p>
+<p align="center"><em>Language-agnostic CLI for versioning, multi-repo state recovery, and experiment tracking -- all stored in git.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
@@ -22,43 +22,38 @@
 ```sh
 pip install vmn
 
-vmn stamp -r minor my_model              # => 0.1.0
-vmn exp create my_model \
-    --metrics loss=0.34 acc=0.91          # capture code + metrics
-vmn exp compare --latest 2 my_model       # side-by-side metrics table
-vmn exp restore --latest my_model         # exact code state restored
+vmn stamp -r patch my_app                 # => 0.0.1  (auto-initializes repo + app)
+vmn stamp -r minor my_app                 # => 0.1.0
+vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1  (prerelease)
+vmn release my_app                        # => 0.1.1
+vmn goto -v 0.1.0 my_app                  # repo restored to exact 0.1.0 state
 ```
 
-Stop juggling MLflow for experiments and semantic-release for versions. vmn does both -- and stores everything in git tags and local files. No servers. No cloud. No lock-in.
+Versions live in git annotated tags. Uninstall vmn and the tags still make sense. No databases, no SaaS, no ecosystem buy-in.
 
 ---
 
-[Why vmn?](#why-vmn) · [ML Experiments](#why-vmn-for-ml-experiments) · [Only in vmn](#what-only-vmn-can-do) · [Experiment Tracking](#experiment-management) · [Snapshots](#snapshots) · [Commands](#commands) · [Configuration](#configuration) · [Roadmap](#roadmap) · [Migration](#already-using-another-tool) · [Contributing](CONTRIBUTING.md)
+[Requirements](#requirements) · [Quick Start](#quick-start) · [Why vmn?](#why-vmn) · [Only in vmn](#what-only-vmn-can-do) · [Experiments](#experiment-management) · [Snapshots](#snapshots) · [Commands](#commands) · [Version Auto-Embedding](#version-auto-embedding) · [Configuration](#configuration) · [CI](#ci-integration) · [Troubleshooting](#troubleshooting) · [Migration](#already-using-another-tool)
 
 ---
 
 ### vmn is for you if:
-
-**Developers who ship software:**
 
 - You version projects in Python, Rust, Go, C++, Java, or anything else -- vmn is language-agnostic.
 - You run microservices and need independent versions per service under one root app.
 - You manage multi-repo dependencies and want reproducible state recovery across all of them.
 - You want zero config. No plugins, no YAML pipelines, no ecosystem buy-in.
 - You need versioning that works offline, in CI, and in air-gapped environments.
-- You like that versions live in git annotated tags -- uninstall vmn and the tags stay.
-
-**AI/ML researchers who run experiments:**
-
-- You want reproducible experiment snapshots without committing half-finished code.
-- You track metrics from the CLI -- no MLflow server, no W&B account, no internet required.
-- You compare experiments side by side and restore the exact working tree state of any run.
-- You work offline, on a train, in a lab with no cloud access -- it all still works.
+- You like that versions live in git annotated tags -- zero lock-in.
+- You run ML experiments and want reproducible snapshots with metrics, without spinning up a tracking server.
 
 No separate `vmn init` required -- `vmn stamp` auto-initializes on first run. Works with shallow clones (`fetch-depth: 1`).
 
-<details>
-<summary><strong>Try it locally (playground)</strong></summary>
+### How it works
+
+vmn stores all version state in **git annotated tag messages** as plain YAML. When you `vmn stamp`, it computes the next version, writes it into a tag (e.g., `my_app_1.2.0`), and optionally pushes. When you `vmn show`, it reads that tag. There is no database, no config service, no proprietary format -- just git tags you can inspect with `git tag -n1`.
+
+**Try it locally (30 seconds):**
 
 ```sh
 pip install vmn
@@ -71,22 +66,29 @@ vmn stamp -r patch my_app   # => 0.0.1
 
 echo b >> ./a.txt && git add ./a.txt && git commit -m "feat: add b" && git push origin master
 vmn stamp -r patch my_app   # => 0.0.2
-```
 
-</details>
+git tag -n1 my_app_0.0.2    # version metadata right there in the tag
+```
 
 ---
 
+## Requirements
+
+- **Python** 3.8+
+- **Git** 2.10+ (for push options support; 2.17+ recommended)
+- **Platforms:** Linux, macOS, Windows (including WSL). No platform-specific configuration needed -- vmn uses GitPython for cross-platform git operations.
+
 ## Quick Start
 
-### Version a project (30 seconds)
+### Version a project
 
 ```sh
 pip install vmn
-cd your-project     # any git repo
+cd your-project                           # any git repo
 
 vmn stamp -r patch my_app                 # => 0.0.1 (auto-initializes)
 vmn stamp -r minor my_app                 # => 0.1.0
+vmn show my_app                           # => 0.1.0
 vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1 (prerelease)
 vmn release my_app                        # => 0.1.1
 ```
@@ -96,26 +98,29 @@ vmn release my_app                        # => 0.1.1
 ```sh
 # You're mid-experiment, code is dirty, results look promising
 vmn exp create my_model --note "baseline CNN" --metrics loss=0.45 acc=0.85
+# => 0.1.0-dev.a1b2c3d.e4f5g6h
 
 # Try a different approach...
 vmn exp create my_model --note "with dropout" --metrics loss=0.34 acc=0.91
+# => 0.1.0-dev.f7a2b1c.d3e4f5g
 
 # Compare results
 vmn exp compare --latest 2 my_model
-# metric    baseline_CNN          with_dropout
-# loss      0.45                  0.34
-# acc       0.85                  0.91
+# metric        0.1.0-dev.a1b2c3  0.1.0-dev.f7a2b1
+# --------------------------------------------------
+# loss          0.45              0.34
+# acc           0.85              0.91
 
-# Winner! Restore that exact state anytime
+# Winner! Restore that exact state (checkout + apply uncommitted changes)
 vmn exp restore --latest my_model
 ```
 
-Both workflows store everything in git -- uninstall vmn tomorrow and your tags still make sense.
+Both workflows store everything in git -- no servers, no lock-in.
 
 ---
 ## Why vmn?
 
-vmn does everything semantic-release and release-please do — plus **9 things nothing else does**.
+vmn does everything semantic-release and release-please do -- plus **9 things nothing else does**.
 
 | Capability | vmn | semantic-release | release-please | changesets |
 |:-----------|:---:|:----------------:|:--------------:|:----------:|
@@ -129,36 +134,36 @@ vmn does everything semantic-release and release-please do — plus **9 things n
 | **Microservice / root app topology** | :white_check_mark: | :x: | :x: | monorepo only |
 | **4-segment hotfix versioning** | :white_check_mark: | :x: | :x: | :x: |
 | **Zero-config start (auto-init)** | :white_check_mark: | :x: | :x: | :x: |
-| **Offline / air-gapped** | :white_check_mark: | :x: | :x: | :x: |
+| **Offline / air-gapped** | :white_check_mark: | :x: | :x: | :x: \* |
 | **Zero lock-in (pure git tags)** | :white_check_mark: | :x: | :x: | :x: |
 | **Dev snapshots (uncommitted state capture)** | :white_check_mark: | :x: | :x: | :x: |
 | **ML experiment tracking** | :white_check_mark: | :x: | :x: | :x: |
 
-> **Bold rows = only vmn.** That's the moat.
+> **Bold rows = only vmn.**
+>
+> \* changesets works offline for authoring, but requires GitHub/npm for publishing.
 
 <details>
 <summary>Detailed comparisons & migration guides</summary>
 
-- [vmn vs semantic-release](docs/vmn-vs-semantic-release.md)
-- [vmn vs release-please](docs/vmn-vs-release-please.md)
-- [vmn vs setuptools-scm](docs/vmn-vs-setuptools-scm.md)
-- [Migrating from standard-version](docs/migrating-from-standard-version.md)
-- [Migrating from bump2version](docs/migrating-from-bump2version.md)
+See [Already using another tool?](#already-using-another-tool) for step-by-step migration paths from semantic-release, release-please, setuptools-scm, standard-version, and bump2version.
 
 </details>
 
 ---
 ## Why vmn for ML experiments?
 
-Most experiment trackers require a server, a cloud account, or both. vmn tracks experiments the same way it tracks versions — in git and local files.
+Most experiment trackers require a server, a cloud account, or both. vmn tracks experiments the same way it tracks versions -- in git and local files.
 
 ```sh
-vmn exp create my_model \
-  --metrics accuracy=0.94 loss=0.12 \
-  --note "baseline ResNet run"
+vmn exp create my_model --metrics accuracy=0.94 loss=0.12 --note "baseline ResNet run"
+# => 0.2.0-dev.c3d4e5f.a1b2c3d
 
-vmn exp list my_model --sort accuracy
-vmn exp compare --latest 3 my_model
+vmn exp list my_model --sort loss --top 3
+# [1] 0.2.0-dev.c3d4e5f.a1b2c3d  (5m ago)  loss=0.12  accuracy=0.94 - baseline ResNet run
+# [2] 0.1.0-dev.f7a2b1c.d3e4f5g  (2d ago)  loss=0.34  accuracy=0.91 - with dropout
+# [3] 0.1.0-dev.a1b2c3d.e4f5g6h  (3d ago)  loss=0.45  accuracy=0.85 - baseline CNN
+
 vmn exp restore --latest my_model         # checkout exact code state
 ```
 
@@ -166,12 +171,12 @@ vmn exp restore --latest my_model         # checkout exact code state
 
 | Capability | vmn | MLflow | W&B | DVC | Neptune |
 |:-----------|:---:|:------:|:---:|:---:|:-------:|
-| No server required | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: |
+| No server required | :white_check_mark: | :x: \* | :x: | :white_check_mark: | :x: |
 | No cloud account | :white_check_mark: | :white_check_mark: (self-hosted) | :x: | :white_check_mark: | :x: |
 | Free & open source | :white_check_mark: | :white_check_mark: | Free tier | :white_check_mark: | Free tier |
 | Metrics tracking | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Experiment comparison | CLI table | Web UI | Web UI | CLI | Web UI |
-| **Full code state capture** | :white_check_mark: | :x: | :x: | partial | :x: |
+| **Full code state capture** | :white_check_mark: | :x: | :x: | partial \*\* | :x: |
 | **Uncommitted changes captured** | :white_check_mark: | :x: | :x: | :x: | :x: |
 | **One-command state restore** | :white_check_mark: | :x: | :x: | :x: | :x: |
 | **Built-in version management** | :white_check_mark: | :x: | :x: | :x: | :x: |
@@ -181,9 +186,12 @@ vmn exp restore --latest my_model         # checkout exact code state
 | Storage | git + local/S3 | database | cloud | git/S3 | cloud |
 | Lock-in | zero (git tags + files) | MLflow format | W&B cloud | DVC format | Neptune cloud |
 
-> **Bold rows = only vmn.** Capture your exact working state — dirty files, local commits, everything — and restore it with one command. No other experiment tracker does this.
+> **Bold rows = only vmn.** Capture your exact working state -- dirty files, local commits, everything -- and restore it with one command.
+>
+> \* MLflow Tracking can log to local files without a server, but the comparison UI requires `mlflow server`.
+> \*\* DVC tracks data/model files via git, but does not capture uncommitted code changes or local-only commits.
 
-vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite. It's for researchers who want **lightweight, git-native experiment tracking** that lives alongside their version management — without spinning up servers, creating cloud accounts, or leaving the terminal.
+vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite. It's for researchers who want **lightweight, git-native experiment tracking** that lives alongside their version management -- without spinning up servers, creating cloud accounts, or leaving the terminal.
 
 ### When to use what
 
@@ -191,7 +199,7 @@ vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite
 - You want a CLI-first workflow with no context switching
 - You work offline or in air-gapped environments
 - You need version management and experiment tracking in one tool
-- You want zero infrastructure — no servers, no databases, no accounts
+- You want zero infrastructure -- no servers, no databases, no accounts
 - You prefer git-native storage with no vendor lock-in
 
 **Use MLflow / W&B when:**
@@ -208,12 +216,12 @@ Eight subcommands cover the full experiment lifecycle:
 | `vmn exp list` | List experiments with filtering and sorting by any metric |
 | `vmn exp show` | Display full experiment details including log history |
 | `vmn exp compare` | Side-by-side metric comparison across experiments |
-| `vmn exp restore` | Restore the exact code state — checkout + apply patches |
+| `vmn exp restore` | Restore the exact code state -- checkout + apply patches |
 | `vmn exp export` | Export experiment as a directory or tarball |
 | `vmn exp prune` | Clean up old experiments (keep N or older than duration) |
 
 ---
-## What only vmn does
+## What only vmn can do
 
 ### State recovery -- a time machine for your repo
 
@@ -552,8 +560,8 @@ vmn snapshot create my_model \
 ```sh
 vmn stamp -r patch my_app                 # => 0.0.1
 vmn stamp -r minor my_app                 # => 0.1.0
-vmn stamp -r patch --pr rc my_app         # => 0.0.2-rc.1 (prerelease)
-vmn stamp my_app                          # => 0.0.3 (with conventional_commits -- no -r needed)
+vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1 (prerelease)
+vmn stamp my_app                          # => 0.1.2 (with conventional_commits -- no -r needed)
 vmn stamp --dry-run -r patch my_app       # preview without committing
 vmn stamp --pull -r patch my_app          # pull before stamping (retries on conflict)
 ```
@@ -614,7 +622,6 @@ conf:
     draft: false
 ```
 
-`default_release_mode` is a top-level config key (not nested under `conventional_commits`).
 ### vmn release
 
 ```sh
@@ -689,14 +696,15 @@ vmn release my_app                      # 2.0.0
 
 ### Python library
 
-```python
-from contextlib import redirect_stdout, redirect_stderr
-import io, version_stamp.vmn as vmn
+vmn can be called programmatically. `vmn_run` accepts a command-line argument list and returns `(exit_code, context)`:
 
-out, err = io.StringIO(), io.StringIO()
-with redirect_stdout(out), redirect_stderr(err):
-    ret, vmn_ctx = vmn.vmn_run(["show", "vmn"])
+```python
+from version_stamp.cli.entry import vmn_run
+
+ret, ctx = vmn_run(["show", "my_app"])
 ```
+
+> **Note:** `vmn_run` prints to stdout/stderr. To capture output programmatically, wrap calls with `contextlib.redirect_stdout`/`redirect_stderr`.
 
 ### Environment variables
 
@@ -775,14 +783,7 @@ Same variables as `vmn gen`.
 ---
 ## Configuration
 
-vmn auto-generates `.vmn/<app-name>/conf.yml` when an app is first stamped. Edit it directly or use the built-in TUI:
-
-```sh
-vmn config my_app        # interactive TUI editor
-vmn config my_app --vim  # open in $EDITOR
-```
-
-Full `conf.yml` structure:
+vmn auto-generates `.vmn/<app-name>/conf.yml` when an app is first stamped. Edit it directly or use `vmn config` (see [Commands](#commands)). Full `conf.yml` structure:
 
 ```yaml
 conf:
@@ -791,7 +792,7 @@ conf:
   extra_info: false
   create_snapshots: false
   conventional_commits: true
-  default_release_mode: optional   # "optional" (--orm) or "strict" (-r required)
+  default_release_mode: optional   # "optional" (--orm) or "strict" (-r required). Top-level key, not nested under conventional_commits.
   changelog:
     path: "CHANGELOG.md"
   github_release:
@@ -843,53 +844,63 @@ steps:
 ---
 ## Roadmap
 
-vmn is actively developed. Here's what's next — [file an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
+vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
 
-**Experiment Tracking**
+- [ ] **`vmn exp plot`** -- ASCII metric charts in the terminal (`vmn exp plot --metric loss my_model`)
+- [ ] **Monorepo auto-discovery** -- detect apps from Cargo workspaces, pnpm-workspace.yaml, Python namespace packages
+- [ ] **PR version annotation** -- GitHub Action that auto-comments the next version using `vmn stamp --dry-run`
+- [ ] **Post-stamp hooks** -- run custom commands after a successful stamp (deploy, notify, update docs)
+- [ ] **Homebrew tap** -- `brew install vmn`
 
-- [ ] **`vmn experiment plot`** — ASCII metric charts in the terminal.
-  Visualize loss curves, accuracy trends across experiments without leaving the CLI.
-  `vmn exp plot --metric loss my_model`
+See the [full roadmap and backlog](https://github.com/progovoy/vmn/issues) for more.
 
-- [ ] **W&B / MLflow export** — Push experiments to existing tracking platforms for team visualization.
-  `vmn exp export --format mlflow` bridges vmn's lightweight tracking to rich UIs when you need them.
+---
+## Troubleshooting
 
-- [ ] **Advanced filtering** — Filter experiments by tags, metric thresholds, or date ranges.
-  `vmn exp list --tag baseline --filter "loss<0.5"` for targeted experiment discovery.
+<details>
+<summary><strong>vmn can't find tags / shows wrong version</strong></summary>
 
-- [ ] **Local web dashboard** — `vmn dashboard my_model` serves a local-only web UI for visualizing
-  experiment metrics, diffs, and artifacts. Think MLflow UI without the server — reads directly from `.vmn/`.
+Most CI systems default to shallow clones. vmn needs full history and tags:
 
-- [ ] **Team experiment sync** — Push/pull experiments via S3 for team-wide collaboration and comparison,
-  building on the existing S3 backend.
+```yaml
+# GitHub Actions
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0    # full history
+```
 
-**Version Management**
+Or manually: `git fetch --tags --unshallow`
+</details>
 
-- [ ] **Monorepo auto-discovery** — Detect apps automatically from workspace configs
-  (Cargo workspaces, pnpm-workspace.yaml, Python namespace packages).
+<details>
+<summary><strong>"Another vmn process is running" / lock file error</strong></summary>
 
-- [ ] **PR version annotation** — GitHub Action that auto-comments the next version on pull requests
-  using `vmn stamp --dry-run`.
+vmn uses a per-repo lock file to prevent concurrent stamps. If a previous run crashed:
 
-- [ ] **Version policies** — Guardrails like `max_release_mode: minor` (prevent accidental major bumps
-  on feature branches) and `require_changelog: true`.
+```sh
+rm .vmn/.vmn.lock           # default location
+# or if VMN_LOCK_FILE_PATH is set:
+rm "$VMN_LOCK_FILE_PATH"
+```
+</details>
 
-- [ ] **Post-stamp hooks** — Run custom commands after a successful stamp
-  (e.g., trigger deploys, update docs, notify Slack).
+<details>
+<summary><strong>Tag name collision with existing tags</strong></summary>
 
-**Distribution**
+vmn tags follow the format `{app_name}_{version}`. If your repo already has tags matching this pattern, either rename the app or clean up conflicting tags before the first stamp.
+</details>
 
-- [ ] **Homebrew tap** — `brew install vmn` for macOS/Linux users who prefer Homebrew over pip.
+<details>
+<summary><strong>"Dirty" state warnings on stamp</strong></summary>
 
-- [ ] **npm wrapper** — `npx vmn` for Node.js teams who want vmn without Python.
-
-- [ ] **conda-forge package** — `conda install vmn` for data science teams.
+vmn checks for uncommitted changes and unpushed commits. To stamp despite dirty state, commit or stash your changes first. `vmn show --verbose` shows the exact dirty flags (`pending`, `outgoing`, `detached`).
+</details>
 
 ---
 
 ## Already using another tool?
 
-Migration takes 5 minutes:
+Step-by-step guides for common migration paths:
 
 - [Migrating from semantic-release](docs/vmn-vs-semantic-release.md)
 - [Migrating from release-please](docs/vmn-vs-release-please.md)
@@ -907,7 +918,7 @@ pip install vmn
 
 <p align="center">
   Star the repo if vmn saved you time.
-  <a href="https://github.com/progovoy/vmn/issues">File an issue</a> if it didn't — we'll fix it.
+  <a href="https://github.com/progovoy/vmn/issues">File an issue</a> if it didn't -- we'll fix it.
 </p>
 
 <p align="center">
