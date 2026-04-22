@@ -1143,7 +1143,7 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
             VMN_LOGGER.error(f"Snapshot {verstr2} not found")
             return 1
 
-    tool = tool or os.environ.get("VMN_DIFFTOOL")
+    tool = tool or get_git_difftool(vcs)
 
     if tool:
         return _diff_with_external_tool(
@@ -1151,6 +1151,13 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
         )
     else:
         return _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2)
+
+
+def get_git_difftool(vcs):
+    try:
+        return vcs.backend._be.git.config("diff.tool")
+    except Exception:
+        return None
 
 
 def _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2):

@@ -364,7 +364,7 @@ def add_arg_snapshot(subprasers):
         "--tool",
         default=None,
         required=False,
-        help="External diff tool (e.g., bcompare, meld, vimdiff). Env: VMN_DIFFTOOL",
+        help="External diff tool (e.g., bcompare, meld, vimdiff). Falls back to git config diff.tool",
     )
     psnap.add_argument(
         "-o",
@@ -444,7 +444,7 @@ def _add_experiment_parser(subprasers, name):
         default=False,
         help="Use the most recent experiment (for show/compare/restore/export)",
     )
-    pexp.add_argument("--tool", default=None, help="External diff tool for compare")
+    pexp.add_argument("--tool", default=None, help="External diff tool for compare. Falls back to git config diff.tool")
     pexp.add_argument("-o", "--output", default=None, help="Output path for export")
     pexp.add_argument("--keep", type=int, default=None, help="Keep latest N experiments (for prune)")
     pexp.add_argument("--older-than", default=None, help="Prune experiments older than duration (e.g., 30d)")

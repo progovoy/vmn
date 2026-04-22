@@ -47,7 +47,7 @@ Versions live in git annotated tags. Uninstall vmn and the tags still make sense
 - You like that versions live in git annotated tags -- zero lock-in.
 - You run ML experiments and want reproducible snapshots with metrics, without spinning up a tracking server.
 
-No separate `vmn init` required -- `vmn stamp` auto-initializes on first run. Works with shallow clones (`fetch-depth: 1`).
+No separate `vmn init` required -- `vmn stamp` auto-initializes on first run. Works in CI (handles shallow clones automatically).
 
 ### How it works
 
@@ -356,7 +356,7 @@ vmn exp compare my_model -v 1.1.0 -v 1.2.0 -v 1.3.0
 vmn exp compare my_model --latest 3 --tool delta   # use external diff tool
 ```
 
-Set `VMN_DIFFTOOL` to default to your preferred diff viewer.
+Falls back to `git config diff.tool` if `--tool` is not given.
 
 #### restore
 
@@ -500,7 +500,7 @@ Everything needed to reconstruct the working tree is stored alongside the metada
 | `--latest` | Use the most recent snapshot |
 | `--note` | Attach or update a text note |
 | `--to` | Second version for `diff` (or `current` for working tree) |
-| `--tool` | External diff tool (`meld`, `vimdiff`, etc.). Env: `VMN_DIFFTOOL` |
+| `--tool` | External diff tool (`meld`, `vimdiff`, etc.). Falls back to `git config diff.tool` |
 | `-o`, `--output` | Export destination path |
 | `--meta` | Repeatable `key=value` metadata pairs |
 | `--meta-file` | YAML file with additional metadata |
@@ -713,7 +713,6 @@ ret, ctx = vmn_run(["show", "my_app"])
 | `VMN_WORKING_DIR` | Override working directory |
 | `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo) |
 | `GITHUB_TOKEN` / `GH_TOKEN` | Required for GitHub Releases |
-| `VMN_DIFFTOOL` | External diff tool for snapshot/experiment compare |
 
 ---
 ## Version Auto-Embedding

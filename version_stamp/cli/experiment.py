@@ -15,6 +15,7 @@ from version_stamp.cli.snapshot import (
     _compute_verstr,
     _diff_builtin,
     _diff_with_external_tool,
+    get_git_difftool,
     _relative_timestamp,
     _strip_git_dirs,
     gather_create_data,
@@ -601,7 +602,7 @@ def experiment_compare(vcs, params, storage, args):
             print("  ".join(str(v).ljust(w) for v, w in zip(row, col_widths)))
 
     # Code diff
-    tool = getattr(args, "tool", None) or os.environ.get("VMN_DIFFTOOL")
+    tool = getattr(args, "tool", None) or get_git_difftool(vcs)
     if len(experiments) == 2:
         meta1, patches1, _ = experiments[0]
         meta2, patches2, _ = experiments[1]
