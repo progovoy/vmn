@@ -13,8 +13,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.8+-3776AB?logo=python&logoColor=white" alt="Python 3.8+">
-  <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-brightgreen" alt="Platforms">
+  <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/C++-00599C?logo=cplusplus&logoColor=white" alt="C++">
+  <img src="https://img.shields.io/badge/Java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
 </p>
 
 ---
@@ -33,23 +37,24 @@ Versions live in git annotated tags. Uninstall vmn and the tags still make sense
 
 ---
 
-[Requirements](#requirements) · [Quick Start](#quick-start) · [Why vmn?](#why-vmn) · [Only in vmn](#what-only-vmn-does) · [Experiments](#experiment-management) · [Snapshots](#snapshots) · [Commands](#commands) · [Version Auto-Embedding](#version-auto-embedding) · [Configuration](#configuration) · [CI](#ci-integration) · [Troubleshooting](#troubleshooting) · [Migration](#already-using-another-tool)
+[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
 
 ---
 
 ### vmn is for you if:
 
-- You version projects in Python, Rust, Go, C++, Java, or anything else -- vmn is language-agnostic.
-- You run microservices and need independent versions per service under one root app.
-- You manage multi-repo dependencies and want reproducible state recovery across all of them.
-- You want zero config. No plugins, no YAML pipelines, no ecosystem buy-in.
-- You need versioning that works offline, in CI, and in air-gapped environments.
-- You like that versions live in git annotated tags -- zero lock-in.
-- You run ML experiments and want reproducible snapshots with metrics, without spinning up a tracking server.
+| | |
+|:--|:--|
+| **Any language** — Python, Rust, Go, C++, Java, JS, or anything with a git repo | **Microservices** — independent versions per service, one root counter |
+| **Multi-repo** — reproducible state recovery across repositories | **Zero config** — no plugins, no pipelines, no ecosystem buy-in |
+| **Offline / air-gapped** — works without network access | **Zero lock-in** — versions live in plain git tags |
+| **ML experiments** — reproducible snapshots with metrics, no tracking server | |
 
 No separate `vmn init` required -- `vmn stamp` auto-initializes on first run. Works in CI (handles shallow clones automatically).
 
 ### How it works
+
+<p align="center"><code>git commit</code> → <code>vmn stamp</code> → <strong>git tag</strong> → <code>git push</code></p>
 
 vmn stores all version state in **git annotated tag messages** as plain YAML. When you `vmn stamp`, it computes the next version, writes it into a tag (e.g., `my_app_1.2.0`), and optionally pushes. When you `vmn show`, it reads that tag. There is no database, no config service, no proprietary format -- just git tags you can inspect with `git tag -n1`.
 
@@ -72,13 +77,13 @@ git tag -n1 my_app_0.0.2    # version metadata right there in the tag
 
 ---
 
-## Requirements
+## 📋 Requirements
 
 - **Python** 3.8+
 - **Git** 2.10+ (for push options support; 2.17+ recommended)
 - **Platforms:** Linux, macOS, Windows (including WSL). No platform-specific configuration needed -- vmn uses GitPython for cross-platform git operations.
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Version a project
 
@@ -118,7 +123,7 @@ vmn exp restore --latest my_model
 Both workflows store everything in git -- no servers, no lock-in.
 
 ---
-## Why vmn?
+## ⚡ Why vmn?
 
 vmn does everything semantic-release and release-please do -- plus **9 things nothing else does**.
 
@@ -151,7 +156,7 @@ See [Already using another tool?](#already-using-another-tool) for step-by-step 
 </details>
 
 ---
-## Why vmn for ML experiments?
+## 🧪 Why vmn for ML experiments?
 
 Most experiment trackers require a server, a cloud account, or both. vmn tracks experiments the same way it tracks versions -- in git and local files.
 
@@ -221,7 +226,7 @@ Eight subcommands cover the full experiment lifecycle:
 | `vmn exp prune` | Clean up old experiments (keep N or older than duration) |
 
 ---
-## What only vmn does
+## 🔑 What only vmn does
 
 ### State recovery -- a time machine for your repo
 
@@ -285,7 +290,7 @@ Standard Semver 2.0 plus an optional 4th hotfix segment and dev snapshots for ev
 The hotfix segment lets you ship emergency fixes without bumping patch, keeping your release train on schedule while production stays safe.
 
 ---
-## Experiment Management
+## 🧬 Experiment Management
 
 `vmn experiment` (alias: `vmn exp`) adds git-native experiment tracking to any
 versioned app. No servers, no databases -- experiments are stored alongside your
@@ -441,7 +446,7 @@ vmn exp create my_model --backend s3 --bucket my-experiments \
 </details>
 
 ---
-## Snapshots
+## 📸 Snapshots
 
 Snapshots capture your exact working state -- uncommitted changes, local commits, untracked files -- into a deterministic dev version you can restore later. No WIP commits, no stash juggling. The newer `vmn experiment` command builds on this primitive for structured experiment tracking.
 
@@ -538,7 +543,7 @@ vmn snapshot create my_model \
 </details>
 
 ---
-## Commands
+## 🔧 Commands
 
 > `init-app` and `stamp` both support `--dry-run` for safe testing.
 
@@ -622,7 +627,8 @@ conf:
     draft: false
 ```
 
-### vmn release
+<details>
+<summary><strong>vmn release</strong></summary>
 
 ```sh
 vmn release -v 0.0.1-rc.1 my_app   # explicit version -- tag-only
@@ -631,7 +637,10 @@ vmn release --stamp my_app          # full stamp flow -- new commit + tag + push
 ```
 Promotes prerelease to final. Idempotent. `-v` and `--stamp` are mutually exclusive.
 
-### vmn show
+</details>
+
+<details>
+<summary><strong>vmn show</strong></summary>
 
 ```sh
 vmn show my_app              # current version
@@ -644,7 +653,10 @@ vmn show --conf my_app       # show app configuration
 vmn show --root my_root_app  # root app version (integer)
 ```
 
-### vmn goto
+</details>
+
+<details>
+<summary><strong>vmn goto</strong></summary>
 
 ```sh
 vmn goto -v 1.2.3 my_app              # repo + deps restored to exact state
@@ -655,25 +667,32 @@ vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model  # restore dev snapshot
 ```
 Deps auto-cloned if missing. Dev restore: checkout base, replay commits, apply working tree patch.
 
-### vmn gen
+</details>
+
+<details>
+<summary><strong>vmn gen</strong></summary>
 
 ```sh
 vmn gen -t version.j2 -o version.txt my_app
 vmn gen -t version.j2 -o version.txt -c custom.yml my_app
 ```
-<details><summary>Template variables</summary>
 
-`version`, `base_version`, `name`, `release_mode`, `prerelease`, `previous_version`, `stamped_on_branch`, `release_notes`, `changesets`, `root_name`, `root_version`, `root_services`.
+Template variables: `version`, `base_version`, `name`, `release_mode`, `prerelease`, `previous_version`, `stamped_on_branch`, `release_notes`, `changesets`, `root_name`, `root_version`, `root_services`.
+
 </details>
 
-### vmn add
+<details>
+<summary><strong>vmn add</strong></summary>
 
 ```sh
 vmn add -v 0.0.1 --bm build42 my_app
 ```
 Attaches build metadata to an existing version tag (e.g. `0.0.1+build42`). Optional `--vmp` for metadata file path.
 
-### vmn config
+</details>
+
+<details>
+<summary><strong>vmn config</strong></summary>
 
 ```sh
 vmn config                  # list all managed apps
@@ -683,7 +702,10 @@ vmn config --branch my_app  # branch-specific override
 vmn config --global         # repo-level .vmn/conf.yml
 ```
 
-### Release candidates
+</details>
+
+<details>
+<summary><strong>Release candidates</strong></summary>
 
 Iterate on prereleases, then promote:
 
@@ -694,7 +716,10 @@ vmn stamp --pr mybeta my_app            # 2.0.0-mybeta.1
 vmn release my_app                      # 2.0.0
 ```
 
-### Python library
+</details>
+
+<details>
+<summary><strong>Python library</strong></summary>
 
 vmn can be called programmatically. `vmn_run` accepts a command-line argument list and returns `(exit_code, context)`:
 
@@ -706,7 +731,10 @@ ret, ctx = vmn_run(["show", "my_app"])
 
 > **Note:** `vmn_run` prints to stdout/stderr. To capture output programmatically, wrap calls with `contextlib.redirect_stdout`/`redirect_stderr`.
 
-### Environment variables
+</details>
+
+<details>
+<summary><strong>Environment variables</strong></summary>
 
 | Variable | Description |
 |:---------|:------------|
@@ -714,8 +742,10 @@ ret, ctx = vmn_run(["show", "my_app"])
 | `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo) |
 | `GITHUB_TOKEN` / `GH_TOKEN` | Required for GitHub Releases |
 
+</details>
+
 ---
-## Version Auto-Embedding
+## 📦 Version Auto-Embedding
 
 `vmn stamp` can automatically write the stamped version into your project files. Add a `version_backends` section to `.vmn/<app>/conf.yml`:
 
@@ -780,7 +810,7 @@ Same variables as `vmn gen`.
 </details>
 
 ---
-## Configuration
+## ⚙️ Configuration
 
 vmn auto-generates `.vmn/<app-name>/conf.yml` when an app is first stamped. Edit it directly or use `vmn config` (see [Commands](#commands)). Full `conf.yml` structure:
 
@@ -820,7 +850,7 @@ conf:
 
 **Per-branch configuration.** Place `{branch}_conf.yml` next to `conf.yml` in `.vmn/<app>/`. vmn checks for a branch-specific config first and falls back to `conf.yml`. Stale branch configs from other branches are auto-cleaned on stamp.
 
-## CI Integration
+## 🔄 CI Integration
 
 Use the official GitHub Action for stamping in CI pipelines:
 
@@ -841,7 +871,7 @@ steps:
 `fetch-depth: 0` is required -- vmn reads git tags and history to compute the next version.
 
 ---
-## Roadmap
+## 🗺️ Roadmap
 
 vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
 
@@ -854,7 +884,7 @@ vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issue
 See the [full roadmap and backlog](https://github.com/progovoy/vmn/issues) for more.
 
 ---
-## Troubleshooting
+## 🔍 Troubleshooting
 
 <details>
 <summary><strong>vmn can't find tags / shows wrong version</strong></summary>
@@ -897,7 +927,7 @@ vmn checks for uncommitted changes and unpushed commits. To stamp despite dirty 
 
 ---
 
-## Already using another tool?
+## 🔀 Already using another tool?
 
 Step-by-step guides for common migration paths:
 
