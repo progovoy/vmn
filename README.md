@@ -37,7 +37,7 @@ Versions live in git annotated tags. Uninstall vmn and the tags still make sense
 
 ---
 
-[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
+[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#️-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
 
 ---
 
