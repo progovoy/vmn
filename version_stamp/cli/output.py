@@ -101,7 +101,7 @@ def show(vcs, params, verstr=None):
             from version_stamp.cli.snapshot import _generate_patches, _compute_verstr
 
             commit_hash = vcs.backend.changeset()
-            patches = _generate_patches(vcs.backend)
+            patches = _generate_patches(vcs.backend, lightweight=True)
             if patches:
                 base_version = ver_info["stamping"]["app"]["_version"]
                 dev_ver = _compute_verstr(base_version, commit_hash, patches)

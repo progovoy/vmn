@@ -6,6 +6,7 @@ import hashlib
 import io
 import os
 import shutil
+import stat as stat_module
 import subprocess
 import sys
 import tarfile
@@ -615,7 +616,15 @@ def _ensure_trailing_newline(s):
     return s if s.endswith("\n") else s + "\n"
 
 
-def _generate_patches(backend):
+def _generate_patches(backend, lightweight=False):
+    """Generate patches for dirty working tree state.
+
+    Args:
+        backend: Git backend instance.
+        lightweight: When True, hash untracked file metadata (path+size+mtime)
+            instead of reading file contents. Much faster for large untracked
+            files, suitable for ``show --dev`` where only a stable hash is needed.
+    """
     patches = {}
 
     try:
@@ -639,16 +648,21 @@ def _generate_patches(backend):
             )
 
     try:
-        untracked_tar = _collect_untracked_tarball(backend.repo_path)
-        if untracked_tar:
-            patches["untracked_files"] = untracked_tar
+        if lightweight:
+            meta_hash = _hash_untracked_metadata(backend.repo_path)
+            if meta_hash:
+                patches["untracked_files"] = meta_hash
+        else:
+            untracked_tar = _collect_untracked_tarball(backend.repo_path)
+            if untracked_tar:
+                patches["untracked_files"] = untracked_tar
     except Exception:
         VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
 
     return patches
 
 
-def _generate_dep_patches(vcs):
+def _generate_dep_patches(vcs, lightweight=False):
     from version_stamp.backends.factory import get_client
 
     configured_deps = getattr(vcs, "configured_deps", None)
@@ -666,13 +680,56 @@ def _generate_dep_patches(vcs):
             dep_be, err = get_client(full_path, vcs.be_type)
             if err or not dep_be:
                 continue
-            dp = _generate_patches(dep_be)
+            dp = _generate_patches(dep_be, lightweight=lightweight)
             if dp:
                 dep_patches[dep_path] = dp
         except Exception:
             VMN_LOGGER.debug(f"Failed to generate patches for dep {dep_path}", exc_info=True)
 
     return dep_patches
+
+
+def _hash_untracked_metadata(repo_path):
+    """Hash untracked file metadata (path + size + mtime) without reading content.
+
+    Returns a bytes digest suitable for feeding into _compute_verstr, or None
+    if there are no untracked files.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    h = hashlib.sha256()
+    file_count = 0
+    for rel_path in sorted(result.stdout.strip().split("\n")):
+        if not rel_path:
+            continue
+        if rel_path.startswith(".vmn/") or rel_path == ".vmn":
+            continue
+        abs_path = os.path.join(repo_path, rel_path)
+        try:
+            st = os.stat(abs_path)
+            if not stat_module.S_ISREG(st.st_mode):
+                continue
+        except OSError:
+            continue
+        h.update(f"{rel_path}\0{st.st_size}\0{st.st_mtime_ns}\n".encode())
+        file_count += 1
+
+    if file_count == 0:
+        return None
+    return h.digest()
+
+
+def _fmt_size(nbytes):
+    for unit in ("B", "KB", "MB", "GB"):
+        if nbytes < 1024:
+            return f"{nbytes:.0f}{unit}" if unit == "B" else f"{nbytes:.1f}{unit}"
+        nbytes /= 1024
+    return f"{nbytes:.1f}TB"
 
 
 def _collect_untracked_tarball(repo_path):
@@ -684,19 +741,39 @@ def _collect_untracked_tarball(repo_path):
     if result.returncode != 0 or not result.stdout.strip():
         return None
 
+    candidates = []
+    for rel_path in result.stdout.strip().split("\n"):
+        if not rel_path:
+            continue
+        if rel_path.startswith(".vmn/") or rel_path == ".vmn":
+            continue
+        abs_path = os.path.join(repo_path, rel_path)
+        if os.path.isfile(abs_path):
+            candidates.append((rel_path, abs_path))
+
+    if not candidates:
+        return None
+
+    total = len(candidates)
     buf = io.BytesIO()
     file_count = 0
+    collected_bytes = 0
     with tarfile.open(mode="w:gz", fileobj=buf) as tar:
-        for rel_path in result.stdout.strip().split("\n"):
-            if not rel_path:
-                continue
-            # Skip vmn's own state directory
-            if rel_path.startswith(".vmn/") or rel_path == ".vmn":
-                continue
-            abs_path = os.path.join(repo_path, rel_path)
-            if os.path.isfile(abs_path):
-                tar.add(abs_path, arcname=rel_path)
-                file_count += 1
+        for rel_path, abs_path in candidates:
+            tar.add(abs_path, arcname=rel_path)
+            file_count += 1
+            collected_bytes += os.path.getsize(abs_path)
+            if file_count % 50 == 0:
+                VMN_LOGGER.info(
+                    "Collecting untracked files: %d/%d (%s)",
+                    file_count, total, _fmt_size(collected_bytes),
+                )
+
+    if file_count > 0:
+        VMN_LOGGER.info(
+            "Collected %d untracked files (%s)",
+            file_count, _fmt_size(collected_bytes),
+        )
 
     if file_count == 0:
         return None
