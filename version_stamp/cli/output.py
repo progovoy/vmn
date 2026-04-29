@@ -98,18 +98,27 @@ def show(vcs, params, verstr=None):
 
     if params.get("dev") and not params.get("from_file") and dirty_states:
         try:
-            from version_stamp.cli.snapshot import _generate_patches, _compute_verstr
+            from version_stamp.cli.snapshot import (
+                _generate_patches, _generate_dep_patches, _compute_verstr,
+            )
 
             commit_hash = vcs.backend.changeset()
             patches = _generate_patches(vcs.backend, lightweight=True)
+            dep_patches = _generate_dep_patches(vcs, lightweight=True)
+            if dep_patches:
+                patches["deps"] = dep_patches
+
+            base_version = ver_info["stamping"]["app"]["_version"]
             if patches:
-                base_version = ver_info["stamping"]["app"]["_version"]
                 dev_ver = _compute_verstr(base_version, commit_hash, patches)
-                parts = dev_ver.rsplit("-dev.", 1)
-                if len(parts) == 2:
-                    dev_parts = parts[1].split(".")
-                    params["_dev_commit"] = dev_parts[0]
-                    params["_dev_diff_hash"] = dev_parts[1]
+            else:
+                dev_ver = f"{base_version}-dev.{commit_hash[:7]}.0000000"
+
+            parts = dev_ver.rsplit("-dev.", 1)
+            if len(parts) == 2:
+                dev_parts = parts[1].split(".")
+                params["_dev_commit"] = dev_parts[0]
+                params["_dev_diff_hash"] = dev_parts[1]
         except Exception:
             VMN_LOGGER.debug("Failed to compute dev hashes", exc_info=True)
 

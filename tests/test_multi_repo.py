@@ -5,6 +5,7 @@ import shutil
 import yaml
 
 from helpers import (
+    DEV_VERSION_RE,
     _configure_2_deps,
     _goto,
     _init_app,
@@ -206,3 +207,44 @@ def test_no_fetch_branch_configured_for_deps(app_layout, capfd):
 
     err, ver_info, _ = _stamp_app(app_layout.app_name, "minor")
     assert err == 0
+
+
+def test_show_dev_with_dep_version_not_matched(app_layout, capfd):
+    """vmn show --dev should output a single dev version line even when
+    the only dirty state is version_not_matched from a dependency that
+    moved forward after the last stamp."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    _configure_2_deps(app_layout, params)
+
+    err, ver_info, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+    # Move dep forward: commit+push in repo1 without re-stamping.
+    # This makes repo1's hash diverge from the stamped changeset,
+    # causing version_not_matched.
+    app_layout.write_file_commit_and_push("repo1", "f1.file", "dep change")
+
+    # Without --dev: confirm version_not_matched dirty state
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+    out = yaml.safe_load(captured.out)
+    assert "version_not_matched" in out["dirty"]
+
+    # With --dev: should produce a single dev version line, NOT yaml dirty output
+    capfd.readouterr()
+    err = _show(app_layout.app_name, dev=True)
+    assert err == 0
+    captured = capfd.readouterr()
+    dev_ver = captured.out.strip()
+    assert DEV_VERSION_RE.match(dev_ver), (
+        f"Expected single dev version line, got:\n{captured.out}"
+    )
+    assert dev_ver.startswith("0.0.2-dev.")
