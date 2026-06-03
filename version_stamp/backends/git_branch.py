@@ -99,8 +99,9 @@ class GitBranchMixin:
                 branch_name = self.active_branch
 
             self.checkout(branch=branch_name)
-        except Exception:
-            VMN_LOGGER.error("Failed to get branch name")
+        except Exception as e:
+            reason = str(e).replace("\n", " ").strip()
+            VMN_LOGGER.error(f"checkout_branch({branch_name}) failed: {reason}")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
             return None

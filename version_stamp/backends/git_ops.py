@@ -93,7 +93,11 @@ class GitOpsMixin:
     @measure_runtime_decorator
     def pull(self):
         if self.detached_head:
-            raise RuntimeError("Will not pull in detached head")
+            VMN_LOGGER.info(
+                f"{self.repo_path}: in detached HEAD – fetching instead of pulling"
+            )
+            self._be.git.execute(["git", "fetch", self.selected_remote.name, "--tags", "--prune"])
+            return
 
         self.selected_remote.pull("--ff-only")
 

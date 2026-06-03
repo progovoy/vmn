@@ -621,7 +621,8 @@ def _update_repo(args):
 
         if pull:
             try:
-                client.checkout_branch()
+                if not client.in_detached_head():
+                    client.checkout_branch()
                 client.pull()
             except Exception:
                 VMN_LOGGER.exception("Failed to pull:", exc_info=True)
@@ -652,11 +653,11 @@ def _update_repo(args):
             VMN_LOGGER.info(
                 "Updated {0} to {1}".format(rel_path, changeset)
             )
-    except Exception:
+    except Exception as e:
+        reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
-            f"Trying to abort update operation in {path} "
-            "Reason:\n",
+            f"Trying to abort update operation in {path}\nReason: {reason}\n",
             exc_info=True,
         )
 
@@ -667,7 +668,7 @@ def _update_repo(args):
                 "Unexpected behaviour when tried to revert:", exc_info=True
             )
 
-        return {"repo": rel_path, "status": 1, "description": None}
+        return {"repo": rel_path, "status": 1, "description": reason}
 
     return {"repo": rel_path, "status": 0, "description": None}
 
@@ -772,11 +773,20 @@ def _goto_version(deps, vmn_root_path, pull):
     with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
         results = p.map(_update_repo, args)
 
+    has_missing_objects = False
     for res in results:
         if res["status"] == 1:
             err = True
             if res["repo"] is None and res["description"] is None:
                 continue
+
+            desc = res.get("description") or ""
+            if any(p in desc for p in (
+                "reference is not a tree",
+                "unable to read tree",
+                "did not match any",
+            )):
+                has_missing_objects = True
 
             msg = "Failed to update "
             if res["repo"] is not None:
@@ -787,6 +797,12 @@ def _goto_version(deps, vmn_root_path, pull):
             VMN_LOGGER.warning(msg)
 
     if err:
+        if not pull and has_missing_objects:
+            VMN_LOGGER.error(
+                "Some repositories are missing the required commits locally. "
+                "Re-run with --pull to fetch them."
+            )
+
         VMN_LOGGER.error(
             "Failed to update one or more " "of the required repos. See log above"
         )
