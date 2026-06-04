@@ -262,7 +262,9 @@ class VersionControlStamper(IVersionsStamper):
                 ]["app"]["_version"]
                 VMN_LOGGER.error(
                     f"The version {rel_verstr} was already released. "
-                    "Will refuse to stamp prerelease version"
+                    "Will refuse to stamp prerelease version. "
+                    "Merge or rebase onto the branch that has "
+                    "the release to continue from a linear history"
                 )
                 raise RuntimeError()
 
