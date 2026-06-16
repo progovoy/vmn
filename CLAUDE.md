@@ -28,6 +28,12 @@ If you see API timeouts, split the current task into smaller parallel worktrees 
 - Prefer broad wildcards (e.g., `Bash(git:*)`) over specific subcommand rules.
 - Keep the allow list under 30 entries.
 
+## Development methodology
+Every feature must be developed using TDD (Test-Driven Development):
+1. Write a failing test first that defines the expected behavior.
+2. Write the minimal implementation to make the test pass.
+3. Refactor while keeping all tests green.
+
 ## Project Overview
 
 vmn is a CLI tool and Python library for automatic semantic versioning. Versions live in git annotated tags — zero lock-in, zero databases.
