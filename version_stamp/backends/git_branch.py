@@ -51,6 +51,7 @@ class GitBranchMixin:
             if not out:
                 raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
 
+            assert self.selected_remote is not None
             assert out.startswith(self.selected_remote.name)
 
             local_branch_name = (
@@ -110,6 +111,9 @@ class GitBranchMixin:
 
     @measure_runtime_decorator
     def get_remote_tracking_branch(self, local_branch_name):
+        if self.selected_remote is None:
+            return None
+
         command = [
             "git",
             "rev-parse",
@@ -139,6 +143,14 @@ class GitBranchMixin:
 
     @measure_runtime_decorator
     def prepare_for_remote_operation(self):
+        if self.selected_remote is None:
+            VMN_LOGGER.error(
+                f"No git remote is configured for repo {self.repo_path}. "
+                "vmn requires a remote for this operation. "
+                "Add one with 'git remote add origin <url>'."
+            )
+            return 1
+
         if self.remote_active_branch is not None:
             return 0
 

@@ -68,6 +68,12 @@ class GitOpsMixin:
 
     @measure_runtime_decorator
     def push(self, tags=()):
+        if self.selected_remote is None:
+            raise RuntimeError(
+                "No git remote is configured; cannot push. "
+                "Add one with 'git remote add origin <url>'."
+            )
+
         if self.detached_head:
             raise RuntimeError("Will not push from detached head")
 
@@ -92,6 +98,12 @@ class GitOpsMixin:
 
     @measure_runtime_decorator
     def pull(self):
+        if self.selected_remote is None:
+            VMN_LOGGER.info(
+                f"{self.repo_path}: no git remote configured – skipping pull"
+            )
+            return
+
         if self.detached_head:
             VMN_LOGGER.info(
                 f"{self.repo_path}: in detached HEAD – fetching instead of pulling"

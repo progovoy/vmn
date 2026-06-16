@@ -87,6 +87,9 @@ class GitHistoryMixin:
 
     @measure_runtime_decorator
     def remote(self):
+        if self.selected_remote is None:
+            return None
+
         remote = tuple(self.selected_remote.urls)[0]
 
         if os.path.isdir(remote):

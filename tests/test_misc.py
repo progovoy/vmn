@@ -196,6 +196,64 @@ def test_remotes(app_layout):
         c += 1
 
 
+def test_show_without_remote(app_layout):
+    # Local read commands must work even when no git remote is configured.
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    subprocess.call(
+        ["git", "remote", "remove", "origin"], cwd=app_layout.repo_path
+    )
+
+    # show must not crash (used to raise IndexError on remotes[0]) and exit cleanly.
+    assert _show(app_layout.app_name) == 0
+
+
+def test_stamp_without_remote_fails_clearly(app_layout):
+    # A stamp without a remote has no meaning: it must fail (non-zero) and leave
+    # no new commit and no new tag behind. It must NOT be a silent local stamp.
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    subprocess.call(
+        ["git", "remote", "remove", "origin"], cwd=app_layout.repo_path
+    )
+
+    tags_before = subprocess.check_output(
+        ["git", "tag", "--list"], cwd=app_layout.repo_path
+    ).decode()
+    head_before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=app_layout.repo_path
+    ).decode().strip()
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.file", "msg1", push=False
+    )
+    head_after_user_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=app_layout.repo_path
+    ).decode().strip()
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err != 0
+
+    tags_after = subprocess.check_output(
+        ["git", "tag", "--list"], cwd=app_layout.repo_path
+    ).decode()
+    head_after = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=app_layout.repo_path
+    ).decode().strip()
+
+    # No vmn tag created, and no vmn commit on top of the user's commit.
+    assert tags_after == tags_before
+    assert head_after == head_after_user_commit
+
+
 def test_add_bm(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
