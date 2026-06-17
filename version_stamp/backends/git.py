@@ -10,6 +10,7 @@ Implementation is split across mixin modules:
 import datetime
 import os
 import pathlib
+import re
 import time
 
 import git
@@ -28,6 +29,13 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, get_call_stack, measure_runtime_decorator
 
+_CREDENTIALS_RE = re.compile(r"(https?://)([^@]+)@")
+
+
+def _sanitize_log_str(s):
+    """Mask credentials in URLs (e.g. https://user:token@host → https://***@host)."""
+    return _CREDENTIALS_RE.sub(r"\1***@", s)
+
 
 # Global monkey-patch of git.cmd.Git.execute for logging and timing.
 # Must be done at the class level because GitPython makes `execute` read-only
@@ -36,8 +44,9 @@ def _custom_git_execute(self, *args, **kwargs):
     call_stack = get_call_stack()
 
     if VMN_LOGGER:
+        raw_cmd = ' '.join(str(v) for v in args[0])
         VMN_LOGGER.debug(
-            f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{' '.join(str(v) for v in args[0])}{END_CHAR}"
+            f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{_sanitize_log_str(raw_cmd)}{END_CHAR}"
         )
 
     original_execute = getattr(self.__class__, "_execute")
@@ -69,8 +78,8 @@ def _custom_git_execute(self, *args, **kwargs):
     if VMN_LOGGER:
         VMN_LOGGER.debug(
             f"{'  ' * (len(call_stack) - 1)}return code: {ret_code}, git cmd took: {time_took:.6f} seconds.\n"
-            f"{'  ' * (len(call_stack) - 1)}stdout: {sout}\n"
-            f"{'  ' * (len(call_stack) - 1)}stderr: {serr}"
+            f"{'  ' * (len(call_stack) - 1)}stdout: {_sanitize_log_str(str(sout))}\n"
+            f"{'  ' * (len(call_stack) - 1)}stderr: {_sanitize_log_str(str(serr))}"
         )
 
     return ret

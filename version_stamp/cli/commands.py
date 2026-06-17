@@ -124,6 +124,11 @@ def handle_stamp(vmn_ctx):
     github_token = vmn_ctx.args.github_token or os.environ.get("VMN_GITHUB_TOKEN")
     if github_user and github_token:
         vmn_ctx.vcs.backend.set_push_credentials(github_user, github_token)
+    elif bool(github_user) != bool(github_token):
+        VMN_LOGGER.warning(
+            "Both --github-user and --github-token must be provided together. "
+            "Ignoring partial credentials."
+        )
 
     # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
@@ -425,6 +430,16 @@ def _extract_ver_info(vcs, ver):
 
 @measure_runtime_decorator
 def handle_release(vmn_ctx):
+    github_user = vmn_ctx.args.github_user or os.environ.get("VMN_GITHUB_USER")
+    github_token = vmn_ctx.args.github_token or os.environ.get("VMN_GITHUB_TOKEN")
+    if github_user and github_token:
+        vmn_ctx.vcs.backend.set_push_credentials(github_user, github_token)
+    elif bool(github_user) != bool(github_token):
+        VMN_LOGGER.warning(
+            "Both --github-user and --github-token must be provided together. "
+            "Ignoring partial credentials."
+        )
+
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
 

@@ -78,6 +78,18 @@ def add_arg_release(subprasers):
     group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
     prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
+    prelease.add_argument(
+        "--github-user",
+        default=None,
+        help="GitHub username for push authentication. "
+        "Falls back to VMN_GITHUB_USER env var.",
+    )
+    prelease.add_argument(
+        "--github-token",
+        default=None,
+        help="GitHub personal access token for push authentication. "
+        "Falls back to VMN_GITHUB_TOKEN env var.",
+    )
 
 
 def add_arg_goto(subprasers):
