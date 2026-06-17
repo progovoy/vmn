@@ -154,6 +154,18 @@ def add_arg_stamp(subprasers):
         "example: adding --extra-commit-message '[ci-skip]' "
         "will add the string '[ci-skip]' to the commit message",
     )
+    pstamp.add_argument(
+        "--github-user",
+        default=None,
+        help="GitHub username for push authentication. "
+        "Falls back to VMN_GITHUB_USER env var.",
+    )
+    pstamp.add_argument(
+        "--github-token",
+        default=None,
+        help="GitHub personal access token for push authentication. "
+        "Falls back to VMN_GITHUB_TOKEN env var.",
+    )
 
 
 def add_arg_show(subprasers):

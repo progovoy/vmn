@@ -120,6 +120,11 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
+    github_user = vmn_ctx.args.github_user or os.environ.get("VMN_GITHUB_USER")
+    github_token = vmn_ctx.args.github_token or os.environ.get("VMN_GITHUB_TOKEN")
+    if github_user and github_token:
+        vmn_ctx.vcs.backend.set_push_credentials(github_user, github_token)
+
     # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
