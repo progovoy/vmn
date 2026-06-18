@@ -79,16 +79,16 @@ def add_arg_release(subprasers):
     prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
     prelease.add_argument(
-        "--github-user",
+        "--git-push-user",
         default=None,
-        help="GitHub username for push authentication. "
-        "Falls back to VMN_GITHUB_USER env var.",
+        help="Username for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_USER env var.",
     )
     prelease.add_argument(
-        "--github-token",
+        "--git-push-token",
         default=None,
-        help="GitHub personal access token for push authentication. "
-        "Falls back to VMN_GITHUB_TOKEN env var.",
+        help="Access token for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_TOKEN env var.",
     )
 
 
@@ -167,16 +167,16 @@ def add_arg_stamp(subprasers):
         "will add the string '[ci-skip]' to the commit message",
     )
     pstamp.add_argument(
-        "--github-user",
+        "--git-push-user",
         default=None,
-        help="GitHub username for push authentication. "
-        "Falls back to VMN_GITHUB_USER env var.",
+        help="Username for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_USER env var.",
     )
     pstamp.add_argument(
-        "--github-token",
+        "--git-push-token",
         default=None,
-        help="GitHub personal access token for push authentication. "
-        "Falls back to VMN_GITHUB_TOKEN env var.",
+        help="Access token for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_TOKEN env var.",
     )
 
 

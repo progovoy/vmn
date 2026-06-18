@@ -20,8 +20,8 @@ class TestInjectCredentialsIntoUrl:
     @pytest.fixture
     def mixin(self):
         m = GitOpsMixin()
-        m._push_github_user = "deploy-bot"
-        m._push_github_token = "ghp_abc123"
+        m._push_user = "deploy-bot"
+        m._push_token = "ghp_abc123"
         return m
 
     def test_https_url(self, mixin):
@@ -80,8 +80,8 @@ class TestInjectCredentialsIntoUrl:
 
     def test_special_characters_in_credentials(self):
         m = GitOpsMixin()
-        m._push_github_user = "user@domain"
-        m._push_github_token = "token/with+special&chars"
+        m._push_user = "user@domain"
+        m._push_token = "token/with+special&chars"
         result = m._inject_credentials_into_url(
             "https://github.com/owner/repo.git"
         )
@@ -130,16 +130,16 @@ class TestGetPushTarget:
 
     def test_only_user_falls_back_to_remote(self):
         m = GitOpsMixin()
-        m._push_github_user = "user"
-        m._push_github_token = None
+        m._push_user = "user"
+        m._push_token = None
         m.selected_remote = mock.MagicMock()
         m.selected_remote.name = "origin"
         assert m._get_push_target() == "origin"
 
     def test_only_token_falls_back_to_remote(self):
         m = GitOpsMixin()
-        m._push_github_user = None
-        m._push_github_token = "token"
+        m._push_user = None
+        m._push_token = "token"
         m.selected_remote = mock.MagicMock()
         m.selected_remote.name = "origin"
         assert m._get_push_target() == "origin"
@@ -157,8 +157,8 @@ class TestGetPushTarget:
         m1.set_push_credentials("user1", "token1")
 
         m2 = GitOpsMixin()
-        assert m2._push_github_user is None
-        assert m2._push_github_token is None
+        assert m2._push_user is None
+        assert m2._push_token is None
 
 
 class TestSanitizeLogStr:
@@ -196,26 +196,26 @@ class TestCliArgParsing:
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(
-            ["stamp", "-r", "patch", "--github-user", "u", "--github-token", "t", "app"]
+            ["stamp", "-r", "patch", "--git-push-user", "u", "--git-push-token", "t", "app"]
         )
-        assert args.github_user == "u"
-        assert args.github_token == "t"
+        assert args.git_push_user == "u"
+        assert args.git_push_token == "t"
 
     def test_stamp_github_flags_default_to_none(self):
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(["stamp", "-r", "patch", "app"])
-        assert args.github_user is None
-        assert args.github_token is None
+        assert args.git_push_user is None
+        assert args.git_push_token is None
 
     def test_release_accepts_github_flags(self):
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(
-            ["release", "--github-user", "u", "--github-token", "t", "app"]
+            ["release", "--git-push-user", "u", "--git-push-token", "t", "app"]
         )
-        assert args.github_user == "u"
-        assert args.github_token == "t"
+        assert args.git_push_user == "u"
+        assert args.git_push_token == "t"
 
     def test_env_var_fallback(self):
         from version_stamp.cli.args import parse_user_commands
@@ -223,10 +223,10 @@ class TestCliArgParsing:
         args = parse_user_commands(["stamp", "-r", "patch", "app"])
         with mock.patch.dict(
             os.environ,
-            {"VMN_GITHUB_USER": "env_user", "VMN_GITHUB_TOKEN": "env_token"},
+            {"VMN_GIT_PUSH_USER": "env_user", "VMN_GIT_PUSH_TOKEN": "env_token"},
         ):
-            user = args.github_user or os.environ.get("VMN_GITHUB_USER")
-            token = args.github_token or os.environ.get("VMN_GITHUB_TOKEN")
+            user = args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
+            token = args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
         assert user == "env_user"
         assert token == "env_token"
 
@@ -234,14 +234,14 @@ class TestCliArgParsing:
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(
-            ["stamp", "-r", "patch", "--github-user", "cli_user", "--github-token", "cli_token", "app"]
+            ["stamp", "-r", "patch", "--git-push-user", "cli_user", "--git-push-token", "cli_token", "app"]
         )
         with mock.patch.dict(
             os.environ,
-            {"VMN_GITHUB_USER": "env_user", "VMN_GITHUB_TOKEN": "env_token"},
+            {"VMN_GIT_PUSH_USER": "env_user", "VMN_GIT_PUSH_TOKEN": "env_token"},
         ):
-            user = args.github_user or os.environ.get("VMN_GITHUB_USER")
-            token = args.github_token or os.environ.get("VMN_GITHUB_TOKEN")
+            user = args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
+            token = args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
         assert user == "cli_user"
         assert token == "cli_token"
 

@@ -13,17 +13,17 @@ from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 class GitOpsMixin:
     """Methods for basic git operations. Mixed into GitBackend."""
 
-    _push_github_user = None
-    _push_github_token = None
+    _push_user = None
+    _push_token = None
 
-    def set_push_credentials(self, github_user, github_token):
-        """Set alternative GitHub credentials for push operations."""
-        self._push_github_user = github_user
-        self._push_github_token = github_token
+    def set_push_credentials(self, user, token):
+        """Set alternative credentials for push operations."""
+        self._push_user = user
+        self._push_token = token
 
     def _get_push_target(self):
         """Return the push target (remote name or authenticated URL)."""
-        if self._push_github_user and self._push_github_token:
+        if self._push_user and self._push_token:
             remote_url = tuple(self.selected_remote.urls)[0]
             authenticated_url = self._inject_credentials_into_url(remote_url)
             if authenticated_url:
@@ -38,8 +38,8 @@ class GitOpsMixin:
           - git@github.com:owner/repo.git
           - ssh://git@github.com/owner/repo.git
         """
-        user = urlquote(self._push_github_user, safe="")
-        token = urlquote(self._push_github_token, safe="")
+        user = urlquote(self._push_user, safe="")
+        token = urlquote(self._push_token, safe="")
 
         # HTTPS URL
         match = re.match(r"https?://([^/]+)/(.*)", url)
