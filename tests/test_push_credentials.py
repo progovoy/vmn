@@ -289,3 +289,62 @@ class TestPushWithCredentials:
         call_args = m._be.git.execute.call_args_list[1][0][0]
         assert "https://bot:ghp_secret@github.com/org/repo.git" in call_args
         assert "-o" not in call_args
+
+
+class TestUpdateRemoteTrackingRef:
+    """Test that remote tracking refs are updated after credential-based push."""
+
+    def test_push_updates_tracking_ref_with_credentials(self):
+        m = GitOpsMixin()
+        m.selected_remote = mock.MagicMock()
+        m.selected_remote.name = "origin"
+        m.selected_remote.urls = ("https://github.com/org/repo.git",)
+        m.remote_active_branch = "origin/main"
+        m.active_branch = "main"
+        m.detached_head = False
+        m.set_push_credentials("bot", "ghp_secret")
+
+        m._be = mock.MagicMock()
+        m.push()
+
+        # Should have called update-ref after the push
+        all_calls = [call[0][0] for call in m._be.git.execute.call_args_list]
+        update_ref_calls = [c for c in all_calls if "update-ref" in c]
+        assert len(update_ref_calls) == 1
+        assert "refs/remotes/origin/main" in update_ref_calls[0]
+        assert "HEAD" in update_ref_calls[0]
+
+    def test_push_skips_tracking_update_without_credentials(self):
+        m = GitOpsMixin()
+        m.selected_remote = mock.MagicMock()
+        m.selected_remote.name = "origin"
+        m.remote_active_branch = "origin/main"
+        m.active_branch = "main"
+        m.detached_head = False
+
+        m._be = mock.MagicMock()
+        m.push()
+
+        all_calls = [call[0][0] for call in m._be.git.execute.call_args_list]
+        update_ref_calls = [c for c in all_calls if "update-ref" in c]
+        assert len(update_ref_calls) == 0
+
+    def test_tracking_ref_update_failure_does_not_raise(self):
+        m = GitOpsMixin()
+        m.selected_remote = mock.MagicMock()
+        m.selected_remote.name = "origin"
+        m.selected_remote.urls = ("https://github.com/org/repo.git",)
+        m.remote_active_branch = "origin/main"
+        m.active_branch = "main"
+        m.detached_head = False
+        m.set_push_credentials("bot", "ghp_secret")
+
+        m._be = mock.MagicMock()
+        # Push succeeds, but update-ref fails
+        def side_effect(cmd):
+            if "update-ref" in cmd:
+                raise Exception("update-ref failed")
+        m._be.git.execute.side_effect = side_effect
+
+        # Should not raise
+        m.push()
