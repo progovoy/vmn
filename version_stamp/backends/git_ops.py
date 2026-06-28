@@ -68,6 +68,25 @@ class GitOpsMixin:
         )
         return None
 
+    def _update_remote_tracking_ref(self, remote_branch_name):
+        """Update the remote tracking ref after pushing via explicit URL.
+
+        When pushing to a URL instead of a named remote, git does not update
+        the remote tracking refs (e.g. origin/main). This causes
+        check_for_outgoing_changes to falsely report outgoing commits.
+        """
+        try:
+            self._be.git.execute([
+                "git", "update-ref",
+                f"refs/remotes/{self.remote_active_branch}",
+                "HEAD",
+            ])
+        except Exception:
+            VMN_LOGGER.debug(
+                "Failed to update remote tracking ref after push",
+                exc_info=True,
+            )
+
     def _push_with_ci_skip_fallback(self, refspec):
         """Push a refspec, trying with -o ci.skip first, falling back to without."""
         push_target = self._get_push_target()
@@ -144,6 +163,9 @@ class GitOpsMixin:
             err_str = "Push has failed. Please verify that 'git push' works"
             VMN_LOGGER.error(err_str, exc_info=True)
             raise RuntimeError(err_str)
+
+        if self._push_user and self._push_token:
+            self._update_remote_tracking_ref(remote_branch_name_no_remote_name)
 
         for tag in tags:
             self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
