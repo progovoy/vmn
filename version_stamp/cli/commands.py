@@ -120,6 +120,16 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
+    push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
+    push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
+    if push_user and push_token:
+        vmn_ctx.vcs.backend.set_push_credentials(push_user, push_token)
+    elif bool(push_user) != bool(push_token):
+        VMN_LOGGER.warning(
+            "Both --git-push-user and --git-push-token must be provided together. "
+            "Ignoring partial credentials."
+        )
+
     # For backward compatibility
     if vmn_ctx.vcs.release_mode == "micro":
         vmn_ctx.vcs.release_mode = "hotfix"
@@ -420,6 +430,16 @@ def _extract_ver_info(vcs, ver):
 
 @measure_runtime_decorator
 def handle_release(vmn_ctx):
+    push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
+    push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
+    if push_user and push_token:
+        vmn_ctx.vcs.backend.set_push_credentials(push_user, push_token)
+    elif bool(push_user) != bool(push_token):
+        VMN_LOGGER.warning(
+            "Both --git-push-user and --git-push-token must be provided together. "
+            "Ignoring partial credentials."
+        )
+
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
     optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
 

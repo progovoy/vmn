@@ -78,6 +78,18 @@ def add_arg_release(subprasers):
     group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
     prelease.set_defaults(stamp=False)
     prelease.add_argument("name", help="The application's name")
+    prelease.add_argument(
+        "--git-push-user",
+        default=None,
+        help="Username for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_USER env var.",
+    )
+    prelease.add_argument(
+        "--git-push-token",
+        default=None,
+        help="Access token for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_TOKEN env var.",
+    )
 
 
 def add_arg_goto(subprasers):
@@ -153,6 +165,18 @@ def add_arg_stamp(subprasers):
         help="add more information to the commit message."
         "example: adding --extra-commit-message '[ci-skip]' "
         "will add the string '[ci-skip]' to the commit message",
+    )
+    pstamp.add_argument(
+        "--git-push-user",
+        default=None,
+        help="Username for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_USER env var.",
+    )
+    pstamp.add_argument(
+        "--git-push-token",
+        default=None,
+        help="Access token for push authentication (any git hosting). "
+        "Falls back to VMN_GIT_PUSH_TOKEN env var.",
     )
 
 

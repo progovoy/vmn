@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Git backend mixin: core operations (tag, push, pull, commit, clone)."""
 import time
+import re
+from urllib.parse import quote as urlquote
 
 import git
 
@@ -11,8 +13,83 @@ from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 class GitOpsMixin:
     """Methods for basic git operations. Mixed into GitBackend."""
 
+    _push_user = None
+    _push_token = None
+
+    def set_push_credentials(self, user, token):
+        """Set alternative credentials for push operations."""
+        self._push_user = user
+        self._push_token = token
+
+    def _get_push_target(self):
+        """Return the push target (remote name or authenticated URL)."""
+        if self._push_user and self._push_token:
+            remote_url = tuple(self.selected_remote.urls)[0]
+            authenticated_url = self._inject_credentials_into_url(remote_url)
+            if authenticated_url:
+                return authenticated_url
+        return self.selected_remote.name
+
+    def _inject_credentials_into_url(self, url):
+        """Rewrite a GitHub remote URL to use HTTPS with embedded credentials.
+
+        Supports:
+          - https://github.com/owner/repo.git
+          - git@github.com:owner/repo.git
+          - ssh://git@github.com/owner/repo.git
+        """
+        user = urlquote(self._push_user, safe="")
+        token = urlquote(self._push_token, safe="")
+
+        # HTTPS URL
+        match = re.match(r"https?://([^/]+)/(.*)", url)
+        if match:
+            host = match.group(1)
+            # Strip any existing credentials from host
+            if "@" in host:
+                host = host.split("@", 1)[1]
+            return f"https://{user}:{token}@{host}/{match.group(2)}"
+
+        # SSH shorthand: git@github.com:owner/repo.git
+        match = re.match(r"git@([^:]+):(.*)", url)
+        if match:
+            host = match.group(1)
+            return f"https://{user}:{token}@{host}/{match.group(2)}"
+
+        # SSH URL: ssh://git@github.com/owner/repo.git
+        match = re.match(r"ssh://[^@]+@([^/]+)/(.*)", url)
+        if match:
+            host = match.group(1)
+            return f"https://{user}:{token}@{host}/{match.group(2)}"
+
+        VMN_LOGGER.warning(
+            f"Could not inject credentials into remote URL: {url}. "
+            "Falling back to default remote."
+        )
+        return None
+
+    def _update_remote_tracking_ref(self, remote_branch_name):
+        """Update the remote tracking ref after pushing via explicit URL.
+
+        When pushing to a URL instead of a named remote, git does not update
+        the remote tracking refs (e.g. origin/main). This causes
+        check_for_outgoing_changes to falsely report outgoing commits.
+        """
+        try:
+            self._be.git.execute([
+                "git", "update-ref",
+                f"refs/remotes/{self.remote_active_branch}",
+                "HEAD",
+            ])
+        except Exception:
+            VMN_LOGGER.debug(
+                "Failed to update remote tracking ref after push",
+                exc_info=True,
+            )
+
     def _push_with_ci_skip_fallback(self, refspec):
         """Push a refspec, trying with -o ci.skip first, falling back to without."""
+        push_target = self._get_push_target()
         try:
             self._be.git.execute(
                 [
@@ -21,7 +98,7 @@ class GitOpsMixin:
                     "--porcelain",
                     "-o",
                     "ci.skip",
-                    self.selected_remote.name,
+                    push_target,
                     refspec,
                 ]
             )
@@ -31,7 +108,7 @@ class GitOpsMixin:
                     "git",
                     "push",
                     "--porcelain",
-                    self.selected_remote.name,
+                    push_target,
                     refspec,
                 ]
             )
@@ -86,6 +163,9 @@ class GitOpsMixin:
             err_str = "Push has failed. Please verify that 'git push' works"
             VMN_LOGGER.error(err_str, exc_info=True)
             raise RuntimeError(err_str)
+
+        if self._push_user and self._push_token:
+            self._update_remote_tracking_ref(remote_branch_name_no_remote_name)
 
         for tag in tags:
             self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
