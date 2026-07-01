@@ -175,7 +175,7 @@ class GitOpsMixin:
         if self.detached_head:
             raise RuntimeError("Will not pull in detached head")
 
-        self.selected_remote.pull("--ff-only")
+        self.selected_remote.pull(ff_only=True)
 
     @measure_runtime_decorator
     def commit(self, message, user, include=None):
