@@ -214,6 +214,38 @@ class IVersionsStamper(object):
                     self.root_app_dir_path, "root_conf.yml"
                 )
 
+        self._warn_on_misplaced_branch_conf_files()
+
+    def _warn_on_misplaced_branch_conf_files(self):
+        """Branch-specific overrides must be flat files named
+        '<branch-with-/-replaced-by-dashes>_conf.yml', living directly in
+        app_dir_path (see branch_to_conf_prefix). A file with a matching name
+        nested in a subdirectory - e.g. someone mirroring a branch like
+        'a/b/c' as a directory tree instead of dashes - is silently ignored
+        by initialize_paths() above, so warn instead of failing quietly.
+        """
+        if not os.path.isdir(self.app_dir_path):
+            return
+
+        for dirpath, _, filenames in os.walk(self.app_dir_path):
+            if dirpath == self.app_dir_path:
+                continue
+
+            for fname in filenames:
+                if fname == "root_conf.yml" or fname.endswith("_root_conf.yml"):
+                    continue
+                if fname != "conf.yml" and not fname.endswith("_conf.yml"):
+                    continue
+
+                found_path = os.path.join(dirpath, fname)
+                VMN_LOGGER.warning(
+                    f"Found '{found_path}', which looks like a "
+                    "branch-specific config file nested in a subdirectory. "
+                    "Branch overrides must be flat files named "
+                    "'<branch-with-/-replaced-by-dashes>_conf.yml' directly "
+                    f"inside '{self.app_dir_path}'. This file will be ignored."
+                )
+
     def initialize_configured_deps(self, self_base, self_dep):
         self.configured_deps = {}
         if self.raw_configured_deps:

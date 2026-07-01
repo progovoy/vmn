@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 
+import git
 import pytest
 import toml
 import yaml
@@ -3543,6 +3544,130 @@ def test_multi_repo_dependency_on_specific_branch_goto(app_layout, capfd):
     assert err == 0
     captured = capfd.readouterr()
     assert captured.out == "0.0.2\n"
+
+
+def test_goto_clones_and_checks_out_new_dep_from_branch_specific_conf(app_layout):
+    from version_stamp.core.utils import branch_to_conf_prefix
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Set up the dependency repo. create_repo() also leaves a local clone on
+    # disk as a side effect of test setup - remove it below so the repo is,
+    # from vmn's point of view, a dependency it has never cloned before.
+    dep_be = app_layout.create_repo(repo_name="dep_repo", repo_type="git")
+    dep_path = app_layout._repos["dep_repo"]["path"]
+    dep_remote = app_layout._repos["dep_repo"]["remote"]
+
+    target_branch = "general/integration/ussr_remove_async"
+    app_layout.checkout(target_branch, repo_name="dep_repo", create_new=True)
+    app_layout.write_file_commit_and_push("dep_repo", "f1.file", "on-branch-content")
+    expected_sha = app_layout._repos["dep_repo"]["changesets"]["hash"]
+
+    dep_be.__del__()
+    shutil.rmtree(dep_path)
+
+    # The app moves to its own branch, with a branch-specific conf.yml that
+    # is the only place the dependency on target_branch is configured.
+    app_branch = "topic/goto_new_dep"
+    app_layout.checkout(app_branch, create_new=True)
+    subprocess.call(
+        ["git", "push", "-u", "origin", app_branch], cwd=app_layout.repo_path
+    )
+
+    branch_conf_path = os.path.join(
+        os.path.dirname(params["app_conf_path"]),
+        f"{branch_to_conf_prefix(app_branch)}_conf.yml",
+    )
+    app_layout.write_conf(
+        branch_conf_path,
+        deps={
+            "../": {
+                "dep_repo": {
+                    "vcs_type": "git",
+                    "remote": dep_remote,
+                    "branch": target_branch,
+                }
+            }
+        },
+    )
+
+    err = _goto(app_layout.app_name)
+    assert err == 0
+
+    assert os.path.isdir(dep_path)
+
+    dep_repo_after = git.Repo(dep_path)
+    assert dep_repo_after.active_branch.name == target_branch
+    assert dep_repo_after.head.commit.hexsha == expected_sha
+    dep_repo_after.close()
+
+
+def test_goto_ignores_branch_conf_placed_at_nested_branch_path(app_layout, capfd):
+    """Reproduces a client report: they placed the branch-specific conf.yml at
+    a path mirroring the branch name with '/' kept as directories (e.g.
+    '.vmn/<app>/general/integration/ussr_remove_async_conf.yml'), instead of
+    the actual expected flattened '<branch-with-dashes>_conf.yml' file next to
+    conf.yml. vmn falls back to the default conf.yml, so a dependency declared
+    only in the misplaced file is never cloned or checked out - but it now
+    warns about the stray file instead of failing silently."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    dep_be = app_layout.create_repo(repo_name="dep_repo", repo_type="git")
+    dep_path = app_layout._repos["dep_repo"]["path"]
+    dep_remote = app_layout._repos["dep_repo"]["remote"]
+
+    target_branch = "general/integration/ussr_remove_async"
+    app_layout.checkout(target_branch, repo_name="dep_repo", create_new=True)
+    app_layout.write_file_commit_and_push("dep_repo", "f1.file", "on-branch-content")
+
+    dep_be.__del__()
+    shutil.rmtree(dep_path)
+
+    app_branch = "general/integration/ussr_remove_async"
+    app_layout.checkout(app_branch, create_new=True)
+    subprocess.call(
+        ["git", "push", "-u", "origin", app_branch], cwd=app_layout.repo_path
+    )
+
+    # Misplaced conf: nested directories mirroring the branch name, instead
+    # of the flattened "general-integration-ussr_remove_async_conf.yml".
+    app_dir = os.path.dirname(params["app_conf_path"])
+    wrong_branch_conf_path = os.path.join(app_dir, f"{app_branch}_conf.yml")
+    os.makedirs(os.path.dirname(wrong_branch_conf_path), exist_ok=True)
+    app_layout.write_conf(
+        wrong_branch_conf_path,
+        deps={
+            "../": {
+                "dep_repo": {
+                    "vcs_type": "git",
+                    "remote": dep_remote,
+                    "branch": target_branch,
+                }
+            }
+        },
+    )
+
+    capfd.readouterr()
+    err = _goto(app_layout.app_name)
+    assert err == 0
+
+    # The dependency was never cloned: vmn fell back to the default conf.yml
+    # (which has no deps at all).
+    assert not os.path.exists(dep_path)
+
+    # But it now warns about the stray nested conf file instead of just
+    # silently ignoring it.
+    captured = capfd.readouterr()
+    assert "nested in a subdirectory" in captured.err
+    assert wrong_branch_conf_path in captured.err
 
 
 def test_dirty_no_ff_rebase(app_layout, capfd):
