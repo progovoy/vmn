@@ -14,6 +14,10 @@ VMN_OLD_TEMPLATE = (
 
 INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 
+# Directory inside an app dir holding branch-specific configs:
+# .vmn/{app}/branch_conf/{branch}/conf.yml
+BRANCH_CONF_DIR = "branch_conf"
+
 # ── Regex patterns ───────────────────────────────────────────────────
 
 _DIGIT_REGEX = r"0|[1-9]\d*"

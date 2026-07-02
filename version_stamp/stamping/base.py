@@ -26,7 +26,7 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
-from version_stamp.core.utils import branch_to_conf_prefix, comment_out_jinja
+from version_stamp.core.utils import comment_out_jinja, resolve_branch_conf_path
 from version_stamp.stamping.template_data import (
     create_data_dict_for_jinja2,
     gen_jinja2_template_from_data,
@@ -183,12 +183,9 @@ class IVersionsStamper(object):
 
         self.version_file_path = os.path.join(self.app_dir_path, VER_FILE_NAME)
 
-        self.app_conf_path = os.path.join(
-            self.app_dir_path,
-            f"{branch_to_conf_prefix(self.backend.active_branch)}_conf.yml",
+        self.app_conf_path, _ = resolve_branch_conf_path(
+            self.app_dir_path, self.backend.active_branch
         )
-        if not os.path.isfile(self.app_conf_path):
-            self.app_conf_path = os.path.join(self.app_dir_path, "conf.yml")
 
         if self.root_context:
             self.root_app_name = self.name
@@ -205,46 +202,11 @@ class IVersionsStamper(object):
                 self.vmn_root_path, ".vmn", self.root_app_name
             )
 
-            self.root_app_conf_path = os.path.join(
+            self.root_app_conf_path, _ = resolve_branch_conf_path(
                 self.root_app_dir_path,
-                f"{branch_to_conf_prefix(self.backend.active_branch)}_root_conf.yml",
+                self.backend.active_branch,
+                root=True,
             )
-            if not os.path.isfile(self.root_app_conf_path):
-                self.root_app_conf_path = os.path.join(
-                    self.root_app_dir_path, "root_conf.yml"
-                )
-
-        self._warn_on_misplaced_branch_conf_files()
-
-    def _warn_on_misplaced_branch_conf_files(self):
-        """Branch-specific overrides must be flat files named
-        '<branch-with-/-replaced-by-dashes>_conf.yml', living directly in
-        app_dir_path (see branch_to_conf_prefix). A file with a matching name
-        nested in a subdirectory - e.g. someone mirroring a branch like
-        'a/b/c' as a directory tree instead of dashes - is silently ignored
-        by initialize_paths() above, so warn instead of failing quietly.
-        """
-        if not os.path.isdir(self.app_dir_path):
-            return
-
-        for dirpath, _, filenames in os.walk(self.app_dir_path):
-            if dirpath == self.app_dir_path:
-                continue
-
-            for fname in filenames:
-                if fname == "root_conf.yml" or fname.endswith("_root_conf.yml"):
-                    continue
-                if fname != "conf.yml" and not fname.endswith("_conf.yml"):
-                    continue
-
-                found_path = os.path.join(dirpath, fname)
-                VMN_LOGGER.warning(
-                    f"Found '{found_path}', which looks like a "
-                    "branch-specific config file nested in a subdirectory. "
-                    "Branch overrides must be flat files named "
-                    "'<branch-with-/-replaced-by-dashes>_conf.yml' directly "
-                    f"inside '{self.app_dir_path}'. This file will be ignored."
-                )
 
     def initialize_configured_deps(self, self_base, self_dep):
         self.configured_deps = {}

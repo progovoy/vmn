@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 
-from version_stamp.core.constants import JINJA_TAG_RE
+from version_stamp.core.constants import BRANCH_CONF_DIR, JINJA_TAG_RE
 from version_stamp.core.logging import VMN_LOGGER
 
 
@@ -51,6 +51,57 @@ def resolve_root_path():
 def branch_to_conf_prefix(branch_name):
     """Sanitize branch name for use in conf filenames (abc/feat → abc-feat)."""
     return branch_name.replace("/", "-")
+
+
+def _conf_basename(root):
+    return "root_conf.yml" if root else "conf.yml"
+
+
+def branch_conf_canonical_path(app_dir_path, branch, root=False):
+    """Canonical layout: {app_dir}/branch_conf/{branch as dirs}/(root_)conf.yml"""
+    return os.path.join(
+        app_dir_path,
+        BRANCH_CONF_DIR,
+        branch.replace("/", os.sep),
+        _conf_basename(root),
+    )
+
+
+def branch_conf_flat_path(app_dir_path, branch, root=False):
+    """Flat layout: {app_dir}/{branch-with-dashes}_(root_)conf.yml"""
+    return os.path.join(
+        app_dir_path,
+        f"{branch_to_conf_prefix(branch)}_{_conf_basename(root)}",
+    )
+
+
+def branch_conf_legacy_path(app_dir_path, branch, root=False):
+    """Legacy nested layout: {app_dir}/{seg0}/../{leaf}_(root_)conf.yml"""
+    segments = branch.split("/")
+    return os.path.join(
+        app_dir_path,
+        *segments[:-1],
+        f"{segments[-1]}_{_conf_basename(root)}",
+    )
+
+
+def resolve_branch_conf_path(app_dir_path, branch, root=False):
+    """Resolve a branch-specific conf file, supporting all layouts.
+
+    Precedence: canonical > flat > legacy. Falls back to the default
+    (root_)conf.yml with convention None when no branch conf exists.
+    """
+    if branch:
+        for convention, path_fn in (
+            ("canonical", branch_conf_canonical_path),
+            ("flat", branch_conf_flat_path),
+            ("legacy", branch_conf_legacy_path),
+        ):
+            path = path_fn(app_dir_path, branch, root=root)
+            if os.path.isfile(path):
+                return path, convention
+
+    return os.path.join(app_dir_path, _conf_basename(root)), None
 
 
 class WrongTagFormatException(Exception):

@@ -3098,6 +3098,131 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
     assert not os.path.exists(branch_conf_path)
 
 
+def test_show_reads_branch_conf_from_canonical_layout(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "b2"
+    canonical_conf_path = os.path.join(
+        app_layout.repo_path,
+        ".vmn",
+        app_layout.app_name,
+        "branch_conf",
+        branch,
+        "conf.yml",
+    )
+    os.makedirs(os.path.dirname(canonical_conf_path), exist_ok=True)
+    app_layout.write_conf(
+        canonical_conf_path, template="[test_{major}][.{minor}][.{patch}]"
+    )
+
+    capfd.readouterr()
+    _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "0.0.1"
+
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
+
+    capfd.readouterr()
+    _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "test_0.0.1"
+
+
+def test_show_reads_branch_conf_from_legacy_nested_layout(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "a/b/c"
+    legacy_conf_path = os.path.join(
+        app_layout.repo_path,
+        ".vmn",
+        app_layout.app_name,
+        "a",
+        "b",
+        "c_conf.yml",
+    )
+    os.makedirs(os.path.dirname(legacy_conf_path), exist_ok=True)
+    app_layout.write_conf(
+        legacy_conf_path, template="[test_{major}][.{minor}][.{patch}]"
+    )
+
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
+
+    capfd.readouterr()
+    _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "test_0.0.1"
+
+
+def test_show_prefers_canonical_over_flat_branch_conf(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "b2"
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+
+    app_layout.write_conf(
+        os.path.join(app_dir, f"{branch}_conf.yml"),
+        template="[flat_{major}][.{minor}][.{patch}]",
+    )
+
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", branch, "conf.yml")
+    os.makedirs(os.path.dirname(canonical_conf_path), exist_ok=True)
+    app_layout.write_conf(
+        canonical_conf_path, template="[canon_{major}][.{minor}][.{patch}]"
+    )
+
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
+
+    capfd.readouterr()
+    _show(app_layout.app_name)
+    captured = capfd.readouterr()
+
+    tmp = yaml.safe_load(captured.out)
+    assert tmp["out"] == "canon_0.0.1"
+
+
+def test_show_and_goto_do_not_migrate(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(f"{app_layout.app_name}", "patch")
+
+    branch = "b2"
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    flat_conf_path = os.path.join(app_dir, f"{branch}_conf.yml")
+    app_layout.write_conf(
+        flat_conf_path, template="[test_{major}][.{minor}][.{patch}]"
+    )
+
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
+    subprocess.call(
+        ["git", "push", "-u", "origin", branch], cwd=app_layout.repo_path
+    )
+
+    assert _show(app_layout.app_name) == 0
+    assert _goto(app_layout.app_name) == 0
+
+    # Read-only commands must not move conf files around.
+    assert os.path.exists(flat_conf_path)
+    assert not os.path.isdir(os.path.join(app_dir, "branch_conf"))
+
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain", "--", ".vmn"],
+        cwd=app_layout.repo_path,
+    ).decode()
+    assert status.strip() == ""
+
+
 def test_stamp_no_ff_rebase(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -3606,14 +3731,12 @@ def test_goto_clones_and_checks_out_new_dep_from_branch_specific_conf(app_layout
     dep_repo_after.close()
 
 
-def test_goto_ignores_branch_conf_placed_at_nested_branch_path(app_layout, capfd):
-    """Reproduces a client report: they placed the branch-specific conf.yml at
-    a path mirroring the branch name with '/' kept as directories (e.g.
-    '.vmn/<app>/general/integration/ussr_remove_async_conf.yml'), instead of
-    the actual expected flattened '<branch-with-dashes>_conf.yml' file next to
-    conf.yml. vmn falls back to the default conf.yml, so a dependency declared
-    only in the misplaced file is never cloned or checked out - but it now
-    warns about the stray file instead of failing silently."""
+def test_goto_reads_branch_conf_from_legacy_nested_path(app_layout, capfd):
+    """A branch-specific conf placed at a path mirroring the branch name with
+    '/' kept as directories (e.g.
+    '.vmn/<app>/general/integration/ussr_remove_async_conf.yml') is a
+    supported legacy layout: vmn reads it, so a dependency declared only
+    there is cloned and checked out."""
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -3627,6 +3750,7 @@ def test_goto_ignores_branch_conf_placed_at_nested_branch_path(app_layout, capfd
     target_branch = "general/integration/ussr_remove_async"
     app_layout.checkout(target_branch, repo_name="dep_repo", create_new=True)
     app_layout.write_file_commit_and_push("dep_repo", "f1.file", "on-branch-content")
+    expected_sha = app_layout._repos["dep_repo"]["changesets"]["hash"]
 
     dep_be.__del__()
     shutil.rmtree(dep_path)
@@ -3637,13 +3761,13 @@ def test_goto_ignores_branch_conf_placed_at_nested_branch_path(app_layout, capfd
         ["git", "push", "-u", "origin", app_branch], cwd=app_layout.repo_path
     )
 
-    # Misplaced conf: nested directories mirroring the branch name, instead
+    # Legacy layout: nested directories mirroring the branch name, instead
     # of the flattened "general-integration-ussr_remove_async_conf.yml".
     app_dir = os.path.dirname(params["app_conf_path"])
-    wrong_branch_conf_path = os.path.join(app_dir, f"{app_branch}_conf.yml")
-    os.makedirs(os.path.dirname(wrong_branch_conf_path), exist_ok=True)
+    legacy_branch_conf_path = os.path.join(app_dir, f"{app_branch}_conf.yml")
+    os.makedirs(os.path.dirname(legacy_branch_conf_path), exist_ok=True)
     app_layout.write_conf(
-        wrong_branch_conf_path,
+        legacy_branch_conf_path,
         deps={
             "../": {
                 "dep_repo": {
@@ -3659,15 +3783,69 @@ def test_goto_ignores_branch_conf_placed_at_nested_branch_path(app_layout, capfd
     err = _goto(app_layout.app_name)
     assert err == 0
 
-    # The dependency was never cloned: vmn fell back to the default conf.yml
-    # (which has no deps at all).
-    assert not os.path.exists(dep_path)
+    assert os.path.isdir(dep_path)
 
-    # But it now warns about the stray nested conf file instead of just
-    # silently ignoring it.
+    dep_repo_after = git.Repo(dep_path)
+    assert dep_repo_after.active_branch.name == target_branch
+    assert dep_repo_after.head.commit.hexsha == expected_sha
+    dep_repo_after.close()
+
     captured = capfd.readouterr()
-    assert "nested in a subdirectory" in captured.err
-    assert wrong_branch_conf_path in captured.err
+    assert "nested in a subdirectory" not in captured.err
+
+
+def test_goto_clones_dep_from_canonical_branch_conf(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    dep_be = app_layout.create_repo(repo_name="dep_repo", repo_type="git")
+    dep_path = app_layout._repos["dep_repo"]["path"]
+    dep_remote = app_layout._repos["dep_repo"]["remote"]
+
+    target_branch = "general/integration/ussr_remove_async"
+    app_layout.checkout(target_branch, repo_name="dep_repo", create_new=True)
+    app_layout.write_file_commit_and_push("dep_repo", "f1.file", "on-branch-content")
+    expected_sha = app_layout._repos["dep_repo"]["changesets"]["hash"]
+
+    dep_be.__del__()
+    shutil.rmtree(dep_path)
+
+    app_branch = "topic/goto_new_dep"
+    app_layout.checkout(app_branch, create_new=True)
+    subprocess.call(
+        ["git", "push", "-u", "origin", app_branch], cwd=app_layout.repo_path
+    )
+
+    app_dir = os.path.dirname(params["app_conf_path"])
+    canonical_conf_path = os.path.join(
+        app_dir, "branch_conf", *app_branch.split("/"), "conf.yml"
+    )
+    os.makedirs(os.path.dirname(canonical_conf_path), exist_ok=True)
+    app_layout.write_conf(
+        canonical_conf_path,
+        deps={
+            "../": {
+                "dep_repo": {
+                    "vcs_type": "git",
+                    "remote": dep_remote,
+                    "branch": target_branch,
+                }
+            }
+        },
+    )
+
+    err = _goto(app_layout.app_name)
+    assert err == 0
+
+    assert os.path.isdir(dep_path)
+
+    dep_repo_after = git.Repo(dep_path)
+    assert dep_repo_after.active_branch.name == target_branch
+    assert dep_repo_after.head.commit.hexsha == expected_sha
+    dep_repo_after.close()
 
 
 def test_dirty_no_ff_rebase(app_layout, capfd):
