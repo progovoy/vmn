@@ -2,7 +2,6 @@
 """VersionControlStamper — handles stamp, release, publish, changelog."""
 import copy
 import datetime
-import glob
 import os
 import pathlib
 import re
@@ -15,6 +14,7 @@ import yaml
 
 from version_stamp.backends.base import VMNBackend
 from version_stamp.core.constants import (
+    BRANCH_CONF_DIR,
     PUBLISH_MAX_RETRIES,
     PUBLISH_RETRY_SLEEP_SECONDS,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
@@ -23,9 +23,9 @@ from version_stamp.core.constants import (
     VMN_USER_NAME,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import branch_to_conf_prefix
 from version_stamp.core.version_math import parse_conventional_commit_message
 from version_stamp.stamping.base import IVersionsStamper
+from version_stamp.stamping.conf_migration import migrate_branch_confs
 
 
 class VersionControlStamper(IVersionsStamper):
@@ -405,6 +405,8 @@ class VersionControlStamper(IVersionsStamper):
 
         if not self.should_publish:
             return 0
+
+        self._migrate_branch_confs()
 
         self.write_version_to_file(version_number=app_version)
 
@@ -840,39 +842,63 @@ class VersionControlStamper(IVersionsStamper):
         version_files_to_add.append(file_path)
 
     @measure_runtime_decorator
+    def _migrate_branch_confs(self):
+        """Move old-convention branch confs to the canonical layout and remap
+        any tracked paths that were moved into the stamp commit."""
+        moves = migrate_branch_confs(
+            self.backend, self.vmn_root_path, self.dry_run
+        )
+        if not moves:
+            return
+
+        remap = dict(moves)
+        self.app_conf_path = remap.get(self.app_conf_path, self.app_conf_path)
+        if self.root_app_conf_path is not None:
+            self.root_app_conf_path = remap.get(
+                self.root_app_conf_path, self.root_app_conf_path
+            )
+        self.version_files = [remap.get(p, p) for p in self.version_files]
+
+    def _collect_stale_branch_confs(self, cur_branch):
+        """Canonical confs belonging to branches other than ``cur_branch``."""
+        branch_conf_root = os.path.join(self.app_dir_path, BRANCH_CONF_DIR)
+        if not os.path.isdir(branch_conf_root):
+            return []
+
+        keep_prefix = (
+            os.path.join(branch_conf_root, cur_branch.replace("/", os.sep))
+            + os.sep
+        )
+        stale = []
+        for dirpath, _dirnames, filenames in os.walk(branch_conf_root):
+            for name in filenames:
+                full = os.path.join(dirpath, name)
+                if not full.startswith(keep_prefix):
+                    stale.append(full)
+        return stale
+
+    def _prune_branch_conf_dirs(self):
+        branch_conf_root = os.path.join(self.app_dir_path, BRANCH_CONF_DIR)
+        if not os.path.isdir(branch_conf_root):
+            return
+        for dirpath, _dirnames, _filenames in os.walk(
+            branch_conf_root, topdown=False
+        ):
+            try:
+                os.rmdir(dirpath)
+            except OSError:
+                pass
+
+    @measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
         cur_branch = self.backend.active_branch
-        path = os.path.join(
-            self.app_dir_path,
-            "*_conf.yml",
-        )
-        list_of_files = glob.glob(path)
-
-        # Detect legacy branch configs in subdirectories (created before branch
-        # name sanitization replaced "/" with "-" in conf filenames).
-        try:
-            for entry in os.scandir(self.app_dir_path):
-                if entry.is_dir():
-                    for fname in os.listdir(entry.path):
-                        if fname.endswith("_conf.yml") or fname == "conf.yml":
-                            legacy = os.path.join(entry.path, fname)
-                            VMN_LOGGER.warning(
-                                f"Found legacy branch config in subdirectory: {legacy}. "
-                                f"Branch configs should be flat files like "
-                                f"'<branch>_conf.yml'."
-                            )
-        except OSError:
-            pass
-
-        branch_conf_path = os.path.join(
-            self.app_dir_path, f"{branch_to_conf_prefix(cur_branch)}_conf.yml"
-        )
+        stale_confs = self._collect_stale_branch_confs(cur_branch)
 
         if self.dry_run:
-            if list_of_files:
+            if stale_confs:
                 VMN_LOGGER.info(
-                    "Would have removed config files:\n"
-                    f"{set(list_of_files) - {branch_conf_path} }"
+                    "Would have removed other branches' config files:\n"
+                    f"{set(stale_confs)}"
                 )
 
             VMN_LOGGER.info(
@@ -880,17 +906,22 @@ class VersionControlStamper(IVersionsStamper):
                 f'{self.current_version_info["stamping"]["msg"]}'
             )
         else:
-            for f in set(list_of_files) - {branch_conf_path}:
+            for f in stale_confs:
+                # -f handles both committed confs and ones freshly staged by
+                # this stamp's migration (plain git rm refuses staged adds).
                 try:
-                    self.backend._be.index.remove([f], working_tree=True)
+                    self.backend._be.git.rm("-f", "--", f)
                 except Exception:
-                    pass
+                    try:
+                        self.backend._be.index.remove([f], working_tree=True)
+                    except Exception:
+                        pass
+                    try:
+                        pathlib.Path(f).unlink()
+                    except Exception:
+                        pass
 
-                try:
-                    f_to_rem = pathlib.Path(f)
-                    f_to_rem.unlink()
-                except Exception:
-                    pass
+            self._prune_branch_conf_dirs()
 
             self.backend.commit(
                 message=self.current_version_info["stamping"]["msg"],
