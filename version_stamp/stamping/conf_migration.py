@@ -52,18 +52,27 @@ def _is_app_dir(path):
     )
 
 
+def _split_conf_filename(name):
+    """Return ``(leaf, is_root)`` for a branch conf filename, else None."""
+    if name in ("conf.yml", "root_conf.yml"):
+        return None
+    if name.endswith("_root_conf.yml"):
+        return name[: -len("_root_conf.yml")], True
+    if name.endswith("_conf.yml"):
+        return name[: -len("_conf.yml")], False
+    return None
+
+
 def _flat_confs(app_dir):
     """Yield ``(path, is_root, prefix)`` for flat branch confs in ``app_dir``."""
     for name in sorted(os.listdir(app_dir)):
-        if name in ("conf.yml", "root_conf.yml"):
-            continue
         full = os.path.join(app_dir, name)
         if not os.path.isfile(full):
             continue
-        if name.endswith("_root_conf.yml"):
-            yield full, True, name[: -len("_root_conf.yml")]
-        elif name.endswith("_conf.yml"):
-            yield full, False, name[: -len("_conf.yml")]
+        parsed = _split_conf_filename(name)
+        if parsed:
+            leaf, is_root = parsed
+            yield full, is_root, leaf
 
 
 def _legacy_confs(app_dir):
@@ -83,14 +92,10 @@ def _legacy_confs(app_dir):
             continue
         rel_dir = os.path.relpath(dirpath, app_dir)
         for name in sorted(filenames):
-            if name in ("conf.yml", "root_conf.yml"):
+            parsed = _split_conf_filename(name)
+            if not parsed:
                 continue
-            if name.endswith("_root_conf.yml"):
-                leaf, is_root = name[: -len("_root_conf.yml")], True
-            elif name.endswith("_conf.yml"):
-                leaf, is_root = name[: -len("_conf.yml")], False
-            else:
-                continue
+            leaf, is_root = parsed
             branch = os.path.join(rel_dir, leaf).replace(os.sep, "/")
             yield os.path.join(dirpath, name), is_root, branch
 
