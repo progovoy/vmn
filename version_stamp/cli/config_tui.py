@@ -15,8 +15,13 @@ from rich.text import Text
 
 from version_stamp.backends.git import GitBackend
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.constants import BRANCH_CONF_DIR
 from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
-from version_stamp.core.utils import branch_to_conf_prefix
+from version_stamp.core.utils import (
+    branch_conf_canonical_path,
+    resolve_branch_conf_path,
+)
+from version_stamp.core.version_math import get_root_app_name_from_name
 from version_stamp.cli.constants import (
     INIT_FILENAME,
     _CONFIG_DESCRIPTIONS,
@@ -44,8 +49,54 @@ def _write_full_config(conf_path, raw_conf):
         yaml.dump(ver_conf_yml, f, sort_keys=True)
 
 
+def _root_app_dir(vcs):
+    """Directory holding a root app's root_conf.yml (.vmn/{root_app_name})."""
+    root_name = get_root_app_name_from_name(vcs.name) or vcs.name
+    return os.path.join(
+        vcs.vmn_root_path, ".vmn", root_name.replace("/", os.sep)
+    )
+
+
+def _resolve_conf_target(vmn_ctx):
+    """Resolve the conf file targeted by --branch/--root flags.
+
+    Returns (conf_path, descriptions, seed_source_path). ``seed_source_path``
+    is the existing conf to seed a new branch conf from (branch mode only),
+    else None. Returns (None, None, None) after logging when --root is used
+    on a non-root app.
+    """
+    vcs = vmn_ctx.vcs
+    root = vmn_ctx.args.root
+
+    if root and vcs.root_app_conf_path is None:
+        VMN_LOGGER.error(
+            f"'{vcs.name}' is not a root app (name must contain '/')."
+        )
+        return None, None, None
+
+    descriptions = _ROOT_CONFIG_DESCRIPTIONS if root else _CONFIG_DESCRIPTIONS
+    app_dir = _root_app_dir(vcs) if root else vcs.app_dir_path
+
+    if vmn_ctx.args.branch:
+        branch = vcs.backend.active_branch
+        conf_path = branch_conf_canonical_path(app_dir, branch, root=root)
+        if os.path.isfile(conf_path):
+            seed_source = conf_path
+        else:
+            seed_source, _ = resolve_branch_conf_path(app_dir, branch, root=root)
+        return conf_path, descriptions, seed_source
+
+    conf_path = os.path.join(app_dir, "root_conf.yml" if root else "conf.yml")
+    return conf_path, descriptions, None
+
+
 @measure_runtime_decorator
 def handle_config(vmn_ctx):
+    if vmn_ctx.args.gen:
+        from version_stamp.cli.config_gen import handle_config_gen
+
+        return handle_config_gen(vmn_ctx)
+
     vmn_root_path = vmn_ctx.vcs.vmn_root_path
 
     # --global mode: edit repo-level .vmn/conf.yml
@@ -59,26 +110,14 @@ def handle_config(vmn_ctx):
     if vmn_ctx.vcs.name is None:
         return _config_list_apps(vmn_root_path)
 
-    # --branch mode: edit branch-specific config
+    # --branch mode: edit branch-specific config in the canonical layout,
+    # seeded from the current effective conf when it does not exist yet.
     if vmn_ctx.args.branch:
-        prefix = branch_to_conf_prefix(vmn_ctx.vcs.backend.active_branch)
-        if vmn_ctx.args.root:
-            if vmn_ctx.vcs.root_app_conf_path is None:
-                VMN_LOGGER.error(
-                    f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
-                )
-                return 1
-            conf_path = os.path.join(
-                vmn_ctx.vcs.root_app_dir_path,
-                f"{prefix}_root_conf.yml",
-            )
-            descriptions = _ROOT_CONFIG_DESCRIPTIONS
-        else:
-            conf_path = os.path.join(
-                vmn_ctx.vcs.app_dir_path,
-                f"{prefix}_conf.yml",
-            )
-            descriptions = _CONFIG_DESCRIPTIONS
+        conf_path, descriptions, seed_source = _resolve_conf_target(vmn_ctx)
+        if conf_path is None:
+            return 1
+        if not os.path.isfile(conf_path) and seed_source:
+            _write_full_config(conf_path, _read_raw_conf(seed_source))
         if vmn_ctx.args.vim:
             return _config_vim(conf_path, create_if_missing=True)
         return _config_interactive(conf_path, descriptions, vmn_root_path)
@@ -128,6 +167,8 @@ def _config_list_apps(vmn_root_path):
 
     apps = []
     for dirpath, dirnames, filenames in os.walk(vmn_dir):
+        if BRANCH_CONF_DIR in dirnames:
+            dirnames.remove(BRANCH_CONF_DIR)
         has_conf = any(
             f == "conf.yml" or f.endswith("_conf.yml")
             for f in filenames

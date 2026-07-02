@@ -10,7 +10,7 @@ from filelock import FileLock
 
 from version_stamp import version as version_mod
 from version_stamp.backends.factory import get_client
-from version_stamp.core.constants import BOLD_CHAR, END_CHAR, VMN_BE_TYPE_GIT, VMN_BE_TYPE_LOCAL_FILE
+from version_stamp.core.constants import BOLD_CHAR, BRANCH_CONF_DIR, END_CHAR, VMN_BE_TYPE_GIT, VMN_BE_TYPE_LOCAL_FILE
 from version_stamp.core.logging import VMN_LOGGER, _runtime_ctx, init_stamp_logger, measure_runtime_decorator
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.cli.args import parse_user_commands
@@ -66,6 +66,9 @@ def validate_app_name(args):
         raise RuntimeError()
     if "-" in args.name:
         VMN_LOGGER.error("App name cannot include -")
+        raise RuntimeError()
+    if BRANCH_CONF_DIR in args.name.split("/"):
+        VMN_LOGGER.error("App name cannot include a 'branch_conf' path segment")
         raise RuntimeError()
 
 def main(command_line=None):

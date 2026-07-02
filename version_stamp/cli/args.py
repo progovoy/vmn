@@ -29,11 +29,36 @@ def parse_user_commands(command_line):
 
     args = parser.parse_args(command_line)
 
+    normalize_config_gen(args)
+
     verify_user_input_version(args, "version")
     verify_user_input_version(args, "ov")
     verify_user_input_version(args, "orv")
 
     return args
+
+
+def normalize_config_gen(args):
+    """Collapse the config 'name' positional list into gen flag + single name.
+
+    'vmn config gen <name>' -> args.gen=True, args.name=<name>.
+    'vmn config <name>'     -> args.gen=False, args.name=<name>.
+    An app literally named 'gen' is addressed as 'vmn config gen gen'.
+    """
+    if getattr(args, "command", None) != "config":
+        return
+
+    positionals = list(args.name or [])
+    if positionals and positionals[0] == "gen":
+        args.gen = True
+        positionals = positionals[1:]
+
+    if len(positionals) > 1:
+        err = "config accepts at most one application name"
+        VMN_LOGGER.error(err)
+        raise RuntimeError(err)
+
+    args.name = positionals[0] if positionals else None
 
 
 def add_arg_gen(subprasers):
@@ -292,10 +317,13 @@ def add_arg_config(subprasers):
     )
     pconfig.add_argument(
         "name",
-        nargs="?",
+        nargs="*",
         default=None,
-        help="The application name. If omitted, lists all managed apps.",
+        help="The application name. If omitted, lists all managed apps. "
+        "Prefix with 'gen' to non-interactively create a config file "
+        "(e.g. 'vmn config gen my_app').",
     )
+    pconfig.set_defaults(gen=False)
     pconfig.add_argument(
         "--vim",
         dest="vim",
@@ -321,7 +349,8 @@ def add_arg_config(subprasers):
         "--branch",
         dest="branch",
         action="store_true",
-        help="Edit the branch-specific config (<current-branch>_conf.yml) instead of the default",
+        help="Edit the branch-specific config in the canonical branch_conf "
+        "directory instead of the default conf.yml",
     )
     pconfig.set_defaults(branch=False)
 
