@@ -112,7 +112,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `deps`: External repository dependencies for multi-repo tracking
 - `version_backends`: Auto-embed version into package.json, Cargo.toml, pyproject.toml, or any file via regex/Jinja2
 - `policies.whitelist_release_branches`: Restrict which branches can stamp/release
-- Branch-specific overrides: `<branch>_conf.yml` next to `conf.yml`
+- Branch-specific overrides: canonical layout `.vmn/{app}/branch_conf/{branch}/conf.yml` (branch slashes become real directories; root apps use `root_conf.yml`). Legacy flat `<branch>_conf.yml` and nested `{branch}/conf.yml` files are still read (precedence canonical > flat > legacy) and are auto-migrated to the canonical layout on the next `vmn stamp`.
 
 ### Test Infrastructure
 
@@ -132,7 +132,8 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn goto -v <version> <name>`: Checkout repo + all deps to exact state at version. `--deps-only`, `--root`.
 - `vmn gen -t <template> -o <output> <name>`: Generate file from Jinja2 template.
 - `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
-- `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config.
+- `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
+- `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
 
 ## Environment Variables
 
