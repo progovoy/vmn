@@ -124,3 +124,30 @@ def test_canonical_path_for_branch_named_branch_conf(tmp_path):
         app_dir, "branch_conf", "branch_conf", "conf.yml"
     )
     assert convention == "canonical"
+
+
+def test_migrate_dry_run_returns_planned_moves(tmp_path):
+    import git
+
+    from version_stamp.core.logging import init_stamp_logger
+    from version_stamp.stamping.conf_migration import migrate_branch_confs
+
+    init_stamp_logger()
+    repo = git.Repo.init(str(tmp_path))
+    try:
+        app_dir = os.path.join(str(tmp_path), ".vmn", "my_app")
+        _touch(os.path.join(app_dir, "conf.yml"))
+        flat = os.path.join(app_dir, "b2_conf.yml")
+        _touch(flat)
+
+        backend = type("StubBackend", (), {"_be": repo})()
+
+        moves = migrate_branch_confs(backend, str(tmp_path), dry_run=True)
+
+        canonical = branch_conf_canonical_path(app_dir, "b2")
+        assert moves == [(flat, canonical)]
+        # Dry run touches nothing.
+        assert os.path.isfile(flat)
+        assert not os.path.exists(canonical)
+    finally:
+        repo.close()

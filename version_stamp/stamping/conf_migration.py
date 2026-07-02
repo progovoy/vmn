@@ -22,7 +22,8 @@ def migrate_branch_confs(backend, vmn_root_path, dry_run=False):
     """Move every app's branch confs to the canonical layout.
 
     Returns a list of ``(old_path, new_path)`` moves (for remapping paths that
-    the caller tracks). Runs for all apps regardless of which one is stamped.
+    the caller tracks); under ``dry_run`` the moves are only planned and
+    nothing is touched. Runs for all apps regardless of which one is stamped.
     """
     vmn_dir = os.path.join(vmn_root_path, ".vmn")
     if not os.path.isdir(vmn_dir):
@@ -120,6 +121,8 @@ def _migrate_app_dir(repo, app_dir, known_branches, dry_run):
             for dup in (flat, legacy):
                 if dup:
                     _stage_delete(repo, dup, dry_run)
+            if legacy and not dry_run:
+                _prune_empty_dirs(os.path.dirname(legacy), app_dir)
             continue
 
         src = flat or legacy
@@ -135,19 +138,24 @@ def _migrate_app_dir(repo, app_dir, known_branches, dry_run):
 
 
 def _resolve_flat_branch(prefix, known_branches):
-    candidates = {
+    """Map a flat conf prefix to a branch name.
+
+    A slashed branch whose dashed form matches wins over a literal branch of
+    the same name; several slashed matches are ambiguous and skipped.
+    """
+    slashed = {
         b
         for b in known_branches
-        if b == prefix or branch_to_conf_prefix(b) == prefix
+        if b != prefix and branch_to_conf_prefix(b) == prefix
     }
-    if len(candidates) > 1:
+    if len(slashed) > 1:
         VMN_LOGGER.warning(
             f"Ambiguous branch conf prefix '{prefix}' matches "
-            f"{sorted(candidates)}; leaving it in the flat layout."
+            f"{sorted(slashed)}; leaving it in the flat layout."
         )
         return None
-    if len(candidates) == 1:
-        return next(iter(candidates))
+    if slashed:
+        return next(iter(slashed))
     return prefix
 
 
@@ -171,7 +179,7 @@ def _known_branches(repo):
 def _stage_move(repo, src, dst, dry_run):
     if dry_run:
         VMN_LOGGER.info(f"Would have migrated {src} -> {dst}")
-        return False
+        return True
     try:
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         os.replace(src, dst)

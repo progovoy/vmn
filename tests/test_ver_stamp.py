@@ -5747,6 +5747,45 @@ def test_config_gen_requires_app_name(app_layout):
     assert ret == 1
 
 
+def test_config_gen_root_on_plain_app_errors(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)  # single-segment app, not a root app
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name, "--root"])[0]
+    assert ret == 1
+
+    root_conf = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "root_conf.yml"
+    )
+    assert not os.path.exists(root_conf)
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name, "--branch", "--root"])[0]
+    assert ret == 1
+
+
+def test_config_gen_creates_default_conf_when_branch_conf_exists(app_layout):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    os.makedirs(os.path.dirname(canonical), exist_ok=True)
+    app_layout.write_conf(canonical, template="[{major}]")
+
+    # Default gen targets conf.yml itself, not the branch-resolved conf.
+    conf_path = os.path.join(app_dir, "conf.yml")
+    os.remove(conf_path)
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name])[0]
+    assert ret == 0
+    assert os.path.isfile(conf_path)
+
+
 def test_config_gen_works_without_tty(app_layout, monkeypatch):
     _run_vmn_init()
 
@@ -5938,11 +5977,13 @@ def test_stamp_migration_prefers_flat_over_legacy_when_canonical_exists(app_layo
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    # Canonical content survives; the lower-precedence duplicates are gone.
+    # Canonical content survives; the lower-precedence duplicates are gone,
+    # including the emptied legacy directory tree.
     with open(canonical_conf_path) as f:
         assert "canon_" in f.read()
     assert not os.path.exists(flat_conf_path)
     assert not os.path.exists(legacy_conf_path)
+    assert not os.path.isdir(os.path.join(app_dir, "feat"))
     assert _vmn_status_clean(app_layout.repo_path)
 
 
@@ -5978,17 +6019,43 @@ def test_stamp_migration_flat_wins_over_legacy(app_layout):
     assert _vmn_status_clean(app_layout.repo_path)
 
 
-def test_stamp_migration_ambiguous_flat_prefix_skipped(app_layout, caplog):
+def test_stamp_migration_dashed_flat_conf_converts_to_slashed_branch(app_layout):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
 
-    # Two branches whose dashed form collide on prefix "a-b".
-    subprocess.call(["git", "branch", "a/b"], cwd=app_layout.repo_path)
+    # Even when a literal "a-b" branch collides on the prefix, the slashed
+    # branch interpretation wins: a-b_conf.yml -> branch_conf/a/b/conf.yml.
     subprocess.call(["git", "branch", "a-b"], cwd=app_layout.repo_path)
 
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
     flat_conf_path = os.path.join(app_dir, "a-b_conf.yml")
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", "a", "b", "conf.yml")
+    app_layout.write_conf(flat_conf_path, template="[amb_{major}]")
+
+    subprocess.call(["git", "checkout", "-b", "a/b"], cwd=app_layout.repo_path)
+    app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    assert not os.path.exists(flat_conf_path)
+    assert os.path.exists(canonical_conf_path)
+    assert _vmn_status_clean(app_layout.repo_path)
+
+
+def test_stamp_migration_multiple_slashed_matches_skipped(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    # Two slashed branches whose dashed forms collide on prefix "x-y-z":
+    # no safe target, so the flat conf stays readable via the flat layout.
+    subprocess.call(["git", "branch", "x/y-z"], cwd=app_layout.repo_path)
+    subprocess.call(["git", "branch", "x-y/z"], cwd=app_layout.repo_path)
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    flat_conf_path = os.path.join(app_dir, "x-y-z_conf.yml")
     app_layout.write_conf(flat_conf_path, template="[amb_{major}]")
 
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
@@ -5996,7 +6063,6 @@ def test_stamp_migration_ambiguous_flat_prefix_skipped(app_layout, caplog):
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    # Ambiguous prefix -> left in place, still readable via flat convention.
     assert os.path.exists(flat_conf_path)
     assert _vmn_status_clean(app_layout.repo_path)
 

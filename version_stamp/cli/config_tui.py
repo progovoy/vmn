@@ -57,6 +57,23 @@ def _root_app_dir(vcs):
     )
 
 
+def _check_root_app(vcs):
+    """Error and return False when ``vcs.name`` is not a root app.
+
+    A root app is addressed either as a service path (contains '/') or
+    directly by a name whose app dir holds a root_conf.yml.
+    """
+    if "/" in vcs.name or os.path.isfile(
+        os.path.join(_root_app_dir(vcs), "root_conf.yml")
+    ):
+        return True
+
+    VMN_LOGGER.error(
+        f"'{vcs.name}' is not a root app (name must contain '/')."
+    )
+    return False
+
+
 def _resolve_conf_target(vmn_ctx):
     """Resolve the conf file targeted by --branch/--root flags.
 
@@ -68,10 +85,7 @@ def _resolve_conf_target(vmn_ctx):
     vcs = vmn_ctx.vcs
     root = vmn_ctx.args.root
 
-    if root and vcs.root_app_conf_path is None:
-        VMN_LOGGER.error(
-            f"'{vcs.name}' is not a root app (name must contain '/')."
-        )
+    if root and not _check_root_app(vcs):
         return None, None, None
 
     descriptions = _ROOT_CONFIG_DESCRIPTIONS if root else _CONFIG_DESCRIPTIONS
@@ -125,20 +139,14 @@ def handle_config(vmn_ctx):
     # --vim mode
     if vmn_ctx.args.vim:
         if vmn_ctx.args.root:
-            if vmn_ctx.vcs.root_app_conf_path is None:
-                VMN_LOGGER.error(
-                    f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
-                )
+            if not _check_root_app(vmn_ctx.vcs):
                 return 1
             return _config_vim(vmn_ctx.vcs.root_app_conf_path)
         return _config_vim(vmn_ctx.vcs.app_conf_path)
 
     # --root mode: edit root_conf.yml
     if vmn_ctx.args.root:
-        if vmn_ctx.vcs.root_app_conf_path is None:
-            VMN_LOGGER.error(
-                f"'{vmn_ctx.vcs.name}' is not a root app (name must contain '/')."
-            )
+        if not _check_root_app(vmn_ctx.vcs):
             return 1
         return _config_interactive(
             vmn_ctx.vcs.root_app_conf_path, _ROOT_CONFIG_DESCRIPTIONS, vmn_root_path

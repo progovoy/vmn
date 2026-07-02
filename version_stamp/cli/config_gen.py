@@ -35,7 +35,8 @@ def handle_config_gen(vmn_ctx):
             return 1
         raw_conf = {"external_services": {}}
     else:
-        conf_path = vcs.app_conf_path
+        # Always target the default conf.yml, not the branch-resolved conf.
+        conf_path = os.path.join(vcs.app_dir_path, "conf.yml")
         raw_conf = dataclasses.asdict(AppConf())
 
     if os.path.isfile(conf_path):

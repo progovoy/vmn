@@ -848,7 +848,8 @@ class VersionControlStamper(IVersionsStamper):
         moves = migrate_branch_confs(
             self.backend, self.vmn_root_path, self.dry_run
         )
-        if not moves:
+        if self.dry_run or not moves:
+            # Dry-run moves are only planned; nothing on disk to remap to.
             return
 
         remap = dict(moves)
