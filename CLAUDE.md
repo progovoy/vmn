@@ -28,6 +28,24 @@ If you see API timeouts, split the current task into smaller parallel worktrees 
 - Prefer broad wildcards (e.g., `Bash(git:*)`) over specific subcommand rules.
 - Keep the allow list under 30 entries.
 
+## Code practices
+- Keep functions small and single-purpose; prefer clear names over comments.
+- Don't add abstractions, config flags, or error handling for cases that can't happen — match the scope of the change to what was actually asked.
+- Reuse existing helpers/patterns in the codebase instead of duplicating logic.
+- Keep diffs minimal and focused; don't refactor unrelated code in the same change.
+- Run the relevant tests (see Running Tests) before considering a change done.
+
+## Test-driven development (required)
+All feature work and bug fixes must follow strict TDD:
+1. Write the test first. It must fail for the right reason (red).
+2. Write the minimum implementation code needed to make it pass (green). Do not modify the test to make it pass.
+3. Refactor implementation code only, keeping tests green.
+
+Rules:
+- Never edit a test to force a passing result — if the test seems wrong, stop and ask before touching it.
+- Do not write implementation code before its test exists.
+- Each new behavior gets a test asserting it before any code implements it.
+
 ## Project Overview
 
 vmn is a CLI tool and Python library for automatic semantic versioning. Versions live in git annotated tags — zero lock-in, zero databases.
