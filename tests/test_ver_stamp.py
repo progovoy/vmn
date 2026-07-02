@@ -5519,6 +5519,249 @@ def test_config_global(app_layout, capfd, monkeypatch):
     assert ret == 0
 
 
+def _active_branch(app_layout):
+    return app_layout._app_backend.be.get_active_branch()
+
+
+# ── Cycle 3: --branch targets canonical path, seeded from effective conf ──
+
+
+def test_config_branch_vim_creates_canonical_conf(app_layout, monkeypatch):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    monkeypatch.setenv("EDITOR", "true")
+
+    reset_logger()
+    ret = vmn_run(["config", app_layout.app_name, "--branch", "--vim"])[0]
+    assert ret == 0
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    assert os.path.isfile(canonical)
+
+
+def test_config_branch_vim_seeds_from_existing_flat_conf(app_layout, monkeypatch):
+    from version_stamp.core.utils import (
+        branch_conf_canonical_path,
+        branch_conf_flat_path,
+    )
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    branch = _active_branch(app_layout)
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    flat = branch_conf_flat_path(app_dir, branch)
+    app_layout.write_conf(flat, template="[{major}].[{minor}]")
+
+    with open(flat, "r") as f:
+        flat_data = yaml.safe_load(f)
+
+    monkeypatch.setenv("EDITOR", "true")
+
+    reset_logger()
+    ret = vmn_run(["config", app_layout.app_name, "--branch", "--vim"])[0]
+    assert ret == 0
+
+    canonical = branch_conf_canonical_path(app_dir, branch)
+    assert os.path.isfile(canonical)
+    with open(canonical, "r") as f:
+        canonical_data = yaml.safe_load(f)
+
+    assert canonical_data["conf"] == flat_data["conf"]
+    # flat left in place
+    assert os.path.isfile(flat)
+
+
+def test_config_branch_root_vim_creates_canonical_root_conf(app_layout, monkeypatch):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    root_app_name = "root_app/service1"
+    _run_vmn_init()
+    _init_app(root_app_name)
+
+    monkeypatch.setenv("EDITOR", "true")
+
+    reset_logger()
+    ret = vmn_run(["config", root_app_name, "--branch", "--root", "--vim"])[0]
+    assert ret == 0
+
+    root_app_dir = os.path.join(app_layout.repo_path, ".vmn", "root_app")
+    canonical = branch_conf_canonical_path(
+        root_app_dir, _active_branch(app_layout), root=True
+    )
+    assert os.path.isfile(canonical)
+
+
+# ── Cycle 4: listing prunes branch_conf, reserved app name ──
+
+
+def test_config_list_apps_ignores_branch_conf_dirs(app_layout, capfd):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    os.makedirs(os.path.dirname(canonical), exist_ok=True)
+    app_layout.write_conf(canonical, template="[{major}]")
+
+    capfd.readouterr()
+    reset_logger()
+    ret = vmn_run(["config"])[0]
+    captured = capfd.readouterr()
+
+    assert ret == 0
+    assert app_layout.app_name in captured.out
+    assert "branch_conf" not in captured.out
+
+
+def test_init_app_rejects_branch_conf_app_name(app_layout, capfd):
+    _run_vmn_init()
+
+    capfd.readouterr()
+    reset_logger()
+    ret = vmn_run(["init-app", "my_app/branch_conf/foo"])[0]
+
+    assert ret == 1
+
+
+# ── Cycle 6: vmn config gen (non-interactive) ──
+
+
+def test_config_gen_arg_parsing():
+    from version_stamp.cli.args import parse_user_commands
+
+    args = parse_user_commands(["config", "gen", "x"])
+    assert args.gen is True
+    assert args.name == "x"
+
+    args = parse_user_commands(["config", "x"])
+    assert args.gen is False
+    assert args.name == "x"
+
+    args = parse_user_commands(["config", "gen"])
+    assert args.gen is True
+    assert args.name is None
+
+
+def test_config_gen_creates_default_conf(app_layout):
+    import dataclasses
+    from version_stamp.core.models import AppConf
+
+    _run_vmn_init()
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name])[0]
+    assert ret == 0
+
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    assert os.path.isfile(conf_path)
+    with open(conf_path, "r") as f:
+        data = yaml.safe_load(f)
+
+    assert data["conf"] == dataclasses.asdict(AppConf())
+
+
+def test_config_gen_existing_file_errors(app_layout):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name])[0]
+    assert ret == 1
+
+
+def test_config_gen_branch_seeds_from_existing_conf(app_layout):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    with open(conf_path, "r") as f:
+        default_conf = yaml.safe_load(f)["conf"]
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name, "--branch"])[0]
+    assert ret == 0
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    assert os.path.isfile(canonical)
+    with open(canonical, "r") as f:
+        canonical_conf = yaml.safe_load(f)["conf"]
+
+    assert canonical_conf == default_conf
+
+
+def test_config_gen_branch_existing_canonical_errors(app_layout):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    os.makedirs(os.path.dirname(canonical), exist_ok=True)
+    app_layout.write_conf(canonical, template="[{major}]")
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name, "--branch"])[0]
+    assert ret == 1
+
+
+def test_config_gen_root_branch(app_layout):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    root_app_name = "root_app/service1"
+    _run_vmn_init()
+    _init_app(root_app_name)
+
+    reset_logger()
+    ret = vmn_run(
+        ["config", "gen", root_app_name, "--branch", "--root"]
+    )[0]
+    assert ret == 0
+
+    root_app_dir = os.path.join(app_layout.repo_path, ".vmn", "root_app")
+    canonical = branch_conf_canonical_path(
+        root_app_dir, _active_branch(app_layout), root=True
+    )
+    assert os.path.isfile(canonical)
+
+
+def test_config_gen_requires_app_name(app_layout):
+    _run_vmn_init()
+
+    reset_logger()
+    ret = vmn_run(["config", "gen"])[0]
+    assert ret == 1
+
+
+def test_config_gen_works_without_tty(app_layout, monkeypatch):
+    _run_vmn_init()
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    reset_logger()
+    ret = vmn_run(["config", "gen", app_layout.app_name])[0]
+    assert ret == 0
+
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    assert os.path.isfile(conf_path)
+
+
 def test_stamp_auto_init(app_layout):
     """vmn stamp on a completely fresh repo should auto-init repo + app and stamp 0.0.1."""
     # Do NOT call _run_vmn_init() or _init_app() — that's the whole point.
