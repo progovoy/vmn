@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers import experiments as exp_reader
+from version_stamp.ui.readers import tree as tree_reader
 from version_stamp.ui.readers import versions as ver_reader
 from version_stamp.ui.workspaces import WorkspaceError
 
@@ -101,6 +102,26 @@ def create_app(manager, token=None, read_only=False):
         ws = _git_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
         return ver_reader.list_versions(ws.path, app_name)
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree")
+    def version_tree(ws_name: str, app_tag: str):
+        ws = _git_workspace(ws_name)
+        return tree_reader.version_dag(ws.path, tag_name_to_app_name(app_tag))
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree/root")
+    def root_tree(ws_name: str, app_tag: str):
+        ws = _git_workspace(ws_name)
+        return tree_reader.root_topology(ws.path, tag_name_to_app_name(app_tag))
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/deps")
+    def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
+        ws = _git_workspace(ws_name)
+        graph, err = tree_reader.dep_graph(
+            ws.path, tag_name_to_app_name(app_tag), verstr=v, to_verstr=to
+        )
+        if err:
+            raise HTTPException(404, err)
+        return graph
 
     _mount_static(app)
     return app
