@@ -18,6 +18,7 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     _relative_timestamp,
     _resolve_verstr,
+    _restore_with_safety_net,
     _strip_git_dirs,
     gather_create_data,
     get_snapshot_storage,
@@ -762,7 +763,7 @@ def experiment_restore(vcs, params, storage, args):
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
-    return _apply_snapshot_patches(vcs, params, metadata, patches)
+    return _restore_with_safety_net(vcs, params, metadata, patches)
 
 
 # ---------------------------------------------------------------------------

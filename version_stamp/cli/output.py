@@ -407,7 +407,7 @@ def _goto_dev_version(vcs, params, version):
     from version_stamp.cli.snapshot import (
         LocalSnapshotStorage,
         get_snapshot_storage,
-        _apply_snapshot_patches,
+        _restore_with_safety_net,
     )
 
     storage = LocalSnapshotStorage(vcs.vmn_root_path)
@@ -438,7 +438,7 @@ def _goto_dev_version(vcs, params, version):
         )
         return 1
 
-    return _apply_snapshot_patches(vcs, params, metadata, patches)
+    return _restore_with_safety_net(vcs, params, metadata, patches)
 
 
 @measure_runtime_decorator

@@ -1405,3 +1405,108 @@ def test_snapshot_ambiguous_prefix_lists_candidates(app_layout, capfd):
     assert "mbiguous" in err
     assert v1 in err
     assert v2 in err
+
+
+# ---------------------------------------------------------------------------
+# W6: snapshot restore action + dirty-tree safety net (M4)
+# ---------------------------------------------------------------------------
+
+
+def _snapshot_of_state(app_layout, capfd, filename, content):
+    """Commit filename, dirty it with content, snapshot it. Returns verstr."""
+    app_layout.write_file_commit_and_push("test_repo_0", filename, "committed")
+    with open(os.path.join(app_layout.repo_path, filename), "w") as f:
+        f.write(content)
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    return extract_dev_verstr(capfd.readouterr().out)
+
+
+def test_snapshot_restore_action(app_layout, capfd):
+    """`vmn snapshot restore` reapplies a stored dev snapshot."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    test_file = os.path.join(app_layout.repo_path, "restore_action.txt")
+    verstr = _snapshot_of_state(app_layout, capfd, "restore_action.txt", "snap A")
+
+    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+    with open(test_file) as f:
+        assert f.read() == "committed"
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="restore", version=verstr) == 0
+    with open(test_file) as f:
+        assert f.read() == "snap A"
+
+
+def test_snapshot_restore_dirty_tree_auto_saves(app_layout, capfd):
+    """Restoring over dirty work first snapshots that work (safety net)."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    test_file = os.path.join(app_layout.repo_path, "safety.txt")
+    v_a = _snapshot_of_state(app_layout, capfd, "safety.txt", "state A")
+
+    # Move to a different dirty state B (not snapshotted).
+    with open(test_file, "w") as f:
+        f.write("state B unsaved")
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="restore", version=v_a) == 0
+    out = capfd.readouterr()
+    combined = out.out + out.err
+
+    # State A restored.
+    with open(test_file) as f:
+        assert f.read() == "state A"
+    # The safety net announced the saved work.
+    assert "Current work saved as" in combined
+
+    # Two snapshots now exist: v_a and the safety snapshot of B.
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="list") == 0
+    rows = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert len(rows) == 2
+
+
+def test_restore_same_state_skips_safety_snapshot(app_layout, capfd):
+    """No safety snapshot when the working state already equals the target."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    verstr = _snapshot_of_state(app_layout, capfd, "same.txt", "state A")
+
+    # Working tree is still state A == target.
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="restore", version=verstr) == 0
+    combined = capfd.readouterr()
+    assert "Current work saved as" not in (combined.out + combined.err)
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="list") == 0
+    rows = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert len(rows) == 1
+
+
+def test_goto_dev_dirty_tree_auto_saves(app_layout, capfd):
+    """`vmn goto` to a dev version also auto-saves dirty work first."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    test_file = os.path.join(app_layout.repo_path, "goto_safety.txt")
+    v_a = _snapshot_of_state(app_layout, capfd, "goto_safety.txt", "state A")
+
+    with open(test_file, "w") as f:
+        f.write("state B unsaved")
+
+    capfd.readouterr()
+    assert _goto(app_layout.app_name, version=v_a) == 0
+    combined = capfd.readouterr()
+    assert "Current work saved as" in (combined.out + combined.err)
+    with open(test_file) as f:
+        assert f.read() == "state A"

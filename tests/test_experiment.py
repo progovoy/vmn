@@ -316,6 +316,29 @@ def test_experiment_restore(app_layout, capfd):
         assert f.read() == "experiment state"
 
 
+def test_exp_restore_dirty_tree_auto_saves(app_layout, capfd):
+    """Restoring an experiment over dirty work first snapshots that work."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    fpath = _make_dirty(app_layout, "exp_safety.txt", "experiment state A")
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="A")
+    v_a = extract_dev_verstr(capfd.readouterr().out)
+
+    # Different, unsaved dirty state.
+    with open(fpath, "w") as f:
+        f.write("experiment state B unsaved")
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="restore", version=v_a) == 0
+    combined = capfd.readouterr()
+    assert "Current work saved as" in (combined.out + combined.err)
+    with open(fpath) as f:
+        assert f.read() == "experiment state A"
+
+
 def test_experiment_export_tarball(app_layout, capfd):
     _run_vmn_init()
     _init_app(app_layout.app_name)

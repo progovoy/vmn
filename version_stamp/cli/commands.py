@@ -677,6 +677,17 @@ def handle_goto(vmn_ctx):
         "deps_synced_with_conf",
     }
 
+    # Restoring a dev version snapshots (and thus preserves) any dirty work via
+    # the safety net, so a dirty tree is not an error for a dev-version goto.
+    version = vmn_ctx.args.version
+    if version:
+        try:
+            from version_stamp.core.version_math import deserialize_vmn_version
+            if "dev" in deserialize_vmn_version(version).types:
+                optional_status |= {"pending", "outgoing", "dirty_deps"}
+        except Exception:
+            pass
+
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
@@ -703,6 +714,7 @@ def handle_snapshot(vmn_ctx):
         snapshot_export,
         snapshot_list,
         snapshot_note,
+        snapshot_restore,
         snapshot_show,
     )
 
@@ -752,7 +764,7 @@ def handle_snapshot(vmn_ctx):
     # Resolve --latest / @N / prefix for actions that take a version.
     # When no version is given, default to the most recent snapshot; for diff,
     # default the second side to the live working state ("current").
-    if action in ("show", "note", "diff", "export"):
+    if action in ("show", "note", "diff", "export", "restore"):
         from version_stamp.cli.snapshot import _resolve_verstr, _get_storage
         latest = getattr(vmn_ctx.args, "latest", False)
         verstr = vmn_ctx.args.version
@@ -811,6 +823,8 @@ def handle_snapshot(vmn_ctx):
             vmn_ctx.args.version,
             getattr(vmn_ctx.args, "output", None),
         )
+    elif action == "restore":
+        return snapshot_restore(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
     else:
         VMN_LOGGER.error(f"Unknown snapshot action: {action}")
         return 1

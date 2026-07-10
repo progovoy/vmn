@@ -1086,17 +1086,9 @@ def gather_create_data(vcs, allow_clean=False):
     return base_version, commit_hash, patches, dirty_states, ver_info, None
 
 
-@measure_runtime_decorator
-def snapshot_create(vcs, params, note=None, user_meta=None):
-    base_version, commit_hash, patches, dirty_states, ver_info, err = \
-        gather_create_data(vcs)
-    if err is not None:
-        return err
-
-    verstr = _compute_verstr(base_version, commit_hash, patches)
-
-    storage = _get_storage(vcs, params)
-
+def _build_snapshot_metadata(vcs, verstr, base_version, commit_hash,
+                             dirty_states, patches, ver_info, note=None,
+                             user_meta=None):
     be = vcs.backend
     try:
         remote_url = be.remote()
@@ -1109,7 +1101,7 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
         "base_commit": commit_hash,
         "branch": be.active_branch,
         "remote": remote_url,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+        "timestamp": _now_iso(),
         "note": note,
         "app_name": vcs.name,
         "dirty_states": dirty_states,
@@ -1124,12 +1116,89 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:
         metadata["changesets"] = changesets
+    return metadata
 
-    storage.save(vcs.name, verstr, metadata, patches)
+
+def _now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+@measure_runtime_decorator
+def snapshot_create(vcs, params, note=None, user_meta=None):
+    base_version, commit_hash, patches, dirty_states, ver_info, err = \
+        gather_create_data(vcs)
+    if err is not None:
+        return err
+
+    verstr = _compute_verstr(base_version, commit_hash, patches)
+    metadata = _build_snapshot_metadata(
+        vcs, verstr, base_version, commit_hash, dirty_states, patches,
+        ver_info, note=note, user_meta=user_meta,
+    )
+    _get_storage(vcs, params).save(vcs.name, verstr, metadata, patches)
 
     VMN_LOGGER.info(f"Created snapshot: {verstr}")
     print(verstr)
     return 0
+
+
+def _save_safety_snapshot(vcs, params, target_verstr):
+    """Snapshot the current dirty state before a restore overwrites it.
+
+    Returns the saved verstr, or None when the tree is clean or already equals
+    the restore target (nothing to lose).
+    """
+    base_version, commit_hash, patches, dirty_states, ver_info, err = \
+        gather_create_data(vcs)
+    if err is not None:
+        return None  # clean tree (err==0) or a real error — nothing to save
+
+    verstr = _compute_verstr(base_version, commit_hash, patches)
+    if verstr == target_verstr:
+        return None
+
+    metadata = _build_snapshot_metadata(
+        vcs, verstr, base_version, commit_hash, dirty_states, patches, ver_info,
+        note="auto-saved before restore",
+    )
+    _get_storage(vcs, params).save(vcs.name, verstr, metadata, patches)
+    return verstr
+
+
+def _reset_worktree(vcs):
+    """Discard tracked + untracked working-tree changes (keeps .vmn/ ignored data)."""
+    for cmd in (["git", "reset", "--hard"], ["git", "clean", "-fd"]):
+        subprocess.run(cmd, cwd=vcs.vmn_root_path, capture_output=True)
+
+
+def _restore_with_safety_net(vcs, params, metadata, patches):
+    """Apply a restore, first auto-snapshotting any dirty work it would clobber.
+
+    The current dirty state is preserved as a snapshot, then the working tree is
+    cleared so the target state applies cleanly.
+    """
+    saved = _save_safety_snapshot(vcs, params, metadata.get("verstr"))
+    if saved:
+        VMN_LOGGER.info(
+            f"Current work saved as {saved} — restore it anytime with: "
+            f"vmn snapshot restore {vcs.name} -v {saved}"
+        )
+    if not params.get("deps_only"):
+        _reset_worktree(vcs)
+    return _apply_snapshot_patches(vcs, params, metadata, patches)
+
+
+@measure_runtime_decorator
+def snapshot_restore(vcs, params, verstr):
+    storage = _get_storage(vcs, params)
+    metadata, patches = storage.load(vcs.name, verstr)
+    if metadata is None:
+        VMN_LOGGER.error(f"Snapshot {verstr} not found")
+        return 1
+    ret = _restore_with_safety_net(vcs, params, metadata, patches)
+    if ret == 0:
+        VMN_LOGGER.info(f"Restored snapshot {verstr}")
+    return ret
 
 
 @measure_runtime_decorator

@@ -378,8 +378,8 @@ def add_arg_snapshot(subprasers):
         "action",
         nargs="?",
         default="create",
-        choices=["create", "list", "show", "note", "diff", "export"],
-        help="Snapshot action: create (default), list, show, note, diff, export",
+        choices=["create", "list", "show", "note", "diff", "export", "restore"],
+        help="Snapshot action: create (default), list, show, note, diff, export, restore",
     )
     psnap.add_argument("name", help="The application's name")
     psnap.add_argument(
