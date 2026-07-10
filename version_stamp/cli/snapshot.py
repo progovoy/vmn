@@ -1001,11 +1001,15 @@ def _build_user_meta(meta_args, meta_file):
     return result if result else None
 
 
-def gather_create_data(vcs):
+def gather_create_data(vcs, allow_clean=False):
     """Gather common data needed by snapshot/experiment create.
 
     Returns (base_version, commit_hash, patches, dirty_states, ver_info, error_code).
     error_code is non-None when the caller should return early.
+
+    When ``allow_clean`` is True a clean working tree is not an error: it yields
+    empty patches (verstr gets a zeroed diff hash) so experiments can be recorded
+    against committed code. Snapshots keep the clean-tree no-op.
     """
     from version_stamp.cli.commands import _get_repo_status
     from version_stamp.cli.output import get_dirty_states
@@ -1054,8 +1058,12 @@ def gather_create_data(vcs):
         any(k != "deps" for k in patches) or bool(dep_patches)
     )
     if not patches or not has_content:
-        print("No local changes to snapshot (working tree is clean)", file=sys.stderr)
-        return None, None, None, None, None, 0
+        if not allow_clean:
+            print(
+                "No local changes to snapshot (working tree is clean)",
+                file=sys.stderr,
+            )
+            return None, None, None, None, None, 0
 
     return base_version, commit_hash, patches, dirty_states, ver_info, None
 

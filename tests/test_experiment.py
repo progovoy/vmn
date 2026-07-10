@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tarfile
 
 import pytest
@@ -475,3 +476,284 @@ def test_exp_alias(app_layout, capfd):
     captured = capfd.readouterr()
     assert verstr in captured.out
     assert "alias works" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# W3: run-suffix identity (B2), params/metrics split (B6), goal schema (B7),
+# clean-tree experiments
+# ---------------------------------------------------------------------------
+
+
+def _exp_log(app_layout, verstr):
+    """Load an experiment's log.yml from disk."""
+    safe = verstr.replace("+", "_plus_")
+    log_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name,
+        "experiments", safe, "log.yml",
+    )
+    with open(log_path) as f:
+        return yaml.safe_load(f)
+
+
+def test_experiment_create_same_state_creates_new_run(app_layout, capfd):
+    """B2: creating over identical code state must start a new run (suffix .2),
+    never overwrite the earlier experiment's log."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    _make_dirty(app_layout, "run_state.txt", "same content")
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="run one") == 0
+    v1 = extract_dev_verstr(capfd.readouterr().out)
+    assert v1 is not None
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="run two") == 0
+    v2 = extract_dev_verstr(capfd.readouterr().out)
+    assert v2 is not None
+
+    assert v2 == f"{v1}.r2"
+
+    # Both runs are listed.
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list") == 0
+    list_out = capfd.readouterr().out
+    assert v1 in list_out
+    assert v2 in list_out
+
+    # The first run's log survived intact.
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version=v1) == 0
+    assert "run one" in capfd.readouterr().out
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version=v2) == 0
+    assert "run two" in capfd.readouterr().out
+
+
+def test_experiment_run_suffix_addressable(app_layout, capfd):
+    """B2: a run-suffixed id addresses exactly that run for add/show."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    _make_dirty(app_layout, "addr_state.txt", "content")
+
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="one")
+    v1 = extract_dev_verstr(capfd.readouterr().out)
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="two")
+    v2 = extract_dev_verstr(capfd.readouterr().out)
+    assert v2 == f"{v1}.r2"
+
+    # Add a metric only to run 2.
+    assert _experiment(
+        app_layout.app_name, action="add", version=v2, metrics=["acc=0.9"]
+    ) == 0
+
+    capfd.readouterr()
+    _experiment(app_layout.app_name, action="show", version=v2)
+    assert "acc" in capfd.readouterr().out
+
+    capfd.readouterr()
+    _experiment(app_layout.app_name, action="show", version=v1)
+    assert "acc" not in capfd.readouterr().out
+
+
+def test_goto_experiment_run_id(app_layout, capfd):
+    """B2: `vmn goto` restores a run-suffixed experiment id from experiments/."""
+    from helpers import _goto
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    tracked = _make_dirty(app_layout, "goto_run.txt", "dirty A")
+
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="one")
+    v1 = extract_dev_verstr(capfd.readouterr().out)
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="two")
+    v2 = extract_dev_verstr(capfd.readouterr().out)
+    assert v2 == f"{v1}.r2"
+
+    # Revert the working tree.
+    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+    with open(tracked) as f:
+        assert f.read() == "initial"
+
+    # goto the run-suffixed id restores the captured dirty content.
+    assert _goto(app_layout.app_name, version=v2) == 0
+    with open(tracked) as f:
+        assert f.read() == "dirty A"
+
+
+def test_dev_version_parsing_run_suffix():
+    """B2: deserialize_vmn_version parses the optional run suffix."""
+    from version_stamp.core.version_math import deserialize_vmn_version
+
+    props = deserialize_vmn_version("1.2.3-dev.abc1234.def5678.r2")
+    assert "dev" in props.types
+    assert props.dev_commit == "abc1234"
+    assert props.dev_diff_hash == "def5678"
+    assert props.dev_run == 2
+
+    # Without a suffix, dev_run is None.
+    props0 = deserialize_vmn_version("1.2.3-dev.abc1234.def5678")
+    assert props0.dev_run is None
+
+
+def test_experiment_create_metrics_and_file_params_coexist(app_layout, capfd, tmp_path):
+    """B6: --metrics on create must not clobber -f params; they become a
+    separate metrics entry."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    _make_dirty(app_layout, "coexist.txt", "content")
+
+    params_file = tmp_path / "params.yml"
+    params_file.write_text("params:\n  lr: 0.01\n  batch_size: 32\nhypothesis: baseline\n")
+
+    capfd.readouterr()
+    assert _experiment(
+        app_layout.app_name, note="both",
+        metrics=["loss=0.5"], file=str(params_file),
+    ) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    log = _exp_log(app_layout, verstr)
+    create_entry = next(e for e in log if e.get("type") == "create")
+    assert create_entry["params"]["lr"] == 0.01
+    assert create_entry["params"]["batch_size"] == 32
+    assert create_entry.get("hypothesis") == "baseline"
+
+    metrics_entries = [e for e in log if e.get("type") == "metrics"]
+    assert len(metrics_entries) == 1
+    assert metrics_entries[0]["values"]["loss"] == 0.5
+
+
+def _setup_three_experiments(app_layout, capfd, experiment_conf):
+    """Init an app with a metrics schema and create 3 experiments with metrics."""
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        template="[{major}][.{minor}][.{patch}]",
+        experiment=experiment_conf,
+    )
+    _stamp_app(app_layout.app_name, "patch")
+
+    verstrs = []
+    for i, (loss, acc) in enumerate([(0.5, 0.80), (0.3, 0.91), (0.4, 0.85)]):
+        # Distinct code state per experiment so each gets its own verstr.
+        _make_dirty(app_layout, f"schema_{i}.txt", f"content {i}")
+        capfd.readouterr()
+        _experiment(
+            app_layout.app_name, note=f"run{i}",
+            metrics=[f"loss={loss}", f"acc={acc}"],
+        )
+        verstrs.append(extract_dev_verstr(capfd.readouterr().out))
+    return verstrs
+
+
+def test_experiment_metrics_schema_goal_max_sorts_descending(app_layout, capfd):
+    """B7: goal: max sorts best (highest) first."""
+    _setup_three_experiments(
+        app_layout, capfd, {"metrics": {"acc": {"goal": "max"}}}
+    )
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
+    lines = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert "acc=0.91" in lines[0]
+    assert "acc=0.8" in lines[-1]
+
+
+def test_experiment_metrics_schema_goal_min_sorts_ascending(app_layout, capfd):
+    """B7: goal: min sorts best (lowest) first."""
+    _setup_three_experiments(
+        app_layout, capfd, {"metrics": {"loss": {"goal": "min"}}}
+    )
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list", sort="loss") == 0
+    lines = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert "loss=0.3" in lines[0]
+    assert "loss=0.5" in lines[-1]
+
+
+def test_experiment_metrics_schema_primary_default_sort(app_layout, capfd):
+    """B7: with no --sort, the primary metric drives the leaderboard order."""
+    _setup_three_experiments(
+        app_layout, capfd,
+        {"metrics": {"loss": {"goal": "min", "primary": True}}},
+    )
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list") == 0
+    lines = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert "loss=0.3" in lines[0]
+
+
+def test_experiment_metrics_schema_legacy_sort_desc_warns(app_layout, capfd):
+    """B7: legacy `sort: desc` still works but warns about deprecation."""
+    _setup_three_experiments(
+        app_layout, capfd, {"metrics": {"acc": {"sort": "desc"}}}
+    )
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
+    captured = capfd.readouterr()
+    lines = [l for l in captured.out.strip().split("\n") if l.startswith("[")]
+    assert "acc=0.91" in lines[0]
+    assert "deprecated" in captured.err.lower()
+
+
+def test_experiment_create_without_git_remote(app_layout, capfd):
+    """B3: experiments are local-first — no git remote required."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "local_only.txt", "initial")
+    subprocess.run(
+        ["git", "remote", "remove", "origin"],
+        cwd=app_layout.repo_path, capture_output=True,
+    )
+    with open(os.path.join(app_layout.repo_path, "local_only.txt"), "w") as f:
+        f.write("dirty without a remote")
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="local only") == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list") == 0
+    assert verstr in capfd.readouterr().out
+
+
+def test_exp_create_clean_tree_zero_hash(app_layout, capfd):
+    """Clean-tree experiment creates a real record with a zeroed diff hash."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Tree is clean right after stamp.
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="clean run") == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+    assert verstr.endswith(".0000000")
+
+    # It is a real, listable experiment.
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list") == 0
+    assert verstr in capfd.readouterr().out

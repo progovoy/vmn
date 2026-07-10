@@ -9,7 +9,7 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import reset_logger
 
-DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}$")
+DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}(?:\.r\d+)?$")
 
 
 def extract_dev_verstr(output):

@@ -50,7 +50,7 @@ VMN_OLD_TAG_REGEX = rf"^(?P<app_name>[^\/]+)_{_VMN_OLD_REGEX}$"
 
 VMN_VERSTR_REGEX = rf"{_VMN_BASE_VER_REGEX}{_VMN_PRERELEASE_REGEX}"
 
-_VMN_DEV_REGEX = r"(?:-dev\.(?P<dev_commit>[0-9a-f]{7})\.(?P<dev_diff_hash>[0-9a-f]{7}))?"
+_VMN_DEV_REGEX = r"(?:-dev\.(?P<dev_commit>[0-9a-f]{7})\.(?P<dev_diff_hash>[0-9a-f]{7})(?:\.r(?P<dev_run>\d+))?)?"
 
 _VMN_VERSION_REGEX = rf"{VMN_VERSTR_REGEX}{_VMN_DEV_REGEX}{SEMVER_BUILDMETADATA_REGEX}"
 # Regex for matching versions stamped by vmn

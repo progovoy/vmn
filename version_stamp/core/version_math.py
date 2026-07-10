@@ -291,6 +291,8 @@ def deserialize_vmn_version(verstr):
     if gdict.get("dev_commit") is not None:
         ret.dev_commit = gdict["dev_commit"]
         ret.dev_diff_hash = gdict["dev_diff_hash"]
+        if gdict.get("dev_run") is not None:
+            ret.dev_run = int(gdict["dev_run"])
         ret.types.add("dev")
 
     if gdict["buildmetadata"] is not None:

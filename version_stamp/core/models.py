@@ -20,6 +20,7 @@ class VersionProps:
     buildmetadata: Optional[str] = None
     dev_commit: Optional[str] = None
     dev_diff_hash: Optional[str] = None
+    dev_run: Optional[int] = None
     old_ver_format: bool = False
 
 

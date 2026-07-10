@@ -414,6 +414,11 @@ def _goto_dev_version(vcs, params, version):
     metadata, patches = storage.load(vcs.name, version)
 
     if metadata is None:
+        # Experiments live in a parallel tree; a run-suffixed id resolves here.
+        exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
+        metadata, patches = exp_storage.load(vcs.name, version)
+
+    if metadata is None:
         conf_storage = getattr(vcs, 'snapshot_storage', None) or {}
         if conf_storage.get("bucket"):
             try:

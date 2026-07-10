@@ -129,6 +129,30 @@ def _get_metrics_schema(vcs):
     return {}
 
 
+def _metric_sort_descending(schema, key):
+    """Whether metric ``key`` sorts best-first as descending (higher is better).
+
+    Driven by ``goal: min|max`` in the metrics schema (``max`` = higher-is-better
+    = descending). Legacy ``sort: asc|desc`` is still honored with a deprecation
+    warning. Unspecified metrics default to higher-is-better.
+    """
+    entry = (schema or {}).get(key, {}) or {}
+    if "goal" in entry:
+        goal = entry.get("goal")
+        if goal not in ("min", "max"):
+            VMN_LOGGER.warning(
+                f"Invalid goal '{goal}' for metric '{key}'; using 'max'"
+            )
+            goal = "max"
+        return goal == "max"
+    if "sort" in entry:
+        VMN_LOGGER.warning(
+            f"experiment metric '{key}': 'sort' is deprecated, use goal: min|max"
+        )
+        return entry.get("sort", "asc") == "desc"
+    return True
+
+
 def _get_latest_metrics(log):
     """Scan log entries and return the latest value for each metric."""
     metrics = {}
@@ -272,14 +296,67 @@ def handle_experiment(vmn_ctx):
 # create
 # ---------------------------------------------------------------------------
 
+def _allocate_run_verstr(storage, app_name, code_verstr):
+    """Return the verstr for a new experiment run over ``code_verstr``.
+
+    Content-addressed code state maps many runs to one code verstr; each new run
+    over an existing state gets a ``.N`` suffix so runs never overwrite one
+    another (e.g. same code, different seed).
+    """
+    runs = []
+    for meta in storage.list_snapshots(app_name):
+        v = meta.get("verstr", "")
+        if v == code_verstr:
+            runs.append(1)
+        elif v.startswith(code_verstr + ".r"):
+            suffix = v[len(code_verstr) + 2:]
+            if suffix.isdigit():
+                runs.append(int(suffix))
+    if not runs:
+        return code_verstr
+    return f"{code_verstr}.r{max(runs) + 1}"
+
+
 @measure_runtime_decorator
 def experiment_create(vcs, params, storage, args):
-    base_version, commit_hash, patches, dirty_states, ver_info, err = \
-        gather_create_data(vcs)
+    verstr, err = _experiment_create_core(vcs, storage, note=args.note)
     if err is not None:
         return err
 
-    verstr = _compute_verstr(base_version, commit_hash, patches)
+    log = _load_log(storage, vcs.name, verstr)
+    create_entry = log[0]
+
+    if args.file:
+        notes_data = _parse_notes_file(args.file)
+        for key in ("params", "hypothesis", "tags"):
+            if key in notes_data:
+                create_entry[key] = notes_data[key]
+        for k, v in notes_data.items():
+            if k not in ("params", "hypothesis", "tags"):
+                create_entry[k] = v
+
+    if args.metrics:
+        log.append(_create_log_entry("metrics", values=_parse_metrics(args.metrics)))
+
+    _save_log(storage, vcs.name, verstr, log)
+
+    print(verstr)
+    return 0
+
+
+def _experiment_create_core(vcs, storage, note=None):
+    """Create the experiment record (snapshot + initial log entry).
+
+    Returns (verstr, error_code). error_code is None on success. Works on a clean
+    or dirty tree; repeat runs over identical code state get a run suffix.
+    """
+    base_version, commit_hash, patches, dirty_states, ver_info, err = \
+        gather_create_data(vcs, allow_clean=True)
+    if err is not None:
+        return None, err
+
+    code_verstr = _compute_verstr(base_version, commit_hash, patches)
+    verstr = _allocate_run_verstr(storage, vcs.name, code_verstr)
 
     be = vcs.backend
     try:
@@ -289,12 +366,13 @@ def experiment_create(vcs, params, storage, args):
 
     metadata = {
         "verstr": verstr,
+        "code_verstr": code_verstr,
         "base_version": base_version,
         "base_commit": commit_hash,
         "branch": be.active_branch,
         "remote": remote_url,
         "timestamp": _now_iso(),
-        "note": args.note,
+        "note": note,
         "app_name": vcs.name,
         "dirty_states": dirty_states,
         "has_working_tree_patch": "working_tree" in patches,
@@ -308,29 +386,8 @@ def experiment_create(vcs, params, storage, args):
         metadata["changesets"] = changesets
 
     storage.save(vcs.name, verstr, metadata, patches)
-
-    # Build first log entry
-    log_entry = _create_log_entry("create", note=args.note)
-
-    if args.file:
-        notes_data = _parse_notes_file(args.file)
-        if "params" in notes_data:
-            log_entry["params"] = notes_data["params"]
-        if "hypothesis" in notes_data:
-            log_entry["hypothesis"] = notes_data["hypothesis"]
-        if "tags" in notes_data:
-            log_entry["tags"] = notes_data["tags"]
-        for k, v in notes_data.items():
-            if k not in ("params", "hypothesis", "tags"):
-                log_entry[k] = v
-
-    if args.metrics:
-        log_entry["params"] = _parse_metrics(args.metrics)
-
-    _save_log(storage, vcs.name, verstr, [log_entry])
-
-    print(verstr)
-    return 0
+    _save_log(storage, vcs.name, verstr, [_create_log_entry("create", note=note)])
+    return verstr, None
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +474,7 @@ def experiment_list(vcs, params, storage, args):
     if sort_key and sort_key in all_metric_keys:
         sort_desc = False
         if schema and sort_key in schema:
-            sort_desc = schema[sort_key].get("sort", "asc") == "desc"
+            sort_desc = _metric_sort_descending(schema, sort_key)
         rows.sort(
             key=lambda r: (r[1].get(sort_key) is None, r[1].get(sort_key, 0)),
             reverse=sort_desc,
@@ -425,7 +482,7 @@ def experiment_list(vcs, params, storage, args):
     elif not sort_key and schema:
         primary = next((k for k, v in schema.items() if v.get("primary")), None)
         if primary and primary in all_metric_keys:
-            sort_desc = schema[primary].get("sort", "asc") == "desc"
+            sort_desc = _metric_sort_descending(schema, primary)
             rows.sort(
                 key=lambda r: (r[1].get(primary) is None, r[1].get(primary, 0)),
                 reverse=sort_desc,
