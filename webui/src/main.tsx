@@ -8,7 +8,7 @@ import Compare from "./pages/Compare";
 import Leaderboard from "./pages/Leaderboard";
 import Run from "./pages/Run";
 import Snapshots from "./pages/Snapshots";
-import Tree from "./pages/Tree";
+import StampTree from "./pages/StampTree";
 import "./styles.css";
 
 const router = createBrowserRouter([
@@ -22,7 +22,7 @@ const router = createBrowserRouter([
       { path: "ws/:ws/app/:app/run/:verstr", element: <Run /> },
       { path: "ws/:ws/app/:app/compare", element: <Compare /> },
       { path: "ws/:ws/app/:app/snapshots", element: <Snapshots /> },
-      { path: "ws/:ws/app/:app/tree", element: <Tree /> },
+      { path: "ws/:ws/app/:app/tree", element: <StampTree /> },
       { path: "ws/:ws/app/:app/actions", element: <Actions /> },
     ],
   },
