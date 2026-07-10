@@ -72,39 +72,14 @@ def list_apps(root_path):
     return rows
 
 
-def list_experiments(root_path, app_name, sort=None, last=None):
-    """Leaderboard rows, ordered exactly like ``vmn exp list``."""
+def fetch_experiment_rows(root_path, app_name):
+    """Leaderboard rows in storage order (oldest first). The expensive read:
+    every experiment's metadata + log."""
     storage = experiment_storage(root_path)
-    metas = storage.list_snapshots(app_name)
-    if last:
-        metas = metas[-int(last):]
-
-    schema = metrics_schema(root_path, app_name)
     rows = []
-    all_keys = set()
-    for meta in metas:
+    for meta in storage.list_snapshots(app_name):
         log = _load_log(storage, app_name, meta["verstr"])
-        metrics = _get_latest_metrics(log)
-        all_keys.update(metrics.keys())
-        rows.append((meta, metrics))
-
-    sort_key = sort
-    if sort_key and sort_key in all_keys:
-        desc = _metric_sort_descending(schema, sort_key) if schema else False
-        rows.sort(
-            key=lambda r: (r[1].get(sort_key) is None, r[1].get(sort_key, 0)),
-            reverse=desc,
-        )
-    elif not sort_key and schema:
-        primary = next((k for k, v in schema.items() if v.get("primary")), None)
-        if primary and primary in all_keys:
-            rows.sort(
-                key=lambda r: (r[1].get(primary) is None, r[1].get(primary, 0)),
-                reverse=_metric_sort_descending(schema, primary),
-            )
-
-    return [
-        {
+        rows.append({
             "verstr": meta["verstr"],
             "code_verstr": meta.get("code_verstr", meta["verstr"]),
             "timestamp": meta.get("timestamp"),
@@ -112,10 +87,46 @@ def list_experiments(root_path, app_name, sort=None, last=None):
             "branch": meta.get("branch"),
             "base_version": meta.get("base_version"),
             "user_meta": meta.get("user_meta"),
-            "metrics": metrics,
-        }
-        for meta, metrics in rows
-    ]
+            "metrics": _get_latest_metrics(log),
+        })
+    return rows
+
+
+def sort_rows(rows, schema, sort=None, last=None):
+    """Pure ordering over fetched rows — semantics identical to ``vmn exp list``."""
+    if last:
+        rows = rows[-int(last):]
+    rows = list(rows)
+
+    all_keys = set()
+    for r in rows:
+        all_keys.update(r["metrics"].keys())
+
+    def _key(metric):
+        return lambda r: (
+            r["metrics"].get(metric) is None, r["metrics"].get(metric, 0),
+        )
+
+    if sort and sort in all_keys:
+        desc = _metric_sort_descending(schema, sort) if schema else False
+        rows.sort(key=_key(sort), reverse=desc)
+    elif not sort and schema:
+        primary = next((k for k, v in schema.items() if v.get("primary")), None)
+        if primary and primary in all_keys:
+            rows.sort(
+                key=_key(primary),
+                reverse=_metric_sort_descending(schema, primary),
+            )
+    return rows
+
+
+def list_experiments(root_path, app_name, sort=None, last=None):
+    """Leaderboard rows, ordered exactly like ``vmn exp list``."""
+    return sort_rows(
+        fetch_experiment_rows(root_path, app_name),
+        metrics_schema(root_path, app_name),
+        sort=sort, last=last,
+    )
 
 
 def get_experiment(root_path, app_name, verstr_ref):

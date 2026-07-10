@@ -20,10 +20,24 @@ from version_stamp.ui.workspaces import WorkspaceError
 API_PREFIX = "/api/v1"
 
 
-def create_app(manager, token=None, read_only=False):
+def create_app(manager, token=None, read_only=False, use_index=True):
     app = FastAPI(title="vmn ui", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.manager = manager
     app.state.read_only = read_only
+
+    indexes = {}
+
+    def _index_for(ws):
+        """Per-workspace read cache under the server data dir (never in the repo)."""
+        if not use_index:
+            return None
+        if ws.name not in indexes:
+            from version_stamp.ui.index import WorkspaceIndex
+
+            indexes[ws.name] = WorkspaceIndex(
+                ws.path, db_dir=os.path.join(manager.data_dir, "index")
+            )
+        return indexes[ws.name]
 
     if token:
         @app.middleware("http")
@@ -83,6 +97,9 @@ def create_app(manager, token=None, read_only=False):
                          last: int = None):
         ws = _git_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
+        index = _index_for(ws)
+        if index:
+            return index.list_experiments(app_name, sort=sort, last=last)
         return exp_reader.list_experiments(ws.path, app_name, sort=sort, last=last)
 
     @app.get(
@@ -101,6 +118,9 @@ def create_app(manager, token=None, read_only=False):
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
+        index = _index_for(ws)
+        if index:
+            return index.list_versions(app_name)
         return ver_reader.list_versions(ws.path, app_name)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree")
