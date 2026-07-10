@@ -44,6 +44,7 @@ def test_ui_version_dag(app_layout, capfd):
     edges = {(e["from"], e["to"]) for e in tree["edges"]}
     assert ("0.0.1", "0.0.2") in edges
     assert ("0.0.2", "0.1.0") in edges
+    assert all(e["from"] != e["to"] for e in tree["edges"])
 
     by_verstr = {n["verstr"]: n for n in tree["nodes"]}
     assert by_verstr["0.1.0"]["release_mode"] == "minor"

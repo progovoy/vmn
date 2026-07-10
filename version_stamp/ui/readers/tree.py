@@ -43,7 +43,7 @@ def version_dag(root_path, app_name):
     edges = [
         {"from": r["previous_version"], "to": r["verstr"]}
         for r in rows
-        if r.get("previous_version") in known
+        if r.get("previous_version") in known and r["previous_version"] != r["verstr"]
     ]
     return {"nodes": nodes, "edges": edges}
 
