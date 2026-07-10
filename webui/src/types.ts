@@ -52,6 +52,7 @@ export interface VersionRow {
   commit?: string | null;
   timestamp?: number | null;
   services?: Record<string, string>;
+  changesets?: Record<string, { hash?: string | null } | null>;
 }
 
 export interface DiffResult {

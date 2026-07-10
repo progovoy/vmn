@@ -85,7 +85,11 @@ td .note { color: var(--text-secondary); }
 .badge.mode-major { border-color: var(--series-6); color: var(--series-6); }
 .badge.mode-minor { border-color: var(--series-1); color: var(--series-1); }
 .badge.mode-patch { border-color: var(--series-2); color: var(--series-2); }
-.badge.mode-prerelease, .badge.mode-rc { border-color: var(--series-3); color: var(--series-3); }
+.badge.mode-hotfix { border-color: var(--series-3); color: var(--series-3); }
+.badge.mode-prerelease, .badge.mode-rc, .badge.mode-release { border-color: var(--series-5); color: var(--series-5); }
+
+.tree-row { fill: transparent; cursor: pointer; }
+.tree-row:hover, .tree-row.selected { fill: var(--surface-2); }
 
 .kv { display: grid; grid-template-columns: 160px 1fr; row-gap: 6px; }
 .kv .k { color: var(--text-muted); }

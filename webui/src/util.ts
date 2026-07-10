@@ -26,6 +26,26 @@ export function shortVerstr(verstr: string): string {
   return m ? `${m[1]}…${m[2] ?? ""}` : verstr;
 }
 
+/** Copy to clipboard, falling back to execCommand where the async
+ *  clipboard API is unavailable (plain-http hosts) or denied. */
+export async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard) {
+    const ok = await navigator.clipboard
+      .writeText(text)
+      .then(() => true, () => false);
+    if (ok) return true;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  return ok;
+}
+
 /** Fixed categorical assignment (never cycled): metric name -> series slot. */
 const SERIES_VARS = [
   "var(--series-1)", "var(--series-2)", "var(--series-3)",
