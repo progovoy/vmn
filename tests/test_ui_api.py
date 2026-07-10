@@ -189,6 +189,64 @@ def test_ui_token_auth(app_layout, capfd):
     assert r.status_code == 200
 
 
+def test_ui_experiment_diff_endpoint(app_layout, capfd):
+    """Diff endpoint returns the metric delta and a real unified diff."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "m.py", "base line")
+    p = os.path.join(app_layout.repo_path, "m.py")
+    verstrs = []
+    for content, loss in (("ALPHA_LINE\n", 0.5), ("BETA_LINE\n", 0.3)):
+        with open(p, "w") as f:
+            f.write(content)
+        capfd.readouterr()
+        _experiment(app_layout.app_name, note="d", metrics=[f"loss={loss}"])
+        verstrs.append(extract_dev_verstr(capfd.readouterr().out))
+
+    client = _client(app_layout)
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments-diff",
+        params={"v": verstrs[0], "to": verstrs[1]},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["metrics_delta"]["loss"] == {"from": 0.5, "to": 0.3}
+    assert "ALPHA_LINE" in body["diff"]
+    assert "BETA_LINE" in body["diff"]
+
+
+def test_ui_snapshots_endpoints(app_layout, capfd):
+    """Snapshots browser: list + detail over the snapshots subdir."""
+    from helpers import _snapshot
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    _make_dirty(app_layout, "snap.txt", "snapshot content")
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, note="ui snap") == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    client = _client(app_layout)
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
+    )
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1
+    assert rows[0]["verstr"] == verstr
+    assert rows[0]["note"] == "ui snap"
+
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots/{verstr}"
+    )
+    assert r.status_code == 200
+    assert r.json()["metadata"]["verstr"] == verstr
+
+
 def test_ui_root_app_names_in_urls(app_layout, capfd):
     """Root-app service names (with '/') are addressed by their dashed tag
     form in URLs, matching vmn's tag-name convention."""

@@ -1395,8 +1395,11 @@ def _materialize_for_diff(vcs, verstr, meta, patches, dest):
     return True
 
 
-def _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
-    """Print a real file-level diff between two materialized snapshot workdirs."""
+def render_tree_diff(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
+    """Real file-level diff text between two materialized snapshot workdirs.
+
+    Returns (diff_text, error_message_or_None); empty text means identical.
+    """
     parent = tempfile.mkdtemp(prefix="vmn-diff-")
     try:
         name1 = verstr1.replace("+", "_plus_")
@@ -1408,19 +1411,29 @@ def _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
         ok2 = _materialize_for_diff(vcs, verstr2, meta2, patches2,
                                     os.path.join(parent, name2))
         if not ok1 or not ok2:
-            VMN_LOGGER.error("Failed to materialize snapshots for diff")
-            return 1
+            return None, "Failed to materialize snapshots for diff"
         # Run with cwd=parent so git labels the sides by their version strings.
         result = subprocess.run(
             ["git", "diff", "--no-index", "--", name1, name2],
             capture_output=True, text=True, cwd=parent,
         )
-        if result.stdout.strip():
-            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-        else:
-            print(f"{verstr1} and {verstr2} are identical")
+        return result.stdout, None
     finally:
         shutil.rmtree(parent, ignore_errors=True)
+
+
+def _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
+    """Print a real file-level diff between two materialized snapshot workdirs."""
+    text, err = render_tree_diff(
+        vcs, verstr1, meta1, patches1, verstr2, meta2, patches2
+    )
+    if err:
+        VMN_LOGGER.error(err)
+        return 1
+    if text.strip():
+        print(text, end="" if text.endswith("\n") else "\n")
+    else:
+        print(f"{verstr1} and {verstr2} are identical")
     return 0
 
 

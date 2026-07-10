@@ -12,7 +12,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from version_stamp.core.version_math import tag_name_to_app_name
+from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import experiments as exp_reader
+from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import tree as tree_reader
 from version_stamp.ui.readers import versions as ver_reader
 from version_stamp.ui.workspaces import WorkspaceError
@@ -123,6 +125,34 @@ def create_app(manager, token=None, read_only=False, use_index=True):
             return index.list_versions(app_name)
         return ver_reader.list_versions(ws.path, app_name)
 
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff")
+    def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
+        ws = _git_workspace(ws_name)
+        result, err = diff_reader.experiment_diff(
+            ws.path, tag_name_to_app_name(app_tag), v, to
+        )
+        if err:
+            raise HTTPException(404, err)
+        return result
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/snapshots")
+    def list_snapshots(ws_name: str, app_tag: str):
+        ws = _git_workspace(ws_name)
+        return snap_reader.list_snapshots(ws.path, tag_name_to_app_name(app_tag))
+
+    @app.get(
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+        "/snapshots/{verstr}"
+    )
+    def get_snapshot(ws_name: str, app_tag: str, verstr: str):
+        ws = _git_workspace(ws_name)
+        detail, err = snap_reader.get_snapshot(
+            ws.path, tag_name_to_app_name(app_tag), verstr
+        )
+        if err:
+            raise HTTPException(404, err)
+        return detail
+
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree")
     def version_tree(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
@@ -149,7 +179,23 @@ def create_app(manager, token=None, read_only=False, use_index=True):
 
 def _mount_static(app):
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    if os.path.isdir(static_dir):
-        from fastapi.staticfiles import StaticFiles
+    if not os.path.isdir(static_dir):
+        return
 
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(static_dir, "assets")),
+        name="assets",
+    )
+
+    # History-API fallback: any non-API route is a client-side route — serve
+    # the SPA shell and let the router resolve it.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        candidate = os.path.join(static_dir, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(os.path.join(static_dir, "index.html"))
