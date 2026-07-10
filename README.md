@@ -1,7 +1,7 @@
 <h1 align="center">vmn</h1>
 
 <p align="center"><strong>Automatic semantic versioning powered by git tags. Zero lock-in.</strong></p>
-<p align="center"><em>Language-agnostic CLI for versioning, multi-repo state recovery, and experiment tracking -- all stored in git.</em></p>
+<p align="center"><em>Language-agnostic CLI for versioning, multi-repo state recovery, and local-first experiment tracking -- versions live in git tags, experiments live on disk (or S3), no server required.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
@@ -127,7 +127,7 @@ vmn exp diff my_model
 vmn exp restore my_model --latest
 ```
 
-Both workflows store everything in git -- no servers, no lock-in.
+Both workflows store everything locally under `.vmn/` (git-ignored -- never committed or pushed) -- no servers, no lock-in. Add `--backend s3` if you want to share experiments across a team; see [Storage](#storage) below.
 
 ---
 ## ⚡ Why vmn?
@@ -195,7 +195,7 @@ vmn exp restore my_model --latest         # checkout exact code state (dirty wor
 | Artifact tracking | :white_check_mark: (SHA256) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Works offline / air-gapped | :white_check_mark: | self-hosted only | :x: | partially | :x: |
 | Install complexity | `pip install vmn` | server + DB | account + pip | pip + git config | account + pip |
-| Storage | git + local/S3 | database | cloud | git/S3 | cloud |
+| Storage | local files / S3 (git-anchored) | database | cloud | git/S3 | cloud |
 | Lock-in | zero (git tags + files) | MLflow format | W&B cloud | DVC format | Neptune cloud |
 
 > **Bold rows = only vmn.** Capture your exact working state -- dirty files, local commits, everything -- and restore it with one command.
@@ -203,7 +203,7 @@ vmn exp restore my_model --latest         # checkout exact code state (dirty wor
 > \* MLflow Tracking can log to local files without a server, but the comparison UI requires `mlflow server`.
 > \*\* DVC tracks data/model files via git, but does not capture uncommitted code changes or local-only commits.
 
-vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite. It's for researchers who want **lightweight, git-native experiment tracking** that lives alongside their version management -- without spinning up servers, creating cloud accounts, or leaving the terminal.
+vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite. It's for researchers who want **lightweight, local-first experiment tracking** -- anchored to your git commits, but stored as plain files on disk (or S3), never committed -- alongside their version management, without spinning up servers, creating cloud accounts, or leaving the terminal.
 
 ### When to use what
 
@@ -212,7 +212,7 @@ vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite
 - You work offline or in air-gapped environments
 - You need version management and experiment tracking in one tool
 - You want zero infrastructure -- no servers, no databases, no accounts
-- You prefer git-native storage with no vendor lock-in
+- You prefer local-first storage with no vendor lock-in
 
 **Use MLflow / W&B when:**
 - You need rich web visualizations and interactive charts
@@ -305,10 +305,11 @@ The hotfix segment lets you ship emergency fixes without bumping patch, keeping 
 ---
 ## 🧬 Experiment Management
 
-`vmn experiment` (alias: `vmn exp`) adds git-native experiment tracking to any
-versioned app. No servers, no databases -- experiments are stored alongside your
-tags and snapshots. Every experiment ties back to an exact version and commit,
-so reproducing results is a `vmn exp restore` away.
+`vmn experiment` (alias: `vmn exp`) adds local-first experiment tracking to any
+versioned app. No servers, no databases -- experiments are plain files under
+`.vmn/{app}/experiments/` (git-ignored, never committed or pushed), anchored to
+your version tags via the base commit. Every experiment ties back to an exact
+version and commit, so reproducing results is a `vmn exp restore` away.
 
 ### Quick workflow
 
@@ -343,8 +344,32 @@ become a metrics entry. `vmn exp run` returns the command's own exit code.
 
 ```sh
 vmn exp run my_model --note "dropout 0.3" -- python train.py --lr 0.01
-# inside train.py:  open(os.environ["VMN_METRICS_FILE"], "a").write("loss=0.31\n")
 ```
+
+Minimal `train.py` that reports back to vmn:
+
+```python
+import os
+
+metrics_file = os.environ["VMN_METRICS_FILE"]
+
+def log_metric(key, value):
+    with open(metrics_file, "a") as f:
+        f.write(f"{key}={value}\n")
+
+def train():
+    for epoch in range(10):
+        loss = run_one_epoch()  # your training code
+    log_metric("loss", loss)
+    log_metric("accuracy", 0.91)
+
+if __name__ == "__main__":
+    train()
+```
+
+Numeric values are parsed as floats; anything else is kept as a string. Your
+script's own exit code becomes `vmn exp run`'s exit code, so CI can tell a failed
+training run from a successful one.
 
 Works on a clean or dirty tree, and cold-starts a fresh repo (auto-init + baseline stamp).
 
