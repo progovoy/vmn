@@ -302,6 +302,14 @@ def deserialize_vmn_version(verstr):
     return ret
 
 
+def is_dev_version(verstr):
+    """True if verstr is a dev-snapshot version (``…-dev.<commit>.<hash>``)."""
+    try:
+        return "dev" in deserialize_vmn_version(verstr).types
+    except Exception:
+        return False
+
+
 def deserialize_vmn_tag_name(vmn_tag):
     try:
         return deserialize_tag_name(vmn_tag)

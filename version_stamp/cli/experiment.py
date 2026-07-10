@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
 import datetime
-import hashlib
 import os
 import shutil
 from dataclasses import dataclass
@@ -11,16 +10,18 @@ import yaml
 
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.cli.snapshot import (
-    _apply_snapshot_patches,
+    _build_snapshot_metadata,
     _compute_verstr,
     _diff_with_external_tool,
-    get_git_difftool,
     _diff_real_tree,
+    _now_iso,
     _relative_timestamp,
     _resolve_verstr,
     _restore_with_safety_net,
+    _sha256_file,
     _strip_git_dirs,
     gather_create_data,
+    get_git_difftool,
     get_snapshot_storage,
 )
 
@@ -70,10 +71,6 @@ def _append_to_log(storage, app_name, verstr, entry):
 # Log entry helpers
 # ---------------------------------------------------------------------------
 
-def _now_iso():
-    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 def _create_log_entry(entry_type, **kwargs):
     entry = {"timestamp": _now_iso(), "type": entry_type}
     entry.update(kwargs)
@@ -106,15 +103,10 @@ def _parse_notes_file(path):
 
 def _compute_artifact_info(path):
     """Compute sha256 and size for an artifact file."""
-    size = os.path.getsize(path)
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
     return {
         "path": os.path.basename(path),
-        "size": size,
-        "sha256": h.hexdigest(),
+        "size": os.path.getsize(path),
+        "sha256": _sha256_file(path),
     }
 
 
@@ -318,22 +310,15 @@ def experiment_create(vcs, params, storage, args):
     if err is not None:
         return err
 
-    log = _load_log(storage, vcs.name, verstr)
-    create_entry = log[0]
-
-    if args.file:
-        notes_data = _parse_notes_file(args.file)
-        for key in ("params", "hypothesis", "tags"):
-            if key in notes_data:
-                create_entry[key] = notes_data[key]
-        for k, v in notes_data.items():
-            if k not in ("params", "hypothesis", "tags"):
-                create_entry[k] = v
-
-    if args.metrics:
-        log.append(_create_log_entry("metrics", values=_parse_metrics(args.metrics)))
-
-    _save_log(storage, vcs.name, verstr, log)
+    if args.file or args.metrics:
+        log = _load_log(storage, vcs.name, verstr)
+        if args.file:
+            notes_data = _parse_notes_file(args.file)
+            for k, v in notes_data.items():
+                log[0][k] = v
+        if args.metrics:
+            log.append(_create_log_entry("metrics", values=_parse_metrics(args.metrics)))
+        _save_log(storage, vcs.name, verstr, log)
 
     print(verstr)
     return 0
@@ -353,32 +338,11 @@ def _experiment_create_core(vcs, storage, note=None):
     code_verstr = _compute_verstr(base_version, commit_hash, patches)
     verstr = _allocate_run_verstr(storage, vcs.name, code_verstr)
 
-    be = vcs.backend
-    try:
-        remote_url = be.remote()
-    except Exception:
-        remote_url = None
-
-    metadata = {
-        "verstr": verstr,
-        "code_verstr": code_verstr,
-        "base_version": base_version,
-        "base_commit": commit_hash,
-        "branch": be.active_branch,
-        "remote": remote_url,
-        "timestamp": _now_iso(),
-        "note": note,
-        "app_name": vcs.name,
-        "dirty_states": dirty_states,
-        "has_working_tree_patch": "working_tree" in patches,
-        "has_local_commits_patch": "local_commits" in patches,
-        "has_untracked_files": "untracked_files" in patches,
-        "has_dep_patches": bool(patches.get("deps")),
-    }
-
-    changesets = ver_info["stamping"]["app"].get("changesets", {})
-    if changesets:
-        metadata["changesets"] = changesets
+    metadata = _build_snapshot_metadata(
+        vcs, verstr, base_version, commit_hash, dirty_states, patches,
+        ver_info, note=note,
+    )
+    metadata["code_verstr"] = code_verstr
 
     storage.save(vcs.name, verstr, metadata, patches)
     _save_log(storage, vcs.name, verstr, [_create_log_entry("create", note=note)])
@@ -652,43 +616,63 @@ def experiment_show(vcs, params, storage, args):
 # compare
 # ---------------------------------------------------------------------------
 
+def _load_experiment_bundle(storage, vcs, verstr):
+    """Load (meta, patches, log) for an experiment, or None (logging) on error."""
+    meta, patches = storage.load(vcs.name, verstr)
+    if meta is None:
+        VMN_LOGGER.error(f"Experiment {verstr} not found")
+        return None
+    return meta, patches, _load_log(storage, vcs.name, verstr)
+
+
+def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None):
+    """Resolve (meta, patches, log) bundles for compare/diff.
+
+    Uses the given ``-v`` versions (each resolved), or the ``count`` most recent
+    when none are given; ``cap`` limits how many are taken. Returns the list, or
+    None (logging) on error — at least two experiments are required.
+    """
+    if len(versions) == 1:
+        VMN_LOGGER.error(
+            "Need at least 2 experiments — pass -v <a> -v <b> or none for the latest"
+        )
+        return None
+
+    if versions:
+        verstrs = []
+        for v in versions[:cap] if cap else versions:
+            resolved, err = _resolve_experiment_version(storage, vcs, _VersionStub(version=[v]))
+            if err:
+                VMN_LOGGER.error(err)
+                return None
+            verstrs.append(resolved)
+    else:
+        if count < 2:
+            VMN_LOGGER.error(f"Need at least 2 experiments, got {count}")
+            return None
+        snaps = storage.list_snapshots(vcs.name)
+        if len(snaps) < 2:
+            VMN_LOGGER.error("Need at least 2 experiments")
+            return None
+        verstrs = [m["verstr"] for m in snaps[-count:]]
+
+    bundles = []
+    for verstr in verstrs:
+        bundle = _load_experiment_bundle(storage, vcs, verstr)
+        if bundle is None:
+            return None
+        bundles.append(bundle)
+    return bundles
+
+
 @measure_runtime_decorator
 def experiment_compare(vcs, params, storage, args):
     versions = getattr(args, "version", None) or []
-    use_latest = getattr(args, "latest", False)
     last = getattr(args, "last", None) or getattr(args, "top", None)
 
-    experiments = []
-    if len(versions) >= 2:
-        for v in versions:
-            stub = _VersionStub(version=[v])
-            resolved, err = _resolve_experiment_version(storage, vcs, stub)
-            if err:
-                VMN_LOGGER.error(err)
-                return 1
-            meta, patches = storage.load(vcs.name, resolved)
-            if meta is None:
-                VMN_LOGGER.error(f"Experiment {v} not found")
-                return 1
-            log = _load_log(storage, vcs.name, resolved)
-            experiments.append((meta, patches, log))
-    elif len(versions) == 1:
-        VMN_LOGGER.error("Need at least 2 experiments to compare")
+    experiments = _resolve_experiment_bundles(storage, vcs, versions, count=last or 2)
+    if experiments is None:
         return 1
-    else:
-        # Default (and --latest): compare the N most recent (N = --last/--top or 2).
-        n = last or 2
-        if n < 2:
-            VMN_LOGGER.error(f"Need at least 2 to compare, got {n}")
-            return 1
-        snaps = storage.list_snapshots(vcs.name)
-        if len(snaps) < 2:
-            VMN_LOGGER.error("Need at least 2 experiments to compare")
-            return 1
-        for meta in snaps[-n:]:
-            _, patches = storage.load(vcs.name, meta["verstr"])
-            log = _load_log(storage, vcs.name, meta["verstr"])
-            experiments.append((meta, patches, log))
 
     # Metrics comparison table
     schema = _get_metrics_schema(vcs)
@@ -761,7 +745,8 @@ def _print_delta_line(label, d1, d2):
 @measure_runtime_decorator
 def experiment_diff(vcs, params, storage, args):
     """Show a real code diff between two experiments, with a params/metrics delta."""
-    exps = _resolve_two_experiments(storage, vcs, args)
+    versions = getattr(args, "version", None) or []
+    exps = _resolve_experiment_bundles(storage, vcs, versions, count=2, cap=2)
     if exps is None:
         return 1
     (meta1, patches1, log1), (meta2, patches2, log2) = exps
@@ -780,43 +765,6 @@ def experiment_diff(vcs, params, storage, args):
     return _diff_real_tree(vcs, v1, meta1, patches1, v2, meta2, patches2)
 
 
-def _resolve_two_experiments(storage, vcs, args):
-    """Resolve exactly two experiments from -v args or the latest two.
-
-    Returns a list of two (meta, patches, log) tuples, or None on error.
-    """
-    versions = getattr(args, "version", None) or []
-    last = getattr(args, "last", None) or getattr(args, "top", None)
-
-    if len(versions) == 1:
-        VMN_LOGGER.error("Need two experiments — pass -v <a> -v <b> or none for latest 2")
-        return None
-
-    chosen = []
-    if len(versions) >= 2:
-        for v in versions[:2] if last is None else versions:
-            stub = _VersionStub(version=[v])
-            resolved, err = _resolve_experiment_version(storage, vcs, stub)
-            if err:
-                VMN_LOGGER.error(err)
-                return None
-            chosen.append(resolved)
-    else:
-        snaps = storage.list_snapshots(vcs.name)
-        if len(snaps) < 2:
-            VMN_LOGGER.error("Need at least 2 experiments to diff")
-            return None
-        chosen = [m["verstr"] for m in snaps[-(last or 2):]]
-
-    result = []
-    for verstr in chosen[:2] if len(chosen) > 2 else chosen:
-        meta, patches = storage.load(vcs.name, verstr)
-        if meta is None:
-            VMN_LOGGER.error(f"Experiment {verstr} not found")
-            return None
-        log = _load_log(storage, vcs.name, verstr)
-        result.append((meta, patches, log))
-    return result[:2]
 
 
 # ---------------------------------------------------------------------------

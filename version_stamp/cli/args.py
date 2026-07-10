@@ -374,6 +374,7 @@ def add_arg_snapshot(subprasers):
         "snapshot",
         help="Create and manage local snapshots of uncommitted/unpushed changes",
     )
+    psnap.set_defaults(strict_version=False)
     psnap.add_argument(
         "action",
         nargs="?",
@@ -480,6 +481,7 @@ def add_arg_snapshot(subprasers):
 
 def _add_experiment_parser(subprasers, name):
     pexp = subprasers.add_parser(name, help="Experiment tracking for reproducible research")
+    pexp.set_defaults(strict_version=False)
     pexp.add_argument(
         "action",
         nargs="?",
@@ -543,9 +545,9 @@ def add_arg_exp(subprasers):
 
 
 def verify_user_input_version(args, key):
-    # snapshot/experiment resolve their own version refs (--latest, @N, dev
-    # prefixes, "current"), which are not strict version strings.
-    if getattr(args, "command", None) in ("snapshot", "experiment", "exp"):
+    # Commands that resolve their own version refs (--latest, @N, dev prefixes,
+    # "current") opt out of strict version validation via strict_version=False.
+    if not getattr(args, "strict_version", True):
         return
 
     if key not in args or getattr(args, key) is None:

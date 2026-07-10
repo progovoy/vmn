@@ -679,14 +679,9 @@ def handle_goto(vmn_ctx):
 
     # Restoring a dev version snapshots (and thus preserves) any dirty work via
     # the safety net, so a dirty tree is not an error for a dev-version goto.
-    version = vmn_ctx.args.version
-    if version:
-        try:
-            from version_stamp.core.version_math import deserialize_vmn_version
-            if "dev" in deserialize_vmn_version(version).types:
-                optional_status |= {"pending", "outgoing", "dirty_deps"}
-        except Exception:
-            pass
+    from version_stamp.core.version_math import is_dev_version
+    if vmn_ctx.args.version and is_dev_version(vmn_ctx.args.version):
+        optional_status |= {"pending", "outgoing", "dirty_deps"}
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
 

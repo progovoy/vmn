@@ -588,16 +588,8 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
     verstr, a unique dev-verstr prefix, or a stamped (non-dev) version passed
     through untouched. Returns ``(resolved_verstr, error_message_or_None)``.
     """
-    listing = None
-
-    def _snaps():
-        nonlocal listing
-        if listing is None:
-            listing = storage.list_snapshots(app_name)
-        return listing
-
     if latest or verstr in ("latest", "@latest"):
-        snaps = _snaps()
+        snaps = storage.list_snapshots(app_name)
         if not snaps:
             return None, f"No {kind}s found for {app_name}"
         most_recent = max(snaps, key=lambda m: m.get("timestamp", ""))
@@ -612,7 +604,7 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
         if not idx_str.isdigit():
             return None, f"Invalid index reference '{verstr}' (use @N, e.g. @1)"
         n = int(idx_str)
-        snaps = _snaps()
+        snaps = storage.list_snapshots(app_name)
         if n < 1 or n > len(snaps):
             return None, f"Index '{verstr}' out of range (1..{len(snaps)})"
         return snaps[n - 1]["verstr"], None
@@ -627,7 +619,7 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
         return verstr, None
 
     # Try prefix match
-    matches = [m for m in _snaps() if m["verstr"].startswith(verstr)]
+    matches = [m for m in storage.list_snapshots(app_name) if m["verstr"].startswith(verstr)]
     if len(matches) == 1:
         return matches[0]["verstr"], None
     if len(matches) > 1:

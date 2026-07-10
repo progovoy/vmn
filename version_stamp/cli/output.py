@@ -448,14 +448,9 @@ def goto_version(vcs, params, version, pull):
     status_str = ""
 
     # Handle dev versions via snapshot restore
-    if version is not None:
-        try:
-            from version_stamp.core.version_math import deserialize_vmn_version
-            _props = deserialize_vmn_version(version)
-            if "dev" in _props.types:
-                return _goto_dev_version(vcs, params, version)
-        except Exception:
-            pass
+    from version_stamp.core.version_math import is_dev_version
+    if version is not None and is_dev_version(version):
+        return _goto_dev_version(vcs, params, version)
 
     if version is None:
         if not params["deps_only"]:
