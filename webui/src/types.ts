@@ -10,17 +10,7 @@ export interface AppRow {
   experiments: number;
 }
 
-export interface DepConfig {
-  path: string;
-  remote: string | null;
-  vcs_type: string | null;
-  branch: string | null;
-}
-
-export interface AppConfig {
-  conf: Record<string, unknown>;
-  deps: DepConfig[];
-}
+export type AppConfig = Record<string, unknown>;
 
 export interface Job {
   id: string;

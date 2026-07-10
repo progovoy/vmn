@@ -22,16 +22,14 @@ def _client(app_layout):
     return TestClient(create_app(manager))
 
 
-def test_app_config_flattens_deps():
-    """The reader flattens the nested deps config into a flat list."""
-    from version_stamp.ui.readers.config import app_config
-    # Point at a made-up path — with no conf.yml the reader returns empties.
-    cfg = app_config("/nonexistent", "nope")
-    assert cfg == {"conf": {}, "deps": []}
+def test_read_app_conf_missing_is_empty():
+    from version_stamp.ui.readers.config import read_app_conf
+
+    assert read_app_conf("/nonexistent", "nope") == {}
 
 
 def test_ui_app_config_endpoint(app_layout, capfd):
-    """The /config endpoint returns the app conf and a flattened deps list."""
+    """The /config endpoint returns the raw app conf; deps is a key like any other."""
     _run_vmn_init()
     err, ver_info, params = _init_app(app_layout.app_name)
     _configure_2_deps(app_layout, params)
@@ -41,10 +39,8 @@ def test_ui_app_config_endpoint(app_layout, capfd):
     client = _client(app_layout)
     r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/config")
     assert r.status_code == 200
-    cfg = r.json()
+    conf = r.json()
 
-    assert "conf" in cfg
-    dep_paths = {d["path"] for d in cfg["deps"]}
-    assert any("repo1" in p for p in dep_paths)
-    assert any("repo2" in p for p in dep_paths)
-    assert all(d.get("remote") for d in cfg["deps"])
+    repos = conf["deps"]["../"]
+    assert "repo1" in repos and "repo2" in repos
+    assert all(info.get("remote") for info in repos.values())

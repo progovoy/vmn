@@ -90,10 +90,11 @@ export default function Actions() {
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>goto a version</h2>
+        <h2 style={{ marginTop: 0 }}>goto a version of {appName}</h2>
         <p className="subtitle" style={{ marginTop: 0 }}>
-          Checks out this app and all its dependency repos to the exact state
-          recorded at the given version — cloning any missing deps.
+          Checks out <span className="mono">{appName}</span> and all its
+          dependency repos to the exact state recorded at the given version —
+          cloning any missing deps. Other apps in this repo are untouched.
         </p>
         <div className="toolbar">
           <label>

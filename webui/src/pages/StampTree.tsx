@@ -372,45 +372,19 @@ function ConfigSection({ ws, app }: { ws: string; app: string }) {
     return () => { live = false; };
   }, [open, ws, app]);
 
-  const conf = cfg
-    ? Object.fromEntries(
-        Object.entries(cfg.conf).filter(
-          ([k, v]) => k !== "deps" && !isDefaultConfValue(v)
-        )
-      )
-    : {};
+  const configured = cfg && Object.values(cfg).some((v) => !isDefaultConfValue(v));
 
   return (
     <div style={{ marginTop: 16 }}>
-      <Disclosure open={open} onToggle={() => setOpen((o) => !o)} label="config & deps" />
+      <Disclosure open={open} onToggle={() => setOpen((o) => !o)} label="config" />
       {open && (
-        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ marginTop: 8 }}>
           {error && <div className="error">{error}</div>}
-          {cfg && (
-            <>
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>deps</div>
-                {cfg.deps.length === 0 ? (
-                  <div style={{ color: "var(--text-muted)" }}>none configured</div>
-                ) : (
-                  cfg.deps.map((d) => (
-                    <div key={d.path} className="mono" style={{ fontSize: 12 }} title={d.remote ?? ""}>
-                      {d.path}{d.branch ? ` @${d.branch}` : ""}
-                      <span style={{ color: "var(--text-muted)" }}> · {d.remote ?? "?"}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>conf.yml</div>
-                {Object.keys(conf).length === 0 ? (
-                  <div style={{ color: "var(--text-muted)" }}>defaults (no overrides)</div>
-                ) : (
-                  <ConfEntries obj={conf} />
-                )}
-              </div>
-            </>
-          )}
+          {cfg && (configured ? (
+            <ConfEntries obj={cfg} />
+          ) : (
+            <div style={{ color: "var(--text-muted)" }}>defaults (no overrides)</div>
+          ))}
         </div>
       )}
     </div>

@@ -16,25 +16,3 @@ def read_app_conf(root_path, app_name):
     except OSError:
         return {}
     return data.get("conf", {}) or {}
-
-
-def _dep_list(conf):
-    """Flatten nested ``deps`` config into ``[{path, remote, vcs_type, branch}]``."""
-    result = []
-    for base_dir, repos in (conf.get("deps") or {}).items():
-        for repo_name, info in (repos or {}).items():
-            info = info or {}
-            path = os.path.normpath(os.path.join(base_dir, repo_name))
-            result.append({
-                "path": path,
-                "remote": info.get("remote"),
-                "vcs_type": info.get("vcs_type"),
-                "branch": info.get("branch"),
-            })
-    return sorted(result, key=lambda d: d["path"])
-
-
-def app_config(root_path, app_name):
-    """App config for the UI: the raw conf plus a flattened deps list."""
-    conf = read_app_conf(root_path, app_name)
-    return {"conf": conf, "deps": _dep_list(conf)}

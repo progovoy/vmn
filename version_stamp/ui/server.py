@@ -210,7 +210,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/config")
     def app_config(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        return config_reader.app_config(ws.path, tag_name_to_app_name(app_tag))
+        return config_reader.read_app_conf(ws.path, tag_name_to_app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/deps")
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
