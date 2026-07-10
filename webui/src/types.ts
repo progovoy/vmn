@@ -55,6 +55,28 @@ export interface VersionRow {
   changesets?: Record<string, { hash?: string | null } | null>;
 }
 
+export interface ChangelogEntry {
+  type: string | null;
+  scope: string | null;
+  description: string;
+  hash: string;
+}
+
+export interface ChangelogGroup {
+  label: string;
+  type: string | null;
+  commits: ChangelogEntry[];
+}
+
+export interface Changelog {
+  to_verstr: string;
+  from_verstr: string | null;
+  to_commit: string | null;
+  from_commit: string | null;
+  breaking: ChangelogEntry[];
+  groups: ChangelogGroup[];
+}
+
 export interface DiffResult {
   from_verstr: string;
   to_verstr: string;

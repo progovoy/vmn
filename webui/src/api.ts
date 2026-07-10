@@ -1,5 +1,5 @@
 import type {
-  AppRow, DiffResult, ExperimentDetail, ExperimentRow, SnapshotRow,
+  AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentRow, SnapshotRow,
   VersionRow, Workspace,
 } from "./types";
 
@@ -46,6 +46,11 @@ export const api = {
     ),
   versions: (ws: string, app: string) =>
     get<VersionRow[]>(`/workspaces/${ws}/apps/${appTag(app)}/versions`),
+  changelog: (ws: string, app: string, v: string, from?: string) =>
+    get<Changelog>(
+      `/workspaces/${ws}/apps/${appTag(app)}/changelog?v=${encodeURIComponent(v)}` +
+        (from ? `&from=${encodeURIComponent(from)}` : "")
+    ),
   snapshots: (ws: string, app: string) =>
     get<SnapshotRow[]>(`/workspaces/${ws}/apps/${appTag(app)}/snapshots`),
 };

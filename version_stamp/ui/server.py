@@ -8,10 +8,11 @@ illegal in app names.
 """
 import os
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from version_stamp.core.version_math import tag_name_to_app_name
+from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
@@ -189,6 +190,21 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     def root_tree(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
         return tree_reader.root_topology(ws.path, tag_name_to_app_name(app_tag))
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
+    def version_changelog(
+        ws_name: str,
+        app_tag: str,
+        v: str = None,
+        frm: str = Query(None, alias="from"),
+    ):
+        ws = _git_workspace(ws_name)
+        result, err = changelog_reader.version_changelog(
+            ws.path, tag_name_to_app_name(app_tag), to_verstr=v, from_verstr=frm
+        )
+        if err:
+            raise HTTPException(404, err)
+        return result
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/deps")
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):

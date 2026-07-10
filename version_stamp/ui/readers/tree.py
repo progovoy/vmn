@@ -4,47 +4,77 @@
 Shapes the raw tag rows from ``readers.versions`` into the structures the UI
 draws. All reads are cheap local git operations.
 """
-from version_stamp.core.version_math import deserialize_vmn_version
+from version_stamp.core.version_math import get_base_vmn_version
 from version_stamp.ui.readers.versions import list_versions
 
 
 def _base_version(verstr):
     """The release version a (pre)release verstr belongs to (rc chain anchor)."""
     try:
-        props = deserialize_vmn_version(verstr)
+        return get_base_vmn_version(verstr, hide_zero_hotfix=True)
     except Exception:
         return verstr
-    base = f"{props.major}.{props.minor}.{props.patch}"
-    if props.hotfix:
-        base += f".{props.hotfix}"
-    return base
+
+
+def _row_rank(row):
+    """Canonical-node order within a commit: release, then rc, then metadata."""
+    if row.get("prerelease") == "metadata":
+        return 2
+    if row.get("prerelease") in (None, "release"):
+        return 0
+    return 1
 
 
 def version_dag(root_path, app_name):
-    """Nodes for every stamped version and edges from previous_version links."""
+    """Nodes for every stamped commit and edges from previous_version links.
+
+    Tags sharing a commit (a promoted release, its final rc, build-metadata
+    versions) merge into one node — the release — with the rest as aliases.
+    """
     rows = [r for r in list_versions(root_path, app_name) if r["kind"] == "version"]
 
-    nodes = []
+    groups = []
+    by_key = {}
     for r in rows:
+        key = (r.get("commit"), _base_version(r["verstr"]))
+        group = by_key.get(key) if r.get("commit") is not None else None
+        if group is not None:
+            group.append(r)
+        else:
+            group = [r]
+            by_key[key] = group
+            groups.append(group)
+
+    canonical = {}
+    nodes = []
+    for group in groups:
+        group.sort(key=_row_rank)
+        head = group[0]
+        for r in group:
+            canonical[r["verstr"]] = head["verstr"]
         nodes.append({
-            "verstr": r["verstr"],
-            "base": _base_version(r["verstr"]),
-            "release_mode": r.get("release_mode"),
+            "verstr": head["verstr"],
+            "base": _base_version(head["verstr"]),
+            "release_mode": head.get("release_mode"),
             "prerelease": (
-                r.get("prerelease")
-                if r.get("prerelease") not in (None, "release") else None
+                head.get("prerelease")
+                if head.get("prerelease") not in (None, "release") else None
             ),
-            "branch": r.get("branch"),
-            "commit": r.get("commit"),
-            "timestamp": r.get("timestamp"),
+            "branch": head.get("branch"),
+            "commit": head.get("commit"),
+            "timestamp": head.get("timestamp"),
+            "aliases": [r["verstr"] for r in group[1:]],
         })
 
-    known = {n["verstr"] for n in nodes}
-    edges = [
-        {"from": r["previous_version"], "to": r["verstr"]}
-        for r in rows
-        if r.get("previous_version") in known and r["previous_version"] != r["verstr"]
-    ]
+    edges = []
+    seen = set()
+    for r in rows:
+        src = canonical.get(r.get("previous_version"))
+        dst = canonical[r["verstr"]]
+        if src is None or src == dst or (src, dst) in seen:
+            continue
+        seen.add((src, dst))
+        edges.append({"from": src, "to": dst})
     return {"nodes": nodes, "edges": edges}
 
 

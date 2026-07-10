@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import type { VersionRow } from "../types";
+import type { Changelog, VersionRow } from "../types";
 import { AppLayoutNav } from "./Leaderboard";
 import { copyText, relTime } from "../util";
 
@@ -24,6 +24,7 @@ interface Node {
   branch: string;
   rel: string;
   row: VersionRow;
+  aliases: string[];
   x: number;
   y: number;
 }
@@ -50,11 +51,44 @@ function relDate(ts: number | null | undefined): string {
   return ts ? relTime(new Date(ts * 1000).toISOString()) : "";
 }
 
-/** Lay out newest->oldest top->bottom; one narrow lane per branch. */
+/** The release version an rc/build verstr belongs to ("0.9.1-rc.15" -> "0.9.1"). */
+const baseVersion = (verstr: string) => verstr.split(/[-+]/)[0];
+
+/** Canonical-node order within a commit: release, then rc, then metadata. */
+const rowRank = (v: VersionRow) =>
+  v.prerelease === "metadata" ? 2 : !v.prerelease || v.prerelease === "release" ? 0 : 1;
+
+/** "0.9.1-rc.15" shown next to node "0.9.1" shortens to "rc.15". */
+const shortAlias = (alias: string, verstr: string) =>
+  alias.startsWith(verstr) ? alias.slice(verstr.length).replace(/^-/, "") : alias;
+
+/** Lay out newest->oldest top->bottom; one narrow lane per branch.
+ * Tags sharing a commit (a promoted release, its final rc, build metadata)
+ * merge into one node — the release — with the rest as aliases. */
 function layout(versions: VersionRow[]) {
-  const ordered = [...versions].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+  const groups: VersionRow[][] = [];
+  const byKey = new Map<string, VersionRow[]>();
+  versions.forEach((v) => {
+    const key = `${v.commit}|${baseVersion(v.verstr)}`;
+    const group = v.commit ? byKey.get(key) : undefined;
+    if (group) {
+      group.push(v);
+    } else {
+      const g = [v];
+      byKey.set(key, g);
+      groups.push(g);
+    }
+  });
+  groups.forEach((g) => g.sort((a, b) => rowRank(a) - rowRank(b)));
+  const canonical = new Map<string, string>();
+  groups.forEach((g) => g.forEach((v) => canonical.set(v.verstr, g[0].verstr)));
+
+  const ordered = [...groups].sort(
+    (a, b) => (b[0].timestamp ?? 0) - (a[0].timestamp ?? 0)
+  );
   const lanes: string[] = [];
-  const nodes: Node[] = ordered.map((v, i) => {
+  const nodes: Node[] = ordered.map((g, i) => {
+    const v = g[0];
     const branch = v.branch ?? "?";
     let lane = lanes.indexOf(branch);
     if (lane < 0) {
@@ -68,33 +102,38 @@ function layout(versions: VersionRow[]) {
       branch,
       rel: relDate(v.timestamp),
       row: v,
+      aliases: g.slice(1).map((r) => r.verstr),
       x: PAD_LEFT + lane * LANE_W,
       y: PAD_TOP + ROW_H / 2 + i * ROW_H,
     };
   });
-  const known = new Set(nodes.map((n) => n.verstr));
   const edges: [string, string][] = [];
-  ordered.forEach((v) => {
-    if (
-      v.previous_version &&
-      v.previous_version !== v.verstr &&
-      known.has(v.previous_version)
-    ) {
-      edges.push([v.previous_version, v.verstr]);
-    }
+  const seen = new Set<string>();
+  versions.forEach((v) => {
+    const from = v.previous_version && canonical.get(v.previous_version);
+    const to = canonical.get(v.verstr)!;
+    if (!from || from === to || seen.has(`${from}>${to}`)) return;
+    seen.add(`${from}>${to}`);
+    edges.push([from, to]);
   });
 
   const textX = PAD_LEFT + lanes.length * LANE_W + 14;
   const labelEnd = Math.max(
     360,
-    ...nodes.map(
-      (n) => textX + n.verstr.length * VERSTR_CH + 14 + n.branch.length * BRANCH_CH
-    )
+    ...nodes.map((n) => {
+      const aliasChars = n.aliases.reduce(
+        (len, a) => len + shortAlias(a, n.verstr).length + 3, 0
+      );
+      return (
+        textX + (n.verstr.length + aliasChars) * VERSTR_CH +
+        14 + n.branch.length * BRANCH_CH
+      );
+    })
   );
   const presentModes = Object.keys(MODE_COLOR).filter((m) =>
     nodes.some((n) => n.mode === m)
   );
-  return { nodes, edges, textX, labelEnd, presentModes };
+  return { nodes, edges, canonical, textX, labelEnd, presentModes };
 }
 
 function ModeDot({ mode }: { mode: string }) {
@@ -111,11 +150,78 @@ function ModeDot({ mode }: { mode: string }) {
   );
 }
 
+function CommitLine({ scope, description, hash }: Changelog["breaking"][number]) {
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "baseline", lineHeight: 1.5 }}>
+      <span className="mono" style={{ color: "var(--text-muted)", fontSize: 11 }}>{hash}</span>
+      <span>
+        {scope && <strong>{scope}: </strong>}
+        {description}
+      </span>
+    </div>
+  );
+}
+
+/** Conventional-commit changelog between a version and its previous. */
+function ChangelogSection({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
+  const [cl, setCl] = useState<Changelog | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setCl(null);
+    setError(null);
+    api.changelog(ws, app, verstr)
+      .then((c) => live && setCl(c))
+      .catch((e) => live && setError(String(e)));
+    return () => { live = false; };
+  }, [ws, app, verstr]);
+
+  if (error) return null;
+  if (!cl) return <h2 style={{ marginBottom: 0 }}>changes<span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · loading…</span></h2>;
+
+  const empty = cl.breaking.length === 0 && cl.groups.length === 0;
+  return (
+    <>
+      <h2 style={{ marginBottom: 4 }}>
+        changes
+        {cl.from_verstr && (
+          <span className="mono" style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: 12 }}>
+            {" "}since {cl.from_verstr}
+          </span>
+        )}
+      </h2>
+      {empty ? (
+        <div style={{ color: "var(--text-muted)" }}>
+          {cl.from_verstr ? "No conventional commits in this range." : "Baseline version — no previous."}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {cl.breaking.length > 0 && (
+            <div>
+              <div className="badge mode-major" style={{ marginBottom: 4 }}>Breaking</div>
+              {cl.breaking.map((c) => <CommitLine key={c.hash} {...c} />)}
+            </div>
+          )}
+          {cl.groups.map((g) => (
+            <div key={g.label}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{g.label}</div>
+              {g.commits.map((c) => <CommitLine key={c.hash} {...c} />)}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 const VersionDetails = memo(function VersionDetails({
-  node, byVerstr, edges, onSelect,
+  ws, app, node, canonical, edges, onSelect,
 }: {
+  ws: string;
+  app: string;
   node: Node;
-  byVerstr: Record<string, Node>;
+  canonical: Map<string, string>;
   edges: [string, string][];
   onSelect: (verstr: string) => void;
 }) {
@@ -127,7 +233,7 @@ const VersionDetails = memo(function VersionDetails({
   const deps = Object.entries(node.row.changesets ?? {}).filter(([p]) => p !== ".");
 
   const versionLink = (v: string) =>
-    byVerstr[v] ? (
+    canonical.has(v) ? (
       <a key={v} onClick={() => onSelect(v)} style={{ cursor: "pointer", marginRight: 10 }} className="mono">
         {v}
       </a>
@@ -152,6 +258,16 @@ const VersionDetails = memo(function VersionDetails({
         <div className="mono">{node.branch}</div>
         <div className="k">tag</div>
         <div className="mono">{node.row.tag}</div>
+        {node.aliases.length > 0 && (
+          <>
+            <div className="k">also</div>
+            <div>
+              {node.aliases.map((v) => (
+                <div key={v} className="mono">{v}</div>
+              ))}
+            </div>
+          </>
+        )}
         <div className="k">commit</div>
         <div className="mono" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {node.row.commit ? (
@@ -195,6 +311,7 @@ const VersionDetails = memo(function VersionDetails({
           </>
         )}
       </div>
+      <ChangelogSection ws={ws} app={app} verstr={node.verstr} />
     </>
   );
 });
@@ -230,7 +347,7 @@ export default function StampTree() {
     () => (rows ?? []).filter((r) => r.kind === "root"),
     [rows]
   );
-  const { nodes, edges, textX, labelEnd, presentModes } = useMemo(
+  const { nodes, edges, canonical, textX, labelEnd, presentModes } = useMemo(
     () => layout(versions),
     [versions]
   );
@@ -242,7 +359,8 @@ export default function StampTree() {
     (verstr: string) => setParams({ v: verstr }, { replace: true }),
     [setParams]
   );
-  const current = (selected && byVerstr[selected]) || nodes[0];
+  const current =
+    (selected && byVerstr[canonical.get(selected) ?? selected]) || nodes[0];
 
   if (error) return <div className="error">{error}</div>;
   if (rows === null) return <div className="empty">Loading…</div>;
@@ -304,6 +422,11 @@ export default function StampTree() {
                     />
                     <text x={textX} y={n.y + 4} fontFamily="ui-monospace, monospace">
                       <tspan fill="var(--text-primary)" fontSize="12.5">{n.verstr}</tspan>
+                      {n.aliases.length > 0 && (
+                        <tspan dx="10" fill="var(--text-muted)" fontSize="11">
+                          {n.aliases.map((a) => shortAlias(a, n.verstr)).join(" · ")}
+                        </tspan>
+                      )}
                       <tspan dx="14" fill="var(--text-muted)" fontSize="11.5">{n.branch}</tspan>
                     </text>
                     <text x={width - 12} y={n.y + 4} fill="var(--text-muted)"
@@ -317,7 +440,7 @@ export default function StampTree() {
           </div>
 
           <aside className="card" style={{ flex: "1 1 280px", maxWidth: 360, position: "sticky", top: 16 }}>
-            <VersionDetails node={current} byVerstr={byVerstr} edges={edges} onSelect={select} />
+            <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} onSelect={select} />
             <h2>legend</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {presentModes.map((mode) => (

@@ -6,8 +6,10 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from helpers import (
+    _add_buildmetadata_to_version,
     _configure_2_deps,
     _init_app,
+    _release_app,
     _run_vmn_init,
     _stamp_app,
 )
@@ -75,6 +77,40 @@ def test_ui_version_dag_rc_chain(app_layout, capfd):
 
     edges = {(e["from"], e["to"]) for e in tree["edges"]}
     assert ("0.0.2-rc.1", "0.0.2-rc.2") in edges
+
+
+def test_ui_version_dag_release_merges_same_commit(app_layout, capfd):
+    """A released version, its source rc, and build metadata share one commit
+    and must collapse into a single node (the release), other tags as aliases."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.1
+
+    app_layout.write_file_commit_and_push("test_repo_0", "rc.txt", "1")
+    _stamp_app(app_layout.app_name, "patch", prerelease="rc")  # 0.0.2-rc.1
+    _release_app(app_layout.app_name, "0.0.2-rc.1")  # 0.0.2, same commit
+    _add_buildmetadata_to_version(
+        app_layout, "build.1", version="0.0.2"
+    )  # 0.0.2+build.1, same commit
+
+    client = _client(app_layout)
+    tree = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/tree"
+    ).json()
+
+    verstrs = [n["verstr"] for n in tree["nodes"]]
+    assert "0.0.2" in verstrs
+    assert "0.0.2-rc.1" not in verstrs
+    assert "0.0.2+build.1" not in verstrs
+
+    node = next(n for n in tree["nodes"] if n["verstr"] == "0.0.2")
+    assert set(node["aliases"]) == {"0.0.2-rc.1", "0.0.2+build.1"}
+    assert node["release_mode"] == "release"
+
+    edges = {(e["from"], e["to"]) for e in tree["edges"]}
+    assert ("0.0.1", "0.0.2") in edges
+    assert all(f != t for f, t in edges)
+    assert len(tree["edges"]) == len(edges)  # no duplicate edges
 
 
 def test_ui_root_topology(app_layout, capfd):
