@@ -37,7 +37,7 @@ Versions live in git annotated tags. Uninstall vmn and the tags still make sense
 
 ---
 
-[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#️-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
+[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Web UI](#-web-ui) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#️-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
 
 ---
 
@@ -187,7 +187,10 @@ vmn exp restore my_model --latest         # checkout exact code state (dirty wor
 | No cloud account | :white_check_mark: | :white_check_mark: (self-hosted) | :x: | :white_check_mark: | :x: |
 | Free & open source | :white_check_mark: | :white_check_mark: | Free tier | :white_check_mark: | Free tier |
 | Metrics tracking | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Experiment comparison | CLI table | Web UI | Web UI | CLI | Web UI |
+| Live training curves | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
+| Experiment comparison | CLI + Web UI | Web UI | Web UI | CLI | Web UI |
+| Web UI | :white_check_mark: (`vmn ui`, one command) | server + DB | cloud | :x: | cloud |
+| **Stamp-tree / version DAG view** | :white_check_mark: | :x: | :x: | :x: | :x: |
 | **Full code state capture** | :white_check_mark: | :x: | :x: | partial \*\* | :x: |
 | **Uncommitted changes captured** | :white_check_mark: | :x: | :x: | :x: | :x: |
 | **One-command state restore** | :white_check_mark: | :x: | :x: | :x: | :x: |
@@ -203,7 +206,7 @@ vmn exp restore my_model --latest         # checkout exact code state (dirty wor
 > \* MLflow Tracking can log to local files without a server, but the comparison UI requires `mlflow server`.
 > \*\* DVC tracks data/model files via git, but does not capture uncommitted code changes or local-only commits.
 
-vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite. It's for researchers who want **lightweight, local-first experiment tracking** -- anchored to your git commits, but stored as plain files on disk (or S3), never committed -- alongside their version management, without spinning up servers, creating cloud accounts, or leaving the terminal.
+vmn gives you the CLI-first, local-first workflow **and** a web UI when you want one. `vmn ui` (`pip install vmn[ui]`) serves a dashboard over the files you already have -- experiment leaderboards, live training curves, side-by-side run comparison with a real code diff, an artifact browser, and a **stamp-tree** version-DAG view that no experiment tracker has -- with no server to stand up and no cloud account. See [Web UI](#-web-ui) below.
 
 ### When to use what
 
@@ -215,8 +218,7 @@ vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite
 - You prefer local-first storage with no vendor lock-in
 
 **Use MLflow / W&B when:**
-- You need rich web visualizations and interactive charts
-- Your team relies on shared dashboards and collaboration features
+- You need cloud-hosted dashboards, team collaboration, reports, or sweeps
 - You are already invested in their ecosystem and integrations
 
 Subcommands cover the full experiment lifecycle:
@@ -525,6 +527,41 @@ vmn exp create my_model --backend s3 --bucket my-experiments \
 | `--prefix` | `vmn-experiments` | Key prefix inside the bucket |
 
 </details>
+
+---
+## 🖥️ Web UI
+
+A dashboard over the data you already have -- experiments, versions, snapshots -- with no server infrastructure and no cloud account. It reads git tags and `.vmn/` files (or S3) directly; the whole SPA ships inside the wheel.
+
+```sh
+pip install "vmn[ui]"
+cd your-project
+vmn ui               # http://127.0.0.1:8265, opens your browser
+```
+
+What it does:
+
+- **Experiment leaderboard** -- sortable metric columns (goal-aware best-first), `@N` indices matching the CLI, filter by note/metadata.
+- **Run detail** -- metadata, params vs. metrics, **live training curves** (from `step=` series), the full log timeline, and copy-paste reproduce commands.
+- **Compare** -- pick two runs for a metric-delta table plus a **real color-coded code diff**.
+- **Stamp tree** -- the version history as a DAG (nodes colored by release mode, edges from `previous_version`), root-app → services topology, and cross-repo dependency pins. *No experiment tracker has this -- it's unique to vmn's git-tag model.*
+- **Actions** -- run `vmn stamp` / `restore` / `goto` / `release` / `prune` from the browser. Each runs as a real `vmn` subprocess (so it takes the repo lock correctly), streams its log live, and shows the equivalent CLI command. Restores surface the dirty-work safety net.
+
+### Remote / team mode
+
+Run it on a shared host and point a browser at it:
+
+```sh
+vmn ui --host 0.0.0.0 --port 8265 \
+       --token "$VMN_UI_TOKEN" \
+       --data-dir /srv/vmn-ui
+```
+
+- **Workspaces** -- the server hosts many isolated checkouts. Add them by cloning a remote or attaching a path; several can be clones of the *same* repo (one per branch/user), so a stamp in one never touches another. S3 buckets register as read-only experiment sources -- no local repo required (`vmn ui --s3-bucket my-experiments`).
+- **Auth** -- a shared bearer token (`--token` / `VMN_UI_TOKEN`); put TLS and user management behind a reverse proxy.
+- **`--read-only`** disables all mutation endpoints for cautious deployments.
+
+The whole `/api/v1/...` surface is documented at `/api/docs` (OpenAPI/Swagger) for scripting without the UI. See [docs/ui.md](docs/ui.md) for deployment details.
 
 ---
 ## 📸 Snapshots
