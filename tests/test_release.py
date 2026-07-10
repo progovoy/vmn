@@ -262,7 +262,10 @@ def test_no_pr_happens_after_release(app_layout, capfd):
     captured = capfd.readouterr()
     assert (
         captured.err
-        == "[ERROR] The version 0.0.2 was already released. Will refuse to stamp prerelease version\n"
+        == "[ERROR] The version 0.0.2 was already released. "
+        "Will refuse to stamp prerelease version. "
+        "Merge or rebase onto the branch that has "
+        "the release to continue from a linear history\n"
     )
     assert err == 1
 
