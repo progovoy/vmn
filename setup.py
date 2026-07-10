@@ -21,6 +21,10 @@ setuptools.setup(
     python_requires=">=3.8",
     url="https://github.com/progovoy/vmn",
     install_requires=install_requires,
+    extras_require={
+        "ui": ["fastapi>=0.110", "uvicorn>=0.29"],
+        "s3": ["boto3"],
+    },
     package_dir={"version_stamp": "version_stamp"},
     packages=[
         "version_stamp",
@@ -28,7 +32,12 @@ setuptools.setup(
         "version_stamp.backends",
         "version_stamp.stamping",
         "version_stamp.cli",
+        "version_stamp.ui",
+        "version_stamp.ui.readers",
     ],
+    package_data={
+        "version_stamp.ui": ["static/*", "static/assets/*"],
+    },
     entry_points={"console_scripts": ["vmn = version_stamp.cli:main"]},
     data_files=[("share/doc/vmn", ["README.md"])],
     license="MIT",

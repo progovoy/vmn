@@ -38,6 +38,18 @@ jobs:
         run: |
           make check
 
+      - name: build web ui
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: build web ui assets
+        run: |
+          cd webui
+          npm ci
+          npm run build
+          ls -ltrh ../version_stamp/ui/static/
+
       - name: run vmn stamp version
         run: |
           python3 -m pip install vmn

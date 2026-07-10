@@ -35,6 +35,7 @@ VMN_ARGS = {
     "snapshot": "local",
     "experiment": "local",
     "exp": "local",
+    "ui": "local",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()

@@ -93,6 +93,14 @@ def vmn_run(command_line=None):
         VMN_LOGGER.error("Logged exception: ", exc_info=True)
         return 1, None
 
+    # `vmn ui` is a long-running server over N workspaces: it must not resolve
+    # a single root path, take the repo lock, or build a VMNContainer.
+    if args.command == "ui":
+        from version_stamp.ui.cli import handle_ui
+
+        init_stamp_logger(debug=args.debug)
+        return handle_ui(args), None
+
     try:
         if args.command == "show":
             init_stamp_logger(debug=args.debug, supress_stdout=True)

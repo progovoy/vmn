@@ -4,3 +4,4 @@ include tests/requirements.txt
 include CONTRIBUTING.md
 include CODE_OF_CONDUCT.md
 recursive-include docs *.md
+recursive-include version_stamp/ui/static *

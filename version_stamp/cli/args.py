@@ -536,6 +536,42 @@ def _add_experiment_parser(subprasers, name):
     pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
 
 
+def add_arg_ui(subprasers):
+    pui = subprasers.add_parser(
+        "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
+    )
+    pui.add_argument("--host", default="127.0.0.1", help="Bind address")
+    pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
+    pui.add_argument(
+        "--token", default=None,
+        help="Bearer token required for API access (or VMN_UI_TOKEN env)",
+    )
+    pui.add_argument(
+        "--data-dir", default=None,
+        help="Server data dir for the workspace registry and index "
+        "(default: ~/.vmn-ui)",
+    )
+    pui.add_argument(
+        "--repo", action="append", default=None,
+        help="Attach a local checkout as a workspace (repeatable)",
+    )
+    pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
+    pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
+    pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
+    pui.add_argument(
+        "--read-only", action="store_true", default=False,
+        help="Disable all mutation endpoints",
+    )
+    pui.add_argument(
+        "--no-browser", action="store_true", default=False,
+        help="Do not open a browser on start",
+    )
+    pui.add_argument(
+        "--no-index", action="store_true", default=False,
+        help="Disable the SQLite read cache (always read directly)",
+    )
+
+
 def add_arg_experiment(subprasers):
     _add_experiment_parser(subprasers, "experiment")
 
