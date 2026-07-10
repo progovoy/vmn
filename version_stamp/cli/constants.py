@@ -17,6 +17,7 @@ IGNORED_FILES = [
     f"{LOG_FILENAME}*",
     CACHE_FILENAME,
     GLOBAL_LOG_FILENAME,
+    "untracked_hash.cache",
     "*/snapshots/",
     "*/experiments/",
 ]

@@ -1132,3 +1132,193 @@ def test_cached_storage_raises_on_remote_save_artifact_file_failure(
 
     with pytest.raises(Exception, match="S3 permission denied"):
         cached.save_artifact_file(_TEST_APP, _TEST_VERSTR, artifact_path)
+
+
+# ---------------------------------------------------------------------------
+# W1: verstr determinism (B1), legacy-metadata skip (B4), remote-less export (B3)
+# ---------------------------------------------------------------------------
+
+
+def _make_dirty_with_untracked(app_layout):
+    """Create a dirty tracked change plus an untracked file. Returns untracked path."""
+    app_layout.write_file_commit_and_push("test_repo_0", "tracked.txt", "initial")
+    with open(os.path.join(app_layout.repo_path, "tracked.txt"), "w") as f:
+        f.write("dirty tracked content")
+    untracked = os.path.join(app_layout.repo_path, "untracked_note.txt")
+    with open(untracked, "w") as f:
+        f.write("some untracked content\n")
+    return untracked
+
+
+def test_show_dev_matches_snapshot_create_verstr(app_layout, capfd):
+    """B1: `show --dev` and `snapshot create` must agree on the dev verstr even
+    when untracked files are present, so `vmn goto` can find the snapshot."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    _make_dirty_with_untracked(app_layout)
+
+    capfd.readouterr()
+    assert _show(app_layout.app_name, dev=True) == 0
+    show_verstr = capfd.readouterr().out.strip()
+    assert DEV_VERSION_RE.match(show_verstr), show_verstr
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    create_verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert create_verstr is not None
+
+    assert show_verstr == create_verstr
+
+    # And the snapshot is actually retrievable by the verstr show printed.
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="show", version=show_verstr) == 0
+
+
+def test_untracked_hash_stable_across_touch(app_layout, capfd):
+    """B1: the diff hash must depend on untracked *content*, not mtime, so a
+    touch leaves the verstr unchanged while a content edit changes it."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    untracked = _make_dirty_with_untracked(app_layout)
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    verstr1 = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr1 is not None
+
+    # Touch the untracked file: change mtime, keep content identical.
+    st = os.stat(untracked)
+    os.utime(untracked, ns=(st.st_atime_ns + 10**9, st.st_mtime_ns + 10**9))
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    verstr2 = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr2 == verstr1
+
+    # Change the content: verstr must change.
+    with open(untracked, "w") as f:
+        f.write("completely different untracked content\n")
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    verstr3 = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr3 is not None
+    assert verstr3 != verstr1
+
+
+def test_untracked_hash_cache_hit(app_layout):
+    """B1: `_hash_untracked_content` caches by (path, size, mtime); a second call
+    with matching stat reuses the cached digest without re-reading content."""
+    from version_stamp.cli.snapshot import _hash_untracked_content
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    f_path = os.path.join(app_layout.repo_path, "cached.txt")
+    with open(f_path, "w") as f:
+        f.write("A")
+
+    h1 = _hash_untracked_content(app_layout.repo_path)
+    assert h1 is not None
+
+    # Overwrite content with a same-length byte, then restore the original stat
+    # so the cache key (path, size, mtime) still matches.
+    st = os.stat(f_path)
+    with open(f_path, "w") as f:
+        f.write("B")
+    os.utime(f_path, ns=(st.st_atime_ns, st.st_mtime_ns))
+
+    h2 = _hash_untracked_content(app_layout.repo_path)
+    # Cache hit: returns the digest of the *original* content ("A"), not "B".
+    assert h2 == h1
+
+
+def test_snapshot_list_skips_legacy_stamp_snapshots(app_layout, capfd):
+    """B4: legacy `create_snapshots` verinfo files (no `verstr` key) live in the
+    same snapshots/ tree; list must skip them instead of raising KeyError."""
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+
+    conf = {
+        "template": "[{major}][.{minor}][.{patch}]",
+        "create_snapshots": True,
+        "deps": {
+            "../": {
+                "test_repo_0": {
+                    "vcs_type": app_layout.be_type,
+                    "remote": app_layout._app_backend.be.remote(),
+                }
+            }
+        },
+        "extra_info": False,
+    }
+    app_layout.write_conf(params["app_conf_path"], **conf)
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # Legacy stamp snapshot dir (schema without 'verstr') now exists.
+    legacy_dir = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots"
+    )
+    assert os.path.isdir(legacy_dir)
+
+    # Create a real dev snapshot on top of a dirty tree.
+    with open(os.path.join(app_layout.repo_path, "tracked_dirty.txt"), "w") as f:
+        f.write("dirty")
+    app_layout.write_file_commit_and_push("test_repo_0", "another.txt", "x")
+    with open(os.path.join(app_layout.repo_path, "another.txt"), "w") as f:
+        f.write("dirty again")
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    # list must not raise and must include the dev snapshot.
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="list") == 0
+    list_out = capfd.readouterr().out
+    assert verstr in list_out
+
+
+def test_snapshot_export_without_remote(app_layout, capfd):
+    """B3: a snapshot whose metadata has no remote URL must still export by
+    cloning from the local repository."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_file_commit_and_push("test_repo_0", "export_noremote.txt", "initial")
+
+    # Drop the git remote entirely.
+    subprocess.run(
+        ["git", "remote", "remove", "origin"],
+        cwd=app_layout.repo_path, capture_output=True,
+    )
+
+    # Dirty the tracked file (no push possible now).
+    with open(os.path.join(app_layout.repo_path, "export_noremote.txt"), "w") as f:
+        f.write("modified with no remote")
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, note="no remote") == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    export_dir = os.path.join(app_layout.repo_path, "_exported_noremote")
+    capfd.readouterr()
+    err = _snapshot(
+        app_layout.app_name, action="export", version=verstr, output=export_dir
+    )
+    assert err == 0
+    assert os.path.isfile(os.path.join(export_dir, "vmn_metadata.yml"))
+    assert os.path.isfile(os.path.join(export_dir, "export_noremote.txt"))

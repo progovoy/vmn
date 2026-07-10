@@ -4,6 +4,7 @@ import datetime
 import difflib
 import hashlib
 import io
+import json
 import os
 import shutil
 import stat as stat_module
@@ -186,6 +187,10 @@ class LocalSnapshotStorage(SnapshotStorage):
             if os.path.isfile(meta_path):
                 with open(meta_path) as f:
                     meta = yaml.safe_load(f)
+                if not isinstance(meta, dict) or "verstr" not in meta:
+                    # Legacy create_snapshots verinfo files share this tree.
+                    VMN_LOGGER.debug(f"Skipping non-snapshot metadata: {meta_path}")
+                    continue
                 results.append(meta)
         results.sort(key=lambda m: m.get("timestamp", ""))
         return results
@@ -370,6 +375,11 @@ class S3SnapshotStorage(SnapshotStorage):
                     meta = yaml.safe_load(
                         resp["Body"].read().decode("utf-8")
                     )
+                    if not isinstance(meta, dict) or "verstr" not in meta:
+                        VMN_LOGGER.debug(
+                            f"Skipping non-snapshot metadata: {meta_key}"
+                        )
+                        continue
                     results.append(meta)
                 except Exception:
                     VMN_LOGGER.warning(
@@ -648,11 +658,13 @@ def _generate_patches(backend, lightweight=False):
             )
 
     try:
-        if lightweight:
-            meta_hash = _hash_untracked_metadata(backend.repo_path)
-            if meta_hash:
-                patches["untracked_files"] = meta_hash
-        else:
+        # The dev verstr always hashes stable untracked *content* (never the
+        # tarball, whose gzip/tar headers embed mtimes), so `show --dev` and
+        # `snapshot create` agree. The tarball is storage payload only.
+        content_hash = _hash_untracked_content(backend.repo_path)
+        if content_hash:
+            patches["untracked_hash"] = content_hash
+        if not lightweight:
             untracked_tar = _collect_untracked_tarball(backend.repo_path)
             if untracked_tar:
                 patches["untracked_files"] = untracked_tar
@@ -689,11 +701,46 @@ def _generate_dep_patches(vcs, lightweight=False):
     return dep_patches
 
 
-def _hash_untracked_metadata(repo_path):
-    """Hash untracked file metadata (path + size + mtime) without reading content.
+_UNTRACKED_CACHE_FILE = "untracked_hash.cache"
 
-    Returns a bytes digest suitable for feeding into _compute_verstr, or None
-    if there are no untracked files.
+
+def _load_untracked_cache(repo_path):
+    """Load the (path,size,mtime)->content-sha cache for untracked files."""
+    cache_path = os.path.join(repo_path, ".vmn", _UNTRACKED_CACHE_FILE)
+    try:
+        with open(cache_path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _store_untracked_cache(repo_path, cache):
+    """Persist the untracked content-hash cache (best effort)."""
+    vmn_dir = os.path.join(repo_path, ".vmn")
+    if not os.path.isdir(vmn_dir):
+        return
+    try:
+        with open(os.path.join(vmn_dir, _UNTRACKED_CACHE_FILE), "w") as f:
+            json.dump(cache, f)
+    except OSError:
+        VMN_LOGGER.debug("Failed to persist untracked hash cache", exc_info=True)
+
+
+def _sha256_file(abs_path):
+    h = hashlib.sha256()
+    with open(abs_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _hash_untracked_content(repo_path):
+    """Hash untracked non-ignored files by their content, deterministically.
+
+    Returns a bytes digest over sorted ``(rel_path, content-sha256)`` pairs, or
+    None if there are no untracked files. Per-file content hashes are cached by
+    ``(size, mtime_ns)`` at ``.vmn/untracked_hash.cache`` so repeat calls (e.g.
+    ``show --dev``) stay fast without re-reading unchanged files.
     """
     result = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -702,6 +749,8 @@ def _hash_untracked_metadata(repo_path):
     if result.returncode != 0 or not result.stdout.strip():
         return None
 
+    cache = _load_untracked_cache(repo_path)
+    new_cache = {}
     h = hashlib.sha256()
     file_count = 0
     for rel_path in sorted(result.stdout.strip().split("\n")):
@@ -716,11 +765,20 @@ def _hash_untracked_metadata(repo_path):
                 continue
         except OSError:
             continue
-        h.update(f"{rel_path}\0{st.st_size}\0{st.st_mtime_ns}\n".encode())
+
+        cached = cache.get(rel_path)
+        if cached and cached[0] == st.st_size and cached[1] == st.st_mtime_ns:
+            content_sha = cached[2]
+        else:
+            content_sha = _sha256_file(abs_path)
+        new_cache[rel_path] = [st.st_size, st.st_mtime_ns, content_sha]
+        h.update(f"{rel_path}\0{content_sha}\n".encode())
         file_count += 1
 
     if file_count == 0:
         return None
+
+    _store_untracked_cache(repo_path, new_cache)
     return h.digest()
 
 
@@ -801,8 +859,8 @@ def _compute_verstr(base_version, commit_hash, patches):
         if patches.get(key):
             h.update(patches[key].encode())
             has_content = True
-    if patches.get("untracked_files"):
-        h.update(patches["untracked_files"])
+    if patches.get("untracked_hash"):
+        h.update(patches["untracked_hash"])
         has_content = True
 
     for dep_path in sorted(patches.get("deps", {})):
@@ -811,8 +869,8 @@ def _compute_verstr(base_version, commit_hash, patches):
             if dp.get(key):
                 h.update(dp[key].encode())
                 has_content = True
-        if dp.get("untracked_files"):
-            h.update(dp["untracked_files"])
+        if dp.get("untracked_hash"):
+            h.update(dp["untracked_hash"])
             has_content = True
 
     diff_hash = h.hexdigest()[:7] if has_content else "0000000"
@@ -1455,8 +1513,13 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         return 1
 
     if not remote:
-        VMN_LOGGER.error("Snapshot metadata missing remote URL")
-        return 1
+        # Local-first: a snapshot taken without a git remote is still
+        # exportable — clone the base commit from the local repository itself.
+        if vcs and getattr(vcs, "vmn_root_path", None):
+            remote = vcs.vmn_root_path
+        else:
+            VMN_LOGGER.error("Snapshot metadata missing remote URL")
+            return 1
 
     remote = _resolve_remote(remote, vcs)
 
