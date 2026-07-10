@@ -353,23 +353,28 @@ import os
 
 metrics_file = os.environ["VMN_METRICS_FILE"]
 
-def log_metric(key, value):
+def log_metric(key, value, step=None):
     with open(metrics_file, "a") as f:
-        f.write(f"{key}={value}\n")
+        prefix = f"step={step} " if step is not None else ""
+        f.write(f"{prefix}{key}={value}\n")
 
 def train():
     for epoch in range(10):
-        loss = run_one_epoch()  # your training code
+        loss = run_one_epoch()          # your training code
+        log_metric("loss", loss, step=epoch)   # per-step series -> training curve
+    log_metric("accuracy", 0.91)        # final scalar
     log_metric("loss", loss)
-    log_metric("accuracy", 0.91)
 
 if __name__ == "__main__":
     train()
 ```
 
-Numeric values are parsed as floats; anything else is kept as a string. Your
-script's own exit code becomes `vmn exp run`'s exit code, so CI can tell a failed
-training run from a successful one.
+Each line is one metrics record: `key=value [key=value …]`, optionally prefixed
+with `step=N` to build a per-step series (vmn tails the file during the run, so
+metrics appear in the experiment log live while training). Numeric values are
+parsed as floats; anything else is kept as a string. Your script's own exit code
+becomes `vmn exp run`'s exit code, so CI can tell a failed training run from a
+successful one.
 
 Works on a clean or dirty tree, and cold-starts a fresh repo (auto-init + baseline stamp).
 
@@ -496,7 +501,6 @@ experiment:
     acc:      {goal: max}
 ```
 
-(The legacy `sort: asc|desc` form is still accepted but deprecated in favor of `goal`.)
 
 ### Storage
 
@@ -526,6 +530,18 @@ vmn exp create my_model --backend s3 --bucket my-experiments \
 ## 📸 Snapshots
 
 Snapshots capture your exact working state -- uncommitted changes, local commits, untracked files -- into a deterministic dev version you can restore later. No WIP commits, no stash juggling. The newer `vmn experiment` command builds on this primitive for structured experiment tracking.
+
+### Snapshots vs experiments -- which one?
+
+An experiment *is* a snapshot plus an append-only metrics/notes log. Use a plain snapshot to save or restore code state; use an experiment when you want to track and compare runs.
+
+| | `vmn snapshot` | `vmn exp` |
+|:--|:--|:--|
+| Captures code state (tracked + untracked) | ✅ | ✅ |
+| Metrics / params / notes log | single note | ✅ append-only log |
+| Run a command and record its outcome | ❌ | ✅ (`exp run`) |
+| Compare across runs | diff only | diff + metric deltas + `compare` |
+| Typical use | saving WIP before a risky change, sharing a dev build | tracking and comparing ML/research runs |
 
 ### Dev version format
 

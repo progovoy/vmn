@@ -723,18 +723,22 @@ def test_experiment_metrics_schema_primary_default_sort(app_layout, capfd):
     assert "loss=0.3" in lines[0]
 
 
-def test_experiment_metrics_schema_legacy_sort_desc_warns(app_layout, capfd):
-    """B7: legacy `sort: desc` still works but warns about deprecation."""
+def test_experiment_metrics_schema_sort_key_removed(app_layout, capfd):
+    """Clean break: legacy `sort:` is ignored — only `goal:` drives direction.
+
+    A schema entry carrying only `sort` falls back to the default
+    (higher-is-better) without crashing or warning.
+    """
     _setup_three_experiments(
-        app_layout, capfd, {"metrics": {"acc": {"sort": "desc"}}}
+        app_layout, capfd, {"metrics": {"acc": {"sort": "asc"}}}
     )
 
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
     captured = capfd.readouterr()
     lines = [l for l in captured.out.strip().split("\n") if l.startswith("[")]
+    # Default goal (max/higher-is-better) applies; `sort: asc` has no effect.
     assert "acc=0.91" in lines[0]
-    assert "deprecated" in captured.err.lower()
 
 
 def test_experiment_create_without_git_remote(app_layout, capfd):
@@ -1074,3 +1078,154 @@ def test_exp_diff_delta_header_params_metrics(app_layout, capfd):
     assert "loss" in out
     assert "0.5" in out
     assert "0.3" in out
+
+
+# ---------------------------------------------------------------------------
+# P0 (vmn ui): metric series — step grammar, live tailing, get_metric_series
+# ---------------------------------------------------------------------------
+
+
+def test_exp_run_step_series(app_layout, capfd):
+    """Lines with a leading step=N become per-step metrics entries (a series)."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    script = (
+        "import os\n"
+        "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
+        "    f.write('step=1 loss=0.9\\n')\n"
+        "    f.write('step=2 loss=0.5\\n')\n"
+        "    f.write('step=3 loss=0.2 acc=0.8\\n')\n"
+    )
+    capfd.readouterr()
+    assert _experiment(
+        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
+    ) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    log = _exp_log(app_layout, verstr)
+    metrics_entries = [e for e in log if e.get("type") == "metrics"]
+    assert [e.get("step") for e in metrics_entries] == [1, 2, 3]
+    assert metrics_entries[0]["values"] == {"loss": 0.9}
+    assert metrics_entries[2]["values"] == {"loss": 0.2, "acc": 0.8}
+
+    from version_stamp.cli.experiment import get_metric_series
+    series = get_metric_series(log)
+    assert [(p["step"], p["value"]) for p in series["loss"]] == [
+        (1, 0.9), (2, 0.5), (3, 0.2),
+    ]
+    assert [(p["step"], p["value"]) for p in series["acc"]] == [(3, 0.8)]
+
+    # Folded latest metrics still reflect the last value per key.
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version=verstr) == 0
+    out = capfd.readouterr().out
+    assert "loss: 0.2" in out
+
+
+def test_exp_run_scalar_metric_lines(app_layout, capfd):
+    """Plain key=value lines (no step) each become a step-less metrics entry."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    script = (
+        "import os\n"
+        "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
+        "    f.write('loss=0.11\\n')\n"
+        "    f.write('acc=0.97 f1=0.9\\n')\n"
+    )
+    capfd.readouterr()
+    assert _experiment(
+        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
+    ) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    log = _exp_log(app_layout, verstr)
+    metrics_entries = [e for e in log if e.get("type") == "metrics"]
+    assert len(metrics_entries) == 2
+    assert all("step" not in e for e in metrics_entries)
+    assert metrics_entries[0]["values"] == {"loss": 0.11}
+    assert metrics_entries[1]["values"] == {"acc": 0.97, "f1": 0.9}
+
+
+def test_get_metric_series_unit():
+    """get_metric_series folds a log into per-metric point lists."""
+    from version_stamp.cli.experiment import get_metric_series
+
+    log = [
+        {"timestamp": "t0", "type": "create", "note": "x"},
+        {"timestamp": "t1", "type": "metrics", "step": 1, "values": {"loss": 0.9}},
+        {"timestamp": "t2", "type": "metrics", "step": 2,
+         "values": {"loss": 0.4, "acc": 0.7}},
+        {"timestamp": "t3", "type": "metrics", "values": {"final_score": 0.95}},
+        {"timestamp": "t4", "type": "note", "text": "irrelevant"},
+    ]
+    series = get_metric_series(log)
+    assert series["loss"] == [
+        {"step": 1, "ts": "t1", "value": 0.9},
+        {"step": 2, "ts": "t2", "value": 0.4},
+    ]
+    assert series["acc"] == [{"step": 2, "ts": "t2", "value": 0.7}]
+    assert series["final_score"] == [{"step": None, "ts": "t3", "value": 0.95}]
+
+
+def test_metrics_tailer_incremental_reads(tmp_path):
+    """The tailer consumes only complete new lines on each poll."""
+    from version_stamp.cli.experiment import _MetricsTailer
+
+    p = tmp_path / "metrics.txt"
+    p.write_text("")
+    tailer = _MetricsTailer(str(p))
+
+    assert tailer.poll() == []
+
+    with open(p, "a") as f:
+        f.write("step=1 loss=0.9\nstep=2 lo")  # second line incomplete
+    batch = tailer.poll()
+    assert batch == [(1, {"loss": 0.9})]
+
+    with open(p, "a") as f:
+        f.write("ss=0.5\nacc=0.8\n")
+    batch = tailer.poll()
+    assert batch == [(2, {"loss": 0.5}), (None, {"acc": 0.8})]
+
+    # Nothing new — nothing returned.
+    assert tailer.poll() == []
+
+
+def test_exp_run_tails_metrics_during_run(app_layout, capfd):
+    """Metrics written mid-run are in the log while the child is still alive.
+
+    The child writes a metric, then waits for the log to contain it (observed
+    via a poll loop reading its own experiment's log.yml), then exits 0 —
+    so a pass proves live tailing, not post-exit parsing.
+    """
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    script = (
+        "import os, time, sys\n"
+        "root = os.getcwd()\n"
+        "app = os.environ['VMN_APP_NAME']\n"
+        "verstr = os.environ['VMN_EXPERIMENT_ID'].replace('+', '_plus_')\n"
+        "log_path = os.path.join(root, '.vmn', app, 'experiments', verstr, 'log.yml')\n"
+        "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
+        "    f.write('step=1 live=1.0\\n')\n"
+        "deadline = time.time() + 30\n"
+        "while time.time() < deadline:\n"
+        "    try:\n"
+        "        if 'live' in open(log_path).read():\n"
+        "            sys.exit(0)\n"
+        "    except OSError:\n"
+        "        pass\n"
+        "    time.sleep(0.2)\n"
+        "sys.exit(7)\n"
+    )
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
+    )
+    assert ret == 0, "child timed out waiting to observe its own live metric"

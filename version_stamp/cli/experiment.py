@@ -92,6 +92,83 @@ def _parse_metrics(metrics_list):
     return result
 
 
+def _parse_metric_line(line):
+    """Parse one metrics-file line into ``(step_or_None, values)``.
+
+    Grammar: ``[step=N] key=value [key=value ...]``. Returns None for lines
+    with no metric values.
+    """
+    tokens = line.split()
+    step = None
+    if tokens and tokens[0].startswith("step="):
+        try:
+            step = int(tokens[0][len("step="):])
+            tokens = tokens[1:]
+        except ValueError:
+            pass  # "step" used as a metric name; leave tokens intact
+    values = _parse_metrics(tokens)
+    if not values:
+        return None
+    return step, values
+
+
+class _MetricsTailer:
+    """Incrementally consume complete lines appended to the metrics file.
+
+    Each ``poll()`` returns the newly completed lines as parsed
+    ``(step, values)`` tuples; a trailing partial line stays buffered until
+    its newline arrives.
+    """
+
+    def __init__(self, path):
+        self._path = path
+        self._offset = 0
+
+    def poll(self):
+        try:
+            with open(self._path) as f:
+                f.seek(self._offset)
+                chunk = f.read()
+        except OSError:
+            return []
+        if not chunk:
+            return []
+
+        complete, sep, _partial = chunk.rpartition("\n")
+        if not sep:
+            return []  # no complete line yet
+        self._offset += len(complete) + 1
+
+        records = []
+        for line in complete.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            parsed = _parse_metric_line(line)
+            if parsed:
+                records.append(parsed)
+        return records
+
+
+def get_metric_series(log):
+    """Fold a log into per-metric point lists for charting.
+
+    Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
+    log order.
+    """
+    series = {}
+    for entry in log:
+        if entry.get("type") != "metrics":
+            continue
+        step = entry.get("step")
+        ts = entry.get("timestamp")
+        for key, value in (entry.get("values") or {}).items():
+            series.setdefault(key, []).append(
+                {"step": step, "ts": ts, "value": value}
+            )
+    return series
+
+
 def _parse_notes_file(path):
     """Read a YAML file and return as dict."""
     with open(path) as f:
@@ -127,24 +204,16 @@ def _metric_sort_descending(schema, key):
     """Whether metric ``key`` sorts best-first as descending (higher is better).
 
     Driven by ``goal: min|max`` in the metrics schema (``max`` = higher-is-better
-    = descending). Legacy ``sort: asc|desc`` is still honored with a deprecation
-    warning. Unspecified metrics default to higher-is-better.
+    = descending). Unspecified metrics default to higher-is-better.
     """
     entry = (schema or {}).get(key, {}) or {}
-    if "goal" in entry:
-        goal = entry.get("goal")
-        if goal not in ("min", "max"):
-            VMN_LOGGER.warning(
-                f"Invalid goal '{goal}' for metric '{key}'; using 'max'"
-            )
-            goal = "max"
-        return goal == "max"
-    if "sort" in entry:
-        VMN_LOGGER.warning(
-            f"experiment metric '{key}': 'sort' is deprecated, use goal: min|max"
-        )
-        return entry.get("sort", "asc") == "desc"
-    return True
+    goal = entry.get("goal")
+    if goal is None:
+        return True
+    if goal not in ("min", "max"):
+        VMN_LOGGER.warning(f"Invalid goal '{goal}' for metric '{key}'; using 'max'")
+        goal = "max"
+    return goal == "max"
 
 
 def _get_latest_metrics(log):
@@ -393,34 +462,49 @@ def experiment_run(vcs, params, storage, args):
     env["VMN_METRICS_FILE"] = metrics_path
 
     VMN_LOGGER.info(f"Experiment {verstr}: running {' '.join(run_cmd)}")
+    tailer = _MetricsTailer(metrics_path)
     start = time.monotonic()
     try:
-        proc = subprocess.run(run_cmd, env=env, cwd=vcs.vmn_root_path)
-        exit_code = proc.returncode
+        proc = subprocess.Popen(run_cmd, env=env, cwd=vcs.vmn_root_path)
     except FileNotFoundError:
         VMN_LOGGER.error(f"Command not found: {run_cmd[0]}")
         _safe_unlink(metrics_path)
         return 1
+
+    # Tail the metrics file for the whole run so the log is live during
+    # training; a final drain after exit catches the tail.
+    while proc.poll() is None:
+        _ingest_metric_records(storage, vcs.name, verstr, tailer.poll())
+        time.sleep(_METRICS_TAIL_INTERVAL)
+    exit_code = proc.returncode
     duration = round(time.monotonic() - start, 3)
+
+    _ingest_metric_records(storage, vcs.name, verstr, tailer.poll())
+    _safe_unlink(metrics_path)
 
     _append_to_log(storage, vcs.name, verstr, _create_log_entry(
         "run", command=run_cmd, exit_code=exit_code, duration_sec=duration,
     ))
 
-    try:
-        with open(metrics_path) as f:
-            metric_lines = [l.strip() for l in f if l.strip()]
-    except OSError:
-        metric_lines = []
-    _safe_unlink(metrics_path)
-    if metric_lines:
-        _append_to_log(storage, vcs.name, verstr, _create_log_entry(
-            "metrics", values=_parse_metrics(metric_lines),
-        ))
-
     VMN_LOGGER.info(f"Experiment {verstr}: exited {exit_code} in {duration}s")
     print(verstr)
     return exit_code
+
+
+_METRICS_TAIL_INTERVAL = 0.5  # seconds between metrics-file polls during a run
+
+
+def _ingest_metric_records(storage, app_name, verstr, records):
+    """Append one metrics log entry per parsed (step, values) record."""
+    if not records:
+        return
+    log = _load_log(storage, app_name, verstr)
+    for step, values in records:
+        entry = _create_log_entry("metrics", values=values)
+        if step is not None:
+            entry["step"] = step
+        log.append(entry)
+    _save_log(storage, app_name, verstr, log)
 
 
 def _safe_unlink(path):
