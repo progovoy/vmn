@@ -69,6 +69,15 @@ def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix)
                 f"{template[f'{octat}_template'].format(**d)}"
             )
 
+    if (
+        props.dev_commit is not None
+        and "dev_commit_template" in template
+        and template["dev_commit_template"] is not None
+    ):
+        formatted_version += template["dev_commit_template"].format(
+            dev_commit=props.dev_commit, dev_diff_hash=props.dev_diff_hash
+        )
+
     return formatted_version
 
 
@@ -105,6 +114,8 @@ def serialize_vmn_version(
     rcn=None,
     buildmetadata=None,
     hide_zero_hotfix=False,
+    dev_commit=None,
+    dev_diff_hash=None,
 ):
     props = deserialize_vmn_version(base_verstr)
     base_verstr = serialize_vmn_base_version(
@@ -144,6 +155,19 @@ def serialize_vmn_version(
 
         if rcn is not None:
             vmn_version = f"{vmn_version}.{rcn}"
+
+    if props.dev_commit is not None:
+        if dev_commit is not None:
+            VMN_LOGGER.warning(
+                "Tried to serialize verstr containing "
+                "dev component but also tried to append"
+                " another dev component. Will ignore it"
+            )
+        dev_commit = props.dev_commit
+        dev_diff_hash = props.dev_diff_hash
+
+    if dev_commit is not None:
+        vmn_version = f"{vmn_version}-dev.{dev_commit}.{dev_diff_hash}"
 
     if buildmetadata is not None:
         vmn_version = f"{vmn_version}+{buildmetadata}"
@@ -213,6 +237,8 @@ def deserialize_tag_name(some_tag):
         prerelease=ver_props.prerelease,
         rcn=ver_props.rcn,
         buildmetadata=ver_props.buildmetadata,
+        dev_commit=ver_props.dev_commit,
+        dev_diff_hash=ver_props.dev_diff_hash,
         old_ver_format=ver_props.old_ver_format,
         app_name=app_name,
         old_tag_format=old_tag_format,
@@ -261,6 +287,11 @@ def deserialize_vmn_version(verstr):
         ret.prerelease = gdict["prerelease"]
         ret.rcn = int(gdict["rcn"])
         ret.types.add("prerelease")
+
+    if gdict.get("dev_commit") is not None:
+        ret.dev_commit = gdict["dev_commit"]
+        ret.dev_diff_hash = gdict["dev_diff_hash"]
+        ret.types.add("dev")
 
     if gdict["buildmetadata"] is not None:
         ret.buildmetadata = gdict["buildmetadata"]

@@ -27,8 +27,12 @@ from version_stamp.cli.commands import (  # noqa: F401
     handle_gen,
     handle_goto,
     handle_add,
+    handle_snapshot,
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
+from version_stamp.cli.experiment import handle_experiment  # noqa: F401
+
+handle_exp = handle_experiment  # alias  # noqa: F811
 
 
 class VMNContainer(object):
@@ -172,6 +176,14 @@ def _vmn_run(args, root_path):
     if VMN_ARGS[vmnc.args.command] == "remote" or (
         "pull" in vmnc.args and vmnc.args.pull
     ):
+        if vmnc.vcs.backend.selected_remote is None:
+            VMN_LOGGER.error(
+                f"No git remote is configured. vmn requires a remote to "
+                f"'{vmnc.args.command}'. Add one with "
+                "'git remote add origin <url>'."
+            )
+            return 1, vmnc
+
         err = vmnc.vcs.backend.prepare_for_remote_operation()
         if err:
             VMN_LOGGER.error(

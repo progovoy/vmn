@@ -17,6 +17,8 @@ IGNORED_FILES = [
     f"{LOG_FILENAME}*",
     CACHE_FILENAME,
     GLOBAL_LOG_FILENAME,
+    "*/snapshots/",
+    "*/experiments/",
 ]
 
 VMN_ARGS = {
@@ -29,6 +31,9 @@ VMN_ARGS = {
     "gen": "local",
     "add": "remote",
     "config": "local",
+    "snapshot": "local",
+    "experiment": "remote",
+    "exp": "remote",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()

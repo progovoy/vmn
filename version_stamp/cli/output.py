@@ -96,6 +96,32 @@ def show(vcs, params, verstr=None):
     if params.get("display_type"):
         data["type"] = ver_info["stamping"]["app"]["prerelease"]
 
+    if params.get("dev") and not params.get("from_file") and dirty_states:
+        try:
+            from version_stamp.cli.snapshot import (
+                _generate_patches, _generate_dep_patches, _compute_verstr,
+            )
+
+            commit_hash = vcs.backend.changeset()
+            patches = _generate_patches(vcs.backend, lightweight=True)
+            dep_patches = _generate_dep_patches(vcs, lightweight=True)
+            if dep_patches:
+                patches["deps"] = dep_patches
+
+            base_version = ver_info["stamping"]["app"]["_version"]
+            if patches:
+                dev_ver = _compute_verstr(base_version, commit_hash, patches)
+            else:
+                dev_ver = f"{base_version}-dev.{commit_hash[:7]}.0000000"
+
+            parts = dev_ver.rsplit("-dev.", 1)
+            if len(parts) == 2:
+                dev_parts = parts[1].split(".")
+                params["_dev_commit"] = dev_parts[0]
+                params["_dev_diff_hash"] = dev_parts[1]
+        except Exception:
+            VMN_LOGGER.debug("Failed to compute dev hashes", exc_info=True)
+
     if vcs.root_context:
         out = _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info)
     else:
@@ -108,6 +134,10 @@ def show(vcs, params, verstr=None):
     return out
 
 
+def _build_dev_version(base_version, dev_commit, dev_diff_hash):
+    return f"{base_version}-dev.{dev_commit}.{dev_diff_hash}"
+
+
 def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data.update(ver_info["stamping"]["app"])
     props = VMNBackend.deserialize_vmn_tag_name(tag_name)
@@ -118,9 +148,15 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data["unique_id"] = VMNBackend.gen_unique_id(
         verstr, data["changesets"]["."]["hash"]
     )
+    is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
+
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
+        if is_dev:
+            data["dev_version"] = _build_dev_version(
+                data["version"], params["_dev_commit"], params["_dev_diff_hash"]
+            )
         out = yaml.dump(data)
     else:
         out = data["version"]
@@ -133,8 +169,13 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
                 out, data["changesets"]["."]["hash"]
             )
 
+        if is_dev:
+            out = _build_dev_version(
+                out, params["_dev_commit"], params["_dev_diff_hash"]
+            )
+
         d_out = {}
-        if dirty_states:
+        if dirty_states and not is_dev:
             d_out.update(
                 {
                     "out": out,
@@ -171,17 +212,28 @@ def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
         raise RuntimeError()
 
     data.update(ver_info["stamping"]["root_app"])
+    is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
+
     out = None
     if params.get("verbose"):
         if dirty_states:
             data["dirty"] = dirty_states
+        if is_dev:
+            data["dev_version"] = _build_dev_version(
+                str(data["version"]), params["_dev_commit"], params["_dev_diff_hash"]
+            )
 
         out = yaml.dump(data)
     else:
         out = data["version"]
 
+        if is_dev:
+            out = _build_dev_version(
+                str(out), params["_dev_commit"], params["_dev_diff_hash"]
+            )
+
         d_out = {}
-        if dirty_states:
+        if dirty_states and not is_dev:
             d_out.update(
                 {
                     "out": out,
@@ -350,11 +402,55 @@ def get_dirty_states(optional_status, status):
     return dirty_states
 
 
+def _goto_dev_version(vcs, params, version):
+    """Handle goto for dev versions: checkout base commit + apply snapshot patches."""
+    from version_stamp.cli.snapshot import (
+        LocalSnapshotStorage,
+        get_snapshot_storage,
+        _apply_snapshot_patches,
+    )
+
+    storage = LocalSnapshotStorage(vcs.vmn_root_path)
+    metadata, patches = storage.load(vcs.name, version)
+
+    if metadata is None:
+        conf_storage = getattr(vcs, 'snapshot_storage', None) or {}
+        if conf_storage.get("bucket"):
+            try:
+                s3_storage = get_snapshot_storage(
+                    "s3",
+                    bucket=conf_storage["bucket"],
+                    prefix=conf_storage.get("prefix", "vmn-snapshots"),
+                    endpoint_url=conf_storage.get("endpoint_url"),
+                )
+                metadata, patches = s3_storage.load(vcs.name, version)
+            except Exception:
+                VMN_LOGGER.debug("S3 snapshot load failed", exc_info=True)
+
+    if metadata is None:
+        VMN_LOGGER.error(
+            f"Snapshot {version} not found locally or in configured storage"
+        )
+        return 1
+
+    return _apply_snapshot_patches(vcs, params, metadata, patches)
+
+
 @measure_runtime_decorator
 def goto_version(vcs, params, version, pull):
     unique_id = None
     check_unique = False
     status_str = ""
+
+    # Handle dev versions via snapshot restore
+    if version is not None:
+        try:
+            from version_stamp.core.version_math import deserialize_vmn_version
+            _props = deserialize_vmn_version(version)
+            if "dev" in _props.types:
+                return _goto_dev_version(vcs, params, version)
+        except Exception:
+            pass
 
     if version is None:
         if not params["deps_only"]:
@@ -525,7 +621,8 @@ def _update_repo(args):
 
         if pull:
             try:
-                client.checkout_branch()
+                if not client.in_detached_head():
+                    client.checkout_branch()
                 client.pull()
             except Exception:
                 VMN_LOGGER.exception("Failed to pull:", exc_info=True)
@@ -556,11 +653,11 @@ def _update_repo(args):
             VMN_LOGGER.info(
                 "Updated {0} to {1}".format(rel_path, changeset)
             )
-    except Exception:
+    except Exception as e:
+        reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
-            f"Trying to abort update operation in {path} "
-            "Reason:\n",
+            f"Trying to abort update operation in {path}\nReason: {reason}\n",
             exc_info=True,
         )
 
@@ -571,7 +668,7 @@ def _update_repo(args):
                 "Unexpected behaviour when tried to revert:", exc_info=True
             )
 
-        return {"repo": rel_path, "status": 1, "description": None}
+        return {"repo": rel_path, "status": 1, "description": reason}
 
     return {"repo": rel_path, "status": 0, "description": None}
 
@@ -676,11 +773,20 @@ def _goto_version(deps, vmn_root_path, pull):
     with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
         results = p.map(_update_repo, args)
 
+    has_missing_objects = False
     for res in results:
         if res["status"] == 1:
             err = True
             if res["repo"] is None and res["description"] is None:
                 continue
+
+            desc = res.get("description") or ""
+            if any(p in desc for p in (
+                "reference is not a tree",
+                "unable to read tree",
+                "did not match any",
+            )):
+                has_missing_objects = True
 
             msg = "Failed to update "
             if res["repo"] is not None:
@@ -691,6 +797,12 @@ def _goto_version(deps, vmn_root_path, pull):
             VMN_LOGGER.warning(msg)
 
     if err:
+        if not pull and has_missing_objects:
+            VMN_LOGGER.error(
+                "Some repositories are missing the required commits locally. "
+                "Re-run with --pull to fetch them."
+            )
+
         VMN_LOGGER.error(
             "Failed to update one or more " "of the required repos. See log above"
         )

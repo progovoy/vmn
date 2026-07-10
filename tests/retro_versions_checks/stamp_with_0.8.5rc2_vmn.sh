@@ -19,7 +19,7 @@ vmn stamp --orm patch --pr staging app1
 echo a >> a.txt ; git add a.txt ; git commit -m "txt" ; git push origin
 vmn stamp --orm patch --pr staging app1
 echo a >> a.txt ; git add a.txt ; git commit -m "txt" ; git push origin
-# result: 2.3.3-staging2
+# result: 2.3.2-staging2
 
 # last_known_version file:
 #

@@ -105,8 +105,10 @@ class GitBackend(
         self.add_git_user_cfg_if_missing()
 
         # TODO:: make selected_remote configurable.
-        # Currently just selecting the first one
-        self.selected_remote = self._be.remotes[0]
+        # Currently just selecting the first one. None when no remote is
+        # configured — local read commands still work; remote-requiring
+        # commands fail fast (see cli/entry.py).
+        self.selected_remote = self._be.remotes[0] if self._be.remotes else None
         self.repo_path = repo_path
         self.active_branch = self.get_active_branch()
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
@@ -171,9 +173,13 @@ class GitBackend(
 
         try:
             hash = client.head.commit.hexsha
-            remote = tuple(client.remotes[0].urls)[0]
-            if os.path.isdir(remote):
-                remote = os.path.relpath(remote, client.working_dir)
+            if client.remotes:
+                remote = tuple(client.remotes[0].urls)[0]
+                if os.path.isdir(remote):
+                    remote = os.path.relpath(remote, client.working_dir)
+            else:
+                # No remote configured — keep the repo entry, just no remote URL.
+                remote = None
         except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None

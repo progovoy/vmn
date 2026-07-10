@@ -293,8 +293,7 @@ class FSAppLayoutFixture(object):
         previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
 
         if not os.path.exists(previous_stamper_dir):
-            LOGGER.info("No previous VMN stamper found")
-            return
+            pytest.skip("No previous VMN stamper found")
 
         if not os.access(previous_stamper_dir, os.X_OK):
             raise RuntimeError(
@@ -309,6 +308,15 @@ class FSAppLayoutFixture(object):
                 f"Add it to _VMN_VERSION_TO_GIT_TAG in conftest.py"
             )
 
+        # Check Docker availability before attempting anything
+        ret = subprocess.call(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if ret != 0:
+            pytest.skip("Docker is not available")
+
         base_cmd = [
             previous_stamper_dir,
             vmn_version,
@@ -316,7 +324,12 @@ class FSAppLayoutFixture(object):
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
-        subprocess.call(base_cmd)
+        ret = subprocess.call(base_cmd)
+        if ret != 0:
+            raise RuntimeError(
+                f"Failed to build previous vmn stamper Docker image "
+                f"for version {vmn_version} (exit code {ret})"
+            )
 
         base_cmd = [
             "docker",
@@ -333,8 +346,12 @@ class FSAppLayoutFixture(object):
         ]
 
         LOGGER.info("going to run: {}".format(" ".join(base_cmd)))
-        subprocess.call(base_cmd, cwd=self.repo_path)
-        pass
+        ret = subprocess.call(base_cmd, cwd=self.repo_path)
+        if ret != 0:
+            raise RuntimeError(
+                f"Failed to run previous vmn stamper Docker container "
+                f"for version {vmn_version} (exit code {ret})"
+            )
 
     def revert_changes(self, repo_name):
         if repo_name not in self._repos:
@@ -427,6 +444,7 @@ class FSAppLayoutFixture(object):
         extra_info=None,
         version_backends=None,
         create_verinfo_files=None,
+        create_snapshots=None,
         policies=None,
         conventional_commits=None,
         default_release_mode=None,
@@ -446,6 +464,8 @@ class FSAppLayoutFixture(object):
                 data["conf"]["version_backends"] = version_backends
             if create_verinfo_files is not None:
                 data["conf"]["create_verinfo_files"] = create_verinfo_files
+            if create_snapshots is not None:
+                data["conf"]["create_snapshots"] = create_snapshots
             if policies is not None:
                 data["conf"]["policies"] = policies
             if conventional_commits is not None:
