@@ -108,7 +108,9 @@ def sort_rows(rows, schema, sort=None, last=None):
         )
 
     if sort and sort in all_keys:
-        desc = _metric_sort_descending(schema, sort) if schema else False
+        # Match `vmn exp list`: a metric drives direction only via its own
+        # schema entry; a key absent from the schema sorts ascending.
+        desc = _metric_sort_descending(schema, sort) if sort in (schema or {}) else False
         rows.sort(key=_key(sort), reverse=desc)
     elif not sort and schema:
         primary = next((k for k, v in schema.items() if v.get("primary")), None)

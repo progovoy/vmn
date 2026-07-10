@@ -94,6 +94,42 @@ def test_ui_leaderboard_matches_cli_sort(app_layout, capfd):
     assert api_order == cli_order
 
 
+def test_ui_leaderboard_sort_unschemad_key_matches_cli(app_layout, capfd):
+    """A sort key present in data but absent from a configured schema sorts
+    ascending — same as the CLI (regression guard for CLI/UI drift)."""
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        template="[{major}][.{minor}][.{patch}]",
+        experiment={"metrics": {"acc": {"goal": "max"}}},
+    )
+    _stamp_app(app_layout.app_name, "patch")
+
+    for i in range(3):
+        _make_dirty(app_layout, f"uk_{i}.txt", f"c{i}")
+        capfd.readouterr()
+        _experiment(app_layout.app_name, note=f"r{i}", metrics=[f"loss=0.{i + 1}"])
+
+    client = _client(app_layout)
+    api_order = [
+        r["verstr"]
+        for r in client.get(
+            f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
+            "?sort=loss"
+        ).json()
+    ]
+
+    capfd.readouterr()
+    _experiment(app_layout.app_name, action="list", sort="loss")
+    cli_order = [
+        l.split()[1]
+        for l in capfd.readouterr().out.strip().split("\n")
+        if l.startswith("[")
+    ]
+    assert api_order == cli_order
+
+
 def test_ui_experiment_detail_and_series(app_layout, capfd):
     verstrs = _seed_experiments(app_layout, capfd, n=1)
     client = _client(app_layout)
