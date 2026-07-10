@@ -12,3 +12,6 @@ ruff; python_version >= "3.7"
 mypy
 boto3
 moto[s3]
+fastapi
+httpx
+uvicorn
