@@ -11,6 +11,7 @@ export function AppLayoutNav() {
       <NavLink to={`/ws/${ws}/app/${app}`} end>experiments</NavLink>
       <NavLink to={`/ws/${ws}/app/${app}/snapshots`}>snapshots</NavLink>
       <NavLink to={`/ws/${ws}/app/${app}/tree`}>stamp tree</NavLink>
+      <NavLink to={`/ws/${ws}/app/${app}/actions`}>actions</NavLink>
     </nav>
   );
 }

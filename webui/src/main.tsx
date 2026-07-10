@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App";
+import Actions from "./pages/Actions";
 import { AppsPage, WorkspacesHome } from "./pages/Dashboard";
 import Compare from "./pages/Compare";
 import Leaderboard from "./pages/Leaderboard";
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: "ws/:ws/app/:app/compare", element: <Compare /> },
       { path: "ws/:ws/app/:app/snapshots", element: <Snapshots /> },
       { path: "ws/:ws/app/:app/tree", element: <Tree /> },
+      { path: "ws/:ws/app/:app/actions", element: <Actions /> },
     ],
   },
 ]);

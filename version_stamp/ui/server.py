@@ -23,9 +23,12 @@ API_PREFIX = "/api/v1"
 
 
 def create_app(manager, token=None, read_only=False, use_index=True):
+    from version_stamp.ui.jobs import JobRunner, build_command
+
     app = FastAPI(title="vmn ui", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.manager = manager
     app.state.read_only = read_only
+    jobs = JobRunner()
 
     indexes = {}
 
@@ -124,6 +127,30 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         if index:
             return index.list_versions(app_name)
         return ver_reader.list_versions(ws.path, app_name)
+
+    @app.post(
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",
+        status_code=202,
+    )
+    def run_action(ws_name: str, app_tag: str, action: str, body: dict = None):
+        if read_only:
+            raise HTTPException(403, "Server is read-only")
+        ws = _git_workspace(ws_name)
+        app_name = tag_name_to_app_name(app_tag)
+        command, err = build_command(action, app_name, body)
+        if err:
+            raise HTTPException(400, err)
+        job, err = jobs.submit(ws_name, ws.path, command)
+        if err:
+            raise HTTPException(409, err)
+        return job
+
+    @app.get(f"{API_PREFIX}/jobs/{{job_id}}")
+    def get_job(job_id: str):
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "Job not found")
+        return job
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff")
     def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
