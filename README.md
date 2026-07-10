@@ -547,6 +547,31 @@ What it does:
 - **Stamp tree** -- the version history as a DAG (nodes colored by release mode, edges from `previous_version`), root-app → services topology, and cross-repo dependency pins. *No experiment tracker has this -- it's unique to vmn's git-tag model.*
 - **Actions** -- run `vmn stamp` / `restore` / `goto` / `release` / `prune` from the browser. Each runs as a real `vmn` subprocess (so it takes the repo lock correctly), streams its log live, and shows the equivalent CLI command. Restores surface the dirty-work safety net.
 
+### Using it
+
+Open the URL and pick a workspace (top-left) -- locally there's just the one repo you started it in. Click into a workspace to see its apps, then click an app for the **experiment leaderboard**: one row per `vmn exp run` / `exp create`, columns are whatever metrics you logged, click a header to sort. The tab bar switches between **experiments**, **snapshots**, **stamp tree**, and **actions** for that app.
+
+Click any leaderboard row for the **run detail** page (metadata, metrics, training curves, full log, reproduce commands). Check two rows to reveal **Compare selected** -- a metric-delta table plus the real code diff between them.
+
+To get training curves, have your script log `step=`-tagged lines to `$VMN_METRICS_FILE` (see the [`train.py` example](#run) above) -- `exp run` tails the file live, so the curve updates in the UI *during* training, not just after.
+
+The **stamp tree** tab renders your version history as a colored graph (release mode = color); click a node for its details. Root apps also show a service-topology table. The **actions** tab has a form to run `vmn stamp` (with a dry-run preview) as a real subprocess, streaming its log back to you; restore/goto actions live on a run's detail page and auto-save any dirty work first.
+
+### Developing the UI
+
+An editable install picks up Python changes immediately; only the SPA needs an explicit rebuild:
+
+```sh
+pip install -e ".[ui]"
+vmn ui --no-browser        # leave running
+
+# edit Python under version_stamp/ui/  -> just refresh the browser
+# edit webui/src/...                   -> rebuild, then refresh (no restart needed)
+cd webui && npm run build
+```
+
+`npm run build` writes straight into `version_stamp/ui/static/`, which the running server reads from disk on every request.
+
 ### Remote / team mode
 
 Run it on a shared host and point a browser at it:
