@@ -996,3 +996,81 @@ def test_exp_run_cold_start_fresh_repo(app_layout, capfd):
     capfd.readouterr()
     assert _experiment("cold_model", action="list") == 0
     assert verstr in capfd.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# W9: first-class exp diff (real tree diff + delta header)
+# ---------------------------------------------------------------------------
+
+
+def _two_experiments_shared_base(app_layout, capfd):
+    """Two experiments over the same base commit, differing in shared.txt +
+    metrics. Returns (v_alpha, v_beta)."""
+    app_layout.write_file_commit_and_push("test_repo_0", "shared.txt", "base line")
+    p = os.path.join(app_layout.repo_path, "shared.txt")
+
+    with open(p, "w") as f:
+        f.write("ALPHA_MARKER_LINE\n")
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="alpha", metrics=["loss=0.5"])
+    v_alpha = extract_dev_verstr(capfd.readouterr().out)
+
+    with open(p, "w") as f:
+        f.write("BETA_MARKER_LINE\n")
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="beta", metrics=["loss=0.3"])
+    v_beta = extract_dev_verstr(capfd.readouterr().out)
+    return v_alpha, v_beta
+
+
+def test_exp_diff_real_tree_diff_output(app_layout, capfd):
+    """exp diff shows the actual changed source lines, not patch-file syntax."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v_alpha, v_beta = _two_experiments_shared_base(app_layout, capfd)
+
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="diff", version=[v_alpha, v_beta],
+    )
+    assert ret == 0
+    out = capfd.readouterr().out
+    assert "ALPHA_MARKER_LINE" in out
+    assert "BETA_MARKER_LINE" in out
+    # Not a diff of the internal .patch files.
+    assert "working_tree.patch" not in out
+
+
+def test_exp_diff_defaults_to_latest_two(app_layout, capfd):
+    """exp diff with no -v diffs the two most recent experiments."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v_alpha, v_beta = _two_experiments_shared_base(app_layout, capfd)
+
+    capfd.readouterr()
+    ret = _experiment(app_layout.app_name, action="diff")
+    assert ret == 0
+    out = capfd.readouterr().out
+    assert "ALPHA_MARKER_LINE" in out
+    assert "BETA_MARKER_LINE" in out
+
+
+def test_exp_diff_delta_header_params_metrics(app_layout, capfd):
+    """exp diff prints a metrics delta header before the code diff."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v_alpha, v_beta = _two_experiments_shared_base(app_layout, capfd)
+
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="diff", version=[v_alpha, v_beta],
+    )
+    assert ret == 0
+    out = capfd.readouterr().out
+    assert "metrics" in out
+    assert "loss" in out
+    assert "0.5" in out
+    assert "0.3" in out

@@ -13,9 +13,9 @@ from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.cli.snapshot import (
     _apply_snapshot_patches,
     _compute_verstr,
-    _diff_builtin,
     _diff_with_external_tool,
     get_git_difftool,
+    _diff_real_tree,
     _relative_timestamp,
     _resolve_verstr,
     _restore_with_safety_net,
@@ -274,6 +274,8 @@ def handle_experiment(vmn_ctx):
         return experiment_show(vcs, params, storage, args)
     elif action == "compare":
         return experiment_compare(vcs, params, storage, args)
+    elif action == "diff":
+        return experiment_diff(vcs, params, storage, args)
     elif action == "restore":
         return experiment_restore(vcs, params, storage, args)
     elif action == "export":
@@ -725,26 +727,96 @@ def experiment_compare(vcs, params, storage, args):
             row = [key] + vals
             print("  ".join(str(v).ljust(w) for v, w in zip(row, col_widths)))
 
-    # Code diff
-    tool = getattr(args, "tool", None) or get_git_difftool(vcs)
     if len(experiments) == 2:
-        meta1, patches1, _ = experiments[0]
-        meta2, patches2, _ = experiments[1]
-        if tool:
-            print()
-            return _diff_with_external_tool(
-                tool, vcs,
-                meta1["verstr"], meta1, patches1,
-                meta2["verstr"], meta2, patches2,
-            )
-        else:
-            print()
-            return _diff_builtin(
-                meta1["verstr"], meta1, patches1,
-                meta2["verstr"], meta2, patches2,
-            )
+        v1 = experiments[0][0]["verstr"]
+        v2 = experiments[1][0]["verstr"]
+        print(f"\nRun 'vmn exp diff {vcs.name} -v {v1} -v {v2}' for a code diff.")
 
     return 0
+
+
+# ---------------------------------------------------------------------------
+# diff
+# ---------------------------------------------------------------------------
+
+def _create_entry_params(log):
+    create = next((e for e in log if e.get("type") == "create"), {})
+    return create.get("params", {}) or {}
+
+
+def _fmt_val(v):
+    return f"{v:.4g}" if isinstance(v, float) else str(v)
+
+
+def _print_delta_line(label, d1, d2):
+    parts = []
+    for k in sorted(set(d1) | set(d2)):
+        a, b = d1.get(k), d2.get(k)
+        if a != b:
+            parts.append(f"{k} {_fmt_val(a)} -> {_fmt_val(b)}")
+    if parts:
+        print(f"{label}: " + "   ".join(parts))
+
+
+@measure_runtime_decorator
+def experiment_diff(vcs, params, storage, args):
+    """Show a real code diff between two experiments, with a params/metrics delta."""
+    exps = _resolve_two_experiments(storage, vcs, args)
+    if exps is None:
+        return 1
+    (meta1, patches1, log1), (meta2, patches2, log2) = exps
+    v1, v2 = meta1["verstr"], meta2["verstr"]
+
+    print(f"Comparing {v1} -> {v2}\n")
+    _print_delta_line("params", _create_entry_params(log1), _create_entry_params(log2))
+    _print_delta_line("metrics", _get_latest_metrics(log1), _get_latest_metrics(log2))
+    print()
+
+    tool = getattr(args, "tool", None) or get_git_difftool(vcs)
+    if tool:
+        return _diff_with_external_tool(
+            tool, vcs, v1, meta1, patches1, v2, meta2, patches2
+        )
+    return _diff_real_tree(vcs, v1, meta1, patches1, v2, meta2, patches2)
+
+
+def _resolve_two_experiments(storage, vcs, args):
+    """Resolve exactly two experiments from -v args or the latest two.
+
+    Returns a list of two (meta, patches, log) tuples, or None on error.
+    """
+    versions = getattr(args, "version", None) or []
+    last = getattr(args, "last", None) or getattr(args, "top", None)
+
+    if len(versions) == 1:
+        VMN_LOGGER.error("Need two experiments — pass -v <a> -v <b> or none for latest 2")
+        return None
+
+    chosen = []
+    if len(versions) >= 2:
+        for v in versions[:2] if last is None else versions:
+            stub = _VersionStub(version=[v])
+            resolved, err = _resolve_experiment_version(storage, vcs, stub)
+            if err:
+                VMN_LOGGER.error(err)
+                return None
+            chosen.append(resolved)
+    else:
+        snaps = storage.list_snapshots(vcs.name)
+        if len(snaps) < 2:
+            VMN_LOGGER.error("Need at least 2 experiments to diff")
+            return None
+        chosen = [m["verstr"] for m in snaps[-(last or 2):]]
+
+    result = []
+    for verstr in chosen[:2] if len(chosen) > 2 else chosen:
+        meta, patches = storage.load(vcs.name, verstr)
+        if meta is None:
+            VMN_LOGGER.error(f"Experiment {verstr} not found")
+            return None
+        log = _load_log(storage, vcs.name, verstr)
+        result.append((meta, patches, log))
+    return result[:2]
 
 
 # ---------------------------------------------------------------------------

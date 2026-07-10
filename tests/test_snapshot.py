@@ -1510,3 +1510,35 @@ def test_goto_dev_dirty_tree_auto_saves(app_layout, capfd):
     assert "Current work saved as" in (combined.out + combined.err)
     with open(test_file) as f:
         assert f.read() == "state A"
+
+
+# ---------------------------------------------------------------------------
+# W9: snapshot diff real tree output + implicit --to current
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_diff_single_version_defaults_to_current(app_layout, capfd):
+    """`snapshot diff -v A` (no --to) diffs A against the current working tree."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    app_layout.write_file_commit_and_push("test_repo_0", "d.txt", "base line")
+    p = os.path.join(app_layout.repo_path, "d.txt")
+    with open(p, "w") as f:
+        f.write("SNAPSHOT_SIDE\n")
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    # Change the working tree to a different state.
+    with open(p, "w") as f:
+        f.write("CURRENT_SIDE\n")
+
+    capfd.readouterr()
+    ret = _snapshot(app_layout.app_name, action="diff", version=verstr)
+    assert ret == 0
+    out = capfd.readouterr().out
+    assert "SNAPSHOT_SIDE" in out
+    assert "CURRENT_SIDE" in out
+    assert "working_tree.patch" not in out

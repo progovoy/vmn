@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Snapshot storage and operations for dev versions."""
 import datetime
-import difflib
 import hashlib
 import io
 import json
@@ -1383,8 +1382,54 @@ def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
         return _diff_with_external_tool(
             tool, vcs, verstr1, meta1, patches1, verstr2, meta2, patches2
         )
-    else:
-        return _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2)
+    return _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2)
+
+
+def _materialize_for_diff(vcs, verstr, meta, patches, dest):
+    """Materialize a snapshot/experiment into ``dest`` (no .git, no vmn metadata)
+    for diffing. 'current'/base-less meta materializes the live HEAD.
+    """
+    m = dict(meta)
+    if not m.get("base_commit"):
+        m["base_commit"] = vcs.backend.changeset()
+    if _materialize_workdir(vcs, m, patches, dest) != 0:
+        return False
+    _strip_git_dirs(dest)
+    # vmn's own export metadata is not part of the user's code.
+    try:
+        os.remove(os.path.join(dest, "vmn_metadata.yml"))
+    except OSError:
+        pass
+    return True
+
+
+def _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
+    """Print a real file-level diff between two materialized snapshot workdirs."""
+    parent = tempfile.mkdtemp(prefix="vmn-diff-")
+    try:
+        name1 = verstr1.replace("+", "_plus_")
+        name2 = verstr2.replace("+", "_plus_")
+        if name1 == name2:
+            name2 += "_b"
+        ok1 = _materialize_for_diff(vcs, verstr1, meta1, patches1,
+                                    os.path.join(parent, name1))
+        ok2 = _materialize_for_diff(vcs, verstr2, meta2, patches2,
+                                    os.path.join(parent, name2))
+        if not ok1 or not ok2:
+            VMN_LOGGER.error("Failed to materialize snapshots for diff")
+            return 1
+        # Run with cwd=parent so git labels the sides by their version strings.
+        result = subprocess.run(
+            ["git", "diff", "--no-index", "--", name1, name2],
+            capture_output=True, text=True, cwd=parent,
+        )
+        if result.stdout.strip():
+            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+        else:
+            print(f"{verstr1} and {verstr2} are identical")
+    finally:
+        shutil.rmtree(parent, ignore_errors=True)
+    return 0
 
 
 def get_git_difftool(vcs):
@@ -1392,66 +1437,6 @@ def get_git_difftool(vcs):
         return vcs.backend._be.git.config("diff.tool")
     except Exception:
         return None
-
-
-def _diff_builtin(verstr1, meta1, patches1, verstr2, meta2, patches2):
-    """Print unified diff of two snapshots to stdout."""
-    print(f"--- {verstr1}")
-    print(f"+++ {verstr2}")
-    print()
-
-    common_keys = sorted(set(meta1.keys()) & set(meta2.keys()))
-    meta_changes = []
-    for key in common_keys:
-        v1 = meta1[key]
-        v2 = meta2[key]
-        if v1 != v2:
-            meta_changes.append(f"  {key}: {v1} -> {v2}")
-    if meta_changes:
-        print("Metadata changes:")
-        for line in meta_changes:
-            print(line)
-        print()
-
-    for patch_type in ("working_tree", "local_commits"):
-        p1 = patches1.get(patch_type, "")
-        p2 = patches2.get(patch_type, "")
-        if p1 == p2:
-            if p1:
-                print(f"{patch_type}: identical")
-            continue
-
-        label = patch_type.replace("_", " ")
-        diff_lines = difflib.unified_diff(
-            p1.splitlines(keepends=True),
-            p2.splitlines(keepends=True),
-            fromfile=f"{verstr1}/{patch_type}.patch",
-            tofile=f"{verstr2}/{patch_type}.patch",
-        )
-        print(f"--- {label} changes ---")
-        for line in diff_lines:
-            print(line, end="")
-        print()
-
-    ut1 = patches1.get("untracked_files")
-    ut2 = patches2.get("untracked_files")
-    if ut1 or ut2:
-        names1 = _list_tarball_members(ut1) if ut1 else []
-        names2 = _list_tarball_members(ut2) if ut2 else []
-        if names1 != names2:
-            print("--- untracked files ---")
-            for line in difflib.unified_diff(
-                [n + "\n" for n in names1],
-                [n + "\n" for n in names2],
-                fromfile=f"{verstr1}/untracked",
-                tofile=f"{verstr2}/untracked",
-            ):
-                print(line, end="")
-            print()
-        elif names1:
-            print("untracked files: identical file list")
-
-    return 0
 
 
 def _diff_with_external_tool(tool, vcs, verstr1, meta1, patches1,

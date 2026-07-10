@@ -484,7 +484,7 @@ def _add_experiment_parser(subprasers, name):
         "action",
         nargs="?",
         default="create",
-        choices=["create", "run", "add", "list", "show", "compare", "restore", "export", "prune"],
+        choices=["create", "run", "add", "list", "show", "compare", "diff", "restore", "export", "prune"],
         help="Experiment action (default: create)",
     )
     pexp.add_argument("name", help="The application's name")
