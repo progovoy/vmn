@@ -313,6 +313,12 @@ versioned app. No servers, no databases -- experiments are plain files under
 your version tags via the base commit. Every experiment ties back to an exact
 version and commit, so reproducing results is a `vmn exp restore` away.
 
+> **No training script required.** An experiment is just a snapshot of your tree
+> plus a metrics log -- ML training is one use case, but config sweeps,
+> benchmarks, and performance tests work the same way. The examples below use
+> `python train.py`; for the no-command, config-tweaking workflow and a complete
+> reference, see the **[full experiments guide](docs/experiments.md)**.
+
 ### Quick workflow
 
 ```sh
