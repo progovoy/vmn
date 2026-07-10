@@ -43,13 +43,21 @@ def _entry(parsed, short_hash):
     }
 
 
+def _plain_entry(message, short_hash):
+    """A non-conventional commit, kept under the catch-all by its subject line."""
+    subject = message.splitlines()[0].strip() if message.strip() else ""
+    return {"type": None, "scope": None, "description": subject, "hash": short_hash}
+
+
 def group_commits(commits):
     """Group ``(message, short_hash)`` pairs into changelog sections.
 
-    Non-conventional messages are skipped (matching stamp-time behavior). A
-    breaking change lands only in ``breaking``, not its type group. Returns
-    ``{"breaking": [...], "groups": [{"label", "type", "commits"}, ...]}`` with
-    sections ordered Features, Bug Fixes, then the remaining types.
+    Conventional commits group by type; anything else falls under "Other
+    Changes" by its subject line, so the changelog reflects real history even
+    in repos that don't follow the convention. A breaking change lands only in
+    ``breaking``, not its type group. Returns ``{"breaking": [...], "groups":
+    [{"label", "type", "commits"}, ...]}`` ordered Features, Bug Fixes, then the
+    remaining types.
     """
     breaking = []
     by_label = {}
@@ -57,12 +65,13 @@ def group_commits(commits):
         try:
             parsed = parse_conventional_commit_message(message)
         except ValueError:
-            continue
-        entry = _entry(parsed, short_hash)
-        if _is_breaking(parsed):
-            breaking.append(entry)
-            continue
-        label = TYPE_LABELS.get(entry["type"], _OTHER_LABEL)
+            label, entry = _OTHER_LABEL, _plain_entry(message, short_hash)
+        else:
+            entry = _entry(parsed, short_hash)
+            if _is_breaking(parsed):
+                breaking.append(entry)
+                continue
+            label = TYPE_LABELS.get(entry["type"], _OTHER_LABEL)
         by_label.setdefault(label, {"type": entry["type"], "commits": []})
         by_label[label]["commits"].append(entry)
 

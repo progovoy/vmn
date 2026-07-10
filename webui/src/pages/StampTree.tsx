@@ -162,67 +162,139 @@ function CommitLine({ scope, description, hash }: Changelog["breaking"][number])
   );
 }
 
-/** Conventional-commit changelog between a version and its previous. */
-function ChangelogSection({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
+const CHANGELOG_COLLAPSED = 8; // commits shown before "show all"
+
+function ChangelogBody({ cl }: { cl: Changelog }) {
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => setExpanded(false), [cl]);
+
+  const sections = [
+    ...(cl.breaking.length ? [{ label: "Breaking", breaking: true, commits: cl.breaking }] : []),
+    ...cl.groups.map((g) => ({ label: g.label, breaking: false, commits: g.commits })),
+  ];
+  const total = sections.reduce((n, s) => n + s.commits.length, 0);
+  if (total === 0) {
+    return <div style={{ color: "var(--text-muted)" }}>No changes in this range.</div>;
+  }
+
+  // Keep section headers but stop rendering commits once the budget runs out.
+  let budget = expanded ? Infinity : CHANGELOG_COLLAPSED;
+  const shown = [];
+  for (const s of sections) {
+    if (budget <= 0) break;
+    const commits = s.commits.slice(0, budget);
+    budget -= commits.length;
+    shown.push({ ...s, commits });
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+      {shown.map((s) => (
+        <div key={s.label}>
+          {s.breaking ? (
+            <div className="badge mode-major" style={{ marginBottom: 4 }}>Breaking</div>
+          ) : (
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{s.label}</div>
+          )}
+          {s.commits.map((c) => <CommitLine key={c.hash} {...c} />)}
+        </div>
+      ))}
+      {total > CHANGELOG_COLLAPSED && (
+        <button
+          style={{ alignSelf: "flex-start", padding: "2px 10px", fontSize: 12 }}
+          onClick={() => setExpanded((e) => !e)}
+        >
+          {expanded ? "show less" : `show all ${total}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Collapsed-by-default changelog: 'to' is the selected version, 'from' is a
+ * dropdown over older versions (defaults to the previous one). */
+function ChangelogSection({ ws, app, verstr, olderVerstrs }: {
+  ws: string; app: string; verstr: string; olderVerstrs: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState<string | null>(null);
   const [cl, setCl] = useState<Changelog | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset when the selected version changes; 'from' falls back to the previous.
   useEffect(() => {
+    setOpen(false);
+    setFrom(null);
+    setCl(null);
+    setError(null);
+  }, [verstr]);
+
+  const effectiveFrom = from ?? olderVerstrs[0] ?? null;
+
+  useEffect(() => {
+    if (!open) return;
     let live = true;
     setCl(null);
     setError(null);
-    api.changelog(ws, app, verstr)
+    api.changelog(ws, app, verstr, effectiveFrom ?? undefined)
       .then((c) => live && setCl(c))
       .catch((e) => live && setError(String(e)));
     return () => { live = false; };
-  }, [ws, app, verstr]);
+  }, [open, ws, app, verstr, effectiveFrom]);
 
-  if (error) return null;
-  if (!cl) return <h2 style={{ marginBottom: 0 }}>changes<span style={{ color: "var(--text-muted)", fontWeight: 400 }}> · loading…</span></h2>;
-
-  const empty = cl.breaking.length === 0 && cl.groups.length === 0;
   return (
-    <>
-      <h2 style={{ marginBottom: 4 }}>
-        changes
-        {cl.from_verstr && (
-          <span className="mono" style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: 12 }}>
-            {" "}since {cl.from_verstr}
-          </span>
-        )}
-      </h2>
-      {empty ? (
-        <div style={{ color: "var(--text-muted)" }}>
-          {cl.from_verstr ? "No conventional commits in this range." : "Baseline version — no previous."}
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {cl.breaking.length > 0 && (
-            <div>
-              <div className="badge mode-major" style={{ marginBottom: 4 }}>Breaking</div>
-              {cl.breaking.map((c) => <CommitLine key={c.hash} {...c} />)}
+    <div style={{ marginTop: 16 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          background: "none", border: "none", padding: 0, cursor: "pointer",
+          font: "inherit", fontWeight: 600, color: "var(--text-primary)",
+          display: "flex", alignItems: "center", gap: 6,
+        }}
+      >
+        <span style={{ color: "var(--text-muted)" }}>{open ? "▾" : "▸"}</span>
+        changelog
+      </button>
+      {open && (
+        <>
+          {olderVerstrs.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>from</span>
+              <select
+                className="mono"
+                value={effectiveFrom ?? ""}
+                onChange={(e) => setFrom(e.target.value)}
+                style={{ fontSize: 12, padding: "1px 4px" }}
+              >
+                {olderVerstrs.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
+              <span className="mono" style={{ fontSize: 12 }}>{verstr}</span>
+            </div>
+          ) : (
+            <div style={{ color: "var(--text-muted)", marginTop: 8 }}>
+              Baseline version — no previous.
             </div>
           )}
-          {cl.groups.map((g) => (
-            <div key={g.label}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{g.label}</div>
-              {g.commits.map((c) => <CommitLine key={c.hash} {...c} />)}
-            </div>
-          ))}
-        </div>
+          {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+          {olderVerstrs.length > 0 && cl && <ChangelogBody cl={cl} />}
+        </>
       )}
-    </>
+    </div>
   );
 }
 
 const VersionDetails = memo(function VersionDetails({
-  ws, app, node, canonical, edges, onSelect,
+  ws, app, node, canonical, edges, olderVerstrs, onSelect,
 }: {
   ws: string;
   app: string;
   node: Node;
   canonical: Map<string, string>;
   edges: [string, string][];
+  olderVerstrs: string[];
   onSelect: (verstr: string) => void;
 }) {
   const [copied, setCopied] = useState<"copied" | "no clipboard" | null>(null);
@@ -311,7 +383,7 @@ const VersionDetails = memo(function VersionDetails({
           </>
         )}
       </div>
-      <ChangelogSection ws={ws} app={app} verstr={node.verstr} />
+      <ChangelogSection ws={ws} app={app} verstr={node.verstr} olderVerstrs={olderVerstrs} />
     </>
   );
 });
@@ -361,6 +433,12 @@ export default function StampTree() {
   );
   const current =
     (selected && byVerstr[canonical.get(selected) ?? selected]) || nodes[0];
+  // Versions older than the selected one (nodes are newest-first) — the
+  // candidates for the changelog "from" dropdown.
+  const olderVerstrs = useMemo(() => {
+    const i = current ? nodes.findIndex((n) => n.verstr === current.verstr) : -1;
+    return i < 0 ? [] : nodes.slice(i + 1).map((n) => n.verstr);
+  }, [nodes, current]);
 
   if (error) return <div className="error">{error}</div>;
   if (rows === null) return <div className="empty">Loading…</div>;
@@ -439,8 +517,14 @@ export default function StampTree() {
             </svg>
           </div>
 
-          <aside className="card" style={{ flex: "1 1 280px", maxWidth: 360, position: "sticky", top: 16 }}>
-            <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} onSelect={select} />
+          <aside
+            className="card"
+            style={{
+              flex: "1 1 280px", maxWidth: 360, position: "sticky", top: 16,
+              maxHeight: "calc(100vh - 32px)", overflowY: "auto",
+            }}
+          >
+            <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} olderVerstrs={olderVerstrs} onSelect={select} />
             <h2>legend</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {presentModes.map((mode) => (

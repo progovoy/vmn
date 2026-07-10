@@ -30,7 +30,7 @@ def test_group_commits_sections_and_breaking():
         ("fix: off-by-one", "bbbbbbb"),
         ("docs: readme", "ccccccc"),
         ("feat!: drop py2", "ddddddd"),
-        ("not a conventional commit", "fffffff"),
+        ("just a plain message\n\nwith a body", "fffffff"),
     ]
 
     result = group_commits(commits)
@@ -38,6 +38,7 @@ def test_group_commits_sections_and_breaking():
     labels = [g["label"] for g in result["groups"]]
     assert labels[:2] == ["Features", "Bug Fixes"]  # priority sections first
     assert "Documentation" in labels
+    assert labels[-1] == "Other Changes"  # catch-all sorts last
 
     feats = next(g for g in result["groups"] if g["label"] == "Features")
     assert feats["commits"][0]["scope"] == "ui"
@@ -50,11 +51,10 @@ def test_group_commits_sections_and_breaking():
     # A breaking feat is not double-counted in Features.
     assert "ddddddd" not in {c["hash"] for c in feats["commits"]}
 
-    # Non-conventional messages are dropped entirely.
-    all_hashes = breaking_hashes | {
-        c["hash"] for g in result["groups"] for c in g["commits"]
-    }
-    assert "fffffff" not in all_hashes
+    # A non-conventional message is kept under Other Changes by its subject line.
+    other = next(g for g in result["groups"] if g["label"] == "Other Changes")
+    plain = next(c for c in other["commits"] if c["hash"] == "fffffff")
+    assert plain["description"] == "just a plain message"
 
 
 def test_ui_version_changelog(app_layout, capfd):
