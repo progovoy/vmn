@@ -458,6 +458,12 @@ def add_arg_snapshot(subprasers):
         default=False,
         help="Use the most recent snapshot (for show/note/diff/export)",
     )
+    psnap.add_argument(
+        "--last",
+        type=int,
+        default=None,
+        help="Show only the N most recent snapshots (for list)",
+    )
 
 
 def _add_experiment_parser(subprasers, name):
@@ -492,6 +498,10 @@ def _add_experiment_parser(subprasers, name):
     pexp.add_argument("--sort", default=None, help="Sort list by metric name")
     pexp.add_argument("--top", type=int, default=None, help="Show top N results in list")
     pexp.add_argument(
+        "--last", type=int, default=None,
+        help="Use the N most recent experiments (for list/compare)",
+    )
+    pexp.add_argument(
         "--latest",
         action="store_true",
         default=False,
@@ -521,6 +531,11 @@ def add_arg_exp(subprasers):
 
 
 def verify_user_input_version(args, key):
+    # snapshot/experiment resolve their own version refs (--latest, @N, dev
+    # prefixes, "current"), which are not strict version strings.
+    if getattr(args, "command", None) in ("snapshot", "experiment", "exp"):
+        return
+
     if key not in args or getattr(args, key) is None:
         return
 

@@ -712,6 +712,7 @@ def handle_snapshot(vmn_ctx):
     vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
     vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
     vmn_ctx.params["verbose"] = getattr(vmn_ctx.args, "verbose", False)
+    vmn_ctx.params["last"] = getattr(vmn_ctx.args, "last", None)
 
     # Read snapshot_storage from app conf, CLI args override
     conf_storage = getattr(vmn_ctx.vcs, 'snapshot_storage', None) or {}
@@ -748,34 +749,39 @@ def handle_snapshot(vmn_ctx):
 
     action = vmn_ctx.args.action
 
-    # Resolve --latest / prefix matching for actions that take a version
+    # Resolve --latest / @N / prefix for actions that take a version.
+    # When no version is given, default to the most recent snapshot; for diff,
+    # default the second side to the live working state ("current").
     if action in ("show", "note", "diff", "export"):
         from version_stamp.cli.snapshot import _resolve_verstr, _get_storage
         latest = getattr(vmn_ctx.args, "latest", False)
         verstr = vmn_ctx.args.version
         to_ver = getattr(vmn_ctx.args, "to", None) if action == "diff" else None
-        needs_resolve = latest or verstr is not None or (to_ver and to_ver != "current")
 
-        if needs_resolve:
-            storage = _get_storage(vmn_ctx.vcs, vmn_ctx.params)
+        if verstr is None and not latest:
+            latest = True
+        if action == "diff" and to_ver is None:
+            to_ver = "current"
+            vmn_ctx.args.to = to_ver
 
-            if latest or verstr is not None:
-                resolved, err_msg = _resolve_verstr(
-                    storage, vmn_ctx.vcs.name, verstr, latest=latest
-                )
-                if err_msg:
-                    VMN_LOGGER.error(err_msg)
-                    return 1
-                vmn_ctx.args.version = resolved
+        storage = _get_storage(vmn_ctx.vcs, vmn_ctx.params)
 
-            if to_ver and to_ver != "current":
-                resolved_to, err_msg = _resolve_verstr(
-                    storage, vmn_ctx.vcs.name, to_ver
-                )
-                if err_msg:
-                    VMN_LOGGER.error(err_msg)
-                    return 1
-                vmn_ctx.args.to = resolved_to
+        resolved, err_msg = _resolve_verstr(
+            storage, vmn_ctx.vcs.name, verstr, latest=latest
+        )
+        if err_msg:
+            VMN_LOGGER.error(err_msg)
+            return 1
+        vmn_ctx.args.version = resolved
+
+        if to_ver and to_ver != "current":
+            resolved_to, err_msg = _resolve_verstr(
+                storage, vmn_ctx.vcs.name, to_ver
+            )
+            if err_msg:
+                VMN_LOGGER.error(err_msg)
+                return 1
+            vmn_ctx.args.to = resolved_to
 
     if action == "create":
         user_meta = _build_user_meta(

@@ -757,3 +757,76 @@ def test_exp_create_clean_tree_zero_hash(app_layout, capfd):
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list") == 0
     assert verstr in capfd.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# W5: implicit latest / --last N / @N addressing / candidate listing
+# ---------------------------------------------------------------------------
+
+
+def _make_n_experiments(app_layout, capfd, n):
+    verstrs = []
+    for i in range(n):
+        _make_dirty(app_layout, f"exp_{i}.txt", f"content {i}")
+        capfd.readouterr()
+        _experiment(app_layout.app_name, note=f"run{i}", metrics=[f"loss=0.{i}"])
+        verstrs.append(extract_dev_verstr(capfd.readouterr().out))
+    return verstrs
+
+
+def test_exp_list_last_n(app_layout, capfd):
+    """--last N limits the leaderboard to the N most recent experiments."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    verstrs = _make_n_experiments(app_layout, capfd, 3)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list", last=2) == 0
+    lines = [l for l in capfd.readouterr().out.strip().split("\n") if l.startswith("[")]
+    assert len(lines) == 2
+    # The oldest experiment is excluded.
+    assert verstrs[0] not in "\n".join(lines)
+
+
+def test_exp_compare_no_args_uses_latest_two(app_layout, capfd):
+    """compare with no -v/--last compares the latest two experiments."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    verstrs = _make_n_experiments(app_layout, capfd, 3)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="compare") == 0
+    out = capfd.readouterr().out
+    # Latest two present, oldest absent from the comparison columns.
+    assert "loss" in out
+    assert verstrs[0][-12:] not in out
+
+
+def test_exp_ambiguous_prefix_lists_candidates(app_layout, capfd):
+    """An ambiguous experiment prefix reports the matching candidates."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    verstrs = _make_n_experiments(app_layout, capfd, 2)
+
+    capfd.readouterr()
+    ret = _experiment(app_layout.app_name, action="show", version="0.0.1-dev.")
+    assert ret == 1
+    err = capfd.readouterr().err
+    assert "mbiguous" in err
+    for v in verstrs:
+        assert v in err
+
+
+def test_exp_show_at_index(app_layout, capfd):
+    """@N addresses the N-th experiment shown by list."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    verstrs = _make_n_experiments(app_layout, capfd, 2)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version="@1") == 0
+    assert verstrs[0] in capfd.readouterr().out

@@ -1322,3 +1322,86 @@ def test_snapshot_export_without_remote(app_layout, capfd):
     assert err == 0
     assert os.path.isfile(os.path.join(export_dir, "vmn_metadata.yml"))
     assert os.path.isfile(os.path.join(export_dir, "export_noremote.txt"))
+
+
+# ---------------------------------------------------------------------------
+# W5: implicit latest (M3), @N addressing (M9), candidate listing (M5),
+# output contract (M6)
+# ---------------------------------------------------------------------------
+
+
+def _make_two_snapshots(app_layout, capfd):
+    """Create two distinct dev snapshots; return (v1_oldest, v2_newest)."""
+    verstrs = []
+    for i, content in enumerate(["first change", "second change"]):
+        app_layout.write_file_commit_and_push("test_repo_0", f"s{i}.txt", "init")
+        with open(os.path.join(app_layout.repo_path, f"s{i}.txt"), "w") as f:
+            f.write(content)
+        capfd.readouterr()
+        assert _snapshot(app_layout.app_name, note=f"snap {i}") == 0
+        verstrs.append(extract_dev_verstr(capfd.readouterr().out))
+    return verstrs
+
+
+def test_snapshot_show_defaults_to_latest(app_layout, capfd):
+    """M3: `snapshot show` with no -v shows the most recent snapshot."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v1, v2 = _make_two_snapshots(app_layout, capfd)
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="show") == 0
+    out = capfd.readouterr().out
+    assert v2 in out
+    assert v1 not in out
+
+
+def test_snapshot_create_stdout_last_line_is_verstr(app_layout, capfd):
+    """M6: the machine-readable verstr is the final stdout line (log lines are
+    clearly prefixed, so data stays cleanly extractable)."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "only.txt", "init")
+    with open(os.path.join(app_layout.repo_path, "only.txt"), "w") as f:
+        f.write("dirty")
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, note="x") == 0
+    out_lines = [l for l in capfd.readouterr().out.strip().split("\n") if l.strip()]
+    assert DEV_VERSION_RE.match(out_lines[-1].strip())
+
+
+def test_snapshot_at_index_addressing(app_layout, capfd):
+    """M9: `@N` addresses the N-th row shown by `snapshot list`."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v1, v2 = _make_two_snapshots(app_layout, capfd)
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="show", version="@1") == 0
+    assert v1 in capfd.readouterr().out
+
+    capfd.readouterr()
+    assert _snapshot(app_layout.app_name, action="show", version="@2") == 0
+    assert v2 in capfd.readouterr().out
+
+
+def test_snapshot_ambiguous_prefix_lists_candidates(app_layout, capfd):
+    """M5: an ambiguous -v prefix reports the matching candidates."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    v1, v2 = _make_two_snapshots(app_layout, capfd)
+
+    # Common prefix shared by both dev verstrs (base + '-dev.').
+    prefix = "0.0.1-dev."
+    capfd.readouterr()
+    ret = _snapshot(app_layout.app_name, action="show", version=prefix)
+    assert ret == 1
+    err = capfd.readouterr().err
+    assert "mbiguous" in err
+    assert v1 in err
+    assert v2 in err

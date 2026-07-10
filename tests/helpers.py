@@ -226,13 +226,16 @@ def _goto(app_name, version=None, root=False):
 
 def _snapshot(app_name, action="create", version=None, note=None,
               to_version=None, tool=None, output=None,
-              meta=None, meta_file=None, filter_args=None, latest=False):
+              meta=None, meta_file=None, filter_args=None, latest=False,
+              last=None):
     args_list = ["snapshot"]
     if action != "create":
         args_list.append(action)
     args_list.append(app_name)
     if version is not None:
         args_list.extend(["--version", version])
+    if last is not None:
+        args_list.extend(["--last", str(last)])
     if note is not None:
         args_list.extend(["--note", note])
     if to_version is not None:
@@ -323,7 +326,7 @@ def _configure_2_deps(
 def _experiment(app_name, action="create", version=None, note=None,
                 metrics=None, file=None, attach=None, sort=None,
                 top=None, latest=None, tool=None, output=None,
-                keep=None, older_than=None, command="experiment"):
+                keep=None, older_than=None, last=None, command="experiment"):
     args_list = [command]
     if action != "create":
         args_list.append(action)
@@ -334,6 +337,8 @@ def _experiment(app_name, action="create", version=None, note=None,
                 args_list.extend(["-v", v])
         else:
             args_list.extend(["-v", version])
+    if last is not None:
+        args_list.extend(["--last", str(last)])
     if note is not None:
         args_list.extend(["--note", note])
     if metrics is not None:

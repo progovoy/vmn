@@ -581,23 +581,42 @@ def _get_storage(vcs, params):
     )
 
 
-def _resolve_verstr(storage, app_name, verstr, latest=False):
-    """Resolve a version string shorthand to a full verstr.
+def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
+    """Resolve a version reference to a full verstr.
 
-    - If latest=True or verstr == "latest": return most recent by timestamp
-    - If verstr doesn't exactly match: try unique prefix match
-    - Otherwise: pass through as-is
-    Returns (resolved_verstr, error_message_or_None).
+    Accepts: ``--latest`` / ``"latest"`` / ``"@latest"`` (most recent),
+    ``"@N"`` (the N-th row shown by ``list``, 1-indexed, oldest-first), an exact
+    verstr, a unique dev-verstr prefix, or a stamped (non-dev) version passed
+    through untouched. Returns ``(resolved_verstr, error_message_or_None)``.
     """
-    if latest or verstr == "latest":
-        snapshots = storage.list_snapshots(app_name)
-        if not snapshots:
-            return None, f"No snapshots found for {app_name}"
-        most_recent = max(snapshots, key=lambda m: m.get("timestamp", ""))
+    listing = None
+
+    def _snaps():
+        nonlocal listing
+        if listing is None:
+            listing = storage.list_snapshots(app_name)
+        return listing
+
+    if latest or verstr in ("latest", "@latest"):
+        snaps = _snaps()
+        if not snaps:
+            return None, f"No {kind}s found for {app_name}"
+        most_recent = max(snaps, key=lambda m: m.get("timestamp", ""))
         return most_recent["verstr"], None
 
     if verstr is None:
         return None, None
+
+    # @N addresses the N-th row shown by `list` (1-indexed, oldest-first).
+    if verstr.startswith("@"):
+        idx_str = verstr[1:]
+        if not idx_str.isdigit():
+            return None, f"Invalid index reference '{verstr}' (use @N, e.g. @1)"
+        n = int(idx_str)
+        snaps = _snaps()
+        if n < 1 or n > len(snaps):
+            return None, f"Index '{verstr}' out of range (1..{len(snaps)})"
+        return snaps[n - 1]["verstr"], None
 
     # Try exact match first (fast path — no need to load full data)
     if storage.exists(app_name, verstr):
@@ -609,16 +628,15 @@ def _resolve_verstr(storage, app_name, verstr, latest=False):
         return verstr, None
 
     # Try prefix match
-    snapshots = storage.list_snapshots(app_name)
-    matches = [m for m in snapshots if m["verstr"].startswith(verstr)]
+    matches = [m for m in _snaps() if m["verstr"].startswith(verstr)]
     if len(matches) == 1:
         return matches[0]["verstr"], None
     if len(matches) > 1:
+        cands = ", ".join(m["verstr"] for m in matches)
         return None, (
-            f"Ambiguous prefix '{verstr}': matches {len(matches)} snapshots. "
-            f"Be more specific."
+            f"Ambiguous prefix '{verstr}': matches {len(matches)} {kind}s: {cands}"
         )
-    return None, f"Snapshot '{verstr}' not found"
+    return None, f"{kind.capitalize()} '{verstr}' not found"
 
 
 def _ensure_trailing_newline(s):
@@ -1121,6 +1139,10 @@ def snapshot_list(vcs, params):
     if not snapshots:
         VMN_LOGGER.info(f"No snapshots found for {vcs.name}")
         return 0
+
+    last = params.get("last")
+    if last:
+        snapshots = snapshots[-last:]
 
     filters = _parse_meta_args(params.get("filter")) if params.get("filter") else None
 

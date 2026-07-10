@@ -17,6 +17,7 @@ from version_stamp.cli.snapshot import (
     _diff_with_external_tool,
     get_git_difftool,
     _relative_timestamp,
+    _resolve_verstr,
     _strip_git_dirs,
     gather_create_data,
     get_snapshot_storage,
@@ -168,30 +169,19 @@ def _get_latest_metrics(log):
     return metrics
 
 
-def _resolve_experiment_version(storage, vcs, args):
-    """Resolve version for experiment actions. Returns (verstr, error_msg)."""
+def _resolve_experiment_version(storage, vcs, args, default_latest=False):
+    """Resolve a version for experiment actions. Returns (verstr, error_msg).
+
+    Delegates to the shared resolver (handles ``--latest``, ``@N``, prefixes and
+    candidate listing). When ``default_latest`` is set and no version is given,
+    resolves to the most recent experiment.
+    """
     versions = getattr(args, "version", None)
     latest = getattr(args, "latest", False)
-
-    if latest:
-        snaps = storage.list_snapshots(vcs.name)
-        if not snaps:
-            return None, f"No experiments found for {vcs.name}"
-        return snaps[-1]["verstr"], None
-
-    if versions and len(versions) == 1:
-        verstr = versions[0]
-        if storage.exists(vcs.name, verstr):
-            return verstr, None
-        snaps = storage.list_snapshots(vcs.name)
-        matches = [m for m in snaps if m["verstr"].startswith(verstr)]
-        if len(matches) == 1:
-            return matches[0]["verstr"], None
-        if len(matches) > 1:
-            return None, f"Ambiguous prefix '{verstr}'"
-        return None, f"Experiment '{verstr}' not found"
-
-    return None, None
+    ref = versions[0] if versions else None
+    if ref is None and not latest and default_latest:
+        latest = True
+    return _resolve_verstr(storage, vcs.name, ref, latest=latest, kind="experiment")
 
 
 def _parse_duration(duration_str):
@@ -396,17 +386,10 @@ def _experiment_create_core(vcs, storage, note=None):
 
 @measure_runtime_decorator
 def experiment_add(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args)
+    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
     if err:
         VMN_LOGGER.error(err)
         return 1
-    if not verstr:
-        # Default to latest
-        snaps = storage.list_snapshots(vcs.name)
-        if not snaps:
-            VMN_LOGGER.error(f"No experiments found for {vcs.name}")
-            return 1
-        verstr = snaps[-1]["verstr"]
 
     if args.metrics:
         entry = _create_log_entry("metrics", values=_parse_metrics(args.metrics))
@@ -447,6 +430,10 @@ def experiment_list(vcs, params, storage, args):
     if not experiments:
         print(f"No experiments found for {vcs.name}")
         return 0
+
+    last = getattr(args, "last", None)
+    if last:
+        experiments = experiments[-last:]
 
     schema = _get_metrics_schema(vcs)
 
@@ -518,16 +505,10 @@ def experiment_list(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_show(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args)
+    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
     if err:
         VMN_LOGGER.error(err)
         return 1
-    if not verstr:
-        snaps = storage.list_snapshots(vcs.name)
-        if not snaps:
-            VMN_LOGGER.error(f"No experiments found for {vcs.name}")
-            return 1
-        verstr = snaps[-1]["verstr"]
 
     metadata, patches = storage.load(vcs.name, verstr)
     if metadata is None:
@@ -589,22 +570,10 @@ def experiment_show(vcs, params, storage, args):
 def experiment_compare(vcs, params, storage, args):
     versions = getattr(args, "version", None) or []
     use_latest = getattr(args, "latest", False)
+    last = getattr(args, "last", None) or getattr(args, "top", None)
 
     experiments = []
-    if use_latest:
-        snaps = storage.list_snapshots(vcs.name)
-        n = getattr(args, "top", None) or 2
-        if n < 2:
-            VMN_LOGGER.error(f"Need at least 2 to compare, got {n}")
-            return 1
-        if len(snaps) < 2:
-            VMN_LOGGER.error("Need at least 2 experiments to compare")
-            return 1
-        for meta in snaps[-n:]:
-            _, patches = storage.load(vcs.name, meta["verstr"])
-            log = _load_log(storage, vcs.name, meta["verstr"])
-            experiments.append((meta, patches, log))
-    elif len(versions) >= 2:
+    if len(versions) >= 2:
         for v in versions:
             stub = _VersionStub(version=[v])
             resolved, err = _resolve_experiment_version(storage, vcs, stub)
@@ -617,9 +586,23 @@ def experiment_compare(vcs, params, storage, args):
                 return 1
             log = _load_log(storage, vcs.name, resolved)
             experiments.append((meta, patches, log))
-    else:
-        VMN_LOGGER.error("Specify -v <v1> -v <v2> or --latest")
+    elif len(versions) == 1:
+        VMN_LOGGER.error("Need at least 2 experiments to compare")
         return 1
+    else:
+        # Default (and --latest): compare the N most recent (N = --last/--top or 2).
+        n = last or 2
+        if n < 2:
+            VMN_LOGGER.error(f"Need at least 2 to compare, got {n}")
+            return 1
+        snaps = storage.list_snapshots(vcs.name)
+        if len(snaps) < 2:
+            VMN_LOGGER.error("Need at least 2 experiments to compare")
+            return 1
+        for meta in snaps[-n:]:
+            _, patches = storage.load(vcs.name, meta["verstr"])
+            log = _load_log(storage, vcs.name, meta["verstr"])
+            experiments.append((meta, patches, log))
 
     # Metrics comparison table
     schema = _get_metrics_schema(vcs)
@@ -686,16 +669,10 @@ def experiment_compare(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_restore(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args)
+    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
     if err:
         VMN_LOGGER.error(err)
         return 1
-    if not verstr:
-        snaps = storage.list_snapshots(vcs.name)
-        if not snaps:
-            VMN_LOGGER.error(f"No experiments found for {vcs.name}")
-            return 1
-        verstr = snaps[-1]["verstr"]
 
     metadata, patches = storage.load(vcs.name, verstr)
     if metadata is None:
@@ -714,16 +691,10 @@ def experiment_export(vcs, params, storage, args):
     import tarfile
     import tempfile
 
-    verstr, err = _resolve_experiment_version(storage, vcs, args)
+    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
     if err:
         VMN_LOGGER.error(err)
         return 1
-    if not verstr:
-        snaps = storage.list_snapshots(vcs.name)
-        if not snaps:
-            VMN_LOGGER.error(f"No experiments found for {vcs.name}")
-            return 1
-        verstr = snaps[-1]["verstr"]
 
     metadata, patches = storage.load(vcs.name, verstr)
     if metadata is None:
