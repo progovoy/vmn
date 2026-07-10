@@ -101,23 +101,30 @@ vmn release my_app                        # => 0.1.1
 ### Track an ML experiment (60 seconds)
 
 ```sh
-# You're mid-experiment, code is dirty, results look promising
-vmn exp create my_model --note "baseline CNN" --metrics loss=0.45 acc=0.85
+# One command: capture code state, run training, record metrics + duration + exit code.
+# Your script appends "key=value" lines to $VMN_METRICS_FILE and vmn ingests them.
+vmn exp run my_model --note "baseline CNN" -- python train.py
 # => 0.1.0-dev.a1b2c3d.e4f5g6h
 
-# Try a different approach...
-vmn exp create my_model --note "with dropout" --metrics loss=0.34 acc=0.91
+# Edit the model, run again — a fresh experiment, even on the same commit
+vmn exp run my_model --note "with dropout" -- python train.py
 # => 0.1.0-dev.f7a2b1c.d3e4f5g
 
-# Compare results
-vmn exp compare --latest 2 my_model
-# metric        0.1.0-dev.a1b2c3  0.1.0-dev.f7a2b1
-# --------------------------------------------------
-# loss          0.45              0.34
-# acc           0.85              0.91
+# Leaderboard, best loss first
+vmn exp list my_model --sort loss
 
-# Winner! Restore that exact state (checkout + apply uncommitted changes)
-vmn exp restore --latest my_model
+# See exactly what changed AND what happened — metric delta + real code diff
+vmn exp diff my_model
+# Comparing 0.1.0-dev.a1b2c3d.e4f5g6h -> 0.1.0-dev.f7a2b1c.d3e4f5g
+#
+# metrics: loss 0.45 -> 0.34   acc 0.85 -> 0.91
+#
+# diff --git a/.../model.py b/.../model.py
+# -    return lr * 0.5  # baseline
+# +    return lr * 0.3  # with dropout
+
+# Winner! Restore that exact state (any dirty work is auto-saved first)
+vmn exp restore my_model --latest
 ```
 
 Both workflows store everything in git -- no servers, no lock-in.
@@ -161,7 +168,7 @@ See [Already using another tool?](#already-using-another-tool) for step-by-step 
 Most experiment trackers require a server, a cloud account, or both. vmn tracks experiments the same way it tracks versions -- in git and local files.
 
 ```sh
-vmn exp create my_model --metrics accuracy=0.94 loss=0.12 --note "baseline ResNet run"
+vmn exp run my_model --note "baseline ResNet run" -- python train.py
 # => 0.2.0-dev.c3d4e5f.a1b2c3d
 
 vmn exp list my_model --sort loss --top 3
@@ -169,7 +176,7 @@ vmn exp list my_model --sort loss --top 3
 # [2] 0.1.0-dev.f7a2b1c.d3e4f5g  (2d ago)  loss=0.34  accuracy=0.91 - with dropout
 # [3] 0.1.0-dev.a1b2c3d.e4f5g6h  (3d ago)  loss=0.45  accuracy=0.85 - baseline CNN
 
-vmn exp restore --latest my_model         # checkout exact code state
+vmn exp restore my_model --latest         # checkout exact code state (dirty work auto-saved)
 ```
 
 ### How vmn compares to dedicated experiment trackers
@@ -212,18 +219,24 @@ vmn is not trying to replace MLflow's web dashboard or W&B's visualization suite
 - Your team relies on shared dashboards and collaboration features
 - You are already invested in their ecosystem and integrations
 
-Eight subcommands cover the full experiment lifecycle:
+Subcommands cover the full experiment lifecycle:
 
 | Command | What it does |
 |:--------|:-------------|
-| `vmn exp create` | Capture a snapshot with metrics, parameters, and notes |
+| `vmn exp run` | Capture code state, run a command, record metrics + exit code + duration |
+| `vmn exp create` | Capture a snapshot with metrics, parameters, and notes (no command) |
 | `vmn exp add` | Log additional metrics, notes, or artifacts to an experiment |
 | `vmn exp list` | List experiments with filtering and sorting by any metric |
 | `vmn exp show` | Display full experiment details including log history |
-| `vmn exp compare` | Side-by-side metric comparison across experiments |
-| `vmn exp restore` | Restore the exact code state -- checkout + apply patches |
+| `vmn exp diff` | Metric delta + real source diff between two experiments |
+| `vmn exp compare` | Side-by-side metric table across N experiments |
+| `vmn exp restore` | Restore the exact code state -- dirty work is auto-saved first |
 | `vmn exp export` | Export experiment as a directory or tarball |
 | `vmn exp prune` | Clean up old experiments (keep N or older than duration) |
+
+Most actions default to the latest experiment when you omit `-v`. You can address
+experiments by full version string, a unique prefix, `--latest`, or `@N` (the N-th
+row shown by `vmn exp list`).
 
 ---
 ## 🔑 What only vmn does
@@ -300,37 +313,63 @@ so reproducing results is a `vmn exp restore` away.
 ### Quick workflow
 
 ```sh
-# Create an experiment pinned to a version
+# Run a training command; vmn captures code state + records metrics/exit/duration
+vmn exp run my_model --note "baseline CNN" -- python train.py
+
+# ...or capture the current dirty state without running anything
 vmn exp create my_model --note "baseline CNN" --metrics loss=0.45 acc=0.85
 
-# Train more, append metrics and artifacts
-vmn exp add my_model --latest --metrics loss=0.31 acc=0.92 --attach weights.pt
+# Append metrics or artifacts to the latest experiment
+vmn exp add my_model --metrics loss=0.31 acc=0.92 --attach weights.pt
 
-# Compare the last 3 experiments side by side
-vmn exp compare my_model --latest 3
+# Metric delta + real code diff between the last two experiments
+vmn exp diff my_model
 
-# Restore the best run (checkout code + retrieve artifacts)
-vmn exp restore my_model -v 1.2.0
+# Restore the best run (dirty work auto-saved first)
+vmn exp restore my_model --latest
 ```
 
 ### Subcommand reference
 
+Every version-taking action defaults to the latest experiment when `-v` is omitted,
+and accepts a full version, a unique prefix, `--latest`, or `@N`.
+
+#### run
+
+Create an experiment, run a command, and record its outcome. The child inherits your
+terminal (output streams live) and these env vars: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`,
+`VMN_METRICS_FILE`. Any `key=value` lines the process appends to `VMN_METRICS_FILE`
+become a metrics entry. `vmn exp run` returns the command's own exit code.
+
+```sh
+vmn exp run my_model --note "dropout 0.3" -- python train.py --lr 0.01
+# inside train.py:  open(os.environ["VMN_METRICS_FILE"], "a").write("loss=0.31\n")
+```
+
+Works on a clean or dirty tree, and cold-starts a fresh repo (auto-init + baseline stamp).
+
 #### create
 
-Start a new experiment. This is the default action when no subcommand is given.
+Capture the current state as an experiment without running a command. Re-running over
+the identical code state starts a new run (`.r2`, `.r3`, …) instead of overwriting —
+so "same code, different seed" never clobbers a previous run. On a clean tree the diff
+hash is zeroed (`...-dev.<commit>.0000000`).
 
 ```sh
 vmn exp create my_model --note "dropout 0.3" --metrics loss=0.45 acc=0.85
-vmn exp create my_model -f params.yml --attach initial_weights.pt -v 1.2.0
+vmn exp create my_model -f params.yml --attach initial_weights.pt
 ```
+
+`--metrics` records measurements; `-f params.yml` records inputs (`params:`,
+`hypothesis:`, `tags:`) — they no longer overwrite each other.
 
 #### add
 
-Append metrics, notes, or artifacts to an existing experiment.
+Append metrics, notes, or artifacts to an experiment (default: the latest).
 
 ```sh
-vmn exp add my_model -v 1.2.0 --metrics val_loss=0.29 val_acc=0.93
-vmn exp add my_model --latest --attach checkpoint_epoch10.pt --note "after LR warmup"
+vmn exp add my_model --metrics val_loss=0.29 val_acc=0.93
+vmn exp add my_model -v @2 --attach checkpoint_epoch10.pt --note "after LR warmup"
 ```
 
 #### list
@@ -340,7 +379,7 @@ List experiments, optionally sorted by a metric.
 ```sh
 vmn exp list my_model                          # all experiments
 vmn exp list my_model --sort loss --top 5      # best 5 by loss
-vmn exp list my_model --latest 10              # most recent 10
+vmn exp list my_model --last 10                # most recent 10
 ```
 
 #### show
@@ -348,28 +387,38 @@ vmn exp list my_model --latest 10              # most recent 10
 Display full details for a single experiment.
 
 ```sh
-vmn exp show my_model -v 1.2.0
-vmn exp show my_model --latest
+vmn exp show my_model               # latest
+vmn exp show my_model -v @1         # the [1] row from list
+```
+
+#### diff
+
+Metric/param delta plus a real source diff between two experiments (default: the latest two).
+
+```sh
+vmn exp diff my_model                       # latest two
+vmn exp diff my_model -v @1 -v @3           # specific runs by index
+vmn exp diff my_model --tool delta          # external diff tool
 ```
 
 #### compare
 
-Side-by-side metric comparison across experiments.
+Side-by-side metric table across N experiments (no code diff — use `exp diff` for that).
 
 ```sh
-vmn exp compare my_model -v 1.1.0 -v 1.2.0 -v 1.3.0
-vmn exp compare my_model --latest 3 --tool delta   # use external diff tool
+vmn exp compare my_model -v 1.1.0-dev.aaa.bbb -v 1.2.0-dev.ccc.ddd
+vmn exp compare my_model --last 3
 ```
-
-Falls back to `git config diff.tool` if `--tool` is not given.
 
 #### restore
 
-Check out the exact code state and retrieve artifacts for an experiment.
+Check out the exact code state and retrieve artifacts. If the working tree is dirty,
+that work is auto-snapshotted first (and the recovery command is printed) — you never
+lose uncommitted changes.
 
 ```sh
-vmn exp restore my_model -v 1.2.0
 vmn exp restore my_model --latest
+vmn exp restore my_model -v @2
 ```
 
 #### export
@@ -377,7 +426,7 @@ vmn exp restore my_model --latest
 Package an experiment (metadata, metrics, artifacts) into a tarball.
 
 ```sh
-vmn exp export my_model -v 1.2.0                     # writes 1.2.0.tar.gz
+vmn exp export my_model                              # latest -> <verstr>.tar.gz
 vmn exp export my_model --latest -o best_run.tar.gz
 ```
 
@@ -410,16 +459,19 @@ vmn exp create my_model -f params.yml --metrics loss=0.38
 
 ### Metrics schema
 
-Define sort order and a primary metric in `.vmn/{app_name}/conf.yml` so that
-`list --sort` and `compare` know which direction is better:
+Declare each metric's goal and a primary metric in `.vmn/{app_name}/conf.yml` so
+`list --sort` and the leaderboard know which direction is better. `goal: min` means
+lower is better (best-first ascending); `goal: max` means higher is better:
 
 ```yaml
 experiment:
   metrics:
-    loss: {sort: desc, primary: true}
-    acc:  {sort: desc}
-    val_loss: {sort: desc}
+    loss:     {goal: min, primary: true}
+    val_loss: {goal: min}
+    acc:      {goal: max}
 ```
+
+(The legacy `sort: asc|desc` form is still accepted but deprecated in favor of `goal`.)
 
 ### Storage
 
@@ -470,12 +522,13 @@ vmn snapshot list my_model
 # [1] 1.2.0-dev.a1b2c3d.e4f5g6h  (2h ago) - promising results
 # [2] 1.2.0-dev.x9y8z7w.q1r2s3t  (1d ago)
 
-vmn snapshot show --latest my_model
-vmn snapshot note --latest --note "confirmed: best run" my_model
-vmn snapshot diff -v 1.2.0-dev.a1b --to current my_model
-vmn snapshot export --latest -o ./experiment_42 my_model
+vmn snapshot show my_model                     # latest by default
+vmn snapshot note my_model --note "confirmed: best run"
+vmn snapshot diff my_model -v 1.2.0-dev.a1b    # second side defaults to the working tree
+vmn snapshot export my_model -o ./experiment_42
 
-# Restore via goto
+# Restore a snapshot (dirty work is auto-saved first); vmn goto also works
+vmn snapshot restore my_model -v 1.2.0-dev.a1b2c3d.e4f5g6h
 vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model
 ```
 
@@ -499,12 +552,17 @@ Everything needed to reconstruct the working tree is stored alongside the metada
 <details>
 <summary>All snapshot flags</summary>
 
+Actions: `create` (default), `list`, `show`, `note`, `diff`, `export`, `restore`.
+Version-taking actions default to the latest snapshot and accept a full version, a
+unique prefix, `--latest`, or `@N`.
+
 | Flag | Description |
 |------|-------------|
-| `-v`, `--version` | Target a specific snapshot version (supports prefix matching) |
+| `-v`, `--version` | Target a specific snapshot version (prefix / `@N` / `--latest` all work) |
 | `--latest` | Use the most recent snapshot |
+| `--last N` | Show only the N most recent snapshots (for `list`) |
 | `--note` | Attach or update a text note |
-| `--to` | Second version for `diff` (or `current` for working tree) |
+| `--to` | Second version for `diff` (defaults to `current`, the working tree) |
 | `--tool` | External diff tool (`meld`, `vimdiff`, etc.). Falls back to `git config diff.tool` |
 | `-o`, `--output` | Export destination path |
 | `--meta` | Repeatable `key=value` metadata pairs |
@@ -842,8 +900,8 @@ conf:
     endpoint_url: https://...
   experiment:
     metrics:
-      loss: { sort: desc, primary: true }
-      acc:  { sort: desc }
+      loss: { goal: min, primary: true }
+      acc:  { goal: max }
 ```
 
 > **Migration note:** `create_verinfo_files` has been renamed to `create_snapshots`. The old key still works but prints a deprecation warning.
