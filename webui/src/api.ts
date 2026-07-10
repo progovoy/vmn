@@ -1,15 +1,19 @@
 import type {
-  AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentRow, SnapshotRow,
-  VersionRow, Workspace,
+  AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentRow,
+  Job, SnapshotRow, VersionRow, Workspace,
 } from "./types";
 
 const BASE = "/api/v1";
 
-async function get<T>(path: string): Promise<T> {
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = sessionStorage.getItem("vmn_token");
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...extra };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${path}`, { headers });
+  return headers;
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
   if (res.status === 401) {
     const entered = window.prompt("vmn ui token:");
     if (entered) {
@@ -24,12 +28,29 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(b.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 /** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
 export const appTag = (name: string) => name.replaceAll("/", "-");
 
 export const api = {
   workspaces: () => get<Workspace[]>("/workspaces"),
+  attachWorkspace: (name: string, path: string) =>
+    post<Workspace>("/workspaces", { name, path }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),
+  config: (ws: string, app: string) =>
+    get<AppConfig>(`/workspaces/${ws}/apps/${appTag(app)}/config`),
   experiments: (ws: string, app: string, sort?: string) =>
     get<ExperimentRow[]>(
       `/workspaces/${ws}/apps/${appTag(app)}/experiments` +
@@ -46,6 +67,9 @@ export const api = {
     ),
   versions: (ws: string, app: string) =>
     get<VersionRow[]>(`/workspaces/${ws}/apps/${appTag(app)}/versions`),
+  action: (ws: string, app: string, action: string, body: Record<string, unknown>) =>
+    post<Job>(`/workspaces/${ws}/apps/${appTag(app)}/actions/${action}`, body),
+  job: (id: string) => get<Job>(`/jobs/${id}`),
   changelog: (ws: string, app: string, v: string, from?: string) =>
     get<Changelog>(
       `/workspaces/${ws}/apps/${appTag(app)}/changelog?v=${encodeURIComponent(v)}` +

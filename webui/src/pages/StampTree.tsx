@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import type { Changelog, VersionRow } from "../types";
+import type { AppConfig, Changelog, VersionRow } from "../types";
 import { AppLayoutNav } from "./Leaderboard";
 import { copyText, relTime } from "../util";
 
@@ -244,17 +244,7 @@ function ChangelogSection({ ws, app, verstr, olderVerstrs }: {
 
   return (
     <div style={{ marginTop: 16 }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          background: "none", border: "none", padding: 0, cursor: "pointer",
-          font: "inherit", fontWeight: 600, color: "var(--text-primary)",
-          display: "flex", alignItems: "center", gap: 6,
-        }}
-      >
-        <span style={{ color: "var(--text-muted)" }}>{open ? "▾" : "▸"}</span>
-        changelog
-      </button>
+      <Disclosure open={open} onToggle={() => setOpen((o) => !o)} label="changelog" />
       {open && (
         <>
           {olderVerstrs.length > 0 ? (
@@ -281,6 +271,88 @@ function ChangelogSection({ ws, app, verstr, olderVerstrs }: {
           {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
           {olderVerstrs.length > 0 && cl && <ChangelogBody cl={cl} />}
         </>
+      )}
+    </div>
+  );
+}
+
+/** Disclosure header shared by the changelog and config sections. */
+function Disclosure({ open, onToggle, label }: {
+  open: boolean; onToggle: () => void; label: string;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        background: "none", border: "none", padding: 0, cursor: "pointer",
+        font: "inherit", fontWeight: 600, color: "var(--text-primary)",
+        display: "flex", alignItems: "center", gap: 6,
+      }}
+    >
+      <span style={{ color: "var(--text-muted)" }}>{open ? "▾" : "▸"}</span>
+      {label}
+    </button>
+  );
+}
+
+/** App-level config + dependency repos, collapsed by default. */
+function ConfigSection({ ws, app }: { ws: string; app: string }) {
+  const [open, setOpen] = useState(false);
+  const [cfg, setCfg] = useState<AppConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    setCfg(null);
+    setError(null);
+    api.config(ws, app).then((c) => live && setCfg(c)).catch((e) => live && setError(String(e)));
+    return () => { live = false; };
+  }, [open, ws, app]);
+
+  const confEntries = cfg ? Object.entries(cfg.conf).filter(([k]) => k !== "deps") : [];
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <Disclosure open={open} onToggle={() => setOpen((o) => !o)} label="config & deps" />
+      {open && (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 12 }}>
+          {error && <div className="error">{error}</div>}
+          {cfg && (
+            <>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>deps</div>
+                {cfg.deps.length === 0 ? (
+                  <div style={{ color: "var(--text-muted)" }}>none configured</div>
+                ) : (
+                  cfg.deps.map((d) => (
+                    <div key={d.path} className="mono" style={{ fontSize: 12 }} title={d.remote ?? ""}>
+                      {d.path}{d.branch ? ` @${d.branch}` : ""}
+                      <span style={{ color: "var(--text-muted)" }}> · {d.remote ?? "?"}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>conf.yml</div>
+                {confEntries.length === 0 ? (
+                  <div style={{ color: "var(--text-muted)" }}>defaults (no overrides)</div>
+                ) : (
+                  <div className="kv" style={{ gridTemplateColumns: "auto 1fr", gap: "3px 10px" }}>
+                    {confEntries.map(([k, v]) => (
+                      <Fragment key={k}>
+                        <div className="k">{k}</div>
+                        <div className="mono" style={{ fontSize: 12, wordBreak: "break-word" }}>
+                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                        </div>
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -525,6 +597,7 @@ export default function StampTree() {
             }}
           >
             <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} olderVerstrs={olderVerstrs} onSelect={select} />
+            <ConfigSection ws={ws} app={app} />
             <h2>legend</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {presentModes.map((mode) => (

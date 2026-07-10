@@ -3,21 +3,61 @@ import { Link, useParams } from "react-router-dom";
 import { api, appTag } from "../api";
 import type { AppRow, Workspace } from "../types";
 
+function AttachWorkspace({ onAttached }: { onAttached: () => void }) {
+  const [name, setName] = useState("");
+  const [path, setPath] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim() || !path.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.attachWorkspace(name.trim(), path.trim());
+      setName("");
+      setPath("");
+      onAttached();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ marginTop: 0 }}>add a workspace</h2>
+      <div className="toolbar" style={{ flexWrap: "wrap" }}>
+        <label>
+          name{" "}
+          <input placeholder="my-repo" value={name}
+            onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />
+        </label>
+        <label>
+          path{" "}
+          <input className="mono" placeholder="/abs/path/to/checkout" value={path}
+            onChange={(e) => setPath(e.target.value)} style={{ width: 280 }} />
+        </label>
+        <button className="primary" onClick={submit} disabled={busy}>
+          {busy ? "Attaching…" : "Attach"}
+        </button>
+      </div>
+      <div className="cli-hint">
+        Attaches an existing local checkout — a path on the server host with a
+        .git or .vmn directory.
+      </div>
+      {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
 export function WorkspacesHome() {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
 
-  useEffect(() => {
+  const load = () =>
     api.workspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
-  }, []);
-
-  if (workspaces === null) return <div className="empty">Loading…</div>;
-  if (workspaces.length === 0)
-    return (
-      <div className="empty">
-        No workspaces yet. Start the server inside a vmn repo, or attach one
-        via the API.
-      </div>
-    );
+  useEffect(() => { load(); }, []);
 
   return (
     <>
@@ -26,16 +66,25 @@ export function WorkspacesHome() {
         Each workspace is an isolated checkout — its own working tree,
         experiments, and lock.
       </p>
-      <div className="grid">
-        {workspaces.map((w) => (
-          <Link key={w.name} to={`/ws/${w.name}`}>
-            <div className="card tile">
-              <div className="name">{w.name}</div>
-              <div className="meta mono">{w.kind === "s3" ? `s3://${w.bucket}` : w.path}</div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <AttachWorkspace onAttached={load} />
+      {workspaces === null ? (
+        <div className="empty">Loading…</div>
+      ) : workspaces.length === 0 ? (
+        <div className="empty">
+          No workspaces yet. Attach one above, or start the server inside a vmn repo.
+        </div>
+      ) : (
+        <div className="grid">
+          {workspaces.map((w) => (
+            <Link key={w.name} to={`/ws/${w.name}`}>
+              <div className="card tile">
+                <div className="name">{w.name}</div>
+                <div className="meta mono">{w.kind === "s3" ? `s3://${w.bucket}` : w.path}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </>
   );
 }

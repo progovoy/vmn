@@ -1,47 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { appTag } from "../api";
+import { api } from "../api";
+import type { Job } from "../types";
 import { AppLayoutNav } from "./Leaderboard";
-
-interface Job {
-  id: string;
-  command: string[];
-  status: string;
-  exit_code: number | null;
-  log: string;
-}
-
-function useToken() {
-  return sessionStorage.getItem("vmn_token");
-}
-
-async function postAction(
-  ws: string,
-  app: string,
-  action: string,
-  body: Record<string, unknown>,
-  token: string | null
-): Promise<Job> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(
-    `/api/v1/workspaces/${ws}/apps/${appTag(app)}/actions/${action}`,
-    { method: "POST", headers, body: JSON.stringify(body) }
-  );
-  if (!res.ok) {
-    const b = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(b.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
 
 export default function Actions() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const appName = app.replaceAll("-", "/");
-  const token = useToken();
   const [mode, setMode] = useState("patch");
   const [prerelease, setPrerelease] = useState("");
   const [dryRun, setDryRun] = useState(true);
+  const [gotoVerstr, setGotoVerstr] = useState("");
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number>();
@@ -51,29 +20,29 @@ export default function Actions() {
   const poll = (id: string) => {
     window.clearInterval(pollRef.current);
     pollRef.current = window.setInterval(async () => {
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`/api/v1/jobs/${id}`, { headers });
-      const j: Job = await res.json();
+      const j = await api.job(id);
       setJob(j);
       if (j.status !== "running") window.clearInterval(pollRef.current);
     }, 500);
   };
 
-  const stamp = async () => {
+  const run = async (action: string, body: Record<string, unknown>) => {
     setError(null);
     try {
-      const j = await postAction(ws, app, "stamp", {
-        release_mode: mode,
-        prerelease: prerelease || undefined,
-        dry_run: dryRun,
-      }, token);
+      const j = await api.action(ws, app, action, body);
       setJob(j);
       poll(j.id);
     } catch (e) {
       setError(String(e));
     }
   };
+
+  const stamp = () =>
+    run("stamp", {
+      release_mode: mode,
+      prerelease: prerelease || undefined,
+      dry_run: dryRun,
+    });
 
   return (
     <>
@@ -117,6 +86,36 @@ export default function Actions() {
           vmn stamp -r {mode}
           {prerelease ? ` --pr ${prerelease}` : ""}
           {dryRun ? " --dry-run" : ""} {appName}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>goto a version</h2>
+        <p className="subtitle" style={{ marginTop: 0 }}>
+          Checks out this app and all its dependency repos to the exact state
+          recorded at the given version — cloning any missing deps.
+        </p>
+        <div className="toolbar">
+          <label>
+            version{" "}
+            <input
+              className="mono"
+              placeholder="e.g. 1.2.0"
+              value={gotoVerstr}
+              onChange={(e) => setGotoVerstr(e.target.value)}
+              style={{ width: 140 }}
+            />
+          </label>
+          <button
+            className="primary"
+            disabled={!gotoVerstr.trim()}
+            onClick={() => run("goto", { verstr: gotoVerstr.trim() })}
+          >
+            Goto
+          </button>
+        </div>
+        <div className="cli-hint">
+          vmn goto -v {gotoVerstr.trim() || "<version>"} {appName}
         </div>
       </div>
 

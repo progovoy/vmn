@@ -10,6 +10,26 @@ export interface AppRow {
   experiments: number;
 }
 
+export interface DepConfig {
+  path: string;
+  remote: string | null;
+  vcs_type: string | null;
+  branch: string | null;
+}
+
+export interface AppConfig {
+  conf: Record<string, unknown>;
+  deps: DepConfig[];
+}
+
+export interface Job {
+  id: string;
+  command: string[];
+  status: string;
+  exit_code: number | null;
+  log: string;
+}
+
 export interface ExperimentRow {
   verstr: string;
   code_verstr: string;

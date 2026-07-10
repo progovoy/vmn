@@ -7,8 +7,6 @@ CLI always agree.
 """
 import os
 
-import yaml
-
 from version_stamp.cli.experiment import (
     _get_latest_metrics,
     _load_log,
@@ -16,24 +14,13 @@ from version_stamp.cli.experiment import (
     get_metric_series,
 )
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 
 
 def experiment_storage(root_path):
     return get_snapshot_storage(
         "local", vmn_root_path=root_path, subdir="experiments"
     )
-
-
-def _read_app_conf(root_path, app_name):
-    conf_path = os.path.join(
-        root_path, ".vmn", app_name.replace("/", os.sep), "conf.yml"
-    )
-    try:
-        with open(conf_path) as f:
-            data = yaml.safe_load(f) or {}
-    except OSError:
-        return {}
-    return data.get("conf", {}) or {}
 
 
 def metrics_schema(root_path, app_name):
