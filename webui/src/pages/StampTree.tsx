@@ -1,4 +1,5 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import type { AppConfig, Changelog, VersionRow } from "../types";
@@ -296,6 +297,67 @@ function Disclosure({ open, onToggle, label }: {
 }
 
 /** App-level config + dependency repos, collapsed by default. */
+/** Empty containers and nulls are vmn's "not configured" — hidden for clarity. */
+const isDefaultConfValue = (v: unknown) =>
+  v == null ||
+  (Array.isArray(v) && v.length === 0) ||
+  (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0);
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** An indented block for a nested config value. */
+function ConfNested({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ borderLeft: "2px solid var(--border)", paddingLeft: 10, marginTop: 3 }}>
+      {children}
+    </div>
+  );
+}
+
+function ConfValue({ v }: { v: unknown }) {
+  if (Array.isArray(v)) {
+    if (v.every((x) => !isPlainObject(x))) {
+      return <span className="mono" style={{ fontSize: 12 }}>{v.join(", ")}</span>;
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {v.map((x, i) =>
+          isPlainObject(x) ? <ConfNested key={i}><ConfEntries obj={x} /></ConfNested>
+            : <ConfValue key={i} v={x} />
+        )}
+      </div>
+    );
+  }
+  return (
+    <span className="mono" style={{ fontSize: 12, wordBreak: "break-word" }}>
+      {String(v)}
+    </span>
+  );
+}
+
+/** Key/value rows; nested objects break onto their own indented block. */
+function ConfEntries({ obj }: { obj: Record<string, unknown> }) {
+  const entries = Object.entries(obj).filter(([, v]) => !isDefaultConfValue(v));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {entries.map(([k, v]) =>
+        isPlainObject(v) ? (
+          <div key={k}>
+            <div className="k">{k}</div>
+            <ConfNested><ConfEntries obj={v} /></ConfNested>
+          </div>
+        ) : (
+          <div key={k} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+            <span className="k" style={{ flexShrink: 0 }}>{k}</span>
+            <ConfValue v={v} />
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 function ConfigSection({ ws, app }: { ws: string; app: string }) {
   const [open, setOpen] = useState(false);
   const [cfg, setCfg] = useState<AppConfig | null>(null);
@@ -310,7 +372,13 @@ function ConfigSection({ ws, app }: { ws: string; app: string }) {
     return () => { live = false; };
   }, [open, ws, app]);
 
-  const confEntries = cfg ? Object.entries(cfg.conf).filter(([k]) => k !== "deps") : [];
+  const conf = cfg
+    ? Object.fromEntries(
+        Object.entries(cfg.conf).filter(
+          ([k, v]) => k !== "deps" && !isDefaultConfValue(v)
+        )
+      )
+    : {};
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -335,19 +403,10 @@ function ConfigSection({ ws, app }: { ws: string; app: string }) {
               </div>
               <div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>conf.yml</div>
-                {confEntries.length === 0 ? (
+                {Object.keys(conf).length === 0 ? (
                   <div style={{ color: "var(--text-muted)" }}>defaults (no overrides)</div>
                 ) : (
-                  <div className="kv" style={{ gridTemplateColumns: "auto 1fr", gap: "3px 10px" }}>
-                    {confEntries.map(([k, v]) => (
-                      <Fragment key={k}>
-                        <div className="k">{k}</div>
-                        <div className="mono" style={{ fontSize: 12, wordBreak: "break-word" }}>
-                          {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                        </div>
-                      </Fragment>
-                    ))}
-                  </div>
+                  <ConfEntries obj={conf} />
                 )}
               </div>
             </>
