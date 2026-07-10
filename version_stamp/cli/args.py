@@ -15,6 +15,17 @@ from version_stamp.cli.constants import VMN_ARGS
 
 
 def parse_user_commands(command_line):
+    # `vmn exp run <app> -- <command...>` : everything after the first `--`
+    # is the child command. Split it off before argparse (which would otherwise
+    # treat it as positionals) and attach it as args.run_cmd.
+    cl = list(command_line) if command_line is not None else list(sys.argv[1:])
+    run_cmd = None
+    if "--" in cl:
+        sep = cl.index("--")
+        if any(tok in ("exp", "experiment") for tok in cl[:sep]):
+            run_cmd = cl[sep + 1:]
+            cl = cl[:sep]
+
     parser = argparse.ArgumentParser("vmn")
     parser.add_argument(
         "--version", "-v", action="version", version=version_mod.version
@@ -27,7 +38,8 @@ def parse_user_commands(command_line):
         arg = arg.replace("-", "_")
         getattr(sys.modules[__name__], f"add_arg_{arg}")(subprasers)
 
-    args = parser.parse_args(command_line)
+    args = parser.parse_args(cl)
+    args.run_cmd = run_cmd
 
     normalize_config_gen(args)
 
@@ -472,7 +484,7 @@ def _add_experiment_parser(subprasers, name):
         "action",
         nargs="?",
         default="create",
-        choices=["create", "add", "list", "show", "compare", "restore", "export", "prune"],
+        choices=["create", "run", "add", "list", "show", "compare", "restore", "export", "prune"],
         help="Experiment action (default: create)",
     )
     pexp.add_argument("name", help="The application's name")

@@ -830,3 +830,146 @@ def test_exp_show_at_index(app_layout, capfd):
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="show", version="@1") == 0
     assert verstrs[0] in capfd.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# W7: vmn exp run — one-command experiment execution
+# ---------------------------------------------------------------------------
+
+import sys as _sys
+
+_PY = _sys.executable or "python3"
+
+
+def test_exp_run_records_command_exit_code_and_duration(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run", note="a run",
+        run_cmd=[_PY, "-c", "print('hello from run')"],
+    )
+    assert ret == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    log = _exp_log(app_layout, verstr)
+    run_entries = [e for e in log if e.get("type") == "run"]
+    assert len(run_entries) == 1
+    entry = run_entries[0]
+    assert entry["exit_code"] == 0
+    assert entry["command"][-1] == "print('hello from run')"
+    assert isinstance(entry["duration_sec"], (int, float))
+
+
+def test_exp_run_captures_metrics_file(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    script = (
+        "import os\n"
+        "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
+        "    f.write('loss=0.11\\nacc=0.97\\n')\n"
+    )
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run",
+        run_cmd=[_PY, "-c", script],
+    )
+    assert ret == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version=verstr) == 0
+    out = capfd.readouterr().out
+    assert "loss" in out
+    assert "acc" in out
+
+
+def test_exp_run_propagates_child_exit_code(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run",
+        run_cmd=[_PY, "-c", "import sys; sys.exit(3)"],
+    )
+    assert ret == 3
+
+
+def test_exp_run_sets_experiment_env(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    script = (
+        "import os\n"
+        "with open('env_dump.txt', 'w') as f:\n"
+        "    f.write(os.environ.get('VMN_EXPERIMENT_ID','') + '\\n')\n"
+        "    f.write(os.environ.get('VMN_APP_NAME','') + '\\n')\n"
+    )
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run",
+        run_cmd=[_PY, "-c", script],
+    )
+    assert ret == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    with open(os.path.join(app_layout.repo_path, "env_dump.txt")) as f:
+        lines = f.read().strip().split("\n")
+    assert lines[0] == verstr
+    assert lines[1] == app_layout.app_name
+
+
+def test_exp_run_clean_tree_creates_experiment(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    # Clean tree right after stamp.
+    capfd.readouterr()
+    ret = _experiment(
+        app_layout.app_name, action="run",
+        run_cmd=[_PY, "-c", "print('clean run')"],
+    )
+    assert ret == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+    assert verstr.endswith(".0000000")
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="list") == 0
+    assert verstr in capfd.readouterr().out
+
+
+def test_exp_run_requires_double_dash(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    capfd.readouterr()
+    # No command after --
+    ret = _experiment(app_layout.app_name, action="run")
+    assert ret == 1
+
+
+def test_exp_run_cold_start_fresh_repo(app_layout, capfd):
+    """Zero setup: exp run on a fresh repo auto-inits, stamps, and records."""
+    capfd.readouterr()
+    ret = _experiment(
+        "cold_model", action="run",
+        run_cmd=[_PY, "-c", "print('cold start')"],
+    )
+    assert ret == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert verstr is not None
+
+    capfd.readouterr()
+    assert _experiment("cold_model", action="list") == 0
+    assert verstr in capfd.readouterr().out

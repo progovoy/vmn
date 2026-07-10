@@ -326,7 +326,8 @@ def _configure_2_deps(
 def _experiment(app_name, action="create", version=None, note=None,
                 metrics=None, file=None, attach=None, sort=None,
                 top=None, latest=None, tool=None, output=None,
-                keep=None, older_than=None, last=None, command="experiment"):
+                keep=None, older_than=None, last=None, run_cmd=None,
+                command="experiment"):
     args_list = [command]
     if action != "create":
         args_list.append(action)
@@ -362,6 +363,9 @@ def _experiment(app_name, action="create", version=None, note=None,
         args_list.extend(["--keep", str(keep)])
     if older_than is not None:
         args_list.extend(["--older-than", older_than])
+    if run_cmd is not None:
+        args_list.append("--")
+        args_list.extend(run_cmd)
 
     reset_logger()
     return vmn_run(args_list)[0]

@@ -224,8 +224,8 @@ def handle_experiment(vmn_ctx):
             if conf_val:
                 params[key] = conf_val
 
-    # Auto-init for create action
-    if action == "create":
+    # Auto-init for create/run (zero-setup cold start).
+    if action in ("create", "run"):
         expected_status = {"repo_tracked", "app_tracked"}
         optional_status = {
             "repos_exist_locally", "detached", "pending", "outgoing",
@@ -263,6 +263,8 @@ def handle_experiment(vmn_ctx):
 
     if action == "create":
         return experiment_create(vcs, params, storage, args)
+    elif action == "run":
+        return experiment_run(vcs, params, storage, args)
     elif action == "add":
         return experiment_add(vcs, params, storage, args)
     elif action == "list":
@@ -378,6 +380,87 @@ def _experiment_create_core(vcs, storage, note=None):
     storage.save(vcs.name, verstr, metadata, patches)
     _save_log(storage, vcs.name, verstr, [_create_log_entry("create", note=note)])
     return verstr, None
+
+
+# ---------------------------------------------------------------------------
+# run
+# ---------------------------------------------------------------------------
+
+@measure_runtime_decorator
+def experiment_run(vcs, params, storage, args):
+    """Create an experiment, run a command, and record its outcome + metrics.
+
+    The child inherits stdio (output streams live) and these env vars:
+    VMN_EXPERIMENT_ID, VMN_APP_NAME, VMN_METRICS_FILE. Any ``key=value`` lines the
+    child appends to VMN_METRICS_FILE are recorded as a metrics entry. Returns the
+    child's exit code.
+    """
+    import subprocess
+    import tempfile
+    import time
+
+    run_cmd = getattr(args, "run_cmd", None)
+    if not run_cmd:
+        VMN_LOGGER.error(
+            "No command to run. Usage: vmn exp run <app> -- <command> [args...]"
+        )
+        return 1
+
+    verstr, err = _experiment_create_core(vcs, storage, note=args.note)
+    if err is not None:
+        return err
+
+    if args.file:
+        log = _load_log(storage, vcs.name, verstr)
+        notes_data = _parse_notes_file(args.file)
+        for key in ("params", "hypothesis", "tags"):
+            if key in notes_data:
+                log[0][key] = notes_data[key]
+        _save_log(storage, vcs.name, verstr, log)
+
+    fd, metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
+    os.close(fd)
+    env = dict(os.environ)
+    env["VMN_EXPERIMENT_ID"] = verstr
+    env["VMN_APP_NAME"] = vcs.name
+    env["VMN_METRICS_FILE"] = metrics_path
+
+    VMN_LOGGER.info(f"Experiment {verstr}: running {' '.join(run_cmd)}")
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(run_cmd, env=env, cwd=vcs.vmn_root_path)
+        exit_code = proc.returncode
+    except FileNotFoundError:
+        VMN_LOGGER.error(f"Command not found: {run_cmd[0]}")
+        _safe_unlink(metrics_path)
+        return 1
+    duration = round(time.monotonic() - start, 3)
+
+    _append_to_log(storage, vcs.name, verstr, _create_log_entry(
+        "run", command=run_cmd, exit_code=exit_code, duration_sec=duration,
+    ))
+
+    try:
+        with open(metrics_path) as f:
+            metric_lines = [l.strip() for l in f if l.strip()]
+    except OSError:
+        metric_lines = []
+    _safe_unlink(metrics_path)
+    if metric_lines:
+        _append_to_log(storage, vcs.name, verstr, _create_log_entry(
+            "metrics", values=_parse_metrics(metric_lines),
+        ))
+
+    VMN_LOGGER.info(f"Experiment {verstr}: exited {exit_code} in {duration}s")
+    print(verstr)
+    return exit_code
+
+
+def _safe_unlink(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------------------------
