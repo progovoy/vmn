@@ -13,6 +13,14 @@ import sys
 import threading
 import uuid
 
+# Substrings a successful job's log can carry to mean "ran fine, but there
+# was nothing to do" - distinct from actually producing the thing the action
+# promised (e.g. `vmn snapshot create` on a clean tree exits 0 and does not
+# create a snapshot).
+_NOOP_LOG_MARKERS = (
+    "No local changes to snapshot (working tree is clean)",
+)
+
 
 def _metric_args(metrics):
     """Validate a {name: value} mapping and render it as ``--metrics k=v ...``.
@@ -126,6 +134,7 @@ class Job:
         self.status = "running"
         self.exit_code = None
         self.log = ""
+        self.noop = False
 
     def to_dict(self):
         return {
@@ -134,6 +143,7 @@ class Job:
             "status": self.status,
             "exit_code": self.exit_code,
             "log": self.log,
+            "noop": self.noop,
         }
 
 
@@ -179,6 +189,8 @@ class JobRunner:
             job.log = (proc.stdout or "") + (proc.stderr or "")
             job.exit_code = proc.returncode
             job.status = "succeeded" if proc.returncode == 0 else "failed"
+            if job.status == "succeeded":
+                job.noop = any(m in job.log for m in _NOOP_LOG_MARKERS)
         except Exception as e:  # pragma: no cover - defensive
             job.log = str(e)
             job.exit_code = -1

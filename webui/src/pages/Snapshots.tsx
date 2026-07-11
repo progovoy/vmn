@@ -12,7 +12,7 @@ function NewSnapshot({ ws, app, appName, onCreated, onClose }: {
 }) {
   const [note, setNote] = useState("");
   const { job, error, run } = useJob((j) => {
-    if (j.status === "succeeded") onCreated();
+    if (j.status === "succeeded" && !j.noop) onCreated();
   });
 
   const running = job?.status === "running";
@@ -40,6 +40,11 @@ function NewSnapshot({ ws, app, appName, onCreated, onClose }: {
         </button>
         <button onClick={onClose}>Cancel</button>
         {error && <span className="error">{error}</span>}
+        {job && job.status === "succeeded" && job.noop && (
+          <span style={{ color: "var(--text-muted)" }}>
+            working tree is clean — nothing to snapshot
+          </span>
+        )}
       </div>
       <div className="cli-hint">{cli}</div>
       {job && job.status === "failed" && <JobCard job={job} />}

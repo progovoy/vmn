@@ -34,6 +34,8 @@ export interface Job {
   status: string;
   exit_code: number | null;
   log: string;
+  /** Ran fine but did nothing (e.g. snapshot create on a clean tree). */
+  noop: boolean;
 }
 
 export interface ExperimentRow {

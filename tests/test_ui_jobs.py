@@ -323,12 +323,38 @@ def test_ui_snapshot_create_action(app_layout, capfd):
     assert r.status_code == 202
     job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
     assert job["status"] == "succeeded", job.get("log")
+    assert job["noop"] is False
 
     rows = client.get(
         f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
     ).json()
     assert len(rows) == 1
     assert rows[0]["note"] == "from the ui"
+
+
+def test_ui_snapshot_create_noop_on_clean_tree(app_layout, capfd):
+    """`vmn snapshot create` exits 0 with nothing captured when the working
+    tree is clean. The job must be flagged `noop` so the UI can tell 'nothing
+    to snapshot' apart from an actual new snapshot - the CLI's exit code alone
+    doesn't distinguish them."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+
+    client = _client(app_layout)
+    r = client.post(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/snapshot_create",
+        json={},
+    )
+    assert r.status_code == 202
+    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    assert job["status"] == "succeeded", job.get("log")
+    assert job["noop"] is True
+
+    rows = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
+    ).json()
+    assert rows == []
 
 
 def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
