@@ -89,7 +89,7 @@ export default function App() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link to={ws ? `/ws/${ws}` : "/"} className="sb-brand">
+        <Link to="/" className="sb-brand">
           <span className="logo">v</span>
           <span className="word">vmn<span> ui</span></span>
         </Link>
