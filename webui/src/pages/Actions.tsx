@@ -36,7 +36,7 @@ export default function Actions() {
     });
 
   const gotoRun = () =>
-    run(ws, appTag(gotoApp), "goto", { verstr: gotoVerstr.trim() });
+    run(ws, appTag(gotoApp), "goto", { verstr: gotoVerstr.trim() || undefined });
 
   return (
     <>
@@ -123,8 +123,8 @@ export default function Actions() {
                 className="mono"
                 placeholder={
                   gotoVersions.length
-                    ? `e.g. ${gotoVersions[gotoVersions.length - 1].verstr}`
-                    : "e.g. 1.2.0"
+                    ? `(none) e.g. ${gotoVersions[gotoVersions.length - 1].verstr}`
+                    : "(none) e.g. 1.2.0"
                 }
                 value={gotoVerstr}
                 onChange={(e) => setGotoVerstr(e.target.value)}
@@ -136,12 +136,13 @@ export default function Actions() {
                 ))}
               </datalist>
             </label>
-            <button disabled={!gotoVerstr.trim()} onClick={gotoRun}>
-              Goto
-            </button>
+            <button onClick={gotoRun}>Goto</button>
           </div>
+          <p className="page-sub" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 0 }}>
+            Leave version empty to go to the tip of the current branch.
+          </p>
           <div className="cli-hint">
-            vmn goto -v {gotoVerstr.trim() || "<version>"} {gotoApp}
+            vmn goto{gotoVerstr.trim() ? ` -v ${gotoVerstr.trim()}` : ""} {gotoApp}
           </div>
         </div>
       </div>

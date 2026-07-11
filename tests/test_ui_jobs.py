@@ -195,6 +195,80 @@ def test_ui_exp_create_action(app_layout, capfd):
     assert rows[0]["metrics"]["loss"] == 0.42
 
 
+def test_ui_goto_build_command_version_optional():
+    """`goto` accepts an empty version: goes to the tip of the branch,
+    matching `vmn goto <app>` with no `-v`."""
+    from version_stamp.ui.jobs import build_command
+
+    cmd, err = build_command("goto", "my_app", {})
+    assert err is None
+    assert cmd == ["vmn", "goto", "my_app"]
+
+    cmd, err = build_command("goto", "my_app", {"verstr": ""})
+    assert err is None
+    assert cmd == ["vmn", "goto", "my_app"]
+
+    cmd, err = build_command("goto", "my_app", {"verstr": "1.2.0"})
+    assert err is None
+    assert cmd == ["vmn", "goto", "-v", "1.2.0", "my_app"]
+
+
+def test_ui_goto_action_without_version(app_layout, capfd):
+    """POST actions/goto with no verstr goes to the tip of the branch."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "g.txt", "x")
+    _stamp_app(app_layout.app_name, "minor")
+
+    client = _client(app_layout)
+    r = client.post(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/goto",
+        json={},
+    )
+    assert r.status_code == 202
+    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    assert job["status"] == "succeeded", job.get("log")
+    assert "tip of the branch" in job["log"]
+
+
+def test_ui_snapshot_create_build_command():
+    from version_stamp.ui.jobs import build_command
+
+    cmd, err = build_command("snapshot_create", "my_app", {"note": "wip refactor"})
+    assert err is None
+    assert cmd == ["vmn", "snapshot", "create", "my_app", "--note", "wip refactor"]
+
+    cmd, err = build_command("snapshot_create", "my_app", {})
+    assert err is None
+    assert cmd == ["vmn", "snapshot", "create", "my_app"]
+
+
+def test_ui_snapshot_create_action(app_layout, capfd):
+    """POST actions/snapshot_create captures the dirty working tree."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "s.txt", "committed")
+    with open(os.path.join(app_layout.repo_path, "s.txt"), "w") as f:
+        f.write("dirty state")
+
+    client = _client(app_layout)
+    r = client.post(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/snapshot_create",
+        json={"note": "from the ui"},
+    )
+    assert r.status_code == 202
+    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    assert job["status"] == "succeeded", job.get("log")
+
+    rows = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
+    ).json()
+    assert len(rows) == 1
+    assert rows[0]["note"] == "from the ui"
+
+
 def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
     """A stamp in workspace A does not touch workspace B (a second clone)."""
     _run_vmn_init()

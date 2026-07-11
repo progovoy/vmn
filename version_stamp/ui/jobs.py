@@ -47,9 +47,11 @@ def build_command(action, app_name, body):
 
     if action == "goto":
         verstr = body.get("verstr")
-        if not verstr:
-            return None, "verstr is required"
-        return ["vmn", "goto", "-v", verstr, app_name], None
+        cmd = ["vmn", "goto"]
+        if verstr:
+            cmd += ["-v", verstr]
+        cmd.append(app_name)
+        return cmd, None
 
     if action == "prune":
         cmd = ["vmn", "experiment", "prune", app_name]
@@ -71,6 +73,12 @@ def build_command(action, app_name, body):
                 return None, f"Invalid metric name '{key}'"
         if metrics:
             cmd += ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()]
+        return cmd, None
+
+    if action == "snapshot_create":
+        cmd = ["vmn", "snapshot", "create", app_name]
+        if body.get("note"):
+            cmd += ["--note", body["note"]]
         return cmd, None
 
     if action == "note":

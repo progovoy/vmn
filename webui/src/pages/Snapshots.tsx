@@ -1,19 +1,65 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
 import type { SnapshotRow } from "../types";
 import { relTime } from "../util";
-import { PageHead, Skeleton } from "../components/ui";
+import { JobCard, PageHead, Skeleton, useJob } from "../components/ui";
+
+/** Inline `vmn snapshot create` — captures the dirty working tree as a job. */
+function NewSnapshot({ ws, app, appName, onCreated, onClose }: {
+  ws: string; app: string; appName: string;
+  onCreated: () => void; onClose: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const { job, error, run } = useJob((j) => {
+    if (j.status === "succeeded") onCreated();
+  });
+
+  const running = job?.status === "running";
+  const cli = `vmn snapshot create ${appName}` + (note ? ` --note "${note}"` : "");
+
+  return (
+    <div className="card">
+      <div className="eyebrow">new snapshot</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        Captures the current working tree — uncommitted changes, local
+        commits, untracked files — as a restorable snapshot.
+      </p>
+      <label className="field" style={{ marginBottom: 12 }}>
+        note
+        <input
+          placeholder="promising results"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          autoFocus
+        />
+      </label>
+      <div className="toolbar" style={{ marginBottom: 0 }}>
+        <button className="primary" onClick={() => run(ws, app, "snapshot_create", { note: note || undefined })} disabled={running}>
+          {running ? "Capturing…" : "Create snapshot"}
+        </button>
+        <button onClick={onClose}>Cancel</button>
+        {error && <span className="error">{error}</span>}
+      </div>
+      <div className="cli-hint">{cli}</div>
+      {job && job.status === "failed" && <JobCard job={job} />}
+    </div>
+  );
+}
 
 export default function Snapshots() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const [rows, setRows] = useState<SnapshotRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
   const appName = toAppName(app);
 
-  useEffect(() => {
-    api.snapshots(ws, app).then(setRows).catch((e) => setError(String(e)));
-  }, [ws, app]);
+  const load = useCallback(
+    () => api.snapshots(ws, app).then(setRows).catch((e) => setError(String(e))),
+    [ws, app]
+  );
+  useEffect(() => { load(); }, [load]);
 
   if (error) return <div className="error">{error}</div>;
   if (rows === null) return <Skeleton />;
@@ -25,15 +71,44 @@ export default function Snapshots() {
         captured working-tree states — uncommitted changes, local commits,
         untracked files
       </p>
+
+      {creating && (
+        <NewSnapshot
+          ws={ws}
+          app={app}
+          appName={appName}
+          onClose={() => setCreating(false)}
+          onCreated={() => {
+            const known = new Set(rows.map((r) => r.verstr));
+            setCreating(false);
+            api.snapshots(ws, app).then((next) => {
+              setRows(next);
+              setFlash(next.find((r) => !known.has(r.verstr))?.verstr ?? null);
+            });
+          }}
+        />
+      )}
+
       {rows.length === 0 ? (
-        <div className="empty">
-          No snapshots. Capture your dirty state:
-          <div className="cli-hint" style={{ margin: "12px auto", maxWidth: 480 }}>
-            vmn snapshot create {appName} --note "promising results"
+        !creating && (
+          <div className="empty">
+            No snapshots. Capture your dirty state:
+            <div className="cli-hint" style={{ margin: "12px auto", maxWidth: 480 }}>
+              vmn snapshot create {appName} --note "promising results"
+            </div>
+            <button className="primary" onClick={() => setCreating(true)}>
+              ＋ New snapshot
+            </button>
           </div>
-        </div>
+        )
       ) : (
         <>
+          {!creating && (
+            <div className="toolbar">
+              <span className="spacer" />
+              <button onClick={() => setCreating(true)}>＋ New snapshot</button>
+            </div>
+          )}
           <div className="card flush">
             <div className="tbl-scroll">
               <table style={{ minWidth: 680 }}>
@@ -49,7 +124,7 @@ export default function Snapshots() {
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
-                    <tr key={r.verstr}>
+                    <tr key={r.verstr} className={flash === r.verstr ? "flash" : ""}>
                       <td className="idx-cell" style={{ paddingLeft: 16 }}>@{i + 1}</td>
                       <td className="mono" style={{ color: "var(--accent)" }}>
                         {r.verstr}
