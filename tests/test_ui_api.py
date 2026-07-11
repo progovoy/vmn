@@ -71,6 +71,90 @@ def test_ui_workspaces_and_apps(app_layout, capfd):
     assert any(a["name"] == app_layout.app_name for a in apps)
 
 
+def test_ui_workspace_clone_from_remote(app_layout, capfd):
+    """POST /workspaces with a remote clones it under the managed workspaces dir."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    client = _client(app_layout)
+
+    r = client.post(
+        "/api/v1/workspaces", json={"name": "cloned", "remote": app_layout.repo_path}
+    )
+    assert r.status_code == 201
+    ws = r.json()
+    expected = os.path.join(app_layout.base_dir, "ui_data", "workspaces", "cloned")
+    assert ws["path"] == expected
+    assert os.path.isdir(os.path.join(expected, ".git"))
+
+    # The clone is a live workspace: its apps are listable.
+    r = client.get("/api/v1/workspaces/cloned/apps")
+    assert r.status_code == 200
+    assert any(a["name"] == app_layout.app_name for a in r.json())
+
+
+def test_ui_workspace_clone_custom_path(app_layout, capfd):
+    """A custom path overrides the managed dir."""
+    client = _client(app_layout)
+    target = os.path.join(app_layout.base_dir, "custom_clone")
+
+    r = client.post(
+        "/api/v1/workspaces",
+        json={"name": "custom", "remote": app_layout.repo_path, "path": target},
+    )
+    assert r.status_code == 201
+    assert r.json()["path"] == target
+    assert os.path.isdir(os.path.join(target, ".git"))
+
+
+def test_ui_workspace_clone_bad_remote(app_layout, capfd):
+    """A failing clone is a 400, no workspace is registered, and no residue is
+    left in the managed dir — so a retry with a good remote succeeds."""
+    client = _client(app_layout)
+
+    r = client.post(
+        "/api/v1/workspaces", json={"name": "bad", "remote": "/nonexistent/repo"}
+    )
+    assert r.status_code == 400
+    names = [w["name"] for w in client.get("/api/v1/workspaces").json()]
+    assert "bad" not in names
+
+    managed = os.path.join(app_layout.base_dir, "ui_data", "workspaces", "bad")
+    assert not os.path.exists(managed)
+    r = client.post(
+        "/api/v1/workspaces", json={"name": "bad", "remote": app_layout.repo_path}
+    )
+    assert r.status_code == 201
+
+
+def test_ui_workspace_remove_deletes_managed_clone_only(app_layout, capfd):
+    """Removing a managed clone deletes its server-owned dir; removing an
+    attached workspace leaves the user's checkout alone."""
+    client = _client(app_layout)
+
+    r = client.post(
+        "/api/v1/workspaces", json={"name": "managed", "remote": app_layout.repo_path}
+    )
+    managed_path = r.json()["path"]
+    assert os.path.isdir(managed_path)
+
+    assert client.delete("/api/v1/workspaces/managed").status_code == 204
+    assert not os.path.exists(managed_path)
+
+    assert client.delete("/api/v1/workspaces/main").status_code == 204
+    assert os.path.isdir(app_layout.repo_path)
+
+
+def test_ui_workspace_invalid_name_rejected(app_layout, capfd):
+    """Names are path components and URL segments — reject unsafe ones."""
+    client = _client(app_layout)
+    for bad in ("../evil", "a/b", ".hidden", ""):
+        r = client.post(
+            "/api/v1/workspaces", json={"name": bad, "path": app_layout.repo_path}
+        )
+        assert r.status_code == 400, f"name {bad!r} should be rejected"
+
+
 def test_ui_leaderboard_matches_cli_sort(app_layout, capfd):
     """API leaderboard order equals `vmn exp list --sort loss` (goal default max)."""
     verstrs = _seed_experiments(app_layout, capfd, n=3)

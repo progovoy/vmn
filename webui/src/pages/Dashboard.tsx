@@ -3,21 +3,29 @@ import { Link, useParams } from "react-router-dom";
 import { api, appTag } from "../api";
 import type { AppRow, Workspace } from "../types";
 
-function AttachWorkspace({ onAttached }: { onAttached: () => void }) {
+function AddWorkspace({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
+  const [remote, setRemote] = useState("");
   const [path, setPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const cloning = remote.trim() !== "";
+  const ready = name.trim() && (cloning || path.trim());
+
   const submit = async () => {
-    if (!name.trim() || !path.trim()) return;
+    if (!ready) return;
     setBusy(true);
     setError(null);
     try {
-      await api.attachWorkspace(name.trim(), path.trim());
+      await api.addWorkspace(name.trim(), {
+        remote: remote.trim() || undefined,
+        path: path.trim() || undefined,
+      });
       setName("");
+      setRemote("");
       setPath("");
-      onAttached();
+      onAdded();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -32,20 +40,29 @@ function AttachWorkspace({ onAttached }: { onAttached: () => void }) {
         <label>
           name{" "}
           <input placeholder="my-repo" value={name}
-            onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />
+            onChange={(e) => setName(e.target.value)} style={{ width: 130 }} />
+        </label>
+        <label>
+          remote{" "}
+          <input className="mono" placeholder="git@host:org/repo.git (optional)"
+            value={remote}
+            onChange={(e) => setRemote(e.target.value)} style={{ width: 250 }} />
         </label>
         <label>
           path{" "}
-          <input className="mono" placeholder="/abs/path/to/checkout" value={path}
-            onChange={(e) => setPath(e.target.value)} style={{ width: 280 }} />
+          <input className="mono"
+            placeholder={cloning ? "(managed dir)" : "/abs/path/to/checkout"}
+            value={path}
+            onChange={(e) => setPath(e.target.value)} style={{ width: 220 }} />
         </label>
-        <button className="primary" onClick={submit} disabled={busy}>
-          {busy ? "Attaching…" : "Attach"}
+        <button className="primary" onClick={submit} disabled={busy || !ready}>
+          {busy ? (cloning ? "Cloning…" : "Attaching…") : cloning ? "Clone" : "Attach"}
         </button>
       </div>
       <div className="cli-hint">
-        Attaches an existing local checkout — a path on the server host with a
-        .git or .vmn directory.
+        {cloning
+          ? "Clones the remote on the server host — into the managed workspaces dir, or the given path."
+          : "Attaches an existing local checkout — a path on the server host with a .git or .vmn directory. Fill remote to clone instead."}
       </div>
       {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
     </div>
@@ -66,7 +83,7 @@ export function WorkspacesHome() {
         Each workspace is an isolated checkout — its own working tree,
         experiments, and lock.
       </p>
-      <AttachWorkspace onAttached={load} />
+      <AddWorkspace onAdded={load} />
       {workspaces === null ? (
         <div className="empty">Loading…</div>
       ) : workspaces.length === 0 ? (

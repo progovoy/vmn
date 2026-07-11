@@ -74,11 +74,16 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         return [ws.to_public_dict() for ws in manager.list()]
 
     @app.post(f"{API_PREFIX}/workspaces", status_code=201)
-    def attach_workspace(body: dict):
+    def add_workspace(body: dict):
         if read_only:
             raise HTTPException(403, "Server is read-only")
         try:
-            ws = manager.attach_path(body["name"], body["path"])
+            if body.get("remote"):
+                ws = manager.clone_remote(
+                    body["name"], body["remote"], path=body.get("path")
+                )
+            else:
+                ws = manager.attach_path(body["name"], body["path"])
         except KeyError as e:
             raise HTTPException(422, f"Missing field: {e}")
         except WorkspaceError as e:

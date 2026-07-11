@@ -46,8 +46,8 @@ export const appTag = (name: string) => name.replaceAll("/", "-");
 
 export const api = {
   workspaces: () => get<Workspace[]>("/workspaces"),
-  attachWorkspace: (name: string, path: string) =>
-    post<Workspace>("/workspaces", { name, path }),
+  addWorkspace: (name: string, opts: { remote?: string; path?: string }) =>
+    post<Workspace>("/workspaces", { name, ...opts }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),
   config: (ws: string, app: string) =>
     get<AppConfig>(`/workspaces/${ws}/apps/${appTag(app)}/config`),
