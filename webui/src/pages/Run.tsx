@@ -11,8 +11,8 @@ import { JobCard, Skeleton, useJob } from "../components/ui";
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
  *  for the training-curve chart. */
-function AppendMetrics({ ws, app, verstr, onAdded }: {
-  ws: string; app: string; verstr: string; onAdded: () => void;
+function AppendMetrics({ ws, app, appName, verstr, onAdded }: {
+  ws: string; app: string; appName: string; verstr: string; onAdded: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -56,6 +56,9 @@ function AppendMetrics({ ws, app, verstr, onAdded }: {
   }
 
   const running = job?.status === "running";
+  const cli =
+    `vmn exp add ${appName} -v ${verstr}` +
+    (text.trim() ? ` --metrics ${text.trim()}` : "");
   return (
     <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
       <label className="field">
@@ -76,6 +79,7 @@ function AppendMetrics({ ws, app, verstr, onAdded }: {
         <button onClick={() => { setOpen(false); setParseError(null); }}>Cancel</button>
         {(parseError || error) && <span className="error">{parseError || error}</span>}
       </div>
+      <div className="cli-hint">{cli}</div>
       {job && job.status === "failed" && <JobCard job={job} />}
     </div>
   );
@@ -227,7 +231,7 @@ export default function Run() {
               })}
             </div>
           )}
-          <AppendMetrics ws={ws} app={app} verstr={meta.verstr as string} onAdded={load} />
+          <AppendMetrics ws={ws} app={app} appName={appName} verstr={meta.verstr as string} onAdded={load} />
         </div>
       </div>
 
