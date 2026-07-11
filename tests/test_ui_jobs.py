@@ -169,6 +169,68 @@ def test_ui_exp_create_build_command():
     assert cmd is None and err
 
 
+def test_ui_exp_add_build_command():
+    """exp_add appends metrics (and/or a note) to an existing experiment."""
+    from version_stamp.ui.jobs import build_command
+
+    cmd, err = build_command(
+        "exp_add", "my_app",
+        {"verstr": "0.0.1-dev.abc.def", "metrics": {"loss": 0.05}},
+    )
+    assert err is None
+    assert cmd == [
+        "vmn", "experiment", "add", "my_app", "-v", "0.0.1-dev.abc.def",
+        "--metrics", "loss=0.05",
+    ]
+
+    # verstr is required — you append to a specific run.
+    cmd, err = build_command("exp_add", "my_app", {"metrics": {"loss": 0.05}})
+    assert cmd is None and err
+
+    # Nothing to append is an error, not a no-op subprocess.
+    cmd, err = build_command("exp_add", "my_app", {"verstr": "0.0.1-dev.abc.def"})
+    assert cmd is None and err
+
+    # Same metric-name validation as exp_create.
+    cmd, err = build_command(
+        "exp_add", "my_app",
+        {"verstr": "0.0.1-dev.abc.def", "metrics": {"bad key": 1}},
+    )
+    assert cmd is None and err
+
+
+def test_ui_exp_add_action(app_layout, capfd):
+    """POST actions/exp_add appends metrics to a specific experiment; the new
+    value is the one the leaderboard shows (latest wins)."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "committed")
+    with open(os.path.join(app_layout.repo_path, "a.txt"), "w") as f:
+        f.write("dirty")
+    capfd.readouterr()
+    _experiment(app_layout.app_name, note="r", metrics=["loss=0.5"])
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+
+    client = _client(app_layout)
+    r = client.post(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/exp_add",
+        json={"verstr": verstr, "metrics": {"loss": 0.2, "acc": 0.9}},
+    )
+    assert r.status_code == 202
+    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    assert job["status"] == "succeeded", job.get("log")
+
+    detail = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}"
+        f"/experiments/{verstr}"
+    ).json()
+    assert detail["metrics"]["loss"] == 0.2  # latest overrides the 0.5
+    assert detail["metrics"]["acc"] == 0.9
+    # Both loss points survive as a series for the training-curve chart.
+    assert [p["value"] for p in detail["series"]["loss"]] == [0.5, 0.2]
+
+
 def test_ui_exp_create_action(app_layout, capfd):
     """POST actions/exp_create captures the working state as an experiment."""
     _run_vmn_init()

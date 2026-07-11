@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -6,7 +6,80 @@ import {
 import { api, appName as toAppName } from "../api";
 import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
-import { Skeleton } from "../components/ui";
+import { JobCard, Skeleton, useJob } from "../components/ui";
+
+/** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
+ *  points to this run. Latest value wins in the summary; every point is kept
+ *  for the training-curve chart. */
+function AppendMetrics({ ws, app, verstr, onAdded }: {
+  ws: string; app: string; verstr: string; onAdded: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [parseError, setParseError] = useState<string | null>(null);
+  const { job, error, run } = useJob((j) => {
+    if (j.status === "succeeded") {
+      setText("");
+      setOpen(false);
+      onAdded();
+    }
+  });
+
+  const submit = () => {
+    const metrics: Record<string, string> = {};
+    for (const pair of text.trim().split(/\s+/).filter(Boolean)) {
+      const eq = pair.indexOf("=");
+      if (eq < 1) {
+        setParseError(`"${pair}" is not key=value`);
+        return;
+      }
+      metrics[pair.slice(0, eq)] = pair.slice(eq + 1);
+    }
+    if (Object.keys(metrics).length === 0) {
+      setParseError("enter at least one key=value");
+      return;
+    }
+    setParseError(null);
+    run(ws, app, "exp_add", { verstr, metrics });
+  };
+
+  if (!open) {
+    return (
+      <button
+        className="link"
+        style={{ marginTop: 12 }}
+        onClick={() => setOpen(true)}
+      >
+        ＋ append metrics
+      </button>
+    );
+  }
+
+  const running = job?.status === "running";
+  return (
+    <div style={{ marginTop: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+      <label className="field">
+        add metrics (key=value, space-separated)
+        <input
+          className="mono"
+          placeholder="loss=0.09 acc=0.95"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          autoFocus
+        />
+      </label>
+      <div className="toolbar" style={{ marginTop: 10, marginBottom: 0 }}>
+        <button className="primary" onClick={submit} disabled={running}>
+          {running ? "Adding…" : "Append"}
+        </button>
+        <button onClick={() => { setOpen(false); setParseError(null); }}>Cancel</button>
+        {(parseError || error) && <span className="error">{parseError || error}</span>}
+      </div>
+      {job && job.status === "failed" && <JobCard job={job} />}
+    </div>
+  );
+}
 
 const DOT_COLOR: Record<string, string> = {
   create: "var(--accent)",
@@ -46,10 +119,14 @@ export default function Run() {
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(
+    () => api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e))),
+    [ws, app, verstr]
+  );
   useEffect(() => {
-    api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e)));
+    load();
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
-  }, [ws, app, verstr]);
+  }, [load, ws, app]);
 
   const chartData = useMemo(() => {
     if (!detail) return { points: [], metrics: [] as string[] };
@@ -150,6 +227,7 @@ export default function Run() {
               })}
             </div>
           )}
+          <AppendMetrics ws={ws} app={app} verstr={meta.verstr as string} onAdded={load} />
         </div>
       </div>
 

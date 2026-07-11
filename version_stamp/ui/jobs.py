@@ -14,6 +14,20 @@ import threading
 import uuid
 
 
+def _metric_args(metrics):
+    """Validate a {name: value} mapping and render it as ``--metrics k=v ...``.
+
+    Returns (args, error_message_or_None); ``([], None)`` when there are none.
+    """
+    metrics = metrics or {}
+    for key in metrics:
+        if not key or "=" in key or any(c.isspace() for c in key):
+            return None, f"Invalid metric name '{key}'"
+    if not metrics:
+        return [], None
+    return ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()], None
+
+
 def build_command(action, app_name, body):
     """Translate an action + request body into a ``vmn`` argv list.
 
@@ -67,13 +81,25 @@ def build_command(action, app_name, body):
         cmd = ["vmn", "experiment", "create", app_name]
         if body.get("note"):
             cmd += ["--note", body["note"]]
-        metrics = body.get("metrics") or {}
-        for key in metrics:
-            if not key or "=" in key or any(c.isspace() for c in key):
-                return None, f"Invalid metric name '{key}'"
-        if metrics:
-            cmd += ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()]
-        return cmd, None
+        metric_args, err = _metric_args(body.get("metrics"))
+        if err:
+            return None, err
+        return cmd + metric_args, None
+
+    if action == "exp_add":
+        verstr = body.get("verstr")
+        if not verstr:
+            return None, "verstr is required"
+        metric_args, err = _metric_args(body.get("metrics"))
+        if err:
+            return None, err
+        note = body.get("note")
+        if not metric_args and not note:
+            return None, "exp_add needs metrics or a note"
+        cmd = ["vmn", "experiment", "add", app_name, "-v", verstr]
+        if note:
+            cmd += ["--note", note]
+        return cmd + metric_args, None
 
     if action == "snapshot_create":
         cmd = ["vmn", "snapshot", "create", app_name]
