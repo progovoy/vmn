@@ -224,9 +224,14 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         return result
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/config")
-    def app_config(ws_name: str, app_tag: str):
+    def app_config(ws_name: str, app_tag: str, v: str = None):
         ws = _git_workspace(ws_name)
-        return config_reader.read_app_conf(ws.path, tag_name_to_app_name(app_tag))
+        payload, err = config_reader.app_conf_payload(
+            ws.path, tag_name_to_app_name(app_tag), verstr=v
+        )
+        if err:
+            raise HTTPException(404, err)
+        return payload
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/deps")
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):

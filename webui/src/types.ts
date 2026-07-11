@@ -11,7 +11,10 @@ export interface AppRow {
   versions: number;
 }
 
-export type AppConfig = Record<string, unknown>;
+export interface AppConfig {
+  conf: Record<string, unknown>;
+  text: string | null;
+}
 
 /** Per-metric leaderboard config from conf.yml (experiment.metrics). */
 export interface MetricSpec {

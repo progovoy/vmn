@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
 import type { AppConfig, Changelog, VersionRow } from "../types";
@@ -296,69 +295,39 @@ function Disclosure({ open, onToggle, label }: {
   );
 }
 
-/** App-level config + dependency repos, collapsed by default. */
-/** Empty containers and nulls are vmn's "not configured" — hidden for clarity. */
-const isDefaultConfValue = (v: unknown) =>
-  v == null ||
-  (Array.isArray(v) && v.length === 0) ||
-  (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0);
-
-const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
-/** An indented block for a nested config value. */
-function ConfNested({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ borderLeft: "2px solid var(--border)", paddingLeft: 10, marginTop: 3 }}>
-      {children}
-    </div>
-  );
-}
-
-function ConfValue({ v }: { v: unknown }) {
-  if (Array.isArray(v)) {
-    if (v.every((x) => !isPlainObject(x))) {
-      return <span className="mono" style={{ fontSize: 12 }}>{v.join(", ")}</span>;
-    }
+/** One conf.yml line, split into comment / key / value spans. */
+function YamlLine({ line }: { line: string }) {
+  const comment = line.match(/^(\s*)#(.*)$/);
+  if (comment) {
+    return <span className="yaml-comment">{line}</span>;
+  }
+  const kv = line.match(/^(\s*(?:- )?)([^:#]+):(\s?)(.*)$/);
+  if (kv) {
+    const [, indent, key, sep, rest] = kv;
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        {v.map((x, i) =>
-          isPlainObject(x) ? <ConfNested key={i}><ConfEntries obj={x} /></ConfNested>
-            : <ConfValue key={i} v={x} />
-        )}
-      </div>
+      <>
+        {indent}
+        <span className="yaml-key">{key}</span>:{sep}
+        {rest && <span className="yaml-value">{rest}</span>}
+      </>
     );
   }
+  return <span className="yaml-value">{line}</span>;
+}
+
+/** The raw conf.yml, syntax-highlighted. */
+function YamlBlock({ text }: { text: string }) {
   return (
-    <span className="mono" style={{ fontSize: 12, wordBreak: "break-word" }}>
-      {String(v)}
-    </span>
+    <pre className="yaml-block">
+      {text.replace(/\n$/, "").split("\n").map((line, i) => (
+        <div key={i}>{line ? <YamlLine line={line} /> : " "}</div>
+      ))}
+    </pre>
   );
 }
 
-/** Key/value rows; nested objects break onto their own indented block. */
-function ConfEntries({ obj }: { obj: Record<string, unknown> }) {
-  const entries = Object.entries(obj).filter(([, v]) => !isDefaultConfValue(v));
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      {entries.map(([k, v]) =>
-        isPlainObject(v) ? (
-          <div key={k}>
-            <div className="k">{k}</div>
-            <ConfNested><ConfEntries obj={v} /></ConfNested>
-          </div>
-        ) : (
-          <div key={k} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-            <span className="k" style={{ flexShrink: 0 }}>{k}</span>
-            <ConfValue v={v} />
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
-function ConfigSection({ ws, app }: { ws: string; app: string }) {
+/** The app's conf.yml as recorded at the selected version's tag. */
+function ConfigSection({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
   const [open, setOpen] = useState(false);
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -368,11 +337,11 @@ function ConfigSection({ ws, app }: { ws: string; app: string }) {
     let live = true;
     setCfg(null);
     setError(null);
-    api.config(ws, app).then((c) => live && setCfg(c)).catch((e) => live && setError(String(e)));
+    api.config(ws, app, verstr)
+      .then((c) => live && setCfg(c))
+      .catch((e) => live && setError(String(e)));
     return () => { live = false; };
-  }, [open, ws, app]);
-
-  const configured = cfg && Object.values(cfg).some((v) => !isDefaultConfValue(v));
+  }, [open, ws, app, verstr]);
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -380,10 +349,12 @@ function ConfigSection({ ws, app }: { ws: string; app: string }) {
       {open && (
         <div style={{ marginTop: 8 }}>
           {error && <div className="error">{error}</div>}
-          {cfg && (configured ? (
-            <ConfEntries obj={cfg} />
+          {cfg && (cfg.text ? (
+            <YamlBlock text={cfg.text} />
           ) : (
-            <div style={{ color: "var(--text-muted)" }}>defaults (no overrides)</div>
+            <div style={{ color: "var(--text-muted)" }}>
+              no conf.yml at this version (defaults)
+            </div>
           ))}
         </div>
       )}
@@ -632,7 +603,7 @@ export default function StampTree() {
             }}
           >
             <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} olderVerstrs={olderVerstrs} onSelect={select} />
-            <ConfigSection ws={ws} app={app} />
+            <ConfigSection ws={ws} app={app} verstr={current.verstr} />
             <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
             <div className="eyebrow" style={{ marginBottom: 10 }}>legend</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

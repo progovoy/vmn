@@ -57,6 +57,17 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, .mono { font-family: var(--mono); font-size: 12.5px; }
 input, select, button, textarea { font-family: inherit; }
+
+/* raw conf.yml display (stamp-tree config section) */
+.yaml-block {
+  margin: 0; padding: 10px 12px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+.yaml-comment { color: var(--text-3); font-style: italic; }
+.yaml-key { color: var(--accent); }
+.yaml-value { color: var(--text); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
   background: #2f2f2b; border-radius: 6px; border: 2px solid var(--bg);

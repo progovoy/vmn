@@ -56,8 +56,10 @@ export const api = {
   addWorkspace: (name: string, opts: { remote?: string; path?: string }) =>
     post<Workspace>("/workspaces", { name, ...opts }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),
-  config: (ws: string, app: string) =>
-    get<AppConfig>(`/workspaces/${ws}/apps/${appTag(app)}/config`),
+  config: (ws: string, app: string, v?: string) =>
+    get<AppConfig>(
+      `/workspaces/${ws}/apps/${appTag(app)}/config${v ? `?v=${encodeURIComponent(v)}` : ""}`
+    ),
   experiments: (ws: string, app: string, sort?: string) =>
     get<ExperimentRow[]>(
       `/workspaces/${ws}/apps/${appTag(app)}/experiments` +
