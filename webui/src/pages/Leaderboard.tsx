@@ -1,9 +1,99 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, relTime } from "../util";
+import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
 import { JobCard, PageHead, Skeleton, useJob } from "../components/ui";
+
+/** One small chart per metric — each on its own scale, so a loss (~0.1) and
+ *  an accuracy (~0.9) don't get squashed onto a shared axis. Same visual
+ *  language as the run-detail training curves, in a small-multiples grid. */
+function ParamPlots({ rows, metricCols, schema }: {
+  rows: ExperimentRow[]; metricCols: string[]; schema: MetricsSchema | null;
+}) {
+  const plotCols = useMemo(
+    () => metricCols.filter(
+      (m) => rows.filter((r) => typeof r.metrics[m] === "number").length > 1
+    ),
+    [rows, metricCols]
+  );
+  const points = useMemo(
+    () => [...rows].sort((a, b) => a.idx - b.idx),
+    [rows]
+  );
+
+  if (plotCols.length === 0) return null;
+
+  return (
+    <div className="card">
+      <div className="eyebrow">metrics across runs</div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+        gap: 20,
+      }}>
+        {plotCols.map((m) => {
+          const { goal, known } = metricGoal(schema, m);
+          const color = seriesColor(plotCols, m);
+          const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | undefined }));
+          const vals = data.map((d) => d.v).filter((v): v is number => typeof v === "number");
+          const best = vals.length
+            ? (goal === "min" ? Math.min(...vals) : Math.max(...vals))
+            : null;
+          return (
+            <div key={m}>
+              <div style={{
+                display: "flex", alignItems: "baseline", justifyContent: "space-between",
+                marginBottom: 6, fontSize: 12,
+              }}>
+                <span className="mono" style={{ color: "var(--text-2)" }}>
+                  {m}{" "}
+                  {known && <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>}
+                </span>
+                {best !== null && (
+                  <span style={{ color: "var(--good)", fontSize: 11 }}>best {fmtVal(best)}</span>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={110}>
+                <LineChart data={data}>
+                  <CartesianGrid stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="x" hide />
+                  <YAxis
+                    width={34} stroke="#85847a"
+                    tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
+                  />
+                  <Tooltip
+                    labelFormatter={(x) => `@${x}`}
+                    formatter={(v: number) => fmtVal(v)}
+                    contentStyle={{
+                      background: "var(--panel-2)",
+                      border: "1px solid var(--line)",
+                      borderRadius: 8,
+                      color: "var(--text)",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="v"
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ r: 2.5 }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Inline `vmn exp create` — note + metrics, run as a streamed job. */
 function NewExperiment({ ws, app, appName, onCreated, onClose }: {
@@ -243,6 +333,8 @@ export default function Leaderboard() {
               <button onClick={() => openCreate(true)}>＋ New experiment</button>
             )}
           </div>
+
+          <ParamPlots rows={rows} metricCols={metricCols} schema={schema} />
 
           <div className="card flush">
             <div className="tbl-scroll">
