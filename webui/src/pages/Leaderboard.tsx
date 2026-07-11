@@ -36,7 +36,7 @@ function ParamPlots({ rows, metricCols, schema }: {
         gap: 20,
       }}>
         {plotCols.map((m) => {
-          const { goal, known } = metricGoal(schema, m);
+          const goal = metricGoal(schema, m);
           const color = seriesColor(plotCols, m);
           const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | undefined }));
           const vals = data.map((d) => d.v).filter((v): v is number => typeof v === "number");
@@ -51,7 +51,7 @@ function ParamPlots({ rows, metricCols, schema }: {
               }}>
                 <span className="mono" style={{ color: "var(--text-2)" }}>
                   {m}{" "}
-                  {known && <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>}
+                  <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>
                 </span>
                 {best !== null && (
                   <span style={{ color: "var(--good)", fontSize: 11 }}>best {fmtVal(best)}</span>
@@ -225,18 +225,18 @@ export default function Leaderboard() {
   // Per-column display facts, computed once per data change (not per cell).
   const colMeta = useMemo(() => {
     const meta: Record<string, {
-      goal: "min" | "max"; known: boolean; best: number | null; isBar: boolean;
+      goal: "min" | "max"; best: number | null; isBar: boolean;
       min: number; max: number;
     }> = {};
     metricCols.forEach((m) => {
-      const { goal, known } = metricGoal(schema, m);
+      const goal = metricGoal(schema, m);
       const vals = (rows ?? [])
         .map((r) => r.metrics[m])
         .filter((v): v is number => typeof v === "number");
       const min = vals.length ? Math.min(...vals) : NaN;
       const max = vals.length ? Math.max(...vals) : NaN;
       meta[m] = {
-        goal, known,
+        goal,
         best: vals.length ? (goal === "min" ? min : max) : null,
         isBar: m === primary && vals.length > 0,
         min, max,
@@ -352,7 +352,7 @@ export default function Leaderboard() {
                         title={`sort by ${m} (best first)`}
                       >
                         {m}{" "}
-                        {colMeta[m].known && (
+                        {colMeta[m].best !== null && (
                           <span className="goal">
                             {colMeta[m].goal === "min" ? "↓" : "↑"}
                           </span>

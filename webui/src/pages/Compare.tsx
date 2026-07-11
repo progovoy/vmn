@@ -124,7 +124,7 @@ export default function Compare() {
                 const numeric =
                   typeof d.from === "number" && typeof d.to === "number";
                 const diff = numeric ? (d.to as number) - (d.from as number) : null;
-                const { goal } = metricGoal(schema, k);
+                const goal = metricGoal(schema, k);
                 const improved = diff !== null && diff !== 0 &&
                   (goal === "min" ? diff < 0 : diff > 0);
                 const color =

@@ -123,7 +123,7 @@ export default function Run() {
           ) : (
             <div>
               {Object.entries(detail.metrics).map(([k, v]) => {
-                const { goal, known } = metricGoal(schema, k);
+                const goal = metricGoal(schema, k);
                 const isPrimary = Boolean(schema?.[k]?.primary);
                 return (
                   <div
@@ -136,7 +136,7 @@ export default function Run() {
                   >
                     <span style={{ color: "var(--text-2)", fontSize: 13 }}>
                       {k}{" "}
-                      {known && (
+                      {typeof v === "number" && (
                         <span style={{ color: "var(--text-3)", fontSize: 11 }}>
                           {goal === "min" ? "↓" : "↑"}
                         </span>

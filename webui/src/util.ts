@@ -52,12 +52,17 @@ export function seriesColor(names: string[], name: string): string {
   return SERIES_VARS[Math.min(idx, SERIES_VARS.length - 1)];
 }
 
-/** Display goal for a metric: its schema goal, else the CLI's higher-is-better
- *  default. `known` distinguishes a configured goal from the fallback. */
+/** Loss/error-like metric names improve downward (Keras mode="auto"). */
+const MIN_LIKE = /(^|_)(loss|err|error|mae|mse|rmse|perplexity|ppl)($|_|\d)/i;
+
+/** Display goal for a metric — used for best-value highlights, bar direction,
+ *  and delta coloring (never for ordering, which stays server-side). A schema
+ *  entry wins; otherwise the goal is inferred from the metric's name, falling
+ *  back to higher-is-better. */
 export function metricGoal(
   schema: Record<string, { goal?: string }> | null, key: string
-): { goal: "min" | "max"; known: boolean } {
+): "min" | "max" {
   const spec = schema?.[key];
-  if (!spec) return { goal: "max", known: false };
-  return { goal: spec.goal === "min" ? "min" : "max", known: true };
+  if (spec) return spec.goal === "min" ? "min" : "max";
+  return MIN_LIKE.test(key) ? "min" : "max";
 }
