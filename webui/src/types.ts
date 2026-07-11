@@ -8,9 +8,22 @@ export interface Workspace {
 export interface AppRow {
   name: string;
   experiments: number;
+  versions: number;
 }
 
 export type AppConfig = Record<string, unknown>;
+
+/** Per-metric leaderboard config from conf.yml (experiment.metrics). */
+export interface MetricSpec {
+  goal?: "min" | "max";
+  primary?: boolean;
+}
+
+export type MetricsSchema = Record<string, MetricSpec>;
+
+export interface Meta {
+  version: string;
+}
 
 export interface Job {
   id: string;
@@ -21,6 +34,8 @@ export interface Job {
 }
 
 export interface ExperimentRow {
+  /** 1-based storage-order index — what `vmn exp show <app> -v @N` resolves. */
+  idx: number;
   verstr: string;
   code_verstr: string;
   timestamp: string | null;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, appTag } from "../api";
 import type { AppRow, Workspace } from "../types";
+import { PageHead, Skeleton } from "../components/ui";
 
 function AddWorkspace({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
@@ -34,36 +35,43 @@ function AddWorkspace({ onAdded }: { onAdded: () => void }) {
   };
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <h2 style={{ marginTop: 0 }}>add a workspace</h2>
-      <div className="toolbar" style={{ flexWrap: "wrap" }}>
-        <label>
-          name{" "}
+    <div className="card">
+      <div className="eyebrow">add a workspace</div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "130px 1.4fr 1.2fr auto",
+          gap: 12,
+          alignItems: "end",
+        }}
+      >
+        <label className="field">
+          name
           <input placeholder="my-repo" value={name}
-            onChange={(e) => setName(e.target.value)} style={{ width: 130 }} />
+            onChange={(e) => setName(e.target.value)} />
         </label>
-        <label>
-          remote{" "}
+        <label className="field">
+          remote
           <input className="mono" placeholder="git@host:org/repo.git (optional)"
             value={remote}
-            onChange={(e) => setRemote(e.target.value)} style={{ width: 250 }} />
+            onChange={(e) => setRemote(e.target.value)} />
         </label>
-        <label>
-          path{" "}
+        <label className="field">
+          path
           <input className="mono"
             placeholder={cloning ? "(managed dir)" : "/abs/path/to/checkout"}
             value={path}
-            onChange={(e) => setPath(e.target.value)} style={{ width: 220 }} />
+            onChange={(e) => setPath(e.target.value)} />
         </label>
         <button className="primary" onClick={submit} disabled={busy || !ready}>
           {busy ? (cloning ? "Cloning…" : "Attaching…") : cloning ? "Clone" : "Attach"}
         </button>
       </div>
-      <div className="cli-hint">
+      <p className="page-sub" style={{ margin: "12px 0 0", fontSize: 12.5 }}>
         {cloning
           ? "Clones the remote on the server host — into the managed workspaces dir, or the given path."
           : "Attaches an existing local checkout — a path on the server host with a .git or .vmn directory. Fill remote to clone instead."}
-      </div>
+      </p>
       {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
     </div>
   );
@@ -78,14 +86,14 @@ export function WorkspacesHome() {
 
   return (
     <>
-      <h1>Workspaces</h1>
-      <p className="subtitle">
+      <PageHead title="Workspaces" mono={false} />
+      <p className="page-sub">
         Each workspace is an isolated checkout — its own working tree,
         experiments, and lock.
       </p>
       <AddWorkspace onAdded={load} />
       {workspaces === null ? (
-        <div className="empty">Loading…</div>
+        <Skeleton />
       ) : workspaces.length === 0 ? (
         <div className="empty">
           No workspaces yet. Attach one above, or start the server inside a vmn repo.
@@ -95,8 +103,13 @@ export function WorkspacesHome() {
           {workspaces.map((w) => (
             <Link key={w.name} to={`/ws/${w.name}`}>
               <div className="card tile">
-                <div className="name">{w.name}</div>
-                <div className="meta mono">{w.kind === "s3" ? `s3://${w.bucket}` : w.path}</div>
+                <div className="head">
+                  <span className="status-dot" />
+                  <span className="name">{w.name}</span>
+                </div>
+                <div className="meta mono">
+                  {w.kind === "s3" ? `s3://${w.bucket}` : w.path}
+                </div>
               </div>
             </Link>
           ))}
@@ -116,20 +129,28 @@ export function AppsPage() {
   }, [ws]);
 
   if (error) return <div className="error">{error}</div>;
-  if (apps === null) return <div className="empty">Loading…</div>;
+  if (apps === null) return <Skeleton />;
   if (apps.length === 0)
     return <div className="empty">No vmn apps in this workspace yet.</div>;
 
   return (
     <>
-      <h1>{ws}</h1>
-      <p className="subtitle">{apps.length} app(s)</p>
+      <PageHead title={ws} mono={false} />
+      <p className="page-sub">
+        {apps.length} app{apps.length === 1 ? "" : "s"} in this workspace
+      </p>
       <div className="grid">
         {apps.map((a) => (
           <Link key={a.name} to={`/ws/${ws}/app/${appTag(a.name)}`}>
             <div className="card tile">
-              <div className="name">{a.name}</div>
-              <div className="meta">{a.experiments} experiment(s)</div>
+              <div className="head">
+                <span className="status-dot" />
+                <span className="name">{a.name}</span>
+              </div>
+              <div className="meta">
+                <span>{a.experiments} experiment{a.experiments === 1 ? "" : "s"}</span>
+                <span>{a.versions} version{a.versions === 1 ? "" : "s"}</span>
+              </div>
             </div>
           </Link>
         ))}

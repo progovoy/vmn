@@ -1,6 +1,6 @@
 import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentRow,
-  Job, SnapshotRow, VersionRow, Workspace,
+  Job, Meta, MetricsSchema, SnapshotRow, VersionRow, Workspace,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -43,9 +43,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 /** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
 export const appTag = (name: string) => name.replaceAll("/", "-");
+/** Inverse of appTag: the real app name behind a URL tag. */
+export const appName = (tag: string) => tag.replaceAll("-", "/");
 
 export const api = {
+  meta: () => get<Meta>("/meta"),
   workspaces: () => get<Workspace[]>("/workspaces"),
+  metricsSchema: (ws: string, app: string) =>
+    get<MetricsSchema>(
+      `/workspaces/${ws}/apps/${appTag(app)}/metrics-schema`
+    ),
   addWorkspace: (name: string, opts: { remote?: string; path?: string }) =>
     post<Workspace>("/workspaces", { name, ...opts }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),

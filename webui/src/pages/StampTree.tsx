@@ -1,19 +1,19 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, appName as toAppName } from "../api";
 import type { AppConfig, Changelog, VersionRow } from "../types";
-import { AppLayoutNav } from "./Leaderboard";
+import { PageHead, Skeleton } from "../components/ui";
 import { copyText, relTime } from "../util";
 
 const MODE_COLOR: Record<string, string> = {
-  major: "var(--series-6)",
-  minor: "var(--series-1)",
-  patch: "var(--series-2)",
-  hotfix: "var(--series-3)",
-  prerelease: "var(--series-5)",
-  release: "var(--series-5)",
-  init: "var(--text-muted)",
+  major: "var(--major)",
+  minor: "var(--minor)",
+  patch: "var(--patch)",
+  hotfix: "var(--hotfix)",
+  prerelease: "var(--pre)",
+  release: "var(--pre)",
+  init: "var(--text-3)",
 };
 
 const isPrerelease = (mode: string) => mode === "prerelease";
@@ -421,8 +421,8 @@ const VersionDetails = memo(function VersionDetails({
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span className="mono" style={{ fontSize: 16, fontWeight: 600 }}>{node.verstr}</span>
-        <span className={`badge mode-${node.mode}`}>{node.mode}</span>
+        <span className="mono" style={{ fontSize: 17, fontWeight: 600 }}>{node.verstr}</span>
+        <span className={`badge mode mode-${node.mode}`}>{node.mode}</span>
         {node.prerelease && <span className="badge">pre: {node.prerelease}</span>}
       </div>
       <div className="kv" style={{ gridTemplateColumns: "84px 1fr", marginTop: 14 }}>
@@ -546,15 +546,17 @@ export default function StampTree() {
   }, [nodes, current]);
 
   if (error) return <div className="error">{error}</div>;
-  if (rows === null) return <div className="empty">Loading…</div>;
+  if (rows === null) return <Skeleton />;
 
   const width = Math.max(labelEnd + 110, graphW);
   const height = PAD_TOP + nodes.length * ROW_H + 8;
 
   return (
     <>
-      <h1>{app.replaceAll("-", "/")}</h1>
-      <AppLayoutNav />
+      <PageHead title={toAppName(app)} what="stamp tree" />
+      <p className="page-sub">
+        version history as a DAG · node color = release mode · lane = branch
+      </p>
 
       {nodes.length === 0 && roots.length === 0 && (
         <div className="empty">No stamped versions yet.</div>
@@ -582,7 +584,7 @@ export default function StampTree() {
                     key={i}
                     d={`M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}`}
                     fill="none"
-                    stroke={active ? "var(--accent)" : "var(--border)"}
+                    stroke={active ? "var(--accent)" : "var(--line-2)"}
                     strokeWidth={2}
                     pointerEvents="none"
                   />
@@ -599,20 +601,20 @@ export default function StampTree() {
                     )}
                     <circle
                       cx={n.x} cy={n.y} r={R}
-                      fill={hollow ? "var(--surface-1)" : color}
-                      stroke={hollow ? color : "var(--surface-1)"}
+                      fill={hollow ? "var(--panel)" : color}
+                      stroke={hollow ? color : "var(--panel)"}
                       strokeWidth={2}
                     />
-                    <text x={textX} y={n.y + 4} fontFamily="ui-monospace, monospace">
-                      <tspan fill="var(--text-primary)" fontSize="12.5">{n.verstr}</tspan>
+                    <text x={textX} y={n.y + 4} fontFamily="var(--mono)">
+                      <tspan fill="var(--text)" fontSize="12.5">{n.verstr}</tspan>
                       {n.aliases.length > 0 && (
-                        <tspan dx="10" fill="var(--text-muted)" fontSize="11">
+                        <tspan dx="10" fill="var(--text-3)" fontSize="11">
                           {n.aliases.map((a) => shortAlias(a, n.verstr)).join(" · ")}
                         </tspan>
                       )}
-                      <tspan dx="14" fill="var(--text-muted)" fontSize="11.5">{n.branch}</tspan>
+                      <tspan dx="14" fill="var(--text-3)" fontSize="11.5">{n.branch}</tspan>
                     </text>
-                    <text x={width - 12} y={n.y + 4} fill="var(--text-muted)"
+                    <text x={width - 12} y={n.y + 4} fill="var(--text-3)"
                       fontSize="11.5" textAnchor="end">
                       {n.rel}
                     </text>
@@ -631,7 +633,8 @@ export default function StampTree() {
           >
             <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} olderVerstrs={olderVerstrs} onSelect={select} />
             <ConfigSection ws={ws} app={app} />
-            <h2>legend</h2>
+            <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+            <div className="eyebrow" style={{ marginBottom: 10 }}>legend</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {presentModes.map((mode) => (
                 <div key={mode} style={{ display: "flex", alignItems: "center", gap: 8 }}>

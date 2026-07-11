@@ -384,3 +384,78 @@ def test_ui_root_app_names_in_urls(app_layout, capfd):
     )
     assert r.status_code == 200
     assert r.json()[-1]["verstr"] == "0.0.1"
+
+
+def test_ui_metrics_schema_endpoint(app_layout, capfd):
+    """The app's experiment metrics schema (goal/primary) is readable, so the
+    web leaderboard can render goal hints exactly as the CLI sorts."""
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    app_layout.write_conf(
+        params["app_conf_path"],
+        template="[{major}][.{minor}][.{patch}]",
+        experiment={
+            "metrics": {
+                "loss": {"goal": "min", "primary": True},
+                "acc": {"goal": "max"},
+            }
+        },
+    )
+    _stamp_app(app_layout.app_name, "patch")
+
+    client = _client(app_layout)
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/metrics-schema"
+    )
+    assert r.status_code == 200
+    schema = r.json()
+    assert schema["loss"] == {"goal": "min", "primary": True}
+    assert schema["acc"] == {"goal": "max"}
+
+    # An app without a schema answers with an empty mapping, not an error.
+    _init_app("plain_app")
+    _stamp_app("plain_app", "patch")
+    r = client.get("/api/v1/workspaces/main/apps/plain_app/metrics-schema")
+    assert r.status_code == 200
+    assert r.json() == {}
+
+
+def test_ui_experiment_rows_carry_storage_index(app_layout, capfd):
+    """Each row carries its storage-order index (what `-v @N` resolves), and
+    the index sticks to the row across any leaderboard sort."""
+    verstrs = _seed_experiments(app_layout, capfd, n=3)  # losses 0.5, 0.2, 0.4
+    client = _client(app_layout)
+
+    rows = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
+    ).json()
+    assert [r["idx"] for r in rows] == [1, 2, 3]
+    assert [r["verstr"] for r in rows] == verstrs
+
+    rows = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments",
+        params={"sort": "loss"},
+    ).json()
+    by_idx = {r["idx"]: r["verstr"] for r in rows}
+    assert by_idx == {1: verstrs[0], 2: verstrs[1], 3: verstrs[2]}
+    assert [r["metrics"]["loss"] for r in rows] == [0.2, 0.4, 0.5]
+
+
+def test_ui_apps_include_version_counts(app_layout, capfd):
+    """App rows carry a stamped-version count for the dashboard tiles."""
+    _seed_experiments(app_layout, capfd, n=2)  # one stamp + 2 experiments
+    client = _client(app_layout)
+
+    apps = client.get("/api/v1/workspaces/main/apps").json()
+    row = next(a for a in apps if a["name"] == app_layout.app_name)
+    assert row["experiments"] == 2
+    assert row["versions"] == 2  # the 0.0.0 init stamp + the 0.0.1 patch
+
+
+def test_ui_meta_endpoint(app_layout, capfd):
+    """GET /meta reports the running vmn version for the UI shell."""
+    client = _client(app_layout)
+    r = client.get("/api/v1/meta")
+    assert r.status_code == 200
+    body = r.json()
+    assert "version" in body and isinstance(body["version"], str)

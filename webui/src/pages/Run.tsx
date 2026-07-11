@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
-  CartesianGrid, Legend, Line, LineChart, ResponsiveContainer,
-  Tooltip, XAxis, YAxis,
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api } from "../api";
-import type { ExperimentDetail, LogEntry } from "../types";
-import { fmtVal, relTime, seriesColor } from "../util";
-import { AppLayoutNav } from "./Leaderboard";
+import { api, appName as toAppName } from "../api";
+import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
+import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
+import { Skeleton } from "../components/ui";
+
+const DOT_COLOR: Record<string, string> = {
+  create: "var(--accent)",
+  run: "var(--good)",
+  metrics: "var(--text-3)",
+  note: "var(--pre)",
+  artifact: "var(--hotfix)",
+};
 
 function describeEntry(e: LogEntry): string {
   switch (e.type) {
@@ -36,10 +43,12 @@ export default function Run() {
     ws: string; app: string; verstr: string;
   };
   const [detail, setDetail] = useState<ExperimentDetail | null>(null);
+  const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e)));
+    api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app, verstr]);
 
   const chartData = useMemo(() => {
@@ -61,65 +70,139 @@ export default function Run() {
   }, [detail]);
 
   if (error) return <div className="error">{error}</div>;
-  if (!detail) return <div className="empty">Loading…</div>;
+  if (!detail) return <Skeleton />;
 
   const meta = detail.metadata;
-  const appName = app.replaceAll("-", "/");
+  const appName = toAppName(app);
+  const captured =
+    Object.entries(detail.patches)
+      .filter(([, v]) => v)
+      .map(([k]) => k.replaceAll("_", " "))
+      .join(", ") || "clean tree";
+  const runSecs = detail.log
+    .filter((e) => e.type === "run")
+    .reduce((s, e) => s + (Number(e.duration_sec) || 0), 0);
 
   return (
     <>
-      <h1 className="mono">{meta.verstr}</h1>
-      <AppLayoutNav />
+      <Link className="back-link" to={`/ws/${ws}/app/${app}`}>
+        ← experiments
+      </Link>
+      <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
+        <h1 className="mono" style={{ fontSize: 20 }}>{meta.verstr}</h1>
+        {Boolean(meta.branch) && <span className="badge">{meta.branch as string}</span>}
+      </div>
+      {Boolean(meta.note) && (
+        <p style={{ color: "var(--text-2)", margin: "0 0 20px" }}>
+          {meta.note as string}
+        </p>
+      )}
 
-      <div className="card">
-        <div className="kv">
-          <div className="k">note</div>
-          <div>{(meta.note as string) ?? "–"}</div>
-          <div className="k">branch</div>
-          <div className="mono">{meta.branch as string}</div>
-          <div className="k">base</div>
-          <div className="mono">
-            {meta.base_version as string} ({(meta.base_commit as string)?.slice(0, 7)})
+      <div className="card-grid-2" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="eyebrow">metadata</div>
+          <div className="kv">
+            <div className="k">branch</div>
+            <div className="mono">{meta.branch as string}</div>
+            <div className="k">base</div>
+            <div className="mono">
+              {meta.base_version as string} ({(meta.base_commit as string)?.slice(0, 7)})
+            </div>
+            <div className="k">created</div>
+            <div title={meta.timestamp as string}>{relTime(meta.timestamp as string)}</div>
+            <div className="k">captured</div>
+            <div style={{ color: "var(--text-2)" }}>{captured}</div>
+            <div className="k">runtime</div>
+            <div>{runSecs ? `${runSecs}s` : "—"}</div>
           </div>
-          <div className="k">created</div>
-          <div>{relTime(meta.timestamp as string)}</div>
-          <div className="k">captured</div>
-          <div>
-            {Object.entries(detail.patches)
-              .filter(([, v]) => v)
-              .map(([k]) => k.replaceAll("_", " "))
-              .join(", ") || "clean tree"}
-          </div>
+        </div>
+        <div className="card">
+          <div className="eyebrow">final metrics</div>
+          {Object.keys(detail.metrics).length === 0 ? (
+            <div className="empty" style={{ padding: 12 }}>No metrics logged.</div>
+          ) : (
+            <div>
+              {Object.entries(detail.metrics).map(([k, v]) => {
+                const { goal, known } = metricGoal(schema, k);
+                const isPrimary = Boolean(schema?.[k]?.primary);
+                return (
+                  <div
+                    key={k}
+                    style={{
+                      display: "flex", alignItems: "center",
+                      justifyContent: "space-between", padding: "7px 0",
+                      borderBottom: "1px solid var(--line)",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-2)", fontSize: 13 }}>
+                      {k}{" "}
+                      {known && (
+                        <span style={{ color: "var(--text-3)", fontSize: 11 }}>
+                          {goal === "min" ? "↓" : "↑"}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`metric${isPrimary ? " best" : ""}`}>
+                      {fmtVal(v)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {Object.keys(detail.metrics).length > 0 && (
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>metrics</h2>
-          <div className="kv">
-            {Object.entries(detail.metrics).map(([k, v]) => (
-              <FragmentRow key={k} k={k} v={fmtVal(v)} />
-            ))}
-          </div>
-        </div>
-      )}
-
       {chartData.metrics.length > 0 && (
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>training curves</h2>
+          <div
+            style={{
+              display: "flex", alignItems: "center",
+              justifyContent: "space-between", marginBottom: 14,
+            }}
+          >
+            <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
+            <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+              {chartData.metrics.map((m) => (
+                <span
+                  key={m}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    color: "var(--text-2)",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14, height: 3, borderRadius: 2,
+                      background: seriesColor(chartData.metrics, m),
+                    }}
+                  />
+                  {m}
+                </span>
+              ))}
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={chartData.points}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="x" stroke="var(--text-muted)" name="step" />
-              <YAxis stroke="var(--text-muted)" width={60} />
+              <CartesianGrid stroke="var(--line)" vertical={false} />
+              <XAxis
+                dataKey="x"
+                stroke="#85847a"
+                tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
+              />
+              <YAxis
+                stroke="#85847a"
+                width={60}
+                tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
+              />
               <Tooltip
                 contentStyle={{
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-primary)",
+                  background: "var(--panel-2)",
+                  border: "1px solid var(--line)",
+                  borderRadius: 8,
+                  color: "var(--text)",
                 }}
               />
-              {chartData.metrics.length > 1 && <Legend />}
               {chartData.metrics.map((m) => (
                 <Line
                   key={m}
@@ -127,7 +210,7 @@ export default function Run() {
                   dataKey={m}
                   stroke={seriesColor(chartData.metrics, m)}
                   strokeWidth={2}
-                  dot={{ r: 3 }}
+                  dot={false}
                   isAnimationActive={false}
                 />
               ))}
@@ -136,34 +219,31 @@ export default function Run() {
         </div>
       )}
 
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>log</h2>
-        <ul className="timeline">
-          {detail.log.map((e, i) => (
-            <li key={i}>
-              <span className="ts">{relTime(e.timestamp)}</span>
-              <span>{describeEntry(e)}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>reproduce</h2>
-        <div className="cli-hint">
-          vmn exp restore {appName} -v {meta.verstr}{"\n"}
-          vmn exp export {appName} -v {meta.verstr}
+      <div className="card-grid-wide">
+        <div className="card">
+          <div className="eyebrow">log</div>
+          <ul className="timeline">
+            {detail.log.map((e, i) => (
+              <li
+                key={i}
+                style={{ "--dot": DOT_COLOR[e.type] ?? "var(--text-3)" } as React.CSSProperties}
+              >
+                <span className="ts">{relTime(e.timestamp)}</span>
+                <span className="what">{describeEntry(e)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="card">
+          <div className="eyebrow">reproduce</div>
+          <div className="cli-hint">
+            vmn exp restore {appName} -v {meta.verstr}
+          </div>
+          <div className="cli-hint">
+            vmn exp export {appName} -v {meta.verstr}
+          </div>
         </div>
       </div>
-    </>
-  );
-}
-
-function FragmentRow({ k, v }: { k: string; v: string }) {
-  return (
-    <>
-      <div className="k">{k}</div>
-      <div className="metric">{v}</div>
     </>
   );
 }

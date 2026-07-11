@@ -15,6 +15,7 @@ from version_stamp.cli.experiment import (
 )
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
+from version_stamp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):
@@ -50,12 +51,17 @@ def list_apps(root_path):
 
     rows = []
     storage = experiment_storage(root_path)
+    ver_counts = version_counts(root_path)
     for name in sorted(apps):
         try:
             exp_count = len(storage.list_snapshots(name))
         except Exception:
             exp_count = 0
-        rows.append({"name": name, "experiments": exp_count})
+        rows.append({
+            "name": name,
+            "experiments": exp_count,
+            "versions": ver_counts.get(name, 0),
+        })
     return rows
 
 
@@ -64,9 +70,12 @@ def fetch_experiment_rows(root_path, app_name):
     every experiment's metadata + log."""
     storage = experiment_storage(root_path)
     rows = []
-    for meta in storage.list_snapshots(app_name):
+    for i, meta in enumerate(storage.list_snapshots(app_name)):
         log = _load_log(storage, app_name, meta["verstr"])
         rows.append({
+            # 1-based storage index: what `vmn exp show <app> -v @N` resolves.
+            # Assigned before any sort so it sticks to the row.
+            "idx": i + 1,
             "verstr": meta["verstr"],
             "code_verstr": meta.get("code_verstr", meta["verstr"]),
             "timestamp": meta.get("timestamp"),

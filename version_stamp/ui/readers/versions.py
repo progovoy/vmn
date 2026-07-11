@@ -25,6 +25,26 @@ def _tag_yaml(tag_ref):
     return data if isinstance(data, dict) else None
 
 
+def version_counts(root_path):
+    """Stamped-version tag count per app, for dashboard tiles — one
+    ``git tag`` pass over the repo, no YAML parse."""
+    try:
+        repo = git.Repo(root_path, search_parent_directories=True)
+    except git.GitError:
+        return {}
+    try:
+        counts = {}
+        for name in filter(None, repo.git.tag("--list").split("\n")):
+            try:
+                app_name = deserialize_tag_name(name).app_name
+            except Exception:
+                continue
+            counts[app_name] = counts.get(app_name, 0) + 1
+        return counts
+    finally:
+        repo.close()
+
+
 def list_versions(root_path, app_name):
     """All stamped versions of an app, oldest first.
 

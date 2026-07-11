@@ -61,6 +61,18 @@ def build_command(action, app_name, body):
             return None, "prune needs keep or older_than"
         return cmd, None
 
+    if action == "exp_create":
+        cmd = ["vmn", "experiment", "create", app_name]
+        if body.get("note"):
+            cmd += ["--note", body["note"]]
+        metrics = body.get("metrics") or {}
+        for key in metrics:
+            if not key or "=" in key or any(c.isspace() for c in key):
+                return None, f"Invalid metric name '{key}'"
+        if metrics:
+            cmd += ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()]
+        return cmd, None
+
     if action == "note":
         verstr, note = body.get("verstr"), body.get("note")
         if not verstr or note is None:

@@ -19,12 +19,6 @@ export function fmtVal(v: number | string | null | undefined): string {
   return String(v);
 }
 
-export function shortVerstr(verstr: string): string {
-  // 0.0.1-dev.a1b2c3d.e4f5g6h.r2 -> 0.0.1-dev.a1b2c3d.e4f5g6h.r2 is long;
-  // keep base + first hash for tables.
-  const m = verstr.match(/^(.+?-dev\.[0-9a-f]{7})\.[0-9a-f]{7}(\.r\d+)?$/);
-  return m ? `${m[1]}…${m[2] ?? ""}` : verstr;
-}
 
 /** Copy to clipboard, falling back to execCommand where the async
  *  clipboard API is unavailable (plain-http hosts) or denied. */
@@ -46,13 +40,24 @@ export async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-/** Fixed categorical assignment (never cycled): metric name -> series slot. */
+/** Fixed categorical assignment (never cycled): metric name -> series slot.
+ *  Order matches the redesign: loss -> --minor (blue), val_loss -> --hotfix. */
 const SERIES_VARS = [
-  "var(--series-1)", "var(--series-2)", "var(--series-3)",
-  "var(--series-4)", "var(--series-5)", "var(--series-6)",
+  "var(--minor)", "var(--hotfix)", "var(--patch)",
+  "var(--pre)", "var(--major)", "var(--series-4)",
 ];
 
 export function seriesColor(names: string[], name: string): string {
   const idx = [...names].sort().indexOf(name);
   return SERIES_VARS[Math.min(idx, SERIES_VARS.length - 1)];
+}
+
+/** Display goal for a metric: its schema goal, else the CLI's higher-is-better
+ *  default. `known` distinguishes a configured goal from the fallback. */
+export function metricGoal(
+  schema: Record<string, { goal?: string }> | null, key: string
+): { goal: "min" | "max"; known: boolean } {
+  const spec = schema?.[key];
+  if (!spec) return { goal: "max", known: false };
+  return { goal: spec.goal === "min" ? "min" : "max", known: true };
 }

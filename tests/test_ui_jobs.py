@@ -145,6 +145,56 @@ def test_ui_action_cli_preview(app_layout, capfd):
     assert "-r" in job["command"] and "minor" in job["command"]
 
 
+def test_ui_exp_create_build_command():
+    """exp_create translates note + metrics into a `vmn experiment create` argv."""
+    from version_stamp.ui.jobs import build_command
+
+    cmd, err = build_command(
+        "exp_create", "my_app", {"note": "swin-t", "metrics": {"loss": 0.1, "acc": 0.9}}
+    )
+    assert err is None
+    assert cmd == [
+        "vmn", "experiment", "create", "my_app",
+        "--note", "swin-t", "--metrics", "loss=0.1", "acc=0.9",
+    ]
+
+    cmd, err = build_command("exp_create", "my_app", {})
+    assert err is None
+    assert cmd == ["vmn", "experiment", "create", "my_app"]
+
+    cmd, err = build_command("exp_create", "my_app", {"metrics": {"bad key": 1}})
+    assert cmd is None and err
+
+    cmd, err = build_command("exp_create", "my_app", {"metrics": {"k=v": 1}})
+    assert cmd is None and err
+
+
+def test_ui_exp_create_action(app_layout, capfd):
+    """POST actions/exp_create captures the working state as an experiment."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    app_layout.write_file_commit_and_push("test_repo_0", "e.txt", "committed")
+    with open(os.path.join(app_layout.repo_path, "e.txt"), "w") as f:
+        f.write("dirty state")
+
+    client = _client(app_layout)
+    r = client.post(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/exp_create",
+        json={"note": "from the ui", "metrics": {"loss": 0.42}},
+    )
+    assert r.status_code == 202
+    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
+    assert job["status"] == "succeeded", job.get("log")
+
+    rows = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
+    ).json()
+    assert len(rows) == 1
+    assert rows[0]["note"] == "from the ui"
+    assert rows[0]["metrics"]["loss"] == 0.42
+
+
 def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
     """A stamp in workspace A does not touch workspace B (a second clone)."""
     _run_vmn_init()

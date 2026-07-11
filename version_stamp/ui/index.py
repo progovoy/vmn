@@ -92,10 +92,12 @@ class WorkspaceIndex:
 
     def list_experiments(self, app_name, sort=None, last=None):
         fp = _experiments_fingerprint(self.root_path, app_name)
-        rows = self._get(f"exp:{app_name}", fp)
+        # v2: rows carry the storage-order idx; the scope bump invalidates
+        # cached payloads from before it existed.
+        rows = self._get(f"exp:v2:{app_name}", fp)
         if rows is None:
             rows = _fetch_experiment_rows(self.root_path, app_name)
-            self._put(f"exp:{app_name}", fp, rows)
+            self._put(f"exp:v2:{app_name}", fp, rows)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
         return exp_reader.sort_rows(rows, schema, sort=sort, last=last)
 

@@ -69,6 +69,12 @@ def create_app(manager, token=None, read_only=False, use_index=True):
             raise HTTPException(400, f"Workspace '{name}' is not a git checkout")
         return ws
 
+    @app.get(f"{API_PREFIX}/meta")
+    def meta():
+        from version_stamp import version as version_mod
+
+        return {"version": version_mod.version}
+
     @app.get(f"{API_PREFIX}/workspaces")
     def list_workspaces():
         return [ws.to_public_dict() for ws in manager.list()]
@@ -125,6 +131,11 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         if err:
             raise HTTPException(404, err)
         return detail
+
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
+    def app_metrics_schema(ws_name: str, app_tag: str):
+        ws = _git_workspace(ws_name)
+        return exp_reader.metrics_schema(ws.path, tag_name_to_app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):
