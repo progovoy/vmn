@@ -1,98 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
+import { fmtVal, metricGoal, relTime } from "../util";
 import { JobCard, PageHead, Skeleton, useJob } from "../components/ui";
-
-/** Every numeric metric plotted across runs, oldest→newest (storage order,
- *  independent of the table's display sort) — same visual language as the
- *  run-detail training curves. */
-function MetricTrends({ rows, metricCols }: {
-  rows: ExperimentRow[]; metricCols: string[];
-}) {
-  const { points, metrics } = useMemo(() => {
-    const withData = metricCols.filter((m) =>
-      rows.some((r) => typeof r.metrics[m] === "number")
-    );
-    const pts = [...rows]
-      .sort((a, b) => a.idx - b.idx)
-      .map((r) => ({
-        x: r.idx,
-        ...Object.fromEntries(
-          withData.map((m) => [m, r.metrics[m] as number | undefined])
-        ),
-      }));
-    return { points: pts, metrics: withData };
-  }, [rows, metricCols]);
-
-  if (rows.length < 2 || metrics.length === 0) return null;
-
-  return (
-    <div className="card">
-      <div
-        style={{
-          display: "flex", alignItems: "center",
-          justifyContent: "space-between", marginBottom: 14,
-        }}
-      >
-        <div className="eyebrow" style={{ marginBottom: 0 }}>metric trends across runs</div>
-        <div style={{ display: "flex", gap: 16, fontSize: 12, flexWrap: "wrap" }}>
-          {metrics.map((m) => (
-            <span
-              key={m}
-              style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-2)" }}
-            >
-              <span
-                style={{
-                  width: 14, height: 3, borderRadius: 2,
-                  background: seriesColor(metrics, m),
-                }}
-              />
-              {m}
-            </span>
-          ))}
-        </div>
-      </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={points}>
-          <CartesianGrid stroke="var(--line)" vertical={false} />
-          <XAxis
-            dataKey="x"
-            stroke="#85847a"
-            tickFormatter={(x) => `@${x}`}
-            tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
-          />
-          <YAxis stroke="#85847a" width={50} tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }} />
-          <Tooltip
-            labelFormatter={(x) => `@${x}`}
-            contentStyle={{
-              background: "var(--panel-2)",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              color: "var(--text)",
-            }}
-          />
-          {metrics.map((m) => (
-            <Line
-              key={m}
-              type="monotone"
-              dataKey={m}
-              stroke={seriesColor(metrics, m)}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              connectNulls
-              isAnimationActive={false}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 /** Inline `vmn exp create` — note + metrics, run as a streamed job. */
 function NewExperiment({ ws, app, appName, onCreated, onClose }: {
@@ -332,8 +243,6 @@ export default function Leaderboard() {
               <button onClick={() => openCreate(true)}>＋ New experiment</button>
             )}
           </div>
-
-          <MetricTrends rows={rows} metricCols={metricCols} />
 
           <div className="card flush">
             <div className="tbl-scroll">
