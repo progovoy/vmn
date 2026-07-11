@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { Job } from "../types";
+import type { Job, Workspace } from "../types";
+import { copyText } from "../util";
 
 /** Mono app title + muted page label, per the redesign's page header. */
 export function PageHead({ title, what, mono = true }: {
@@ -10,6 +11,37 @@ export function PageHead({ title, what, mono = true }: {
     <div className="page-head">
       <h1 className={mono ? "mono" : ""}>{title}</h1>
       {what && <span className="what">{what}</span>}
+    </div>
+  );
+}
+
+/** A workspace's full location — the git checkout path, or its s3 URI. */
+export function wsLocation(w: Pick<Workspace, "kind" | "path" | "bucket">): string {
+  return w.kind === "s3" ? `s3://${w.bucket}` : w.path ?? "";
+}
+
+/** Full path/URI + a copy button — the redesign keeps this visible wherever
+ *  a workspace is named, so the location is always one click from the
+ *  clipboard (never truncated in the copied value, even if display wraps). */
+export function CopyPath({ text, className }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState<"copied" | "no clipboard" | null>(null);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(null), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
+  return (
+    <div className={`copy-path${className ? ` ${className}` : ""}`} title={text}>
+      <span className="mono">{text}</span>
+      <button
+        style={{ padding: "0 8px", fontSize: 11 }}
+        onClick={() =>
+          copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard"))
+        }
+      >
+        {copied ?? "copy"}
+      </button>
     </div>
   );
 }

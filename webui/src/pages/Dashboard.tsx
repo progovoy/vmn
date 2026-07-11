@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, appTag } from "../api";
 import type { AppRow, Workspace } from "../types";
-import { PageHead, Skeleton } from "../components/ui";
+import { CopyPath, PageHead, Skeleton, wsLocation } from "../components/ui";
 
 function AddWorkspace({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
@@ -79,6 +79,7 @@ function AddWorkspace({ onAdded }: { onAdded: () => void }) {
 
 export function WorkspacesHome() {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+  const navigate = useNavigate();
 
   const load = () =>
     api.workspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
@@ -101,17 +102,19 @@ export function WorkspacesHome() {
       ) : (
         <div className="grid">
           {workspaces.map((w) => (
-            <Link key={w.name} to={`/ws/${w.name}`}>
-              <div className="card tile">
-                <div className="head">
-                  <span className="status-dot" />
-                  <span className="name">{w.name}</span>
-                </div>
-                <div className="meta mono">
-                  {w.kind === "s3" ? `s3://${w.bucket}` : w.path}
-                </div>
+            <div
+              key={w.name}
+              className="card tile"
+              onClick={() => navigate(`/ws/${w.name}`)}
+            >
+              <div className="head">
+                <span className="status-dot" />
+                <span className="name">{w.name}</span>
               </div>
-            </Link>
+              <div onClick={(e) => e.stopPropagation()}>
+                <CopyPath text={wsLocation(w)} />
+              </div>
+            </div>
           ))}
         </div>
       )}

@@ -5,6 +5,7 @@ import {
 import { api, appName as toAppName } from "./api";
 import type { AppRow, Workspace } from "./types";
 import CommandPalette from "./components/CommandPalette";
+import { CopyPath, wsLocation } from "./components/ui";
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -57,6 +58,7 @@ export default function App() {
   const pageLabel = (deepest?.handle as { page?: string } | undefined)?.page;
   const appName = appTag ? toAppName(appTag) : undefined;
   const appBase = ws && appTag ? `/ws/${ws}/app/${appTag}` : null;
+  const currentWs = workspaces.find((w) => w.name === ws);
 
   // Refetch on entering/leaving home — the add-workspace form lives there.
   const atHome = location.pathname === "/";
@@ -109,6 +111,7 @@ export default function App() {
               ))}
             </select>
           </div>
+          {currentWs && <CopyPath text={wsLocation(currentWs)} />}
         </div>
 
         {appName && (

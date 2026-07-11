@@ -124,6 +124,18 @@ tr.flash { animation: flashbg 1.8s ease-out; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* Full workspace path/URI + a copy button — kept visible wherever a
+ * workspace is named so it's always easy to grab. */
+.copy-path {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
+.copy-path .mono {
+  color: var(--text-3); font-size: 11.5px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.copy-path button { flex: none; }
+.sb-group .copy-path { margin-top: 6px; padding: 0 4px; }
+
 .status-dot {
   width: 7px; height: 7px; border-radius: 50%; background: var(--good);
   flex: none;
