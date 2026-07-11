@@ -770,8 +770,11 @@ def _goto_version(deps, vmn_root_path, pull):
             )
         )
 
-    with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
-        results = p.map(_update_repo, args)
+    if args:
+        with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
+            results = p.map(_update_repo, args)
+    else:
+        results = []
 
     has_missing_objects = False
     for res in results:

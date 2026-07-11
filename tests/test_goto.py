@@ -309,6 +309,39 @@ def test_goto_clones_and_checks_out_new_dep_from_branch_specific_conf(app_layout
     dep_repo_after.close()
 
 
+def test_goto_reports_clone_failure_instead_of_pool_crash(app_layout, capfd):
+    """When every configured dependency fails to clone, goto must report the
+    clone failure - not crash with the confusing multiprocessing error
+    'Number of processes must be at least 1' that comes from building an empty
+    update Pool after all repos were dropped as failed."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    # A dependency whose remote does not exist: the clone can never succeed.
+    app_layout.write_conf(
+        params["app_conf_path"],
+        deps={
+            "../": {
+                "shared_lib": {
+                    "vcs_type": "git",
+                    "remote": "/nonexistent/shared_lib.git",
+                }
+            }
+        },
+    )
+
+    capfd.readouterr()
+    err = _goto(app_layout.app_name)
+    assert err == 1
+
+    captured = capfd.readouterr()
+    assert "Number of processes must be at least 1" not in captured.err
+    assert "Failed to update one or more" in captured.err
+
+
 def test_goto_reads_branch_conf_from_legacy_nested_path(app_layout, capfd):
     """A branch-specific conf placed at a path mirroring the branch name with
     '/' kept as directories (e.g.
