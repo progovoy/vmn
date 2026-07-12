@@ -1,5 +1,10 @@
 vmn.lock
-vmn.log
+vmn.log*
 vmn.cache
+global_vmn.log
+untracked_hash.cache
+*/snapshots/
+*/experiments/
 
+# legacy local artifact, no longer produced by current vmn code
 ver.yml

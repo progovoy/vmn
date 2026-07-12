@@ -20,3 +20,5 @@ dist
 .mcp.json
 webui/node_modules/
 webui/tsconfig.tsbuildinfo
+
+.claude/
