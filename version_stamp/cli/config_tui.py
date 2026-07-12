@@ -104,6 +104,24 @@ def _resolve_conf_target(vmn_ctx):
     return conf_path, descriptions, None
 
 
+def _resolve_seeded_branch_conf(vmn_ctx, sync_dep_branches=False):
+    """Resolve the branch conf target and the raw conf that seeds it.
+
+    Returns (conf_path, descriptions, raw_conf). ``raw_conf`` is read from the
+    effective conf a new branch conf is seeded from; when ``sync_dep_branches``
+    is set, each branch-pinned dep is repinned to the branch its repo is
+    currently checked out on. Returns (None, None, None) after logging on a
+    --root/non-root mismatch.
+    """
+    conf_path, descriptions, seed_source = _resolve_conf_target(vmn_ctx)
+    if conf_path is None:
+        return None, None, None
+    raw_conf = _read_raw_conf(seed_source)
+    if sync_dep_branches:
+        _sync_dep_branches(raw_conf, vmn_ctx.vcs.vmn_root_path)
+    return conf_path, descriptions, raw_conf
+
+
 @measure_runtime_decorator
 def handle_config(vmn_ctx):
     if vmn_ctx.args.gen:
@@ -127,11 +145,11 @@ def handle_config(vmn_ctx):
     # --branch mode: edit branch-specific config in the canonical layout,
     # seeded from the current effective conf when it does not exist yet.
     if vmn_ctx.args.branch:
-        conf_path, descriptions, seed_source = _resolve_conf_target(vmn_ctx)
+        conf_path, descriptions, raw_conf = _resolve_seeded_branch_conf(vmn_ctx)
         if conf_path is None:
             return 1
-        if not os.path.isfile(conf_path) and seed_source:
-            _write_full_config(conf_path, _read_raw_conf(seed_source))
+        if not os.path.isfile(conf_path):
+            _write_full_config(conf_path, raw_conf)
         if vmn_ctx.args.vim:
             return _config_vim(conf_path, create_if_missing=True)
         return _config_interactive(conf_path, descriptions, vmn_root_path)
@@ -519,6 +537,23 @@ def _get_dep_branch(full_path):
         return branch
     except (git.InvalidGitRepositoryError, git.GitCommandNotFound, OSError):
         return None
+
+
+def _sync_dep_branches(raw_conf, vmn_root_path):
+    """Repin each branch-pinned dep to the branch its repo is currently on."""
+    for rel_dir, repos in (raw_conf.get("deps") or {}).items():
+        for repo_name, dep_conf in repos.items():
+            if not isinstance(dep_conf, dict) or "branch" not in dep_conf:
+                continue
+            rel_path = os.path.join(rel_dir, repo_name)
+            actual = _get_dep_branch(os.path.join(vmn_root_path, rel_path))
+            if actual:
+                _set_dep_pin(dep_conf, "branch", actual)
+            else:
+                VMN_LOGGER.warning(
+                    f"Could not detect the current branch of dep "
+                    f"'{rel_path}'. Keeping branch: {dep_conf['branch']}"
+                )
 
 
 def _edit_deps(current, vmn_root_path):
