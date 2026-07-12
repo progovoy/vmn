@@ -617,6 +617,72 @@ def test_config_gen_creates_default_conf_when_branch_conf_exists(app_layout):
     assert os.path.isfile(conf_path)
 
 
+def test_config_gen_branch_sync_dep_branches(app_layout):
+    from version_stamp.core.utils import branch_conf_canonical_path
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    app_layout.create_repo(repo_name="repo1", repo_type="git")
+    app_layout.checkout("feature_x", repo_name="repo1", create_new=True)
+    app_layout.create_repo(repo_name="repo2", repo_type="git")
+
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
+    conf_path = os.path.join(app_dir, "conf.yml")
+    deps = {
+        "../": {
+            "repo1": {"vcs_type": "git", "branch": "stale_branch"},
+            "repo2": {"vcs_type": "git"},
+            "missing_repo": {"vcs_type": "git", "branch": "keepme"},
+        }
+    }
+    app_layout.write_conf(conf_path, deps=deps)
+
+    reset_logger()
+    ret = vmn_run(
+        ["config", "gen", app_layout.app_name, "--branch", "--sync-dep-branches"]
+    )[0]
+    assert ret == 0
+
+    canonical = branch_conf_canonical_path(app_dir, _active_branch(app_layout))
+    with open(canonical, "r") as f:
+        branch_deps = yaml.safe_load(f)["conf"]["deps"]
+
+    # Branch-pinned dep follows the branch its repo is actually on.
+    assert branch_deps["../"]["repo1"]["branch"] == "feature_x"
+    # Deps without a branch pin are untouched.
+    assert "branch" not in branch_deps["../"]["repo2"]
+    # Deps whose repo is not on disk keep their configured branch.
+    assert branch_deps["../"]["missing_repo"]["branch"] == "keepme"
+
+    # The main conf.yml itself is untouched.
+    with open(conf_path, "r") as f:
+        main_deps = yaml.safe_load(f)["conf"]["deps"]
+    assert main_deps["../"]["repo1"]["branch"] == "stale_branch"
+
+
+def test_config_gen_sync_dep_branches_requires_gen_branch(app_layout):
+    _run_vmn_init()
+
+    reset_logger()
+    ret = vmn_run(
+        ["config", "gen", app_layout.app_name, "--sync-dep-branches"]
+    )[0]
+    assert ret == 1
+
+    conf_path = os.path.join(
+        app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml"
+    )
+    assert not os.path.exists(conf_path)
+
+    # Rejected on the interactive (non-gen) path as well.
+    reset_logger()
+    ret = vmn_run(
+        ["config", app_layout.app_name, "--branch", "--sync-dep-branches"]
+    )[0]
+    assert ret == 1
+
+
 def test_config_gen_works_without_tty(app_layout, monkeypatch):
     _run_vmn_init()
 

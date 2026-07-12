@@ -6,10 +6,29 @@ import os
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.models import AppConf
 from version_stamp.cli.config_tui import (
+    _get_dep_branch,
     _read_raw_conf,
     _resolve_conf_target,
+    _set_dep_pin,
     _write_full_config,
 )
+
+
+def _sync_dep_branches(raw_conf, vmn_root_path):
+    """Repin each branch-pinned dep to the branch its repo is currently on."""
+    for rel_dir, repos in (raw_conf.get("deps") or {}).items():
+        for repo_name, dep_conf in repos.items():
+            if not isinstance(dep_conf, dict) or "branch" not in dep_conf:
+                continue
+            rel_path = os.path.join(rel_dir, repo_name)
+            actual = _get_dep_branch(os.path.join(vmn_root_path, rel_path))
+            if actual:
+                _set_dep_pin(dep_conf, "branch", actual)
+            else:
+                VMN_LOGGER.warning(
+                    f"Could not detect the current branch of dep "
+                    f"'{rel_path}'. Keeping branch: {dep_conf['branch']}"
+                )
 
 
 def handle_config_gen(vmn_ctx):
@@ -29,6 +48,8 @@ def handle_config_gen(vmn_ctx):
         if conf_path is None:
             return 1
         raw_conf = _read_raw_conf(seed_source)
+        if vmn_ctx.args.sync_dep_branches:
+            _sync_dep_branches(raw_conf, vcs.vmn_root_path)
     elif vmn_ctx.args.root:
         conf_path, _, _ = _resolve_conf_target(vmn_ctx)
         if conf_path is None:

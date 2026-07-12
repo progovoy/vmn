@@ -70,6 +70,11 @@ def normalize_config_gen(args):
         VMN_LOGGER.error(err)
         raise RuntimeError(err)
 
+    if args.sync_dep_branches and not (args.gen and args.branch):
+        err = "--sync-dep-branches requires 'config gen --branch'"
+        VMN_LOGGER.error(err)
+        raise RuntimeError(err)
+
     args.name = positionals[0] if positionals else None
 
 
@@ -367,6 +372,15 @@ def add_arg_config(subprasers):
         "directory instead of the default conf.yml",
     )
     pconfig.set_defaults(branch=False)
+    pconfig.add_argument(
+        "--sync-dep-branches",
+        dest="sync_dep_branches",
+        action="store_true",
+        help="With 'gen --branch': for each dep pinned to a branch, pin the "
+        "generated branch config to the branch the dep repo is currently "
+        "checked out on",
+    )
+    pconfig.set_defaults(sync_dep_branches=False)
 
 
 def add_arg_snapshot(subprasers):
