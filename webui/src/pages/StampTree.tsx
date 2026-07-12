@@ -150,12 +150,19 @@ function ModeDot({ mode }: { mode: string }) {
   );
 }
 
+// Accent per conventional-commit group; anything else falls back to muted.
+const GROUP_ACCENT: Record<string, string> = {
+  Features: "var(--minor)",
+  "Bug Fixes": "var(--patch)",
+  "Performance Improvements": "var(--hotfix)",
+};
+
 function CommitLine({ scope, description, hash }: Changelog["breaking"][number]) {
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "baseline", lineHeight: 1.5 }}>
-      <span className="mono" style={{ color: "var(--text-muted)", fontSize: 11 }}>{hash}</span>
-      <span>
-        {scope && <strong>{scope}: </strong>}
+    <div className="cl-commit">
+      <span className="cl-hash mono">{hash}</span>
+      <span className="cl-desc">
+        {scope && <span className="cl-scope">{scope}</span>}
         {description}
       </span>
     </div>
@@ -164,21 +171,30 @@ function CommitLine({ scope, description, hash }: Changelog["breaking"][number])
 
 const CHANGELOG_COLLAPSED = 8; // commits shown before "show all"
 
-function ChangelogBody({ cl }: { cl: Changelog }) {
+/** Grouped conventional commits (breaking + type groups) with a collapse budget.
+ * Shared by the app-level changelog and each per-dependency changelog. */
+function CommitGroups({
+  breaking, groups, resetKey, collapsedAt = CHANGELOG_COLLAPSED,
+}: {
+  breaking: Changelog["breaking"];
+  groups: Changelog["groups"];
+  resetKey: string;
+  collapsedAt?: number;
+}) {
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => setExpanded(false), [cl]);
+  useEffect(() => setExpanded(false), [resetKey]);
 
   const sections = [
-    ...(cl.breaking.length ? [{ label: "Breaking", breaking: true, commits: cl.breaking }] : []),
-    ...cl.groups.map((g) => ({ label: g.label, breaking: false, commits: g.commits })),
+    ...(breaking.length ? [{ label: "Breaking", breaking: true, commits: breaking }] : []),
+    ...groups.map((g) => ({ label: g.label, breaking: false, commits: g.commits })),
   ];
   const total = sections.reduce((n, s) => n + s.commits.length, 0);
   if (total === 0) {
-    return <div style={{ color: "var(--text-muted)" }}>No changes in this range.</div>;
+    return <div className="cl-empty">No changes in this range.</div>;
   }
 
   // Keep section headers but stop rendering commits once the budget runs out.
-  let budget = expanded ? Infinity : CHANGELOG_COLLAPSED;
+  let budget = expanded ? Infinity : collapsedAt;
   const shown = [];
   for (const s of sections) {
     if (budget <= 0) break;
@@ -188,24 +204,67 @@ function ChangelogBody({ cl }: { cl: Changelog }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+    <div className="cl-groups">
       {shown.map((s) => (
-        <div key={s.label}>
-          {s.breaking ? (
-            <div className="badge mode-major" style={{ marginBottom: 4 }}>Breaking</div>
-          ) : (
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{s.label}</div>
-          )}
+        <div key={s.label} className="cl-section">
+          <div className="cl-section-head">
+            {s.breaking ? (
+              <span className="badge mode-major">Breaking</span>
+            ) : (
+              <>
+                <span
+                  className="cl-tag-dot"
+                  style={{ background: GROUP_ACCENT[s.label] ?? "var(--text-muted)" }}
+                />
+                <span className="cl-section-label">{s.label}</span>
+              </>
+            )}
+            <span className="cl-count">{s.commits.length}</span>
+          </div>
           {s.commits.map((c) => <CommitLine key={c.hash} {...c} />)}
         </div>
       ))}
-      {total > CHANGELOG_COLLAPSED && (
-        <button
-          style={{ alignSelf: "flex-start", padding: "2px 10px", fontSize: 12 }}
-          onClick={() => setExpanded((e) => !e)}
-        >
+      {total > collapsedAt && (
+        <button className="cl-more" onClick={() => setExpanded((e) => !e)}>
           {expanded ? "show less" : `show all ${total}`}
         </button>
+      )}
+    </div>
+  );
+}
+
+/** One dependency's changelog: name, moved commit range, and its commits. */
+function DepChangelog({ dep }: { dep: Changelog["deps"][number] }) {
+  return (
+    <div className="cl-dep">
+      <div className="cl-dep-head">
+        <span className="cl-dep-name">{dep.name}</span>
+        <span className="cl-dep-range mono">
+          {dep.from_commit}<span className="cl-dep-arrow">→</span>{dep.to_commit}
+        </span>
+      </div>
+      <CommitGroups
+        breaking={dep.breaking}
+        groups={dep.groups}
+        resetKey={dep.path + dep.to_commit}
+        collapsedAt={5}
+      />
+    </div>
+  );
+}
+
+function ChangelogBody({ cl }: { cl: Changelog }) {
+  const resetKey = `${cl.from_verstr}->${cl.to_verstr}`;
+  return (
+    <div className="cl-body">
+      <CommitGroups breaking={cl.breaking} groups={cl.groups} resetKey={resetKey} />
+      {cl.deps.length > 0 && (
+        <div className="cl-deps">
+          <div className="cl-deps-head">
+            dependencies<span className="cl-count">{cl.deps.length}</span>
+          </div>
+          {cl.deps.map((d) => <DepChangelog key={d.path} dep={d} />)}
+        </div>
       )}
     </div>
   );

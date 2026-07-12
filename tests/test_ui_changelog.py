@@ -6,6 +6,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from helpers import (
+    _configure_2_deps,
     _init_app,
     _run_vmn_init,
     _stamp_app,
@@ -119,6 +120,64 @@ def test_ui_version_changelog_non_adjacent_skips_interior_stamps(app_layout, cap
     assert not any("Stamped" in d for d in descriptions)
 
 
+def test_ui_version_changelog_per_dependency(app_layout, capfd):
+    """The changelog reports grouped commits for each dependency whose pin moved
+    between the two versions, alongside the app's own changelog."""
+    _run_vmn_init()
+    err, ver_info, params = _init_app(app_layout.app_name)
+    _configure_2_deps(app_layout, params)
+    app_layout.write_file_commit_and_push("test_repo_0", "d1.txt", "x")
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.1
+
+    # repo1 advances with conventional commits; repo2 stays put.
+    app_layout.write_file_commit_and_push(
+        "repo1", "adv.txt", "z", commit_msg="feat: dep feature"
+    )
+    app_layout.write_file_commit_and_push(
+        "repo1", "adv2.txt", "z2", commit_msg="fix: dep bug"
+    )
+    app_layout.write_file_commit_and_push("test_repo_0", "d2.txt", "y")
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.2
+
+    client = _client(app_layout)
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/changelog?v=0.0.2&from=0.0.1"
+    )
+    assert r.status_code == 200
+    cl = r.json()
+
+    deps = {d["name"]: d for d in cl["deps"]}
+    # Only the dependency that moved shows up.
+    assert "repo1" in deps
+    assert "repo2" not in deps
+
+    repo1 = deps["repo1"]
+    assert repo1["from_commit"] and repo1["to_commit"]
+    assert repo1["from_commit"] != repo1["to_commit"]
+    descriptions = {
+        c["description"] for g in repo1["groups"] for c in g["commits"]
+    }
+    assert {"dep feature", "dep bug"} <= descriptions
+
+
+def test_ui_version_changelog_no_deps_empty_list(app_layout, capfd):
+    """An app without dependencies yields an empty deps list, never an error."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")  # 0.0.1
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "a.txt", "a", commit_msg="feat: x"
+    )
+    _stamp_app(app_layout.app_name, "minor")  # 0.1.0
+
+    client = _client(app_layout)
+    r = client.get(
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/changelog?v=0.1.0"
+    )
+    assert r.status_code == 200
+    assert r.json()["deps"] == []
+
+
 def test_ui_version_changelog_baseline_is_empty(app_layout, capfd):
     """The init baseline (0.0.0) has no distinct previous, so its changelog is
     empty rather than an error (its previous_version points at itself)."""
@@ -135,3 +194,4 @@ def test_ui_version_changelog_baseline_is_empty(app_layout, capfd):
     assert cl["from_verstr"] is None
     assert cl["groups"] == []
     assert cl["breaking"] == []
+    assert cl["deps"] == []

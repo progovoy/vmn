@@ -98,6 +98,15 @@ export interface ChangelogGroup {
   commits: ChangelogEntry[];
 }
 
+export interface ChangelogDep {
+  path: string;
+  name: string;
+  from_commit: string;
+  to_commit: string;
+  breaking: ChangelogEntry[];
+  groups: ChangelogGroup[];
+}
+
 export interface Changelog {
   to_verstr: string;
   from_verstr: string | null;
@@ -105,6 +114,7 @@ export interface Changelog {
   from_commit: string | null;
   breaking: ChangelogEntry[];
   groups: ChangelogGroup[];
+  deps: ChangelogDep[];
 }
 
 export interface DiffResult {
