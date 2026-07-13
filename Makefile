@@ -1,10 +1,15 @@
 NAME=vmn
 
-.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _run_black
+.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _run_black
 
-build: check
+build: check _build
 
-_build: clean
+_build_ui:
+	@echo "Building web UI"
+	npm install --prefix ${PWD}/webui
+	npm run build --prefix ${PWD}/webui
+
+_build: clean _build_ui
 	@echo "Publishing"
 	vmn show ${EXTRA_SHOW_ARGS} --verbose vmn > .vmn/vmn/ver.yml
 	python3 ${PWD}/gen_ver.py
