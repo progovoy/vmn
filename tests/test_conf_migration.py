@@ -121,7 +121,7 @@ def test_stamp_migrates_root_conf(app_layout):
     assert _vmn_status_clean(app_layout.repo_path)
 
 
-def test_stamp_migrates_all_apps(app_layout):
+def test_stamp_migrates_only_stamped_app(app_layout):
     _run_vmn_init()
     _init_app("app_a")
     _stamp_app("app_a", "patch")
@@ -142,14 +142,14 @@ def test_stamp_migrates_all_apps(app_layout):
     subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
 
-    # Stamp only app_a; app_b's conf should also migrate.
+    # Stamp only app_a; app_b's conf should NOT migrate.
     err, _, _ = _stamp_app("app_a", "patch")
     assert err == 0
 
     assert not os.path.exists(flat_a)
     assert os.path.exists(canon_a)
-    assert not os.path.exists(flat_b)
-    assert os.path.exists(canon_b)
+    assert os.path.exists(flat_b)
+    assert not os.path.exists(canon_b)
     assert _vmn_status_clean(app_layout.repo_path)
 
 

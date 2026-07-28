@@ -847,9 +847,13 @@ class VersionControlStamper(IVersionsStamper):
     def _migrate_branch_confs(self):
         """Move old-convention branch confs to the canonical layout and remap
         any tracked paths that were moved into the stamp commit."""
-        moves = migrate_branch_confs(
-            self.backend, self.vmn_root_path, self.dry_run
-        )
+        app_dirs = [self.app_dir_path]
+        if (
+            self.root_app_dir_path is not None
+            and self.root_app_dir_path != self.app_dir_path
+        ):
+            app_dirs.append(self.root_app_dir_path)
+        moves = migrate_branch_confs(self.backend, app_dirs, self.dry_run)
         if self.dry_run or not moves:
             # Dry-run moves are only planned; nothing on disk to remap to.
             return

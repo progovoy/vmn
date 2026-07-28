@@ -142,7 +142,7 @@ def test_migrate_dry_run_returns_planned_moves(tmp_path):
 
         backend = type("StubBackend", (), {"_be": repo})()
 
-        moves = migrate_branch_confs(backend, str(tmp_path), dry_run=True)
+        moves = migrate_branch_confs(backend, [app_dir], dry_run=True)
 
         canonical = branch_conf_canonical_path(app_dir, "b2")
         assert moves == [(flat, canonical)]

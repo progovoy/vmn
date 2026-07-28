@@ -18,33 +18,23 @@ from version_stamp.core.utils import (
 _PRUNE_DIRS = {BRANCH_CONF_DIR, "verinfo", "root_verinfo"}
 
 
-def migrate_branch_confs(backend, vmn_root_path, dry_run=False):
-    """Move every app's branch confs to the canonical layout.
+def migrate_branch_confs(backend, app_dirs, dry_run=False):
+    """Move branch confs to the canonical layout for the given app directories.
 
     Returns a list of ``(old_path, new_path)`` moves (for remapping paths that
     the caller tracks); under ``dry_run`` the moves are only planned and
-    nothing is touched. Runs for all apps regardless of which one is stamped.
+    nothing is touched.
     """
-    vmn_dir = os.path.join(vmn_root_path, ".vmn")
-    if not os.path.isdir(vmn_dir):
-        return []
-
     repo = backend._be
     known_branches = _known_branches(repo)
 
     moves = []
-    for app_dir in _discover_app_dirs(vmn_dir):
-        moves.extend(_migrate_app_dir(repo, app_dir, known_branches, dry_run))
+    for app_dir in app_dirs:
+        if os.path.isdir(app_dir):
+            moves.extend(
+                _migrate_app_dir(repo, app_dir, known_branches, dry_run)
+            )
     return moves
-
-
-def _discover_app_dirs(vmn_dir):
-    app_dirs = []
-    for dirpath, dirnames, filenames in os.walk(vmn_dir):
-        dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
-        if "conf.yml" in filenames or "root_conf.yml" in filenames:
-            app_dirs.append(dirpath)
-    return app_dirs
 
 
 def _is_app_dir(path):
