@@ -134,6 +134,11 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
+- `vmn worktrees create <name>`: Create isolated development islands (git worktrees for main repo + all deps). `--island-name`, `--from-version`, `--no-stamp`, `--shallow-deps`, `--editable-dep`.
+- `vmn worktrees list`: List active islands.
+- `vmn worktrees remove <island>`: Clean up an island.
+- `vmn --completion [SHELL]`: Print shell completion setup script (bash/zsh/fish/tcsh). Auto-detects shell.
+- `vmn --completion-install [SHELL]`: Append completion to shell rc file. Idempotent.
 
 ## Environment Variables
 

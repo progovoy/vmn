@@ -129,6 +129,25 @@ vmn exp restore my_model --latest
 
 Both workflows store everything locally under `.vmn/` (git-ignored -- never committed or pushed) -- no servers, no lock-in. Add `--backend s3` if you want to share experiments across a team; see [Storage](#storage) below.
 
+### Shell Completion
+
+Tab-completion for commands, flags, app names, and choices (bash/zsh/fish/tcsh):
+
+```sh
+# One-time install (auto-detects your shell):
+vmn --completion-install
+
+# Or print the setup script without modifying any files:
+vmn --completion
+```
+
+After installation, restart your shell or `source` the rc file. Then:
+
+- `vmn <TAB>` — lists all commands
+- `vmn stamp <TAB>` — suggests your tracked app names
+- `vmn stamp -r <TAB>` — shows `major minor patch hotfix`
+- `vmn snapshot <TAB>` — shows actions (`create`, `list`, `show`, ...)
+
 ---
 ## ⚡ Why vmn?
 
@@ -726,6 +745,9 @@ vmn snapshot create my_model \
 | `vmn add` | Attach build metadata | `vmn add -v 1.0.0 --bm build42 my_app` |
 | `vmn config` | Edit app config (TUI) | `vmn config my_app` |
 | `vmn init` | Initialize repo/app | `vmn stamp` auto-inits -- rarely needed |
+| `vmn worktrees` | Isolated parallel dev islands | `vmn worktrees create my_app` |
+
+**Global flags:** `--debug`, `--completion [SHELL]`, `--completion-install [SHELL]`
 
 ### vmn stamp
 

@@ -42,6 +42,16 @@ def parse_user_commands(command_line):
         help="Print shell completion setup and exit. "
         "Optionally specify shell (bash/zsh/fish/tcsh); auto-detects if omitted.",
     )
+    parser.add_argument(
+        "--completion-install",
+        nargs="?",
+        const=None,
+        default=argparse.SUPPRESS,
+        choices=["bash", "zsh", "fish", "tcsh"],
+        metavar="SHELL",
+        help="Install shell completion by appending to your shell rc file. "
+        "Optionally specify shell; auto-detects if omitted.",
+    )
     subprasers = parser.add_subparsers(dest="command")
 
     for arg in VMN_ARGS.keys():
