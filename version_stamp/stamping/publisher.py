@@ -563,7 +563,7 @@ class VersionControlStamper(IVersionsStamper):
                     "Would have pushed with tags.\n" f"tags: {all_tags} "
                 )
             else:
-                from version_stamp.cli.worktrees import is_local_only_island
+                from version_stamp.cli.worktree_state import is_local_only_island
                 _push_published_refs(
                     self.backend,
                     all_tags,

@@ -31,11 +31,11 @@ from version_stamp.cli.commands import (  # noqa: F401
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.cli.experiment import handle_experiment  # noqa: F401
-from version_stamp.cli.worktrees import (  # noqa: F401
+from version_stamp.cli.worktree_state import (
     WORKTREE_READONLY_MARKER,
-    handle_worktrees,
     is_local_only_island,
 )
+from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 
 handle_exp = handle_experiment  # alias  # noqa: F811
 

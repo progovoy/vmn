@@ -114,7 +114,7 @@ def handle_init_app(vmn_ctx):
 
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
-    from version_stamp.cli.worktrees import is_local_only_island
+    from version_stamp.cli.worktree_state import is_local_only_island
 
     local_only_island = is_local_only_island(vmn_ctx.vcs.vmn_root_path)
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
@@ -838,7 +838,7 @@ def handle_snapshot(vmn_ctx):
 def _is_editable_island_dep(path, backend, optional_status):
     if "outgoing" not in optional_status or backend.in_detached_head():
         return False
-    from version_stamp.cli.worktrees import is_local_only_island
+    from version_stamp.cli.worktree_state import is_local_only_island
     return is_local_only_island(path)
 
 
