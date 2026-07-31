@@ -115,8 +115,8 @@ class GitOpsMixin:
 
     @measure_runtime_decorator
     def tag(self, tags, messages, ref="HEAD", push=False):
-        if push and self.remote_active_branch is None:
-            raise RuntimeError("Will not push remote branch does not exist")
+        if push and self.selected_remote is None:
+            raise RuntimeError("Will not push tag without a configured remote")
 
         for tag, message in zip(tags, messages):
             # This is required in order to preserver chronological order when
@@ -142,6 +142,13 @@ class GitOpsMixin:
                     VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
                 raise RuntimeError(tag_err_str)
+
+    @measure_runtime_decorator
+    def push_tags(self, tags):
+        if self.selected_remote is None:
+            raise RuntimeError("No git remote is configured; cannot push tags")
+        for tag in tags:
+            self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
 
     @measure_runtime_decorator
     def push(self, tags=()):

@@ -34,6 +34,7 @@ from version_stamp.cli.experiment import handle_experiment  # noqa: F401
 from version_stamp.cli.worktrees import (  # noqa: F401
     WORKTREE_READONLY_MARKER,
     handle_worktrees,
+    is_local_only_island,
 )
 
 handle_exp = handle_experiment  # alias  # noqa: F811
@@ -215,9 +216,14 @@ def _vmn_run(args, root_path):
         VMN_LOGGER.info("Run vmn -h for help")
         return 1, vmnc
 
-    if VMN_ARGS[vmnc.args.command] == "remote" or (
+    local_only_command = (
+        is_local_only_island(root_path)
+        and vmnc.args.command in {"stamp", "release", "add"}
+    )
+    needs_remote = VMN_ARGS[vmnc.args.command] == "remote" or (
         "pull" in vmnc.args and vmnc.args.pull
-    ):
+    )
+    if needs_remote and not local_only_command:
         if vmnc.vcs.backend.selected_remote is None:
             VMN_LOGGER.error(
                 f"No git remote is configured. vmn requires a remote to "

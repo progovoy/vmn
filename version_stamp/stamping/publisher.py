@@ -28,6 +28,27 @@ from version_stamp.stamping.base import IVersionsStamper
 from version_stamp.stamping.conf_migration import migrate_branch_confs
 
 
+def _push_published_refs(backend, tags, local_only=False):
+    if local_only:
+        backend.push_tags(tags)
+        return
+
+    backend.push(tags)
+    count = 0
+    error = backend.check_for_outgoing_changes()
+    while count < PUBLISH_MAX_RETRIES and error:
+        count += 1
+        VMN_LOGGER.error(
+            f"BUG: Somehow we have outgoing changes right after publishing:\n{error}"
+        )
+        time.sleep(PUBLISH_RETRY_SLEEP_SECONDS)
+        error = backend.check_for_outgoing_changes()
+    if count == PUBLISH_MAX_RETRIES and error:
+        raise RuntimeError(
+            f"BUG: Somehow we have outgoing changes right after publishing:\n{error}"
+        )
+
+
 class VersionControlStamper(IVersionsStamper):
     @measure_runtime_decorator
     def __init__(self, arg_params):
@@ -542,24 +563,12 @@ class VersionControlStamper(IVersionsStamper):
                     "Would have pushed with tags.\n" f"tags: {all_tags} "
                 )
             else:
-                self.backend.push(all_tags)
-
-                count = 0
-                res = self.backend.check_for_outgoing_changes()
-                while count < PUBLISH_MAX_RETRIES and res:
-                    count += 1
-                    VMN_LOGGER.error(
-                        f"BUG: Somehow we have outgoing changes right "
-                        f"after publishing:\n{res}"
-                    )
-                    time.sleep(PUBLISH_RETRY_SLEEP_SECONDS)
-                    res = self.backend.check_for_outgoing_changes()
-
-                if count == PUBLISH_MAX_RETRIES and res:
-                    raise RuntimeError(
-                        f"BUG: Somehow we have outgoing changes right "
-                        f"after publishing:\n{res}"
-                    )
+                from version_stamp.cli.worktrees import is_local_only_island
+                _push_published_refs(
+                    self.backend,
+                    all_tags,
+                    local_only=is_local_only_island(self.vmn_root_path),
+                )
         except Exception:
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
@@ -966,5 +975,3 @@ class VersionControlStamper(IVersionsStamper):
     @measure_runtime_decorator
     def retrieve_remote_changes(self):
         self.backend.pull()
-
-
