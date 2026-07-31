@@ -513,6 +513,10 @@ class GitBackend(VersionControlBackend):
 
             self._git_backend = git.Repo(self.root_path)
 
+        with self._git_backend.config_writer() as cw:
+            cw.set_value("user", "name", "Test User")
+            cw.set_value("user", "email", "test@test.com")
+
         p = os.path.join(versions_root_path, "init.txt")
         if not os.path.exists(p):
             with open(p, "w+") as f:

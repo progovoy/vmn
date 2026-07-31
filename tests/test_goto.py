@@ -141,7 +141,7 @@ def test_basic_goto(app_layout, capfd):
     assert err == 1
 
     captured = capfd.readouterr()
-    assert "[ERROR] Wrong unique id\n" == captured.err
+    assert "[ERROR] Wrong unique id: provided '" in captured.err
 
 
 def test_goto_print(app_layout, capfd):
