@@ -120,6 +120,10 @@ def vmn_run(command_line=None):
         from version_stamp.cli.completion import install_completion
         return install_completion(args.completion_install), None
 
+    if hasattr(args, "completion_uninstall"):
+        from version_stamp.cli.completion import uninstall_completion
+        return uninstall_completion(args.completion_uninstall), None
+
     if args.command == "skill":
         from version_stamp.cli.skill import install_skill, print_skill
         if args.install:

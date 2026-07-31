@@ -224,6 +224,22 @@ def _strip_legacy_completion(content, shell):
     return content.replace(legacy_block, "")
 
 
+def _strip_managed_block(content):
+    start = content.find(COMPLETION_MARKER)
+    if start < 0:
+        return content
+    end = content.find(COMPLETION_END_MARKER, start)
+    if end < 0:
+        return content
+    end += len(COMPLETION_END_MARKER)
+    if end < len(content) and content[end] == "\n":
+        end += 1
+    before = content[:start]
+    if before.endswith("\n"):
+        before = before[:-1]
+    return before + content[end:]
+
+
 def _has_malformed_completion_block(content):
     starts = content.count(COMPLETION_MARKER)
     ends = content.count(COMPLETION_END_MARKER)
@@ -279,12 +295,14 @@ def install_completion(shell=None):
                 file=sys.stderr,
             )
             return 1
-        if COMPLETION_MARKER in content:
-            print(f"Completion already installed in {rc_path}")
-            return 0
+        content = _strip_managed_block(content)
 
+        if shell == "zsh" and "compinit" not in content:
+            compinit_guard = "autoload -Uz compinit && compinit\n"
+        else:
+            compinit_guard = ""
         block = (
-            f"\n{COMPLETION_MARKER}\n{script.rstrip()}\n"
+            f"\n{COMPLETION_MARKER}\n{compinit_guard}{script.rstrip()}\n"
             f"{COMPLETION_END_MARKER}\n"
         )
         os.makedirs(os.path.dirname(rc_path), exist_ok=True)
@@ -295,6 +313,32 @@ def install_completion(shell=None):
 
     print(f"Completion installed in {rc_path}")
     print(f"Restart your shell or run: source {rc_path}")
+    return 0
+
+
+def uninstall_completion(shell=None):
+    """Remove the managed completion block from the shell startup file."""
+    shell = shell or _detect_shell()
+    if shell not in SUPPORTED_SHELLS:
+        return _unsupported_shell(shell)
+
+    rc_path = _resolve_rc_path(shell)
+    try:
+        if not os.path.exists(rc_path):
+            print(f"Completion not installed ({rc_path} does not exist)")
+            return 0
+        with open(rc_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if COMPLETION_MARKER not in content:
+            print(f"Completion not installed in {rc_path}")
+            return 0
+        new_content = _strip_managed_block(content)
+        _atomic_write(rc_path, new_content)
+    except OSError as exc:
+        print(f"Failed to uninstall completion from {rc_path}: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Completion removed from {rc_path}")
     return 0
 
 

@@ -99,6 +99,65 @@ def test_install_completion_is_idempotent_for_all_shells(
     assert content.count("# vmn shell completion") == 1
 
 
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish", "tcsh"])
+def test_install_completion_replaces_existing_block(
+    shell, tmp_path, monkeypatch
+):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths[shell].write_text(
+        "existing stuff\n"
+        f"\n{completion.COMPLETION_MARKER}\nold content\n"
+        f"{completion.COMPLETION_END_MARKER}\n"
+    )
+
+    assert completion.install_completion(shell) == 0
+
+    content = paths[shell].read_text()
+    assert content.count(completion.COMPLETION_MARKER) == 1
+    assert "old content" not in content
+    assert "vmn" in content
+    assert content.startswith("existing stuff\n")
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish", "tcsh"])
+def test_uninstall_completion_removes_block(shell, tmp_path, monkeypatch):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert completion.install_completion(shell) == 0
+    assert completion.COMPLETION_MARKER in paths[shell].read_text()
+
+    assert completion.uninstall_completion(shell) == 0
+    content = paths[shell].read_text()
+    assert completion.COMPLETION_MARKER not in content
+    assert completion.COMPLETION_END_MARKER not in content
+
+
+def test_uninstall_completion_preserves_surrounding_content(
+    tmp_path, monkeypatch
+):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths["bash"].write_text("before\n")
+
+    assert completion.install_completion("bash") == 0
+    assert completion.uninstall_completion("bash") == 0
+
+    assert paths["bash"].read_text().strip() == "before"
+
+
+def test_uninstall_completion_noop_when_not_installed(
+    tmp_path, monkeypatch, capsys
+):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths["bash"].write_text("just stuff\n")
+
+    assert completion.uninstall_completion("bash") == 0
+    assert "not installed" in capsys.readouterr().out.lower()
+
+
 def test_install_completion_embeds_shellcode_without_path_dependency(
     tmp_path, monkeypatch
 ):
@@ -122,6 +181,32 @@ def test_tcsh_install_reuses_existing_cshrc(tmp_path, monkeypatch):
 
     assert "# vmn shell completion" in cshrc.read_text()
     assert not (tmp_path / ".tcshrc").exists()
+
+
+def test_zsh_install_ensures_compinit_before_compdef(tmp_path, monkeypatch):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert completion.install_completion("zsh") == 0
+
+    content = paths["zsh"].read_text()
+    assert "autoload -Uz compinit && compinit" in content
+    compinit_pos = content.index("autoload -Uz compinit && compinit")
+    compdef_pos = content.index("compdef")
+    assert compinit_pos < compdef_pos
+
+
+def test_zsh_install_skips_compinit_guard_when_already_present(
+    tmp_path, monkeypatch
+):
+    paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    paths["zsh"].write_text("autoload -Uz compinit && compinit\n")
+
+    assert completion.install_completion("zsh") == 0
+
+    content = paths["zsh"].read_text()
+    assert content.count("autoload -Uz compinit") == 1
 
 
 def test_zsh_install_honors_zdotdir(tmp_path, monkeypatch):
