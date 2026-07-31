@@ -109,9 +109,10 @@ Key config options:
 ## Development gold rules
 
 ### Testability by design
-- All I/O objects (DB connections, HTTP clients, file handles, queues, external services) must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
-- This makes the entire codebase testable with unit tests only — no integration tests, no mocks of concrete classes, no test containers needed for fast feedback.
-- If code is not in this shape, do small incremental refactors until all I/O is injected from the boundary.
+- All I/O objects must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
+- **I/O means anything non-deterministic or side-effectful**: DB connections, HTTP clients, file handles, queues, external services, `time.sleep`, `time.time`, `datetime.now`, random number generators, environment variables, stdin/stdout. If it touches the outside world or the clock — it's an interface.
+- This makes the entire codebase testable with unit tests only — no integration tests, no mocks of concrete classes, no test containers needed for fast feedback. Tests stay fast (milliseconds) because no real I/O ever runs.
+- If code is not in this shape, do small incremental refactors until all I/O is injected from the boundary. Extract the interface, push the concrete implementation to the entry point.
 
 ### TDD (strict)
 1. **RED** — Write the test first. It must fail for the right reason.
@@ -126,9 +127,15 @@ Key config options:
 
 ### Parallel worktree workflow
 - Always use `vmn worktrees create` to spawn clean isolated worktrees for feature work.
-- Delete worktrees after merging (`vmn worktrees remove`). Local worktrees are fine — no need to push worktree branches.
+- Local worktrees are fine — no need to push worktree branches to remote.
 - Run all unit tests before merging a worktree back to master or any branch.
 - Run `/simplify` at the end to review each feature for reuse, simplification, and efficiency.
+
+### Worktree hygiene
+- **Before removing**: verify all work is ported to the target branch. Check `git diff` and `git log` between the worktree branch and the merge target — nothing should be lost.
+- **After merging**: immediately remove the worktree (`vmn worktrees remove <name>`). Don't let stale worktrees accumulate.
+- **On session start**: run `vmn worktrees list` and clean up any stale islands left from previous sessions that are no longer relevant.
+- **Never leave orphaned branches**: removing a worktree should also delete its local branch. If it doesn't, clean it manually (`git branch -D island/<name>/*`).
 
 ### Communication
 - Always interview the developer before starting a task to make sure requirements are clear.
