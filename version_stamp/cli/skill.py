@@ -105,6 +105,34 @@ Key config options:
 - `version_backends` — auto-embed version into package.json, Cargo.toml, pyproject.toml
 - `changelog.path` — auto-generate CHANGELOG.md on stamp
 - `deps` — track external repo dependencies for multi-repo state recovery
+
+## Development gold rules
+
+### Testability by design
+- All I/O objects (DB connections, HTTP clients, file handles, queues, external services) must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
+- This makes the entire codebase testable with unit tests only — no integration tests, no mocks of concrete classes, no test containers needed for fast feedback.
+- If code is not in this shape, do small incremental refactors until all I/O is injected from the boundary.
+
+### TDD (strict)
+1. **RED** — Write the test first. It must fail for the right reason.
+2. **Implement** — Write the minimum code to make it pass.
+3. **GREEN** — Tests pass. Do not modify the test to force green.
+- Never write implementation before its test exists.
+- Never change test logic without explicit approval from the developer.
+
+### Boy Scout rule
+- If you see any refactor opportunity or simplification — even if not part of the current task — do it.
+- Leave the code cleaner than you found it, every time.
+
+### Parallel worktree workflow
+- Always use `vmn worktrees create` to spawn clean isolated worktrees for feature work.
+- Delete worktrees after merging (`vmn worktrees remove`). Local worktrees are fine — no need to push worktree branches.
+- Run all unit tests before merging a worktree back to master or any branch.
+- Run `/simplify` at the end to review each feature for reuse, simplification, and efficiency.
+
+### Communication
+- Always interview the developer before starting a task to make sure requirements are clear.
+- Push back if something seems wrong, over-engineered, or under-specified.
 """
 
 
