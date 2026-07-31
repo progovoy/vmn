@@ -691,10 +691,40 @@ def add_arg_worktrees(subprasers):
 
 
 def add_arg_skill(subprasers):
-    subprasers.add_parser(
+    pskill = subprasers.add_parser(
         "skill",
         help="Print a vibe-coding skill block for AI agents (CLAUDE.md, .cursorrules, etc.)",
     )
+    pskill.add_argument(
+        "--methodology",
+        dest="methodology",
+        action="store_true",
+        help="Also append opinionated development gold rules (TDD, worktree "
+        "workflow, communication) to the skill block",
+    )
+    pskill.set_defaults(methodology=False)
+    pskill.add_argument(
+        "--install",
+        dest="install",
+        action="store_true",
+        help="Write the skill to a file instead of printing to stdout",
+    )
+    pskill.set_defaults(install=False)
+    pskill.add_argument(
+        "--target",
+        dest="target",
+        choices=["claude", "cursor", "agents"],
+        default="claude",
+        help="Install target (with --install): claude → .claude/skills/vmn/"
+        "SKILL.md, cursor → .cursorrules, agents → AGENTS.md (default: claude)",
+    )
+    pskill.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help="Overwrite an existing Claude SKILL.md (claude target only)",
+    )
+    pskill.set_defaults(force=False)
 
 
 def verify_user_input_version(args, key):

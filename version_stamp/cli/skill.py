@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Print a vibe-coding skill block for AI agents."""
 
-SKILL_TEXT = r"""# vmn — versioning & experiment tracking
+import os
+
+from version_stamp.core.logging import VMN_LOGGER
+
+VMN_TEXT = r"""# vmn — versioning & experiment tracking
 
 ## Versioning workflow
 
@@ -51,8 +55,10 @@ vmn exp list <app_name> --sort loss --top 5
 # Compare two experiments (shows metric delta + code diff)
 vmn exp diff <app_name>
 
-# Restore the best experiment's code state
+# Restore the most recent experiment's code state
 vmn exp restore <app_name> --latest
+# For the best run instead: find it with `exp list --sort <metric>`, then
+# vmn exp restore <app_name> -v <version>
 ```
 
 ## Snapshots (uncommitted work)
@@ -105,8 +111,10 @@ Key config options:
 - `version_backends` — auto-embed version into package.json, Cargo.toml, pyproject.toml
 - `changelog.path` — auto-generate CHANGELOG.md on stamp
 - `deps` — track external repo dependencies for multi-repo state recovery
+"""
 
-## Development gold rules
+
+METHODOLOGY_TEXT = r"""## Development gold rules
 
 ### Testability by design
 - All I/O objects must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
@@ -143,7 +151,97 @@ Key config options:
 """
 
 
-def print_skill():
-    """Print the vibe-coding skill block to stdout."""
-    print(SKILL_TEXT.strip())
+CLAUDE_DESCRIPTION = (
+    "Use when stamping versions, tracking experiments, taking snapshots, or "
+    "working with worktree islands via the vmn CLI in this repo."
+)
+
+# Where each --target writes. `claude` gets a real Agent Skill directory;
+# the others are shared instruction files edited in place.
+TARGET_PATHS = {
+    "claude": os.path.join(".claude", "skills", "vmn", "SKILL.md"),
+    "cursor": ".cursorrules",
+    "agents": "AGENTS.md",
+}
+
+BEGIN_MARKER = "<!-- BEGIN vmn skill (managed by `vmn skill --install`) -->"
+END_MARKER = "<!-- END vmn skill -->"
+
+
+def _skill_body(methodology=False):
+    text = VMN_TEXT.strip()
+    if methodology:
+        text = f"{text}\n\n{METHODOLOGY_TEXT.strip()}"
+    return text
+
+
+def print_skill(methodology=False):
+    """Print the vibe-coding skill block to stdout.
+
+    Prints the vmn usage block. When ``methodology`` is set, also appends the
+    opinionated development gold rules (TDD, worktree workflow, communication).
+    """
+    print(_skill_body(methodology))
     return 0
+
+
+def _install_claude(path, methodology, force):
+    if os.path.exists(path) and not force:
+        VMN_LOGGER.error(
+            f"{path} already exists — use --force to overwrite it."
+        )
+        return 1
+    content = (
+        "---\n"
+        "name: vmn\n"
+        f"description: {CLAUDE_DESCRIPTION}\n"
+        "---\n\n"
+        f"{_skill_body(methodology)}\n"
+    )
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content)
+    VMN_LOGGER.info(f"Wrote vmn Agent Skill to {path}")
+    return 0
+
+
+def _install_block(path, methodology):
+    block = f"{BEGIN_MARKER}\n{_skill_body(methodology)}\n{END_MARKER}"
+    existing = ""
+    if os.path.exists(path):
+        with open(path) as f:
+            existing = f.read()
+
+    if BEGIN_MARKER in existing and END_MARKER in existing:
+        start = existing.index(BEGIN_MARKER)
+        end = existing.index(END_MARKER) + len(END_MARKER)
+        new = existing[:start] + block + existing[end:]
+        verb = "Updated"
+    elif existing.strip():
+        new = f"{existing.rstrip()}\n\n{block}"
+        verb = "Appended"
+    else:
+        new = block
+        verb = "Wrote"
+
+    new = new.rstrip("\n") + "\n"
+    with open(path, "w") as f:
+        f.write(new)
+    VMN_LOGGER.info(f"{verb} vmn skill block in {path}")
+    return 0
+
+
+def install_skill(target, methodology=False, force=False, root=None):
+    """Write the skill block to an AI tool's instruction file.
+
+    ``claude`` creates a self-contained Agent Skill at
+    ``.claude/skills/vmn/SKILL.md`` (refuses to clobber unless ``force``).
+    ``cursor``/``agents`` upsert a marker-delimited block into the shared
+    instruction file, preserving any surrounding content.
+    """
+    if root is None:
+        root = os.environ.get("VMN_WORKING_DIR", os.getcwd())
+    path = os.path.join(root, TARGET_PATHS[target])
+    if target == "claude":
+        return _install_claude(path, methodology, force)
+    return _install_block(path, methodology)
