@@ -103,6 +103,10 @@ def vmn_run(command_line=None):
         from version_stamp.cli.completion import install_completion
         return install_completion(args.completion_install), None
 
+    if args.command == "skill":
+        from version_stamp.cli.skill import print_skill
+        return print_skill(), None
+
     # `vmn ui` is a long-running server over N workspaces: it must not resolve
     # a single root path, take the repo lock, or build a VMNContainer.
     if args.command == "ui":

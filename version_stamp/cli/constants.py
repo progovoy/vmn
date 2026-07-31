@@ -37,6 +37,7 @@ VMN_ARGS = {
     "exp": "local",
     "ui": "local",
     "worktrees": "local",
+    "skill": "local",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()

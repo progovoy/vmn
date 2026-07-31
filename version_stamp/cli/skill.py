@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Print a vibe-coding skill block for AI agents."""
+
+SKILL_TEXT = r"""# vmn — versioning & experiment tracking
+
+## Versioning workflow
+
+This project uses `vmn` for semantic versioning via git tags.
+
+### Stamping a new version
+```sh
+vmn stamp -r <mode> <app_name>   # mode: major | minor | patch | hotfix
+vmn stamp -r patch --pr rc <app_name>  # prerelease
+vmn release <app_name>                  # promote prerelease to final
+```
+
+- `vmn stamp` auto-initializes the repo and app on first run — no separate init step.
+- Use `--dry-run` to preview without committing.
+- Use `--pull` in CI or shared repos to auto-retry on tag conflicts.
+- If `conventional_commits` is enabled in config, `-r` is optional — vmn infers the mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major).
+
+### Checking the current version
+```sh
+vmn show <app_name>              # current version string
+vmn show <app_name> --verbose    # full YAML metadata
+vmn show <app_name> --conf       # show effective config
+```
+
+### Restoring state
+```sh
+vmn goto -v <version> <app_name>  # checkout repo + all deps to exact state
+```
+
+## Experiment tracking
+
+Track code changes, metrics, and artifacts without a server:
+
+```sh
+# Run an experiment (captures code state + metrics + duration automatically)
+vmn exp run <app_name> --note "description" -- <your command>
+
+# Your script writes metrics to $VMN_METRICS_FILE as key=value lines
+# vmn ingests them automatically when the run finishes.
+
+# Manual experiment (no command to run)
+vmn exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
+
+# List experiments sorted by a metric
+vmn exp list <app_name> --sort loss --top 5
+
+# Compare two experiments (shows metric delta + code diff)
+vmn exp diff <app_name>
+
+# Restore the best experiment's code state
+vmn exp restore <app_name> --latest
+```
+
+## Snapshots (uncommitted work)
+
+Save and restore work-in-progress without committing:
+
+```sh
+vmn snapshot create <app_name> --note "WIP: refactoring auth"
+vmn snapshot list <app_name>
+vmn snapshot restore <app_name> --latest
+vmn snapshot diff <app_name>  # compare snapshot to current state
+```
+
+## Parallel work with islands
+
+For working on multiple features simultaneously (especially useful when multiple AI agents run in parallel):
+
+```sh
+# Create an isolated worktree island
+vmn worktrees create <app_name> --island-name <feature-name>
+
+# Read island.json in the created directory to understand the layout:
+# - main_repo.path: where to make changes
+# - deps: read-only dependency checkouts at pinned hashes
+
+# List active islands
+vmn worktrees list
+
+# Clean up when done
+vmn worktrees remove <feature-name>
+```
+
+Use `--no-stamp` for islands where you don't want version creation (CI, testing, review).
+
+## Key rules
+
+1. **Never edit .vmn/ files directly** — vmn manages them.
+2. **Commit before stamping** — `vmn stamp` requires a clean working tree.
+3. **App names cannot contain `-`** — use `_` or `/` (for root apps).
+4. **Root app format**: `root_app/service_name` — the root version auto-increments.
+5. **Tags are the source of truth** — versions survive vmn uninstall.
+
+## Configuration
+
+Edit config interactively: `vmn config <app_name>`
+Or non-interactively: `vmn config gen <app_name>`
+
+Key config options:
+- `conventional_commits: true` — auto-detect release mode from commits
+- `version_backends` — auto-embed version into package.json, Cargo.toml, pyproject.toml
+- `changelog.path` — auto-generate CHANGELOG.md on stamp
+- `deps` — track external repo dependencies for multi-repo state recovery
+"""
+
+
+def print_skill():
+    """Print the vibe-coding skill block to stdout."""
+    print(SKILL_TEXT.strip())
+    return 0

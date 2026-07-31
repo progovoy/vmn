@@ -690,6 +690,13 @@ def add_arg_worktrees(subprasers):
     )
 
 
+def add_arg_skill(subprasers):
+    subprasers.add_parser(
+        "skill",
+        help="Print a vibe-coding skill block for AI agents (CLAUDE.md, .cursorrules, etc.)",
+    )
+
+
 def verify_user_input_version(args, key):
     # Commands that resolve their own version refs (--latest, @N, dev prefixes,
     # "current") opt out of strict version validation via strict_version=False.

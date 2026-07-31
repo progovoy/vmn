@@ -1147,7 +1147,15 @@ Every island produces a JSON manifest (`island.json`) that AI agents can consume
 
 ### Vibe-coding skill (copy into your AI agent's instructions)
 
-The block below is a ready-to-paste skill for Claude Code (CLAUDE.md), Cursor (.cursorrules), Windsurf, Aider, or any AI coding agent. It teaches the agent how to use vmn for versioning, experiments, and parallel work.
+```sh
+# Append vmn skill to your project's AI agent instructions:
+vmn skill >> CLAUDE.md        # Claude Code
+vmn skill >> .cursorrules     # Cursor
+vmn skill >> .windsurfrules   # Windsurf
+vmn skill >> AGENTS.md        # any agent
+```
+
+Or expand below to copy manually:
 
 <details>
 <summary><strong>Click to expand the full skill block</strong></summary>
