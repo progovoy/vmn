@@ -124,15 +124,22 @@ def _completion_shellcode(shell):
     return argcomplete.shellcode(["vmn"], shell=shell)
 
 
+_ARGCOMPLETE_OUTPUT_FD = 8
+
+
 def tcsh_completion_main():
-    """Bridge tcsh's command-line protocol to vmn's argcomplete protocol."""
+    """Bridge tcsh's command-line protocol to vmn's argcomplete protocol.
+
+    argcomplete writes completions to fd 8; we dup stdout there so tcsh
+    captures the output, then silence stdout/stderr before exec'ing vmn.
+    """
     command_line = os.environ.get("COMMAND_LINE", "")
     env = os.environ.copy()
     env.update(COMP_LINE=command_line, COMP_POINT=str(len(command_line)))
     env.update(COMP_TYPE="", COMP_WORDBREAKS="", IFS="")
     env.update(_ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="tcsh")
 
-    os.dup2(sys.stdout.fileno(), 8)
+    os.dup2(sys.stdout.fileno(), _ARGCOMPLETE_OUTPUT_FD)
     devnull = os.open(os.devnull, os.O_WRONLY)
     try:
         os.dup2(devnull, 1)

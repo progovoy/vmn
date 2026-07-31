@@ -41,6 +41,30 @@ def _remove_ctx(main_repo, base_path, name):
     return SimpleNamespace(args=args, vcs=vcs)
 
 
+def test_list_skips_corrupt_manifests(tmp_path, capsys):
+    main_repo = tmp_path / "main"
+    base = tmp_path / "islands"
+    valid = base / "valid"
+    corrupt = base / "corrupt"
+    valid.mkdir(parents=True)
+    corrupt.mkdir()
+    (valid / worktrees.ISLAND_MANIFEST_FILENAME).write_text(json.dumps({
+        "name": "valid",
+        "app_name": "app",
+        "version": "1.2.3",
+        "source": {"type": "branch", "ref": "main"},
+        "created_at": "now",
+    }))
+    (corrupt / worktrees.ISLAND_MANIFEST_FILENAME).write_text("not json")
+    ctx = SimpleNamespace(
+        args=SimpleNamespace(base_path=str(base)),
+        vcs=SimpleNamespace(vmn_root_path=str(main_repo)),
+    )
+
+    assert worktrees.worktree_list(ctx) == 0
+    assert "valid" in capsys.readouterr().out
+
+
 def test_worktrees_shorthand_and_action_requirements():
     shorthand = parse_user_commands(["worktrees", "my_app"])
     assert shorthand.action == "create"

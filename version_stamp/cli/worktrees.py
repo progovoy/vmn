@@ -185,8 +185,11 @@ def worktree_list(vmn_ctx):
         for entry in sorted(os.listdir(base_path)):
             path = os.path.join(base_path, entry, ISLAND_MANIFEST_FILENAME)
             if os.path.isfile(path):
-                with open(path) as stream:
-                    islands.append(json.load(stream))
+                try:
+                    with open(path) as stream:
+                        islands.append(json.load(stream))
+                except (json.JSONDecodeError, OSError):
+                    VMN_LOGGER.warning(f"Skipping corrupt manifest: {path}")
     if not islands:
         VMN_LOGGER.info("No islands found")
         return 0
