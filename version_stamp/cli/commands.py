@@ -215,7 +215,10 @@ def handle_stamp(vmn_ctx):
         "deps_synced_with_conf",
     }
 
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
+    status = _get_repo_status(
+        vmn_ctx.vcs, expected_status, optional_status,
+        suppress_errors={"repo_tracked", "app_tracked"},
+    )
     if status.error:
         # Auto-initialize only for truly new repos/apps — check git history
         # to distinguish "never initialized" from "initialized but tags removed"
@@ -843,7 +846,7 @@ def _is_editable_island_dep(path, backend, optional_status):
 
 
 @measure_runtime_decorator
-def _get_repo_status(vcs, expected_status, optional_status=set()):
+def _get_repo_status(vcs, expected_status, optional_status=set(), suppress_errors=frozenset()):
     be = vcs.backend
     default_dep_status = {
         "pending": False,
@@ -1025,6 +1028,8 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
     if (expected_status & status.state) != expected_status:
         for msg in expected_status - status.state:
+            if msg in suppress_errors:
+                continue
             if msg in status.err_msgs and status.err_msgs[msg]:
                 VMN_LOGGER.error(status.err_msgs[msg])
 
