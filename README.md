@@ -1038,6 +1038,121 @@ steps:
 `fetch-depth: 0` is required -- vmn reads git tags and history to compute the next version.
 
 ---
+
+## 🏝️ Worktrees (Islands)
+
+Create isolated development "islands" for parallel feature work -- each island is a set of git worktrees (main repo + all dependencies) pinned to a known-good state. Perfect for vibe-coding workflows where multiple AI agents work on different features simultaneously.
+
+### Why islands?
+
+| Problem | Without islands | With `vmn worktrees` |
+|---------|----------------|---------------------|
+| Parallel features | Manual `git worktree` + clone each dep at correct hash | One command creates everything |
+| Dependency alignment | `vmn goto` mutates your checkout | Islands are non-destructive copies |
+| AI agent isolation | Agents step on each other's changes | Each agent gets its own island |
+| Reproducibility | "Works on my machine" | Island manifest records exact state |
+
+### Quick start
+
+```sh
+# Create an island from current HEAD (auto-names it)
+vmn worktrees create my_app
+
+# Create a named island from a specific version
+vmn worktrees create my_app --island-name feature-auth --from-version 2.1.0
+
+# Create from a branch
+vmn worktrees create my_app --island-name feature-perf --from-branch develop
+
+# Read-only island (vmn stamp is disabled inside it)
+vmn worktrees create my_app --island-name ci-test --no-stamp
+
+# Shallow deps for faster setup
+vmn worktrees create my_app --island-name quick --shallow-deps
+
+# Make a specific dep editable (gets its own branch instead of detached HEAD)
+vmn worktrees create my_app --island-name cross-repo --editable-dep auth_service
+
+# List all islands
+vmn worktrees list
+
+# Remove an island (cleans up worktrees and branches)
+vmn worktrees remove feature-auth
+```
+
+### Directory layout
+
+```
+../vmn-islands/                          # configurable with --base-path
+  feature-auth/
+    my_project/                          # main repo (git worktree, new branch)
+    auth_service/                        # dep (git worktree, detached HEAD)
+    payment_gateway/                     # dep (git worktree, detached HEAD)
+    island.json                          # manifest -- machine-readable island state
+```
+
+### Island manifest
+
+Every island produces a JSON manifest (`island.json`) that AI agents can consume to orient themselves:
+
+```json
+{
+  "name": "feature-auth",
+  "created_at": "2026-07-31T10:30:00Z",
+  "app_name": "my_app",
+  "version": "2.1.0",
+  "base_path": "/home/user/vmn-islands/feature-auth",
+  "source": {"type": "version", "ref": "2.1.0"},
+  "main_repo": {
+    "path": "/home/user/vmn-islands/feature-auth/my_project",
+    "branch": "island/feature-auth/main",
+    "original_branch": "main",
+    "remote": "git@github.com:org/my_project.git"
+  },
+  "deps": {
+    "auth_service": {
+      "path": "/home/user/vmn-islands/feature-auth/auth_service",
+      "hash": "a1b2c3d4e5f6...",
+      "branch": null,
+      "remote": "git@github.com:org/auth_service.git",
+      "editable": false
+    }
+  },
+  "readonly": false,
+  "shallow_deps": false
+}
+```
+
+### Using with AI agents
+
+Give your AI agent this skill/instruction:
+
+```
+Before starting work, run `vmn worktrees create <app> --island-name <feature> --no-stamp`.
+Read the island.json manifest to understand:
+- Where the main repo checkout is (work here)
+- Where each dependency lives (read-only context)
+- What version/branch you're based on
+
+When done, the human reviews and merges from the island's branch.
+Clean up with `vmn worktrees remove <feature>`.
+```
+
+### Branch model
+
+- **Main repo**: gets a new branch `island/{name}/{original-branch}` -- ready for commits and PRs
+- **Dependencies**: detached HEAD at the exact hash recorded when the source version was stamped -- safe, no branch conflicts
+- **Editable deps** (`--editable-dep`): gets `island/{name}/{dep-branch}` for cross-repo work
+
+This hybrid approach avoids git's limitation of not being able to check out the same branch in two worktrees.
+
+### Stamping inside islands
+
+By default, `vmn stamp` works inside islands. Tags are shared across worktrees (they live in `.git`), so a stamp in any island is immediately visible everywhere. This matches multi-developer semantics -- the same race/retry behavior (`--pull`) applies.
+
+Use `--no-stamp` when creating islands for CI, testing, or AI agents that shouldn't create versions.
+
+---
 ## 🗺️ Roadmap
 
 vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
@@ -1045,6 +1160,7 @@ vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issue
 - [ ] **`vmn exp plot`** -- ASCII metric charts in the terminal (`vmn exp plot --metric loss my_model`)
 - [ ] **Monorepo auto-discovery** -- detect apps from Cargo workspaces, pnpm-workspace.yaml, Python namespace packages
 - [ ] **PR version annotation** -- GitHub Action that auto-comments the next version using `vmn stamp --dry-run`
+- [x] **`vmn worktrees`** -- isolated parallel development islands with dependency pinning
 - [ ] **Post-stamp hooks** -- run custom commands after a successful stamp (deploy, notify, update docs)
 - [ ] **Homebrew tap** -- `brew install vmn`
 

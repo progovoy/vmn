@@ -31,6 +31,7 @@ from version_stamp.cli.commands import (  # noqa: F401
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.cli.experiment import handle_experiment  # noqa: F401
+from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 
 handle_exp = handle_experiment  # alias  # noqa: F811
 
@@ -46,7 +47,8 @@ class VMNContainer(object):
         initial_params = {"root": root, "name": None, "root_path": root_path}
 
         if "name" in self.args and self.args.name:
-            validate_app_name(self.args)
+            if getattr(self.args, "validate_app_name", True):
+                validate_app_name(self.args)
             initial_params["name"] = self.args.name
 
             if "command" in self.args and "stamp" in self.args.command:
@@ -92,6 +94,10 @@ def vmn_run(command_line=None):
     except Exception:
         VMN_LOGGER.error("Logged exception: ", exc_info=True)
         return 1, None
+
+    if hasattr(args, "completion"):
+        from version_stamp.cli.completion import print_completion_setup
+        return print_completion_setup(args.completion), None
 
     # `vmn ui` is a long-running server over N workspaces: it must not resolve
     # a single root path, take the repo lock, or build a VMNContainer.

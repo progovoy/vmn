@@ -32,11 +32,24 @@ def parse_user_commands(command_line):
     )
     parser.add_argument("--debug", required=False, action="store_true")
     parser.set_defaults(debug=False)
+    parser.add_argument(
+        "--completion",
+        nargs="?",
+        const=None,
+        default=argparse.SUPPRESS,
+        choices=["bash", "zsh", "fish", "tcsh"],
+        metavar="SHELL",
+        help="Print shell completion setup and exit. "
+        "Optionally specify shell (bash/zsh/fish/tcsh); auto-detects if omitted.",
+    )
     subprasers = parser.add_subparsers(dest="command")
 
     for arg in VMN_ARGS.keys():
         arg = arg.replace("-", "_")
         getattr(sys.modules[__name__], f"add_arg_{arg}")(subprasers)
+
+    from version_stamp.cli.completion import setup_completion
+    setup_completion(parser)
 
     args = parser.parse_args(cl)
     args.run_cmd = run_cmd
@@ -602,6 +615,69 @@ def add_arg_experiment(subprasers):
 
 def add_arg_exp(subprasers):
     _add_experiment_parser(subprasers, "exp")
+
+
+def add_arg_worktrees(subprasers):
+    pwt = subprasers.add_parser(
+        "worktrees",
+        help="Create and manage isolated development islands (worktrees with deps)",
+    )
+    pwt.set_defaults(strict_version=False, validate_app_name=False)
+    pwt.add_argument(
+        "action",
+        nargs="?",
+        default="create",
+        choices=["create", "list", "remove"],
+        help="Worktree action: create (default), list, remove",
+    )
+    pwt.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        help="The application name (for create) or island name (for remove)",
+    )
+    pwt.add_argument(
+        "--island-name",
+        default=None,
+        help="The island name (auto-generated if not provided for create)",
+    )
+    pwt.add_argument(
+        "-fv",
+        "--from-version",
+        default=None,
+        help="Version to start the island from",
+    )
+    pwt.add_argument(
+        "-fb",
+        "--from-branch",
+        default=None,
+        help="Branch to start from (default: current HEAD)",
+    )
+    pwt.add_argument(
+        "--base-path",
+        default="../vmn-islands",
+        help="Directory where islands are stored (default: ../vmn-islands)",
+    )
+    pwt.add_argument(
+        "--no-stamp",
+        dest="no_stamp",
+        action="store_true",
+        help="Make the island read-only (vmn stamp disabled inside)",
+    )
+    pwt.set_defaults(no_stamp=False)
+    pwt.add_argument(
+        "--shallow-deps",
+        dest="shallow_deps",
+        action="store_true",
+        help="Use depth=1 for dependency worktrees",
+    )
+    pwt.set_defaults(shallow_deps=False)
+    pwt.add_argument(
+        "--editable-dep",
+        action="append",
+        default=None,
+        help="Dep that gets a branch instead of detached HEAD (repeatable)",
+    )
 
 
 def verify_user_input_version(args, key):
