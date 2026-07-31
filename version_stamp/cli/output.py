@@ -455,7 +455,11 @@ def goto_version(vcs, params, version, pull):
     if version is None:
         if not params["deps_only"]:
             ret = vcs.backend.checkout_branch()
-            assert ret is not None
+            if ret is None:
+                VMN_LOGGER.error(
+                    "Failed to checkout branch. Commit or stash your changes first."
+                )
+                return 1
 
             if pull:
                 try:
@@ -471,7 +475,12 @@ def goto_version(vcs, params, version, pull):
                     return 1
 
                 ret = vcs.backend.checkout_branch()
-                assert ret is not None
+                if ret is None:
+                    VMN_LOGGER.error(
+                        "Failed to checkout branch after pull. "
+                        "Commit or stash your changes first."
+                    )
+                    return 1
 
             del vcs
             vcs = VersionControlStamper(params)
@@ -517,27 +526,41 @@ def goto_version(vcs, params, version, pull):
 
         tag_name, ver_infos = vcs.get_version_info_from_verstr(version)
         if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            VMN_LOGGER.error(f"No such app: {vcs.name}")
+            VMN_LOGGER.error(
+                f"Version {version} of {vcs.name} was not found. "
+                f"Try running with --pull to fetch from remote."
+            )
             return 1
 
         data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
-        deps = copy.deepcopy(data["changesets"])
+        if "changesets" not in data:
+            VMN_LOGGER.warning(
+                f"Version {version} was stamped by an older vmn that did not "
+                f"record dependency changesets. Dependency repos will not be updated."
+            )
+            deps = {}
+        else:
+            deps = copy.deepcopy(data["changesets"])
 
         if not params["deps_only"]:
             try:
                 vcs.backend.checkout(tag=tag_name)
                 status_str = f"You are at version {version} of {vcs.name}"
-            except Exception:
+            except Exception as exc:
+                reason = str(exc).replace("\n", " ").strip()
                 VMN_LOGGER.error(
-                    "App: {0} with version: {1} was "
-                    "not found".format(vcs.name, version)
+                    f"Failed to checkout version {version} of {vcs.name}: {reason}"
                 )
-
+                VMN_LOGGER.debug("Checkout exception details:", exc_info=True)
                 return 1
 
     if check_unique:
-        if not deps["."]["hash"].startswith(unique_id):
-            VMN_LOGGER.error("Wrong unique id")
+        actual_hash = deps["."]["hash"]
+        if not actual_hash.startswith(unique_id):
+            VMN_LOGGER.error(
+                f"Wrong unique id: provided '{unique_id}' does not match "
+                f"actual commit hash '{actual_hash[:12]}'"
+            )
             return 1
 
     deps.pop(".")
@@ -625,7 +648,7 @@ def _update_repo(args):
                     client.checkout_branch()
                 client.pull()
             except Exception:
-                VMN_LOGGER.exception("Failed to pull:", exc_info=True)
+                VMN_LOGGER.exception("Failed to pull:")
                 return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
         if changeset is None:
@@ -657,15 +680,14 @@ def _update_repo(args):
         reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
-            f"Trying to abort update operation in {path}\nReason: {reason}\n",
-            exc_info=True,
+            f"Trying to abort update operation in {path}\nReason: {reason}\n"
         )
 
         try:
             client.checkout(rev=cur_changeset)
         except Exception:
             VMN_LOGGER.exception(
-                "Unexpected behaviour when tried to revert:", exc_info=True
+                "Unexpected behaviour when tried to revert:"
             )
 
         return {"repo": rel_path, "status": 1, "description": reason}
@@ -710,9 +732,12 @@ def _goto_version(deps, vmn_root_path, pull):
     for rel_path, v in deps.items():
         if "remote" not in v or not v["remote"]:
             VMN_LOGGER.error(
-                "Failed to find a remote for a configured repository. Failing goto"
+                f"Failed to find a remote for dependency '{rel_path}'. "
+                f"Check the 'remote' field in your deps configuration."
             )
-            raise RuntimeError()
+            raise RuntimeError(
+                f"No remote configured for dependency '{rel_path}'"
+            )
 
         # In case the remote is a local dir
         if v["remote"].startswith("."):
@@ -726,7 +751,7 @@ def _goto_version(deps, vmn_root_path, pull):
                 v["vcs_type"],
             )
         )
-    with Pool(min(len(args), POOL_SIZE_UPDATES)) as p:
+    with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
         results = p.map(_clone_repo, args)
 
     err = False
@@ -771,7 +796,7 @@ def _goto_version(deps, vmn_root_path, pull):
         )
 
     if args:
-        with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
+        with Pool(min(len(args), POOL_SIZE_UPDATES)) as p:
             results = p.map(_update_repo, args)
     else:
         results = []
@@ -807,9 +832,11 @@ def _goto_version(deps, vmn_root_path, pull):
             )
 
         VMN_LOGGER.error(
-            "Failed to update one or more " "of the required repos. See log above"
+            "Failed to update one or more of the required repos. See log above"
         )
-        raise RuntimeError()
+        raise RuntimeError(
+            "Failed to update one or more dependency repos"
+        )
 
     return 0
 

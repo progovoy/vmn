@@ -135,21 +135,31 @@ def add_arg_release(subprasers):
 
 
 def add_arg_goto(subprasers):
-    pgoto = subprasers.add_parser("goto", help="go to version")
+    pgoto = subprasers.add_parser(
+        "goto",
+        help="Checkout the repo (and dependency repos) to the state at a specific version",
+    )
     pgoto.add_argument(
         "-v",
         "--version",
         default=None,
         required=False,
         help=f"The version to go to in the format: "
-        f" {VMN_VERSION_FORMAT}",
+        f" {VMN_VERSION_FORMAT}. "
+        f"If omitted, goes to the tip of the current branch.",
     )
     pgoto.add_argument("--root", dest="root", action="store_true")
     pgoto.set_defaults(root=False)
     pgoto.add_argument("--deps-only", dest="deps_only", action="store_true")
     pgoto.set_defaults(deps_only=False)
     pgoto.add_argument("name", help="The application's name")
-    pgoto.add_argument("--pull", dest="pull", action="store_true")
+    pgoto.add_argument(
+        "--pull",
+        dest="pull",
+        action="store_true",
+        help="Fetch remote tags and branches before checking out. "
+        "Use when the version is not found locally.",
+    )
     pgoto.set_defaults(pull=False)
 
 

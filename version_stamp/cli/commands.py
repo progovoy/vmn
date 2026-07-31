@@ -1013,7 +1013,7 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
 
     unexpected = (status.state - expected_status) - optional_status
     if unexpected:
-        for msg in (optional_status | status.state) - expected_status:
+        for msg in unexpected:
             if msg in status.err_msgs and status.err_msgs[msg]:
                 VMN_LOGGER.error(status.err_msgs[msg])
 
@@ -1022,6 +1022,12 @@ def _get_repo_status(vcs, expected_status, optional_status=set()):
             for s in sorted(unexpected)
         )
         VMN_LOGGER.error(f"Unexpected repository status: {desc}")
+
+        if "pending" in unexpected:
+            VMN_LOGGER.info(
+                "Hint: commit or stash your changes first, or use "
+                "'vmn snapshot create' to save your work."
+            )
 
         status.error = True
 

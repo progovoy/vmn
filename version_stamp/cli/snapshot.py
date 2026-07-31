@@ -1159,7 +1159,12 @@ def _save_safety_snapshot(vcs, params, target_verstr):
 def _reset_worktree(vcs):
     """Discard tracked + untracked working-tree changes (keeps .vmn/ ignored data)."""
     for cmd in (["git", "reset", "--hard"], ["git", "clean", "-fd"]):
-        subprocess.run(cmd, cwd=vcs.vmn_root_path, capture_output=True)
+        result = subprocess.run(cmd, cwd=vcs.vmn_root_path, capture_output=True)
+        if result.returncode != 0:
+            stderr = result.stderr.decode().strip() if result.stderr else "unknown error"
+            raise RuntimeError(
+                f"Failed to reset working tree ({' '.join(cmd)}): {stderr}"
+            )
 
 
 def _restore_with_safety_net(vcs, params, metadata, patches):
