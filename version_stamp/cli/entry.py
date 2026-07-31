@@ -31,9 +31,25 @@ from version_stamp.cli.commands import (  # noqa: F401
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.cli.experiment import handle_experiment  # noqa: F401
-from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
+from version_stamp.cli.worktrees import (  # noqa: F401
+    WORKTREE_READONLY_MARKER,
+    handle_worktrees,
+)
 
 handle_exp = handle_experiment  # alias  # noqa: F811
+
+_VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
+
+
+def _reject_readonly_version_creation(args, root_path):
+    marker = os.path.join(root_path, ".vmn", WORKTREE_READONLY_MARKER)
+    if args.command not in _VERSION_CREATING_COMMANDS or not os.path.exists(marker):
+        return False
+    VMN_LOGGER.error(
+        "Version creation is disabled in this worktree (--no-stamp island). "
+        "Remove .vmn/.worktree-readonly to override."
+    )
+    return True
 
 
 class VMNContainer(object):
@@ -124,6 +140,8 @@ def vmn_run(command_line=None):
             init_stamp_logger(debug=args.debug)
 
         root_path = resolve_root_path()
+        if _reject_readonly_version_creation(args, root_path):
+            return 1, None
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
 

@@ -2,8 +2,11 @@
 """Print a vibe-coding skill block for AI agents."""
 
 import os
+import stat
+import tempfile
 
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.utils import resolve_root_path
 
 VMN_TEXT = r"""# vmn — versioning & experiment tracking
 
@@ -185,6 +188,31 @@ def print_skill(methodology=False):
     return 0
 
 
+def _atomic_write(path, content):
+    """Replace ``path`` only after its complete new content is on disk."""
+    parent = os.path.dirname(path) or os.curdir
+    os.makedirs(parent, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(
+        dir=parent,
+        prefix=f".{os.path.basename(path)}.",
+    )
+    try:
+        with os.fdopen(fd, "w") as temporary_file:
+            temporary_file.write(content)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        if os.path.exists(path):
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+            os.chmod(temporary_path, mode)
+        os.replace(temporary_path, path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def _install_claude(path, methodology, force):
     if os.path.exists(path) and not force:
         VMN_LOGGER.error(
@@ -198,9 +226,7 @@ def _install_claude(path, methodology, force):
         "---\n\n"
         f"{_skill_body(methodology)}\n"
     )
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write(content)
+    _atomic_write(path, content)
     VMN_LOGGER.info(f"Wrote vmn Agent Skill to {path}")
     return 0
 
@@ -212,9 +238,23 @@ def _install_block(path, methodology):
         with open(path) as f:
             existing = f.read()
 
-    if BEGIN_MARKER in existing and END_MARKER in existing:
+    begin_count = existing.count(BEGIN_MARKER)
+    end_count = existing.count(END_MARKER)
+    if (begin_count, end_count) not in ((0, 0), (1, 1)):
+        VMN_LOGGER.error(
+            f"Refusing to update {path}: malformed vmn skill markers."
+        )
+        return 1
+
+    if begin_count:
         start = existing.index(BEGIN_MARKER)
-        end = existing.index(END_MARKER) + len(END_MARKER)
+        end_start = existing.index(END_MARKER)
+        if end_start < start:
+            VMN_LOGGER.error(
+                f"Refusing to update {path}: malformed vmn skill marker order."
+            )
+            return 1
+        end = end_start + len(END_MARKER)
         new = existing[:start] + block + existing[end:]
         verb = "Updated"
     elif existing.strip():
@@ -225,8 +265,7 @@ def _install_block(path, methodology):
         verb = "Wrote"
 
     new = new.rstrip("\n") + "\n"
-    with open(path, "w") as f:
-        f.write(new)
+    _atomic_write(path, new)
     VMN_LOGGER.info(f"{verb} vmn skill block in {path}")
     return 0
 
@@ -239,9 +278,25 @@ def install_skill(target, methodology=False, force=False, root=None):
     ``cursor``/``agents`` upsert a marker-delimited block into the shared
     instruction file, preserving any surrounding content.
     """
-    if root is None:
-        root = os.environ.get("VMN_WORKING_DIR", os.getcwd())
-    path = os.path.join(root, TARGET_PATHS[target])
-    if target == "claude":
-        return _install_claude(path, methodology, force)
-    return _install_block(path, methodology)
+    try:
+        if root is None:
+            root = resolve_root_path()
+        else:
+            root = os.path.realpath(os.path.expanduser(root))
+            if not os.path.isdir(root):
+                VMN_LOGGER.error(
+                    f"Cannot install vmn skill: {root} is not a directory."
+                )
+                return 1
+
+        path = os.path.join(root, TARGET_PATHS[target])
+        if target == "claude":
+            return _install_claude(path, methodology, force)
+        return _install_block(path, methodology)
+    except RuntimeError:
+        VMN_LOGGER.error(
+            "Cannot install vmn skill from an unmanaged directory."
+        )
+    except (KeyError, OSError) as exc:
+        VMN_LOGGER.error(f"Failed to install vmn skill: {exc}")
+    return 1

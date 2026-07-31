@@ -114,15 +114,6 @@ def handle_init_app(vmn_ctx):
 
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
-    from version_stamp.cli.worktrees import WORKTREE_READONLY_MARKER
-    marker = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn", WORKTREE_READONLY_MARKER)
-    if os.path.exists(marker):
-        VMN_LOGGER.error(
-            "Stamping is disabled in this worktree (--no-stamp island). "
-            "Remove .vmn/.worktree-readonly to override."
-        )
-        return 1
-
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
@@ -441,15 +432,6 @@ def _extract_ver_info(vcs, ver):
 
 @measure_runtime_decorator
 def handle_release(vmn_ctx):
-    from version_stamp.cli.worktrees import WORKTREE_READONLY_MARKER
-    marker = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn", WORKTREE_READONLY_MARKER)
-    if os.path.exists(marker):
-        VMN_LOGGER.error(
-            "Releasing is disabled in this worktree (--no-stamp island). "
-            "Remove .vmn/.worktree-readonly to override."
-        )
-        return 1
-
     push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
     push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
     if push_user and push_token:
@@ -1197,4 +1179,3 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
         raise RuntimeError(err)
 
     return current_version
-
