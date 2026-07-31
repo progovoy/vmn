@@ -38,7 +38,13 @@ setuptools.setup(
     package_data={
         "version_stamp.ui": ["static/*", "static/assets/*"],
     },
-    entry_points={"console_scripts": ["vmn = version_stamp.cli:main"]},
+    entry_points={
+        "console_scripts": [
+            "vmn = version_stamp.cli:main",
+            "vmn-argcomplete-tcsh = "
+            "version_stamp.cli.completion:tcsh_completion_main",
+        ],
+    },
     data_files=[("share/doc/vmn", ["README.md"])],
     license="MIT",
     include_package_data=True,

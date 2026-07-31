@@ -1,23 +1,35 @@
 #!/usr/bin/env python3
 """Shell completion support for vmn using argcomplete."""
 import os
+import stat
 import sys
+import tempfile
+
+from version_stamp.core.utils import resolve_root_path
+
+
+SUPPORTED_SHELLS = ("bash", "zsh", "fish", "tcsh")
+COMPLETION_MARKER = "# vmn shell completion"
+COMPLETION_END_MARKER = "# end vmn shell completion"
+
+LEGACY_COMPLETION_SCRIPTS = {
+    "bash": 'eval "$(register-python-argcomplete vmn)"',
+    "zsh": "autoload -U bashcompinit\nbashcompinit\n"
+    'eval "$(register-python-argcomplete vmn)"',
+    "fish": "register-python-argcomplete --shell fish vmn | source",
+    "tcsh": "eval `register-python-argcomplete --shell tcsh vmn`",
+}
 
 
 def _find_vmn_root():
-    """Walk up from cwd to find the directory containing .vmn/."""
-    path = os.environ.get("VMN_WORKING_DIR", os.getcwd())
-    while True:
-        if os.path.isdir(os.path.join(path, ".vmn")):
-            return path
-        parent = os.path.dirname(path)
-        if parent == path:
-            return None
-        path = parent
+    """Find the managed repository using vmn's canonical path handling."""
+    try:
+        return resolve_root_path()
+    except RuntimeError:
+        return None
 
 
-def app_name_completer(prefix, parsed_args, **kwargs):
-    """Complete app names by scanning .vmn/ for last_known_app_version.yml files."""
+def _complete_apps(prefix):
     root = _find_vmn_root()
     if root is None:
         return []
@@ -28,101 +40,251 @@ def app_name_completer(prefix, parsed_args, **kwargs):
 
     for dirpath, dirnames, filenames in os.walk(vmn_dir):
         dirnames[:] = [
-            d for d in dirnames
-            if not d.startswith(".") and d not in ("branch_conf", "snapshots", "experiments")
+            name
+            for name in dirnames
+            if not name.startswith(".") and name != "branch_conf"
         ]
         if ver_filename in filenames:
             rel = os.path.relpath(dirpath, vmn_dir)
-            app_name = rel.replace(os.sep, "/")
-            apps.append(app_name)
+            apps.append(rel.replace(os.sep, "/"))
 
-    return [a for a in apps if a.startswith(prefix)]
+    return sorted(app for app in apps if app.startswith(prefix))
+
+
+def _complete_islands(prefix, parsed_args):
+    root = _find_vmn_root()
+    if root is None:
+        return []
+
+    base_path = getattr(parsed_args, "base_path", "../vmn-islands")
+    if not os.path.isabs(base_path):
+        base_path = os.path.join(root, base_path)
+    base_path = os.path.realpath(os.path.expanduser(base_path))
+
+    try:
+        entries = os.listdir(base_path)
+    except OSError:
+        return []
+
+    islands = []
+    for entry in entries:
+        manifest = os.path.join(base_path, entry, "island.json")
+        if os.path.isfile(manifest) and entry.startswith(prefix):
+            islands.append(entry)
+    return sorted(islands)
+
+
+def app_name_completer(prefix, parsed_args, **kwargs):
+    """Complete app names, or island names for ``worktrees remove``."""
+    if getattr(parsed_args, "command", None) == "worktrees":
+        action = getattr(parsed_args, "action", None)
+        if action == "remove":
+            return _complete_islands(prefix, parsed_args)
+        if action == "list":
+            return []
+    return _complete_apps(prefix)
 
 
 def setup_completion(parser):
-    """Activate argcomplete on the parser and attach app-name completers."""
+    """Activate argcomplete without traversing argparse's private internals."""
     try:
         import argcomplete
+        from argcomplete.completers import FilesCompleter
     except ImportError:
         return
 
-    for action in parser._subparsers._actions:
-        if not hasattr(action, "_parser_class"):
-            continue
-        for subparser in action.choices.values():
-            for sub_action in subparser._actions:
-                if sub_action.dest == "name" and not sub_action.option_strings:
-                    sub_action.completer = app_name_completer
+    files_completer = FilesCompleter()
 
-    argcomplete.autocomplete(parser)
+    def default_completer(prefix, parsed_args, action=None, **kwargs):
+        command = getattr(parsed_args, "command", None)
+        action_dest = getattr(action, "dest", None)
+        if command == "worktrees" and action_dest == "action":
+            choices = ("create", "list", "remove")
+            return [item for item in choices if item.startswith(prefix)]
+        if action_dest == "name":
+            return app_name_completer(prefix, parsed_args, **kwargs)
+        return files_completer(
+            prefix,
+            parsed_args=parsed_args,
+            action=action,
+            **kwargs,
+        )
+
+    argcomplete.autocomplete(parser, default_completer=default_completer)
 
 
-COMPLETION_SCRIPTS = {
-    "bash": 'eval "$(register-python-argcomplete vmn)"',
-    "zsh": (
-        "autoload -U bashcompinit\n"
-        "bashcompinit\n"
-        'eval "$(register-python-argcomplete vmn)"'
-    ),
-    "fish": "register-python-argcomplete --shell fish vmn | source",
-    "tcsh": "eval `register-python-argcomplete --shell tcsh vmn`",
-}
+def _completion_shellcode(shell):
+    if shell == "tcsh":
+        return "complete \"vmn\" 'p@*@`vmn-argcomplete-tcsh`@' ;"
+    try:
+        import argcomplete
+    except ImportError:
+        print("argcomplete is required for shell completion", file=sys.stderr)
+        return None
+    return argcomplete.shellcode(["vmn"], shell=shell)
 
-SETUP_INSTRUCTIONS = {
-    "bash": "# Add to ~/.bashrc:\n{script}",
-    "zsh": "# Add to ~/.zshrc:\n{script}",
-    "fish": "# Add to ~/.config/fish/config.fish:\n{script}",
-    "tcsh": "# Add to ~/.tcshrc:\n{script}",
-}
+
+def tcsh_completion_main():
+    """Bridge tcsh's command-line protocol to vmn's argcomplete protocol."""
+    command_line = os.environ.get("COMMAND_LINE", "")
+    env = os.environ.copy()
+    env.update(COMP_LINE=command_line, COMP_POINT=str(len(command_line)))
+    env.update(COMP_TYPE="", COMP_WORDBREAKS="", IFS="")
+    env.update(_ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="tcsh")
+
+    os.dup2(sys.stdout.fileno(), 8)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+    finally:
+        os.close(devnull)
+    os.execvpe("vmn", ["vmn"], env)
+
+
+def _unsupported_shell(shell):
+    print(f"Unsupported shell: {shell}", file=sys.stderr)
+    print(f"Supported shells: {', '.join(SUPPORTED_SHELLS)}", file=sys.stderr)
+    return 1
 
 
 def print_completion_setup(shell=None):
-    """Print shell completion setup instructions."""
-    if shell is None:
-        shell = _detect_shell()
+    """Print static shell completion code generated by the bundled dependency."""
+    shell = shell or _detect_shell()
+    if shell not in SUPPORTED_SHELLS:
+        return _unsupported_shell(shell)
 
-    if shell not in COMPLETION_SCRIPTS:
-        print(f"Unsupported shell: {shell}", file=sys.stderr)
-        print(f"Supported shells: {', '.join(COMPLETION_SCRIPTS.keys())}", file=sys.stderr)
+    script = _completion_shellcode(shell)
+    if script is None:
         return 1
-
-    script = COMPLETION_SCRIPTS[shell]
-    instructions = SETUP_INSTRUCTIONS[shell].format(script=script)
-    print(instructions)
+    print(script)
     return 0
 
 
+def _home_path(*parts):
+    return os.path.join(os.path.expanduser("~"), *parts)
+
+
 RC_FILES = {
-    "bash": os.path.expanduser("~/.bashrc"),
-    "zsh": os.path.expanduser("~/.zshrc"),
-    "fish": os.path.expanduser("~/.config/fish/config.fish"),
-    "tcsh": os.path.expanduser("~/.tcshrc"),
+    "bash": lambda: _home_path(".bashrc"),
+    "zsh": lambda: _home_path(".zshrc"),
+    "fish": lambda: _home_path(".config", "fish", "config.fish"),
+    "tcsh": lambda: _home_path(".tcshrc"),
 }
 
 
+def _configured_rc_path(shell):
+    provider = RC_FILES[shell]
+    return provider() if callable(provider) else provider
+
+
+def _resolve_rc_path(shell):
+    if shell == "zsh":
+        zdotdir = os.environ.get("ZDOTDIR")
+        if zdotdir:
+            base = os.path.realpath(os.path.expanduser(zdotdir))
+            return os.path.join(base, ".zshrc")
+        return _configured_rc_path(shell)
+
+    if shell == "fish":
+        config_home = os.environ.get("XDG_CONFIG_HOME")
+        if config_home:
+            base = os.path.realpath(os.path.expanduser(config_home))
+            return os.path.join(base, "fish", "config.fish")
+        return _configured_rc_path(shell)
+
+    if shell == "tcsh":
+        tcshrc = _configured_rc_path(shell)
+        cshrc = _home_path(".cshrc")
+        return next((path for path in (tcshrc, cshrc) if os.path.exists(path)), tcshrc)
+
+    bashrc = _configured_rc_path(shell)
+    login_files = (
+        _home_path(".bash_profile"),
+        _home_path(".bash_login"),
+        _home_path(".profile"),
+    )
+    return next(
+        (path for path in (bashrc, *login_files) if os.path.exists(path)), bashrc
+    )
+
+
+def _strip_legacy_completion(content, shell):
+    legacy_block = (
+        f"\n{COMPLETION_MARKER}\n"
+        f"{LEGACY_COMPLETION_SCRIPTS[shell]}\n"
+    )
+    return content.replace(legacy_block, "")
+
+
+def _has_malformed_completion_block(content):
+    starts = content.count(COMPLETION_MARKER)
+    ends = content.count(COMPLETION_END_MARKER)
+    if starts != ends or starts > 1:
+        return True
+    if starts == 0:
+        return False
+    start_after_end = content.index(COMPLETION_MARKER) > content.index(
+        COMPLETION_END_MARKER
+    )
+    return starts == 1 and start_after_end
+
+
+def _atomic_write(path, content):
+    directory = os.path.dirname(path)
+    fd, temp_path = tempfile.mkstemp(prefix=".vmn-completion-", dir=directory)
+    os.close(fd)
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        if os.path.exists(path):
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+            os.chmod(temp_path, mode)
+        os.replace(temp_path, path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
 def install_completion(shell=None):
-    """Append completion setup to the user's shell rc file."""
-    if shell is None:
-        shell = _detect_shell()
+    """Install a managed static completion block in the shell startup file."""
+    shell = shell or _detect_shell()
+    if shell not in SUPPORTED_SHELLS:
+        return _unsupported_shell(shell)
 
-    if shell not in COMPLETION_SCRIPTS:
-        print(f"Unsupported shell: {shell}", file=sys.stderr)
-        print(f"Supported shells: {', '.join(COMPLETION_SCRIPTS.keys())}", file=sys.stderr)
+    script = _completion_shellcode(shell)
+    if script is None:
         return 1
+    rc_path = _resolve_rc_path(shell)
 
-    rc_path = RC_FILES[shell]
-    script = COMPLETION_SCRIPTS[shell]
-
-    if os.path.exists(rc_path):
-        with open(rc_path, "r") as f:
-            content = f.read()
-        if "register-python-argcomplete vmn" in content:
+    try:
+        content = ""
+        if os.path.exists(rc_path):
+            with open(rc_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        content = _strip_legacy_completion(content, shell)
+        if _has_malformed_completion_block(content):
+            print(
+                f"Malformed vmn completion block in {rc_path}; refusing to edit",
+                file=sys.stderr,
+            )
+            return 1
+        if COMPLETION_MARKER in content:
             print(f"Completion already installed in {rc_path}")
             return 0
 
-    os.makedirs(os.path.dirname(rc_path), exist_ok=True)
-    with open(rc_path, "a") as f:
-        f.write(f"\n# vmn shell completion\n{script}\n")
+        block = (
+            f"\n{COMPLETION_MARKER}\n{script.rstrip()}\n"
+            f"{COMPLETION_END_MARKER}\n"
+        )
+        os.makedirs(os.path.dirname(rc_path), exist_ok=True)
+        _atomic_write(rc_path, content + block)
+    except OSError as exc:
+        print(f"Failed to install completion in {rc_path}: {exc}", file=sys.stderr)
+        return 1
 
     print(f"Completion installed in {rc_path}")
     print(f"Restart your shell or run: source {rc_path}")
@@ -133,6 +295,6 @@ def _detect_shell():
     """Best-effort detection of the user's shell."""
     shell_path = os.environ.get("SHELL", "")
     basename = os.path.basename(shell_path)
-    if basename in COMPLETION_SCRIPTS:
+    if basename in SUPPORTED_SHELLS:
         return basename
     return "bash"
