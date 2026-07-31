@@ -47,7 +47,7 @@ class VMNContainer(object):
         initial_params = {"root": root, "name": None, "root_path": root_path}
 
         if "name" in self.args and self.args.name:
-            if getattr(self.args, "command", None) != "worktrees":
+            if getattr(self.args, "validate_app_name", True):
                 validate_app_name(self.args)
             initial_params["name"] = self.args.name
 

@@ -612,7 +612,7 @@ def add_arg_worktrees(subprasers):
         "worktrees",
         help="Create and manage isolated development islands (worktrees with deps)",
     )
-    pwt.set_defaults(strict_version=False)
+    pwt.set_defaults(strict_version=False, validate_app_name=False)
     pwt.add_argument(
         "action",
         nargs="?",

@@ -39,9 +39,6 @@ def worktree_create(vmn_ctx):
         return 1
 
     source = _resolve_source(args)
-    if source is None:
-        return 1
-
     main_repo_path = vmn_ctx.vcs.vmn_root_path
     current_branch = _git_current_branch(main_repo_path)
     if current_branch is None:
@@ -69,6 +66,8 @@ def worktree_create(vmn_ctx):
     for dep_name, dep_info in deps.items():
         dep_dest = os.path.join(island_path, dep_name)
         dep_repo_path = _find_dep_repo_path(vmn_ctx, dep_info)
+        editable = dep_name in editable_deps
+        dep_branch = f"island/{island_name}/{dep_name}" if editable else None
 
         if dep_repo_path is None or not os.path.isdir(dep_repo_path):
             if shallow:
@@ -78,28 +77,23 @@ def worktree_create(vmn_ctx):
                     f"Dependency repo not found locally: {dep_name}. "
                     f"Use --shallow-deps to clone from remote."
                 )
-                _cleanup_island(main_repo_path, island_path, island_branch, dep_manifests)
+                _cleanup_island(main_repo_path, main_dest, island_branch, dep_manifests)
                 return 1
         else:
-            editable = dep_name in editable_deps
             ret = _create_dep_worktree(
-                dep_repo_path, dep_dest, dep_info, island_name, editable
+                dep_repo_path, dep_dest, dep_info, dep_branch
             )
 
         if ret != 0:
-            _cleanup_island(main_repo_path, island_path, island_branch, dep_manifests)
+            _cleanup_island(main_repo_path, main_dest, island_branch, dep_manifests)
             return 1
-
-        dep_branch = None
-        if dep_name in editable_deps:
-            dep_branch = f"island/{island_name}/{dep_name}"
 
         dep_manifests[dep_name] = {
             "path": dep_dest,
             "hash": dep_info.get("hash"),
             "branch": dep_branch,
             "remote": dep_info.get("remote"),
-            "editable": dep_name in editable_deps,
+            "editable": editable,
         }
 
     if args.no_stamp:
@@ -130,11 +124,12 @@ def worktree_create(vmn_ctx):
         "shallow_deps": shallow,
     }
 
+    manifest_json = json.dumps(manifest, indent=2)
     manifest_path = os.path.join(island_path, ISLAND_MANIFEST_FILENAME)
     with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+        f.write(manifest_json)
 
-    print(json.dumps(manifest, indent=2))
+    print(manifest_json)
     return 0
 
 
@@ -195,7 +190,7 @@ def worktree_remove(vmn_ctx):
     for dep_name, dep_info in manifest.get("deps", {}).items():
         dep_path = dep_info["path"]
         if os.path.isdir(dep_path):
-            dep_repo_path = _find_dep_repo_path_by_name(vmn_ctx, dep_name)
+            dep_repo_path = _find_dep_repo_path(vmn_ctx, dep_name=dep_name)
             if dep_repo_path:
                 _run_git(dep_repo_path, ["worktree", "remove", "--force", dep_path])
                 if dep_info.get("branch"):
@@ -305,24 +300,20 @@ def _deps_from_configured(vmn_ctx):
     return deps
 
 
-def _find_dep_repo_path(vmn_ctx, dep_info):
-    rel_path = dep_info.get("rel_path")
+def _find_dep_repo_path(vmn_ctx, dep_info=None, dep_name=None):
+    rel_path = None
+    if dep_info:
+        rel_path = dep_info.get("rel_path")
+    elif dep_name:
+        configured = getattr(vmn_ctx.vcs, "configured_deps", {})
+        for rp in configured:
+            if rp != "." and os.path.basename(rp.rstrip("/")) == dep_name:
+                rel_path = rp
+                break
     if rel_path:
         full_path = os.path.join(vmn_ctx.vcs.vmn_root_path, rel_path)
         if os.path.isdir(full_path):
             return full_path
-    return None
-
-
-def _find_dep_repo_path_by_name(vmn_ctx, dep_name):
-    configured = getattr(vmn_ctx.vcs, "configured_deps", {})
-    for rel_path in configured:
-        if rel_path == ".":
-            continue
-        if os.path.basename(rel_path.rstrip("/")) == dep_name:
-            full_path = os.path.join(vmn_ctx.vcs.vmn_root_path, rel_path)
-            if os.path.isdir(full_path):
-                return full_path
     return None
 
 
@@ -360,12 +351,10 @@ def _create_main_worktree(repo_path, dest_path, branch_name, source):
     return 0
 
 
-def _create_dep_worktree(repo_path, dest_path, dep_info, island_name, editable):
+def _create_dep_worktree(repo_path, dest_path, dep_info, branch_name):
     target_hash = dep_info.get("hash")
 
-    if editable:
-        dep_name = os.path.basename(dest_path)
-        branch_name = f"island/{island_name}/{dep_name}"
+    if branch_name:
         cmd = ["worktree", "add", "-b", branch_name, dest_path]
         if target_hash:
             cmd.append(target_hash)
@@ -416,17 +405,17 @@ def _shallow_clone_dep(dep_info, dest_path):
     return 0
 
 
-def _cleanup_island(main_repo_path, island_path, island_branch, dep_manifests):
+def _cleanup_island(main_repo_path, main_dest, island_branch, dep_manifests):
     for dep_name, dep_info in dep_manifests.items():
         dep_path = dep_info["path"]
         if dep_info.get("branch"):
             _run_git(main_repo_path, ["worktree", "remove", "--force", dep_path])
             _run_git(main_repo_path, ["branch", "-D", dep_info["branch"]])
 
-    main_dest = os.path.join(island_path, "main-repo")
     if os.path.isdir(main_dest):
         _run_git(main_repo_path, ["worktree", "remove", "--force", main_dest])
     _run_git(main_repo_path, ["branch", "-D", island_branch])
+    island_path = os.path.dirname(main_dest)
     shutil.rmtree(island_path, ignore_errors=True)
 
 
