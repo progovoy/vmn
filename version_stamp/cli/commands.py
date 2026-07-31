@@ -114,6 +114,15 @@ def handle_init_app(vmn_ctx):
 
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
+    from version_stamp.cli.worktrees import WORKTREE_READONLY_MARKER
+    marker = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn", WORKTREE_READONLY_MARKER)
+    if os.path.exists(marker):
+        VMN_LOGGER.error(
+            "Stamping is disabled in this worktree (--no-stamp island). "
+            "Remove .vmn/.worktree-readonly to override."
+        )
+        return 1
+
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode

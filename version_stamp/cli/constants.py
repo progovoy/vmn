@@ -36,6 +36,7 @@ VMN_ARGS = {
     "experiment": "local",
     "exp": "local",
     "ui": "local",
+    "worktrees": "local",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()
