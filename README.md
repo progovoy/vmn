@@ -1148,12 +1148,25 @@ Every island produces a JSON manifest (`island.json`) that AI agents can consume
 ### Vibe-coding skill (copy into your AI agent's instructions)
 
 ```sh
+# Install into the managed project root (default: Claude Agent Skill):
+vmn skill --install
+vmn skill --install --target cursor
+vmn skill --install --target agents
+
+# Include the optional TDD/worktree methodology section:
+vmn skill --install --methodology
+
 # Append vmn skill to your project's AI agent instructions:
 vmn skill >> CLAUDE.md        # Claude Code
 vmn skill >> .cursorrules     # Cursor
 vmn skill >> .windsurfrules   # Windsurf
 vmn skill >> AGENTS.md        # any agent
 ```
+
+`--install` resolves the managed repository root even when run from a nested
+directory. The Claude target refuses to replace an existing skill unless
+`--force` is supplied; Cursor and AGENTS targets update only vmn's managed
+marker block and preserve surrounding instructions.
 
 Or expand below to copy manually:
 
@@ -1314,7 +1327,11 @@ This hybrid approach avoids git's limitation of not being able to check out the 
 
 ### Stamping inside islands
 
-By default, `vmn stamp` works inside islands. Tags are shared across worktrees (they live in `.git`), so a stamp in any island is immediately visible everywhere. This matches multi-developer semantics -- the same race/retry behavior (`--pull`) applies.
+By default, `vmn stamp` works inside islands after feature changes are
+committed. The version commit stays on the local island branch and vmn pushes
+only the version tag, so it never assigns the island branch to `origin/main`
+or publishes the island branch. `--pull` fetches remote version state without
+merging another branch into the island.
 
 Use `--no-stamp` when creating islands for CI, testing, or AI agents that shouldn't create versions.
 
