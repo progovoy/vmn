@@ -65,12 +65,30 @@ def parse_user_commands(command_line):
     args.run_cmd = run_cmd
 
     normalize_config_gen(args)
+    normalize_worktrees(args)
 
     verify_user_input_version(args, "version")
     verify_user_input_version(args, "ov")
     verify_user_input_version(args, "orv")
 
     return args
+
+
+def normalize_worktrees(args):
+    if getattr(args, "command", None) != "worktrees":
+        return
+
+    actions = {"create", "list", "remove"}
+    if args.action not in actions:
+        if args.name is not None:
+            raise RuntimeError("worktrees accepts at most an action and a name")
+        args.name = args.action
+        args.action = "create"
+
+    if args.action in {"create", "remove"} and not args.name:
+        raise RuntimeError(f"worktrees {args.action} requires a name")
+    if args.action == "list" and args.name:
+        raise RuntimeError("worktrees list does not accept a name")
 
 
 def normalize_config_gen(args):
@@ -636,8 +654,7 @@ def add_arg_worktrees(subprasers):
     pwt.add_argument(
         "action",
         nargs="?",
-        default="create",
-        choices=["create", "list", "remove"],
+        default=None,
         help="Worktree action: create (default), list, remove",
     )
     pwt.add_argument(
@@ -757,4 +774,3 @@ def verify_user_input_version(args, key):
             err = f"Option: {key} must not include buildmetadata parts"
             VMN_LOGGER.error(err)
             raise RuntimeError(err)
-

@@ -542,28 +542,30 @@ def goto_version(vcs, params, version, pull):
         else:
             deps = copy.deepcopy(data["changesets"])
 
-        if not params["deps_only"]:
-            try:
-                vcs.backend.checkout(tag=tag_name)
-                status_str = f"You are at version {version} of {vcs.name}"
-            except Exception as exc:
-                reason = str(exc).replace("\n", " ").strip()
-                VMN_LOGGER.error(
-                    f"Failed to checkout version {version} of {vcs.name}: {reason}"
-                )
-                VMN_LOGGER.debug("Checkout exception details:", exc_info=True)
-                return 1
-
     if check_unique:
-        actual_hash = deps["."]["hash"]
-        if not actual_hash.startswith(unique_id):
+        actual_hash = deps.get(".", {}).get("hash")
+        if actual_hash is None:
+            actual_hash = vcs.backend.changeset(tag=tag_name)
+        if not actual_hash or not actual_hash.startswith(unique_id):
             VMN_LOGGER.error(
                 f"Wrong unique id: provided '{unique_id}' does not match "
-                f"actual commit hash '{actual_hash[:12]}'"
+                f"actual commit hash '{(actual_hash or 'unknown')[:12]}'"
             )
             return 1
 
-    deps.pop(".")
+    if version is not None and not params["deps_only"]:
+        try:
+            vcs.backend.checkout(tag=tag_name)
+            status_str = f"You are at version {version} of {vcs.name}"
+        except Exception as exc:
+            reason = str(exc).replace("\n", " ").strip()
+            VMN_LOGGER.error(
+                f"Failed to checkout version {version} of {vcs.name}: {reason}"
+            )
+            VMN_LOGGER.debug("Checkout exception details:", exc_info=True)
+            return 1
+
+    deps.pop(".", None)
     if deps:
         if version is None:
             for rel_path, v in deps.items():
@@ -839,4 +841,3 @@ def _goto_version(deps, vmn_root_path, pull):
         )
 
     return 0
-
