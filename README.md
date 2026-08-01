@@ -4,7 +4,7 @@
 
 <p align="center">
   <em>Language-agnostic semantic versioning where a version is a <b>restorable state</b>, not just a label.<br>
-  Built for the age of coding agents. Versions live in git tags — no database, no server, no lock-in.</em>
+  Designed for AI-assisted development. Versions live in git tags — no database, no server, no lock-in.</em>
 </p>
 
 <p align="center">
@@ -18,14 +18,12 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/C++-00599C?logo=cplusplus&logoColor=white" alt="C++">
   <img src="https://img.shields.io/badge/Java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
   <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JS/TS">
 </p>
 
-<p align="center"><sub>…and anything else in a git repo. vmn versions the repo, not the build system.</sub></p>
+<p align="center"><sub>…and any other language in a git repository — vmn versions the repo, not the build system.</sub></p>
 
 ---
 
@@ -40,13 +38,13 @@ vmn goto -v 0.0.1 my_app         # your repo AND every dependency repo,
                                  # exactly as they were when 0.0.1 shipped
 ```
 
-Every other versioning tool hands you a **string**. vmn hands you a **state you can return to** — and it does it for every repo your product spans, not just the one you're standing in.
+Other versioning tools produce a **string**. vmn produces a **state you can return to** — across every repository your product spans, not just the one you run it in.
 
-That turns out to be exactly what you need when the code is being written by agents that move faster than you can review. Give each one [its own island](#-built-for-ai-assisted-development), capture what it did, and roll back the ones that went sideways.
+The same property is what makes vmn a natural fit for [AI-assisted development](#-built-for-ai-assisted-development): give each agent an isolated workspace, capture what it produced, and roll back what didn't work.
 
-Uninstall vmn tomorrow and your tags still make sense: it's all plain YAML in git annotated tag messages.
+All state is stored as plain YAML in git annotated tag messages. Remove vmn and the tags remain fully readable.
 
-vmn has been in continuous development since 2019 and has versioned every one of its own releases. It is in daily production use by teams shipping products that span multiple repositories, where recovering from a bad release means restoring every repo to a known state, not just one.
+vmn has been in continuous development since 2019 and versions its own releases. It is in daily production use by teams shipping multi-repository products, where recovering from a bad release means restoring every repo to a known state, not just one.
 
 ---
 
@@ -63,7 +61,7 @@ pip install "vmn[ui]"    # + the web dashboard
 
 **Requirements:** Python 3.8+, Git 2.10+ (2.17+ recommended). Linux, macOS, Windows/WSL. Nothing platform-specific to configure.
 
-vmn is a Python CLI, but your project doesn't have to be Python — it reads and writes git tags, so it's just a binary on your PATH next to any toolchain.
+vmn is a Python CLI, but the project it versions can be in any language — it operates on git tags, not on your build system.
 
 <details>
 <summary><strong>Try it in 30 seconds (copy-paste, no existing repo needed)</strong></summary>
@@ -94,7 +92,7 @@ vmn --completion              # or just print the script, change nothing
 vmn --completion-uninstall    # remove it again
 ```
 
-All three take an optional explicit shell if auto-detection guesses wrong. After installing, restart your shell. Then `vmn <TAB>` lists commands, `vmn stamp <TAB>` suggests **your actual app names**, and `vmn stamp -r <TAB>` offers the release modes.
+All three accept an explicit shell name if auto-detection picks the wrong one. After installing, restart your shell. `vmn <TAB>` lists commands, `vmn stamp <TAB>` suggests your tracked app names, and `vmn stamp -r <TAB>` offers the release modes.
 
 </details>
 
@@ -111,14 +109,14 @@ Most tools treat a version as a **name for a moment**. vmn treats it as a **hand
 | **Measured** state | `vmn exp` | ↑ plus metrics, params, artifacts, and a run log |
 | **Parallel** state | `vmn worktrees` | any of the above, checked out as a *separate* tree instead of replacing your current one |
 
-Each of the first three rows is the row above it plus one thing; the fourth is all of them, somewhere else on disk. They aren't four features bolted together — `vmn exp` is literally built on the snapshot primitive, and snapshots reuse the same version grammar as stamps. That's why `vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h` works: a snapshot **is** a version.
+Each of the first three rows extends the one above it; the fourth materializes any of them as a separate tree. These are not four separate features: `vmn exp` is built on the snapshot primitive, and snapshots share the version grammar of stamps. That is why `vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h` works — a snapshot **is** a version.
 
 <details>
-<summary><strong>What that buys you, concretely</strong></summary>
+<summary><strong>What this enables</strong></summary>
 
-**State recovery across repos.** If your product spans five git repos, `vmn stamp` records every dependency's commit hash into the tag. `vmn goto` restores all of them, in parallel, cloning any that are missing. Reproducing a six-month-old bug becomes one command instead of an afternoon of CI archaeology.
+**State recovery across repos.** If your product spans five git repos, `vmn stamp` records every dependency's commit hash into the tag. `vmn goto` restores all of them, in parallel, cloning any that are missing. Reproducing a six-month-old bug becomes one command instead of an afternoon of digging through CI logs.
 
-**Uncommitted work becomes addressable.** `git stash` is unnamed, local, and single-repo. A WIP commit pollutes history. A snapshot turns your exact messy state — dirty files, local commits, untracked junk, across every dep — into a version string you can name, diff, share, and restore.
+**Uncommitted work becomes addressable.** `git stash` is unnamed, local, and single-repo. A WIP commit pollutes history. A snapshot turns your exact working state — modified files, local commits, untracked files, across every dependency — into a version string you can name, diff, share, and restore.
 
 **Experiment tracking with no server.** An experiment is a snapshot plus an append-only metrics log. That's the whole design. No tracking server, no database, no cloud account — and unlike every dedicated tracker, the *code state* is captured, not just the numbers.
 
@@ -137,7 +135,7 @@ Each of the first three rows is the row above it plus one thing; the fourth is a
 1.6.0-dev.a1b2c3d.e4f5g6h    # dev snapshot (commit hash + diff hash)
 ```
 
-Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an emergency fix without burning a patch number, so your release train stays on schedule. The **dev snapshot** is content-addressed: identical code always produces the identical version string, so re-snapshotting an unchanged tree gives you back the same version instead of a duplicate.
+Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an emergency fix without consuming a patch number, keeping the release train on schedule. The **dev snapshot** is content-addressed: identical code always produces the identical version string, so re-snapshotting an unchanged tree returns the same version instead of creating a duplicate.
 
 </details>
 
@@ -145,17 +143,17 @@ Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an
 
 ## 🤖 Built for AI-assisted development
 
-Coding agents are fast, parallel, and occasionally destructive. Every problem that creates is a *state* problem — which is the thing vmn is already built around.
+Coding agents are fast, parallel, and occasionally destructive. Each of those properties creates a *state* problem — and state is what vmn manages.
 
-| What goes wrong with agents | vmn's answer |
+| Problem | vmn's answer |
 |:--|:--|
-| The agent doesn't know your versioning conventions and invents its own | `vmn skill --install` — ships vmn's own manual into the agent's instruction file |
-| Three agents editing one working tree, clobbering each other | `vmn worktrees` — one isolated island each, deps included |
-| An agent trashed your tree and you want the last good state back | `vmn snapshot` / `vmn goto` |
-| An agent shouldn't be cutting releases | `--no-stamp` islands where stamping is refused |
-| "Which of these 30 runs actually produced the good result?" | `vmn exp` — each number anchored to the tree that produced it |
+| The agent doesn't know your versioning conventions | `vmn skill --install` — writes vmn's usage instructions into the agent's instruction file |
+| Multiple agents editing one working tree overwrite each other | `vmn worktrees` — one isolated island each, dependencies included |
+| An agent corrupted the tree and you need the last good state | `vmn snapshot` / `vmn goto` |
+| An agent shouldn't be cutting releases | `--no-stamp` islands, where stamping is refused |
+| Identifying which of many runs produced the good result | `vmn exp` — every metric anchored to the tree that produced it |
 
-**The tool ships its own manual.** `vmn skill --install` writes vmn usage instructions straight into your agent's instruction file — `.claude/skills/vmn/SKILL.md`, `.cursorrules`, or `AGENTS.md`. The agent learns your versioning workflow from the tool that implements it, instead of guessing from the repo. The `cursor` and `agents` targets write a marker-delimited block, so re-running updates vmn's section and leaves the rest of your instructions untouched.
+**The tool documents itself to the agent.** `vmn skill --install` writes vmn usage instructions into your agent's instruction file — `.claude/skills/vmn/SKILL.md`, `.cursorrules`, or `AGENTS.md`. The agent learns your versioning workflow from the tool that implements it rather than inferring it from the repo. The `cursor` and `agents` targets write a marker-delimited block, so re-running updates vmn's section and leaves the rest of your instructions untouched.
 
 ```sh
 vmn skill --install                  # Claude Agent Skill
@@ -163,20 +161,20 @@ vmn skill --install --target cursor  # .cursorrules
 vmn skill --install --target agents  # AGENTS.md
 ```
 
-**Every agent gets its own island.** One command creates a git worktree for your repo *and* every dependency repo, pinned to a known-good state, alongside your work rather than on top of it. Point three agents at three islands and they cannot touch each other's files.
+**Every agent gets its own island.** One command creates a git worktree for your repo *and* every dependency repo, pinned to a known-good state, alongside your work rather than in place of it. Agents working in separate islands cannot touch each other's files.
 
 ```sh
 vmn worktrees create my_app --island-name agent-auth
 vmn worktrees create my_app --island-name agent-perf
 ```
 
-Each island drops an `island.json` manifest — paths, branches, dependency hashes — so an agent can orient itself without being told the layout. Add `--no-stamp` for a read-only island when the agent shouldn't be creating versions at all.
+Each island includes an `island.json` manifest — paths, branches, dependency hashes — so an agent can orient itself without being told the layout. Use `--no-stamp` for a read-only island when the agent shouldn't create versions at all.
 
-**An undo button that covers the mess.** Agents leave uncommitted edits, half-finished refactors, and untracked scratch files — the exact things `git stash` handles badly and a WIP commit handles worse. `vmn snapshot create` turns all of it (across every dependency repo) into a named version you can come back to. And restores auto-snapshot whatever is currently dirty *before* overwriting it, so an agent can't destroy work you hadn't saved yet.
+**Recoverable by default.** Agents leave behind uncommitted edits, half-finished refactors, and untracked scratch files — state that `git stash` and WIP commits handle poorly. `vmn snapshot create` captures all of it, across every dependency repo, as a named version you can return to. Restore operations snapshot whatever is currently dirty *before* overwriting it, so uncommitted work is never silently destroyed.
 
 **Keep the good run reproducible.** When an agent iterates on something measurable — a prompt, a heuristic, a model — `vmn exp run` records the metrics *and* the exact tree that produced them. Identifying run 14 as the best one is still useful a month later, because run 14's code remains addressable.
 
-> Prefer to read the instructions vmn gives your agent before installing them? They're in **[docs/agent-skill.md](docs/agent-skill.md)**.
+> The full text of the instructions vmn installs is in **[docs/agent-skill.md](docs/agent-skill.md)**.
 
 ---
 
@@ -225,7 +223,7 @@ Each island drops an `island.json` manifest — paths, branches, dependency hash
 
 <sub>\* MLflow can log to local files, but the comparison UI needs `mlflow server`. &nbsp; \*\* DVC versions data/model files via git but captures no uncommitted code.</sub>
 
-**Use vmn when** you want a CLI-first, local-first workflow, you work offline or air-gapped, you want versioning and experiments in one tool, or you refuse to run infrastructure to track a training run.
+**Use vmn when** you want a CLI-first, local-first workflow, you work offline or air-gapped, you want versioning and experiments in one tool, or you don't want to run infrastructure to track training runs.
 
 **Use MLflow / W&B when** you need hosted dashboards, team collaboration features, reports, or sweep orchestration.
 
@@ -240,7 +238,7 @@ Each island drops an `island.json` manifest — paths, branches, dependency hash
 | **Multi-repo** — reproducible state recovery across repositories | **Zero config** — no plugins, no pipelines, no ecosystem buy-in |
 | **Offline / air-gapped** — works with no network at all | **Zero lock-in** — versions are plain git tags |
 | **ML / research** — reproducible snapshots with metrics, no tracking server | **CI** — handles shallow clones automatically |
-| **Vibe coding** — agents get their own islands, their own manual, and an undo button | **Fast-moving teams** — capture and roll back state without ceremony |
+| **AI-assisted development** — per-agent isolation, generated agent instructions, state rollback | **Fast-moving teams** — capture and roll back state without ceremony |
 
 </details>
 
@@ -282,7 +280,7 @@ Idempotent — it won't re-stamp a commit that already has a version. Auto-initi
 <details>
 <summary><strong>Conventional commits, changelogs, GitHub Releases</strong></summary>
 
-Turn on `conventional_commits` and stop typing `-r`. Commit prefixes map to release modes: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `!` after the type → major.
+With `conventional_commits` enabled, `-r` becomes optional. Commit prefixes map to release modes: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `!` after the type → major.
 
 ```sh
 git commit -m "feat: add search endpoint"
@@ -394,11 +392,11 @@ Missing dependency repos are cloned automatically, in parallel. Restoring a dev 
 
 ### snapshot
 
-Capture your exact working state — uncommitted changes, unpushed commits, untracked files, across every dependency — as a deterministic version you can restore. No WIP commits, no stash juggling.
+Capture your exact working state — uncommitted changes, unpushed commits, untracked files, across every dependency — as a deterministic version you can restore. No WIP commits, no stash management.
 
-> **Use it when:** you're three hours into a refactor that half-works, and you want to try a completely different approach without losing this one. Committing it pollutes history with something you may throw away. `git stash` drops your untracked files' relationship to the deps and gives you an unnamed blob you'll never find again. Snapshot it, get a version string, try the other approach — and if the new one is worse, restore and carry on.
+> **Use it when:** you're hours into a refactor that half-works and want to try a different approach without losing this one. Committing pollutes history with work you may discard; `git stash` gives you an unnamed entry with no record of dependency state. A snapshot gives you a version string — try the other approach, and if it's worse, restore.
 >
-> **Also good for:** handing a colleague a bug that only reproduces with your local debug instrumentation; parking work before an agent starts editing the same files; a nightly "what did today look like" marker.
+> **Also useful for:** sharing a bug that only reproduces with your local debug changes; saving your state before an agent edits the same files.
 
 ```sh
 vmn snapshot create my_app --note "promising results"
@@ -522,7 +520,7 @@ vmn skill --install --force             # overwrite an existing Claude SKILL.md
 vmn skill                               # just print it
 ```
 
-`--install` finds the managed repo root even from a nested directory. The Claude target refuses to clobber an existing skill without `--force`; the Cursor and AGENTS targets rewrite only vmn's marker block and leave your other instructions alone. Full text: **[docs/agent-skill.md](docs/agent-skill.md)**.
+`--install` resolves the managed repo root even from a nested directory. The Claude target refuses to overwrite an existing skill without `--force`; the Cursor and AGENTS targets rewrite only vmn's marker block and preserve the rest of the file. Full text: **[docs/agent-skill.md](docs/agent-skill.md)**.
 
 <details>
 <summary><strong>Using vmn as a Python library</strong></summary>
@@ -688,9 +686,9 @@ Two older layouts are still *read*: flat `<branch-with-dashes>_conf.yml` and nes
 
 Local-first experiment tracking for any versioned app. Experiments are plain files under `.vmn/{app}/experiments/` — git-ignored, never committed or pushed. No server, no database, no account.
 
-> **Use it when:** you're tuning something over days — hyperparameters, a cache policy, a retrieval prompt, compiler flags — editing code between every run. Two weeks later someone asks *"what did we do to get 0.91?"* and the honest answer is nobody knows, because the tree that produced it was overwritten twenty runs ago. An experiment pins each number to the exact code that produced it, so `exp diff` can show you the metric delta and the source change side by side.
+> **Use it when:** you're tuning something over days — hyperparameters, a cache policy, a retrieval prompt, compiler flags — editing code between runs. Two weeks later, "what did we change to get 0.91?" is unanswerable, because the tree that produced it was overwritten twenty runs ago. An experiment pins each result to the exact code that produced it, so `exp diff` shows the metric delta and the source change side by side.
 >
-> **Also good for:** benchmark and load-test runs where the config is the variable; agent-driven iteration loops; any "I tried 30 things and one worked" workflow.
+> **Also useful for:** benchmark and load-test runs where the configuration is the variable; agent-driven iteration loops; any workflow where many attempts produce one keeper.
 
 ```sh
 # Capture code state, run the command, record metrics + exit code + duration
@@ -732,7 +730,7 @@ Your command reports metrics by appending `key=value` lines to `$VMN_METRICS_FIL
 
 Version-taking actions default to the latest experiment and accept a full version, a unique prefix, `--latest`, or `@N` (the row index from `exp list`).
 
-Re-running over an identical code state starts a new run (`.r2`, `.r3`, …) rather than overwriting — so "same code, different seed" never clobbers a previous run.
+Re-running over an identical code state starts a new run (`.r2`, `.r3`, …) rather than overwriting — "same code, different seed" never replaces a previous run.
 
 </details>
 
@@ -797,9 +795,9 @@ The whole `/api/v1/...` surface is documented at `/api/docs`.
 
 An island is a set of git worktrees — your main repo plus every dependency — pinned to a known-good state, sitting *beside* your work instead of on top of it.
 
-> **Use it when:** you want to run three agents on three features at once, in a product that spans four repos. Doing that by hand means a `git worktree add` per repo per feature, with every dependency checked out at the exact hash the last good version recorded — twelve checkouts you have to get right, and re-derive from tag metadata each time. One `vmn worktrees create` does it, and the agents physically cannot touch each other's files.
+> **Use it when:** you want three agents working on three features at once in a product that spans four repos. Doing that by hand means a `git worktree add` per repo per feature, with every dependency checked out at the exact hash the last good version recorded — twelve checkouts, each re-derived from tag metadata. One `vmn worktrees create` per feature does it, and agents in separate islands cannot touch each other's files.
 >
-> **Also good for:** reproducing a customer bug on 2.1.0 while your current work stays exactly where it is — `vmn goto` would move *your* checkout, an island gives you that state alongside it. Or a throwaway `--no-stamp` island for a risky experiment you fully intend to delete.
+> **Also useful for:** reproducing a customer bug on 2.1.0 while your current work stays where it is — `vmn goto` would move *your* checkout, an island provides that state alongside it. Or a disposable `--no-stamp` island for a risky experiment.
 
 | Problem | Without islands | With `vmn worktrees` |
 |---------|----------------|---------------------|
@@ -911,7 +909,7 @@ vmn tags are `{app_name}_{version}` (slashes in app names become `-`). If your r
 <details>
 <summary><strong>"Dirty" state warnings on stamp</strong></summary>
 
-vmn refuses to stamp over uncommitted changes or unpushed commits. Commit or stash first — or capture the mess with `vmn snapshot create` so you can come back to it. `vmn show --verbose` prints the exact flags (`pending`, `outgoing`, `detached`).
+vmn refuses to stamp over uncommitted changes or unpushed commits. Commit or stash first — or capture the state with `vmn snapshot create` so you can return to it. `vmn show --verbose` prints the exact flags (`pending`, `outgoing`, `detached`).
 
 </details>
 
@@ -938,15 +936,15 @@ Your existing tags keep working — vmn uses its own `{app}_{version}` format an
 
 ---
 
-<h3 align="center">Stop archaeology. Start with a version you can go back to.</h3>
+<h3 align="center">Every version, restorable.</h3>
 
 ```sh
 pip install vmn
 ```
 
 <p align="center">
-  Star the repo if vmn saved you an afternoon.
-  <a href="https://github.com/progovoy/vmn/issues">File an issue</a> if it cost you one — we'll fix it.
+  If vmn is useful to you, consider starring the repo.
+  Found a problem? <a href="https://github.com/progovoy/vmn/issues">File an issue</a>.
 </p>
 
 <p align="center">
