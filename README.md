@@ -16,14 +16,7 @@
   <a href="https://github.com/progovoy/vmn/blob/master/LICENSE.txt"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="License"></a>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
-  <img src="https://img.shields.io/badge/Java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
-  <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JS/TS">
-</p>
-
-<p align="center"><sub>…and any other language in a git repository — vmn versions the repo, not the build system.</sub></p>
+<p align="center"><sub>Works with any language in a git repository — vmn versions the repo, not the build system.</sub></p>
 
 ---
 
