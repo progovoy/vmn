@@ -4,7 +4,7 @@
 
 <p align="center">
   <em>Language-agnostic semantic versioning where a version is a <b>restorable state</b>, not just a label.<br>
-  Versions live in git tags. No database, no server, no lock-in.</em>
+  Built for the age of coding agents. Versions live in git tags — no database, no server, no lock-in.</em>
 </p>
 
 <p align="center">
@@ -40,11 +40,13 @@ vmn goto -v 0.0.1 my_app         # your repo AND every dependency repo,
 
 Every other versioning tool hands you a **string**. vmn hands you a **state you can return to** — and it does it for every repo your product spans, not just the one you're standing in.
 
+That turns out to be exactly what you need when the code is being written by agents that move faster than you can review. Give each one [its own island](#-built-for-ai-assisted-development), capture what it did, and roll back the ones that went sideways.
+
 Uninstall vmn tomorrow and your tags still make sense: it's all plain YAML in git annotated tag messages.
 
 ---
 
-**[Install](#-install)** · **[The idea](#-the-idea)** · **[Why vmn](#-why-vmn)** · **[Commands](#-commands)** · **[Config](#️-configuration)** · **[Experiments](#-experiments)** · **[Web UI](#️-web-ui)** · **[Islands](#️-islands-parallel-worktrees)** · **[CI](#-ci)** · **[Help](#-troubleshooting)** · **[Migrate](#-coming-from-another-tool)**
+**[Install](#-install)** · **[The idea](#-the-idea)** · **[AI agents](#-built-for-ai-assisted-development)** · **[Why vmn](#-why-vmn)** · **[Commands](#-commands)** · **[Config](#️-configuration)** · **[Experiments](#-experiments)** · **[Web UI](#️-web-ui)** · **[Islands](#️-islands-parallel-worktrees)** · **[CI](#-ci)** · **[Help](#-troubleshooting)** · **[Migrate](#-coming-from-another-tool)**
 
 ---
 
@@ -135,6 +137,43 @@ Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an
 
 ---
 
+## 🤖 Built for AI-assisted development
+
+Coding agents are fast, parallel, and occasionally destructive. Every problem that creates is a *state* problem — which is the thing vmn is already built around.
+
+| What goes wrong with agents | vmn's answer |
+|:--|:--|
+| The agent doesn't know your versioning conventions and invents its own | `vmn skill --install` — ships vmn's own manual into the agent's instruction file |
+| Three agents editing one working tree, clobbering each other | `vmn worktrees` — one isolated island each, deps included |
+| An agent trashed your tree and you want the last good state back | `vmn snapshot` / `vmn goto` |
+| An agent shouldn't be cutting releases | `--no-stamp` islands where stamping is refused |
+| "Which of these 30 runs actually produced the good result?" | `vmn exp` — each number anchored to the tree that produced it |
+
+**The tool ships its own manual.** `vmn skill --install` writes vmn usage instructions straight into your agent's instruction file — `.claude/skills/vmn/SKILL.md`, `.cursorrules`, or `AGENTS.md`. The agent learns your versioning workflow from the tool that implements it, instead of guessing from the repo. The `cursor` and `agents` targets write a marker-delimited block, so re-running updates vmn's section and leaves the rest of your instructions untouched.
+
+```sh
+vmn skill --install                  # Claude Agent Skill
+vmn skill --install --target cursor  # .cursorrules
+vmn skill --install --target agents  # AGENTS.md
+```
+
+**Every agent gets its own island.** One command creates a git worktree for your repo *and* every dependency repo, pinned to a known-good state, alongside your work rather than on top of it. Point three agents at three islands and they cannot touch each other's files.
+
+```sh
+vmn worktrees create my_app --island-name agent-auth
+vmn worktrees create my_app --island-name agent-perf
+```
+
+Each island drops an `island.json` manifest — paths, branches, dependency hashes — so an agent can orient itself without being told the layout. Add `--no-stamp` for a read-only island when the agent shouldn't be creating versions at all.
+
+**An undo button that covers the mess.** Agents leave uncommitted edits, half-finished refactors, and untracked scratch files — the exact things `git stash` handles badly and a WIP commit handles worse. `vmn snapshot create` turns all of it (across every dependency repo) into a named version you can come back to. And restores auto-snapshot whatever is currently dirty *before* overwriting it, so an agent can't destroy work you hadn't saved yet.
+
+**Judge the runs, not the vibes.** When an agent is iterating on something measurable — a prompt, a heuristic, a model — `vmn exp run` records the metrics *and* the exact tree that produced them. "Run 14 was best" stays answerable a month later, because run 14's code is still addressable.
+
+> Prefer to read the instructions vmn gives your agent before installing them? They're in **[docs/agent-skill.md](docs/agent-skill.md)**.
+
+---
+
 ## ⚡ Why vmn
 
 <table>
@@ -152,6 +191,8 @@ Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an
 <tr><td><b>Offline / air-gapped</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌ *</td></tr>
 <tr><td><b>Uncommitted-state capture</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td><b>ML experiment tracking</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>Ships agent instructions (<code>vmn skill</code>)</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>Parallel agent isolation (islands)</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 </table>
 
 **Bold rows are things only vmn does.**
@@ -193,6 +234,7 @@ Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an
 | **Multi-repo** — reproducible state recovery across repositories | **Zero config** — no plugins, no pipelines, no ecosystem buy-in |
 | **Offline / air-gapped** — works with no network at all | **Zero lock-in** — versions are plain git tags |
 | **ML / research** — reproducible snapshots with metrics, no tracking server | **CI** — handles shallow clones automatically |
+| **Vibe coding** — agents get their own islands, their own manual, and an undo button | **Fast-moving teams** — capture and roll back state without ceremony |
 
 </details>
 
@@ -348,6 +390,10 @@ Missing dependency repos are cloned automatically, in parallel. Restoring a dev 
 
 Capture your exact working state — uncommitted changes, unpushed commits, untracked files, across every dependency — as a deterministic version you can restore. No WIP commits, no stash juggling.
 
+> **Use it when:** you're three hours into a refactor that half-works, and you want to try a completely different approach without losing this one. Committing it pollutes history with something you may throw away. `git stash` drops your untracked files' relationship to the deps and gives you an unnamed blob you'll never find again. Snapshot it, get a version string, try the other approach — and if the new one is worse, restore and carry on.
+>
+> **Also good for:** handing a colleague a bug that only reproduces with your local debug instrumentation; parking work before an agent starts editing the same files; a nightly "what did today look like" marker.
+
 ```sh
 vmn snapshot create my_app --note "promising results"
 # => 1.2.0-dev.a1b2c3d.e4f5g6h
@@ -459,13 +505,14 @@ vmn config gen --branch --sync-dep-branches my_app # pin each branch-tracked dep
 
 ### skill
 
-vmn can emit its own usage instructions for AI coding agents, so an agent working in your repo knows how to stamp, snapshot, and use islands correctly.
+Emits vmn's own usage instructions for AI coding agents — see [Built for AI-assisted development](#-built-for-ai-assisted-development).
 
 ```sh
 vmn skill --install                     # .claude/skills/vmn/SKILL.md (default)
 vmn skill --install --target cursor     # .cursorrules
 vmn skill --install --target agents     # AGENTS.md
 vmn skill --install --methodology       # + opinionated TDD / worktree rules
+vmn skill --install --force             # overwrite an existing Claude SKILL.md
 vmn skill                               # just print it
 ```
 
@@ -635,6 +682,10 @@ Two older layouts are still *read*: flat `<branch-with-dashes>_conf.yml` and nes
 
 Local-first experiment tracking for any versioned app. Experiments are plain files under `.vmn/{app}/experiments/` — git-ignored, never committed or pushed. No server, no database, no account.
 
+> **Use it when:** you're tuning something over days — hyperparameters, a cache policy, a retrieval prompt, compiler flags — editing code between every run. Two weeks later someone asks *"what did we do to get 0.91?"* and the honest answer is nobody knows, because the tree that produced it was overwritten twenty runs ago. An experiment pins each number to the exact code that produced it, so `exp diff` can show you the metric delta and the source change side by side.
+>
+> **Also good for:** benchmark and load-test runs where the config is the variable; agent-driven iteration loops; any "I tried 30 things and one worked" workflow.
+
 ```sh
 # Capture code state, run the command, record metrics + exit code + duration
 vmn exp run my_model --note "baseline CNN" -- python train.py
@@ -738,7 +789,11 @@ The whole `/api/v1/...` surface is documented at `/api/docs`.
 
 ## 🏝️ Islands (parallel worktrees)
 
-An island is a set of git worktrees — your main repo plus every dependency — pinned to a known-good state, sitting *beside* your work instead of on top of it. Built for parallel feature work and for running several AI agents at once without them stepping on each other.
+An island is a set of git worktrees — your main repo plus every dependency — pinned to a known-good state, sitting *beside* your work instead of on top of it.
+
+> **Use it when:** you want to run three agents on three features at once, in a product that spans four repos. Doing that by hand means a `git worktree add` per repo per feature, with every dependency checked out at the exact hash the last good version recorded — twelve checkouts you have to get right, and re-derive from tag metadata each time. One `vmn worktrees create` does it, and the agents physically cannot touch each other's files.
+>
+> **Also good for:** reproducing a customer bug on 2.1.0 while your current work stays exactly where it is — `vmn goto` would move *your* checkout, an island gives you that state alongside it. Or a throwaway `--no-stamp` island for a risky experiment you fully intend to delete.
 
 | Problem | Without islands | With `vmn worktrees` |
 |---------|----------------|---------------------|
@@ -874,19 +929,6 @@ App names cannot contain `-` or start with `/`. Use `_`, or `/` to express root-
 | bump2version | [migration guide](docs/migrating-from-bump2version.md) |
 
 Your existing tags keep working — vmn uses its own `{app}_{version}` format and won't collide with `v1.2.3`-style tags.
-
----
-
-## 🗺️ Roadmap
-
-[File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
-
-- [x] **`vmn worktrees`** — isolated parallel development islands
-- [ ] **`vmn exp plot`** — ASCII metric charts in the terminal
-- [ ] **Monorepo auto-discovery** — detect apps from Cargo workspaces, pnpm-workspace.yaml, Python namespace packages
-- [ ] **PR version annotation** — a GitHub Action that comments the next version from `vmn stamp --dry-run`
-- [ ] **Post-stamp hooks** — run commands after a successful stamp
-- [ ] **Homebrew tap** — `brew install vmn`
 
 ---
 
