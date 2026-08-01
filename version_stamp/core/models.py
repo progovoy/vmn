@@ -134,8 +134,8 @@ class AppConf:
             "ui_editor": "policies",
         },
     )
-    conventional_commits: dict = field(
-        default_factory=dict,
+    conventional_commits: object = field(
+        default=True,
         metadata={
             "ui_desc": (
                 "Enable automatic release mode detection from conventional "

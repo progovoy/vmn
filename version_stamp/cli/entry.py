@@ -152,8 +152,8 @@ def vmn_run(command_line=None):
 
     except Exception:
         VMN_LOGGER.error(
-            "Failed to init logger. "
-            "Maybe you are running from a non-managed directory?"
+            "Not inside a git repository, or the directory does not exist.\n"
+            "Fix: cd into a git repository, or run 'git init' to create one."
         )
         VMN_LOGGER.debug("Logged exception: ", exc_info=True)
 
@@ -200,10 +200,32 @@ def vmn_run(command_line=None):
         # the unlock will happen naturally because the process will exit
         lock.release()
 
-    except Exception:
-        VMN_LOGGER.error(
-            "vmn_run raised exception. Run vmn --debug for details"
-        )
+    except Exception as exc:
+        msg = str(exc)
+        if "No git remote" in msg or "selected_remote" in msg:
+            VMN_LOGGER.error(
+                "No git remote configured. vmn needs a remote to push version tags.\n"
+                "Fix: git remote add origin <your-repo-url>"
+            )
+        elif "not a git repository" in msg.lower() or "InvalidGitRepositoryError" in type(exc).__name__:
+            VMN_LOGGER.error(
+                "Not inside a git repository.\n"
+                "Fix: run 'git init' first, or cd into a git repo."
+            )
+        elif "shallow" in msg.lower():
+            VMN_LOGGER.error(
+                "This appears to be a shallow clone. vmn needs full history to compute versions.\n"
+                "Fix: git fetch --unshallow"
+            )
+        elif "dirty" in msg.lower() or "uncommitted" in msg.lower() or "outgoing" in msg.lower():
+            VMN_LOGGER.error(
+                "Working tree has uncommitted or unpushed changes.\n"
+                "Fix: commit and push your changes, or use --dry-run to preview."
+            )
+        else:
+            VMN_LOGGER.error(
+                "vmn_run raised exception. Run vmn --debug for details"
+            )
         VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
         err = 1

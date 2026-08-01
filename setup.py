@@ -24,6 +24,7 @@ setuptools.setup(
     extras_require={
         "ui": ["fastapi>=0.110", "uvicorn>=0.29"],
         "s3": ["boto3"],
+        "changelog": ["git-cliff==2.5.0; python_version >= '3.8'"],
     },
     package_dir={"version_stamp": "version_stamp"},
     packages=[

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Jinja2 template generation utilities."""
 import os
+import shutil
 import subprocess
 from pprint import pformat
 
@@ -28,6 +29,12 @@ def create_data_dict_for_jinja2(
     toml_cliff_conf_param = ""
     if "release_notes_conf_path" in tmplt_value:
         toml_cliff_conf_param = f"-c {tmplt_value['release_notes_conf_path']}"
+
+    if not shutil.which("git-cliff"):
+        raise RuntimeError(
+            "git-cliff is required for Jinja2 template generation with release notes. "
+            "Install it with: pip install 'vmn[changelog]'"
+        )
 
     command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
     try:

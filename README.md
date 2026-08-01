@@ -107,6 +107,19 @@ remain available for migrations and non-default starting versions.
 
 ## Multi-repository recovery
 
+Your product spans 4 repos. Production broke after the 2.1.0 deploy last
+Tuesday. You need the exact source state — not just one repo, all of them — to
+reproduce and fix the bug. One command:
+
+```sh
+vmn goto -v 2.1.0 my_platform
+```
+
+Every configured dependency is restored to its recorded revision, cloning any
+that are missing locally. No container archaeology, no CI log diving.
+
+### Setup
+
 Declare sibling dependency repositories in `.vmn/my_app/conf.yml`:
 
 ```yaml
@@ -215,23 +228,22 @@ steps:
 Start an established migration with `--dry-run`; then add branch policy before
 enabling automatic stamps.
 
-## Snapshots, experiments, and UI
+## Working-state snapshots
 
-The released 0.9.3 CLI also manages restorable working state between releases:
+Between releases, capture and restore your exact working state — uncommitted
+changes, local commits, and untracked files — as a named version:
 
 ```sh
 vmn snapshot create my_app --note "parser refactor"
 vmn snapshot restore my_app --latest
-
-vmn exp run my_model --note "baseline" -- python train.py
-vmn exp list my_model --sort loss
-vmn exp diff my_model
 ```
 
-Snapshot and experiment payloads are local and Git-ignored by default; optional
-S3-compatible storage supports shared workflows. Install `vmn[ui]` and run
-`vmn ui` for the local dashboard, experiment comparison, dependency state, and
-stamp-tree views; install `vmn[s3]` when using S3-backed storage.
+Snapshots extend the same state-recovery model as `goto` to uncommitted work.
+Local-first experiment tracking (`vmn exp`) builds on snapshots to capture
+metrics alongside code state; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
+
+Install `vmn[ui]` for a local web dashboard with stamp-tree views and snapshot
+comparison.
 
 ## Command map
 
