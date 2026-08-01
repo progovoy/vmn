@@ -17,12 +17,20 @@
 </p>
 
 <p align="center">
+  <sub><b>Versions the repo, not the build system</b> — so it works the same in:</sub>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/C++-00599C?logo=cplusplus&logoColor=white" alt="C++">
   <img src="https://img.shields.io/badge/Java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
   <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JS/TS">
+</p>
+
+<p align="center">
+  <sub>vmn itself is a Python CLI — you don't need Python in your project to use it.</sub>
 </p>
 
 ---
@@ -43,6 +51,8 @@ Every other versioning tool hands you a **string**. vmn hands you a **state you 
 That turns out to be exactly what you need when the code is being written by agents that move faster than you can review. Give each one [its own island](#-built-for-ai-assisted-development), capture what it did, and roll back the ones that went sideways.
 
 Uninstall vmn tomorrow and your tags still make sense: it's all plain YAML in git annotated tag messages.
+
+**Not a weekend project.** vmn has been in continuous development since 2019, across 1,000+ commits, and it stamps every one of its own releases — the version you `pip install` was cut by the tool you're installing. It runs in daily production use at engineering teams shipping multi-repo products, where a bad release means restoring five repositories to a known state, not one.
 
 ---
 
@@ -103,9 +113,9 @@ Most tools treat a version as a **name for a moment**. vmn treats it as a **hand
 | **Released** state | `vmn stamp` → `vmn goto` | committed code + the exact commit of every dependency repo |
 | **Working** state | `vmn snapshot` | ↑ plus uncommitted changes, unpushed commits, untracked files |
 | **Measured** state | `vmn exp` | ↑ plus metrics, params, artifacts, and a run log |
-| **Parallel** state | `vmn worktrees` | ↑ materialized *beside* your work instead of on top of it |
+| **Parallel** state | `vmn worktrees` | any of the above, checked out as a *separate* tree instead of replacing your current one |
 
-Each row is the row above it plus one thing. They aren't four features bolted together — `vmn exp` is literally built on the snapshot primitive, and snapshots reuse the same version grammar as stamps. That's why `vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h` works: a snapshot **is** a version.
+Each of the first three rows is the row above it plus one thing; the fourth is all of them, somewhere else on disk. They aren't four features bolted together — `vmn exp` is literally built on the snapshot primitive, and snapshots reuse the same version grammar as stamps. That's why `vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h` works: a snapshot **is** a version.
 
 <details>
 <summary><strong>What that buys you, concretely</strong></summary>
