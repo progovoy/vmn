@@ -255,6 +255,37 @@ metrics alongside code state; see [docs/experiments.md](https://github.com/progo
 Install `vmn[ui]` for a local web dashboard with stamp-tree views and snapshot
 comparison.
 
+## Islands (parallel worktrees)
+
+Create isolated development environments — git worktrees for your repo and
+every dependency — pinned to a known-good state:
+
+```sh
+vmn worktrees create my_app --island-name feature-auth
+vmn worktrees create my_app --island-name feature-perf
+vmn worktrees list
+vmn worktrees remove feature-auth
+```
+
+Each island gets its own branch, an `island.json` manifest with paths and
+dependency hashes, and full stamping capability. Use `--no-stamp` for read-only
+islands. Works well with AI coding agents — each agent gets its own island and
+cannot touch other agents' files.
+
+## AI agent integration
+
+`vmn skill` outputs vmn usage instructions for AI coding agents:
+
+```sh
+vmn skill --install                  # .claude/skills/vmn/SKILL.md
+vmn skill --install --target cursor  # .cursorrules
+vmn skill --install --target agents  # AGENTS.md
+```
+
+The agent learns your versioning workflow from the tool that implements it.
+Re-running updates vmn's section and leaves the rest of your instructions
+untouched.
+
 ## Command map
 
 | Command | Purpose |
@@ -265,6 +296,8 @@ comparison.
 | `vmn goto` | Restore recorded application and dependency revisions |
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
 | `vmn exp` | Track experiments built on working-state snapshots |
+| `vmn worktrees` | Create, list, or remove isolated parallel development islands |
+| `vmn skill` | Output or install AI agent instructions for vmn |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
 | `vmn config` | List or edit global, app, root-app, and branch configuration |
