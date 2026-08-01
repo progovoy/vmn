@@ -207,22 +207,32 @@ recoverable:
 - Release metadata remains readable with standard Git and YAML tooling.
 - No internet access is required when an internal or local Git remote is used.
 
-For CI, fetch complete history and tags, serialize stamps for the same app, and
-provide write access to the remote. A minimal GitHub Actions job looks like:
+For GitHub Actions, use the official [vmn-action](https://github.com/marketplace/actions/automated-versioning):
 
 ```yaml
-permissions:
-  contents: write
-
 steps:
   - uses: actions/checkout@v4
     with:
       fetch-depth: 0
-  - uses: actions/setup-python@v5
+
+  - id: vmn
+    uses: progovoy/vmn-action@latest
     with:
-      python-version: '3.12'
-  - run: pip install 'vmn==0.9.3'
-  - run: vmn stamp --pull -r patch my_app
+      app-name: my_app
+      do-stamp: true
+      stamp-mode: patch
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
+  - run: echo "Stamped ${{ steps.vmn.outputs.verstr }}"
+```
+
+For other CI systems, fetch complete history and tags, serialize stamps for the
+same app, and provide write access to the remote:
+
+```sh
+pip install vmn
+vmn stamp --pull -r patch my_app
 ```
 
 Start an established migration with `--dry-run`; then add branch policy before
