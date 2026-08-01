@@ -163,6 +163,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 
 ## Docs Layout
 
-- `README.md`: user-facing overview; embeds the `vmn skill --methodology` output verbatim — keep it in sync with `version_stamp/cli/skill.py` when that changes.
+- `README.md`: user-facing overview. Skimmable top level with reference material inside `<details>` blocks; deep guides live in `docs/` and are linked, not inlined. Keep it that way — don't paste long reference back into it.
+- `docs/agent-skill.md`: **generated** from `vmn skill --methodology`. Regenerate it (don't hand-edit) whenever `version_stamp/cli/skill.py` changes.
 - `docs/experiments.md`: full `vmn exp` guide. `docs/ui.md`: `vmn ui` deployment + API.
 - `docs/vmn-vs-*.md`, `docs/migrating-from-*.md`: migration guides from other tools.

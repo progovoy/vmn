@@ -1,7 +1,11 @@
 <h1 align="center">vmn</h1>
 
-<p align="center"><strong>Automatic semantic versioning powered by git tags. Zero lock-in.</strong></p>
-<p align="center"><em>Language-agnostic CLI for versioning, multi-repo state recovery, and local-first experiment tracking -- versions live in git tags, experiments live on disk (or S3), no server required.</em></p>
+<p align="center"><strong>A version number that can rebuild your repo.</strong></p>
+
+<p align="center">
+  <em>Language-agnostic semantic versioning where a version is a <b>restorable state</b>, not just a label.<br>
+  Versions live in git tags. No database, no server, no lock-in.</em>
+</p>
 
 <p align="center">
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
@@ -9,7 +13,7 @@
   <a href="https://github.com/progovoy/vmn"><img src="https://img.shields.io/github/stars/progovoy/vmn?style=flat&logo=github" alt="GitHub stars"></a>
   <a href="https://semver.org"><img src="https://img.shields.io/badge/semver-2.0.0-blue?logo=semver&logoColor=white" alt="Semver"></a>
   <a href="https://conventionalcommits.org"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
-  <a href="https://github.com/progovoy/vmn/blob/master/LICENSE"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="License"></a>
+  <a href="https://github.com/progovoy/vmn/blob/master/LICENSE.txt"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="License"></a>
 </p>
 
 <p align="center">
@@ -18,7 +22,7 @@
   <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/C++-00599C?logo=cplusplus&logoColor=white" alt="C++">
   <img src="https://img.shields.io/badge/Java-ED8B00?logo=openjdk&logoColor=white" alt="Java">
-  <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
+  <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JS/TS">
 </p>
 
 ---
@@ -26,43 +30,37 @@
 ```sh
 pip install vmn
 
-vmn stamp -r patch my_app                 # => 0.0.1  (auto-initializes repo + app)
-vmn stamp -r minor my_app                 # => 0.1.0
-vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1  (prerelease)
-vmn release my_app                        # => 0.1.1
-vmn goto -v 0.1.0 my_app                  # repo restored to exact 0.1.0 state
+vmn stamp -r patch my_app        # => 0.0.1   (auto-initializes, no setup)
+
+# ...six months and 400 commits later, prod is broken on 0.0.1
+
+vmn goto -v 0.0.1 my_app         # your repo AND every dependency repo,
+                                 # exactly as they were when 0.0.1 shipped
 ```
 
-Versions live in git annotated tags. Uninstall vmn and the tags still make sense. No databases, no SaaS, no ecosystem buy-in.
+Every other versioning tool hands you a **string**. vmn hands you a **state you can return to** — and it does it for every repo your product spans, not just the one you're standing in.
+
+Uninstall vmn tomorrow and your tags still make sense: it's all plain YAML in git annotated tag messages.
 
 ---
 
-[Requirements](#-requirements) · [Quick Start](#-quick-start) · [Why vmn?](#-why-vmn) · [Only in vmn](#-what-only-vmn-does) · [Experiments](#-experiment-management) · [Web UI](#-web-ui) · [Snapshots](#-snapshots) · [Commands](#-commands) · [Auto-Embedding](#-version-auto-embedding) · [Configuration](#️-configuration) · [CI](#-ci-integration) · [Troubleshooting](#-troubleshooting) · [Migration](#-already-using-another-tool)
+**[Install](#-install)** · **[The idea](#-the-idea)** · **[Why vmn](#-why-vmn)** · **[Commands](#-commands)** · **[Config](#️-configuration)** · **[Experiments](#-experiments)** · **[Web UI](#️-web-ui)** · **[Islands](#️-islands-parallel-worktrees)** · **[CI](#-ci)** · **[Help](#-troubleshooting)** · **[Migrate](#-coming-from-another-tool)**
 
 ---
 
-### vmn is for you if:
-
-| | |
-|:--|:--|
-| **Any language** — Python, Rust, Go, C++, Java, JS, or anything with a git repo | **Microservices** — independent versions per service, one root counter |
-| **Multi-repo** — reproducible state recovery across repositories | **Zero config** — no plugins, no pipelines, no ecosystem buy-in |
-| **Offline / air-gapped** — works without network access | **Zero lock-in** — versions live in plain git tags |
-| **ML experiments** — reproducible snapshots with metrics, no tracking server | |
-
-No separate `vmn init` required -- `vmn stamp` auto-initializes on first run. Works in CI (handles shallow clones automatically).
-
-### How it works
-
-<p align="center"><code>git commit</code> → <code>vmn stamp</code> → <strong>git tag</strong> → <code>git push</code></p>
-
-vmn stores all version state in **git annotated tag messages** as plain YAML. When you `vmn stamp`, it computes the next version, writes it into a tag (e.g., `my_app_1.2.0`), and optionally pushes. When you `vmn show`, it reads that tag. There is no database, no config service, no proprietary format -- just git tags you can inspect with `git tag -n1`.
-
-**Try it locally (30 seconds):**
+## 📦 Install
 
 ```sh
-pip install vmn
+pip install vmn          # or: pipx install vmn / uvx vmn
+pip install "vmn[ui]"    # + the web dashboard
+```
 
+**Requirements:** Python 3.8+, Git 2.10+ (2.17+ recommended). Linux, macOS, Windows/WSL. Nothing platform-specific to configure.
+
+<details>
+<summary><strong>Try it in 30 seconds (copy-paste, no existing repo needed)</strong></summary>
+
+```sh
 mkdir remote && cd remote && git init --bare && cd ..
 git clone ./remote ./local && cd local
 echo a >> ./a.txt && git add ./a.txt && git commit -m "first commit" && git push origin master
@@ -72,820 +70,349 @@ vmn stamp -r patch my_app   # => 0.0.1
 echo b >> ./a.txt && git add ./a.txt && git commit -m "feat: add b" && git push origin master
 vmn stamp -r patch my_app   # => 0.0.2
 
-git tag -n1 my_app_0.0.2    # version metadata right there in the tag
+git tag -n1 my_app_0.0.2    # the version metadata is right there in the tag
 ```
 
----
+No `vmn init` needed — the first `vmn stamp` initializes the repo and the app. Works in CI, in shallow clones, and fully offline.
 
-## 📋 Requirements
-
-- **Python** 3.8+
-- **Git** 2.10+ (for push options support; 2.17+ recommended)
-- **Platforms:** Linux, macOS, Windows (including WSL). No platform-specific configuration needed -- vmn uses GitPython for cross-platform git operations.
-
-## 🚀 Quick Start
-
-### Version a project
-
-```sh
-pip install vmn
-cd your-project                           # any git repo
-
-vmn stamp -r patch my_app                 # => 0.0.1 (auto-initializes)
-vmn stamp -r minor my_app                 # => 0.1.0
-vmn show my_app                           # => 0.1.0
-vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1 (prerelease)
-vmn release my_app                        # => 0.1.1
-```
-
-### Track an ML experiment (60 seconds)
-
-```sh
-# One command: capture code state, run training, record metrics + duration + exit code.
-# Your script appends "key=value" lines to $VMN_METRICS_FILE and vmn ingests them.
-vmn exp run my_model --note "baseline CNN" -- python train.py
-# => 0.1.0-dev.a1b2c3d.e4f5g6h
-
-# Edit the model, run again — a fresh experiment, even on the same commit
-vmn exp run my_model --note "with dropout" -- python train.py
-# => 0.1.0-dev.f7a2b1c.d3e4f5g
-
-# Leaderboard, best loss first
-vmn exp list my_model --sort loss
-
-# See exactly what changed AND what happened — metric delta + real code diff
-vmn exp diff my_model
-# Comparing 0.1.0-dev.a1b2c3d.e4f5g6h -> 0.1.0-dev.f7a2b1c.d3e4f5g
-#
-# metrics: loss 0.45 -> 0.34   acc 0.85 -> 0.91
-#
-# diff --git a/.../model.py b/.../model.py
-# -    return lr * 0.5  # baseline
-# +    return lr * 0.3  # with dropout
-
-# Winner! Restore that exact state (any dirty work is auto-saved first)
-vmn exp restore my_model --latest
-```
-
-Both workflows store everything locally under `.vmn/` (git-ignored -- never committed or pushed) -- no servers, no lock-in. Add `--backend s3` if you want to share experiments across a team; see [Storage](#storage) below.
-
-### Shell Completion
-
-Tab-completion for commands, flags, app names, and choices (bash/zsh/fish/tcsh):
-
-```sh
-# One-time install (auto-detects your shell):
-vmn --completion-install
-
-# Or print the setup script without modifying any files:
-vmn --completion
-
-# Remove it again:
-vmn --completion-uninstall
-```
-
-All three accept an explicit shell (`bash`, `zsh`, `fish`, `tcsh`) when
-auto-detection guesses wrong. Install and uninstall are idempotent.
-
-After installation, restart your shell or `source` the rc file. Then:
-
-- `vmn <TAB>` — lists all commands
-- `vmn stamp <TAB>` — suggests your tracked app names
-- `vmn stamp -r <TAB>` — shows `major minor patch hotfix`
-- `vmn snapshot <TAB>` — shows actions (`create`, `list`, `show`, ...)
-
----
-## ⚡ Why vmn?
-
-vmn does everything semantic-release and release-please do -- plus **9 things nothing else does**.
-
-| Capability | vmn | semantic-release | release-please | changesets |
-|:-----------|:---:|:----------------:|:--------------:|:----------:|
-| Language-agnostic | :white_check_mark: | JS-centric | JS-centric | JS-only |
-| Git-tag source of truth | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Conventional commits + changelog | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: / :white_check_mark: |
-| GitHub Release creation | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
-| Auto-embed version (npm, Cargo, pyproject, any file) | :white_check_mark: | per-plugin | :x: | JS only |
-| **Multi-repo dependency tracking** | :white_check_mark: | :x: | :x: | :x: |
-| **State recovery (`vmn goto`)** | :white_check_mark: | :x: | :x: | :x: |
-| **Microservice / root app topology** | :white_check_mark: | :x: | :x: | monorepo only |
-| **4-segment hotfix versioning** | :white_check_mark: | :x: | :x: | :x: |
-| **Zero-config start (auto-init)** | :white_check_mark: | :x: | :x: | :x: |
-| **Offline / air-gapped** | :white_check_mark: | :x: | :x: | :x: \* |
-| **Zero lock-in (pure git tags)** | :white_check_mark: | :x: | :x: | :x: |
-| **Dev snapshots (uncommitted state capture)** | :white_check_mark: | :x: | :x: | :x: |
-| **ML experiment tracking** | :white_check_mark: | :x: | :x: | :x: |
-
-> **Bold rows = only vmn.**
->
-> \* changesets works offline for authoring, but requires GitHub/npm for publishing.
+</details>
 
 <details>
-<summary>Detailed comparisons & migration guides</summary>
+<summary><strong>Shell completion (bash / zsh / fish / tcsh)</strong></summary>
 
-See [Already using another tool?](#already-using-another-tool) for step-by-step migration paths from semantic-release, release-please, setuptools-scm, standard-version, and bump2version.
+```sh
+vmn --completion-install      # auto-detects your shell, idempotent
+vmn --completion              # or just print the script, change nothing
+vmn --completion-uninstall    # remove it again
+```
+
+All three take an optional explicit shell if auto-detection guesses wrong. After installing, restart your shell. Then `vmn <TAB>` lists commands, `vmn stamp <TAB>` suggests **your actual app names**, and `vmn stamp -r <TAB>` offers the release modes.
 
 </details>
 
 ---
-## 🧪 Why vmn for ML experiments?
 
-Most experiment trackers require a server, a cloud account, or both. vmn tracks experiments the same way it tracks versions -- in git and local files.
+## 💡 The idea
 
-```sh
-vmn exp run my_model --note "baseline ResNet run" -- python train.py
-# => 0.2.0-dev.c3d4e5f.a1b2c3d
+Most tools treat a version as a **name for a moment**. vmn treats it as a **handle on a state** — and once you have that, the same primitive answers four different problems.
 
-vmn exp list my_model --sort loss --top 3
-# [1] 0.2.0-dev.c3d4e5f.a1b2c3d  (5m ago)  loss=0.12  accuracy=0.94 - baseline ResNet run
-# [2] 0.1.0-dev.f7a2b1c.d3e4f5g  (2d ago)  loss=0.34  accuracy=0.91 - with dropout
-# [3] 0.1.0-dev.a1b2c3d.e4f5g6h  (3d ago)  loss=0.45  accuracy=0.85 - baseline CNN
+| Granularity | Command | What gets captured |
+|:--|:--|:--|
+| **Released** state | `vmn stamp` → `vmn goto` | committed code + the exact commit of every dependency repo |
+| **Working** state | `vmn snapshot` | ↑ plus uncommitted changes, unpushed commits, untracked files |
+| **Measured** state | `vmn exp` | ↑ plus metrics, params, artifacts, and a run log |
+| **Parallel** state | `vmn worktrees` | ↑ materialized *beside* your work instead of on top of it |
 
-vmn exp restore my_model --latest         # checkout exact code state (dirty work auto-saved)
+Each row is the row above it plus one thing. They aren't four features bolted together — `vmn exp` is literally built on the snapshot primitive, and snapshots reuse the same version grammar as stamps. That's why `vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h` works: a snapshot **is** a version.
+
+<details>
+<summary><strong>What that buys you, concretely</strong></summary>
+
+**State recovery across repos.** If your product spans five git repos, `vmn stamp` records every dependency's commit hash into the tag. `vmn goto` restores all of them, in parallel, cloning any that are missing. Reproducing a six-month-old bug becomes one command instead of an afternoon of CI archaeology.
+
+**Uncommitted work becomes addressable.** `git stash` is unnamed, local, and single-repo. A WIP commit pollutes history. A snapshot turns your exact messy state — dirty files, local commits, untracked junk, across every dep — into a version string you can name, diff, share, and restore.
+
+**Experiment tracking with no server.** An experiment is a snapshot plus an append-only metrics log. That's the whole design. No tracking server, no database, no cloud account — and unlike every dedicated tracker, the *code state* is captured, not just the numbers.
+
+**Microservice topology.** Version services independently under one root app. Each service keeps its own semver; the root gets a monotonic integer that ticks on every child stamp — one number for "what changed last" across the whole platform.
+
+</details>
+
+<details>
+<summary><strong>Version formats vmn understands</strong></summary>
+
+```
+1.6.0                        # release
+1.6.0-rc.23                  # prerelease
+1.6.7.4                      # hotfix — an optional 4th segment
+1.6.0-rc.23+build01.Info     # build metadata
+1.6.0-dev.a1b2c3d.e4f5g6h    # dev snapshot (commit hash + diff hash)
 ```
 
-### How vmn compares to dedicated experiment trackers
+Standard Semver 2.0, plus two additions. The **hotfix segment** lets you ship an emergency fix without burning a patch number, so your release train stays on schedule. The **dev snapshot** is content-addressed: identical code always produces the identical version string, so re-snapshotting an unchanged tree gives you back the same version instead of a duplicate.
+
+</details>
+
+---
+
+## ⚡ Why vmn
+
+<table>
+<tr><th align="left">Capability</th><th>vmn</th><th>semantic-release</th><th>release-please</th><th>changesets</th></tr>
+<tr><td>Language-agnostic</td><td align="center">✅</td><td align="center">JS-centric</td><td align="center">JS-centric</td><td align="center">JS only</td></tr>
+<tr><td>Git-tag source of truth</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Conventional commits + changelog</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">partial</td></tr>
+<tr><td>GitHub Release creation</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Auto-embed version into project files</td><td align="center">✅</td><td align="center">per-plugin</td><td align="center">❌</td><td align="center">JS only</td></tr>
+<tr><td><b>Multi-repo dependency tracking</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>State recovery (<code>vmn goto</code>)</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>Microservice / root-app topology</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">monorepo</td></tr>
+<tr><td><b>4-segment hotfix versioning</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>Zero-config start (auto-init)</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>Offline / air-gapped</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌ *</td></tr>
+<tr><td><b>Uncommitted-state capture</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td><b>ML experiment tracking</b></td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+</table>
+
+**Bold rows are things only vmn does.**
+<sub>\* changesets authors offline but needs GitHub/npm to publish.</sub>
+
+<details>
+<summary><strong>vs. experiment trackers (MLflow, W&amp;B, DVC, Neptune)</strong></summary>
 
 | Capability | vmn | MLflow | W&B | DVC | Neptune |
 |:-----------|:---:|:------:|:---:|:---:|:-------:|
-| No server required | :white_check_mark: | :x: \* | :x: | :white_check_mark: | :x: |
-| No cloud account | :white_check_mark: | :white_check_mark: (self-hosted) | :x: | :white_check_mark: | :x: |
-| Free & open source | :white_check_mark: | :white_check_mark: | Free tier | :white_check_mark: | Free tier |
-| Metrics tracking | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Live training curves | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: |
-| Experiment comparison | CLI + Web UI | Web UI | Web UI | CLI | Web UI |
-| Web UI | :white_check_mark: (`vmn ui`, one command) | server + DB | cloud | :x: | cloud |
-| **Stamp-tree / version DAG view** | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **Full code state capture** | :white_check_mark: | :x: | :x: | partial \*\* | :x: |
-| **Uncommitted changes captured** | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **One-command state restore** | :white_check_mark: | :x: | :x: | :x: | :x: |
-| **Built-in version management** | :white_check_mark: | :x: | :x: | :x: | :x: |
-| Artifact tracking | :white_check_mark: (SHA256) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Works offline / air-gapped | :white_check_mark: | self-hosted only | :x: | partially | :x: |
-| Install complexity | `pip install vmn` | server + DB | account + pip | pip + git config | account + pip |
-| Storage | local files / S3 (git-anchored) | database | cloud | git/S3 | cloud |
-| Lock-in | zero (git tags + files) | MLflow format | W&B cloud | DVC format | Neptune cloud |
-
-> **Bold rows = only vmn.** Capture your exact working state -- dirty files, local commits, everything -- and restore it with one command.
->
-> \* MLflow Tracking can log to local files without a server, but the comparison UI requires `mlflow server`.
-> \*\* DVC tracks data/model files via git, but does not capture uncommitted code changes or local-only commits.
-
-vmn gives you the CLI-first, local-first workflow **and** a web UI when you want one. `vmn ui` (`pip install vmn[ui]`) serves a dashboard over the files you already have -- experiment leaderboards, live training curves, side-by-side run comparison with a real code diff, an artifact browser, and a **stamp-tree** version-DAG view that no experiment tracker has -- with no server to stand up and no cloud account. See [Web UI](#-web-ui) below.
-
-### When to use what
-
-**Use vmn when:**
-- You want a CLI-first workflow with no context switching
-- You work offline or in air-gapped environments
-- You need version management and experiment tracking in one tool
-- You want zero infrastructure -- no servers, no databases, no accounts
-- You prefer local-first storage with no vendor lock-in
-
-**Use MLflow / W&B when:**
-- You need cloud-hosted dashboards, team collaboration, reports, or sweeps
-- You are already invested in their ecosystem and integrations
-
-Subcommands cover the full experiment lifecycle:
-
-| Command | What it does |
-|:--------|:-------------|
-| `vmn exp run` | Capture code state, run a command, record metrics + exit code + duration |
-| `vmn exp create` | Capture a snapshot with metrics, parameters, and notes (no command) |
-| `vmn exp add` | Log additional metrics, notes, or artifacts to an experiment |
-| `vmn exp list` | List experiments with filtering and sorting by any metric |
-| `vmn exp show` | Display full experiment details including log history |
-| `vmn exp diff` | Metric delta + real source diff between two experiments |
-| `vmn exp compare` | Side-by-side metric table across N experiments |
-| `vmn exp restore` | Restore the exact code state -- dirty work is auto-saved first |
-| `vmn exp export` | Export experiment as a directory or tarball |
-| `vmn exp prune` | Clean up old experiments (keep N or older than duration) |
-
-Most actions default to the latest experiment when you omit `-v`. You can address
-experiments by full version string, a unique prefix, `--latest`, or `@N` (the N-th
-row shown by `vmn exp list`).
-
----
-## 🔑 What only vmn does
-
-### State recovery -- a time machine for your repo
-
-```sh
-vmn goto -v 1.2.3 my_app
-```
-
-Your entire repository -- plus every tracked dependency -- is now at exactly the state when 1.2.3 shipped. No digging through CI logs, no guessing which commit broke prod. Reproduce bugs in seconds, not hours.
-
-### Multi-repo snapshots -- reproducible builds across repositories
-
-If your product spans multiple git repos, vmn records the exact commit hash of every dependency at stamp time. `vmn goto` restores all of them in parallel:
-
-```sh
-vmn stamp -r minor my_app
-# records: my_app @ abc123, lib_core @ def456, lib_utils @ 789fed
-
-# six months later
-vmn goto -v 0.1.0 my_app    # all 3 repos restored to recorded commits
-```
-
-Dependencies are declared in `.vmn/my_app/conf.yml` and auto-cloned if missing -- up to 10 in parallel. One command, full reproducibility.
-
-### Microservice topology -- one umbrella, independent versions
-
-Version multiple services under one root app. Each service has its own semver; the root gets an auto-incrementing integer that ticks on every child stamp:
-
-```sh
-vmn stamp -r patch my_platform/auth      # auth => 0.0.1, root => 1
-vmn stamp -r minor my_platform/billing   # billing => 0.1.0, root => 2
-vmn stamp -r patch my_platform/auth      # auth => 0.0.2, root => 3
-
-vmn show --root my_platform              # => 3
-```
-
-Deploy auth and billing independently while the root version gives you a single monotonic counter for "what changed last." Perfect for Kubernetes manifests and release notes that span services.
-
-### Zero lock-in -- it is just git tags
-
-All version state lives in annotated git tag messages as plain YAML. There are no proprietary databases, no SaaS dashboards, no JSON files you have to keep in sync. Uninstall vmn tomorrow and your tags still make perfect sense:
-
-```sh
-git tag -l 'my_app_*'          # every version, right there
-git tag -n1 my_app_1.2.3       # full stamp metadata in the tag message
-```
-
-Switch to a different tool, read the tags with a shell script, or parse them in CI -- the data is yours.
-
-### Version formats -- full semver plus hotfix
-
-Standard Semver 2.0 plus an optional 4th hotfix segment and dev snapshots for every workflow:
-
-```
-1.6.0                              # stable release
-1.6.0-rc.23                        # prerelease
-1.6.7.4                            # hotfix (4th segment)
-1.6.0-rc.23+build01.Info           # build metadata
-1.6.0-dev.a1b2c3d.e4f5g6h          # dev snapshot
-```
-
-The hotfix segment lets you ship emergency fixes without bumping patch, keeping your release train on schedule while production stays safe.
-
----
-## 🧬 Experiment Management
-
-`vmn experiment` (alias: `vmn exp`) adds local-first experiment tracking to any
-versioned app. No servers, no databases -- experiments are plain files under
-`.vmn/{app}/experiments/` (git-ignored, never committed or pushed), anchored to
-your version tags via the base commit. Every experiment ties back to an exact
-version and commit, so reproducing results is a `vmn exp restore` away.
-
-> **No training script required.** An experiment is just a snapshot of your tree
-> plus a metrics log -- ML training is one use case, but config sweeps,
-> benchmarks, and performance tests work the same way. The examples below use
-> `python train.py`; for the no-command, config-tweaking workflow and a complete
-> reference, see the **[full experiments guide](docs/experiments.md)**.
-
-### Quick workflow
-
-```sh
-# Run a training command; vmn captures code state + records metrics/exit/duration
-vmn exp run my_model --note "baseline CNN" -- python train.py
-
-# ...or capture the current dirty state without running anything
-vmn exp create my_model --note "baseline CNN" --metrics loss=0.45 acc=0.85
-
-# Append metrics or artifacts to the latest experiment
-vmn exp add my_model --metrics loss=0.31 acc=0.92 --attach weights.pt
-
-# Metric delta + real code diff between the last two experiments
-vmn exp diff my_model
-
-# Restore the best run (dirty work auto-saved first)
-vmn exp restore my_model --latest
-```
-
-### Subcommand reference
-
-Every version-taking action defaults to the latest experiment when `-v` is omitted,
-and accepts a full version, a unique prefix, `--latest`, or `@N`.
-
-#### run
-
-Create an experiment, run a command, and record its outcome. The child inherits your
-terminal (output streams live) and these env vars: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`,
-`VMN_METRICS_FILE`. Any `key=value` lines the process appends to `VMN_METRICS_FILE`
-become a metrics entry. `vmn exp run` returns the command's own exit code.
-
-```sh
-vmn exp run my_model --note "dropout 0.3" -- python train.py --lr 0.01
-```
-
-Minimal `train.py` that reports back to vmn:
-
-```python
-import os
-
-metrics_file = os.environ["VMN_METRICS_FILE"]
-
-def log_metric(key, value, step=None):
-    with open(metrics_file, "a") as f:
-        prefix = f"step={step} " if step is not None else ""
-        f.write(f"{prefix}{key}={value}\n")
-
-def train():
-    for epoch in range(10):
-        loss = run_one_epoch()          # your training code
-        log_metric("loss", loss, step=epoch)   # per-step series -> training curve
-    log_metric("accuracy", 0.91)        # final scalar
-    log_metric("loss", loss)
-
-if __name__ == "__main__":
-    train()
-```
-
-Each line is one metrics record: `key=value [key=value …]`, optionally prefixed
-with `step=N` to build a per-step series (vmn tails the file during the run, so
-metrics appear in the experiment log live while training). Numeric values are
-parsed as floats; anything else is kept as a string. Your script's own exit code
-becomes `vmn exp run`'s exit code, so CI can tell a failed training run from a
-successful one.
-
-Works on a clean or dirty tree, and cold-starts a fresh repo (auto-init + baseline stamp).
-
-#### create
-
-Capture the current state as an experiment without running a command. Re-running over
-the identical code state starts a new run (`.r2`, `.r3`, …) instead of overwriting —
-so "same code, different seed" never clobbers a previous run. On a clean tree the diff
-hash is zeroed (`...-dev.<commit>.0000000`).
-
-```sh
-vmn exp create my_model --note "dropout 0.3" --metrics loss=0.45 acc=0.85
-vmn exp create my_model -f params.yml --attach initial_weights.pt
-```
-
-`--metrics` records measurements; `-f params.yml` records inputs (`params:`,
-`hypothesis:`, `tags:`) — they no longer overwrite each other.
-
-#### add
-
-Append metrics, notes, or artifacts to an experiment (default: the latest).
-
-```sh
-vmn exp add my_model --metrics val_loss=0.29 val_acc=0.93
-vmn exp add my_model -v @2 --attach checkpoint_epoch10.pt --note "after LR warmup"
-```
-
-#### list
-
-List experiments, optionally sorted by a metric.
-
-```sh
-vmn exp list my_model                          # all experiments
-vmn exp list my_model --sort loss --top 5      # best 5 by loss
-vmn exp list my_model --last 10                # most recent 10
-```
-
-#### show
-
-Display full details for a single experiment.
-
-```sh
-vmn exp show my_model               # latest
-vmn exp show my_model -v @1         # the [1] row from list
-```
-
-#### diff
-
-Metric/param delta plus a real source diff between two experiments (default: the latest two).
-
-```sh
-vmn exp diff my_model                       # latest two
-vmn exp diff my_model -v @1 -v @3           # specific runs by index
-vmn exp diff my_model --tool delta          # external diff tool
-```
-
-#### compare
-
-Side-by-side metric table across N experiments (no code diff — use `exp diff` for that).
-
-```sh
-vmn exp compare my_model -v 1.1.0-dev.aaa.bbb -v 1.2.0-dev.ccc.ddd
-vmn exp compare my_model --last 3
-```
-
-#### restore
-
-Check out the exact code state and retrieve artifacts. If the working tree is dirty,
-that work is auto-snapshotted first (and the recovery command is printed) — you never
-lose uncommitted changes.
-
-```sh
-vmn exp restore my_model --latest
-vmn exp restore my_model -v @2
-```
-
-#### export
-
-Package an experiment (metadata, metrics, artifacts) into a tarball.
-
-```sh
-vmn exp export my_model                              # latest -> <verstr>.tar.gz
-vmn exp export my_model --latest -o best_run.tar.gz
-```
-
-#### prune
-
-Clean up old experiments by count or age.
-
-```sh
-vmn exp prune my_model --keep 10           # keep the 10 most recent
-vmn exp prune my_model --older-than 30d    # remove experiments older than 30 days
-```
-
-### Structured notes
-
-Pass a YAML file with `-f` to attach structured metadata to any experiment:
-
-```yaml
-# params.yml
-hypothesis: "larger batch size improves convergence"
-params:
-  lr: 0.001
-  batch_size: 64
-  epochs: 50
-tags: [baseline, transformer-v2]
-```
-
-```sh
-vmn exp create my_model -f params.yml --metrics loss=0.38
-```
-
-### Metrics schema
-
-Declare each metric's goal and a primary metric in `.vmn/{app_name}/conf.yml` so
-`list --sort` and the leaderboard know which direction is better. `goal: min` means
-lower is better (best-first ascending); `goal: max` means higher is better:
-
-```yaml
-experiment:
-  metrics:
-    loss:     {goal: min, primary: true}
-    val_loss: {goal: min}
-    acc:      {goal: max}
-```
-
-
-### Storage
-
-Experiments are stored locally by default under `.vmn/`. For team-wide sharing,
-point to an S3-compatible backend:
-
-<details>
-<summary>S3 / MinIO storage flags</summary>
-
-All subcommands accept these flags:
-
-```sh
-vmn exp create my_model --backend s3 --bucket my-experiments \
-    --endpoint-url http://minio:9000 --prefix team/ml
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--backend` | `local` | `local` or `s3` |
-| `--bucket` | -- | S3 bucket name |
-| `--endpoint-url` | -- | Custom endpoint (MinIO, LocalStack, etc.) |
-| `--prefix` | `vmn-experiments` | Key prefix inside the bucket |
-
-</details>
-
----
-## 🖥️ Web UI
-
-A dashboard over the data you already have -- experiments, versions, snapshots -- with no server infrastructure and no cloud account. It reads git tags and `.vmn/` files (or S3) directly; the whole SPA ships inside the wheel.
-
-```sh
-pip install "vmn[ui]"
-cd your-project
-vmn ui               # http://127.0.0.1:8265, opens your browser
-```
-
-What it does:
-
-- **Experiment leaderboard** -- sortable metric columns (goal-aware best-first), `@N` indices matching the CLI, filter by note/metadata.
-- **Run detail** -- metadata, params vs. metrics, **live training curves** (from `step=` series), the full log timeline, and copy-paste reproduce commands.
-- **Compare** -- pick two runs for a metric-delta table plus a **real color-coded code diff**.
-- **Stamp tree** -- the version history as a DAG (nodes colored by release mode, edges from `previous_version`), root-app → services topology, and cross-repo dependency pins. *No experiment tracker has this -- it's unique to vmn's git-tag model.*
-- **Actions** -- run `vmn stamp` / `restore` / `goto` / `release` / `prune` from the browser. Each runs as a real `vmn` subprocess (so it takes the repo lock correctly), streams its log live, and shows the equivalent CLI command. Restores surface the dirty-work safety net.
-
-### Using it
-
-Open the URL and pick a workspace (top-left) -- locally there's just the one repo you started it in. Click into a workspace to see its apps, then click an app for the **experiment leaderboard**: one row per `vmn exp run` / `exp create`, columns are whatever metrics you logged, click a header to sort. The tab bar switches between **experiments**, **snapshots**, **stamp tree**, and **actions** for that app.
-
-Click any leaderboard row for the **run detail** page (metadata, metrics, training curves, full log, reproduce commands). Check two rows to reveal **Compare selected** -- a metric-delta table plus the real code diff between them.
-
-To get training curves, have your script log `step=`-tagged lines to `$VMN_METRICS_FILE` (see the [`train.py` example](#run) above) -- `exp run` tails the file live, so the curve updates in the UI *during* training, not just after.
-
-The **stamp tree** tab renders your version history as a colored graph (release mode = color); click a node for its details. Root apps also show a service-topology table. The **actions** tab has a form to run `vmn stamp` (with a dry-run preview) as a real subprocess, streaming its log back to you; restore/goto actions live on a run's detail page and auto-save any dirty work first.
-
-### Developing the UI
-
-An editable install picks up Python changes immediately; only the SPA needs an explicit rebuild:
-
-```sh
-pip install -e ".[ui]"
-vmn ui --no-browser        # leave running
-
-# edit Python under version_stamp/ui/  -> just refresh the browser
-# edit webui/src/...                   -> rebuild, then refresh (no restart needed)
-cd webui && npm run build
-```
-
-`npm run build` writes straight into `version_stamp/ui/static/`, which the running server reads from disk on every request.
-
-### Remote / team mode
-
-Run it on a shared host and point a browser at it:
-
-```sh
-vmn ui --host 0.0.0.0 --port 8265 \
-       --token "$VMN_UI_TOKEN" \
-       --data-dir /srv/vmn-ui \
-       --repo /srv/checkouts/model-a --repo /srv/checkouts/model-b
-```
-
-- **Workspaces** -- the server hosts many isolated checkouts. Register them at startup with `--repo` (repeatable), or at runtime from the UI/API; several can be clones of the *same* repo (one per branch/user), so a stamp in one never touches another. S3 buckets register as read-only experiment sources -- no local repo required (`vmn ui --s3-bucket my-experiments --s3-prefix ml`).
-- **Auth** -- a shared bearer token (`--token` / `VMN_UI_TOKEN`); put TLS and user management behind a reverse proxy.
-- **`--read-only`** disables all mutation endpoints for cautious deployments.
-- **`--data-dir`** (default `~/.vmn-ui`) holds the workspace registry and a derived SQLite read cache that keeps leaderboards and the stamp tree instant; `--no-index` skips the cache and reads sources directly.
-
-The whole `/api/v1/...` surface is documented at `/api/docs` (OpenAPI/Swagger) for scripting without the UI. See [docs/ui.md](docs/ui.md) for deployment details.
-
----
-## 📸 Snapshots
-
-Snapshots capture your exact working state -- uncommitted changes, local commits, untracked files -- into a deterministic dev version you can restore later. No WIP commits, no stash juggling. The newer `vmn experiment` command builds on this primitive for structured experiment tracking.
-
-### Snapshots vs experiments -- which one?
-
-An experiment *is* a snapshot plus an append-only metrics/notes log. Use a plain snapshot to save or restore code state; use an experiment when you want to track and compare runs.
-
-| | `vmn snapshot` | `vmn exp` |
-|:--|:--|:--|
-| Captures code state (tracked + untracked) | ✅ | ✅ |
-| Metrics / params / notes log | single note | ✅ append-only log |
-| Run a command and record its outcome | ❌ | ✅ (`exp run`) |
-| Compare across runs | diff only | diff + metric deltas + `compare` |
-| Typical use | saving WIP before a risky change, sharing a dev build | tracking and comparing ML/research runs |
-
-### Dev version format
-
-Every snapshot produces a version string derived from the content itself:
-
-```
-{base_version}-dev.{commit_hash}.{diff_hash}
-```
-
-Identical code state always produces the identical version string. If nothing changed, you get the same snapshot version back.
-
-### Quick start
-
-```sh
-vmn snapshot create my_model --note "promising results"
-# => 1.2.0-dev.a1b2c3d.e4f5g6h
-
-vmn snapshot list my_model
-# [1] 1.2.0-dev.a1b2c3d.e4f5g6h  (2h ago) - promising results
-# [2] 1.2.0-dev.x9y8z7w.q1r2s3t  (1d ago)
-
-vmn snapshot show my_model                     # latest by default
-vmn snapshot note my_model --note "confirmed: best run"
-vmn snapshot diff my_model -v 1.2.0-dev.a1b    # second side defaults to the working tree
-vmn snapshot export my_model -o ./experiment_42
-
-# Restore a snapshot (dirty work is auto-saved first); vmn goto also works
-vmn snapshot restore my_model -v 1.2.0-dev.a1b2c3d.e4f5g6h
-vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model
-```
-
-<details>
-<summary>What's stored in a snapshot</summary>
-
-```
-.vmn/{app}/snapshots/{version}/
-  metadata.yml           # version, branch, timestamp, note, dirty states
-  working_tree.patch     # uncommitted changes (git diff HEAD)
-  local_commits.patch    # local commits not yet pushed
-  untracked_files.tar.gz # untracked files
-  deps/{dep_name}/...    # dependency patches (same structure)
-  artifacts/{filename}   # attached files
-```
-
-Everything needed to reconstruct the working tree is stored alongside the metadata. Dependencies get their own patch set so multi-repo states restore correctly with `vmn goto`.
+| No server required | ✅ | ❌ \* | ❌ | ✅ | ❌ |
+| No cloud account | ✅ | ✅ self-hosted | ❌ | ✅ | ❌ |
+| Free & open source | ✅ | ✅ | free tier | ✅ | free tier |
+| Metrics + live curves | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Web UI | ✅ one command | server + DB | cloud | ❌ | cloud |
+| **Full code-state capture** | ✅ | ❌ | ❌ | partial \*\* | ❌ |
+| **Uncommitted changes captured** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **One-command state restore** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Stamp-tree / version DAG view** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Built-in version management** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Works offline / air-gapped | ✅ | self-hosted | ❌ | partial | ❌ |
+| Install | `pip install vmn` | server + DB | account + pip | pip + git config | account + pip |
+| Lock-in | none (git tags + files) | MLflow format | W&B cloud | DVC format | Neptune cloud |
+
+<sub>\* MLflow can log to local files, but the comparison UI needs `mlflow server`. &nbsp; \*\* DVC versions data/model files via git but captures no uncommitted code.</sub>
+
+**Use vmn when** you want a CLI-first, local-first workflow, you work offline or air-gapped, you want versioning and experiments in one tool, or you refuse to run infrastructure to track a training run.
+
+**Use MLflow / W&B when** you need hosted dashboards, team collaboration features, reports, or sweep orchestration.
 
 </details>
 
 <details>
-<summary>All snapshot flags</summary>
+<summary><strong>Is vmn for me?</strong></summary>
 
-Actions: `create` (default), `list`, `show`, `note`, `diff`, `export`, `restore`.
-Version-taking actions default to the latest snapshot and accept a full version, a
-unique prefix, `--latest`, or `@N`.
-
-| Flag | Description |
-|------|-------------|
-| `-v`, `--version` | Target a specific snapshot version (prefix / `@N` / `--latest` all work) |
-| `--latest` | Use the most recent snapshot |
-| `--last N` | Show only the N most recent snapshots (for `list`) |
-| `--note` | Attach or update a text note |
-| `--to` | Second version for `diff` (defaults to `current`, the working tree) |
-| `--tool` | External diff tool (`meld`, `vimdiff`, etc.). Falls back to `git config diff.tool` |
-| `-o`, `--output` | Export destination path |
-| `--meta` | Repeatable `key=value` metadata pairs |
-| `--meta-file` | YAML file with additional metadata |
-| `--filter` | Repeatable `key=value` pairs for filtering `list` output |
-| `--backend` | Storage backend: `local` (default) or `s3` |
-| `--bucket` | S3 bucket name |
-| `--endpoint-url` | Custom S3 endpoint (MinIO, DigitalOcean Spaces, etc.) |
-| `--prefix` | S3 key prefix (default: `vmn-snapshots`) |
-| `--verbose` | Show extended snapshot details |
-
-</details>
-
-<details>
-<summary>Storage backends</summary>
-
-**Local (default)** -- snapshots live under `.vmn/{app}/snapshots/` in the repository. Nothing to configure.
-
-**S3** -- push snapshots to any S3-compatible store:
-
-```sh
-vmn snapshot create my_model --backend s3 --bucket my-snapshots
-vmn snapshot list my_model --backend s3 --bucket my-snapshots
-```
-
-Custom endpoints work for MinIO, DigitalOcean Spaces, and similar services:
-
-```sh
-vmn snapshot create my_model \
-  --backend s3 \
-  --bucket dev-snapshots \
-  --endpoint-url http://localhost:9000 \
-  --prefix team/ml
-```
+| | |
+|:--|:--|
+| **Any language** — Python, Rust, Go, C++, Java, JS, anything in a git repo | **Microservices** — independent versions per service, one root counter |
+| **Multi-repo** — reproducible state recovery across repositories | **Zero config** — no plugins, no pipelines, no ecosystem buy-in |
+| **Offline / air-gapped** — works with no network at all | **Zero lock-in** — versions are plain git tags |
+| **ML / research** — reproducible snapshots with metrics, no tracking server | **CI** — handles shallow clones automatically |
 
 </details>
 
 ---
+
 ## 🔧 Commands
-
-> `init-app` and `stamp` both support `--dry-run` for safe testing.
 
 | Command | What it does | Example |
 |:--------|:-------------|:--------|
-| `vmn stamp` | Create a new version | `vmn stamp -r patch my_app` |
-| `vmn release` | Promote prerelease to final | `vmn release my_app` |
-| `vmn show` | Display version info | `vmn show my_app` |
-| `vmn goto` | Checkout repo at a version | `vmn goto -v 1.2.3 my_app` |
-| `vmn snapshot` | Capture dev state (uncommitted work) | `vmn snapshot create my_app` |
-| `vmn experiment` | Track ML experiments (alias: `exp`) | `vmn exp create my_model --metrics loss=0.34` |
-| `vmn gen` | Generate file from template | `vmn gen -t ver.j2 -o ver.txt my_app` |
-| `vmn add` | Attach build metadata | `vmn add -v 1.0.0 --bm build42 my_app` |
-| `vmn config` | Edit app config (TUI or non-interactive `gen`) | `vmn config my_app` |
-| `vmn init` | Initialize repo/app | `vmn stamp` auto-inits -- rarely needed |
-| `vmn worktrees` | Isolated parallel dev islands | `vmn worktrees create my_app` |
-| `vmn ui` | Serve the web dashboard | `vmn ui` |
-| `vmn skill` | Print/install the AI-agent skill block | `vmn skill --install` |
+| [`stamp`](#stamp) | Create a new version | `vmn stamp -r patch my_app` |
+| [`release`](#release) | Promote a prerelease to final | `vmn release my_app` |
+| [`show`](#show) | Display version info | `vmn show my_app` |
+| [`goto`](#goto) | Restore repo + deps to a version | `vmn goto -v 1.2.3 my_app` |
+| [`snapshot`](#snapshot) | Capture uncommitted working state | `vmn snapshot create my_app` |
+| [`experiment`](#-experiments) | Track runs with metrics (alias `exp`) | `vmn exp run my_model -- python train.py` |
+| [`worktrees`](#️-islands-parallel-worktrees) | Isolated parallel dev islands | `vmn worktrees create my_app` |
+| [`ui`](#️-web-ui) | Serve the web dashboard | `vmn ui` |
+| [`gen`](#gen) | Render a file from a Jinja2 template | `vmn gen -t ver.j2 -o ver.txt my_app` |
+| [`add`](#add) | Attach build metadata to a version | `vmn add -v 1.0.0 --bm build42 my_app` |
+| [`config`](#config) | Edit app config (TUI or scriptable) | `vmn config my_app` |
+| [`skill`](#skill) | Emit AI-agent instructions for vmn | `vmn skill --install` |
+| `init` / `init-app` | Explicit init — rarely needed, `stamp` auto-inits | `vmn init-app -v 1.4.2 my_app` |
 
-**Global flags:** `--debug`, `--version`, `--completion [SHELL]`, `--completion-install [SHELL]`, `--completion-uninstall [SHELL]`
+**Global flags:** `--debug`, `--version`, `--completion[-install|-uninstall] [SHELL]`
 
-### vmn stamp
+### stamp
 
 ```sh
-vmn stamp -r patch my_app                 # => 0.0.1
-vmn stamp -r minor my_app                 # => 0.1.0
-vmn stamp -r patch --pr rc my_app         # => 0.1.1-rc.1 (prerelease)
-vmn stamp my_app                          # => 0.1.2 (with conventional_commits -- no -r needed)
-vmn stamp --dry-run -r patch my_app       # preview without committing
-vmn stamp --pull -r patch my_app          # pull before stamping (retries on conflict)
+vmn stamp -r patch my_app             # => 0.0.1
+vmn stamp -r minor my_app             # => 0.1.0
+vmn stamp -r patch --pr rc my_app     # => 0.1.1-rc.1
+vmn stamp my_app                      # no -r needed with conventional_commits
+vmn stamp --dry-run -r patch my_app   # preview, commit nothing
+vmn stamp --pull -r patch my_app      # pull first, retry on conflict
 ```
 
-Idempotent -- won't re-stamp if the current commit already matches. Auto-initializes repo and app on first run.
+Idempotent — it won't re-stamp a commit that already has a version. Auto-initializes the repo and app on first run.
 
 <details>
-<summary>Stamping without -r, -r vs --orm, and all flags</summary>
+<summary><strong>Conventional commits, changelogs, GitHub Releases</strong></summary>
 
-**Without `-r`:** only works during a prerelease sequence (continues the existing prerelease). Errors on a release commit. Exception: with `conventional_commits` enabled, `-r` is always optional -- the release mode is inferred from commit messages.
-
-**`-r` vs `--orm`:**
-
-| Flag | Behavior |
-|:----:|:---------|
-| `-r patch` | **Strict** -- always advances. `0.0.1` -> `0.0.2`. `0.0.2-rc.3` -> `0.0.3`. |
-| `--orm patch` | **Optional** -- advances only if no prerelease exists at the target version. |
-
-**All stamp flags:**
-
-| Flag | Description |
-|:-----|:------------|
-| `-r`, `--release-mode` | Release mode: `major`, `minor`, `patch`, `hotfix`, `micro` |
-| `--orm`, `--optional-release-mode` | Optional release mode: `major`, `minor`, `patch`, `hotfix` |
-| `--pr`, `--prerelease` | Create a prerelease (e.g., `--pr rc` produces `X.Y.Z-rc.N`) |
-| `--pull` | Pull remote before stamping; retries on conflict |
-| `--dry-run` | Preview the version without committing or tagging |
-| `-e`, `--extra-commit-message` | Append extra text to the stamp commit message |
-| `--ov`, `--override-version` | Force a specific version string |
-| `--orv`, `--override-root-version` | Force a specific root-app version |
-| `--dont-check-vmn-version` | Skip the vmn version compatibility check |
-| `--git-push-user` | Username for push authentication (falls back to `VMN_GIT_PUSH_USER`) |
-| `--git-push-token` | Access token for push authentication (falls back to `VMN_GIT_PUSH_TOKEN`) |
-
-`--git-push-user` / `--git-push-token` work with any git host and are also
-accepted by `vmn release`. Use them when the checkout has no push credentials of
-its own (CI runners, containers): vmn rewrites the remote URL to an
-authenticated HTTPS URL for that single push and leaves your git remote config
-untouched. Both must be supplied together (a lone one is ignored with a
-warning), and `ssh://` / `git@host:` remotes are converted to HTTPS.
-
-**`vmn init-app` flags:**
-
-| Flag | Description |
-|:-----|:------------|
-| `-v`, `--version` | Initial version (default `0.0.0`) |
-| `--dry-run` | Preview without writing |
-| `--orm`, `--default-release-mode` | Set default release mode: `optional` or `strict` |
-</details>
-
-#### Stamp automation (conventional commits, changelog, GitHub releases)
-
-Enable `conventional_commits` and never type `-r` again. Commit prefixes map directly to release modes: `fix:` -> patch, `feat:` -> minor, `BREAKING CHANGE` or `!` after type -> major.
+Turn on `conventional_commits` and stop typing `-r`. Commit prefixes map to release modes: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `!` after the type → major.
 
 ```sh
 git commit -m "feat: add search endpoint"
-vmn stamp my_app    # => 0.2.0 (minor, auto-detected)
+vmn stamp my_app     # => 0.2.0, minor inferred
 ```
 
 ```yaml
 conf:
   conventional_commits: true
-  default_release_mode: optional
+  default_release_mode: optional   # or "strict"
   changelog:
     path: "CHANGELOG.md"
   github_release:
     draft: false
 ```
 
-<details>
-<summary><strong>vmn release</strong></summary>
-
-```sh
-vmn release -v 0.0.1-rc.1 my_app   # explicit version -- tag-only
-vmn release my_app                  # auto-detect from current commit
-vmn release --stamp my_app          # full stamp flow -- new commit + tag + push
-```
-Promotes prerelease to final. Idempotent. `-v` and `--stamp` are mutually
-exclusive. Also accepts `--git-push-user` / `--git-push-token` (see the stamp
-flag table above).
+Changelog generation requires `conventional_commits`. GitHub Releases need the `gh` CLI and `GITHUB_TOKEN`.
 
 </details>
 
 <details>
-<summary><strong>vmn show</strong></summary>
+<summary><strong><code>-r</code> vs <code>--orm</code>, and every stamp flag</strong></summary>
+
+**Without `-r`:** works during an in-progress prerelease sequence, or always if `conventional_commits` is on. Otherwise it errors on a release commit.
+
+| Flag | Behavior |
+|:----:|:---------|
+| `-r patch` | **Strict** — always advances. `0.0.1` → `0.0.2`; `0.0.2-rc.3` → `0.0.3`. |
+| `--orm patch` | **Optional** — advances only if no prerelease already exists at the target. |
+
+| Flag | Description |
+|:-----|:------------|
+| `-r`, `--release-mode` | `major`, `minor`, `patch`, `hotfix`, `micro` |
+| `--orm`, `--optional-release-mode` | `major`, `minor`, `patch`, `hotfix` |
+| `--pr`, `--prerelease` | Create a prerelease (`--pr rc` → `X.Y.Z-rc.N`) |
+| `--pull` | Pull before stamping; retries on conflict |
+| `--dry-run` | Preview without committing or tagging |
+| `-e`, `--extra-commit-message` | Append text to the stamp commit message |
+| `--ov`, `--override-version` | Force a specific version string |
+| `--orv`, `--override-root-version` | Force a specific root-app version |
+| `--dont-check-vmn-version` | Skip the vmn compatibility check |
+| `--git-push-user` / `--git-push-token` | Push credentials (see below) |
+
+**Push credentials.** For checkouts with no credentials of their own (CI runners, containers), `--git-push-user` / `--git-push-token` — or `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN` — make vmn rewrite the remote to an authenticated HTTPS URL *for that single push only*, leaving your git remote config untouched. `ssh://` and `git@host:` remotes are converted to HTTPS. Both values must be supplied together; a lone one is ignored with a warning. `vmn release` accepts them too.
+
+**`vmn init-app` flags:** `-v/--version` (initial version, default `0.0.0`), `--dry-run`, `--orm/--default-release-mode` (`optional` | `strict`).
+
+</details>
+
+### release
+
+```sh
+vmn release my_app                  # auto-detect from the current commit
+vmn release -v 0.0.1-rc.1 my_app    # explicit version — tag only
+vmn release --stamp my_app          # full stamp flow: commit + tag + push
+```
+
+Promotes a prerelease to final. Idempotent. `-v` and `--stamp` are mutually exclusive.
+
+<details>
+<summary><strong>Iterating on release candidates</strong></summary>
+
+```sh
+vmn stamp -r major --pr alpha my_app   # 2.0.0-alpha.1
+vmn stamp --pr alpha my_app            # 2.0.0-alpha.2
+vmn stamp --pr mybeta my_app           # 2.0.0-mybeta.1
+vmn release my_app                     # 2.0.0
+```
+
+</details>
+
+### show
 
 ```sh
 vmn show my_app              # current version
-vmn show --dev my_app        # dev version with commit+diff hash
-vmn show --verbose my_app    # full YAML metadata dump
-vmn show --raw my_app        # without template formatting
+vmn show --verbose my_app    # full YAML metadata
+vmn show --dev my_app        # dev version (commit + diff hash)
 vmn show --type my_app       # release / prerelease / metadata
-vmn show -u my_app           # unique ID (version+commit_hash)
-vmn show --conf my_app       # show app configuration
-vmn show --root my_root_app  # root app version (integer)
-vmn show -v 1.2.3 my_app     # info for a specific version
-vmn show -t '[{major}]' my_app   # render with an ad-hoc template
-vmn show --from-file my_app  # read local state instead of git tags
-vmn show --ignore-dirty my_app   # do not fail on a dirty working tree
+vmn show -u my_app           # unique ID (version + commit hash)
+vmn show --root my_platform  # root-app version (an integer)
 ```
+
+<details>
+<summary><strong>Remaining show flags</strong></summary>
+
+| Flag | Description |
+|:--|:--|
+| `-v`, `--version` | Show info for a specific version |
+| `-t`, `--template` | Render with an ad-hoc template |
+| `--raw` | Skip template formatting |
+| `--conf` | Print the effective app configuration |
+| `--from-file` | Read local state instead of git tags |
+| `--ignore-dirty` | Don't fail on a dirty working tree |
 
 </details>
 
-<details>
-<summary><strong>vmn goto</strong></summary>
+### goto
 
 ```sh
-vmn goto -v 1.2.3 my_app              # repo + deps restored to exact state
-vmn goto my_app                        # latest version on current branch
-vmn goto -v 1.2.3 --deps-only my_app  # only checkout dependencies
-vmn goto -v 5 --root my_root_app      # checkout to root app version
-vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model  # restore dev snapshot
-vmn goto -v 1.2.3 --pull my_app       # fetch tags/branches first if not found locally
+vmn goto -v 1.2.3 my_app                        # repo + all deps
+vmn goto my_app                                 # latest on the current branch
+vmn goto -v 1.2.3 --deps-only my_app            # dependencies only
+vmn goto -v 5 --root my_platform                # by root-app version
+vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model  # restore a dev snapshot
+vmn goto -v 1.2.3 --pull my_app                 # fetch first if not found locally
 ```
-Deps auto-cloned if missing. Dev restore: checkout base, replay commits, apply working tree patch.
+
+Missing dependency repos are cloned automatically, in parallel. Restoring a dev version checks out the base commit, replays local commits, then applies the working-tree patch.
+
+### snapshot
+
+Capture your exact working state — uncommitted changes, unpushed commits, untracked files, across every dependency — as a deterministic version you can restore. No WIP commits, no stash juggling.
+
+```sh
+vmn snapshot create my_app --note "promising results"
+# => 1.2.0-dev.a1b2c3d.e4f5g6h
+
+vmn snapshot list my_app
+vmn snapshot diff my_app -v 1.2.0-dev.a1b   # second side defaults to your working tree
+vmn snapshot restore my_app --latest        # dirty work is auto-saved first
+```
+
+<details>
+<summary><strong>Snapshot vs. experiment — which do I want?</strong></summary>
+
+An experiment *is* a snapshot plus an append-only metrics log. Use a plain snapshot to save or restore code state; use an experiment when you want to track and compare runs.
+
+| | `vmn snapshot` | `vmn exp` |
+|:--|:--|:--|
+| Captures code state (tracked + untracked + deps) | ✅ | ✅ |
+| Metrics / params / notes | one note | ✅ append-only log |
+| Run a command, record its outcome | ❌ | ✅ (`exp run`) |
+| Compare across runs | diff only | diff + metric deltas + `compare` |
+| Typical use | saving WIP before a risky change | tracking and comparing runs |
 
 </details>
 
 <details>
-<summary><strong>vmn gen</strong></summary>
+<summary><strong>What's inside a snapshot</strong></summary>
+
+```
+.vmn/{app}/snapshots/{version}/
+  metadata.yml            # version, branch, timestamp, note, dirty states
+  working_tree.patch      # uncommitted changes (git diff HEAD)
+  local_commits.patch     # commits not yet pushed
+  untracked_files.tar.gz  # untracked files
+  deps/{dep_name}/...     # the same three, per dependency repo
+  artifacts/{filename}    # attached files
+```
+
+Dependency state feeds into the content hash, so two snapshots differing only inside a dep get different version strings.
+
+> **Note:** unlike `vmn goto`, snapshot restore does *not* clone a missing dependency — it warns and skips it. Deps are expected to be on disk already.
+
+</details>
+
+<details>
+<summary><strong>All snapshot flags</strong></summary>
+
+Actions: `create` (default), `list`, `show`, `note`, `diff`, `export`, `restore`. Version-taking actions default to the latest and accept a full version, a unique prefix, `--latest`, or `@N`.
+
+| Flag | Description |
+|------|-------------|
+| `-v`, `--version` | Target a specific snapshot |
+| `--latest` | Use the most recent snapshot |
+| `--last N` | Show only the N most recent (for `list`) |
+| `--note` | Attach or update a note |
+| `--to` | Second version for `diff` (default: `current`, your working tree) |
+| `--tool` | External diff tool; falls back to `git config diff.tool` |
+| `-o`, `--output` | Export destination |
+| `--meta` / `--meta-file` | Extra metadata, repeatable `key=value` or a YAML file |
+| `--filter` | Filter `list` by `key=value`, repeatable |
+| `--verbose` | Full ISO timestamps |
+| `--backend` / `--bucket` / `--endpoint-url` / `--prefix` | `local` (default) or `s3`; S3 works with MinIO, Spaces, etc. |
+
+</details>
+
+### gen
 
 ```sh
 vmn gen -t version.j2 -o version.txt my_app
@@ -894,67 +421,58 @@ vmn gen -t version.j2 -o version.txt -c custom.yml my_app
 
 Template variables: `version`, `base_version`, `name`, `release_mode`, `prerelease`, `previous_version`, `stamped_on_branch`, `release_notes`, `changesets`, `root_name`, `root_version`, `root_services`.
 
-</details>
-
-<details>
-<summary><strong>vmn add</strong></summary>
+### add
 
 ```sh
 vmn add -v 0.0.1 --bm build42 my_app
 vmn add -v 0.0.1 --bm build42 --vmp ./build.yml --vmu https://ci/build/42 my_app
 ```
-Attaches build metadata to an existing version tag (e.g. `0.0.1+build42`).
-Optional `--vmp` records a path to a YAML metadata file and `--vmu` a URL
-associated with that build.
+
+Attaches build metadata to an existing tag (`0.0.1+build42`). `--vmp` records a path to a YAML metadata file; `--vmu` an associated URL.
+
+### config
+
+```sh
+vmn config                       # list all managed apps
+vmn config my_app                # interactive TUI
+vmn config my_app --vim          # open in $EDITOR
+vmn config --branch my_app       # override for the current branch
+vmn config --root my_platform    # root-app config
+vmn config --global              # repo-level .vmn/conf.yml
+```
+
+<details>
+<summary><strong>Non-interactive (<code>config gen</code>) — for CI and scripting</strong></summary>
+
+Creates a config file with no TTY. Never overwrites an existing one.
+
+```sh
+vmn config gen my_app                              # .vmn/my_app/conf.yml
+vmn config gen --branch my_app                     # branch config, seeded from the effective conf
+vmn config gen --branch --root my_platform         # branch config for a root app
+vmn config gen --branch --sync-dep-branches my_app # pin each branch-tracked dep to its current branch
+```
+
+`--sync-dep-branches` is only valid with `config gen --branch`.
 
 </details>
 
-<details>
-<summary><strong>vmn config</strong></summary>
+### skill
+
+vmn can emit its own usage instructions for AI coding agents, so an agent working in your repo knows how to stamp, snapshot, and use islands correctly.
 
 ```sh
-vmn config                  # list all managed apps
-vmn config my_app           # interactive TUI editor
-vmn config my_app --vim     # open in $EDITOR
-vmn config --branch my_app  # branch-specific override for the current branch
-vmn config --root my_root_app   # root app config (root_conf.yml)
-vmn config --global         # repo-level .vmn/conf.yml
+vmn skill --install                     # .claude/skills/vmn/SKILL.md (default)
+vmn skill --install --target cursor     # .cursorrules
+vmn skill --install --target agents     # AGENTS.md
+vmn skill --install --methodology       # + opinionated TDD / worktree rules
+vmn skill                               # just print it
 ```
 
-**Non-interactive (`config gen`)** -- creates a config file without a TTY, for
-CI and scripting. It never overwrites an existing file:
-
-```sh
-vmn config gen my_app                       # create .vmn/my_app/conf.yml
-vmn config gen --branch my_app              # create the canonical branch config,
-                                            # seeded from the effective config
-vmn config gen --branch --root my_root_app  # branch config for a root app
-vmn config gen --branch --sync-dep-branches my_app  # pin each branch-tracked dep
-                                            # to the branch it is checked out on
-```
-
-`--sync-dep-branches` is only valid together with `config gen --branch`.
-
-</details>
+`--install` finds the managed repo root even from a nested directory. The Claude target refuses to clobber an existing skill without `--force`; the Cursor and AGENTS targets rewrite only vmn's marker block and leave your other instructions alone. Full text: **[docs/agent-skill.md](docs/agent-skill.md)**.
 
 <details>
-<summary><strong>Release candidates</strong></summary>
-
-Iterate on prereleases, then promote:
-
-```sh
-vmn stamp -r major --pr alpha my_app    # 2.0.0-alpha.1
-vmn stamp --pr alpha my_app             # 2.0.0-alpha.2
-vmn stamp --pr mybeta my_app            # 2.0.0-mybeta.1
-vmn release my_app                      # 2.0.0
-```
-
-</details>
-
-<details>
-<summary><strong>Python library</strong></summary>
-
-vmn can be called programmatically. `vmn_run` accepts a command-line argument list and returns `(exit_code, context)`:
+<summary><strong>Using vmn as a Python library</strong></summary>
 
 ```python
 from version_stamp.cli.entry import vmn_run
@@ -962,7 +480,7 @@ from version_stamp.cli.entry import vmn_run
 ret, ctx = vmn_run(["show", "my_app"])
 ```
 
-> **Note:** `vmn_run` prints to stdout/stderr. To capture output programmatically, wrap calls with `contextlib.redirect_stdout`/`redirect_stderr`.
+`vmn_run` takes an argument list and returns `(exit_code, context)`. It prints to stdout/stderr, so wrap calls in `contextlib.redirect_stdout` / `redirect_stderr` to capture output.
 
 </details>
 
@@ -973,11 +491,10 @@ Read by vmn:
 
 | Variable | Description |
 |:---------|:------------|
-| `VMN_WORKING_DIR` | Override working directory |
-| `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo) |
+| `VMN_WORKING_DIR` | Override the working directory |
+| `VMN_LOCK_FILE_PATH` | Custom lock file path (default `.vmn/vmn.lock`) |
 | `GITHUB_TOKEN` / `GH_TOKEN` | Required for GitHub Releases |
-| `VMN_GIT_PUSH_USER` | Fallback for `--git-push-user` (`stamp` / `release`) |
-| `VMN_GIT_PUSH_TOKEN` | Fallback for `--git-push-token` (`stamp` / `release`) |
+| `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN` | Fallbacks for the `--git-push-*` flags |
 | `VMN_UI_TOKEN` | Fallback for `vmn ui --token` |
 
 Set *by* vmn for the child process of `vmn exp run`:
@@ -991,74 +508,13 @@ Set *by* vmn for the child process of `vmn exp run`:
 </details>
 
 ---
-## 📦 Version Auto-Embedding
 
-`vmn stamp` can automatically write the stamped version into your project files. Add a `version_backends` section to `.vmn/<app>/conf.yml`:
-
-| Backend | File | What it updates |
-|:--------|:-----|:----------------|
-| `npm` | `package.json` | `version` field |
-| `cargo` | `Cargo.toml` | `version` field |
-| `poetry` | `pyproject.toml` | `[tool.poetry].version` |
-| `pep621` | `pyproject.toml` | `[project].version` |
-
-```yaml
-version_backends:
-  npm:
-    path: "relative/path/to/package.json"
-```
-
-<details><summary>Hatchling / uv dynamic versioning (hatch-vcs)</summary>
-
-Instead of file injection, read the version directly from git tags at build time:
-
-```toml
-[build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "vcs"
-tag-pattern = "my_app_(?P<version>.*)"
-```
-
-No `version_backends` entry needed -- the build tool pulls the version from the tag vmn created.
-</details>
-
-<details><summary>Generic backends (regex and Jinja2)</summary>
-
-**generic_selectors** -- regex find-and-replace in any file:
-
-```yaml
-version_backends:
-  generic_selectors:
-    - paths_section:
-        - input_file_path: in.txt
-          output_file_path: in.txt
-      selectors_section:
-        - regex_selector: '(version: )(\d+\.\d+\.\d+)'
-          regex_sub: \1{{version}}
-```
-
-Use `{{VMN_VERSION_REGEX}}` to match any vmn version string ([playground](https://regex101.com/r/JoEvaN/1)).
-
-**generic_jinja** -- render a Jinja2 template:
-
-```yaml
-version_backends:
-  generic_jinja:
-    - input_file_path: f1.jinja2
-      output_file_path: jinja_out.txt
-      custom_keys_path: custom.yml
-```
-
-Same variables as `vmn gen`.
-</details>
-
----
 ## ⚙️ Configuration
 
-vmn auto-generates `.vmn/<app-name>/conf.yml` when an app is first stamped. Edit it directly or use `vmn config` (see [Commands](#commands)). Full `conf.yml` structure:
+vmn writes `.vmn/<app>/conf.yml` when an app is first stamped. Edit it directly or via [`vmn config`](#config).
+
+<details>
+<summary><strong>Full <code>conf.yml</code> reference</strong></summary>
 
 ```yaml
 conf:
@@ -1067,7 +523,7 @@ conf:
   extra_info: false
   create_snapshots: false
   conventional_commits: true
-  default_release_mode: optional   # "optional" (--orm) or "strict" (-r required). Top-level key, not nested under conventional_commits.
+  default_release_mode: optional   # "optional" (--orm) or "strict" (-r). Top-level, not nested.
   changelog:
     path: "CHANGELOG.md"
   github_release:
@@ -1090,39 +546,257 @@ conf:
     metrics:
       loss: { goal: min, primary: true }
       acc:  { goal: max }
-    storage:            # same shape as snapshot_storage; CLI flags override it
+    storage:            # same shape as snapshot_storage; CLI flags override
       backend: local
 ```
 
-> **Migration note:** `create_verinfo_files` has been renamed to `create_snapshots`. The old key still works but prints a deprecation warning.
+> `create_verinfo_files` was renamed to `create_snapshots`. The old key still works but warns.
 
-**Per-branch configuration.** A branch can override the app config. The
-canonical location is:
+</details>
+
+<details>
+<summary><strong>Auto-embedding the version into project files</strong></summary>
+
+`vmn stamp` can write the version straight into your project files:
+
+| Backend | File | Field |
+|:--------|:-----|:------|
+| `npm` | `package.json` | `version` |
+| `cargo` | `Cargo.toml` | `version` |
+| `poetry` | `pyproject.toml` | `[tool.poetry].version` |
+| `pep621` | `pyproject.toml` | `[project].version` |
+
+```yaml
+version_backends:
+  npm:
+    path: "relative/path/to/package.json"
+```
+
+**Regex find-and-replace in any file:**
+
+```yaml
+version_backends:
+  generic_selectors:
+    - paths_section:
+        - input_file_path: in.txt
+          output_file_path: in.txt
+      selectors_section:
+        - regex_selector: '(version: )(\d+\.\d+\.\d+)'
+          regex_sub: \1{{version}}
+```
+
+`{{VMN_VERSION_REGEX}}` matches any vmn version string ([playground](https://regex101.com/r/JoEvaN/1)).
+
+**Jinja2 rendering:**
+
+```yaml
+version_backends:
+  generic_jinja:
+    - input_file_path: f1.jinja2
+      output_file_path: jinja_out.txt
+      custom_keys_path: custom.yml
+```
+
+Same variables as [`vmn gen`](#gen).
+
+**Or skip file injection entirely** — with hatch-vcs, read the version from the tag at build time:
+
+```toml
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "my_app_(?P<version>.*)"
+```
+
+</details>
+
+<details>
+<summary><strong>Per-branch configuration</strong></summary>
+
+A branch can override the app config. The canonical location:
 
 ```
 .vmn/<app>/branch_conf/<branch>/conf.yml        # slashes in the branch name
 .vmn/<app>/branch_conf/<branch>/root_conf.yml   # become real directories
 ```
 
-Create one with `vmn config --branch <app>` (TUI) or `vmn config gen --branch
-<app>` (non-interactive) -- both seed it from the currently effective config.
-vmn resolves a branch config first and falls back to `conf.yml`.
+Create one with `vmn config --branch <app>` or `vmn config gen --branch <app>` — both seed it from the currently effective config. vmn resolves a branch config first and falls back to `conf.yml`.
 
-Two older layouts are still *read* for backward compatibility -- flat
-`<branch-with-dashes>_conf.yml` and nested `<branch>/conf.yml` next to
-`conf.yml`. Precedence is canonical > flat > legacy, and any legacy file is
-auto-migrated into the canonical layout on the next `vmn stamp`. Stale branch
-configs belonging to other branches are cleaned up on stamp.
+Two older layouts are still *read*: flat `<branch-with-dashes>_conf.yml` and nested `<branch>/conf.yml` beside `conf.yml`. Precedence is canonical > flat > legacy, and legacy files are auto-migrated to canonical on the next `vmn stamp`. Stale branch configs from other branches are cleaned up on stamp.
 
-## 🔄 CI Integration
+</details>
 
-Use the official GitHub Action for stamping in CI pipelines:
+---
+
+## 🧬 Experiments
+
+Local-first experiment tracking for any versioned app. Experiments are plain files under `.vmn/{app}/experiments/` — git-ignored, never committed or pushed. No server, no database, no account.
+
+```sh
+# Capture code state, run the command, record metrics + exit code + duration
+vmn exp run my_model --note "baseline CNN" -- python train.py
+# => 0.1.0-dev.a1b2c3d.e4f5g6h
+
+# Change the model, run again — a distinct experiment, even on the same commit
+vmn exp run my_model --note "with dropout" -- python train.py
+
+# Leaderboard, best loss first
+vmn exp list my_model --sort loss --top 3
+
+# Metric delta AND a real source diff between two runs
+vmn exp diff my_model
+
+# Winner — restore that exact state (dirty work auto-saved first)
+vmn exp restore my_model --latest
+```
+
+**No training script required.** An experiment is a tree snapshot plus a metrics log — ML training is one use case; config sweeps, benchmarks, and load tests work identically.
+
+Your command reports metrics by appending `key=value` lines to `$VMN_METRICS_FILE`. Prefix a line with `step=N` to build a per-step series — vmn tails the file *during* the run, so training curves appear live in the web UI.
+
+<details>
+<summary><strong>Subcommands at a glance</strong></summary>
+
+| Command | What it does |
+|:--------|:-------------|
+| `exp run` | Capture state, run a command, record metrics + exit code + duration |
+| `exp create` | Capture a snapshot with metrics/params/notes, no command |
+| `exp add` | Append metrics, notes, or artifacts to an existing experiment |
+| `exp list` | List experiments, filter and sort by any metric |
+| `exp show` | Full detail for one experiment, including its log |
+| `exp diff` | Metric delta + real source diff between two experiments |
+| `exp compare` | Side-by-side metric table across N experiments |
+| `exp restore` | Restore the exact code state (dirty work auto-saved) |
+| `exp export` | Package an experiment as a directory or tarball |
+| `exp prune` | Clean up by count (`--keep N`) or age (`--older-than 30d`) |
+
+Version-taking actions default to the latest experiment and accept a full version, a unique prefix, `--latest`, or `@N` (the row index from `exp list`).
+
+Re-running over an identical code state starts a new run (`.r2`, `.r3`, …) rather than overwriting — so "same code, different seed" never clobbers a previous run.
+
+</details>
+
+<details>
+<summary><strong>Metrics schema — teaching vmn which direction is better</strong></summary>
+
+```yaml
+experiment:
+  metrics:
+    loss:     {goal: min, primary: true}   # lower is better; default sort key
+    val_loss: {goal: min}
+    acc:      {goal: max}
+```
+
+`goal: min` sorts best-first ascending, `goal: max` descending. `primary: true` sets the default sort for `list` and the web-UI leaderboard.
+
+</details>
+
+📖 **[Full experiments guide →](docs/experiments.md)** — the metrics protocol, structured params, addressing, S3 storage, and the no-script workflow.
+
+---
+
+## 🖥️ Web UI
+
+A dashboard over data you already have. It reads git tags and `.vmn/` files directly; the whole SPA ships inside the wheel.
+
+```sh
+pip install "vmn[ui]"
+vmn ui               # http://127.0.0.1:8265, opens your browser
+```
+
+- **Leaderboard** — sortable, goal-aware metric columns; `@N` indices matching the CLI.
+- **Run detail** — params vs. metrics, **live training curves**, full log, copy-paste reproduce commands.
+- **Compare** — pick two runs for a metric-delta table plus a color-coded code diff.
+- **Stamp tree** — your version history as a DAG, colored by release mode, with root-app topology and cross-repo dependency pins. *No experiment tracker has this — it falls out of vmn's git-tag model.*
+- **Actions** — run `stamp` / `restore` / `goto` / `release` / `prune` from the browser. Each runs as a real `vmn` subprocess, so it takes the repo lock correctly and streams its log live.
+
+<details>
+<summary><strong>Team / remote deployment</strong></summary>
+
+```sh
+vmn ui --host 0.0.0.0 --port 8265 \
+       --token "$VMN_UI_TOKEN" \
+       --data-dir /srv/vmn-ui \
+       --repo /srv/checkouts/model-a --repo /srv/checkouts/model-b
+```
+
+- **Workspaces** — one server hosts many isolated checkouts. Several can be clones of the *same* repo (one per branch or user); a stamp in one never touches another. S3 buckets register as read-only experiment sources with no local repo at all.
+- **Auth** — a shared bearer token; put TLS and user management behind a reverse proxy.
+- **`--read-only`** disables every mutation endpoint.
+- **`--data-dir`** (default `~/.vmn-ui`) holds the workspace registry and a derived SQLite cache that keeps leaderboards instant; `--no-index` reads sources directly.
+
+The whole `/api/v1/...` surface is documented at `/api/docs`.
+
+</details>
+
+📖 **[Full UI guide →](docs/ui.md)**
+
+---
+
+## 🏝️ Islands (parallel worktrees)
+
+An island is a set of git worktrees — your main repo plus every dependency — pinned to a known-good state, sitting *beside* your work instead of on top of it. Built for parallel feature work and for running several AI agents at once without them stepping on each other.
+
+| Problem | Without islands | With `vmn worktrees` |
+|---------|----------------|---------------------|
+| Parallel features | `git worktree` + manually clone each dep at the right hash | one command |
+| Dependency alignment | `vmn goto` mutates your checkout | islands are non-destructive copies |
+| Agent isolation | agents collide in one tree | each agent gets its own island |
+| Reproducibility | "works on my machine" | `island.json` records the exact state |
+
+```sh
+vmn worktrees create my_app                                    # from current HEAD, auto-named
+vmn worktrees my_app                                           # 'create' is the default action
+vmn worktrees create my_app --island-name feat-auth -fv 2.1.0  # from a version
+vmn worktrees create my_app --island-name feat-perf -fb develop # from a branch
+vmn worktrees create my_app --island-name ci-test --no-stamp   # read-only: stamping disabled
+vmn worktrees list
+vmn worktrees remove feat-auth                                 # removes worktrees and branches
+```
+
+<details>
+<summary><strong>Layout, branch model, and the manifest</strong></summary>
+
+```
+../vmn-islands/                # configurable with --base-path
+  feat-auth/
+    my_project/                # main repo — git worktree on a new branch
+    auth_service/              # dep — git worktree, detached HEAD
+    payment_gateway/           # dep — git worktree, detached HEAD
+    island.json                # machine-readable manifest
+```
+
+- **Main repo** gets a new branch `island/{name}/{original-branch}` — ready for commits and PRs.
+- **Dependencies** are detached HEAD at the exact hash recorded when the source version was stamped. Detaching sidesteps git's rule that the same branch can't be checked out in two worktrees.
+- **`--editable-dep <name>`** gives that dep its own `island/{name}/{dep-branch}` for cross-repo work.
+
+`island.json` records name, creation time, app, version, source ref, the main repo's path/branch/remote, and every dep's path/hash/branch/remote — so an agent can orient itself without being told the layout.
+
+**`--shallow-deps`** is a fallback, not a speed knob: if a dependency repo is already on disk, vmn always makes a worktree from it. The flag only applies when a dep is *missing* locally, permitting a `--depth 1` clone from its remote. Without it, a missing dep is a hard error.
+
+</details>
+
+<details>
+<summary><strong>Stamping inside an island</strong></summary>
+
+`vmn stamp` works inside islands by default. The version commit stays on the local island branch and vmn pushes **only the tag**, so it never assigns the island branch to `origin/main` or publishes the branch. `--pull` fetches remote version state without merging another branch into the island.
+
+Use `--no-stamp` for islands meant for CI, testing, review, or agents that shouldn't create versions.
+
+</details>
+
+---
+
+## 🔄 CI
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
     with:
-      fetch-depth: 0          # vmn needs full history
+      fetch-depth: 0          # required — vmn reads tags and history
   - uses: progovoy/vmn-action@latest
     with:
       app-name: my_app
@@ -1132,372 +806,99 @@ steps:
       GITHUB_TOKEN: ${{ github.token }}
 ```
 
-`fetch-depth: 0` is required -- vmn reads git tags and history to compute the next version.
+`fetch-depth: 0` is not optional — vmn computes the next version from git history and tags.
 
 ---
 
-## 🏝️ Worktrees (Islands)
-
-Create isolated development "islands" for parallel feature work -- each island is a set of git worktrees (main repo + all dependencies) pinned to a known-good state. Perfect for vibe-coding workflows where multiple AI agents work on different features simultaneously.
-
-### Why islands?
-
-| Problem | Without islands | With `vmn worktrees` |
-|---------|----------------|---------------------|
-| Parallel features | Manual `git worktree` + clone each dep at correct hash | One command creates everything |
-| Dependency alignment | `vmn goto` mutates your checkout | Islands are non-destructive copies |
-| AI agent isolation | Agents step on each other's changes | Each agent gets its own island |
-| Reproducibility | "Works on my machine" | Island manifest records exact state |
-
-### Quick start
-
-```sh
-# Create an island from current HEAD (auto-names it)
-vmn worktrees create my_app
-vmn worktrees my_app                      # 'create' is the default action
-
-# Create a named island from a specific version
-vmn worktrees create my_app --island-name feature-auth --from-version 2.1.0   # -fv
-
-# Create from a branch
-vmn worktrees create my_app --island-name feature-perf --from-branch develop  # -fb
-
-# Put islands somewhere other than ../vmn-islands
-vmn worktrees create my_app --base-path ~/islands
-
-# Read-only island (vmn stamp is disabled inside it)
-vmn worktrees create my_app --island-name ci-test --no-stamp
-
-# Shallow deps for faster setup
-vmn worktrees create my_app --island-name quick --shallow-deps
-
-# Make a specific dep editable (gets its own branch instead of detached HEAD)
-vmn worktrees create my_app --island-name cross-repo --editable-dep auth_service
-
-# List all islands
-vmn worktrees list
-
-# Remove an island (cleans up worktrees and branches)
-vmn worktrees remove feature-auth
-```
-
-### Directory layout
-
-```
-../vmn-islands/                          # configurable with --base-path
-  feature-auth/
-    my_project/                          # main repo (git worktree, new branch)
-    auth_service/                        # dep (git worktree, detached HEAD)
-    payment_gateway/                     # dep (git worktree, detached HEAD)
-    island.json                          # manifest -- machine-readable island state
-```
-
-### Island manifest
-
-Every island produces a JSON manifest (`island.json`) that AI agents can consume to orient themselves:
-
-```json
-{
-  "name": "feature-auth",
-  "created_at": "2026-07-31T10:30:00Z",
-  "app_name": "my_app",
-  "version": "2.1.0",
-  "base_path": "/home/user/vmn-islands/feature-auth",
-  "source": {"type": "version", "ref": "2.1.0"},
-  "main_repo": {
-    "path": "/home/user/vmn-islands/feature-auth/my_project",
-    "branch": "island/feature-auth/main",
-    "original_branch": "main",
-    "remote": "git@github.com:org/my_project.git"
-  },
-  "deps": {
-    "auth_service": {
-      "path": "/home/user/vmn-islands/feature-auth/auth_service",
-      "hash": "a1b2c3d4e5f6...",
-      "branch": null,
-      "remote": "git@github.com:org/auth_service.git",
-      "editable": false
-    }
-  },
-  "readonly": false,
-  "shallow_deps": false
-}
-```
-
-### Vibe-coding skill (copy into your AI agent's instructions)
-
-```sh
-# Install into the managed project root (default: Claude Agent Skill):
-vmn skill --install
-vmn skill --install --target cursor
-vmn skill --install --target agents
-
-# Include the optional TDD/worktree methodology section:
-vmn skill --install --methodology
-
-# Append vmn skill to your project's AI agent instructions:
-vmn skill >> CLAUDE.md        # Claude Code
-vmn skill >> .cursorrules     # Cursor
-vmn skill >> .windsurfrules   # Windsurf
-vmn skill >> AGENTS.md        # any agent
-```
-
-`--install` resolves the managed repository root even when run from a nested
-directory. The Claude target refuses to replace an existing skill unless
-`--force` is supplied; Cursor and AGENTS targets update only vmn's managed
-marker block and preserve surrounding instructions.
-
-Or expand below to copy manually:
-
-<details>
-<summary><strong>Click to expand the full skill block</strong></summary>
-
-> Everything from **Development gold rules** down is the optional
-> `--methodology` section -- `vmn skill` omits it unless you ask for it.
-
-````markdown
-# vmn — versioning & experiment tracking
-
-## Versioning workflow
-
-This project uses `vmn` for semantic versioning via git tags.
-
-### Stamping a new version
-```sh
-vmn stamp -r <mode> <app_name>   # mode: major | minor | patch | hotfix
-vmn stamp -r patch --pr rc <app_name>  # prerelease
-vmn release <app_name>                  # promote prerelease to final
-```
-
-- `vmn stamp` auto-initializes the repo and app on first run — no separate init step.
-- Use `--dry-run` to preview without committing.
-- Use `--pull` in CI or shared repos to auto-retry on tag conflicts.
-- If `conventional_commits` is enabled in config, `-r` is optional — vmn infers the mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major).
-
-### Checking the current version
-```sh
-vmn show <app_name>              # current version string
-vmn show <app_name> --verbose    # full YAML metadata
-vmn show <app_name> --conf       # show effective config
-```
-
-### Restoring state
-```sh
-vmn goto -v <version> <app_name>  # checkout repo + all deps to exact state
-```
-
-## Experiment tracking
-
-Track code changes, metrics, and artifacts without a server:
-
-```sh
-# Run an experiment (captures code state + metrics + duration automatically)
-vmn exp run <app_name> --note "description" -- <your command>
-
-# Your script writes metrics to $VMN_METRICS_FILE as key=value lines
-# vmn ingests them automatically when the run finishes.
-
-# Manual experiment (no command to run)
-vmn exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
-
-# List experiments sorted by a metric
-vmn exp list <app_name> --sort loss --top 5
-
-# Compare two experiments (shows metric delta + code diff)
-vmn exp diff <app_name>
-
-# Restore the most recent experiment's code state
-vmn exp restore <app_name> --latest
-# For the best run instead: find it with `exp list --sort <metric>`, then
-# vmn exp restore <app_name> -v <version>
-```
-
-## Snapshots (uncommitted work)
-
-Save and restore work-in-progress without committing:
-
-```sh
-vmn snapshot create <app_name> --note "WIP: refactoring auth"
-vmn snapshot list <app_name>
-vmn snapshot restore <app_name> --latest
-vmn snapshot diff <app_name>  # compare snapshot to current state
-```
-
-## Parallel work with islands
-
-For working on multiple features simultaneously (especially useful when multiple AI agents run in parallel):
-
-```sh
-# Create an isolated worktree island
-vmn worktrees create <app_name> --island-name <feature-name>
-
-# Read island.json in the created directory to understand the layout:
-# - main_repo.path: where to make changes
-# - deps: read-only dependency checkouts at pinned hashes
-
-# List active islands
-vmn worktrees list
-
-# Clean up when done
-vmn worktrees remove <feature-name>
-```
-
-Use `--no-stamp` for islands where you don't want version creation (CI, testing, review).
-
-## Key rules
-
-1. **Never edit .vmn/ files directly** — vmn manages them.
-2. **Commit before stamping** — `vmn stamp` requires a clean working tree.
-3. **App names cannot contain `-`** — use `_` or `/` (for root apps).
-4. **Root app format**: `root_app/service_name` — the root version auto-increments.
-5. **Tags are the source of truth** — versions survive vmn uninstall.
-
-## Configuration
-
-Edit config interactively: `vmn config <app_name>`
-Or non-interactively: `vmn config gen <app_name>`
-
-Key config options:
-- `conventional_commits: true` — auto-detect release mode from commits
-- `version_backends` — auto-embed version into package.json, Cargo.toml, pyproject.toml
-- `changelog.path` — auto-generate CHANGELOG.md on stamp
-- `deps` — track external repo dependencies for multi-repo state recovery
-
-## Development gold rules
-
-### Testability by design
-- All I/O objects must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
-- **I/O means anything non-deterministic or side-effectful**: DB connections, HTTP clients, file handles, queues, external services, `time.sleep`, `time.time`, `datetime.now`, random number generators, environment variables, stdin/stdout. If it touches the outside world or the clock — it's an interface.
-- This makes the entire codebase testable with unit tests only — no integration tests, no mocks of concrete classes, no test containers needed for fast feedback. Tests stay fast (milliseconds) because no real I/O ever runs.
-- If code is not in this shape, do small incremental refactors until all I/O is injected from the boundary. Extract the interface, push the concrete implementation to the entry point.
-
-### TDD (strict)
-1. **RED** — Write the test first. It must fail for the right reason.
-2. **Implement** — Write the minimum code to make it pass.
-3. **GREEN** — Tests pass. Do not modify the test to force green.
-- Never write implementation before its test exists.
-- Never change test logic without explicit approval from the developer.
-
-### Boy Scout rule
-- If you see any refactor opportunity or simplification — even if not part of the current task — do it.
-- Leave the code cleaner than you found it, every time.
-
-### Parallel worktree workflow
-- Always use `vmn worktrees create` to spawn clean isolated worktrees for feature work.
-- Local worktrees are fine — no need to push worktree branches to remote.
-- Run all unit tests before merging a worktree back to master or any branch.
-- Run `/simplify` at the end to review each feature for reuse, simplification, and efficiency.
-
-### Worktree hygiene
-- **Before removing**: verify all work is ported to the target branch. Check `git diff` and `git log` between the worktree branch and the merge target — nothing should be lost.
-- **After merging**: immediately remove the worktree (`vmn worktrees remove <name>`). Don't let stale worktrees accumulate.
-- **On session start**: run `vmn worktrees list` and clean up any stale islands left from previous sessions that are no longer relevant.
-- **Never leave orphaned branches**: removing a worktree should also delete its local branch. If it doesn't, clean it manually (`git branch -D island/<name>/*`).
-
-### Communication
-- Always interview the developer before starting a task to make sure requirements are clear.
-- Push back if something seems wrong, over-engineered, or under-specified.
-````
-
-</details>
-
-### Branch model
-
-- **Main repo**: gets a new branch `island/{name}/{original-branch}` -- ready for commits and PRs
-- **Dependencies**: detached HEAD at the exact hash recorded when the source version was stamped -- safe, no branch conflicts
-- **Editable deps** (`--editable-dep`): gets `island/{name}/{dep-branch}` for cross-repo work
-
-This hybrid approach avoids git's limitation of not being able to check out the same branch in two worktrees.
-
-### Stamping inside islands
-
-By default, `vmn stamp` works inside islands after feature changes are
-committed. The version commit stays on the local island branch and vmn pushes
-only the version tag, so it never assigns the island branch to `origin/main`
-or publishes the island branch. `--pull` fetches remote version state without
-merging another branch into the island.
-
-Use `--no-stamp` when creating islands for CI, testing, or AI agents that shouldn't create versions.
-
----
-## 🗺️ Roadmap
-
-vmn is actively developed. [File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
-
-- [ ] **`vmn exp plot`** -- ASCII metric charts in the terminal (`vmn exp plot --metric loss my_model`)
-- [ ] **Monorepo auto-discovery** -- detect apps from Cargo workspaces, pnpm-workspace.yaml, Python namespace packages
-- [ ] **PR version annotation** -- GitHub Action that auto-comments the next version using `vmn stamp --dry-run`
-- [x] **`vmn worktrees`** -- isolated parallel development islands with dependency pinning
-- [ ] **Post-stamp hooks** -- run custom commands after a successful stamp (deploy, notify, update docs)
-- [ ] **Homebrew tap** -- `brew install vmn`
-
-See the [full roadmap and backlog](https://github.com/progovoy/vmn/issues) for more.
-
----
 ## 🔍 Troubleshooting
 
 <details>
-<summary><strong>vmn can't find tags / shows wrong version</strong></summary>
+<summary><strong>vmn can't find tags / reports the wrong version</strong></summary>
 
-Most CI systems default to shallow clones. vmn needs full history and tags:
+Most CI systems shallow-clone by default. vmn needs full history:
 
 ```yaml
-# GitHub Actions
 - uses: actions/checkout@v4
   with:
-    fetch-depth: 0    # full history
+    fetch-depth: 0
 ```
 
 Or manually: `git fetch --tags --unshallow`
+
 </details>
 
 <details>
 <summary><strong>"Another vmn process is running" / lock file error</strong></summary>
 
-vmn uses a per-repo lock file to prevent concurrent stamps. If a previous run crashed:
+vmn takes a per-repo lock so concurrent stamps can't interleave. If a previous run crashed:
 
 ```sh
 rm .vmn/vmn.lock            # default location
-# or if VMN_LOCK_FILE_PATH is set:
+# or, if VMN_LOCK_FILE_PATH is set:
 rm "$VMN_LOCK_FILE_PATH"
 ```
+
 </details>
 
 <details>
-<summary><strong>Tag name collision with existing tags</strong></summary>
+<summary><strong>Tag name collision</strong></summary>
 
-vmn tags follow the format `{app_name}_{version}`. If your repo already has tags matching this pattern, either rename the app or clean up conflicting tags before the first stamp.
+vmn tags are `{app_name}_{version}` (slashes in app names become `-`). If your repo already has tags matching that pattern, rename the app or clean up the conflicting tags before the first stamp.
+
 </details>
 
 <details>
 <summary><strong>"Dirty" state warnings on stamp</strong></summary>
 
-vmn checks for uncommitted changes and unpushed commits. To stamp despite dirty state, commit or stash your changes first. `vmn show --verbose` shows the exact dirty flags (`pending`, `outgoing`, `detached`).
+vmn refuses to stamp over uncommitted changes or unpushed commits. Commit or stash first — or capture the mess with `vmn snapshot create` so you can come back to it. `vmn show --verbose` prints the exact flags (`pending`, `outgoing`, `detached`).
+
+</details>
+
+<details>
+<summary><strong>App name rejected</strong></summary>
+
+App names cannot contain `-` or start with `/`. Use `_`, or `/` to express root-app topology (`my_platform/auth`).
+
 </details>
 
 ---
 
-## 🔀 Already using another tool?
+## 🔀 Coming from another tool?
 
-Step-by-step guides for common migration paths:
+| From | Guide |
+|:--|:--|
+| semantic-release | [migration guide](docs/vmn-vs-semantic-release.md) |
+| release-please | [migration guide](docs/vmn-vs-release-please.md) |
+| setuptools-scm | [migration guide](docs/vmn-vs-setuptools-scm.md) |
+| standard-version *(archived 2023)* | [migration guide](docs/migrating-from-standard-version.md) |
+| bump2version | [migration guide](docs/migrating-from-bump2version.md) |
 
-- [Migrating from semantic-release](docs/vmn-vs-semantic-release.md)
-- [Migrating from release-please](docs/vmn-vs-release-please.md)
-- [Migrating from setuptools-scm](docs/vmn-vs-setuptools-scm.md)
-- [Migrating from standard-version](docs/migrating-from-standard-version.md)
-- [Migrating from bump2version](docs/migrating-from-bump2version.md)
+Your existing tags keep working — vmn uses its own `{app}_{version}` format and won't collide with `v1.2.3`-style tags.
 
 ---
 
-<h3 align="center">Ready to stop fighting your versioning tools?</h3>
+## 🗺️ Roadmap
+
+[File an issue](https://github.com/progovoy/vmn/issues) to vote or suggest.
+
+- [x] **`vmn worktrees`** — isolated parallel development islands
+- [ ] **`vmn exp plot`** — ASCII metric charts in the terminal
+- [ ] **Monorepo auto-discovery** — detect apps from Cargo workspaces, pnpm-workspace.yaml, Python namespace packages
+- [ ] **PR version annotation** — a GitHub Action that comments the next version from `vmn stamp --dry-run`
+- [ ] **Post-stamp hooks** — run commands after a successful stamp
+- [ ] **Homebrew tap** — `brew install vmn`
+
+---
+
+<h3 align="center">Stop archaeology. Start with a version you can go back to.</h3>
 
 ```sh
 pip install vmn
 ```
 
 <p align="center">
-  Star the repo if vmn saved you time.
-  <a href="https://github.com/progovoy/vmn/issues">File an issue</a> if it didn't -- we'll fix it.
+  Star the repo if vmn saved you an afternoon.
+  <a href="https://github.com/progovoy/vmn/issues">File an issue</a> if it cost you one — we'll fix it.
 </p>
 
 <p align="center">
