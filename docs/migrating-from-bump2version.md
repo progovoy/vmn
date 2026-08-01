@@ -1,6 +1,6 @@
 # Migrating from bump2version to vmn
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This guide helps you migrate from [bump2version](https://github.com/c4urself/bump2version) (and its predecessor bumpversion), which are no longer actively maintained.
 
 ## Why Migrate
@@ -27,8 +27,8 @@ vmn is an actively maintained alternative that offers:
 | --- | --- | --- |
 | `.bumpversion.cfg` / `setup.cfg [bumpversion]` | `.vmn/{app}/conf.yml` | Per-app configuration |
 | `current_version = 1.2.3` | Git tag (source of truth) | No version in config files |
-| `[bumpversion:file:setup.py]` | `version_backends: {pep621: [{path: pyproject.toml}]}` | Auto-embed version in files |
-| `[bumpversion:file:package.json]` | `version_backends: {npm: [{path: package.json}]}` | Auto-embed version in files |
+| `[bumpversion:file:setup.py]` | `version_backends: {pep621: {path: pyproject.toml}}` | Auto-embed version in files |
+| `[bumpversion:file:package.json]` | `version_backends: {npm: {path: package.json}}` | Auto-embed version in files |
 | `part = major/minor/patch` | `-r major/minor/patch` | Release mode argument |
 | `--allow-dirty` | Not applicable (vmn manages git state) | vmn commits changes automatically |
 | `--dry-run` | `--dry-run` | Preview without changes |
@@ -49,25 +49,22 @@ pip install vmn
 # or: uvx vmn
 ```
 
-### 2. Initialize vmn in Your Repository
+### 2. Initialize vmn
+
+The first `vmn stamp` auto-initializes both the repository and the app, so you
+can skip straight to stamping. Run the explicit commands only if you want the
+`.vmn/` scaffolding in place before your first version -- for example to seed a
+starting version:
 
 ```bash
-vmn init
-```
-
-This creates the `.vmn/` directory and a root configuration. Run this once per
-repository.
-
-### 3. Initialize Your Application
-
-```bash
-vmn init-app my_app
+vmn init                       # once per repository
+vmn init-app -v 1.4.2 my_app   # once per app; -v sets the starting version
 ```
 
 This registers `my_app` for versioning and creates
 `.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
 
-### 4. Map Your bump2version File Patterns
+### 3. Map Your bump2version File Patterns
 
 bump2version uses `[bumpversion:file:...]` sections with `search` and `replace`
 patterns to update version strings in source files. vmn replaces this with
@@ -97,7 +94,7 @@ replace = __version__ = "{new_version}"
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 For files like `__init__.py` that are not covered by a built-in backend, use
@@ -130,7 +127,7 @@ replace = "version": "{new_version}"
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
 ```
 
 #### Rust Projects (Cargo.toml)
@@ -150,10 +147,10 @@ replace = version = "{new_version}"
 conf:
   version_backends:
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
-### 5. Enable Conventional Commits (Optional)
+### 4. Enable Conventional Commits (Optional)
 
 If you want vmn to automatically determine the release mode from commit
 messages:
@@ -164,7 +161,7 @@ conf:
   conventional_commits: true
 ```
 
-### 6. Stamp Your First vmn Version
+### 5. Stamp Your First vmn Version
 
 ```bash
 # Explicit release mode
@@ -177,7 +174,7 @@ vmn stamp my_app
 vmn creates an annotated git tag, updates configured version backends, commits
 the changes, and pushes.
 
-### 7. Remove bump2version Configuration
+### 6. Remove bump2version Configuration
 
 ```bash
 # Remove config file
@@ -189,7 +186,7 @@ rm -f .bumpversion.cfg
 pip uninstall bump2version
 ```
 
-### 8. Update CI Pipelines
+### 7. Update CI Pipelines
 
 Replace bump2version commands in your CI configuration:
 
@@ -297,6 +294,6 @@ four-segment format covers most real-world workflows.
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [bump2version repository](https://github.com/c4urself/bump2version)

@@ -139,7 +139,13 @@ vmn --completion-install
 
 # Or print the setup script without modifying any files:
 vmn --completion
+
+# Remove it again:
+vmn --completion-uninstall
 ```
+
+All three accept an explicit shell (`bash`, `zsh`, `fish`, `tcsh`) when
+auto-detection guesses wrong. Install and uninstall are idempotent.
 
 After installation, restart your shell or `source` the rc file. Then:
 
@@ -604,12 +610,14 @@ Run it on a shared host and point a browser at it:
 ```sh
 vmn ui --host 0.0.0.0 --port 8265 \
        --token "$VMN_UI_TOKEN" \
-       --data-dir /srv/vmn-ui
+       --data-dir /srv/vmn-ui \
+       --repo /srv/checkouts/model-a --repo /srv/checkouts/model-b
 ```
 
-- **Workspaces** -- the server hosts many isolated checkouts. Add them by cloning a remote or attaching a path; several can be clones of the *same* repo (one per branch/user), so a stamp in one never touches another. S3 buckets register as read-only experiment sources -- no local repo required (`vmn ui --s3-bucket my-experiments`).
+- **Workspaces** -- the server hosts many isolated checkouts. Register them at startup with `--repo` (repeatable), or at runtime from the UI/API; several can be clones of the *same* repo (one per branch/user), so a stamp in one never touches another. S3 buckets register as read-only experiment sources -- no local repo required (`vmn ui --s3-bucket my-experiments --s3-prefix ml`).
 - **Auth** -- a shared bearer token (`--token` / `VMN_UI_TOKEN`); put TLS and user management behind a reverse proxy.
 - **`--read-only`** disables all mutation endpoints for cautious deployments.
+- **`--data-dir`** (default `~/.vmn-ui`) holds the workspace registry and a derived SQLite read cache that keeps leaderboards and the stamp tree instant; `--no-index` skips the cache and reads sources directly.
 
 The whole `/api/v1/...` surface is documented at `/api/docs` (OpenAPI/Swagger) for scripting without the UI. See [docs/ui.md](docs/ui.md) for deployment details.
 
@@ -743,11 +751,13 @@ vmn snapshot create my_model \
 | `vmn experiment` | Track ML experiments (alias: `exp`) | `vmn exp create my_model --metrics loss=0.34` |
 | `vmn gen` | Generate file from template | `vmn gen -t ver.j2 -o ver.txt my_app` |
 | `vmn add` | Attach build metadata | `vmn add -v 1.0.0 --bm build42 my_app` |
-| `vmn config` | Edit app config (TUI) | `vmn config my_app` |
+| `vmn config` | Edit app config (TUI or non-interactive `gen`) | `vmn config my_app` |
 | `vmn init` | Initialize repo/app | `vmn stamp` auto-inits -- rarely needed |
 | `vmn worktrees` | Isolated parallel dev islands | `vmn worktrees create my_app` |
+| `vmn ui` | Serve the web dashboard | `vmn ui` |
+| `vmn skill` | Print/install the AI-agent skill block | `vmn skill --install` |
 
-**Global flags:** `--debug`, `--completion [SHELL]`, `--completion-install [SHELL]`
+**Global flags:** `--debug`, `--version`, `--completion [SHELL]`, `--completion-install [SHELL]`, `--completion-uninstall [SHELL]`
 
 ### vmn stamp
 
@@ -787,6 +797,15 @@ Idempotent -- won't re-stamp if the current commit already matches. Auto-initial
 | `--ov`, `--override-version` | Force a specific version string |
 | `--orv`, `--override-root-version` | Force a specific root-app version |
 | `--dont-check-vmn-version` | Skip the vmn version compatibility check |
+| `--git-push-user` | Username for push authentication (falls back to `VMN_GIT_PUSH_USER`) |
+| `--git-push-token` | Access token for push authentication (falls back to `VMN_GIT_PUSH_TOKEN`) |
+
+`--git-push-user` / `--git-push-token` work with any git host and are also
+accepted by `vmn release`. Use them when the checkout has no push credentials of
+its own (CI runners, containers): vmn rewrites the remote URL to an
+authenticated HTTPS URL for that single push and leaves your git remote config
+untouched. Both must be supplied together (a lone one is ignored with a
+warning), and `ssh://` / `git@host:` remotes are converted to HTTPS.
 
 **`vmn init-app` flags:**
 
@@ -824,7 +843,9 @@ vmn release -v 0.0.1-rc.1 my_app   # explicit version -- tag-only
 vmn release my_app                  # auto-detect from current commit
 vmn release --stamp my_app          # full stamp flow -- new commit + tag + push
 ```
-Promotes prerelease to final. Idempotent. `-v` and `--stamp` are mutually exclusive.
+Promotes prerelease to final. Idempotent. `-v` and `--stamp` are mutually
+exclusive. Also accepts `--git-push-user` / `--git-push-token` (see the stamp
+flag table above).
 
 </details>
 
@@ -840,6 +861,10 @@ vmn show --type my_app       # release / prerelease / metadata
 vmn show -u my_app           # unique ID (version+commit_hash)
 vmn show --conf my_app       # show app configuration
 vmn show --root my_root_app  # root app version (integer)
+vmn show -v 1.2.3 my_app     # info for a specific version
+vmn show -t '[{major}]' my_app   # render with an ad-hoc template
+vmn show --from-file my_app  # read local state instead of git tags
+vmn show --ignore-dirty my_app   # do not fail on a dirty working tree
 ```
 
 </details>
@@ -853,6 +878,7 @@ vmn goto my_app                        # latest version on current branch
 vmn goto -v 1.2.3 --deps-only my_app  # only checkout dependencies
 vmn goto -v 5 --root my_root_app      # checkout to root app version
 vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_model  # restore dev snapshot
+vmn goto -v 1.2.3 --pull my_app       # fetch tags/branches first if not found locally
 ```
 Deps auto-cloned if missing. Dev restore: checkout base, replay commits, apply working tree patch.
 
@@ -875,8 +901,11 @@ Template variables: `version`, `base_version`, `name`, `release_mode`, `prerelea
 
 ```sh
 vmn add -v 0.0.1 --bm build42 my_app
+vmn add -v 0.0.1 --bm build42 --vmp ./build.yml --vmu https://ci/build/42 my_app
 ```
-Attaches build metadata to an existing version tag (e.g. `0.0.1+build42`). Optional `--vmp` for metadata file path.
+Attaches build metadata to an existing version tag (e.g. `0.0.1+build42`).
+Optional `--vmp` records a path to a YAML metadata file and `--vmu` a URL
+associated with that build.
 
 </details>
 
@@ -887,9 +916,24 @@ Attaches build metadata to an existing version tag (e.g. `0.0.1+build42`). Optio
 vmn config                  # list all managed apps
 vmn config my_app           # interactive TUI editor
 vmn config my_app --vim     # open in $EDITOR
-vmn config --branch my_app  # branch-specific override
+vmn config --branch my_app  # branch-specific override for the current branch
+vmn config --root my_root_app   # root app config (root_conf.yml)
 vmn config --global         # repo-level .vmn/conf.yml
 ```
+
+**Non-interactive (`config gen`)** -- creates a config file without a TTY, for
+CI and scripting. It never overwrites an existing file:
+
+```sh
+vmn config gen my_app                       # create .vmn/my_app/conf.yml
+vmn config gen --branch my_app              # create the canonical branch config,
+                                            # seeded from the effective config
+vmn config gen --branch --root my_root_app  # branch config for a root app
+vmn config gen --branch --sync-dep-branches my_app  # pin each branch-tracked dep
+                                            # to the branch it is checked out on
+```
+
+`--sync-dep-branches` is only valid together with `config gen --branch`.
 
 </details>
 
@@ -925,11 +969,24 @@ ret, ctx = vmn_run(["show", "my_app"])
 <details>
 <summary><strong>Environment variables</strong></summary>
 
+Read by vmn:
+
 | Variable | Description |
 |:---------|:------------|
 | `VMN_WORKING_DIR` | Override working directory |
 | `VMN_LOCK_FILE_PATH` | Custom lock file path (default: per-repo) |
 | `GITHUB_TOKEN` / `GH_TOKEN` | Required for GitHub Releases |
+| `VMN_GIT_PUSH_USER` | Fallback for `--git-push-user` (`stamp` / `release`) |
+| `VMN_GIT_PUSH_TOKEN` | Fallback for `--git-push-token` (`stamp` / `release`) |
+| `VMN_UI_TOKEN` | Fallback for `vmn ui --token` |
+
+Set *by* vmn for the child process of `vmn exp run`:
+
+| Variable | Description |
+|:---------|:------------|
+| `VMN_EXPERIMENT_ID` | The verstr of the running experiment |
+| `VMN_APP_NAME` | The app name |
+| `VMN_METRICS_FILE` | Path your command appends `key=value` metrics to |
 
 </details>
 
@@ -943,7 +1000,7 @@ ret, ctx = vmn_run(["show", "my_app"])
 | `npm` | `package.json` | `version` field |
 | `cargo` | `Cargo.toml` | `version` field |
 | `poetry` | `pyproject.toml` | `[tool.poetry].version` |
-| `pep_621` | `pyproject.toml` | `[project].version` |
+| `pep621` | `pyproject.toml` | `[project].version` |
 
 ```yaml
 version_backends:
@@ -1033,11 +1090,29 @@ conf:
     metrics:
       loss: { goal: min, primary: true }
       acc:  { goal: max }
+    storage:            # same shape as snapshot_storage; CLI flags override it
+      backend: local
 ```
 
 > **Migration note:** `create_verinfo_files` has been renamed to `create_snapshots`. The old key still works but prints a deprecation warning.
 
-**Per-branch configuration.** Place `{branch}_conf.yml` next to `conf.yml` in `.vmn/<app>/`. vmn checks for a branch-specific config first and falls back to `conf.yml`. Stale branch configs from other branches are auto-cleaned on stamp.
+**Per-branch configuration.** A branch can override the app config. The
+canonical location is:
+
+```
+.vmn/<app>/branch_conf/<branch>/conf.yml        # slashes in the branch name
+.vmn/<app>/branch_conf/<branch>/root_conf.yml   # become real directories
+```
+
+Create one with `vmn config --branch <app>` (TUI) or `vmn config gen --branch
+<app>` (non-interactive) -- both seed it from the currently effective config.
+vmn resolves a branch config first and falls back to `conf.yml`.
+
+Two older layouts are still *read* for backward compatibility -- flat
+`<branch-with-dashes>_conf.yml` and nested `<branch>/conf.yml` next to
+`conf.yml`. Precedence is canonical > flat > legacy, and any legacy file is
+auto-migrated into the canonical layout on the next `vmn stamp`. Stale branch
+configs belonging to other branches are cleaned up on stamp.
 
 ## 🔄 CI Integration
 
@@ -1079,12 +1154,16 @@ Create isolated development "islands" for parallel feature work -- each island i
 ```sh
 # Create an island from current HEAD (auto-names it)
 vmn worktrees create my_app
+vmn worktrees my_app                      # 'create' is the default action
 
 # Create a named island from a specific version
-vmn worktrees create my_app --island-name feature-auth --from-version 2.1.0
+vmn worktrees create my_app --island-name feature-auth --from-version 2.1.0   # -fv
 
 # Create from a branch
-vmn worktrees create my_app --island-name feature-perf --from-branch develop
+vmn worktrees create my_app --island-name feature-perf --from-branch develop  # -fb
+
+# Put islands somewhere other than ../vmn-islands
+vmn worktrees create my_app --base-path ~/islands
 
 # Read-only island (vmn stamp is disabled inside it)
 vmn worktrees create my_app --island-name ci-test --no-stamp
@@ -1173,6 +1252,9 @@ Or expand below to copy manually:
 <details>
 <summary><strong>Click to expand the full skill block</strong></summary>
 
+> Everything from **Development gold rules** down is the optional
+> `--methodology` section -- `vmn skill` omits it unless you ask for it.
+
 ````markdown
 # vmn — versioning & experiment tracking
 
@@ -1224,8 +1306,10 @@ vmn exp list <app_name> --sort loss --top 5
 # Compare two experiments (shows metric delta + code diff)
 vmn exp diff <app_name>
 
-# Restore the best experiment's code state
+# Restore the most recent experiment's code state
 vmn exp restore <app_name> --latest
+# For the best run instead: find it with `exp list --sort <metric>`, then
+# vmn exp restore <app_name> -v <version>
 ```
 
 ## Snapshots (uncommitted work)
@@ -1373,7 +1457,7 @@ Or manually: `git fetch --tags --unshallow`
 vmn uses a per-repo lock file to prevent concurrent stamps. If a previous run crashed:
 
 ```sh
-rm .vmn/.vmn.lock           # default location
+rm .vmn/vmn.lock            # default location
 # or if VMN_LOCK_FILE_PATH is set:
 rm "$VMN_LOCK_FILE_PATH"
 ```

@@ -1,6 +1,6 @@
 # Migrating from standard-version to vmn
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This guide helps you migrate from [standard-version](https://github.com/conventional-changelog/standard-version), which was deprecated and archived in May 2023.
 
 ## Why Migrate
@@ -28,10 +28,10 @@ vmn is an actively maintained alternative that offers:
 | `.versionrc` / `.versionrc.json` | `.vmn/{app}/conf.yml` | Per-app configuration |
 | `"version"` in `package.json` | Git tag (source of truth) | vmn's npm backend can also update `package.json` |
 | `--release-as major` | `-r major` | Same for `minor`, `patch` |
-| `--release-as 1.2.3` | Not supported (vmn increments, never sets absolute) | Use `vmn stamp -r patch` to increment |
+| `--release-as 1.2.3` | `--ov 1.2.3` (`--override-version`) | Normally vmn increments; `--ov` forces an absolute version |
 | `--prerelease alpha` | `--pr alpha` | Prerelease tagging |
 | `--dry-run` | `--dry-run` | Preview without changes |
-| `--first-release` | `vmn init-app my_app` | Initializes versioning for the app |
+| `--first-release` | Nothing -- the first `vmn stamp` auto-initializes | `vmn init-app -v <version> my_app` if you need a specific starting version |
 | `--tag-prefix v` | Tag format is `{app_name}_{version}` | vmn uses its own tag convention |
 | `CHANGELOG.md` generation | Changelog config in `conf.yml` | vmn supports changelog generation |
 | `--skip.changelog` | Omit changelog config | Changelog is opt-in in vmn |
@@ -49,25 +49,22 @@ pip install vmn
 # or: uvx vmn
 ```
 
-### 2. Initialize vmn in Your Repository
+### 2. Initialize vmn
+
+The first `vmn stamp` auto-initializes both the repository and the app, so you
+can skip straight to stamping. Run the explicit commands only if you want the
+`.vmn/` scaffolding in place before your first version -- for example to seed a
+starting version:
 
 ```bash
-vmn init
-```
-
-This creates the `.vmn/` directory and a root configuration. Run this once per
-repository.
-
-### 3. Initialize Your Application
-
-```bash
-vmn init-app my_app
+vmn init                       # once per repository
+vmn init-app -v 1.4.2 my_app   # once per app; -v sets the starting version
 ```
 
 This registers `my_app` for versioning. vmn will create
 `.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
 
-### 4. Configure Version Backends
+### 3. Configure Version Backends
 
 If standard-version was updating `package.json`, configure vmn's npm backend:
 
@@ -76,7 +73,7 @@ If standard-version was updating `package.json`, configure vmn's npm backend:
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
 ```
 
 For Python projects, use the pep621 backend:
@@ -85,7 +82,7 @@ For Python projects, use the pep621 backend:
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 For Rust projects, use the cargo backend:
@@ -94,13 +91,13 @@ For Rust projects, use the cargo backend:
 conf:
   version_backends:
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
 You can combine multiple backends if your project has several files that need
 version updates.
 
-### 5. Enable Conventional Commits (Optional)
+### 4. Enable Conventional Commits (Optional)
 
 If you relied on standard-version's automatic release mode detection from
 conventional commit messages, enable the same behavior in vmn:
@@ -114,7 +111,7 @@ conf:
 With this enabled, `vmn stamp my_app` (without `-r`) reads commit messages
 since the last stamp and automatically selects major, minor, or patch.
 
-### 6. Stamp Your First vmn Version
+### 5. Stamp Your First vmn Version
 
 ```bash
 # Explicit release mode
@@ -127,7 +124,7 @@ vmn stamp my_app
 vmn creates an annotated git tag, updates configured version backends, commits
 the changes, and pushes.
 
-### 7. Remove standard-version Configuration
+### 6. Remove standard-version Configuration
 
 ```bash
 # Remove config files
@@ -138,7 +135,7 @@ npm uninstall standard-version
 # or remove from devDependencies manually
 ```
 
-### 8. Update CI Pipelines
+### 7. Update CI Pipelines
 
 Replace standard-version commands in your CI configuration:
 
@@ -161,7 +158,7 @@ Replace standard-version commands in your CI configuration:
 vmn handles the git commit, tag, and push internally (unless `--dry-run` is
 used).
 
-### 9. Update npm Scripts (If Applicable)
+### 8. Update npm Scripts (If Applicable)
 
 **Before:**
 
@@ -196,7 +193,7 @@ used).
 | `npx standard-version --release-as major` | `vmn stamp -r major my_app` |
 | `npx standard-version --prerelease alpha` | `vmn stamp -r patch --pr alpha my_app` |
 | `npx standard-version --dry-run` | `vmn stamp -r patch --dry-run my_app` |
-| `npx standard-version --first-release` | `vmn init-app my_app && vmn stamp -r patch my_app` |
+| `npx standard-version --first-release` | `vmn stamp -r patch my_app` (auto-inits) |
 
 ## FAQ
 
@@ -214,20 +211,21 @@ future entries will be appended according to vmn's format.
 
 ### Can I use vmn in a monorepo?
 
-Yes. Initialize a separate app for each package:
+Yes. Use a separate app name per package -- each is auto-initialized on its
+first stamp:
 
 ```bash
-vmn init-app package_a
-vmn init-app package_b
 vmn stamp -r patch package_a
 vmn stamp -r minor package_b
 ```
 
-For microservice topologies, use the root-app feature:
+For microservice topologies, use the root-app feature -- each service keeps its
+own semver while the root gets an auto-incrementing integer:
 
 ```bash
-vmn init-app my_platform/service_a
-vmn init-app my_platform/service_b
+vmn stamp -r patch my_platform/service_a
+vmn stamp -r minor my_platform/service_b
+vmn show --root my_platform
 ```
 
 ### Does vmn support lifecycle hooks?
@@ -243,6 +241,6 @@ Node.js dependency.
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [standard-version deprecation notice](https://github.com/conventional-changelog/standard-version#deprecated)

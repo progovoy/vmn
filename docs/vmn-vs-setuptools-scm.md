@@ -1,6 +1,6 @@
 # vmn vs setuptools-scm
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This page compares vmn with [setuptools-scm](https://github.com/pypa/setuptools-scm) to help Python developers choose the right tool.
 
 ## Overview
@@ -101,13 +101,8 @@ pip install vmn
 # or: pipx install vmn
 # or: uvx vmn
 
-# Initialize vmn in your repository (once per repo)
-vmn init
-
-# Initialize your application (once per app)
-vmn init-app my_app
-
-# Stamp a patch release
+# Stamp a patch release -- this auto-initializes the repo and the app
+# on first run, so `vmn init` / `vmn init-app` are optional.
 vmn stamp -r patch my_app
 
 # Show the current version
@@ -127,7 +122,7 @@ result to setuptools-scm's build-time version injection:
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 After each `vmn stamp`, the `version` field in your `[project]` table is
@@ -158,7 +153,9 @@ vmn stamp my_app
 ## Migrating from setuptools-scm
 
 1. **Install vmn:** `pip install vmn`
-2. **Initialize:** `vmn init && vmn init-app my_app`
+2. **Initialize:** nothing to do -- the first `vmn stamp` auto-initializes
+   the repo and the app (`vmn init` / `vmn init-app` remain available if you
+   want an explicit step, e.g. to seed a starting version with `-v`).
 3. **Stamp your current version:** If you already have git tags in the format
    setuptools-scm uses (e.g., `v1.2.3`), you can stamp a new vmn version to
    establish a baseline: `vmn stamp -r patch my_app`.
@@ -199,11 +196,11 @@ version = "1.2.3"  # maintained by vmn
 conf:
   version_backends:
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
 ```
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [setuptools-scm documentation](https://setuptools-scm.readthedocs.io/)

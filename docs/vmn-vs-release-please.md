@@ -1,6 +1,6 @@
 # vmn vs release-please
 
-> [vmn](https://github.com/final-israel/vmn) is a language-agnostic, git-tag-based versioning CLI.
+> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
 > This page compares vmn with [release-please](https://github.com/googleapis/release-please) to help you choose the right tool.
 
 ## Overview
@@ -99,13 +99,8 @@ pip install vmn
 # or: pipx install vmn
 # or: uvx vmn
 
-# Initialize vmn in your repository (once per repo)
-vmn init
-
-# Initialize your application (once per app)
-vmn init-app my_app
-
-# Stamp a patch release
+# Stamp a patch release -- this auto-initializes the repo and the app
+# on first run, so `vmn init` / `vmn init-app` are optional.
 vmn stamp -r patch my_app
 
 # Show the current version
@@ -141,17 +136,19 @@ Write the version into your project files automatically:
 conf:
   version_backends:
     npm:
-      - path: package.json
+      path: package.json
     pep621:
-      - path: pyproject.toml
+      path: pyproject.toml
     cargo:
-      - path: Cargo.toml
+      path: Cargo.toml
 ```
 
 ## Migrating from release-please
 
 1. **Install vmn:** `pip install vmn`
-2. **Initialize:** `vmn init && vmn init-app my_app`
+2. **Initialize:** nothing to do -- the first `vmn stamp` auto-initializes
+   the repo and the app (`vmn init` / `vmn init-app` remain available if you
+   want an explicit step, e.g. to seed a starting version with `-v`).
 3. **Start at your current version:** vmn will discover existing version tags
    or you can stamp a new version to establish a baseline.
 4. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
@@ -165,6 +162,6 @@ conf:
 
 ## Further Reading
 
-- [vmn GitHub repository](https://github.com/final-israel/vmn)
-- [vmn README](https://github.com/final-israel/vmn#readme)
+- [vmn GitHub repository](https://github.com/progovoy/vmn)
+- [vmn README](https://github.com/progovoy/vmn#readme)
 - [release-please documentation](https://github.com/googleapis/release-please)

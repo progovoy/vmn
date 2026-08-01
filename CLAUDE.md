@@ -127,21 +127,42 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
   - `--pull`: Pull remote first, retry on conflict
   - `--dry-run`: Preview without committing
   - Without `-r`: works during prerelease sequence, or always with `conventional_commits` enabled
-- `vmn release <name>`: Promote prerelease to final. `-v <version>` for explicit, `--stamp` for full stamp flow.
-- `vmn show <name>`: Display version info. `--verbose` for full YAML, `--raw`, `--type`, `-u` for unique ID.
-- `vmn goto -v <version> <name>`: Checkout repo + all deps to exact state at version. `--deps-only`, `--root`.
+  - `--git-push-user` / `--git-push-token`: push credentials for hosts where the checkout has none (fall back to `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN`). Both required together; injected into an ephemeral HTTPS push URL only, git remote config is left untouched.
+- `vmn release <name>`: Promote prerelease to final. `-v <version>` for explicit, `--stamp` for full stamp flow. Also takes the `--git-push-*` flags.
+- `vmn show <name>`: Display version info. `--verbose` for full YAML, `--raw`, `--type`, `-u` for unique ID, `--dev`, `--conf`, `--from-file`, `--ignore-dirty`, `-t <template>`.
+- `vmn goto -v <version> <name>`: Checkout repo + all deps to exact state at version. `--deps-only`, `--root`, `--pull` (fetch first when the version is not local).
 - `vmn gen -t <template> -o <output> <name>`: Generate file from Jinja2 template.
-- `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
+- `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata. `--vmp` for a metadata YAML path, `--vmu` for an associated URL.
+- `vmn snapshot [action] <name>`: Capture/restore uncommitted work as a deterministic dev version. Actions: `create` (default), `list`, `show`, `note`, `diff`, `export`, `restore`. Version-taking actions accept a full verstr, a unique prefix, `--latest`, or `@N`.
+- `vmn experiment [action] <name>` (alias `vmn exp`): Local-first experiment tracking (a snapshot + an append-only metrics/notes log). Actions: `create` (default), `run`, `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`. `vmn exp run <name> -- <cmd>` runs a command and ingests `key=value` lines the child writes to `$VMN_METRICS_FILE`. See docs/experiments.md.
+- `vmn ui`: Serve the web dashboard + REST API (`pip install "vmn[ui]"`). `--host`, `--port` (8265), `--token`, `--data-dir`, `--repo` (repeatable), `--s3-bucket`/`--s3-prefix`/`--endpoint-url`, `--read-only`, `--no-browser`, `--no-index`. See docs/ui.md.
+- `vmn skill`: Print the AI-agent skill block to stdout. `--install` writes it instead (`--target claude` → `.claude/skills/vmn/SKILL.md`, `cursor` → `.cursorrules`, `agents` → `AGENTS.md`); `--methodology` appends the opinionated TDD/worktree rules; `--force` overwrites an existing Claude SKILL.md. Cursor/agents targets only rewrite vmn's marker block and preserve surrounding text.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
-- `vmn worktrees create <name>`: Create isolated development islands (git worktrees for main repo + all deps). `--island-name`, `--from-version`, `--no-stamp`, `--shallow-deps`, `--editable-dep`.
+- `vmn worktrees create <name>`: Create isolated development islands (git worktrees for main repo + all deps). `--island-name`, `-fv`/`--from-version`, `-fb`/`--from-branch`, `--base-path` (default `../vmn-islands`), `--no-stamp`, `--shallow-deps`, `--editable-dep`. `create` is the default action, so `vmn worktrees <name>` works.
 - `vmn worktrees list`: List active islands.
-- `vmn worktrees remove <island>`: Clean up an island.
+- `vmn worktrees remove <island>`: Clean up an island (removes its worktrees and local branches).
 - `vmn --completion [SHELL]`: Print shell completion setup script (bash/zsh/fish/tcsh). Auto-detects shell.
 - `vmn --completion-install [SHELL]`: Append completion to shell rc file. Idempotent.
+- `vmn --completion-uninstall [SHELL]`: Remove completion from the shell rc file. Idempotent.
+
+### Islands (worktrees)
+
+- Main repo gets a new branch `island/{name}/{original-branch}`; deps are detached HEAD at the hash recorded when the source version was stamped. `--editable-dep` gives a dep its own island branch.
+- `island.json` in the island root is the machine-readable manifest (paths, branches, dep hashes, `readonly`, `shallow_deps`).
+- Stamping inside an island keeps the version commit on the local island branch and pushes only the tag — the island branch is never published. `--no-stamp` creates a read-only island where `vmn stamp` is refused.
 
 ## Environment Variables
 
 - `VMN_WORKING_DIR`: Override the working directory for vmn
-- `VMN_LOCK_FILE_PATH`: Custom lock file path (default is per-repo lock to prevent concurrent vmn commands)
+- `VMN_LOCK_FILE_PATH`: Custom lock file path (default `.vmn/vmn.lock`, a per-repo lock preventing concurrent vmn commands)
 - `GITHUB_TOKEN` / `GH_TOKEN`: Required for GitHub Releases feature
+- `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN`: Fallbacks for `stamp`/`release` `--git-push-user`/`--git-push-token`
+- `VMN_UI_TOKEN`: Fallback for `vmn ui --token`
+- Set *by* vmn for the `vmn exp run` child process: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`
+
+## Docs Layout
+
+- `README.md`: user-facing overview; embeds the `vmn skill --methodology` output verbatim — keep it in sync with `version_stamp/cli/skill.py` when that changes.
+- `docs/experiments.md`: full `vmn exp` guide. `docs/ui.md`: `vmn ui` deployment + API.
+- `docs/vmn-vs-*.md`, `docs/migrating-from-*.md`: migration guides from other tools.
