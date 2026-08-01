@@ -17,10 +17,6 @@
 </p>
 
 <p align="center">
-  <sub><b>Versions the repo, not the build system</b> — so it works the same in:</sub>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white" alt="Go">
@@ -29,9 +25,7 @@
   <img src="https://img.shields.io/badge/JS/TS-F7DF1E?logo=javascript&logoColor=black" alt="JS/TS">
 </p>
 
-<p align="center">
-  <sub>vmn itself is a Python CLI — you don't need Python in your project to use it.</sub>
-</p>
+<p align="center"><sub>…and anything else in a git repo. vmn versions the repo, not the build system.</sub></p>
 
 ---
 
@@ -68,6 +62,8 @@ pip install "vmn[ui]"    # + the web dashboard
 ```
 
 **Requirements:** Python 3.8+, Git 2.10+ (2.17+ recommended). Linux, macOS, Windows/WSL. Nothing platform-specific to configure.
+
+vmn is a Python CLI, but your project doesn't have to be Python — it reads and writes git tags, so it's just a binary on your PATH next to any toolchain.
 
 <details>
 <summary><strong>Try it in 30 seconds (copy-paste, no existing repo needed)</strong></summary>
