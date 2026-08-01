@@ -46,7 +46,7 @@ That turns out to be exactly what you need when the code is being written by age
 
 Uninstall vmn tomorrow and your tags still make sense: it's all plain YAML in git annotated tag messages.
 
-**Not a weekend project.** vmn has been in continuous development since 2019, across 1,000+ commits, and it stamps every one of its own releases — the version you `pip install` was cut by the tool you're installing. It runs in daily production use at engineering teams shipping multi-repo products, where a bad release means restoring five repositories to a known state, not one.
+vmn has been in continuous development since 2019 and has versioned every one of its own releases. It is in daily production use by teams shipping products that span multiple repositories, where recovering from a bad release means restoring every repo to a known state, not just one.
 
 ---
 
@@ -174,7 +174,7 @@ Each island drops an `island.json` manifest — paths, branches, dependency hash
 
 **An undo button that covers the mess.** Agents leave uncommitted edits, half-finished refactors, and untracked scratch files — the exact things `git stash` handles badly and a WIP commit handles worse. `vmn snapshot create` turns all of it (across every dependency repo) into a named version you can come back to. And restores auto-snapshot whatever is currently dirty *before* overwriting it, so an agent can't destroy work you hadn't saved yet.
 
-**Judge the runs, not the vibes.** When an agent is iterating on something measurable — a prompt, a heuristic, a model — `vmn exp run` records the metrics *and* the exact tree that produced them. "Run 14 was best" stays answerable a month later, because run 14's code is still addressable.
+**Keep the good run reproducible.** When an agent iterates on something measurable — a prompt, a heuristic, a model — `vmn exp run` records the metrics *and* the exact tree that produced them. Identifying run 14 as the best one is still useful a month later, because run 14's code remains addressable.
 
 > Prefer to read the instructions vmn gives your agent before installing them? They're in **[docs/agent-skill.md](docs/agent-skill.md)**.
 
