@@ -96,6 +96,10 @@ vmn worktrees remove <feature-name>
 
 Use `--no-stamp` for islands where you don't want version creation (CI, testing, review).
 
+Always create islands from the current HEAD — don't switch branches or specify a different base before running `vmn worktrees create`.
+
+Island branches are named `island/<island-name>/<original-branch>`. When stamping inside an island, vmn resolves a branch conf matching this full branch name — create one with `vmn config gen <app> --branch` if you need to pin deps to different branches in the island.
+
 ## Key rules
 
 1. **Never edit .vmn/ files directly** — vmn manages them.
@@ -114,6 +118,29 @@ Key config options:
 - `version_backends` — auto-embed version into package.json, Cargo.toml, pyproject.toml
 - `changelog.path` — auto-generate CHANGELOG.md on stamp
 - `deps` — track external repo dependencies for multi-repo state recovery
+
+### Branch-specific config
+
+Integration branches can override the default config to pin deps to different branches:
+
+```sh
+vmn config gen <app_name> --branch   # create branch conf for current branch
+vmn config <app_name> --branch       # edit branch conf interactively
+```
+
+The canonical path mirrors the branch name (slashes become directories):
+- Branch `build_checker/chore/test_rdkafka` → `.vmn/<app>/branch_conf/build_checker/chore/test_rdkafka/conf.yml`
+
+A branch conf should be identical to master's `conf.yml` except for added `branch:` lines on deps:
+```yaml
+deps:
+  Infra:
+    remote: ssh://git@gitlab.example.com/infra/Infra.git
+    vcs_type: git
+    branch: rdkafka/use_external_lz4_by_default
+```
+
+vmn resolves branch confs automatically at stamp time — no extra flags needed.
 """
 
 
