@@ -74,6 +74,8 @@ Install vmn as an isolated command-line tool:
 ```sh
 pipx install vmn
 # Alternative: uv tool install vmn
+
+vmn --completion-install   # bash/zsh/fish/tcsh; auto-detects shell
 ```
 
 Inside any Git repository:
@@ -193,6 +195,19 @@ vmn stamp -r minor platform/billing    # billing 0.1.0; platform 2
 vmn show --root platform               # 2
 ```
 
+### Branch-specific configuration
+
+Integration branches can override dep pinning without touching the main config:
+
+```sh
+vmn config gen my_app --branch                  # create branch conf for current branch
+vmn config gen my_app --branch --sync-dep-branches  # auto-pin deps to their checked-out branches
+vmn config my_app --branch                      # edit interactively
+```
+
+Branch confs are resolved automatically at stamp time. The canonical layout is
+`.vmn/<app>/branch_conf/<branch>/conf.yml` (branch slashes become directories).
+
 ## Production operation
 
 vmn is designed for release automation where failure must be visible and
@@ -274,17 +289,26 @@ cannot touch other agents' files.
 
 ## AI agent integration
 
-`vmn skill` outputs vmn usage instructions for AI coding agents:
+`vmn ai` gives AI coding agents the context they need to use vmn correctly:
 
 ```sh
-vmn skill --install                  # .claude/skills/vmn/SKILL.md
-vmn skill --install --target cursor  # .cursorrules
-vmn skill --install --target agents  # AGENTS.md
+vmn ai skill --install                  # .claude/skills/vmn/SKILL.md
+vmn ai skill --install --target cursor  # .cursorrules
+vmn ai skill --install --target agents  # AGENTS.md
+
+# Composable development methodology rules
+vmn ai methodology --tdd --minimal-diffs --install
+vmn ai methodology --testability --worktrees --errors --install --target cursor
 ```
 
-The agent learns your versioning workflow from the tool that implements it.
-Re-running updates vmn's section and leaves the rest of your instructions
-untouched.
+`vmn ai skill` outputs CLI usage instructions. `vmn ai methodology` outputs
+opinionated development rules — pick only what applies to your team:
+`--tdd`, `--testability`, `--boyscout`, `--worktrees`, `--communication`,
+`--minimal-diffs`, `--errors`.
+
+The legacy `vmn skill` command remains as an alias for `vmn ai skill`.
+Re-running `--install` updates vmn's section and leaves the rest of your
+instructions untouched.
 
 ## Command map
 
@@ -297,7 +321,7 @@ untouched.
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
 | `vmn exp` | Track experiments built on working-state snapshots |
 | `vmn worktrees` | Create, list, or remove isolated parallel development islands |
-| `vmn skill` | Output or install AI agent instructions for vmn |
+| `vmn ai` | Output or install AI agent skill blocks and methodology rules |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
 | `vmn config` | List or edit global, app, root-app, and branch configuration |
@@ -307,6 +331,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 
 ## Documentation
 
+- [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
 - [Web UI](https://github.com/progovoy/vmn/blob/master/docs/ui.md)
 - [vmn vs semantic-release](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-semantic-release.md)
