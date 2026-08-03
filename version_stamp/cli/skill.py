@@ -24,6 +24,7 @@ vmn release <app_name>                  # promote prerelease to final
 - `vmn stamp` auto-initializes the repo and app on first run — no separate init step.
 - Use `--dry-run` to preview without committing.
 - Use `--pull` in CI or shared repos to auto-retry on tag conflicts.
+- Use `--orm` (optional release mode) to stamp only if no prerelease already exists at the target version — safe for CI pipelines that re-run on the same commit.
 - If `conventional_commits` is enabled in config, `-r` is optional — vmn infers the mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major).
 
 ### Checking the current version
@@ -37,6 +38,21 @@ vmn show <app_name> --conf       # show effective config
 ```sh
 vmn goto -v <version> <app_name>  # checkout repo + all deps to exact state
 ```
+
+### Build metadata
+```sh
+vmn add -v <version> --bm <key>=<value> <app_name>  # attach metadata to a version
+vmn add -v <version> --bm <key>=<value> --vmp <path> --vmu <url> <app_name>
+```
+
+Build metadata (the `+...` suffix) is append-only and does not change the version. Use it to record build hashes, artifact URLs, or CI run IDs after a stamp.
+
+### File generation from templates
+```sh
+vmn gen -t <template.j2> -o <output_file> <app_name>
+```
+
+Renders a Jinja2 template with the current version context. Useful for generating version headers, build manifests, or embedding version info into non-standard file formats.
 
 ## Experiment tracking
 
@@ -144,26 +160,31 @@ vmn resolves branch confs automatically at stamp time — no extra flags needed.
 """
 
 
-METHODOLOGY_TEXT = r"""## Development gold rules
+METHODOLOGY_HEADER = r"""## Development gold rules
 
-### Testability by design
+> Follow these rules. If your CLAUDE.md or project instructions explicitly
+> contradict a rule below, the project instruction wins.
+"""
+
+METHODOLOGY_SECTIONS = {
+    "testability": r"""### Testability by design
 - All I/O objects must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.
 - **I/O means anything non-deterministic or side-effectful**: DB connections, HTTP clients, file handles, queues, external services, `time.sleep`, `time.time`, `datetime.now`, random number generators, environment variables, stdin/stdout. If it touches the outside world or the clock — it's an interface.
 - This makes the entire codebase testable with unit tests only — no integration tests, no mocks of concrete classes, no test containers needed for fast feedback. Tests stay fast (milliseconds) because no real I/O ever runs.
 - If code is not in this shape, do small incremental refactors until all I/O is injected from the boundary. Extract the interface, push the concrete implementation to the entry point.
-
-### TDD (strict)
+""",
+    "tdd": r"""### TDD (strict)
 1. **RED** — Write the test first. It must fail for the right reason.
 2. **Implement** — Write the minimum code to make it pass.
 3. **GREEN** — Tests pass. Do not modify the test to force green.
 - Never write implementation before its test exists.
 - Never change test logic without explicit approval from the developer.
-
-### Boy Scout rule
+""",
+    "boyscout": r"""### Boy Scout rule
 - If you see any refactor opportunity or simplification — even if not part of the current task — do it.
 - Leave the code cleaner than you found it, every time.
-
-### Parallel worktree workflow
+""",
+    "worktrees": r"""### Parallel worktree workflow
 - Always use `vmn worktrees create` to spawn clean isolated worktrees for feature work.
 - Local worktrees are fine — no need to push worktree branches to remote.
 - Run all unit tests before merging a worktree back to master or any branch.
@@ -174,11 +195,14 @@ METHODOLOGY_TEXT = r"""## Development gold rules
 - **After merging**: immediately remove the worktree (`vmn worktrees remove <name>`). Don't let stale worktrees accumulate.
 - **On session start**: run `vmn worktrees list` and clean up any stale islands left from previous sessions that are no longer relevant.
 - **Never leave orphaned branches**: removing a worktree should also delete its local branch. If it doesn't, clean it manually (`git branch -D island/<name>/*`).
-
-### Communication
+""",
+    "communication": r"""### Communication
 - Always interview the developer before starting a task to make sure requirements are clear.
 - Push back if something seems wrong, over-engineered, or under-specified.
-"""
+""",
+}
+
+ALL_METHODOLOGY_KEYS = list(METHODOLOGY_SECTIONS.keys())
 
 
 CLAUDE_DESCRIPTION = (
@@ -198,20 +222,36 @@ BEGIN_MARKER = "<!-- BEGIN vmn skill (managed by `vmn skill --install`) -->"
 END_MARKER = "<!-- END vmn skill -->"
 
 
-def _skill_body(methodology=False):
+def _methodology_body(sections=None):
+    """Build methodology text from selected section keys."""
+    if sections is None:
+        sections = ALL_METHODOLOGY_KEYS
+    parts = [METHODOLOGY_SECTIONS[k].strip() for k in sections if k in METHODOLOGY_SECTIONS]
+    if not parts:
+        return ""
+    return METHODOLOGY_HEADER.strip() + "\n\n" + "\n\n".join(parts)
+
+
+def _skill_body(methodology=False, methodology_sections=None):
     text = VMN_TEXT.strip()
     if methodology:
-        text = f"{text}\n\n{METHODOLOGY_TEXT.strip()}"
+        meth = _methodology_body(methodology_sections)
+        if meth:
+            text = f"{text}\n\n{meth}"
     return text
 
 
-def print_skill(methodology=False):
-    """Print the vibe-coding skill block to stdout.
+def print_skill(methodology=False, methodology_sections=None):
+    """Print the vibe-coding skill block to stdout."""
+    print(_skill_body(methodology, methodology_sections))
+    return 0
 
-    Prints the vmn usage block. When ``methodology`` is set, also appends the
-    opinionated development gold rules (TDD, worktree workflow, communication).
-    """
-    print(_skill_body(methodology))
+
+def print_methodology(sections=None):
+    """Print only the methodology rules to stdout."""
+    body = _methodology_body(sections)
+    if body:
+        print(body)
     return 0
 
 
@@ -240,7 +280,14 @@ def _atomic_write(path, content):
         raise
 
 
-def _install_claude(path, methodology, force):
+def _content_body(methodology, methodology_sections, methodology_only):
+    if methodology_only:
+        return _methodology_body(methodology_sections)
+    return _skill_body(methodology, methodology_sections)
+
+
+def _install_claude(path, methodology, force, methodology_sections=None,
+                    methodology_only=False):
     if os.path.exists(path) and not force:
         VMN_LOGGER.error(
             f"{path} already exists — use --force to overwrite it."
@@ -251,15 +298,17 @@ def _install_claude(path, methodology, force):
         "name: vmn\n"
         f"description: {CLAUDE_DESCRIPTION}\n"
         "---\n\n"
-        f"{_skill_body(methodology)}\n"
+        f"{_content_body(methodology, methodology_sections, methodology_only)}\n"
     )
     _atomic_write(path, content)
     VMN_LOGGER.info(f"Wrote vmn Agent Skill to {path}")
     return 0
 
 
-def _install_block(path, methodology):
-    block = f"{BEGIN_MARKER}\n{_skill_body(methodology)}\n{END_MARKER}"
+def _install_block(path, methodology, methodology_sections=None,
+                   methodology_only=False):
+    body = _content_body(methodology, methodology_sections, methodology_only)
+    block = f"{BEGIN_MARKER}\n{body}\n{END_MARKER}"
     existing = ""
     if os.path.exists(path):
         with open(path) as f:
@@ -297,13 +346,17 @@ def _install_block(path, methodology):
     return 0
 
 
-def install_skill(target, methodology=False, force=False, root=None):
+def install_skill(target, methodology=False, force=False, root=None,
+                  methodology_sections=None, methodology_only=False):
     """Write the skill block to an AI tool's instruction file.
 
     ``claude`` creates a self-contained Agent Skill at
     ``.claude/skills/vmn/SKILL.md`` (refuses to clobber unless ``force``).
     ``cursor``/``agents`` upsert a marker-delimited block into the shared
     instruction file, preserving any surrounding content.
+
+    When ``methodology_only`` is set, only the methodology rules are written
+    (no vmn CLI reference). Used by ``vmn ai methodology --install``.
     """
     try:
         if root is None:
@@ -318,8 +371,10 @@ def install_skill(target, methodology=False, force=False, root=None):
 
         path = os.path.join(root, TARGET_PATHS[target])
         if target == "claude":
-            return _install_claude(path, methodology, force)
-        return _install_block(path, methodology)
+            return _install_claude(path, methodology, force,
+                                   methodology_sections, methodology_only)
+        return _install_block(path, methodology,
+                              methodology_sections, methodology_only)
     except RuntimeError:
         VMN_LOGGER.error(
             "Cannot install vmn skill from an unmanaged directory."

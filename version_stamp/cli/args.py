@@ -334,11 +334,12 @@ def add_arg_init_app(subprasers):
     pinitapp.set_defaults(dry=False)
     pinitapp.add_argument(
         "--orm",
+        "--release-mode-policy",
         "--default-release-mode",
         dest="orm",
         choices=["optional", "strict"],
         default="optional",
-        help="Set the default_release_mode for the app config. "
+        help="Set the release_mode_policy for the app config. "
         "'optional' uses --orm behavior, 'strict' uses -r behavior. "
         "Default: optional",
     )
@@ -717,41 +718,106 @@ def add_arg_worktrees(subprasers):
     )
 
 
-def add_arg_skill(subprasers):
-    pskill = subprasers.add_parser(
-        "skill",
-        help="Print a vibe-coding skill block for AI agents (CLAUDE.md, .cursorrules, etc.)",
-    )
-    pskill.add_argument(
-        "--methodology",
-        dest="methodology",
-        action="store_true",
-        help="Also append opinionated development gold rules (TDD, worktree "
-        "workflow, communication) to the skill block",
-    )
-    pskill.set_defaults(methodology=False)
-    pskill.add_argument(
+def _add_install_args(parser):
+    """Shared --install, --target, --force args for ai subcommands."""
+    parser.add_argument(
         "--install",
         dest="install",
         action="store_true",
-        help="Write the skill to a file instead of printing to stdout",
+        help="Write to a file instead of printing to stdout",
     )
-    pskill.set_defaults(install=False)
-    pskill.add_argument(
+    parser.set_defaults(install=False)
+    parser.add_argument(
         "--target",
         dest="target",
         choices=["claude", "cursor", "agents"],
         default="claude",
-        help="Install target (with --install): claude → .claude/skills/vmn/"
-        "SKILL.md, cursor → .cursorrules, agents → AGENTS.md (default: claude)",
+        help="Install target: claude → .claude/skills/vmn/SKILL.md, "
+        "cursor → .cursorrules, agents → AGENTS.md (default: claude)",
     )
-    pskill.add_argument(
+    parser.add_argument(
         "--force",
         dest="force",
         action="store_true",
         help="Overwrite an existing Claude SKILL.md (claude target only)",
     )
-    pskill.set_defaults(force=False)
+    parser.set_defaults(force=False)
+
+
+def add_arg_ai(subprasers):
+    pai = subprasers.add_parser(
+        "ai",
+        help="AI agent integration (skill block and methodology rules)",
+    )
+    pai.set_defaults(strict_version=False, validate_app_name=False)
+    ai_sub = pai.add_subparsers(dest="ai_action")
+
+    # --- vmn ai skill ---
+    pskill = ai_sub.add_parser(
+        "skill",
+        help="Print vmn CLI usage instructions for AI agents",
+    )
+    pskill.add_argument(
+        "--methodology",
+        dest="methodology",
+        action="store_true",
+        help="Also append all methodology rules",
+    )
+    pskill.set_defaults(methodology=False)
+    _add_install_args(pskill)
+
+    # --- vmn ai methodology ---
+    pmeth = ai_sub.add_parser(
+        "methodology",
+        help="Print opinionated development rules for AI agents",
+    )
+    pmeth.add_argument(
+        "--tdd",
+        dest="meth_tdd",
+        action="store_true",
+        help="Include strict TDD rules",
+    )
+    pmeth.add_argument(
+        "--testability",
+        dest="meth_testability",
+        action="store_true",
+        help="Include testability-by-design (I/O injection) rules",
+    )
+    pmeth.add_argument(
+        "--boyscout",
+        dest="meth_boyscout",
+        action="store_true",
+        help="Include the boy scout rule (leave code cleaner)",
+    )
+    pmeth.add_argument(
+        "--worktrees",
+        dest="meth_worktrees",
+        action="store_true",
+        help="Include parallel worktree workflow and hygiene rules",
+    )
+    pmeth.add_argument(
+        "--communication",
+        dest="meth_communication",
+        action="store_true",
+        help="Include communication rules (interview before starting, push back)",
+    )
+    _add_install_args(pmeth)
+
+
+def add_arg_skill(subprasers):
+    """Legacy alias: `vmn skill` → `vmn ai skill`."""
+    pskill = subprasers.add_parser(
+        "skill",
+        help="(alias for `vmn ai skill`) Print vmn skill block for AI agents",
+    )
+    pskill.add_argument(
+        "--methodology",
+        dest="methodology",
+        action="store_true",
+        help="Also append all methodology rules",
+    )
+    pskill.set_defaults(methodology=False, ai_action="skill")
+    _add_install_args(pskill)
 
 
 def verify_user_input_version(args, key):

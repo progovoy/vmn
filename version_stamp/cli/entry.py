@@ -124,11 +124,31 @@ def vmn_run(command_line=None):
         from version_stamp.cli.completion import uninstall_completion
         return uninstall_completion(args.completion_uninstall), None
 
-    if args.command == "skill":
-        from version_stamp.cli.skill import install_skill, print_skill
+    if args.command in ("skill", "ai"):
+        from version_stamp.cli.skill import (
+            install_skill, print_skill, print_methodology,
+            ALL_METHODOLOGY_KEYS,
+        )
+        ai_action = getattr(args, "ai_action", "skill")
+        if ai_action is None:
+            VMN_LOGGER.error("Usage: vmn ai <skill|methodology>")
+            return 1, None
+
+        if ai_action == "methodology":
+            picked = [k for k in ALL_METHODOLOGY_KEYS
+                      if getattr(args, f"meth_{k}", False)]
+            sections = picked if picked else None
+            if args.install:
+                return install_skill(
+                    args.target, methodology=True, force=args.force,
+                    methodology_sections=sections, methodology_only=True,
+                ), None
+            return print_methodology(sections), None
+
+        methodology = getattr(args, "methodology", False)
         if args.install:
-            return install_skill(args.target, args.methodology, args.force), None
-        return print_skill(args.methodology), None
+            return install_skill(args.target, methodology, args.force), None
+        return print_skill(methodology), None
 
     # `vmn ui` is a long-running server over N workspaces: it must not resolve
     # a single root path, take the repo lock, or build a VMNContainer.

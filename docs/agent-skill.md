@@ -1,30 +1,40 @@
-# The vmn agent skill
+# The vmn AI agent integration
 
-`vmn skill` prints a block of vmn usage instructions written for AI coding
-agents, so an agent working in your repo knows how to stamp, snapshot, and use
-islands correctly instead of guessing.
+`vmn ai` groups all AI-agent-related commands: a factual CLI skill block and
+composable methodology rules.
 
 ```sh
-vmn skill --install                     # .claude/skills/vmn/SKILL.md (default)
-vmn skill --install --target cursor     # .cursorrules
-vmn skill --install --target agents     # AGENTS.md
-vmn skill --install --methodology       # + the gold rules section below
-vmn skill --install --force             # overwrite an existing Claude SKILL.md
-vmn skill                               # print instead of writing
+# Skill — vmn CLI reference for agents
+vmn ai skill --install                  # .claude/skills/vmn/SKILL.md (default)
+vmn ai skill --install --target cursor  # .cursorrules
+vmn ai skill --install --target agents  # AGENTS.md
+vmn ai skill --install --methodology    # + all methodology rules
+vmn ai skill                            # print instead of writing
+
+# Methodology — opinionated development rules (pick what you want)
+vmn ai methodology --install            # all rules
+vmn ai methodology --tdd --install      # just TDD
+vmn ai methodology --tdd --boyscout --install  # combine freely
+vmn ai methodology                      # print instead of writing
 ```
+
+Available methodology flags: `--tdd`, `--testability`, `--boyscout`,
+`--worktrees`, `--communication`. No flags = all rules.
 
 `--install` resolves the managed repository root even when run from a nested
 directory. The `claude` target writes a self-contained Agent Skill and refuses
 to clobber an existing one without `--force`. The `cursor` and `agents` targets
 upsert a marker-delimited block, preserving whatever else is in the file.
 
-> The text below is the output of `vmn skill --methodology`, reproduced for
+`vmn skill` remains as a backwards-compatible alias for `vmn ai skill`.
+
+> The text below is the output of `vmn ai skill --methodology`, reproduced for
 > browsing. **It is generated** — the source of truth is
 > [`version_stamp/cli/skill.py`](../version_stamp/cli/skill.py). Regenerate with
-> `vmn skill --methodology` rather than editing this file by hand.
+> `vmn ai skill --methodology` rather than editing this file by hand.
 >
 > Everything from **Development gold rules** onward is the opt-in
-> `--methodology` section; plain `vmn skill` stops before it.
+> methodology section; plain `vmn ai skill` stops before it.
 
 ---
 
@@ -44,6 +54,7 @@ vmn release <app_name>                  # promote prerelease to final
 - `vmn stamp` auto-initializes the repo and app on first run — no separate init step.
 - Use `--dry-run` to preview without committing.
 - Use `--pull` in CI or shared repos to auto-retry on tag conflicts.
+- Use `--orm` (optional release mode) to stamp only if no prerelease already exists at the target version — safe for CI pipelines that re-run on the same commit.
 - If `conventional_commits` is enabled in config, `-r` is optional — vmn infers the mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major).
 
 ### Checking the current version
@@ -57,6 +68,21 @@ vmn show <app_name> --conf       # show effective config
 ```sh
 vmn goto -v <version> <app_name>  # checkout repo + all deps to exact state
 ```
+
+### Build metadata
+```sh
+vmn add -v <version> --bm <key>=<value> <app_name>  # attach metadata to a version
+vmn add -v <version> --bm <key>=<value> --vmp <path> --vmu <url> <app_name>
+```
+
+Build metadata (the `+...` suffix) is append-only and does not change the version. Use it to record build hashes, artifact URLs, or CI run IDs after a stamp.
+
+### File generation from templates
+```sh
+vmn gen -t <template.j2> -o <output_file> <app_name>
+```
+
+Renders a Jinja2 template with the current version context. Useful for generating version headers, build manifests, or embedding version info into non-standard file formats.
 
 ## Experiment tracking
 
@@ -163,6 +189,9 @@ deps:
 vmn resolves branch confs automatically at stamp time — no extra flags needed.
 
 ## Development gold rules
+
+> Follow these rules. If your CLAUDE.md or project instructions explicitly
+> contradict a rule below, the project instruction wins.
 
 ### Testability by design
 - All I/O objects must be created as interfaces/abstractions in the outermost layer (e.g., `main.py`), then injected into the classes that use them.

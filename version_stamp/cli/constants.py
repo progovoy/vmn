@@ -37,6 +37,7 @@ VMN_ARGS = {
     "exp": "local",
     "ui": "local",
     "worktrees": "local",
+    "ai": "local",
     "skill": "local",
 }
 
