@@ -787,7 +787,7 @@ def add_arg_ai(subprasers):
         "--boyscout",
         dest="meth_boyscout",
         action="store_true",
-        help="Include the boy scout rule (leave code cleaner)",
+        help="Include the boy scout rule (improve what you touch)",
     )
     pmeth.add_argument(
         "--worktrees",
@@ -799,7 +799,19 @@ def add_arg_ai(subprasers):
         "--communication",
         dest="meth_communication",
         action="store_true",
-        help="Include communication rules (interview before starting, push back)",
+        help="Include communication rules (ask when ambiguous, push back)",
+    )
+    pmeth.add_argument(
+        "--minimal-diffs",
+        dest="meth_minimal_diffs",
+        action="store_true",
+        help="Include minimal-diffs rules (one thing per commit, no dead code)",
+    )
+    pmeth.add_argument(
+        "--errors",
+        dest="meth_errors",
+        action="store_true",
+        help="Include error-handling rules (fail fast, actionable messages)",
     )
     _add_install_args(pmeth)
 
