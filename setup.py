@@ -29,6 +29,7 @@ setuptools.setup(
     package_dir={"version_stamp": "version_stamp"},
     packages=[
         "version_stamp",
+        "version_stamp.compat",
         "version_stamp.core",
         "version_stamp.backends",
         "version_stamp.stamping",
