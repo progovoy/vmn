@@ -139,20 +139,31 @@ class AppConf:
         metadata={
             "ui_desc": (
                 "Enable automatic release mode detection from conventional "
-                "commit messages. Works with default_release_mode."
+                "commit messages. Works with release_mode_policy."
             ),
             "ui_type": "bool_or_dict",
         },
     )
-    default_release_mode: str = field(
+    release_mode_policy: str = field(
         default="optional",
         metadata={
             "ui_desc": (
-                "How conventional commits determine release mode. "
+                "How detected release mode is applied. "
                 "'optional' uses --orm behavior, 'strict' uses -r behavior."
             ),
             "ui_type": "choice",
             "ui_choices": ["optional", "strict"],
+        },
+    )
+    default_release_mode: str = field(
+        default="",
+        metadata={
+            "ui_desc": (
+                "Fallback release mode when none is resolved from CLI or "
+                "conventional commits. One of: major, minor, patch, hotfix."
+            ),
+            "ui_type": "choice",
+            "ui_choices": ["", "major", "minor", "patch", "hotfix"],
         },
     )
     changelog: dict = field(

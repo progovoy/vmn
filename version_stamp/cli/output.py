@@ -9,6 +9,7 @@ import yaml
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
 from version_stamp.backends.git import GitBackend
+from version_stamp.compat.goto_changesets import extract_changesets_or_warn
 from version_stamp.core.constants import (
     POOL_SIZE_CLONES,
     POOL_SIZE_UPDATES,
@@ -533,14 +534,7 @@ def goto_version(vcs, params, version, pull):
             return 1
 
         data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
-        if "changesets" not in data:
-            VMN_LOGGER.warning(
-                f"Version {version} was stamped by an older vmn that did not "
-                f"record dependency changesets. Dependency repos will not be updated."
-            )
-            deps = {}
-        else:
-            deps = copy.deepcopy(data["changesets"])
+        deps = copy.deepcopy(extract_changesets_or_warn(data, version, vcs.name))
 
     if check_unique:
         actual_hash = deps.get(".", {}).get("hash")

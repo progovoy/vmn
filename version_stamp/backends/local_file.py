@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-import glob
 import os
 
 import yaml
 
 from version_stamp.backends.base import VMNBackend
+from version_stamp.compat.local_file_paths import (
+    list_all_with_verinfo_fallback,
+    resolve_specific_with_verinfo_fallback,
+    resolve_with_verinfo_fallback,
+)
 from version_stamp.core.constants import (
     RELATIVE_TO_GLOBAL_TYPE,
     VMN_BE_TYPE_LOCAL_FILE,
@@ -26,17 +30,6 @@ class LocalFileBackend(VMNBackend):
         self.repo_path = repo_path
         self.active_branch = "none"
         self.remote_active_branch = "remote/none"
-
-    @staticmethod
-    def _find_snapshot_files(base_dir):
-        """Find metadata.yml files in snapshot directories."""
-        pattern = os.path.join(base_dir, "*", "metadata.yml")
-        return glob.glob(pattern)
-
-    @staticmethod
-    def _find_verinfo_files(base_dir):
-        """Find .yml files in verinfo directories (backward compat)."""
-        return glob.glob(os.path.join(base_dir, "*.yml"))
 
     def perform_cached_fetch(self, force=False):
         return
@@ -62,17 +55,7 @@ class LocalFileBackend(VMNBackend):
             snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "snapshots")
             verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
 
-        # Check snapshots first
-        snap_files = self._find_snapshot_files(snap_dir)
-        if snap_files:
-            return max(snap_files, key=os.path.getmtime)
-
-        # Fall back to verinfo
-        verinfo_files = self._find_verinfo_files(verinfo_dir)
-        if verinfo_files:
-            return max(verinfo_files, key=os.path.getmtime)
-
-        return None
+        return resolve_with_verinfo_fallback(snap_dir, verinfo_dir)
 
     def _resolve_version_file(self, app_name, verstr, root=False, root_version=None):
         """Find a specific version file, checking snapshots/ first, then verinfo/."""
@@ -95,11 +78,7 @@ class LocalFileBackend(VMNBackend):
                 f"{verstr}.yml",
             )
 
-        if os.path.isfile(snap_path):
-            return snap_path
-        if os.path.isfile(verinfo_path):
-            return verinfo_path
-        return None
+        return resolve_specific_with_verinfo_fallback(snap_path, verinfo_path)
 
     def _list_all_version_files(self, app_name, root=False):
         """List all version files from both snapshots/ and verinfo/."""
@@ -110,8 +89,7 @@ class LocalFileBackend(VMNBackend):
             snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "snapshots")
             verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
 
-        files = self._find_snapshot_files(snap_dir) + self._find_verinfo_files(verinfo_dir)
-        return files
+        return list_all_with_verinfo_fallback(snap_dir, verinfo_dir)
 
     def get_first_reachable_version_info(
         self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE

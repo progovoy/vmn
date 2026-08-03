@@ -16,11 +16,13 @@ import yaml
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
+from version_stamp.compat.config_keys import migrate_config_keys, warn_vmn_version_file_backend
+from version_stamp.compat.template_format import migrate_old_template
+from version_stamp.compat.version_file_084 import read_version_from_old_file
 from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     RELATIVE_TO_GLOBAL_TYPE,
     SUPPORTED_REGEX_VARS,
-    VMN_OLD_TEMPLATE,
     VMN_TEMPLATE_REGEX,
     VMN_VERSION_FORMAT,
 )
@@ -132,48 +134,17 @@ class IVersionsStamper(object):
                 if "conf" in data:
                     if "template" in data["conf"]:
                         self.template = data["conf"]["template"]
-
-                        if (
-                            VMN_OLD_TEMPLATE
-                            == self.template
-                        ):
-                            # TODO:: this means that using the old
-                            #  default template format is impossible. I am okay with this for now.
-                            VMN_LOGGER.warning(
-                                "Identified old default template format. "
-                                "will ignore and use the new default format"
-                            )
-                            self.template = VMN_DEFAULT_CONF["template"]
-                    # Backward compat: old key maps to new one
-                    if "create_verinfo_files" in data["conf"] and "create_snapshots" not in data["conf"]:
-                        data["conf"]["create_snapshots"] = data["conf"]["create_verinfo_files"]
-                        VMN_LOGGER.debug(
-                            "Migrating deprecated config key 'create_verinfo_files' "
-                            "to 'create_snapshots' in %s. "
-                            "Remove 'create_verinfo_files' from your conf.yml to silence this.",
-                            self.app_conf_path,
+                        self.template = migrate_old_template(
+                            self.template, VMN_DEFAULT_CONF["template"]
                         )
+
+                    migrate_config_keys(data["conf"], self.app_conf_path)
 
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
                         if conf_key == "template":
                             continue  # handled above with old-template detection
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
-
-                    cc = data["conf"].get("conventional_commits")
-                    if (
-                        isinstance(cc, dict)
-                        and "default_release_mode" in cc
-                    ):
-                        raise RuntimeError(
-                            "Detected 'default_release_mode' nested inside "
-                            "'conventional_commits' in your conf.yml. "
-                            "This is no longer supported. Please move it to "
-                            "a top-level key:\n\n"
-                            "  conf:\n"
-                            "    default_release_mode: optional\n"
-                            "    conventional_commits: {}\n"
-                        )
 
                 self.set_template(self.template)
 
@@ -248,21 +219,13 @@ class IVersionsStamper(object):
 
         with open(self.version_file_path, "r") as fid:
             ver_dict = yaml.safe_load(fid)
-            if "version_to_stamp_from" in ver_dict:
-                verstr = ver_dict["version_to_stamp_from"]
-                # 0.8.4
-                if "prerelease" in ver_dict:
-                    base_verstr = verstr
-                    prerelease = None
-                    if ver_dict["prerelease"] != "release":
-                        prerelease = f"{ver_dict['prerelease']}{ver_dict['prerelease_count'][ver_dict['prerelease']]}"
-                    verstr = VMNBackend.serialize_vmn_version(
-                        base_verstr,
-                        prerelease=prerelease,
-                        hide_zero_hotfix=self.hide_zero_hotfix,
-                    )
+            legacy_verstr = read_version_from_old_file(
+                ver_dict, VMNBackend.serialize_vmn_version, self.hide_zero_hotfix
+            )
+            if legacy_verstr is not None:
+                verstr = legacy_verstr
             else:
-                verstr = ver_dict["last_stamped_version"]
+                verstr = ver_dict.get("version_to_stamp_from")
 
             try:
                 props = VMNBackend.deserialize_vmn_version(verstr)
@@ -655,10 +618,7 @@ class IVersionsStamper(object):
 
         for backend in self.version_backends:
             try:
-                if backend == "vmn_version_file":
-                    VMN_LOGGER.warning(
-                        "Remove vmn_version_file version backend from the configuration"
-                    )
+                if warn_vmn_version_file_backend(backend):
                     continue
 
                 backend_conf = self.version_backends[backend]

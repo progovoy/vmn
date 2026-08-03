@@ -5,6 +5,9 @@ Old conventions (flat ``{branch-dashes}_conf.yml`` and legacy nested
 ``{branch}/conf.yml``) are moved to ``branch_conf/{branch}/conf.yml`` on any
 stamp. Migration is purely local (uses only already-known refs), idempotent,
 and never destroys data it cannot safely place.
+
+Safe to remove when: all repos have gone through at least one stamp cycle
+on every branch that has a branch-specific conf (migration happens on stamp).
 """
 import os
 

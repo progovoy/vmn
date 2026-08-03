@@ -106,7 +106,8 @@ Tests run in parallel (29 workers by default) using pytest-xdist.
 Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `template`: Version display format (e.g., `[{major}][.{minor}]`)
 - `conventional_commits`: Auto-detect release mode from commit messages (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major). When enabled, `-r` flag is optional.
-- `default_release_mode`: `optional` (--orm behavior) or `strict` (-r behavior) when using conventional_commits
+- `release_mode_policy`: `optional` (--orm behavior) or `strict` (-r behavior) — controls how detected release mode is applied
+- `default_release_mode`: Fallback release mode (`patch`/`minor`/`major`/`hotfix`) when none is resolved from CLI or conventional commits
 - `changelog.path`: Generate CHANGELOG.md on stamp (requires conventional_commits)
 - `github_release.draft`: Create GitHub Release on stamp (requires `gh` CLI + `GITHUB_TOKEN`)
 - `deps`: External repository dependencies for multi-repo tracking

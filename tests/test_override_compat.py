@@ -308,107 +308,65 @@ def test_overwrite_with_orm_from_stable(app_layout, capfd):
     assert data["prerelease"] == "staging"
 
 
-def test_backward_compatability_with_0_3_9_vmn(app_layout, capfd):
-    app_layout.stamp_with_previous_vmn("0.3.9")
 
-    capfd.readouterr()
-    err, ver_info, _ = _stamp_app("app1", "major")
-    captured = capfd.readouterr()
-    assert err == 0
-    assert (
-        "[INFO] Found existing version 0.0.3 and nothing has changed. Will not stamp\n"
-        == captured.out
-    )
-
-    app_layout.write_file_commit_and_push("test_repo_0", "f1.file", "msg1")
-
-    err, ver_info, _ = _stamp_app("app1", "patch")
-    assert err == 0
-    assert ver_info["stamping"]["app"]["_version"] == "0.0.4"
-
-    err = _goto("app1", version="0.0.2")
-    assert err == 0
-
-    err = _goto("app1", version="0.0.3")
-    assert err == 0
-
-    err = _goto("app1", version="0.0.4")
-    assert err == 0
-
-    err = _goto("app1")
-    assert err == 0
-
-    err, ver_info, _ = _stamp_app("root_app/service1", "patch")
-    assert err == 0
-    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+# Tests for 0.3.9 / 0.8.5rc2 compat moved to tests/compat/test_version_compat.py
 
 
-def test_problem_found_in_real_customer(app_layout, capfd):
-    app_layout.stamp_with_previous_vmn("0.8.5rc2")
 
-    err, ver_info, _ = _stamp_app(
-        "app1", optional_release_mode="patch", prerelease="189."
-    )
-    assert err == 0
-    data = ver_info["stamping"]["app"]
-    assert data["_version"] == "2.3.2-189.1"
-    assert data["prerelease"] == "189"
-
-
-@pytest.mark.parametrize("default_release_mode,separate,first_commit_msg,first_expected_version,second_commit_msg,second_expected_version",
+@pytest.mark.parametrize("release_mode_policy,separate,first_commit_msg,first_expected_version,second_commit_msg,second_expected_version",
                          [
                              # Simple recognize release
-                             ("", False, "fix: a", "0.0.2-staging.1", None, None),
-                             ("", False, "feat: a", "0.1.0-staging.1", None, None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", None, None),
+                             ("strict", False, "fix: a", "0.0.2-staging.1", None, None),
+                             ("strict", False, "feat: a", "0.1.0-staging.1", None, None),
+                             ("strict", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
+                             ("strict", False, "fix!: a", "1.0.0-staging.1", None, None),
                              # Simple recognize optional release
                              ("optional", False, "fix: a", "0.0.2-staging.1", None, None),
                              ("optional", False, "feat: a", "0.1.0-staging.1", None, None),
                              ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", None, None),
                              ("optional", False, "fix!: a", "1.0.0-staging.1", None, None),
                              # Recognize release same version types
-                             ("", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
-                             ("", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
+                             ("strict", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
+                             ("strict", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
+                             ("strict", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
+                             ("strict", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
                              # Recognize optional release same version types
                              ("optional", False, "fix: a", "0.0.2-staging.1", "fix: a", None),
                              ("optional", False, "feat: a", "0.1.0-staging.1", "feat: a", None),
                              ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
                              ("optional", False, "fix!: a", "1.0.0-staging.1", "fix!: a", None),
                              # Recognize release different version types
-                             ("", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
-                             ("", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
-                             ("", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
-                             ("", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
+                             ("strict", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
+                             ("strict", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
+                             ("strict", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
+                             ("strict", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
                              # Recognize optional release different version types
                              ("optional", False, "fix: a", "0.1.0-staging.1", "feat: a", None),
                              ("optional", False, "feat: a", "1.0.0-staging.1", "BREAKING CHANGE: a", None),
                              ("optional", False, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", None),
                              ("optional", False, "fix!: a", "1.0.0-staging.1", "fix: a", None),
                              # Recognize release same version types
-                             ("", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.3-staging.1"),
-                             ("", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.2.0-staging.1"),
-                             ("", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", "2.0.0-staging.1"),
-                             ("", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
+                             ("strict", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.3-staging.1"),
+                             ("strict", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.2.0-staging.1"),
+                             ("strict", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", "2.0.0-staging.1"),
+                             ("strict", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
                              # Recognize optional release same version types
                              ("optional", True, "fix: a", "0.0.2-staging.1", "fix: a", "0.0.2-staging.2"),
                              ("optional", True, "feat: a", "0.1.0-staging.1", "feat: a", "0.1.0-staging.2"),
                              ("optional", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "BREAKING CHANGE: a", "1.0.0-staging.2"),
                              ("optional", True, "fix!: a", "1.0.0-staging.1", "fix!: a", "1.0.0-staging.2"),
                              # Recognize release different version types
-                             ("", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.1.0-staging.1"),
-                             ("", True, "feat: a", "0.1.0-staging.1", "BREAKING CHANGE: a", "1.0.0-staging.1"),
-                             ("", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
-                             ("", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.1-staging.1"),
+                             ("strict", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.1.0-staging.1"),
+                             ("strict", True, "feat: a", "0.1.0-staging.1", "BREAKING CHANGE: a", "1.0.0-staging.1"),
+                             ("strict", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", "2.0.0-staging.1"),
+                             ("strict", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.1-staging.1"),
                              # Recognize optional release different version types
                              ("optional", True, "fix: a", "0.0.2-staging.1", "feat: a", "0.0.2-staging.2"),
                              ("optional", True, "feat: a", "0.1.0-staging.1", "BREAKING CHANGE: a", "0.1.0-staging.2"),
                              ("optional", True, "BREAKING CHANGE: a", "1.0.0-staging.1", "fix!: a", "1.0.0-staging.2"),
                              ("optional", True, "fix!: a", "1.0.0-staging.1", "fix: a", "1.0.0-staging.2"),
                           ])
-def test_conventional_commits(app_layout, capfd, default_release_mode, separate, first_commit_msg, first_expected_version, second_commit_msg, second_expected_version):
+def test_conventional_commits(app_layout, capfd, release_mode_policy, separate, first_commit_msg, first_expected_version, second_commit_msg, second_expected_version):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -418,7 +376,7 @@ def test_conventional_commits(app_layout, capfd, default_release_mode, separate,
     app_layout.write_conf(
         params["app_conf_path"],
         conventional_commits=True,
-        default_release_mode=default_release_mode,
+        release_mode_policy=release_mode_policy,
     )
 
     first_commit_msg += """prevent racing of requests
@@ -474,8 +432,8 @@ def test_conventional_commits(app_layout, capfd, default_release_mode, separate,
     assert data["_version"] == second_expected_version
     assert data["prerelease"] == "staging"
 
-@pytest.mark.parametrize("default_release_mode", ["","optional",])
-def test_conventional_commits_simple_failure(app_layout, capfd, default_release_mode):
+@pytest.mark.parametrize("release_mode_policy", ["strict","optional",])
+def test_conventional_commits_simple_failure(app_layout, capfd, release_mode_policy):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -485,7 +443,7 @@ def test_conventional_commits_simple_failure(app_layout, capfd, default_release_
     app_layout.write_conf(
         params["app_conf_path"],
         conventional_commits=True,
-        default_release_mode=default_release_mode,
+        release_mode_policy=release_mode_policy,
     )
 
     app_layout.write_file_commit_and_push(
@@ -501,8 +459,8 @@ def test_conventional_commits_simple_failure(app_layout, capfd, default_release_
         == captured.err
     )
 
-@pytest.mark.parametrize("default_release_mode", ["","optional",])
-def test_conventional_commits_simple_overwrite(app_layout, capfd, default_release_mode):
+@pytest.mark.parametrize("release_mode_policy", ["strict","optional",])
+def test_conventional_commits_simple_overwrite(app_layout, capfd, release_mode_policy):
     _run_vmn_init()
     _init_app(app_layout.app_name)
 
@@ -512,7 +470,7 @@ def test_conventional_commits_simple_overwrite(app_layout, capfd, default_releas
     app_layout.write_conf(
         params["app_conf_path"],
         conventional_commits=True,
-        default_release_mode=default_release_mode,
+        release_mode_policy=release_mode_policy,
     )
 
     app_layout.write_file_commit_and_push(
@@ -526,3 +484,96 @@ def test_conventional_commits_simple_overwrite(app_layout, capfd, default_releas
     data = ver_info["stamping"]["app"]
     assert data["_version"] == "0.1.0-staging.1"
     assert data["prerelease"] == "staging"
+
+
+@pytest.mark.parametrize(
+    "fallback,policy,expected_version",
+    [
+        # fallback with strict policy (acts like -r)
+        ("patch", "strict", "0.0.2"),
+        ("minor", "strict", "0.1.0"),
+        ("major", "strict", "1.0.0"),
+        # fallback with optional policy (acts like --orm)
+        ("patch", "optional", "0.0.2"),
+        ("minor", "optional", "0.1.0"),
+    ],
+)
+def test_default_release_mode_fallback(
+    app_layout, capfd, fallback, policy, expected_version
+):
+    """default_release_mode provides a fallback when no -r and no conv commits detected."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_conf(
+        params["app_conf_path"],
+        release_mode_policy=policy,
+        default_release_mode=fallback,
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="no conventional format here"
+    )
+
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == expected_version
+
+
+def test_default_release_mode_fallback_with_conv_commits(app_layout, capfd):
+    """When conv commits find a mode, fallback is not used."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        release_mode_policy="strict",
+        default_release_mode="patch",
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: new feature"
+    )
+
+    # conv commits detect "minor" which overrides the "patch" fallback
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.1.0"
+
+
+def test_default_release_mode_fallback_no_conv_commits_enabled(app_layout, capfd):
+    """Fallback works even without conventional_commits enabled."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=False,
+        release_mode_policy="strict",
+        default_release_mode="minor",
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="whatever"
+    )
+
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+    data = ver_info["stamping"]["app"]
+    assert data["_version"] == "0.1.0"
+
+
+
+# Config migration tests moved to tests/compat/test_version_compat.py

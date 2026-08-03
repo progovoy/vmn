@@ -130,7 +130,7 @@ def test_migrate_dry_run_returns_planned_moves(tmp_path):
     import git
 
     from version_stamp.core.logging import init_stamp_logger
-    from version_stamp.stamping.conf_migration import migrate_branch_confs
+    from version_stamp.compat.branch_conf import migrate_branch_confs
 
     init_stamp_logger()
     repo = git.Repo.init(str(tmp_path))

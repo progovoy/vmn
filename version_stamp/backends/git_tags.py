@@ -5,6 +5,10 @@ import os
 import yaml
 
 from version_stamp.backends.base import VMNBackend
+from version_stamp.compat.tag_format_039 import (
+    parse_automatic_tag_message,
+    try_tag_with_dot_zero_suffix,
+)
 from version_stamp.core.constants import (
     MAX_COMMIT_SEARCH_ITERATIONS,
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
@@ -194,12 +198,8 @@ class GitTagsMixin:
             o = self._be.tag(f"refs/tags/{tname}")
         except Exception:
             VMN_LOGGER.debug("Logged exception: ", exc_info=True)
-            # Backward compatability code for vmn 0.3.9:
-            try:
-                _tag_name = f"{tname}.0"
-                o = self._be.tag(f"refs/tags/{_tag_name}")
-            except Exception:
-                VMN_LOGGER.debug("Logged exception: ", exc_info=True)
+            tname, o = try_tag_with_dot_zero_suffix(self._be, tname)
+            if o is None:
                 return tname, None
 
         try:
@@ -333,16 +333,11 @@ class GitTagsMixin:
         if ver_info is None:
             return tag_name, ret
 
-        if not isinstance(ver_info, dict) and ver_info.startswith("Automatic"):
-            # Code from vmn 0.3.9
-            commit_msg = yaml.safe_load(self._be.commit(tag_name).message)
-
-            if commit_msg is not None and "stamping" in commit_msg:
-                commit_msg["stamping"]["app"]["prerelease"] = "release"
-                commit_msg["stamping"]["app"]["prerelease_count"] = {}
-
-            ver_info = commit_msg
-            if ver_info is None:
+        if not isinstance(ver_info, dict):
+            ver_info_039 = parse_automatic_tag_message(self._be, tag_name, ver_info)
+            if ver_info_039 is not None:
+                ver_info = ver_info_039
+            if ver_info is None or not isinstance(ver_info, dict):
                 return tag_name, ret
 
         if "vmn_info" not in ver_info:

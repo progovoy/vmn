@@ -31,6 +31,7 @@ from version_stamp.cli.worktree_state import (
     write_island_markers as _write_island_markers,
     write_manifest as _write_manifest,
 )
+from version_stamp.compat.worktree_manifest import legacy_dep_source
 from version_stamp.core.logging import VMN_LOGGER
 
 ISLANDS_DIR_DEFAULT = "../vmn-islands"
@@ -230,7 +231,7 @@ def worktree_remove(vmn_ctx):
         source_path = (
             dep.get("source_path")
             or source_repo_from_worktree(dep["path"], _run_git)
-            or _legacy_dep_source(main_source, dep)
+            or legacy_dep_source(main_source, dep)
         )
         if source_path and not remove_registered_worktree(
             source_path, dep["path"], dep.get("branch"), _run_git
@@ -250,12 +251,6 @@ def worktree_remove(vmn_ctx):
     VMN_LOGGER.info(f"Removed island: {name}")
     return 0
 
-
-def _legacy_dep_source(main_source, dep):
-    rel_path = dep.get("rel_path")
-    if rel_path:
-        return os.path.realpath(os.path.join(main_source, rel_path))
-    return None
 
 
 def _resolve_island_name(args):

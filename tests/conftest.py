@@ -448,6 +448,7 @@ class FSAppLayoutFixture(object):
         policies=None,
         conventional_commits=None,
         default_release_mode=None,
+        release_mode_policy=None,
         experiment=None,
     ):
         with open(app_conf_path, "w") as f:
@@ -473,6 +474,8 @@ class FSAppLayoutFixture(object):
                 data["conf"]["conventional_commits"] = conventional_commits
             if default_release_mode is not None:
                 data["conf"]["default_release_mode"] = default_release_mode
+            if release_mode_policy is not None:
+                data["conf"]["release_mode_policy"] = release_mode_policy
             if experiment is not None:
                 data["conf"]["experiment"] = experiment
 

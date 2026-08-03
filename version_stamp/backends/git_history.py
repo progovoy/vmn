@@ -7,6 +7,7 @@ import re
 import git
 
 from version_stamp.backends.iterators import CommitInfoIterator, CommitMessageIterator
+from version_stamp.compat.tag_format_039 import try_commit_with_dot_zero_suffix
 from version_stamp.core.constants import INIT_COMMIT_MESSAGE, VMN_USER_NAME
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
@@ -172,12 +173,8 @@ class GitHistoryMixin:
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except Exception:
-            # Backward compatability code for vmn 0.3.9:
-            try:
-                _tag_name = f"{tag_name}.0"
-                commit_tag_obj = self._be.commit(_tag_name)
-                tag_name = _tag_name
-            except Exception:
+            tag_name, commit_tag_obj = try_commit_with_dot_zero_suffix(self._be, tag_name)
+            if commit_tag_obj is None:
                 return tag_name, None
 
         return tag_name, commit_tag_obj

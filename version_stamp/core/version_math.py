@@ -341,6 +341,7 @@ def compare_release_modes(r1, r2):
         "major": 3,
         "minor": 2,
         "patch": 1,
+        "hotfix": 0,
         "micro": 0,
     }
 

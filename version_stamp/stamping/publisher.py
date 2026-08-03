@@ -25,7 +25,7 @@ from version_stamp.core.constants import (
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.version_math import parse_conventional_commit_message
 from version_stamp.stamping.base import IVersionsStamper
-from version_stamp.stamping.conf_migration import migrate_branch_confs
+from version_stamp.compat.branch_conf import migrate_branch_confs
 
 
 def _push_published_refs(backend, tags, local_only=False):

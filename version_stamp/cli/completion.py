@@ -5,20 +5,13 @@ import stat
 import sys
 import tempfile
 
+from version_stamp.compat.completion import strip_legacy_completion
 from version_stamp.core.utils import resolve_root_path
 
 
 SUPPORTED_SHELLS = ("bash", "zsh", "fish", "tcsh")
 COMPLETION_MARKER = "# vmn shell completion"
 COMPLETION_END_MARKER = "# end vmn shell completion"
-
-LEGACY_COMPLETION_SCRIPTS = {
-    "bash": 'eval "$(register-python-argcomplete vmn)"',
-    "zsh": "autoload -U bashcompinit\nbashcompinit\n"
-    'eval "$(register-python-argcomplete vmn)"',
-    "fish": "register-python-argcomplete --shell fish vmn | source",
-    "tcsh": "eval `register-python-argcomplete --shell tcsh vmn`",
-}
 
 
 def _find_vmn_root():
@@ -216,13 +209,6 @@ def _resolve_rc_path(shell):
     )
 
 
-def _strip_legacy_completion(content, shell):
-    legacy_block = (
-        f"\n{COMPLETION_MARKER}\n"
-        f"{LEGACY_COMPLETION_SCRIPTS[shell]}\n"
-    )
-    return content.replace(legacy_block, "")
-
 
 def _strip_managed_block(content):
     start = content.find(COMPLETION_MARKER)
@@ -288,7 +274,7 @@ def install_completion(shell=None):
         if os.path.exists(rc_path):
             with open(rc_path, "r", encoding="utf-8") as f:
                 content = f.read()
-        content = _strip_legacy_completion(content, shell)
+        content = strip_legacy_completion(content, shell)
         if _has_malformed_completion_block(content):
             print(
                 f"Malformed vmn completion block in {rc_path}; refusing to edit",

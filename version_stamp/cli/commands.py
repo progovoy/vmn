@@ -20,6 +20,7 @@ from version_stamp.core.constants import (
     VMN_USER_NAME,
     VMN_VERSION_FORMAT,
 )
+from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import WrongTagFormatException
@@ -92,7 +93,7 @@ def handle_init(vmn_ctx, extra_optional=None):
 @measure_runtime_decorator
 def handle_init_app(vmn_ctx):
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
-    vmn_ctx.vcs.default_release_mode = vmn_ctx.args.orm
+    vmn_ctx.vcs.release_mode_policy = vmn_ctx.args.orm
 
     err = _init_app(vmn_ctx.vcs, vmn_ctx.args.version)
     if err:
@@ -135,9 +136,7 @@ def handle_stamp(vmn_ctx):
             "Ignoring partial credentials."
         )
 
-    # For backward compatibility
-    if vmn_ctx.vcs.release_mode == "micro":
-        vmn_ctx.vcs.release_mode = "hotfix"
+    vmn_ctx.vcs.release_mode = normalize_release_mode(vmn_ctx.vcs.release_mode)
 
     if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == ".":
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
@@ -153,7 +152,7 @@ def handle_stamp(vmn_ctx):
                 "feat": "minor",
                 "breaking change": "major",
                 "BREAKING CHANGE": "major",
-                "micro": "micro",
+                "micro": "hotfix",
                 "perf": "",
                 "refactor": "",
                 "docs": "",
@@ -184,10 +183,20 @@ def handle_stamp(vmn_ctx):
                 ):
                     max_release_mode = mapping[res["type"]]
 
-            if vmn_ctx.vcs.default_release_mode == "optional":
+            if vmn_ctx.vcs.release_mode_policy == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
             else:
                 vmn_ctx.vcs.release_mode = max_release_mode
+
+    if (
+        vmn_ctx.vcs.release_mode is None
+        and vmn_ctx.vcs.optional_release_mode is None
+        and vmn_ctx.vcs.default_release_mode
+    ):
+        if vmn_ctx.vcs.release_mode_policy == "optional":
+            vmn_ctx.vcs.optional_release_mode = vmn_ctx.vcs.default_release_mode
+        else:
+            vmn_ctx.vcs.release_mode = vmn_ctx.vcs.default_release_mode
 
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
