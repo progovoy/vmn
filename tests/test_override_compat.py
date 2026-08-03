@@ -575,5 +575,92 @@ def test_default_release_mode_fallback_no_conv_commits_enabled(app_layout, capfd
     assert data["_version"] == "0.1.0"
 
 
+def _truncate_vmn_log(app_layout):
+    open(_vmn_log_path(app_layout), "w").close()
+
+
+def _vmn_log_path(app_layout):
+    return os.path.join(app_layout.repo_path, ".vmn", "vmn.log")
+
+
+def _read_vmn_log(app_layout):
+    with open(_vmn_log_path(app_layout)) as f:
+        return f.read()
+
+
+def test_release_mode_reason_logged_for_conventional_commits(app_layout, capfd):
+    """The log explains that the mode came from a specific conventional commit."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        release_mode_policy="strict",
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="feat: shiny new thing"
+    )
+
+    _truncate_vmn_log(app_layout)
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.1.0"
+
+    log = _read_vmn_log(app_layout)
+    assert "Release mode 'minor' chosen because conventional commit" in log
+    assert "feat: shiny new thing" in log
+    assert "release_mode_policy=strict" in log
+
+
+def test_release_mode_reason_logged_for_default_fallback(app_layout, capfd):
+    """The log explains that the mode came from the configured fallback."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    err, _, params = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+    app_layout.write_conf(
+        params["app_conf_path"],
+        conventional_commits=True,
+        release_mode_policy="optional",
+        default_release_mode="patch",
+    )
+
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "text", commit_msg="no conventional format here"
+    )
+
+    _truncate_vmn_log(app_layout)
+    err, ver_info, params = _stamp_app(app_layout.app_name)
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+
+    log = _read_vmn_log(app_layout)
+    assert "no commit since" in log
+    assert (
+        "Release mode 'patch' chosen because it is the configured "
+        "default_release_mode" in log
+    )
+    assert "release_mode_policy=optional" in log
+
+
+def test_release_mode_reason_logged_for_cli_flag(app_layout, capfd):
+    """The log explains that the mode came from the command line."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+
+    _truncate_vmn_log(app_layout)
+    err, ver_info, params = _stamp_app(app_layout.app_name, "minor")
+    assert err == 0
+
+    log = _read_vmn_log(app_layout)
+    assert "Release mode 'minor' chosen because it was given on the command line" in log
+
 
 # Config migration tests moved to tests/compat/test_version_compat.py

@@ -113,6 +113,60 @@ def handle_init_app(vmn_ctx):
     return 0
 
 
+def _describe_release_mode_policy(policy):
+    if policy == "optional":
+        return "applied as an optional release mode (--orm behavior)"
+
+    return "applied as a strict release mode (-r behavior)"
+
+
+def _log_cli_release_mode(vcs):
+    if vcs.release_mode is not None:
+        flag, mode = "-r/--release-mode", vcs.release_mode
+    else:
+        flag, mode = "--orm/--optional-release-mode", vcs.optional_release_mode
+
+    VMN_LOGGER.debug(
+        f"Release mode '{mode}' chosen because it was given on the command line "
+        f"via {flag}. Conventional commits and default_release_mode are not "
+        f"consulted when a release mode is passed explicitly."
+    )
+
+
+def _log_conventional_commits_release_mode(vcs, release_mode, trigger):
+    if release_mode is None:
+        VMN_LOGGER.debug(
+            f"No release mode chosen from conventional commits: no commit since "
+            f"{vcs.selected_tag} mapped to a release mode."
+        )
+        return
+
+    VMN_LOGGER.debug(
+        f"Release mode '{release_mode}' chosen because conventional commit "
+        f'"{trigger}" maps to it, and it is the highest release mode among the '
+        f"commits since {vcs.selected_tag}. It is "
+        f"{_describe_release_mode_policy(vcs.release_mode_policy)}, per "
+        f"release_mode_policy={vcs.release_mode_policy}."
+    )
+
+
+def _log_default_release_mode(vcs):
+    VMN_LOGGER.debug(
+        f"Release mode '{vcs.default_release_mode}' chosen because it is the "
+        f"configured default_release_mode, and nothing earlier resolved a mode. "
+        f"It is {_describe_release_mode_policy(vcs.release_mode_policy)}, per "
+        f"release_mode_policy={vcs.release_mode_policy}."
+    )
+
+
+def _log_no_release_mode(vcs):
+    VMN_LOGGER.debug(
+        f"No release mode chosen: none was given on the command line, "
+        f"conventional_commits is {bool(vcs.conventional_commits)} and "
+        f"default_release_mode is not configured."
+    )
+
+
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
     from version_stamp.cli.worktree_state import is_local_only_island
@@ -141,12 +195,19 @@ def handle_stamp(vmn_ctx):
     if vmn_ctx.vcs.prerelease and vmn_ctx.vcs.prerelease[-1] == ".":
         vmn_ctx.vcs.prerelease = vmn_ctx.vcs.prerelease[:-1]
 
+    if (
+        vmn_ctx.vcs.release_mode is not None
+        or vmn_ctx.vcs.optional_release_mode is not None
+    ):
+        _log_cli_release_mode(vmn_ctx.vcs)
+
     if vmn_ctx.vcs.conventional_commits:
         if (
             vmn_ctx.vcs.release_mode is None
             and vmn_ctx.vcs.optional_release_mode is None
         ):
             max_release_mode = None
+            max_release_trigger = None
             mapping = {
                 "fix": "patch",
                 "feat": "minor",
@@ -182,6 +243,11 @@ def handle_stamp(vmn_ctx):
                     mapping[res["type"]], max_release_mode
                 ):
                     max_release_mode = mapping[res["type"]]
+                    max_release_trigger = f"{res['type']}: {res['description']}"
+
+            _log_conventional_commits_release_mode(
+                vmn_ctx.vcs, max_release_mode, max_release_trigger
+            )
 
             if vmn_ctx.vcs.release_mode_policy == "optional":
                 vmn_ctx.vcs.optional_release_mode = max_release_mode
@@ -191,12 +257,16 @@ def handle_stamp(vmn_ctx):
     if (
         vmn_ctx.vcs.release_mode is None
         and vmn_ctx.vcs.optional_release_mode is None
-        and vmn_ctx.vcs.default_release_mode
     ):
-        if vmn_ctx.vcs.release_mode_policy == "optional":
-            vmn_ctx.vcs.optional_release_mode = vmn_ctx.vcs.default_release_mode
+        if vmn_ctx.vcs.default_release_mode:
+            _log_default_release_mode(vmn_ctx.vcs)
+
+            if vmn_ctx.vcs.release_mode_policy == "optional":
+                vmn_ctx.vcs.optional_release_mode = vmn_ctx.vcs.default_release_mode
+            else:
+                vmn_ctx.vcs.release_mode = vmn_ctx.vcs.default_release_mode
         else:
-            vmn_ctx.vcs.release_mode = vmn_ctx.vcs.default_release_mode
+            _log_no_release_mode(vmn_ctx.vcs)
 
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
