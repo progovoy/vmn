@@ -76,10 +76,15 @@ fi
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
 
-rm -rf ${CUR_DIR}/../version_stamp/__pycache__
-# macOS caches .pyc files outside __pycache__ — stale cache from a build
-# (where version.py transiently holds the real version) breaks tests
-rm -rf ~/Library/Caches/com.apple.python/*/version_stamp/version.*.pyc 2>/dev/null
+REPO_ROOT="$(cd "${CUR_DIR}/.." && pwd)"
+
+rm -rf ${REPO_ROOT}/version_stamp/__pycache__
+# macOS caches .pyc files outside __pycache__, under a tree mirroring the
+# source's absolute path. A stale cache from a build (where version.py
+# transiently holds the real version) breaks tests: version.py keeps the same
+# size across stamp/revert, so if both writes land in the same second Python's
+# (mtime, size) check accepts the stale bytecode.
+rm -rf "${HOME}/Library/Caches/com.apple.python${REPO_ROOT}"
 
 echo "Will run:"
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
