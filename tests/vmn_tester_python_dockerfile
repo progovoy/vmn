@@ -1,0 +1,14 @@
+ARG PYTHON_VERSION=3.8
+FROM python:${PYTHON_VERSION}-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /var/
+COPY test_requirements_docker.txt /var/
+
+RUN pip install --no-cache-dir -r /var/requirements.txt && \
+    pip install --no-cache-dir -r /var/test_requirements_docker.txt
+
+RUN git config --global user.email "you@example.com" && \
+    git config --global user.name "Your Name"
