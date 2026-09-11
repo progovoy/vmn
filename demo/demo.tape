@@ -6,9 +6,9 @@
 Output demo/vmn-goto.gif
 
 Set Shell bash
-Set FontSize 15
+Set FontSize 14
 Set Width 1100
-Set Height 700
+Set Height 860
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set Padding 20
@@ -23,14 +23,18 @@ Type "export PS1='$ ' PROMPT_COMMAND= VIRTUAL_ENV_DISABLE_PROMPT=1; cd /tmp/vmn-
 Show
 
 Type "# shop tracks two dependency repos and writes its version into version.py" Enter
+Sleep 1.5s
 Type "cat .vmn/shop/conf.yml" Enter
+Sleep 6s
+
+Type "# Stamp the first release. vmn writes the version into version.py:" Enter
+Sleep 1.5s
+Type "vmn stamp -r minor shop && cat version.py" Enter
 Sleep 4s
 
-Type "vmn stamp -r minor shop && cat version.py" Enter
-Sleep 2.5s
-
-Type "clear" Enter
+Type "" Enter
 Type "# Only a dependency changes. shop itself is untouched:" Enter
+Sleep 1.5s
 Hide
 Type "perl -pi -e s/off/on/ ../lib_core/core.py; tput cuu1; tput el" Enter
 Sleep 500ms
@@ -38,10 +42,11 @@ Show
 Type "git -C ../lib_core commit -qam 'feat: enable fast path' && git -C ../lib_core push -q" Enter
 Sleep 1s
 Type "vmn stamp -r minor shop && cat version.py" Enter
-Sleep 2.5s
+Sleep 4s
 
 Type "# A bug report comes in for 0.1.0. Restore that exact state:" Enter
+Sleep 1.5s
 Type "vmn goto -v 0.1.0 shop" Enter
-Sleep 3s
+Sleep 3.5s
 Type "cat version.py ../lib_core/core.py" Enter
-Sleep 4s
+Sleep 7s
