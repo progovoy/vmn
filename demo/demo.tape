@@ -6,11 +6,11 @@
 Output demo/vmn-goto.gif
 
 Set Shell bash
-Set FontSize 16
+Set FontSize 15
 Set Width 1100
-Set Height 600
+Set Height 700
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 40ms
+Set TypingSpeed 35ms
 Set Padding 20
 
 Env GIT_AUTHOR_NAME "demo"
@@ -22,38 +22,26 @@ Hide
 Type "export PS1='$ ' PROMPT_COMMAND= VIRTUAL_ENV_DISABLE_PROMPT=1; cd /tmp/vmn-demo/work/shop && clear" Enter
 Show
 
-Type "# shop depends on ../lib_core and ../service_api. Release it:" Enter
-Sleep 500ms
-Type "vmn stamp -r minor shop" Enter
+Type "# shop tracks two dependency repos and writes its version into version.py" Enter
+Type "cat .vmn/shop/conf.yml" Enter
+Sleep 4s
+
+Type "vmn stamp -r minor shop && cat version.py" Enter
 Sleep 2.5s
 
-Type "# lib_core and shop each get a new commit, then release again:" Enter
+Type "clear" Enter
+Type "# Only a dependency changes. shop itself is untouched:" Enter
 Hide
 Type "perl -pi -e s/off/on/ ../lib_core/core.py; tput cuu1; tput el" Enter
 Sleep 500ms
 Show
 Type "git -C ../lib_core commit -qam 'feat: enable fast path' && git -C ../lib_core push -q" Enter
 Sleep 1s
-Hide
-Type "echo 'USE_V2 = True' >> shop.py; tput cuu1; tput el" Enter
-Sleep 500ms
-Show
-Type "git commit -qam 'feat: use v2 orders' && git push -q" Enter
-Sleep 1s
-Type "vmn stamp -r minor shop" Enter
+Type "vmn stamp -r minor shop && cat version.py" Enter
 Sleep 2.5s
 
-Type "# A bug report comes in for 0.1.0. Which lib_core was it built with?" Enter
-Sleep 500ms
-Type "git -C ../lib_core log --oneline -1 && cat ../lib_core/core.py" Enter
-Sleep 2.5s
-
+Type "# A bug report comes in for 0.1.0. Restore that exact state:" Enter
 Type "vmn goto -v 0.1.0 shop" Enter
 Sleep 3s
-Type "git -C ../lib_core log --oneline -1 && cat ../lib_core/core.py" Enter
-Sleep 3s
-
-Type "# Every repo is back at the revision recorded in the release tag." Enter
-Sleep 500ms
-Type "vmn goto -v 0.2.0 shop" Enter
+Type "cat version.py ../lib_core/core.py" Enter
 Sleep 4s

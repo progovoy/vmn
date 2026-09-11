@@ -1,7 +1,9 @@
 # README demo
 
-`vmn-goto.gif` shows a two-dependency release being stamped and then restored
-with `vmn goto`. Regenerate it after installing [VHS](https://github.com/charmbracelet/vhs):
+`vmn-goto.gif` shows an app's `conf.yml` with two dependency repos and a
+`generic_selectors` backend that writes the version into `version.py`. It
+stamps, stamps again after a dependency-only change, and restores the first
+release with `vmn goto`. Regenerate it after installing [VHS](https://github.com/charmbracelet/vhs):
 
 ```sh
 pip install -e .          # or pipx install vmn

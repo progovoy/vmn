@@ -33,7 +33,7 @@ make_repo() {
 
 make_repo lib_core    core.py    'VERSION = "fast path off"'
 make_repo service_api api.py     'ROUTES = ["/v1/orders"]'
-make_repo shop        shop.py    'import core, api'
+make_repo shop        version.py '__version__ = "0.0.0"'
 
 (cd "${WS}/work/shop" && vmn init >/dev/null && vmn init-app shop >/dev/null)
 cat > "${WS}/work/shop/.vmn/shop/conf.yml" <<'YAML'
@@ -44,6 +44,14 @@ conf:
         vcs_type: git
       service_api:
         vcs_type: git
+  version_backends:
+    generic_selectors:
+    - paths_section:
+      - input_file_path: version.py
+        output_file_path: version.py
+      selectors_section:
+      - regex_selector: '(__version__ = ")[^"]*'
+        regex_sub: '\1{{version}}'
 YAML
 (
     cd "${WS}/work/shop"
