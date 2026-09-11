@@ -1,10 +1,10 @@
 <h1 align="center">vmn</h1>
 
-<p align="center"><strong>Restorable release state across Git repositories.</strong></p>
+<p align="center"><strong>git checkout for releases that span many repos.</strong></p>
 
 <p align="center">
-  Language-agnostic version management for products that span repositories.<br>
-  Record a release once. Restore its source state later with one command.
+  Record a release once. Put the app and every repo it depends on back to exactly that state with one command.<br>
+  No server. No database. Any language.
 </p>
 
 <p align="center">
@@ -17,13 +17,22 @@
 
 <p align="center"><img src="demo/vmn-goto.gif" alt="vmn stamp, then vmn goto restoring the app and both dependency repos" width="820"></p>
 
+Production broke after last Tuesday's 2.1.0 deploy. Your product is four repos.
+Which commit of each one actually shipped?
+
+Without vmn, that is an afternoon of CI logs and container tags. With vmn:
+
+```sh
+vmn goto -v 2.1.0 my_platform   # every repo back at the commit that shipped
+```
+
+Try it in any Git repository:
+
 ```sh
 pipx install vmn
 
 vmn stamp -r patch my_app       # 0.0.1
-
-# Restore the application and every configured dependency repository.
-vmn goto -v 0.0.1 my_app
+vmn goto -v 0.0.1 my_app        # restore the app and every configured dependency
 ```
 
 vmn stores release metadata as readable YAML in annotated Git tags. Each tag
@@ -34,6 +43,8 @@ release context. There is no vmn server and no external metadata database.
 > by teams at large companies managing multi-repository products. vmn versions
 > its own releases. The repository contains more than 400 tests, including
 > Docker-backed multi-repository, recovery, and compatibility scenarios.
+
+If vmn saves you an afternoon, a ⭐ helps other teams find it.
 
 [Quick start](#quick-start) · [Why vmn](#why-vmn) ·
 [Multi-repository recovery](#multi-repository-recovery) ·
