@@ -10,6 +10,8 @@ toml
 filelock
 ruff; python_version >= "3.7"
 mypy
+setuptools
+git-cliff
 boto3
 moto[s3]
 fastapi

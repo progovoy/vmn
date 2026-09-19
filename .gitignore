@@ -22,3 +22,4 @@ webui/node_modules/
 webui/tsconfig.tsbuildinfo
 
 .claude/
+.mtd/

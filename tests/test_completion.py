@@ -72,7 +72,7 @@ def test_tcsh_helper_executes_vmn_with_argcomplete_environment(monkeypatch):
 
 
 def test_setup_exposes_tcsh_helper_entry_point(monkeypatch):
-    import setuptools
+    setuptools = pytest.importorskip("setuptools")
 
     captured = {}
     monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))

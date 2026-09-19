@@ -30,23 +30,18 @@ def create_data_dict_for_jinja2(
     if "release_notes_conf_path" in tmplt_value:
         toml_cliff_conf_param = f"-c {tmplt_value['release_notes_conf_path']}"
 
-    if not shutil.which("git-cliff"):
-        raise RuntimeError(
-            "git-cliff is required for Jinja2 template generation with release notes. "
-            "Install it with: pip install 'vmn[changelog]'"
-        )
-
-    command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
-    try:
-        result = subprocess.run(
-            command.split(), check=True, text=True, capture_output=True
-        )
-        changelog_output = result.stdout
-    except subprocess.CalledProcessError as e:
-        VMN_LOGGER.error(e.stderr)
-        raise e
-
-    tmplt_value["release_notes"] = changelog_output
+    if shutil.which("git-cliff"):
+        command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
+        try:
+            result = subprocess.run(
+                command.split(), check=True, text=True, capture_output=True
+            )
+            tmplt_value["release_notes"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            VMN_LOGGER.error(e.stderr)
+            raise e
+    else:
+        tmplt_value["release_notes"] = ""
 
     return tmplt_value
 

@@ -1,9 +1,11 @@
-FROM ubuntu:focal
+FROM python:3.9-slim
 
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 ARG VMN_VERSION
 ARG VMN_GIT_TAG
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 RUN if getent group vmnuser ; then groupdel vmnuser; fi &&\
     groupadd -o -g ${GROUP_ID} vmnuser &&\
@@ -13,13 +15,12 @@ RUN if getent group vmnuser ; then groupdel vmnuser; fi &&\
           --from=33:33 ${USER_ID}:${GROUP_ID} \
         /home/vmnuser
 
-RUN apt update && apt install -y python3-pip git
 COPY stamp_with_${VMN_VERSION}_vmn.sh /
 
 RUN git config --global user.email "you@example.com"
 RUN git config --global user.name "Your Name"
 
-RUN pip3 install "git+https://github.com/progovoy/vmn.git@${VMN_GIT_TAG}"
+RUN pip3 install --no-cache-dir "git+https://github.com/progovoy/vmn.git@${VMN_GIT_TAG}"
 
 # Inject the real version — git installs leave version.py at 0.0.0
 # because gen_ver.py only runs during PyPI wheel builds
