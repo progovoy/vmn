@@ -60,6 +60,7 @@ export interface SeriesPoint {
 export interface LogEntry {
   timestamp: string;
   type: string;
+  _writer?: string;
   [key: string]: unknown;
 }
 

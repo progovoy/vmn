@@ -81,6 +81,82 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe("Run writer provenance badge", () => {
+  it("shows _writer badge when log entry has _writer field", async () => {
+    const detail = makeDetail();
+    detail.log = [
+      { timestamp: "2026-01-01T12:00:00Z", type: "create", _writer: "gpu0" },
+    ];
+    mockedApi.experiment.mockResolvedValue(detail);
+    mockedApi.metricsSchema.mockResolvedValue({});
+
+    renderRun();
+
+    await waitFor(() => {
+      expect(screen.getByText("gpu0")).toBeInTheDocument();
+    });
+    expect(screen.getByText("gpu0").className).toContain("badge");
+  });
+
+  it("does not show badge when log entry has no _writer field", async () => {
+    const detail = makeDetail();
+    mockedApi.experiment.mockResolvedValue(detail);
+    mockedApi.metricsSchema.mockResolvedValue({});
+
+    renderRun();
+
+    await waitFor(() => {
+      expect(screen.getByText("log")).toBeInTheDocument();
+    });
+    const timeline = document.querySelector(".timeline");
+    expect(timeline?.querySelector(".badge")).toBeNull();
+  });
+});
+
+describe("Run provenance metadata", () => {
+  it("shows from_snapshot when present in metadata", async () => {
+    const detail = makeDetail();
+    detail.metadata.from_snapshot = "0.0.1-snap.3";
+    mockedApi.experiment.mockResolvedValue(detail);
+    mockedApi.metricsSchema.mockResolvedValue({});
+
+    renderRun();
+
+    await waitFor(() => {
+      expect(screen.getByText("from snapshot")).toBeInTheDocument();
+    });
+    expect(screen.getByText("0.0.1-snap.3")).toBeInTheDocument();
+  });
+
+  it("shows code_verstr when it differs from verstr", async () => {
+    const detail = makeDetail();
+    detail.metadata.code_verstr = "0.0.2";
+    mockedApi.experiment.mockResolvedValue(detail);
+    mockedApi.metricsSchema.mockResolvedValue({});
+
+    renderRun();
+
+    await waitFor(() => {
+      expect(screen.getByText("code version")).toBeInTheDocument();
+    });
+    expect(screen.getByText("0.0.2")).toBeInTheDocument();
+  });
+
+  it("does NOT show code_verstr when it matches verstr", async () => {
+    const detail = makeDetail();
+    detail.metadata.code_verstr = "0.0.1-rc.1";
+    mockedApi.experiment.mockResolvedValue(detail);
+    mockedApi.metricsSchema.mockResolvedValue({});
+
+    renderRun();
+
+    await waitFor(() => {
+      expect(screen.getByText("metadata")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("code version")).not.toBeInTheDocument();
+  });
+});
+
 describe("Run x-axis mode", () => {
   it("defaults to step mode using step values as X", async () => {
     const detail = makeDetail({ withTimestamps: true });

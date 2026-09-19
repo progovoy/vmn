@@ -112,7 +112,7 @@ export default function Leaderboard() {
     setSelected((cur) =>
       cur.includes(verstr)
         ? cur.filter((v) => v !== verstr)
-        : [...cur.slice(-1), verstr]
+        : [...cur, verstr]
     );
 
   const openCreate = (open: boolean) =>
@@ -200,6 +200,18 @@ export default function Leaderboard() {
                 }
               >
                 Compare 2 selected →
+              </button>
+            )}
+            {selected.length >= 2 && (
+              <button
+                className="primary"
+                onClick={() =>
+                  navigate(
+                    `/ws/${ws}/app/${app}/overlay?runs=${selected.map(encodeURIComponent).join(",")}`
+                  )
+                }
+              >
+                Overlay curves →
               </button>
             )}
             {!creating && (

@@ -282,13 +282,16 @@ class LocalSnapshotStorage(SnapshotStorage):
         if os.path.isdir(snap_dir):
             for name in sorted(os.listdir(snap_dir)):
                 if name.startswith("log.") and name.endswith(".jsonl"):
+                    writer_id = name[len("log."):-len(".jsonl")]
                     path = os.path.join(snap_dir, name)
                     with open(path) as f:
                         for line in f:
                             line = line.strip()
                             if line:
                                 try:
-                                    entries.append(json.loads(line))
+                                    entry = json.loads(line)
+                                    entry["_writer"] = writer_id
+                                    entries.append(entry)
                                 except json.JSONDecodeError:
                                     pass
         entries.sort(key=lambda e: e.get("timestamp", ""))
@@ -521,6 +524,8 @@ class S3SnapshotStorage(SnapshotStorage):
                 for obj in page.get("Contents", []):
                     key = obj["Key"]
                     if key.endswith(".jsonl"):
+                        fname = key.rsplit("/", 1)[-1]
+                        writer_id = fname[len("log."):-len(".jsonl")]
                         try:
                             resp = self._s3.get_object(Bucket=self.bucket, Key=key)
                             text = resp["Body"].read().decode("utf-8")
@@ -528,7 +533,9 @@ class S3SnapshotStorage(SnapshotStorage):
                                 line = line.strip()
                                 if line:
                                     try:
-                                        entries.append(json.loads(line))
+                                        entry = json.loads(line)
+                                        entry["_writer"] = writer_id
+                                        entries.append(entry)
                                     except json.JSONDecodeError:
                                         pass
                         except Exception:

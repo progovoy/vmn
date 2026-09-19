@@ -274,6 +274,12 @@ export default function Run() {
             <div style={{ color: "var(--text-2)" }}>{captured}</div>
             <div className="k">runtime</div>
             <div>{runSecs ? `${runSecs}s` : "—"}</div>
+            {Boolean(meta.from_snapshot) && (
+              <><div className="k">from snapshot</div><div className="mono">{String(meta.from_snapshot)}</div></>
+            )}
+            {Boolean(meta.code_verstr) && meta.code_verstr !== meta.verstr && (
+              <><div className="k">code version</div><div className="mono">{String(meta.code_verstr)}</div></>
+            )}
           </div>
         </div>
         {(() => {
@@ -444,6 +450,7 @@ export default function Run() {
                 style={{ "--dot": DOT_COLOR[e.type] ?? "var(--text-3)" } as React.CSSProperties}
               >
                 <span className="ts">{relTime(e.timestamp)}</span>
+                {e._writer && <span className="badge" style={{ fontSize: 10, marginLeft: 6 }}>{e._writer}</span>}
                 <span className="what">{describeEntry(e)}</span>
               </li>
             ))}

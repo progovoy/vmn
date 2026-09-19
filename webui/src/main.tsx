@@ -6,6 +6,7 @@ import Actions from "./pages/Actions";
 import { AppsPage, WorkspacesHome } from "./pages/Dashboard";
 import Compare from "./pages/Compare";
 import Leaderboard from "./pages/Leaderboard";
+import Overlay from "./pages/Overlay";
 import Run from "./pages/Run";
 import Snapshots from "./pages/Snapshots";
 import StampTree from "./pages/StampTree";
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: "ws/:ws/app/:app", element: <Leaderboard />, handle: { page: "experiments" } },
       { path: "ws/:ws/app/:app/run/:verstr", element: <Run />, handle: { page: "run" } },
       { path: "ws/:ws/app/:app/compare", element: <Compare />, handle: { page: "compare" } },
+      { path: "ws/:ws/app/:app/overlay", element: <Overlay />, handle: { page: "overlay" } },
       { path: "ws/:ws/app/:app/snapshots", element: <Snapshots />, handle: { page: "snapshots" } },
       { path: "ws/:ws/app/:app/tree", element: <StampTree />, handle: { page: "stamp tree" } },
       { path: "ws/:ws/app/:app/actions", element: <Actions />, handle: { page: "actions" } },
