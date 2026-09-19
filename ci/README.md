@@ -45,41 +45,33 @@ Instead of waiting for the 2am daily run:
 
 ```mermaid
 graph LR
-    setup_venv["setup_venv<br/><i>verify venv</i>"]
     lint["lint<br/><i>ruff check</i>"]
     run_tests["run_tests<br/><i>pytest -n 29</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
-    summary["summary<br/><i>collect reports</i>"]
 
-    setup_venv --> lint
-    setup_venv --> run_tests
-    setup_venv --> typecheck
-    lint --> summary
-    run_tests --> summary
-    typecheck --> summary
-
-    style setup_venv fill:#2d6a4f,stroke:#1b4332,color:#fff
     style lint fill:#264653,stroke:#1d3557,color:#fff
     style run_tests fill:#264653,stroke:#1d3557,color:#fff
     style typecheck fill:#264653,stroke:#1d3557,color:#fff
-    style summary fill:#e76f51,stroke:#c1440e,color:#fff
 ```
 
 | Stage | What it does | Cached? |
 |-------|-------------|---------|
-| `setup_venv` | Verifies the muster-built venv (`import version_stamp`) so the DAG blocks here if deps are broken | No |
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `run_tests` | Runs `pytest tests/ -n 29` (parallel, 29 workers), produces JUnit XML + HTML report | No |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
-| `summary` | Collects lint/tests/typecheck results into one report | No |
 
-Every stage declares `requires` (`tests/requirements.txt` +
-`tests/test_requirements.txt` + vmn installed editable). muster builds that venv
-once, content-addressed by the requirements files' contents under `.mtd/envs/`,
-and all four stages run inside it — no hand-rolled venv or `pip install`. The
-venv rebuilds only when a requirements file changes. `setup_venv` runs first
-(the others depend on its `reports/venv.txt`) so the one-time build happens once,
-not in a three-way race; the three middle stages then run in parallel.
+The three stages have no dependencies, so they run in parallel. Every stage
+declares `requires` (`tests/requirements.txt` + `tests/test_requirements.txt` +
+vmn installed editable). muster builds that venv once, content-addressed by the
+requirements files' contents under `.mtd/envs/`, and all three stages run inside
+it — no hand-rolled venv or `pip install`. The venv rebuilds only when a
+requirements file changes; muster's build lock serializes the concurrent
+builders, so the first stage to need it builds it and the others reuse it.
+
+Each stage runs its tool through `ctx.run` (bare names resolve via the venv's
+`bin` on `PATH`), which captures the tool output into a per-stage **card** shown
+in the run UI. `run_tests` additionally writes `reports/tests.xml` (JUnit) and
+`reports/tests.html` as downloadable artifacts.
 
 Lint and typecheck are report-only — they don't fail the pipeline on warnings.
 `run_tests` only fails on pytest crashes (exit code > 1), not on test failures
