@@ -14,6 +14,20 @@ Open **http://localhost:8000** — no password needed.
 This creates a Python venv, installs muster from `../multi_target_debugger`,
 seeds a daily schedule, and starts the Muster pipeline server.
 
+```mermaid
+flowchart TD
+    A["./ci/start.sh"] --> B{muster venv exists?}
+    B -- no --> C["create venv<br/>Python 3.12"]
+    B -- yes --> D["pip install muster"]
+    C --> D
+    D --> E{UI built?}
+    E -- no --> F["npm install + build"]
+    E -- yes --> G["seed daily schedule"]
+    F --> G
+    G --> H["muster serve --no-auth :8000"]
+    H --> I["🌐 http://localhost:8000"]
+```
+
 ## Run tests now
 
 Instead of waiting for the 2am daily run:
@@ -28,10 +42,26 @@ Instead of waiting for the 2am daily run:
 
 ## The pipeline
 
-```
-setup_venv ──┬── lint        ──┐
-             ├── run_tests   ──┤── summary
-             └── typecheck   ──┘
+```mermaid
+graph LR
+    setup_venv["🔒 setup_venv<br/><i>cached</i>"]
+    lint["lint<br/><i>ruff check</i>"]
+    run_tests["run_tests<br/><i>pytest -n 29</i>"]
+    typecheck["typecheck<br/><i>mypy</i>"]
+    summary["summary<br/><i>collect reports</i>"]
+
+    setup_venv --> lint
+    setup_venv --> run_tests
+    setup_venv --> typecheck
+    lint --> summary
+    run_tests --> summary
+    typecheck --> summary
+
+    style setup_venv fill:#2d6a4f,stroke:#1b4332,color:#fff
+    style lint fill:#264653,stroke:#1d3557,color:#fff
+    style run_tests fill:#264653,stroke:#1d3557,color:#fff
+    style typecheck fill:#264653,stroke:#1d3557,color:#fff
+    style summary fill:#e76f51,stroke:#c1440e,color:#fff
 ```
 
 | Stage | What it does | Cached? |
