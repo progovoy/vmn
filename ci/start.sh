@@ -58,6 +58,8 @@ echo "  Cache:    .mtd/cache/"
 echo ""
 
 cd "$REPO_ROOT"
+export MTD_PIPELINES_DIR="$REPO_ROOT"
+export MTD_PIPELINE_STATE_DIR="$REPO_ROOT/.mtd/runs"
 
 if [[ "${1:-}" == "--run-now" ]]; then
     echo "Triggering immediate run ..."

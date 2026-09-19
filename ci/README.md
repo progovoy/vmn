@@ -10,6 +10,7 @@ viewable in a web dashboard.
 ```
 
 Open **http://localhost:8000** — no password needed.
+Click **Trigger** to see the pipeline DAG and launch a run manually.
 
 This creates a Python venv, installs muster from `../multi_target_debugger`,
 seeds a daily schedule, and starts the Muster pipeline server.
@@ -130,9 +131,10 @@ pause it. You can also edit schedules through the web UI.
 | `ci/start.sh` | Bootstrap + launch script |
 | `.mtd/ci_venv/` | Dedicated venv for running tests |
 | `.mtd/muster_venv/` | Dedicated venv for muster itself |
-| `.mtd/runs/` | Run history (state.json per run) |
+| `.mtd/runs/` | Run history (state.json, cards, console logs) |
 | `.mtd/cache/` | Content-addressed stage cache |
 | `.mtd/schedules/` | Schedule configs (JSON) |
+| `.mtd/workspaces/` | Per-run scratch dirs (stage outputs) |
 
 Everything under `.mtd/` is gitignored. Delete it to start completely fresh.
 
@@ -143,7 +145,24 @@ Everything under `.mtd/` is gitignored. Delete it to start completely fresh.
 - `../multi_target_debugger` checked out next to this repo
 - Docker (optional, only for the backward-compat tests)
 
+## Environment variables
+
+The start script sets these automatically. Override them to customize:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MTD_PIPELINES_DIR` | repo root | Where the trigger page looks for pipeline `.py` files |
+| `MTD_PIPELINE_STATE_DIR` | `.mtd/runs` | Run history directory |
+| `MTD_PIPELINE_WORKSPACES_DIR` | `.mtd/workspaces` | Per-run scratch dirs for stage outputs |
+
 ## Troubleshooting
+
+**"No pipelines available" on the trigger page**
+
+The `MTD_PIPELINES_DIR` env var must point to the directory containing your
+pipeline files. The start script sets this to the repo root. If you run
+`muster serve` manually, export it first:
+`export MTD_PIPELINES_DIR="$(pwd)"`
 
 **"port 8000 is already in use"**
 
