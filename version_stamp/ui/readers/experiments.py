@@ -65,10 +65,15 @@ def list_apps(root_path):
     return rows
 
 
-def fetch_experiment_rows(root_path, app_name):
+def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     """Leaderboard rows in storage order (oldest first). The expensive read:
-    every experiment's metadata + log."""
-    storage = experiment_storage(root_path)
+    every experiment's metadata + log.
+
+    Accepts either ``root_path`` (local checkout) or a pre-built ``storage``
+    backend (S3 / remote workspaces).
+    """
+    if storage is None:
+        storage = experiment_storage(root_path)
     rows = []
     for i, meta in enumerate(storage.list_snapshots(app_name)):
         log = _load_log(storage, app_name, meta["verstr"])
@@ -152,3 +157,59 @@ def get_experiment(root_path, app_name, verstr_ref):
             for k in ("working_tree", "local_commits", "untracked_files")
         },
     }, None
+
+
+# ---- Storage-backend functions (S3 / remote workspaces) ----
+
+
+def list_experiments_from_storage(storage, app_name, sort=None, last=None):
+    """List experiments using a storage backend directly (for S3/remote workspaces)."""
+    rows = fetch_experiment_rows(app_name=app_name, storage=storage)
+    schema = {}  # No app conf available for S3 workspaces
+    return sort_rows(rows, schema, sort=sort, last=last)
+
+
+def get_experiment_from_storage(storage, app_name, verstr_ref):
+    """Get experiment detail from storage backend directly."""
+    verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
+    if err:
+        return None, err
+    metadata, patches = storage.load(app_name, verstr)
+    if metadata is None:
+        return None, "Experiment " + verstr + " not found"
+    log = _load_log(storage, app_name, verstr)
+    return {
+        "metadata": metadata,
+        "log": log,
+        "metrics": _get_latest_metrics(log),
+        "series": get_metric_series(log),
+        "artifacts_dir": storage.list_artifact_files(app_name, verstr),
+        "patches": {
+            k: bool(patches.get(k)) if patches else False
+            for k in ("working_tree", "local_commits", "untracked_files")
+        },
+    }, None
+
+
+def list_apps_from_storage(storage):
+    """List apps from a storage backend (S3). Limited: no version counts or conf."""
+    apps = set()
+    if hasattr(storage, "_s3") and hasattr(storage, "prefix"):
+        try:
+            paginator = storage._s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=storage.bucket, Prefix=storage.prefix + "/", Delimiter="/"
+            ):
+                for cp in page.get("CommonPrefixes", []):
+                    app_name = cp["Prefix"][len(storage.prefix) + 1:].rstrip("/").replace("_", "/")
+                    apps.add(app_name)
+        except Exception:
+            pass
+    rows = []
+    for name in sorted(apps):
+        try:
+            exp_count = len(storage.list_snapshots(name))
+        except Exception:
+            exp_count = 0
+        rows.append({"name": name, "experiments": exp_count, "versions": 0})
+    return rows

@@ -86,6 +86,27 @@ class SnapshotStorage(ABC):
         """Return the filesystem path to the artifacts directory, or None."""
         ...
 
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        """Append a single log entry to the writer's per-writer log file.
+        Default implementation falls back to read-modify-write on log.yml."""
+        data = self.load_file(app_name, verstr, "log.yml")
+        log = yaml.safe_load(data) if data else []
+        log.append(entry)
+        self.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
+
+    def load_merged_log(self, app_name, verstr):
+        """Load and merge all per-writer log files plus legacy log.yml.
+        Default implementation reads only log.yml."""
+        data = self.load_file(app_name, verstr, "log.yml")
+        if data is None:
+            return []
+        loaded = yaml.safe_load(data)
+        return loaded if isinstance(loaded, list) else []
+
+    def sync_log_to_remote(self, app_name, verstr, writer_id):
+        """Sync the writer's log file to remote storage. No-op by default."""
+        pass
+
 
 def _write_patches_to_dir(directory, patches):
     if patches.get("working_tree"):
@@ -239,6 +260,39 @@ class LocalSnapshotStorage(SnapshotStorage):
         if os.path.isdir(art_dir):
             return art_dir
         return None
+
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        Path(snap_dir).mkdir(parents=True, exist_ok=True)
+        path = os.path.join(snap_dir, "log." + writer_id + ".jsonl")
+        with open(path, "a") as f:
+            f.write(json.dumps(entry, default=str) + "\n")
+
+    def load_merged_log(self, app_name, verstr):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        entries = []
+        # Backward compat: read legacy log.yml
+        legacy_path = os.path.join(snap_dir, "log.yml")
+        if os.path.isfile(legacy_path):
+            with open(legacy_path) as f:
+                data = yaml.safe_load(f)
+            if isinstance(data, list):
+                entries.extend(data)
+        # Read all per-writer JSONL log files
+        if os.path.isdir(snap_dir):
+            for name in sorted(os.listdir(snap_dir)):
+                if name.startswith("log.") and name.endswith(".jsonl"):
+                    path = os.path.join(snap_dir, name)
+                    with open(path) as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                try:
+                                    entries.append(json.loads(line))
+                                except json.JSONDecodeError:
+                                    pass
+        entries.sort(key=lambda e: e.get("timestamp", ""))
+        return entries
 
 
 class S3SnapshotStorage(SnapshotStorage):
@@ -440,6 +494,50 @@ class S3SnapshotStorage(SnapshotStorage):
     def list_artifact_files(self, app_name, verstr):
         return None
 
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        filename = "log." + writer_id + ".jsonl"
+        existing = self.load_file(app_name, verstr, filename)
+        line = json.dumps(entry, default=str) + "\n"
+        if existing:
+            new_data = (existing.decode("utf-8") if isinstance(existing, bytes) else existing) + line
+        else:
+            new_data = line
+        self.save_file(app_name, verstr, filename, new_data)
+
+    def load_merged_log(self, app_name, verstr):
+        entries = []
+        # Legacy log.yml
+        data = self.load_file(app_name, verstr, "log.yml")
+        if data:
+            text = data.decode("utf-8") if isinstance(data, bytes) else data
+            loaded = yaml.safe_load(text)
+            if isinstance(loaded, list):
+                entries.extend(loaded)
+        # List log.*.jsonl files via S3 prefix listing
+        prefix = self._key_prefix(app_name, verstr)
+        try:
+            paginator = self._s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix + "/log."):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key.endswith(".jsonl"):
+                        try:
+                            resp = self._s3.get_object(Bucket=self.bucket, Key=key)
+                            text = resp["Body"].read().decode("utf-8")
+                            for line in text.splitlines():
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        entries.append(json.loads(line))
+                                    except json.JSONDecodeError:
+                                        pass
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        entries.sort(key=lambda e: e.get("timestamp", ""))
+        return entries
+
 
 class CachedSnapshotStorage(SnapshotStorage):
     """Local-first storage with optional S3 sync. All ops hit local disk;
@@ -542,6 +640,26 @@ class CachedSnapshotStorage(SnapshotStorage):
 
     def list_artifact_files(self, app_name, verstr):
         return self._local.list_artifact_files(app_name, verstr)
+
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        self._local.append_log_entry(app_name, verstr, writer_id, entry)
+        # Don't sync on every append — use sync_log_to_remote for periodic sync
+
+    def load_merged_log(self, app_name, verstr):
+        local_entries = self._local.load_merged_log(app_name, verstr)
+        if local_entries:
+            return local_entries
+        if self._remote:
+            return self._remote.load_merged_log(app_name, verstr)
+        return []
+
+    def sync_log_to_remote(self, app_name, verstr, writer_id):
+        if not self._remote:
+            return
+        filename = "log." + writer_id + ".jsonl"
+        data = self._local.load_file(app_name, verstr, filename)
+        if data is not None:
+            self._remote.save_file(app_name, verstr, filename, data)
 
 
 def get_snapshot_storage(backend, vmn_root_path=None, bucket=None,

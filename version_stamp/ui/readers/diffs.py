@@ -48,3 +48,40 @@ def experiment_diff(root_path, app_name, ref1, ref2):
         "metrics_delta": metrics_delta,
         "diff": diff_text,
     }, None
+
+
+def experiment_diff_from_storage(storage, app_name, ref1, ref2):
+    """Compare two experiments from a storage backend (S3). Metrics-only
+    comparison: tree diffs are unavailable without a local checkout."""
+    resolved = []
+    for ref in (ref1, ref2):
+        verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
+        if err:
+            return None, err
+        resolved.append(verstr)
+    v1, v2 = resolved
+
+    sides = []
+    for verstr in (v1, v2):
+        meta, patches = storage.load(app_name, verstr)
+        if meta is None:
+            return None, f"Experiment {verstr} not found"
+        if hasattr(storage, "load_merged_log"):
+            log = storage.load_merged_log(app_name, verstr)
+        else:
+            log = _load_log(storage, app_name, verstr)
+        sides.append((meta, patches, _get_latest_metrics(log)))
+    (meta1, patches1, m1), (meta2, patches2, m2) = sides
+
+    metrics_delta = {
+        key: {"from": m1.get(key), "to": m2.get(key)}
+        for key in sorted(set(m1) | set(m2))
+        if m1.get(key) != m2.get(key)
+    }
+
+    return {
+        "from_verstr": v1,
+        "to_verstr": v2,
+        "metrics_delta": metrics_delta,
+        "diff": None,  # Tree diffs unavailable for S3 workspaces
+    }, None

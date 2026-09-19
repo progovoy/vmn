@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
 import datetime
+import json
 import os
 import shutil
+import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -36,10 +38,37 @@ class _VersionStub:
 # Storage helpers
 # ---------------------------------------------------------------------------
 
+def _app_name(vcs, args=None):
+    """Derive app name from vcs or CLI args (safe when vcs is None)."""
+    if vcs is not None:
+        return vcs.name
+    return getattr(args, "name", None) if args is not None else None
+
+
+_WRITER_ID = None
+
+
+def _get_writer_id():
+    """Return a unique writer identifier for concurrent-safe log writes.
+
+    Cached for the process lifetime so all log entries land in the same JSONL file.
+    """
+    global _WRITER_ID
+    if _WRITER_ID is None:
+        _WRITER_ID = (
+            os.environ.get("VMN_WRITER_ID")
+            or os.environ.get("HOSTNAME")
+            or "w-" + uuid.uuid4().hex[:8]
+        )
+    return _WRITER_ID
+
+
 def _get_experiment_storage(vcs, params):
+    experiment_dir = params.get("experiment_dir") or os.environ.get("VMN_EXPERIMENT_DIR")
+    vmn_root = experiment_dir if experiment_dir else (vcs.vmn_root_path if vcs else None)
     return get_snapshot_storage(
         params.get("backend", "local"),
-        vmn_root_path=vcs.vmn_root_path,
+        vmn_root_path=vmn_root,
         bucket=params.get("bucket"),
         prefix=params.get("prefix", "vmn-experiments"),
         endpoint_url=params.get("endpoint_url"),
@@ -48,23 +77,18 @@ def _get_experiment_storage(vcs, params):
 
 
 def _load_log(storage, app_name, verstr):
-    """Load experiment log from storage."""
-    data = storage.load_file(app_name, verstr, "log.yml")
-    if data is None:
-        return []
-    return yaml.safe_load(data) or []
+    """Load experiment log from storage, merging per-writer JSONL files."""
+    return storage.load_merged_log(app_name, verstr)
 
 
 def _save_log(storage, app_name, verstr, log):
-    """Save experiment log to storage."""
+    """Save experiment log to storage. Legacy: prefer _append_to_log for new code."""
     storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
 
 
 def _append_to_log(storage, app_name, verstr, entry):
-    """Append an entry to the experiment log (immutable — never edit existing)."""
-    log = _load_log(storage, app_name, verstr)
-    log.append(entry)
-    _save_log(storage, app_name, verstr, log)
+    """Append an entry to the experiment log using per-writer JSONL files."""
+    storage.append_log_entry(app_name, verstr, _get_writer_id(), entry)
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +267,8 @@ def _resolve_experiment_version(storage, vcs, args, default_latest=False):
     ref = versions[0] if versions else None
     if ref is None and not latest and default_latest:
         latest = True
-    return _resolve_verstr(storage, vcs.name, ref, latest=latest, kind="experiment")
+    app_name = _app_name(vcs, args)
+    return _resolve_verstr(storage, app_name, ref, latest=latest, kind="experiment")
 
 
 def _parse_duration(duration_str):
@@ -276,6 +301,7 @@ def handle_experiment(vmn_ctx):
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
     }
+    params["experiment_dir"] = getattr(args, "experiment_dir", None)
 
     # Read experiment storage config from app conf, CLI overrides
     exp_conf = getattr(vcs, "experiment", None) or {}
@@ -286,8 +312,9 @@ def handle_experiment(vmn_ctx):
             if conf_val:
                 params[key] = conf_val
 
-    # Auto-init for create/run (zero-setup cold start).
-    if action in ("create", "run"):
+    # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
+    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
+    if action in ("create", "run") and not from_snapshot:
         expected_status = {"repo_tracked", "app_tracked"}
         optional_status = {
             "repos_exist_locally", "detached", "pending", "outgoing",
@@ -353,12 +380,22 @@ def handle_experiment(vmn_ctx):
 # ---------------------------------------------------------------------------
 
 def _allocate_run_verstr(storage, app_name, code_verstr):
-    """Return the verstr for a new experiment run over ``code_verstr``.
+    """Return the verstr for a new experiment run.
 
-    Content-addressed code state maps many runs to one code verstr; each new run
-    over an existing state gets a ``.N`` suffix so runs never overwrite one
-    another (e.g. same code, different seed).
+    When VMN_WRITER_ID is set (K8s mode), uses pod-unique suffix for zero
+    contention.  Otherwise, uses the existing .rN scan-and-increment.
     """
+    writer_id = os.environ.get("VMN_WRITER_ID")
+    if writer_id:
+        candidate = code_verstr + "." + writer_id
+        if not storage.exists(app_name, candidate):
+            return candidate
+        for i in range(2, 100000):
+            c = candidate + "." + str(i)
+            if not storage.exists(app_name, c):
+                return c
+        raise RuntimeError("Could not allocate experiment verstr")
+    # Single-user mode: existing scan-and-increment
     runs = []
     for meta in storage.list_snapshots(app_name):
         v = meta.get("verstr", "")
@@ -370,35 +407,101 @@ def _allocate_run_verstr(storage, app_name, code_verstr):
                 runs.append(int(suffix))
     if not runs:
         return code_verstr
-    return f"{code_verstr}.r{max(runs) + 1}"
+    return code_verstr + ".r" + str(max(runs) + 1)
 
 
 @measure_runtime_decorator
 def experiment_create(vcs, params, storage, args):
-    verstr, err = _experiment_create_core(vcs, storage, note=args.note)
+    extra = {}
+    if getattr(args, 'file', None):
+        extra.update(_parse_notes_file(args.file))
+
+    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
+    verstr, err = _experiment_create_core(
+        vcs, storage, note=args.note,
+        from_snapshot=from_snapshot,
+        extra_create_data=extra or None,
+    )
     if err is not None:
         return err
 
-    if args.file or args.metrics:
-        log = _load_log(storage, vcs.name, verstr)
-        if args.file:
-            notes_data = _parse_notes_file(args.file)
-            for k, v in notes_data.items():
-                log[0][k] = v
-        if args.metrics:
-            log.append(_create_log_entry("metrics", values=_parse_metrics(args.metrics)))
-        _save_log(storage, vcs.name, verstr, log)
+    app_name = _app_name(vcs, args)
+    if getattr(args, 'metrics', None):
+        _append_to_log(storage, app_name, verstr,
+                       _create_log_entry("metrics", values=_parse_metrics(args.metrics)))
 
     print(verstr)
     return 0
 
 
-def _experiment_create_core(vcs, storage, note=None):
+def _experiment_create_from_snapshot(storage, app_name, snapshot_meta_path, note=None, extra_create_data=None):
+    """Create experiment from an exported snapshot directory (no git required).
+
+    snapshot_meta_path: path to vmn_metadata.yml or a directory containing it.
+    Returns (verstr, error_code). error_code is None on success.
+    """
+    if os.path.isdir(snapshot_meta_path):
+        snapshot_meta_path = os.path.join(snapshot_meta_path, "vmn_metadata.yml")
+    if not os.path.isfile(snapshot_meta_path):
+        VMN_LOGGER.error("Snapshot metadata not found: " + snapshot_meta_path)
+        return None, 1
+
+    with open(snapshot_meta_path) as f:
+        snap_meta = yaml.safe_load(f)
+
+    if not isinstance(snap_meta, dict) or "verstr" not in snap_meta:
+        VMN_LOGGER.error("Invalid snapshot metadata (missing verstr): " + snapshot_meta_path)
+        return None, 1
+
+    code_verstr = snap_meta["verstr"]
+    app = app_name or snap_meta.get("app_name")
+    if not app:
+        VMN_LOGGER.error("App name not found in snapshot metadata and not provided via CLI")
+        return None, 1
+
+    verstr = _allocate_run_verstr(storage, app, code_verstr)
+
+    metadata = {
+        "verstr": verstr,
+        "base_version": snap_meta.get("base_version"),
+        "base_commit": snap_meta.get("base_commit"),
+        "branch": snap_meta.get("branch"),
+        "remote": snap_meta.get("remote"),
+        "timestamp": _now_iso(),
+        "note": note,
+        "app_name": app,
+        "code_verstr": code_verstr,
+        "from_snapshot": True,
+        "dirty_states": snap_meta.get("dirty_states", []),
+        "has_working_tree_patch": False,
+        "has_local_commits_patch": False,
+        "has_untracked_files": False,
+        "has_dep_patches": False,
+    }
+    if snap_meta.get("changesets"):
+        metadata["changesets"] = snap_meta["changesets"]
+
+    entry = _create_log_entry("create", note=note)
+    if extra_create_data:
+        entry.update(extra_create_data)
+
+    storage.save(app, verstr, metadata, {})
+    _append_to_log(storage, app, verstr, entry)
+    return verstr, None
+
+
+def _experiment_create_core(vcs, storage, note=None, from_snapshot=None, extra_create_data=None):
     """Create the experiment record (snapshot + initial log entry).
 
-    Returns (verstr, error_code). error_code is None on success. Works on a clean
-    or dirty tree; repeat runs over identical code state get a run suffix.
+    Returns (verstr, error_code). error_code is None on success.
+    When from_snapshot is set, reads identity from vmn_metadata.yml (no git needed).
     """
+    if from_snapshot:
+        app_name = _app_name(vcs)
+        return _experiment_create_from_snapshot(
+            storage, app_name, from_snapshot, note=note, extra_create_data=extra_create_data
+        )
+
     base_version, commit_hash, patches, dirty_states, ver_info, err = \
         gather_create_data(vcs, allow_clean=True)
     if err is not None:
@@ -413,8 +516,12 @@ def _experiment_create_core(vcs, storage, note=None):
     )
     metadata["code_verstr"] = code_verstr
 
+    entry = _create_log_entry("create", note=note)
+    if extra_create_data:
+        entry.update(extra_create_data)
+
     storage.save(vcs.name, verstr, metadata, patches)
-    _save_log(storage, vcs.name, verstr, [_create_log_entry("create", note=note)])
+    _append_to_log(storage, vcs.name, verstr, entry)
     return verstr, None
 
 
@@ -442,51 +549,72 @@ def experiment_run(vcs, params, storage, args):
         )
         return 1
 
-    verstr, err = _experiment_create_core(vcs, storage, note=args.note)
-    if err is not None:
-        return err
+    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
+    sync_interval = getattr(args, 'sync_interval', 30)
 
-    if args.file:
-        log = _load_log(storage, vcs.name, verstr)
+    extra = {}
+    if getattr(args, 'file', None):
         notes_data = _parse_notes_file(args.file)
         for key in ("params", "hypothesis", "tags"):
             if key in notes_data:
-                log[0][key] = notes_data[key]
-        _save_log(storage, vcs.name, verstr, log)
+                extra[key] = notes_data[key]
+
+    verstr, err = _experiment_create_core(
+        vcs, storage, note=args.note,
+        from_snapshot=from_snapshot,
+        extra_create_data=extra or None,
+    )
+    if err is not None:
+        return err
+
+    app_name = _app_name(vcs, args)
+    cwd = vcs.vmn_root_path if vcs else os.environ.get("VMN_WORKING_DIR", os.getcwd())
 
     fd, metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
     os.close(fd)
     env = dict(os.environ)
     env["VMN_EXPERIMENT_ID"] = verstr
-    env["VMN_APP_NAME"] = vcs.name
+    env["VMN_APP_NAME"] = app_name or ""
     env["VMN_METRICS_FILE"] = metrics_path
 
-    VMN_LOGGER.info(f"Experiment {verstr}: running {' '.join(run_cmd)}")
+    VMN_LOGGER.info("Experiment " + verstr + ": running " + " ".join(run_cmd))
     tailer = _MetricsTailer(metrics_path)
     start = time.monotonic()
     try:
-        proc = subprocess.Popen(run_cmd, env=env, cwd=vcs.vmn_root_path)
+        proc = subprocess.Popen(run_cmd, env=env, cwd=cwd)
     except FileNotFoundError:
-        VMN_LOGGER.error(f"Command not found: {run_cmd[0]}")
+        VMN_LOGGER.error("Command not found: " + run_cmd[0])
         _safe_unlink(metrics_path)
         return 1
 
-    # Tail the metrics file for the whole run so the log is live during
-    # training; a final drain after exit catches the tail.
+    writer_id = _get_writer_id()
+
+    def _try_sync():
+        try:
+            storage.sync_log_to_remote(app_name, verstr, writer_id)
+        except Exception:
+            VMN_LOGGER.debug("S3 sync failed", exc_info=True)
+
+    last_sync = time.monotonic()
     while proc.poll() is None:
-        _ingest_metric_records(storage, vcs.name, verstr, tailer.poll())
+        _ingest_metric_records(storage, app_name, verstr, tailer.poll())
+        if sync_interval and time.monotonic() - last_sync > sync_interval:
+            _try_sync()
+            last_sync = time.monotonic()
         time.sleep(_METRICS_TAIL_INTERVAL)
     exit_code = proc.returncode
     duration = round(time.monotonic() - start, 3)
 
-    _ingest_metric_records(storage, vcs.name, verstr, tailer.poll())
+    _ingest_metric_records(storage, app_name, verstr, tailer.poll())
     _safe_unlink(metrics_path)
 
-    _append_to_log(storage, vcs.name, verstr, _create_log_entry(
+    _append_to_log(storage, app_name, verstr, _create_log_entry(
         "run", command=run_cmd, exit_code=exit_code, duration_sec=duration,
     ))
 
-    VMN_LOGGER.info(f"Experiment {verstr}: exited {exit_code} in {duration}s")
+    _try_sync()
+
+    VMN_LOGGER.info("Experiment " + verstr + ": exited " + str(exit_code) + " in " + str(duration) + "s")
     print(verstr)
     return exit_code
 
@@ -525,14 +653,16 @@ def experiment_add(vcs, params, storage, args):
         VMN_LOGGER.error(err)
         return 1
 
+    app_name = _app_name(vcs, args)
+
     if args.metrics:
         entry = _create_log_entry("metrics", values=_parse_metrics(args.metrics))
-        _append_to_log(storage, vcs.name, verstr, entry)
+        _append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added metrics to {verstr}")
 
     if args.note:
         entry = _create_log_entry("note", text=args.note)
-        _append_to_log(storage, vcs.name, verstr, entry)
+        _append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added note to {verstr}")
 
     if args.attach:
@@ -540,15 +670,15 @@ def experiment_add(vcs, params, storage, args):
             VMN_LOGGER.error(f"Artifact file not found: {args.attach}")
             return 1
         info = _compute_artifact_info(args.attach)
-        _save_artifact(storage, vcs.name, verstr, args.attach)
+        _save_artifact(storage, app_name, verstr, args.attach)
         entry = _create_log_entry("artifact", **info)
-        _append_to_log(storage, vcs.name, verstr, entry)
+        _append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Attached {info['path']} to {verstr}")
 
     if args.file:
         notes_data = _parse_notes_file(args.file)
         entry = _create_log_entry("structured", **notes_data)
-        _append_to_log(storage, vcs.name, verstr, entry)
+        _append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
 
     return 0
@@ -560,21 +690,22 @@ def experiment_add(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
-    experiments = storage.list_snapshots(vcs.name)
+    app_name = _app_name(vcs, args)
+    experiments = storage.list_snapshots(app_name)
     if not experiments:
-        print(f"No experiments found for {vcs.name}")
+        print(f"No experiments found for {app_name}")
         return 0
 
     last = getattr(args, "last", None)
     if last:
         experiments = experiments[-last:]
 
-    schema = _get_metrics_schema(vcs)
+    schema = _get_metrics_schema(vcs) if vcs else {}
 
     rows = []
     all_metric_keys = set()
     for meta in experiments:
-        log = _load_log(storage, vcs.name, meta["verstr"])
+        log = _load_log(storage, app_name, meta["verstr"])
         metrics = _get_latest_metrics(log)
         all_metric_keys.update(metrics.keys())
         rows.append((meta, metrics, log))
@@ -644,12 +775,13 @@ def experiment_show(vcs, params, storage, args):
         VMN_LOGGER.error(err)
         return 1
 
-    metadata, patches = storage.load(vcs.name, verstr)
+    app_name = _app_name(vcs, args)
+    metadata, patches = storage.load(app_name, verstr)
     if metadata is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
-    log = _load_log(storage, vcs.name, verstr)
+    log = _load_log(storage, app_name, verstr)
 
     print(f"Experiment: {verstr}")
     print(f"  Branch:    {metadata.get('branch', '?')}")
@@ -700,22 +832,25 @@ def experiment_show(vcs, params, storage, args):
 # compare
 # ---------------------------------------------------------------------------
 
-def _load_experiment_bundle(storage, vcs, verstr):
+def _load_experiment_bundle(storage, vcs, verstr, app_name=None):
     """Load (meta, patches, log) for an experiment, or None (logging) on error."""
-    meta, patches = storage.load(vcs.name, verstr)
+    app_name = app_name or (_app_name(vcs))
+    meta, patches = storage.load(app_name, verstr)
     if meta is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return None
-    return meta, patches, _load_log(storage, vcs.name, verstr)
+    return meta, patches, _load_log(storage, app_name, verstr)
 
 
-def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None):
+def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None, app_name=None):
     """Resolve (meta, patches, log) bundles for compare/diff.
 
     Uses the given ``-v`` versions (each resolved), or the ``count`` most recent
     when none are given; ``cap`` limits how many are taken. Returns the list, or
     None (logging) on error — at least two experiments are required.
     """
+    app_name = app_name or (_app_name(vcs))
+
     if len(versions) == 1:
         VMN_LOGGER.error(
             "Need at least 2 experiments — pass -v <a> -v <b> or none for the latest"
@@ -734,7 +869,7 @@ def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None):
         if count < 2:
             VMN_LOGGER.error(f"Need at least 2 experiments, got {count}")
             return None
-        snaps = storage.list_snapshots(vcs.name)
+        snaps = storage.list_snapshots(app_name)
         if len(snaps) < 2:
             VMN_LOGGER.error("Need at least 2 experiments")
             return None
@@ -742,7 +877,7 @@ def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None):
 
     bundles = []
     for verstr in verstrs:
-        bundle = _load_experiment_bundle(storage, vcs, verstr)
+        bundle = _load_experiment_bundle(storage, vcs, verstr, app_name=app_name)
         if bundle is None:
             return None
         bundles.append(bundle)
@@ -753,13 +888,14 @@ def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None):
 def experiment_compare(vcs, params, storage, args):
     versions = getattr(args, "version", None) or []
     last = getattr(args, "last", None) or getattr(args, "top", None)
+    app_name = _app_name(vcs, args)
 
-    experiments = _resolve_experiment_bundles(storage, vcs, versions, count=last or 2)
+    experiments = _resolve_experiment_bundles(storage, vcs, versions, count=last or 2, app_name=app_name)
     if experiments is None:
         return 1
 
     # Metrics comparison table
-    schema = _get_metrics_schema(vcs)
+    schema = _get_metrics_schema(vcs) if vcs else {}
     all_keys = set()
     exp_metrics = []
     for meta, patches, log in experiments:
@@ -798,7 +934,7 @@ def experiment_compare(vcs, params, storage, args):
     if len(experiments) == 2:
         v1 = experiments[0][0]["verstr"]
         v2 = experiments[1][0]["verstr"]
-        print(f"\nRun 'vmn exp diff {vcs.name} -v {v1} -v {v2}' for a code diff.")
+        print(f"\nRun 'vmn exp diff {app_name} -v {v1} -v {v2}' for a code diff.")
 
     return 0
 
@@ -862,7 +998,8 @@ def experiment_restore(vcs, params, storage, args):
         VMN_LOGGER.error(err)
         return 1
 
-    metadata, patches = storage.load(vcs.name, verstr)
+    app_name = _app_name(vcs, args)
+    metadata, patches = storage.load(app_name, verstr)
     if metadata is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
@@ -884,12 +1021,13 @@ def experiment_export(vcs, params, storage, args):
         VMN_LOGGER.error(err)
         return 1
 
-    metadata, patches = storage.load(vcs.name, verstr)
+    app_name = _app_name(vcs, args)
+    metadata, patches = storage.load(app_name, verstr)
     if metadata is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
-    log = _load_log(storage, vcs.name, verstr)
+    log = _load_log(storage, app_name, verstr)
 
     safe_verstr = verstr.replace("+", "_plus_")
     output_path = args.output or f"{safe_verstr}.tar.gz"
@@ -913,7 +1051,7 @@ def experiment_export(vcs, params, storage, args):
         with open(os.path.join(dest, "vmn_experiment.yml"), "w") as f:
             yaml.dump({"metadata": metadata, "log": log}, f, sort_keys=False)
 
-        art_dir = storage.list_artifact_files(vcs.name, verstr)
+        art_dir = storage.list_artifact_files(app_name, verstr)
         if art_dir and os.path.isdir(art_dir):
             dest_art = os.path.join(dest, "artifacts")
             shutil.copytree(art_dir, dest_art, dirs_exist_ok=True)
@@ -935,7 +1073,8 @@ def experiment_export(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_prune(vcs, params, storage, args):
-    experiments = storage.list_snapshots(vcs.name)
+    app_name = _app_name(vcs, args)
+    experiments = storage.list_snapshots(app_name)
     if not experiments:
         print("No experiments to prune")
         return 0
@@ -978,7 +1117,7 @@ def experiment_prune(vcs, params, storage, args):
 
     deleted = 0
     for meta in to_delete:
-        storage.delete(vcs.name, meta["verstr"])
+        storage.delete(app_name, meta["verstr"])
         deleted += 1
 
     kept = len(experiments) - deleted

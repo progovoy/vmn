@@ -42,6 +42,54 @@ handle_exp = handle_experiment  # alias  # noqa: F811
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
 
+def _run_experiment_from_snapshot(args):
+    """Run experiment commands without a git repo (from-snapshot mode)."""
+    from version_stamp.cli.experiment import (
+        _get_experiment_storage,
+        experiment_create,
+        experiment_run,
+        experiment_add,
+        experiment_list,
+        experiment_show,
+        experiment_compare,
+        experiment_prune,
+    )
+
+    if getattr(args, "writer_id", None):
+        os.environ["VMN_WRITER_ID"] = args.writer_id
+
+    params = {
+        "backend": getattr(args, "backend", "local"),
+        "bucket": getattr(args, "bucket", None),
+        "prefix": getattr(args, "prefix", "vmn-experiments"),
+        "endpoint_url": getattr(args, "endpoint_url", None),
+        "experiment_dir": getattr(args, "experiment_dir", None),
+    }
+
+    storage = _get_experiment_storage(None, params)
+    action = args.action
+
+    dispatch = {
+        "create": experiment_create,
+        "run": experiment_run,
+        "add": experiment_add,
+        "list": experiment_list,
+        "show": experiment_show,
+        "compare": experiment_compare,
+        "prune": experiment_prune,
+    }
+
+    handler = dispatch.get(action)
+    if handler is not None:
+        return handler(None, params, storage, args)
+
+    VMN_LOGGER.error(
+        "Action '%s' requires a git repository "
+        "(not available in --from-snapshot mode)", action,
+    )
+    return 1
+
+
 def _reject_readonly_version_creation(args, root_path):
     marker = os.path.join(root_path, ".vmn", WORKTREE_READONLY_MARKER)
     if args.command not in _VERSION_CREATING_COMMANDS or not os.path.exists(marker):
@@ -158,6 +206,13 @@ def vmn_run(command_line=None):
         init_stamp_logger(debug=args.debug)
         return handle_ui(args), None
 
+    # Git-free experiment mode: --from-snapshot doesn't need a git repo
+    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
+        "VMN_SNAPSHOT_METADATA"
+    )
+    if args.command in ("experiment", "exp") and from_snapshot:
+        return _run_experiment_from_snapshot(args), None
+
     try:
         if args.command == "show":
             init_stamp_logger(debug=args.debug, supress_stdout=True)
@@ -213,6 +268,9 @@ def vmn_run(command_line=None):
         VMN_LOGGER.debug(
             f"\n{BOLD_CHAR}Command line: {' '.join(command_line)}{END_CHAR}"
         )
+
+        if hasattr(args, "writer_id") and args.writer_id:
+            os.environ["VMN_WRITER_ID"] = args.writer_id
 
         # Call the actual function
         err, vmnc = _vmn_run(args, root_path)

@@ -11,6 +11,7 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
@@ -69,6 +70,19 @@ def create_app(manager, token=None, read_only=False, use_index=True):
             raise HTTPException(400, f"Workspace '{name}' is not a git checkout")
         return ws
 
+    def _experiment_workspace(name):
+        """Like _workspace but accepts git, s3, and path-only workspaces for experiment routes."""
+        return _workspace(name)
+
+    def _exp_storage_for(ws):
+        """Return the right experiment storage backend for a workspace."""
+        if ws.kind == "s3":
+            return get_snapshot_storage(
+                "s3", bucket=ws.bucket, prefix=ws.prefix or "vmn-experiments",
+                endpoint_url=ws.endpoint_url, subdir="experiments"
+            )
+        return None  # None means: use the default path-based reader
+
     @app.get(f"{API_PREFIX}/meta")
     def meta():
         from version_stamp import version as version_mod
@@ -107,14 +121,20 @@ def create_app(manager, token=None, read_only=False, use_index=True):
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
     def list_apps(ws_name: str):
-        ws = _git_workspace(ws_name)
+        ws = _experiment_workspace(ws_name)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            return exp_reader.list_apps_from_storage(s3_storage)
         return exp_reader.list_apps(ws.path)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments")
     def list_experiments(ws_name: str, app_tag: str, sort: str = None,
                          last: int = None):
-        ws = _git_workspace(ws_name)
+        ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            return exp_reader.list_experiments_from_storage(s3_storage, app_name, sort=sort, last=last)
         index = _index_for(ws)
         if index:
             return index.list_experiments(app_name, sort=sort, last=last)
@@ -125,16 +145,23 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         "/experiments/{verstr}"
     )
     def get_experiment(ws_name: str, app_tag: str, verstr: str):
-        ws = _git_workspace(ws_name)
+        ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
-        detail, err = exp_reader.get_experiment(ws.path, app_name, verstr)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            detail, err = exp_reader.get_experiment_from_storage(s3_storage, app_name, verstr)
+        else:
+            detail, err = exp_reader.get_experiment(ws.path, app_name, verstr)
         if err:
             raise HTTPException(404, err)
         return detail
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
+        ws = _experiment_workspace(ws_name)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            return {}  # No app conf available for S3 workspaces
         return exp_reader.metrics_schema(ws.path, tag_name_to_app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
@@ -172,10 +199,17 @@ def create_app(manager, token=None, read_only=False, use_index=True):
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff")
     def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
-        ws = _git_workspace(ws_name)
-        result, err = diff_reader.experiment_diff(
-            ws.path, tag_name_to_app_name(app_tag), v, to
-        )
+        ws = _experiment_workspace(ws_name)
+        app_name = tag_name_to_app_name(app_tag)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            result, err = diff_reader.experiment_diff_from_storage(
+                s3_storage, app_name, v, to
+            )
+        else:
+            result, err = diff_reader.experiment_diff(
+                ws.path, app_name, v, to
+            )
         if err:
             raise HTTPException(404, err)
         return result

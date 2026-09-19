@@ -602,6 +602,32 @@ def _add_experiment_parser(subprasers, name):
     pexp.add_argument("--keep", type=int, default=None, help="Keep latest N experiments (for prune)")
     pexp.add_argument("--older-than", default=None, help="Prune experiments older than duration (e.g., 30d)")
     pexp.add_argument(
+        "--from-snapshot",
+        default=None,
+        help="Path to vmn_metadata.yml or directory containing it. "
+             "Creates experiment from exported snapshot (no git required). "
+             "Falls back to VMN_SNAPSHOT_METADATA env var.",
+    )
+    pexp.add_argument(
+        "--experiment-dir",
+        default=None,
+        help="Write experiments to this directory instead of local .vmn/. "
+             "For shared NFS/FSx mounts. Falls back to VMN_EXPERIMENT_DIR env var.",
+    )
+    pexp.add_argument(
+        "--writer-id",
+        default=None,
+        help="Unique writer ID for this process (default: VMN_WRITER_ID or hostname). "
+             "Used for per-writer log files and pod-unique experiment IDs.",
+    )
+    pexp.add_argument(
+        "--sync-interval",
+        type=int,
+        default=30,
+        help="Seconds between S3 metric syncs during 'run' (default: 30). "
+             "Set to 0 to disable periodic sync.",
+    )
+    pexp.add_argument(
         "--backend",
         default="local",
         choices=["local", "s3"],
