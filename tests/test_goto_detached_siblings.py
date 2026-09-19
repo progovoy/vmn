@@ -38,7 +38,10 @@ def stale_workspace(tmp_path):
         _run(f"git clone {bare} {local}", cwd=tmp_path)
         _run("git checkout -b master", cwd=local)
         (local / "init.txt").write_text(name)
-        _run("git add . && git -c user.email=t@t -c user.name=t commit -m init", cwd=local)
+        _run(
+            "git add . && git -c user.email=t@t -c user.name=t commit -m init",
+            cwd=local,
+        )
         _run("git push -u origin master", cwd=local)
 
     app_dir = work / "app"
@@ -70,14 +73,20 @@ def stale_workspace(tmp_path):
     with open(conf_path, "w") as f:
         yaml.dump(conf_data, f)
 
-    _run("git add . && git -c user.email=t@t -c user.name=t commit -m 'add conf'", cwd=app_dir)
+    _run(
+        "git add . && git -c user.email=t@t -c user.name=t commit -m 'add conf'",
+        cwd=app_dir,
+    )
     _run("git push origin master", cwd=app_dir)
 
     # Advance dep locally so that when we stamp, the recorded changeset
     # is a commit that we can later remove from the local clone.
     dep_dir = work / "dep"
     (dep_dir / "new.txt").write_text("advance")
-    _run("git add . && git -c user.email=t@t -c user.name=t commit -m advance", cwd=dep_dir)
+    _run(
+        "git add . && git -c user.email=t@t -c user.name=t commit -m advance",
+        cwd=dep_dir,
+    )
     _run("git push origin master", cwd=dep_dir)
 
     # Stamp myapp 0.0.1 — this records dep at the advanced commit
@@ -89,6 +98,7 @@ def stale_workspace(tmp_path):
     # separate bare that only has the initial commit.  This ensures the
     # object DB truly lacks the SHA recorded in the stamp tag.
     import shutil
+
     shutil.rmtree(str(dep_dir))
     # Clone from a shallow depth that excludes the advanced commit
     # We use --single-branch --depth=1 and then reset to initial commit
@@ -96,10 +106,13 @@ def stale_workspace(tmp_path):
     stale_bare = tmp_path / "stale_dep.git"
     _run(f"git clone --bare {remotes / 'dep.git'} {stale_bare}", cwd=tmp_path)
     # Remove the advanced commit from this bare by resetting its master
-    initial_sha = subprocess.check_output(
-        "git rev-list --max-parents=0 HEAD",
-        cwd=str(stale_bare), shell=True
-    ).decode().strip()
+    initial_sha = (
+        subprocess.check_output(
+            "git rev-list --max-parents=0 HEAD", cwd=str(stale_bare), shell=True
+        )
+        .decode()
+        .strip()
+    )
     _run(f"git update-ref refs/heads/master {initial_sha}", cwd=stale_bare)
     _run("git gc --prune=now", cwd=stale_bare)
     # Clone from this stale bare — the new dep won't have the advanced commit
@@ -132,7 +145,10 @@ def branched_workspace(tmp_path):
         _run(f"git clone {bare} {local}", cwd=tmp_path)
         _run("git checkout -b master", cwd=local)
         (local / "init.txt").write_text(name)
-        _run("git add . && git -c user.email=t@t -c user.name=t commit -m init", cwd=local)
+        _run(
+            "git add . && git -c user.email=t@t -c user.name=t commit -m init",
+            cwd=local,
+        )
         _run("git push -u origin master", cwd=local)
 
     app_dir = work / "app"
@@ -162,7 +178,10 @@ def branched_workspace(tmp_path):
     with open(conf_path, "w") as f:
         yaml.dump(conf_data, f)
 
-    _run("git add . && git -c user.email=t@t -c user.name=t commit -m 'add conf'", cwd=app_dir)
+    _run(
+        "git add . && git -c user.email=t@t -c user.name=t commit -m 'add conf'",
+        cwd=app_dir,
+    )
     _run("git push origin master", cwd=app_dir)
 
     reset_logger()
@@ -188,9 +207,7 @@ def test_goto_without_pull_surfaces_real_git_error(stale_workspace, caplog):
     assert any(
         "reference is not a tree" in l or "unable to read tree" in l
         for l in failed_lines
-    ), (
-        f"Expected git error reason in 'Failed to update' line, got: {failed_lines}"
-    )
+    ), f"Expected git error reason in 'Failed to update' line, got: {failed_lines}"
 
 
 def test_goto_without_pull_hints_at_pull_flag(stale_workspace):
@@ -216,7 +233,9 @@ def test_goto_with_pull_succeeds_in_detached_head(stale_workspace):
     assert "fetching instead of pulling" in log.lower()
 
 
-def test_pull_on_branch_still_uses_selected_remote_pull(branched_workspace, monkeypatch):
+def test_pull_on_branch_still_uses_selected_remote_pull(
+    branched_workspace, monkeypatch
+):
     """Regression: when NOT in detached HEAD, pull() must still call
     selected_remote.pull('--ff-only'), not the fetch fallback."""
     os.environ["VMN_WORKING_DIR"] = branched_workspace
@@ -224,6 +243,7 @@ def test_pull_on_branch_still_uses_selected_remote_pull(branched_workspace, monk
     pull_calls = []
 
     from git import Remote
+
     original_pull_fn = Remote.pull
 
     def spy_pull(self, *args, **kwargs):
@@ -236,6 +256,6 @@ def test_pull_on_branch_still_uses_selected_remote_pull(branched_workspace, monk
     err, _ = vmn_run(["goto", "myapp", "-v", "0.0.1", "--pull"])
 
     # pull() should have been called via selected_remote.pull
-    assert any("selected_remote.pull" in str(c) for c in pull_calls), (
-        f"Expected selected_remote.pull to be called, got: {pull_calls}"
-    )
+    assert any(
+        "selected_remote.pull" in str(c) for c in pull_calls
+    ), f"Expected selected_remote.pull to be called, got: {pull_calls}"

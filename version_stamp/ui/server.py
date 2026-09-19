@@ -48,14 +48,13 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         return indexes[ws.name]
 
     if token:
+
         @app.middleware("http")
         async def _token_auth(request: Request, call_next):
             if request.url.path.startswith("/api"):
                 auth = request.headers.get("Authorization", "")
                 if auth != f"Bearer {token}":
-                    return JSONResponse(
-                        {"detail": "Unauthorized"}, status_code=401
-                    )
+                    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
             return await call_next(request)
 
     def _workspace(name):
@@ -78,8 +77,11 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         """Return the right experiment storage backend for a workspace."""
         if ws.kind == "s3":
             return get_snapshot_storage(
-                "s3", bucket=ws.bucket, prefix=ws.prefix or "vmn-experiments",
-                endpoint_url=ws.endpoint_url, subdir="experiments"
+                "s3",
+                bucket=ws.bucket,
+                prefix=ws.prefix or "vmn-experiments",
+                endpoint_url=ws.endpoint_url,
+                subdir="experiments",
             )
         return None  # None means: use the default path-based reader
 
@@ -128,38 +130,55 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         return exp_reader.list_apps(ws.path)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments")
-    def list_experiments(ws_name: str, app_tag: str, sort: str = None,
-                         last: int = None, offset: int = 0,
-                         limit: int = None):
+    def list_experiments(
+        ws_name: str,
+        app_tag: str,
+        sort: str = None,
+        last: int = None,
+        offset: int = 0,
+        limit: int = None,
+    ):
         ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             return exp_reader.list_experiments_from_storage(
-                s3_storage, app_name, sort=sort, last=last,
-                offset=offset, limit=limit,
+                s3_storage,
+                app_name,
+                sort=sort,
+                last=last,
+                offset=offset,
+                limit=limit,
             )
         index = _index_for(ws)
         if index:
             return index.list_experiments(
-                app_name, sort=sort, last=last,
-                offset=offset, limit=limit,
+                app_name,
+                sort=sort,
+                last=last,
+                offset=offset,
+                limit=limit,
             )
         return exp_reader.list_experiments(
-            ws.path, app_name, sort=sort, last=last,
-            offset=offset, limit=limit,
+            ws.path,
+            app_name,
+            sort=sort,
+            last=last,
+            offset=offset,
+            limit=limit,
         )
 
     @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}"
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
     )
     def get_experiment(ws_name: str, app_tag: str, verstr: str):
         ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
-            detail, err = exp_reader.get_experiment_from_storage(s3_storage, app_name, verstr)
+            detail, err = exp_reader.get_experiment_from_storage(
+                s3_storage, app_name, verstr
+            )
         else:
             detail, err = exp_reader.get_experiment(ws.path, app_name, verstr)
         if err:
@@ -239,9 +258,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
                 s3_storage, app_name, v, to
             )
         else:
-            result, err = diff_reader.experiment_diff(
-                ws.path, app_name, v, to
-            )
+            result, err = diff_reader.experiment_diff(ws.path, app_name, v, to)
         if err:
             raise HTTPException(404, err)
         return result
@@ -252,8 +269,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         return snap_reader.list_snapshots(ws.path, tag_name_to_app_name(app_tag))
 
     @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/snapshots/{verstr}"
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/snapshots/{verstr}"
     )
     def get_snapshot(ws_name: str, app_tag: str, verstr: str):
         ws = _git_workspace(ws_name)

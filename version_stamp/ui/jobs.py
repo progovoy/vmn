@@ -17,9 +17,7 @@ import uuid
 # was nothing to do" - distinct from actually producing the thing the action
 # promised (e.g. `vmn snapshot create` on a clean tree exits 0 and does not
 # create a snapshot).
-_NOOP_LOG_MARKERS = (
-    "No local changes to snapshot (working tree is clean)",
-)
+_NOOP_LOG_MARKERS = ("No local changes to snapshot (working tree is clean)",)
 
 
 def _metric_args(metrics):
@@ -120,7 +118,14 @@ def build_command(action, app_name, body):
         if not verstr or note is None:
             return None, "verstr and note are required"
         return [
-            "vmn", "experiment", "add", app_name, "-v", verstr, "--note", note,
+            "vmn",
+            "experiment",
+            "add",
+            app_name,
+            "-v",
+            verstr,
+            "--note",
+            note,
         ], None
 
     return None, f"Unknown action '{action}'"
@@ -184,7 +189,10 @@ class JobRunner:
             argv = [sys.executable, "-m", "version_stamp.cli"] + job.command[1:]
         try:
             proc = subprocess.run(
-                argv, cwd=job.cwd, capture_output=True, text=True,
+                argv,
+                cwd=job.cwd,
+                capture_output=True,
+                text=True,
             )
             job.log = (proc.stdout or "") + (proc.stderr or "")
             job.exit_code = proc.returncode

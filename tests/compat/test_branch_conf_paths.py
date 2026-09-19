@@ -120,9 +120,7 @@ def test_canonical_path_for_branch_named_branch_conf(tmp_path):
     _touch(branch_conf_canonical_path(app_dir, "branch_conf"))
 
     path, convention = resolve_branch_conf_path(app_dir, "branch_conf")
-    assert path == os.path.join(
-        app_dir, "branch_conf", "branch_conf", "conf.yml"
-    )
+    assert path == os.path.join(app_dir, "branch_conf", "branch_conf", "conf.yml")
     assert convention == "canonical"
 
 

@@ -209,7 +209,6 @@ def _resolve_rc_path(shell):
     )
 
 
-
 def _strip_managed_block(content):
     start = content.find(COMPLETION_MARKER)
     if start < 0:

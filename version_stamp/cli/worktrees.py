@@ -77,9 +77,7 @@ def worktree_create(vmn_ctx):
     os.makedirs(island_path)
     main_dest = os.path.join(island_path, os.path.basename(main_repo_path))
     island_branch = f"island/{island_name}/{current_branch}"
-    if _create_main_worktree(
-        main_repo_path, main_dest, island_branch, source
-    ) != 0:
+    if _create_main_worktree(main_repo_path, main_dest, island_branch, source) != 0:
         shutil.rmtree(island_path, ignore_errors=True)
         return 1
 
@@ -103,9 +101,7 @@ def worktree_create(vmn_ctx):
         dep_dest = os.path.join(island_path, dep_name)
         source_path = _find_dep_repo_path(vmn_ctx, dep_info)
         if source_path:
-            ret = _create_dep_worktree(
-                source_path, dep_dest, dep_info, dep_branch
-            )
+            ret = _create_dep_worktree(source_path, dep_dest, dep_info, dep_branch)
         elif args.shallow_deps:
             ret = _shallow_clone_dep(dep_info, dep_dest, dep_branch)
         else:
@@ -224,9 +220,7 @@ def worktree_remove(vmn_ctx):
         manifest = json.load(stream)
 
     success = True
-    main_source = manifest["main_repo"].get(
-        "source_path", vmn_ctx.vcs.vmn_root_path
-    )
+    main_source = manifest["main_repo"].get("source_path", vmn_ctx.vcs.vmn_root_path)
     for dep in manifest.get("deps", {}).values():
         source_path = (
             dep.get("source_path")
@@ -244,13 +238,14 @@ def worktree_remove(vmn_ctx):
     ):
         success = False
     if not success:
-        VMN_LOGGER.error(f"Island cleanup incomplete; retry metadata kept at {manifest_path}")
+        VMN_LOGGER.error(
+            f"Island cleanup incomplete; retry metadata kept at {manifest_path}"
+        )
         return 1
 
     shutil.rmtree(island_path, ignore_errors=True)
     VMN_LOGGER.info(f"Removed island: {name}")
     return 0
-
 
 
 def _resolve_island_name(args):

@@ -16,11 +16,18 @@ from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
     VMN_BE_TYPE_GIT,
 )
-from version_stamp.core.logging import VMN_LOGGER, init_stamp_logger, measure_runtime_decorator
+from version_stamp.core.logging import (
+    VMN_LOGGER,
+    init_stamp_logger,
+    measure_runtime_decorator,
+)
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.cli.constants import LOG_FILENAME
 from version_stamp.stamping.publisher import VersionControlStamper
-from version_stamp.stamping.template_data import create_data_dict_for_jinja2, gen_jinja2_template_from_data
+from version_stamp.stamping.template_data import (
+    create_data_dict_for_jinja2,
+    gen_jinja2_template_from_data,
+)
 
 
 @measure_runtime_decorator
@@ -100,7 +107,9 @@ def show(vcs, params, verstr=None):
     if params.get("dev") and not params.get("from_file") and dirty_states:
         try:
             from version_stamp.cli.snapshot import (
-                _generate_patches, _generate_dep_patches, _compute_verstr,
+                _generate_patches,
+                _generate_dep_patches,
+                _compute_verstr,
             )
 
             commit_hash = vcs.backend.changeset()
@@ -166,9 +175,7 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
             out = data["_version"]
 
         if params.get("display_unique_id"):
-            out = VMNBackend.gen_unique_id(
-                out, data["changesets"]["."]["hash"]
-            )
+            out = VMNBackend.gen_unique_id(out, data["changesets"]["."]["hash"])
 
         if is_dev:
             out = _build_dev_version(
@@ -342,9 +349,7 @@ def gen(vcs, params, verstr_range=None):
 
         for k, v in vcs.configured_deps.items():
             if k not in vcs.actual_deps_state:
-                VMN_LOGGER.error(
-                    f"{k} doesn't exist locally. Use vmn goto and rerun"
-                )
+                VMN_LOGGER.error(f"{k} doesn't exist locally. Use vmn goto and rerun")
                 raise RuntimeError()
 
             data["changesets"][k] = copy.deepcopy(vcs.actual_deps_state[k])
@@ -420,7 +425,7 @@ def _goto_dev_version(vcs, params, version):
         metadata, patches = exp_storage.load(vcs.name, version)
 
     if metadata is None:
-        conf_storage = getattr(vcs, 'snapshot_storage', None) or {}
+        conf_storage = getattr(vcs, "snapshot_storage", None) or {}
         if conf_storage.get("bucket"):
             try:
                 s3_storage = get_snapshot_storage(
@@ -450,6 +455,7 @@ def goto_version(vcs, params, version, pull):
 
     # Handle dev versions via snapshot restore
     from version_stamp.core.version_math import is_dev_version
+
     if version is not None and is_dev_version(version):
         return _goto_dev_version(vcs, params, version)
 
@@ -469,9 +475,7 @@ def goto_version(vcs, params, version, pull):
                     VMN_LOGGER.error(
                         "Failed to pull, run with --debug for more details"
                     )
-                    VMN_LOGGER.debug(
-                        "Logged Exception message:", exc_info=True
-                    )
+                    VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
                     return 1
 
@@ -518,9 +522,7 @@ def goto_version(vcs, params, version, pull):
             try:
                 vcs.retrieve_remote_changes()
             except Exception:
-                VMN_LOGGER.error(
-                    "Failed to pull, run with --debug for more details"
-                )
+                VMN_LOGGER.error("Failed to pull, run with --debug for more details")
                 VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
                 return 1
@@ -631,9 +633,7 @@ def _update_repo(args):
         if not client.in_detached_head():
             err = client.check_for_outgoing_changes()
             if err:
-                VMN_LOGGER.info(
-                    "{0}. Aborting update operation".format(err)
-                )
+                VMN_LOGGER.info("{0}. Aborting update operation".format(err))
                 return {"repo": rel_path, "status": 1, "description": err}
 
         VMN_LOGGER.info("Updating {0}".format(rel_path))
@@ -650,9 +650,7 @@ def _update_repo(args):
         if changeset is None:
             if tag is not None:
                 client.checkout(tag=tag)
-                VMN_LOGGER.info(
-                    "Updated {0} to tag {1}".format(rel_path, tag)
-                )
+                VMN_LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
             else:
                 rev = client.checkout_branch(branch_name=branch_name)
                 if rev is None:
@@ -669,9 +667,7 @@ def _update_repo(args):
         else:
             client.checkout(rev=changeset)
 
-            VMN_LOGGER.info(
-                "Updated {0} to {1}".format(rel_path, changeset)
-            )
+            VMN_LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
     except Exception as e:
         reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
@@ -682,9 +678,7 @@ def _update_repo(args):
         try:
             client.checkout(rev=cur_changeset)
         except Exception:
-            VMN_LOGGER.exception(
-                "Unexpected behaviour when tried to revert:"
-            )
+            VMN_LOGGER.exception("Unexpected behaviour when tried to revert:")
 
         return {"repo": rel_path, "status": 1, "description": reason}
 
@@ -731,9 +725,7 @@ def _goto_version(deps, vmn_root_path, pull):
                 f"Failed to find a remote for dependency '{rel_path}'. "
                 f"Check the 'remote' field in your deps configuration."
             )
-            raise RuntimeError(
-                f"No remote configured for dependency '{rel_path}'"
-            )
+            raise RuntimeError(f"No remote configured for dependency '{rel_path}'")
 
         # In case the remote is a local dir
         if v["remote"].startswith("."):
@@ -805,11 +797,14 @@ def _goto_version(deps, vmn_root_path, pull):
                 continue
 
             desc = res.get("description") or ""
-            if any(p in desc for p in (
-                "reference is not a tree",
-                "unable to read tree",
-                "did not match any",
-            )):
+            if any(
+                p in desc
+                for p in (
+                    "reference is not a tree",
+                    "unable to read tree",
+                    "did not match any",
+                )
+            ):
                 has_missing_objects = True
 
             msg = "Failed to update "
@@ -830,8 +825,6 @@ def _goto_version(deps, vmn_root_path, pull):
         VMN_LOGGER.error(
             "Failed to update one or more of the required repos. See log above"
         )
-        raise RuntimeError(
-            "Failed to update one or more dependency repos"
-        )
+        raise RuntimeError("Failed to update one or more dependency repos")
 
     return 0

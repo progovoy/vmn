@@ -43,7 +43,8 @@ class GitBranchMixin:
             out = self._be.git.branch("-r", "--contains", hexsha)
             # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
             remote_branches = [
-                stripped for b in out.split("\n")
+                stripped
+                for b in out.split("\n")
                 if (stripped := b.strip()) and "->" not in stripped
             ]
             out = remote_branches[0] if remote_branches else None

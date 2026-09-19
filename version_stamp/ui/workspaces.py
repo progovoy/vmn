@@ -143,8 +143,11 @@ class WorkspaceManager:
         """Register a read-only S3 experiment source."""
         self._validate_new_name(name)
         ws = Workspace(
-            name=name, kind="s3", bucket=bucket,
-            prefix=prefix, endpoint_url=endpoint_url,
+            name=name,
+            kind="s3",
+            bucket=bucket,
+            prefix=prefix,
+            endpoint_url=endpoint_url,
         )
         self._workspaces[name] = ws
         self._save()

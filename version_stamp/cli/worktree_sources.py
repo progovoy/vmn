@@ -9,9 +9,7 @@ def resolve_version_source(vmn_ctx, source):
         return True
     resolved = version_app_data(vmn_ctx, source["ref"])
     if resolved is None:
-        VMN_LOGGER.error(
-            f"Version {source['ref']} of {vmn_ctx.vcs.name} was not found"
-        )
+        VMN_LOGGER.error(f"Version {source['ref']} of {vmn_ctx.vcs.name} was not found")
         return False
 
     tag_name, _ = resolved

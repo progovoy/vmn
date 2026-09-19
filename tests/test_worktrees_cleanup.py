@@ -48,13 +48,17 @@ def test_list_skips_corrupt_manifests(tmp_path, capsys):
     corrupt = base / "corrupt"
     valid.mkdir(parents=True)
     corrupt.mkdir()
-    (valid / worktrees.ISLAND_MANIFEST_FILENAME).write_text(json.dumps({
-        "name": "valid",
-        "app_name": "app",
-        "version": "1.2.3",
-        "source": {"type": "branch", "ref": "main"},
-        "created_at": "now",
-    }))
+    (valid / worktrees.ISLAND_MANIFEST_FILENAME).write_text(
+        json.dumps(
+            {
+                "name": "valid",
+                "app_name": "app",
+                "version": "1.2.3",
+                "source": {"type": "branch", "ref": "main"},
+                "created_at": "now",
+            }
+        )
+    )
     (corrupt / worktrees.ISLAND_MANIFEST_FILENAME).write_text("not json")
     ctx = SimpleNamespace(
         args=SimpleNamespace(base_path=str(base)),
@@ -102,7 +106,9 @@ def test_remove_cleans_detached_and_editable_dep_registrations(tmp_path):
     editable_wt = island / "editable"
     _git(main_repo, "worktree", "add", "-b", "island/demo/main", str(main_wt))
     _git(detached_repo, "worktree", "add", "--detach", str(detached_wt))
-    _git(editable_repo, "worktree", "add", "-b", "island/demo/editable", str(editable_wt))
+    _git(
+        editable_repo, "worktree", "add", "-b", "island/demo/editable", str(editable_wt)
+    )
     manifest = {
         "main_repo": {
             "path": str(main_wt),
@@ -142,10 +148,24 @@ def test_remove_failure_keeps_manifest_for_retry(tmp_path, monkeypatch):
     dep_wt = island / "dep"
     _git(dep_repo, "worktree", "add", "--detach", str(dep_wt))
     manifest_path = island / worktrees.ISLAND_MANIFEST_FILENAME
-    manifest_path.write_text(json.dumps({
-        "main_repo": {"path": str(island / "main"), "branch": None, "source_path": str(main_repo)},
-        "deps": {"dep": {"path": str(dep_wt), "branch": None, "source_path": str(dep_repo)}},
-    }))
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "main_repo": {
+                    "path": str(island / "main"),
+                    "branch": None,
+                    "source_path": str(main_repo),
+                },
+                "deps": {
+                    "dep": {
+                        "path": str(dep_wt),
+                        "branch": None,
+                        "source_path": str(dep_repo),
+                    }
+                },
+            }
+        )
+    )
     real_run_git = worktrees._run_git
 
     def fail_dep_remove(repo, args):
@@ -170,10 +190,14 @@ def test_remove_repairs_legacy_manifest_without_dep_source_path(tmp_path):
     island.mkdir(parents=True)
     dep_wt = island / "dep"
     _git(dep_repo, "worktree", "add", "--detach", str(dep_wt))
-    (island / worktrees.ISLAND_MANIFEST_FILENAME).write_text(json.dumps({
-        "main_repo": {"path": str(island / "main"), "branch": None},
-        "deps": {"dep": {"path": str(dep_wt), "branch": None}},
-    }))
+    (island / worktrees.ISLAND_MANIFEST_FILENAME).write_text(
+        json.dumps(
+            {
+                "main_repo": {"path": str(island / "main"), "branch": None},
+                "deps": {"dep": {"path": str(dep_wt), "branch": None}},
+            }
+        )
+    )
 
     assert worktrees.worktree_remove(_remove_ctx(main_repo, base, "legacy")) == 0
     assert not _registered(dep_repo, dep_wt)
@@ -190,10 +214,18 @@ def test_rollback_uses_each_dependency_source_repo(tmp_path):
         return subprocess.CompletedProcess([], 0, "", "")
 
     dep_manifests = {
-        "detached": {"path": "/island/dep", "branch": None, "source_path": "/source/dep"},
+        "detached": {
+            "path": "/island/dep",
+            "branch": None,
+            "source_path": "/source/dep",
+        },
     }
 
     assert worktrees._cleanup_island(
-        "/source/main", "/island/main", "island/demo/main", dep_manifests, run_git=record
+        "/source/main",
+        "/island/main",
+        "island/demo/main",
+        dep_manifests,
+        run_git=record,
     )
     assert ("/source/dep", ["worktree", "remove", "--force", "/island/dep"]) in calls

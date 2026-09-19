@@ -52,19 +52,22 @@ def version_dag(root_path, app_name):
         head = group[0]
         for r in group:
             canonical[r["verstr"]] = head["verstr"]
-        nodes.append({
-            "verstr": head["verstr"],
-            "base": _base_version(head["verstr"]),
-            "release_mode": head.get("release_mode"),
-            "prerelease": (
-                head.get("prerelease")
-                if head.get("prerelease") not in (None, "release") else None
-            ),
-            "branch": head.get("branch"),
-            "commit": head.get("commit"),
-            "timestamp": head.get("timestamp"),
-            "aliases": [r["verstr"] for r in group[1:]],
-        })
+        nodes.append(
+            {
+                "verstr": head["verstr"],
+                "base": _base_version(head["verstr"]),
+                "release_mode": head.get("release_mode"),
+                "prerelease": (
+                    head.get("prerelease")
+                    if head.get("prerelease") not in (None, "release")
+                    else None
+                ),
+                "branch": head.get("branch"),
+                "commit": head.get("commit"),
+                "timestamp": head.get("timestamp"),
+                "aliases": [r["verstr"] for r in group[1:]],
+            }
+        )
 
     edges = []
     seen = set()
@@ -88,19 +91,20 @@ def root_topology(root_path, root_app_name):
     for r in rows:
         services = r.get("services", {}) or {}
         changed = sorted(
-            name for name, ver in services.items()
-            if prev_services.get(name) != ver
+            name for name, ver in services.items() if prev_services.get(name) != ver
         )
         removed = sorted(set(prev_services) - set(services))
-        topology.append({
-            "root_version": r["root_version"],
-            "services": services,
-            "latest_service": r.get("latest_service"),
-            "external_services": r.get("external_services", {}),
-            "changed": changed,
-            "removed": removed,
-            "timestamp": r.get("timestamp"),
-        })
+        topology.append(
+            {
+                "root_version": r["root_version"],
+                "services": services,
+                "latest_service": r.get("latest_service"),
+                "external_services": r.get("external_services", {}),
+                "changed": changed,
+                "removed": removed,
+                "timestamp": r.get("timestamp"),
+            }
+        )
         prev_services = services
     return topology
 

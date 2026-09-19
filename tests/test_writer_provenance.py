@@ -20,8 +20,16 @@ def test_merged_log_injects_writer_for_jsonl_entries():
     with tempfile.TemporaryDirectory() as tmp:
         storage, snap_dir = _make_storage(tmp, "myapp", "0.0.1-exp.1")
         entries = [
-            {"timestamp": "2026-01-01T00:00:00Z", "type": "metrics", "values": {"loss": 0.5}},
-            {"timestamp": "2026-01-01T00:01:00Z", "type": "metrics", "values": {"loss": 0.3}},
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "type": "metrics",
+                "values": {"loss": 0.5},
+            },
+            {
+                "timestamp": "2026-01-01T00:01:00Z",
+                "type": "metrics",
+                "values": {"loss": 0.3},
+            },
         ]
         with open(os.path.join(snap_dir, "log.gpu0.jsonl"), "w") as f:
             for e in entries:
@@ -55,7 +63,11 @@ def test_merged_log_mixed_legacy_and_writer():
         with open(os.path.join(snap_dir, "log.yml"), "w") as f:
             yaml.dump(legacy, f)
         writer_entries = [
-            {"timestamp": "2026-01-01T00:01:00Z", "type": "metrics", "values": {"acc": 0.9}},
+            {
+                "timestamp": "2026-01-01T00:01:00Z",
+                "type": "metrics",
+                "values": {"acc": 0.9},
+            },
         ]
         with open(os.path.join(snap_dir, "log.worker1.jsonl"), "w") as f:
             for e in writer_entries:

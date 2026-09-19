@@ -24,14 +24,27 @@ def _init_logger():
 
 def _save_exp_with_log(storage, app, verstr, metrics=None, ts="2025-01-01T00:00:00Z"):
     """Save experiment metadata + a log with optional metrics."""
-    storage.save(app, verstr, {
-        "verstr": verstr, "app_name": app, "timestamp": ts,
-        "base_version": "1.0.0", "base_commit": "abc1234",
-        "branch": "main", "remote": None,
-    }, {})
+    storage.save(
+        app,
+        verstr,
+        {
+            "verstr": verstr,
+            "app_name": app,
+            "timestamp": ts,
+            "base_version": "1.0.0",
+            "base_commit": "abc1234",
+            "branch": "main",
+            "remote": None,
+        },
+        {},
+    )
     if metrics:
-        storage.append_log_entry(app, verstr, "test-writer",
-            {"timestamp": ts, "type": "metrics", "values": metrics})
+        storage.append_log_entry(
+            app,
+            verstr,
+            "test-writer",
+            {"timestamp": ts, "type": "metrics", "values": metrics},
+        )
 
 
 # -- J. UI reader functions --------------------------------------------------
@@ -41,12 +54,20 @@ def test_list_experiments_from_storage(tmp_path):
     """list_experiments_from_storage returns rows with correct metrics."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       metrics={"loss": 0.5, "acc": 0.9},
-                       ts="2025-01-01T00:00:00Z")
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.ccc.ddd",
-                       metrics={"loss": 0.3, "acc": 0.95},
-                       ts="2025-01-02T00:00:00Z")
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        metrics={"loss": 0.5, "acc": 0.9},
+        ts="2025-01-01T00:00:00Z",
+    )
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.ccc.ddd",
+        metrics={"loss": 0.3, "acc": 0.95},
+        ts="2025-01-02T00:00:00Z",
+    )
 
     rows = exp_reader.list_experiments_from_storage(storage, "myapp")
 
@@ -61,11 +82,17 @@ def test_get_experiment_from_storage(tmp_path):
     """get_experiment_from_storage returns full detail dict."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       metrics={"loss": 0.42}, ts="2025-01-01T00:00:00Z")
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        metrics={"loss": 0.42},
+        ts="2025-01-01T00:00:00Z",
+    )
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb")
+        storage, "myapp", "1.0.0-dev.aaa.bbb"
+    )
 
     assert err is None
     assert result is not None
@@ -86,7 +113,8 @@ def test_get_experiment_from_storage_not_found(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
     result, err = exp_reader.get_experiment_from_storage(
-        storage, "myapp", "1.0.0-dev.nonexistent.xxx")
+        storage, "myapp", "1.0.0-dev.nonexistent.xxx"
+    )
 
     assert result is None
     assert "not found" in err.lower() or "not found" in err
@@ -100,10 +128,8 @@ def test_list_apps_from_storage():
 
     storage = S3SnapshotStorage("test-bucket", prefix="vmn-experiments")
 
-    _save_exp_with_log(storage, "app_a", "1.0.0-dev.aaa.bbb",
-                       ts="2025-01-01T00:00:00Z")
-    _save_exp_with_log(storage, "app_b", "2.0.0-dev.ccc.ddd",
-                       ts="2025-01-02T00:00:00Z")
+    _save_exp_with_log(storage, "app_a", "1.0.0-dev.aaa.bbb", ts="2025-01-01T00:00:00Z")
+    _save_exp_with_log(storage, "app_b", "2.0.0-dev.ccc.ddd", ts="2025-01-02T00:00:00Z")
 
     rows = exp_reader.list_apps_from_storage(storage)
 
@@ -121,8 +147,13 @@ def test_fetch_experiment_rows_with_storage(tmp_path):
     """fetch_experiment_rows accepts a storage= parameter directly."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       metrics={"lr": 0.001}, ts="2025-01-01T00:00:00Z")
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        metrics={"lr": 0.001},
+        ts="2025-01-01T00:00:00Z",
+    )
 
     rows = exp_reader.fetch_experiment_rows(app_name="myapp", storage=storage)
 
@@ -140,16 +171,29 @@ def test_fetch_experiment_rows_with_jsonl_logs(tmp_path):
     """Rows include merged metrics from per-writer JSONL log files."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       ts="2025-01-01T00:00:00Z")
+    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb", ts="2025-01-01T00:00:00Z")
 
     # Append from two different writers
-    storage.append_log_entry("myapp", "1.0.0-dev.aaa.bbb", "worker-0",
-        {"timestamp": "2025-01-01T00:01:00Z", "type": "metrics",
-         "values": {"loss": 0.8}})
-    storage.append_log_entry("myapp", "1.0.0-dev.aaa.bbb", "worker-1",
-        {"timestamp": "2025-01-01T00:02:00Z", "type": "metrics",
-         "values": {"loss": 0.5, "acc": 0.9}})
+    storage.append_log_entry(
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        "worker-0",
+        {
+            "timestamp": "2025-01-01T00:01:00Z",
+            "type": "metrics",
+            "values": {"loss": 0.8},
+        },
+    )
+    storage.append_log_entry(
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        "worker-1",
+        {
+            "timestamp": "2025-01-01T00:02:00Z",
+            "type": "metrics",
+            "values": {"loss": 0.5, "acc": 0.9},
+        },
+    )
 
     rows = exp_reader.fetch_experiment_rows(app_name="myapp", storage=storage)
 
@@ -166,15 +210,24 @@ def test_experiment_diff_from_storage(tmp_path):
     """experiment_diff_from_storage returns metrics_delta and diff: None."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       metrics={"loss": 0.8, "acc": 0.7},
-                       ts="2025-01-01T00:00:00Z")
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.ccc.ddd",
-                       metrics={"loss": 0.3, "acc": 0.95},
-                       ts="2025-01-02T00:00:00Z")
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.aaa.bbb",
+        metrics={"loss": 0.8, "acc": 0.7},
+        ts="2025-01-01T00:00:00Z",
+    )
+    _save_exp_with_log(
+        storage,
+        "myapp",
+        "1.0.0-dev.ccc.ddd",
+        metrics={"loss": 0.3, "acc": 0.95},
+        ts="2025-01-02T00:00:00Z",
+    )
 
     result, err = diff_reader.experiment_diff_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd")
+        storage, "myapp", "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd"
+    )
 
     assert err is None
     assert result is not None
@@ -195,11 +248,11 @@ def test_experiment_diff_from_storage_not_found(tmp_path):
     """experiment_diff_from_storage returns error when one ref is missing."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
-    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb",
-                       ts="2025-01-01T00:00:00Z")
+    _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb", ts="2025-01-01T00:00:00Z")
 
     result, err = diff_reader.experiment_diff_from_storage(
-        storage, "myapp", "1.0.0-dev.aaa.bbb", "1.0.0-dev.nonexistent.xxx")
+        storage, "myapp", "1.0.0-dev.aaa.bbb", "1.0.0-dev.nonexistent.xxx"
+    )
 
     assert result is None
     assert err is not None

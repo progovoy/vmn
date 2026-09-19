@@ -19,9 +19,7 @@ from version_stamp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):
-    return get_snapshot_storage(
-        "local", vmn_root_path=root_path, subdir="experiments"
-    )
+    return get_snapshot_storage("local", vmn_root_path=root_path, subdir="experiments")
 
 
 def metrics_schema(root_path, app_name):
@@ -57,11 +55,13 @@ def list_apps(root_path):
             exp_count = len(storage.list_snapshots(name))
         except Exception:
             exp_count = 0
-        rows.append({
-            "name": name,
-            "experiments": exp_count,
-            "versions": ver_counts.get(name, 0),
-        })
+        rows.append(
+            {
+                "name": name,
+                "experiments": exp_count,
+                "versions": ver_counts.get(name, 0),
+            }
+        )
     return rows
 
 
@@ -77,19 +77,21 @@ def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     rows = []
     for i, meta in enumerate(storage.list_snapshots(app_name)):
         log = _load_log(storage, app_name, meta["verstr"])
-        rows.append({
-            # 1-based storage index: what `vmn exp show <app> -v @N` resolves.
-            # Assigned before any sort so it sticks to the row.
-            "idx": i + 1,
-            "verstr": meta["verstr"],
-            "code_verstr": meta.get("code_verstr", meta["verstr"]),
-            "timestamp": meta.get("timestamp"),
-            "note": meta.get("note"),
-            "branch": meta.get("branch"),
-            "base_version": meta.get("base_version"),
-            "user_meta": meta.get("user_meta"),
-            "metrics": _get_latest_metrics(log),
-        })
+        rows.append(
+            {
+                # 1-based storage index: what `vmn exp show <app> -v @N` resolves.
+                # Assigned before any sort so it sticks to the row.
+                "idx": i + 1,
+                "verstr": meta["verstr"],
+                "code_verstr": meta.get("code_verstr", meta["verstr"]),
+                "timestamp": meta.get("timestamp"),
+                "note": meta.get("note"),
+                "branch": meta.get("branch"),
+                "base_version": meta.get("base_version"),
+                "user_meta": meta.get("user_meta"),
+                "metrics": _get_latest_metrics(log),
+            }
+        )
     return rows
 
 
@@ -101,7 +103,7 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
     compatible).
     """
     if last:
-        rows = rows[-int(last):]
+        rows = rows[-int(last) :]
     rows = list(rows)
 
     all_keys = set()
@@ -110,13 +112,16 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
 
     def _key(metric):
         return lambda r: (
-            r["metrics"].get(metric) is None, r["metrics"].get(metric, 0),
+            r["metrics"].get(metric) is None,
+            r["metrics"].get(metric, 0),
         )
 
     if sort and sort in all_keys:
         # Match `vmn exp list`: a metric drives direction only via its own
         # schema entry; a key absent from the schema sorts ascending.
-        desc = _metric_sort_descending(schema, sort) if sort in (schema or {}) else False
+        desc = (
+            _metric_sort_descending(schema, sort) if sort in (schema or {}) else False
+        )
         rows.sort(key=_key(sort), reverse=desc)
     elif not sort and schema:
         primary = next((k for k, v in schema.items() if v.get("primary")), None)
@@ -128,7 +133,7 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
 
     if limit is not None:
         total = len(rows)
-        rows = rows[offset:offset + limit]
+        rows = rows[offset : offset + limit]
         return {"rows": rows, "total": total}
     return rows
 
@@ -138,7 +143,10 @@ def list_experiments(root_path, app_name, sort=None, last=None, offset=0, limit=
     return sort_rows(
         fetch_experiment_rows(root_path, app_name),
         metrics_schema(root_path, app_name),
-        sort=sort, last=last, offset=offset, limit=limit,
+        sort=sort,
+        last=last,
+        offset=offset,
+        limit=limit,
     )
 
 
@@ -157,9 +165,7 @@ def _list_artifacts(storage, app_name, verstr):
 def get_experiment(root_path, app_name, verstr_ref):
     """Full experiment detail; the ref supports @N / prefix / 'latest'."""
     storage = experiment_storage(root_path)
-    verstr, err = _resolve_verstr(
-        storage, app_name, verstr_ref, kind="experiment"
-    )
+    verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
     if err:
         return None, err
 
@@ -184,7 +190,9 @@ def get_experiment(root_path, app_name, verstr_ref):
 # ---- Storage-backend functions (S3 / remote workspaces) ----
 
 
-def list_experiments_from_storage(storage, app_name, sort=None, last=None, offset=0, limit=None):
+def list_experiments_from_storage(
+    storage, app_name, sort=None, last=None, offset=0, limit=None
+):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
     rows = fetch_experiment_rows(app_name=app_name, storage=storage)
     schema = {}  # No app conf available for S3 workspaces
@@ -223,7 +231,11 @@ def list_apps_from_storage(storage):
                 Bucket=storage.bucket, Prefix=storage.prefix + "/", Delimiter="/"
             ):
                 for cp in page.get("CommonPrefixes", []):
-                    app_name = cp["Prefix"][len(storage.prefix) + 1:].rstrip("/").replace("_", "/")
+                    app_name = (
+                        cp["Prefix"][len(storage.prefix) + 1 :]
+                        .rstrip("/")
+                        .replace("_", "/")
+                    )
                     apps.add(app_name)
         except Exception:
             pass

@@ -52,9 +52,7 @@ def _write_full_config(conf_path, raw_conf):
 def _root_app_dir(vcs):
     """Directory holding a root app's root_conf.yml (.vmn/{root_app_name})."""
     root_name = get_root_app_name_from_name(vcs.name) or vcs.name
-    return os.path.join(
-        vcs.vmn_root_path, ".vmn", root_name.replace("/", os.sep)
-    )
+    return os.path.join(vcs.vmn_root_path, ".vmn", root_name.replace("/", os.sep))
 
 
 def _check_root_app(vcs):
@@ -68,9 +66,7 @@ def _check_root_app(vcs):
     ):
         return True
 
-    VMN_LOGGER.error(
-        f"'{vcs.name}' is not a root app (name must contain '/')."
-    )
+    VMN_LOGGER.error(f"'{vcs.name}' is not a root app (name must contain '/').")
     return False
 
 
@@ -249,9 +245,7 @@ def _render_config_panel(raw_conf, descriptions, modified, conf_path):
 
 def _config_interactive(conf_path, descriptions, vmn_root_path):
     if not sys.stdin.isatty():
-        VMN_LOGGER.error(
-            "Interactive config requires a terminal. Use --vim instead."
-        )
+        VMN_LOGGER.error("Interactive config requires a terminal. Use --vim instead.")
         return 1
 
     raw_conf = _read_raw_conf(conf_path)
@@ -415,18 +409,24 @@ def _edit_version_backends(current, vmn_root_path):
         choices = []
         if current:
             for name in current:
-                choices.append(questionary.Choice(
-                    title=f"  {name}: {_format_value_short(current[name])}",
-                    value=f"view:{name}",
-                ))
+                choices.append(
+                    questionary.Choice(
+                        title=f"  {name}: {_format_value_short(current[name])}",
+                        value=f"view:{name}",
+                    )
+                )
         else:
-            choices.append(questionary.Choice(
-                title="  (no backends configured)", value="_noop", disabled="empty"
-            ))
+            choices.append(
+                questionary.Choice(
+                    title="  (no backends configured)", value="_noop", disabled="empty"
+                )
+            )
 
         choices.append(questionary.Choice(title="  + Add backend", value="_add"))
         if current:
-            choices.append(questionary.Choice(title="  - Remove backend", value="_remove"))
+            choices.append(
+                questionary.Choice(title="  - Remove backend", value="_remove")
+            )
         choices.append(questionary.Choice(title="  Back", value="_back"))
 
         action = questionary.select("  version_backends", choices=choices).ask()
@@ -436,16 +436,12 @@ def _edit_version_backends(current, vmn_root_path):
 
         if action == "_add":
             all_types = known_structured + known_generic
-            be_type = questionary.select(
-                "  Backend type", choices=all_types
-            ).ask()
+            be_type = questionary.select("  Backend type", choices=all_types).ask()
             if be_type is None:
                 continue
 
             if be_type in known_structured:
-                path = questionary.text(
-                    f"  Path to file (relative to repo root)"
-                ).ask()
+                path = questionary.text(f"  Path to file (relative to repo root)").ask()
                 if path is None:
                     continue
                 full = os.path.join(vmn_root_path, path)
@@ -480,9 +476,7 @@ def _edit_version_backends(current, vmn_root_path):
                 inp = questionary.text("  Input file path").ask()
                 if inp is None:
                     continue
-                out = questionary.text(
-                    "  Output file path", default=inp
-                ).ask()
+                out = questionary.text("  Output file path", default=inp).ask()
                 if out is None:
                     continue
                 full_inp = os.path.join(vmn_root_path, inp)
@@ -491,7 +485,9 @@ def _edit_version_backends(current, vmn_root_path):
                 regex_sel = questionary.text("  Regex selector pattern").ask()
                 if regex_sel is None:
                     continue
-                regex_sub = questionary.text("  Regex substitution (use {{version}})").ask()
+                regex_sub = questionary.text(
+                    "  Regex substitution (use {{version}})"
+                ).ask()
                 if regex_sub is None:
                     continue
                 entry = {
@@ -508,7 +504,9 @@ def _edit_version_backends(current, vmn_root_path):
 
         elif action == "_remove":
             names = list(current.keys())
-            to_remove = questionary.select("  Remove which backend?", choices=names).ask()
+            to_remove = questionary.select(
+                "  Remove which backend?", choices=names
+            ).ask()
             if to_remove:
                 del current[to_remove]
 
@@ -528,6 +526,7 @@ def _set_dep_pin(dep_conf, kind, value):
 def _get_dep_branch(full_path):
     try:
         import git
+
         client = git.Repo(full_path, search_parent_directories=True)
         if not client.head.is_detached:
             branch = client.active_branch.name
@@ -561,21 +560,37 @@ def _edit_deps(current, vmn_root_path):
         choices = []
         if current:
             for path, dep_conf in current.items():
-                vcs = dep_conf.get("vcs_type", "git") if isinstance(dep_conf, dict) else "git"
-                pinned = dep_conf.get("branch") or dep_conf.get("tag") or dep_conf.get("hash")
+                vcs = (
+                    dep_conf.get("vcs_type", "git")
+                    if isinstance(dep_conf, dict)
+                    else "git"
+                )
+                pinned = (
+                    dep_conf.get("branch")
+                    or dep_conf.get("tag")
+                    or dep_conf.get("hash")
+                )
                 pin_info = f", pinned: {pinned}" if pinned else ""
-                choices.append(questionary.Choice(
-                    title=f"  {path} ({vcs}{pin_info})",
-                    value=f"view:{path}",
-                ))
+                choices.append(
+                    questionary.Choice(
+                        title=f"  {path} ({vcs}{pin_info})",
+                        value=f"view:{path}",
+                    )
+                )
         else:
-            choices.append(questionary.Choice(
-                title="  (no dependencies configured)", value="_noop", disabled="empty"
-            ))
+            choices.append(
+                questionary.Choice(
+                    title="  (no dependencies configured)",
+                    value="_noop",
+                    disabled="empty",
+                )
+            )
 
         choices.append(questionary.Choice(title="  + Add dependency", value="_add"))
         if current:
-            choices.append(questionary.Choice(title="  - Remove dependency", value="_remove"))
+            choices.append(
+                questionary.Choice(title="  - Remove dependency", value="_remove")
+            )
         choices.append(questionary.Choice(title="  Back", value="_back"))
 
         action = questionary.select("  deps", choices=choices).ask()
@@ -604,7 +619,9 @@ def _edit_deps(current, vmn_root_path):
                 default="keep current",
             ).ask()
             if pin == "branch":
-                val = questionary.text("  Branch name", default=detected_branch or "").ask()
+                val = questionary.text(
+                    "  Branch name", default=detected_branch or ""
+                ).ask()
                 _set_dep_pin(dep_conf, "branch", val)
             elif pin == "tag":
                 val = questionary.text("  Tag name").ask()
@@ -650,7 +667,9 @@ def _edit_deps(current, vmn_root_path):
                 default="branch" if detected_branch else "none",
             ).ask()
             if pin == "branch":
-                val = questionary.text("  Branch name", default=detected_branch or "").ask()
+                val = questionary.text(
+                    "  Branch name", default=detected_branch or ""
+                ).ask()
                 _set_dep_pin(dep_conf, "branch", val)
             elif pin == "tag":
                 val = questionary.text("  Tag name").ask()
@@ -714,20 +733,26 @@ def _edit_external_services(current):
         choices = []
         if current:
             for name, conf in current.items():
-                choices.append(questionary.Choice(
-                    title=f"  {name}: {_format_value_short(conf)}",
-                    value=f"view:{name}",
-                ))
+                choices.append(
+                    questionary.Choice(
+                        title=f"  {name}: {_format_value_short(conf)}",
+                        value=f"view:{name}",
+                    )
+                )
         else:
-            choices.append(questionary.Choice(
-                title="  (no external services configured)",
-                value="_noop",
-                disabled="empty",
-            ))
+            choices.append(
+                questionary.Choice(
+                    title="  (no external services configured)",
+                    value="_noop",
+                    disabled="empty",
+                )
+            )
 
         choices.append(questionary.Choice(title="  + Add service", value="_add"))
         if current:
-            choices.append(questionary.Choice(title="  - Remove service", value="_remove"))
+            choices.append(
+                questionary.Choice(title="  - Remove service", value="_remove")
+            )
         choices.append(questionary.Choice(title="  Back", value="_back"))
 
         action = questionary.select("  external_services", choices=choices).ask()
@@ -791,4 +816,3 @@ def _format_value_short(val):
     if len(s) > 50:
         return s[:47] + "..."
     return s
-

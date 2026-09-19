@@ -24,7 +24,10 @@ from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import WrongTagFormatException
-from version_stamp.core.version_math import compare_release_modes, parse_conventional_commit_message
+from version_stamp.core.version_math import (
+    compare_release_modes,
+    parse_conventional_commit_message,
+)
 from version_stamp.cli.constants import (
     IGNORED_FILES,
     INIT_FILENAME,
@@ -83,9 +86,7 @@ def handle_init(vmn_ctx, extra_optional=None):
     )
     be.push()
 
-    VMN_LOGGER.info(
-        f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}"
-    )
+    VMN_LOGGER.info(f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}")
 
     return 0
 
@@ -254,10 +255,7 @@ def handle_stamp(vmn_ctx):
             else:
                 vmn_ctx.vcs.release_mode = max_release_mode
 
-    if (
-        vmn_ctx.vcs.release_mode is None
-        and vmn_ctx.vcs.optional_release_mode is None
-    ):
+    if vmn_ctx.vcs.release_mode is None and vmn_ctx.vcs.optional_release_mode is None:
         if vmn_ctx.vcs.default_release_mode:
             _log_default_release_mode(vmn_ctx.vcs)
 
@@ -272,9 +270,7 @@ def handle_stamp(vmn_ctx):
 
     if vmn_ctx.vcs.override_version is not None:
         try:
-            props = VMNBackend.deserialize_vmn_version(
-                vmn_ctx.vcs.override_version
-            )
+            props = VMNBackend.deserialize_vmn_version(vmn_ctx.vcs.override_version)
         except Exception:
             err = (
                 f"Provided override {vmn_ctx.vcs.override_version} doesn't comply with: "
@@ -295,7 +291,9 @@ def handle_stamp(vmn_ctx):
     }
 
     status = _get_repo_status(
-        vmn_ctx.vcs, expected_status, optional_status,
+        vmn_ctx.vcs,
+        expected_status,
+        optional_status,
         suppress_errors={"repo_tracked", "app_tracked"},
     )
     if status.error:
@@ -312,9 +310,7 @@ def handle_stamp(vmn_ctx):
             )
             ret = handle_init(vmn_ctx)
             if ret != 0:
-                VMN_LOGGER.error(
-                    "Auto-initialization of repository failed"
-                )
+                VMN_LOGGER.error("Auto-initialization of repository failed")
                 return 1
             auto_initialized = True
 
@@ -377,9 +373,7 @@ def handle_stamp(vmn_ctx):
         try:
             _retrieve_stamp_updates(vmn_ctx.vcs, local_only_island)
         except Exception:
-            VMN_LOGGER.error(
-                "Failed to pull, run with --debug for more details"
-            )
+            VMN_LOGGER.error("Failed to pull, run with --debug for more details")
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
             return 1
@@ -401,9 +395,7 @@ def handle_stamp(vmn_ctx):
                 verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         except WrongTagFormatException as e:
-            VMN_LOGGER.debug(
-                f"Logged Exception message: {e}", exc_info=True
-            )
+            VMN_LOGGER.debug(f"Logged Exception message: {e}", exc_info=True)
 
             return 1
 
@@ -535,7 +527,12 @@ def handle_release(vmn_ctx):
         )
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
+    optional_status = {
+        "detached",
+        "version_not_matched",
+        "dirty_deps",
+        "deps_synced_with_conf",
+    }
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -550,16 +547,12 @@ def handle_release(vmn_ctx):
         # --stamp creates a new commit + tag and pushes both,
         # so it cannot work in detached HEAD
         if "detached" in status.state:
-            VMN_LOGGER.error(
-                "Cannot use --stamp in detached HEAD state"
-            )
+            VMN_LOGGER.error("Cannot use --stamp in detached HEAD state")
             return 1
 
         # Deps must be clean — same requirement as regular stamp
         if status.dirty_deps:
-            VMN_LOGGER.error(
-                "Cannot use --stamp with dirty dependencies"
-            )
+            VMN_LOGGER.error("Cannot use --stamp with dirty dependencies")
             return 1
 
         if "deps_synced_with_conf" not in status.state:
@@ -672,7 +665,12 @@ def handle_add(vmn_ctx):
     vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
 
     expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
+    optional_status = {
+        "detached",
+        "version_not_matched",
+        "dirty_deps",
+        "deps_synced_with_conf",
+    }
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -689,9 +687,7 @@ def handle_add(vmn_ctx):
 
     try:
         tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
-        VMN_LOGGER.info(
-            vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info)
-        )
+        VMN_LOGGER.info(vmn_ctx.vcs.add_metadata_to_version(tag_name, ver_info))
     except Exception:
         VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -772,6 +768,7 @@ def handle_goto(vmn_ctx):
     # Restoring a dev version snapshots (and thus preserves) any dirty work via
     # the safety net, so a dirty tree is not an error for a dev-version goto.
     from version_stamp.core.version_math import is_dev_version
+
     if vmn_ctx.args.version and is_dev_version(vmn_ctx.args.version):
         optional_status |= {"pending", "outgoing", "dirty_deps"}
 
@@ -814,7 +811,7 @@ def handle_snapshot(vmn_ctx):
     vmn_ctx.params["last"] = getattr(vmn_ctx.args, "last", None)
 
     # Read snapshot_storage from app conf, CLI args override
-    conf_storage = getattr(vmn_ctx.vcs, 'snapshot_storage', None) or {}
+    conf_storage = getattr(vmn_ctx.vcs, "snapshot_storage", None) or {}
     if not vmn_ctx.params.get("bucket") and conf_storage.get("bucket"):
         vmn_ctx.params["bucket"] = conf_storage["bucket"]
     if vmn_ctx.params.get("backend") == "local" and conf_storage.get("backend"):
@@ -827,8 +824,13 @@ def handle_snapshot(vmn_ctx):
     # Guard: all snapshot actions require repo_tracked + app_tracked
     expected_status = {"repo_tracked", "app_tracked"}
     optional_status = {
-        "repos_exist_locally", "detached", "pending", "outgoing",
-        "version_not_matched", "dirty_deps", "deps_synced_with_conf",
+        "repos_exist_locally",
+        "detached",
+        "pending",
+        "outgoing",
+        "version_not_matched",
+        "dirty_deps",
+        "deps_synced_with_conf",
     }
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:
@@ -853,6 +855,7 @@ def handle_snapshot(vmn_ctx):
     # default the second side to the live working state ("current").
     if action in ("show", "note", "diff", "export", "restore"):
         from version_stamp.cli.snapshot import _resolve_verstr, _get_storage
+
         latest = getattr(vmn_ctx.args, "latest", False)
         verstr = vmn_ctx.args.version
         to_ver = getattr(vmn_ctx.args, "to", None) if action == "diff" else None
@@ -874,9 +877,7 @@ def handle_snapshot(vmn_ctx):
         vmn_ctx.args.version = resolved
 
         if to_ver and to_ver != "current":
-            resolved_to, err_msg = _resolve_verstr(
-                storage, vmn_ctx.vcs.name, to_ver
-            )
+            resolved_to, err_msg = _resolve_verstr(storage, vmn_ctx.vcs.name, to_ver)
             if err_msg:
                 VMN_LOGGER.error(err_msg)
                 return 1
@@ -899,14 +900,16 @@ def handle_snapshot(vmn_ctx):
         )
     elif action == "diff":
         return snapshot_diff(
-            vmn_ctx.vcs, vmn_ctx.params,
+            vmn_ctx.vcs,
+            vmn_ctx.params,
             vmn_ctx.args.version,
             getattr(vmn_ctx.args, "to", None),
             getattr(vmn_ctx.args, "tool", None),
         )
     elif action == "export":
         return snapshot_export(
-            vmn_ctx.vcs, vmn_ctx.params,
+            vmn_ctx.vcs,
+            vmn_ctx.params,
             vmn_ctx.args.version,
             getattr(vmn_ctx.args, "output", None),
         )
@@ -921,11 +924,14 @@ def _is_editable_island_dep(path, backend, optional_status):
     if "outgoing" not in optional_status or backend.in_detached_head():
         return False
     from version_stamp.cli.worktree_state import is_local_only_island
+
     return is_local_only_island(path)
 
 
 @measure_runtime_decorator
-def _get_repo_status(vcs, expected_status, optional_status=set(), suppress_errors=frozenset()):
+def _get_repo_status(
+    vcs, expected_status, optional_status=set(), suppress_errors=frozenset()
+):
     be = vcs.backend
     default_dep_status = {
         "pending": False,
@@ -1226,9 +1232,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
         )
 
         if newer_stamping:
-            VMN_LOGGER.error(
-                "Refusing to stamp with old vmn. Please upgrade"
-            )
+            VMN_LOGGER.error("Refusing to stamp with old vmn. Please upgrade")
             raise RuntimeError()
 
     if versions_be_ifc.template_err_str:

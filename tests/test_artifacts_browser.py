@@ -19,11 +19,20 @@ def _init_logger():
 
 def _save_exp(storage, app, verstr, ts="2025-01-01T00:00:00Z"):
     """Save a minimal experiment."""
-    storage.save(app, verstr, {
-        "verstr": verstr, "app_name": app, "timestamp": ts,
-        "base_version": "1.0.0", "base_commit": "abc1234",
-        "branch": "main", "remote": None,
-    }, {})
+    storage.save(
+        app,
+        verstr,
+        {
+            "verstr": verstr,
+            "app_name": app,
+            "timestamp": ts,
+            "base_version": "1.0.0",
+            "base_commit": "abc1234",
+            "branch": "main",
+            "remote": None,
+        },
+        {},
+    )
 
 
 def _create_artifact(storage, app, verstr, filename, content):
@@ -45,7 +54,9 @@ def test_experiment_detail_includes_structured_artifacts(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "model.pt", "x" * 100)
-    _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "config.json", '{"lr": 0.01}')
+    _create_artifact(
+        storage, "myapp", "1.0.0-dev.aaa.bbb", "config.json", '{"lr": 0.01}'
+    )
 
     result, err = exp_reader.get_experiment(str(tmp_path), "myapp", "1.0.0-dev.aaa.bbb")
 
@@ -98,6 +109,7 @@ def test_experiment_from_storage_includes_structured_artifacts(tmp_path):
 
 try:
     import fastapi as _fastapi  # noqa: F401
+
     _HAS_FASTAPI = True
 except ImportError:
     _HAS_FASTAPI = False

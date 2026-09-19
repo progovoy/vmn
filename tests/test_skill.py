@@ -118,9 +118,7 @@ def test_skill_install_via_cli_resolves_project_root_from_nested_cwd(
     assert not (nested / "AGENTS.md").exists()
 
 
-def test_skill_install_via_cli_resolves_vmn_working_dir(
-    tmp_path, monkeypatch
-):
+def test_skill_install_via_cli_resolves_vmn_working_dir(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".vmn").mkdir(parents=True)
     nested = project / "src" / "package"

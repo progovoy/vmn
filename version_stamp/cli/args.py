@@ -23,7 +23,7 @@ def parse_user_commands(command_line):
     if "--" in cl:
         sep = cl.index("--")
         if any(tok in ("exp", "experiment") for tok in cl[:sep]):
-            run_cmd = cl[sep + 1:]
+            run_cmd = cl[sep + 1 :]
             cl = cl[:sep]
 
     parser = argparse.ArgumentParser("vmn")
@@ -69,6 +69,7 @@ def parse_user_commands(command_line):
         getattr(sys.modules[__name__], f"add_arg_{arg}")(subprasers)
 
     from version_stamp.cli.completion import setup_completion
+
     setup_completion(parser)
 
     args = parser.parse_args(cl)
@@ -165,8 +166,7 @@ def add_arg_release(subprasers):
         "--version",
         default=None,
         required=False,
-        help=f"The version to release in the format: "
-        f" {VMN_VERSION_FORMAT}",
+        help=f"The version to release in the format: " f" {VMN_VERSION_FORMAT}",
     )
     group.add_argument("-s", "--stamp", dest="stamp", action="store_true")
     prelease.set_defaults(stamp=False)
@@ -556,25 +556,40 @@ def add_arg_snapshot(subprasers):
 
 
 def _add_experiment_parser(subprasers, name):
-    pexp = subprasers.add_parser(name, help="Experiment tracking for reproducible research")
+    pexp = subprasers.add_parser(
+        name, help="Experiment tracking for reproducible research"
+    )
     pexp.set_defaults(strict_version=False)
     pexp.add_argument(
         "action",
         nargs="?",
         default="create",
-        choices=["create", "run", "add", "list", "show", "compare", "diff", "restore", "export", "prune"],
+        choices=[
+            "create",
+            "run",
+            "add",
+            "list",
+            "show",
+            "compare",
+            "diff",
+            "restore",
+            "export",
+            "prune",
+        ],
         help="Experiment action (default: create)",
     )
     pexp.add_argument("name", help="The application's name")
     pexp.add_argument(
-        "-v", "--version",
+        "-v",
+        "--version",
         action="append",
         default=None,
         help="Version string(s). Repeatable for compare.",
     )
     pexp.add_argument("--note", default=None, help="Note or description")
     pexp.add_argument(
-        "-f", "--file",
+        "-f",
+        "--file",
         default=None,
         help="YAML file with structured notes/params",
     )
@@ -586,9 +601,13 @@ def _add_experiment_parser(subprasers, name):
     )
     pexp.add_argument("--attach", default=None, help="File to attach as artifact")
     pexp.add_argument("--sort", default=None, help="Sort list by metric name")
-    pexp.add_argument("--top", type=int, default=None, help="Show top N results in list")
     pexp.add_argument(
-        "--last", type=int, default=None,
+        "--top", type=int, default=None, help="Show top N results in list"
+    )
+    pexp.add_argument(
+        "--last",
+        type=int,
+        default=None,
         help="Use the N most recent experiments (for list/compare)",
     )
     pexp.add_argument(
@@ -597,35 +616,45 @@ def _add_experiment_parser(subprasers, name):
         default=False,
         help="Use the most recent experiment (for show/compare/restore/export)",
     )
-    pexp.add_argument("--tool", default=None, help="External diff tool for compare. Falls back to git config diff.tool")
+    pexp.add_argument(
+        "--tool",
+        default=None,
+        help="External diff tool for compare. Falls back to git config diff.tool",
+    )
     pexp.add_argument("-o", "--output", default=None, help="Output path for export")
-    pexp.add_argument("--keep", type=int, default=None, help="Keep latest N experiments (for prune)")
-    pexp.add_argument("--older-than", default=None, help="Prune experiments older than duration (e.g., 30d)")
+    pexp.add_argument(
+        "--keep", type=int, default=None, help="Keep latest N experiments (for prune)"
+    )
+    pexp.add_argument(
+        "--older-than",
+        default=None,
+        help="Prune experiments older than duration (e.g., 30d)",
+    )
     pexp.add_argument(
         "--from-snapshot",
         default=None,
         help="Path to vmn_metadata.yml or directory containing it. "
-             "Creates experiment from exported snapshot (no git required). "
-             "Falls back to VMN_SNAPSHOT_METADATA env var.",
+        "Creates experiment from exported snapshot (no git required). "
+        "Falls back to VMN_SNAPSHOT_METADATA env var.",
     )
     pexp.add_argument(
         "--experiment-dir",
         default=None,
         help="Write experiments to this directory instead of local .vmn/. "
-             "For shared NFS/FSx mounts. Falls back to VMN_EXPERIMENT_DIR env var.",
+        "For shared NFS/FSx mounts. Falls back to VMN_EXPERIMENT_DIR env var.",
     )
     pexp.add_argument(
         "--writer-id",
         default=None,
         help="Unique writer ID for this process (default: VMN_WRITER_ID or hostname). "
-             "Used for per-writer log files and pod-unique experiment IDs.",
+        "Used for per-writer log files and pod-unique experiment IDs.",
     )
     pexp.add_argument(
         "--sync-interval",
         type=int,
         default=30,
         help="Seconds between S3 metric syncs during 'run' (default: 30). "
-             "Set to 0 to disable periodic sync.",
+        "Set to 0 to disable periodic sync.",
     )
     pexp.add_argument(
         "--backend",
@@ -645,31 +674,41 @@ def add_arg_ui(subprasers):
     pui.add_argument("--host", default="127.0.0.1", help="Bind address")
     pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
     pui.add_argument(
-        "--token", default=None,
+        "--token",
+        default=None,
         help="Bearer token required for API access (or VMN_UI_TOKEN env)",
     )
     pui.add_argument(
-        "--data-dir", default=None,
+        "--data-dir",
+        default=None,
         help="Server data dir for the workspace registry and index "
         "(default: ~/.vmn-ui)",
     )
     pui.add_argument(
-        "--repo", action="append", default=None,
+        "--repo",
+        action="append",
+        default=None,
         help="Attach a local checkout as a workspace (repeatable)",
     )
     pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
     pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
     pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pui.add_argument(
-        "--read-only", action="store_true", default=False,
+        "--read-only",
+        action="store_true",
+        default=False,
         help="Disable all mutation endpoints",
     )
     pui.add_argument(
-        "--no-browser", action="store_true", default=False,
+        "--no-browser",
+        action="store_true",
+        default=False,
         help="Do not open a browser on start",
     )
     pui.add_argument(
-        "--no-index", action="store_true", default=False,
+        "--no-index",
+        action="store_true",
+        default=False,
         help="Disable the SQLite read cache (always read directly)",
     )
 

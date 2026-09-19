@@ -467,9 +467,7 @@ def test_version_backends_pep621(app_layout, capfd):
     app_layout.write_file_commit_and_push(
         "test_repo_0",
         "pyproject.toml",
-        toml.dumps(
-            {"project": {"name": "test_app", "version": "some ignored string"}}
-        ),
+        toml.dumps({"project": {"name": "test_app", "version": "some ignored string"}}),
     )
 
     conf = {
@@ -537,7 +535,9 @@ def test_version_backends_npm(app_layout, capfd):
     assert err == 0
 
 
-def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layout, capfd):
+def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(
+    app_layout, capfd
+):
     _run_vmn_init()
     _, _, params = _init_app(app_layout.app_name)
 
@@ -551,8 +551,8 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
 
     # Simulate a file that is a jinja template with a jinja expression that will fail
     jinja_expr_content = (
-        'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"\n'
-        'version: 1.0.2\nCustom: 3\n'
+        "INTEGRATION_LAB: \"{{ lookup('env', 'INTEGRATION_LAB') | default(false) }}\"\n"
+        "version: 1.0.2\nCustom: 3\n"
     )
     app_layout.write_file_commit_and_push(
         "test_repo_0",
@@ -590,12 +590,15 @@ def test_version_backends_generic_selectors_jinja_file_with_jinja_expr(app_layou
     # Run the stamp and check for nonzero error code and error message in stderr
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     captured = capfd.readouterr()
-    assert ("lookup" not in captured.err and "undefined" not in captured.err)
+    assert "lookup" not in captured.err and "undefined" not in captured.err
 
     assert err == 0
 
     # Check the output file: version should be replaced, lookup should be preserved
     with open(opath, "r") as f:
         content = f.read()
-        assert 'INTEGRATION_LAB: "{{ lookup(\'env\', \'INTEGRATION_LAB\') | default(false) }}"' in content
-        assert 'version: 0.0.2' in content
+        assert (
+            "INTEGRATION_LAB: \"{{ lookup('env', 'INTEGRATION_LAB') | default(false) }}\""
+            in content
+        )
+        assert "version: 0.0.2" in content

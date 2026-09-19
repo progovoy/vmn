@@ -76,11 +76,14 @@ class GitOpsMixin:
         check_for_outgoing_changes to falsely report outgoing commits.
         """
         try:
-            self._be.git.execute([
-                "git", "update-ref",
-                f"refs/remotes/{self.remote_active_branch}",
-                "HEAD",
-            ])
+            self._be.git.execute(
+                [
+                    "git",
+                    "update-ref",
+                    f"refs/remotes/{self.remote_active_branch}",
+                    "HEAD",
+                ]
+            )
         except Exception:
             VMN_LOGGER.debug(
                 "Failed to update remote tracking ref after push",
@@ -195,7 +198,9 @@ class GitOpsMixin:
             VMN_LOGGER.info(
                 f"{self.repo_path}: in detached HEAD – fetching instead of pulling"
             )
-            self._be.git.execute(["git", "fetch", self.selected_remote.name, "--tags", "--prune"])
+            self._be.git.execute(
+                ["git", "fetch", self.selected_remote.name, "--tags", "--prune"]
+            )
             return
 
         self.selected_remote.pull(ff_only=True)

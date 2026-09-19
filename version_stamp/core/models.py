@@ -7,6 +7,7 @@ from version_stamp.core.constants import VMN_OLD_TEMPLATE
 
 # ── Version data classes ─────────────────────────────────────────────
 
+
 @dataclass
 class VersionProps:
     types: Set[str] = field(default_factory=lambda: {"version"})
@@ -40,6 +41,7 @@ _DEFAULT_TEMPLATE = (
 
 
 # ── Application configuration ────────────────────────────────────────
+
 
 @dataclass
 class AppConf:
@@ -214,9 +216,7 @@ class AppConf:
     @classmethod
     def conf_key_to_attr(cls):
         """Return {conf_yml_key: self_attr_name} for all fields."""
-        return {
-            f.name: f.metadata.get("attr", f.name) for f in fields(cls)
-        }
+        return {f.name: f.metadata.get("attr", f.name) for f in fields(cls)}
 
     @classmethod
     def config_descriptions(cls):

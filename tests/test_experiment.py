@@ -81,11 +81,14 @@ def test_experiment_create_with_notes_file(app_layout, capfd):
 
     notes_path = os.path.join(app_layout.repo_path, "notes.yml")
     with open(notes_path, "w") as f:
-        yaml.dump({
-            "hypothesis": "lower LR improves convergence",
-            "params": {"lr": 0.001, "batch_size": 32},
-            "tags": ["baseline", "v1"],
-        }, f)
+        yaml.dump(
+            {
+                "hypothesis": "lower LR improves convergence",
+                "params": {"lr": 0.001, "batch_size": 32},
+                "tags": ["baseline", "v1"],
+            },
+            f,
+        )
 
     capfd.readouterr()
     err = _experiment(app_layout.app_name, file=notes_path, note="with notes file")
@@ -115,7 +118,9 @@ def test_experiment_add_metrics(app_layout, capfd):
     assert verstr is not None
 
     err = _experiment(
-        app_layout.app_name, action="add", version=verstr,
+        app_layout.app_name,
+        action="add",
+        version=verstr,
         metrics=["loss=0.342", "accuracy=0.91"],
     )
     assert err == 0
@@ -142,7 +147,9 @@ def test_experiment_add_note(app_layout, capfd):
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     err = _experiment(
-        app_layout.app_name, action="add", version=verstr,
+        app_layout.app_name,
+        action="add",
+        version=verstr,
         note="overfitting after epoch 12",
     )
     assert err == 0
@@ -173,7 +180,9 @@ def test_experiment_add_artifact(app_layout, capfd):
         f.write(b"\x00" * 1024)
 
     err = _experiment(
-        app_layout.app_name, action="add", version=verstr,
+        app_layout.app_name,
+        action="add",
+        version=verstr,
         attach=artifact_path,
     )
     assert err == 0
@@ -215,13 +224,14 @@ def test_experiment_list_sort_top(app_layout, capfd):
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    for i, (fname, loss_val) in enumerate([
-        ("sort1.txt", "0.5"), ("sort2.txt", "0.3"), ("sort3.txt", "0.8")
-    ]):
+    for i, (fname, loss_val) in enumerate(
+        [("sort1.txt", "0.5"), ("sort2.txt", "0.3"), ("sort3.txt", "0.8")]
+    ):
         _make_dirty(app_layout, fname, f"content_{i}")
         capfd.readouterr()
         err = _experiment(
-            app_layout.app_name, note=f"exp_{i}",
+            app_layout.app_name,
+            note=f"exp_{i}",
             metrics=[f"loss={loss_val}"],
         )
         assert err == 0
@@ -253,7 +263,8 @@ def test_experiment_compare(app_layout, capfd):
         _make_dirty(app_layout, fname, f"compare_{i}")
         capfd.readouterr()
         err = _experiment(
-            app_layout.app_name, note=f"compare_{i}",
+            app_layout.app_name,
+            note=f"compare_{i}",
             metrics=[f"loss={0.5 - i * 0.2}"],
         )
         assert err == 0
@@ -263,7 +274,8 @@ def test_experiment_compare(app_layout, capfd):
 
     capfd.readouterr()
     err = _experiment(
-        app_layout.app_name, action="compare",
+        app_layout.app_name,
+        action="compare",
         version=verstrs,
     )
     assert err == 0
@@ -303,9 +315,11 @@ def test_experiment_restore(app_layout, capfd):
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     import subprocess
+
     subprocess.run(
         ["git", "checkout", "."],
-        cwd=app_layout.repo_path, capture_output=True,
+        cwd=app_layout.repo_path,
+        capture_output=True,
     )
     with open(fpath) as f:
         assert f.read() == "initial"
@@ -355,7 +369,10 @@ def test_experiment_export_tarball(app_layout, capfd):
     tar_path = os.path.join(app_layout.repo_path, "experiment_export.tar.gz")
     capfd.readouterr()
     err = _experiment(
-        app_layout.app_name, action="export", version=verstr, output=tar_path,
+        app_layout.app_name,
+        action="export",
+        version=verstr,
+        output=tar_path,
     )
     assert err == 0
 
@@ -437,9 +454,9 @@ def test_experiment_create_auto_init_dirty_tree(app_layout, capfd):
 
     capfd.readouterr()
     err = _experiment("new_dirty_app", note="dirty tree auto init")
-    assert err == 0, (
-        "experiment create should succeed on uninitialized app with dirty tree"
-    )
+    assert (
+        err == 0
+    ), "experiment create should succeed on uninitialized app with dirty tree"
     captured = capfd.readouterr()
     verstr = extract_dev_verstr(captured.out)
     assert verstr is not None, f"Expected dev verstr in output, got: {captured.out}"
@@ -448,6 +465,7 @@ def test_experiment_create_auto_init_dirty_tree(app_layout, capfd):
 def test_experiment_argparse_latest_before_name():
     """Argparse should not consume app name as --latest value."""
     from version_stamp.cli.args import parse_user_commands
+
     args = parse_user_commands(["experiment", "--latest", "my_app"])
     assert args.name == "my_app"
     assert args.latest is True
@@ -511,8 +529,12 @@ def _exp_log(app_layout, verstr):
     """Load an experiment's log.yml from disk."""
     safe = verstr.replace("+", "_plus_")
     log_path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name,
-        "experiments", safe, "log.yml",
+        app_layout.repo_path,
+        ".vmn",
+        app_layout.app_name,
+        "experiments",
+        safe,
+        "log.yml",
     )
     with open(log_path) as f:
         return yaml.safe_load(f)
@@ -573,9 +595,10 @@ def test_experiment_run_suffix_addressable(app_layout, capfd):
     assert v2 == f"{v1}.r2"
 
     # Add a metric only to run 2.
-    assert _experiment(
-        app_layout.app_name, action="add", version=v2, metrics=["acc=0.9"]
-    ) == 0
+    assert (
+        _experiment(app_layout.app_name, action="add", version=v2, metrics=["acc=0.9"])
+        == 0
+    )
 
     capfd.readouterr()
     _experiment(app_layout.app_name, action="show", version=v2)
@@ -605,7 +628,9 @@ def test_goto_experiment_run_id(app_layout, capfd):
     assert v2 == f"{v1}.r2"
 
     # Revert the working tree.
-    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+    subprocess.run(
+        ["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True
+    )
     with open(tracked) as f:
         assert f.read() == "initial"
 
@@ -639,13 +664,20 @@ def test_experiment_create_metrics_and_file_params_coexist(app_layout, capfd, tm
     _make_dirty(app_layout, "coexist.txt", "content")
 
     params_file = tmp_path / "params.yml"
-    params_file.write_text("params:\n  lr: 0.01\n  batch_size: 32\nhypothesis: baseline\n")
+    params_file.write_text(
+        "params:\n  lr: 0.01\n  batch_size: 32\nhypothesis: baseline\n"
+    )
 
     capfd.readouterr()
-    assert _experiment(
-        app_layout.app_name, note="both",
-        metrics=["loss=0.5"], file=str(params_file),
-    ) == 0
+    assert (
+        _experiment(
+            app_layout.app_name,
+            note="both",
+            metrics=["loss=0.5"],
+            file=str(params_file),
+        )
+        == 0
+    )
     verstr = extract_dev_verstr(capfd.readouterr().out)
     assert verstr is not None
 
@@ -677,7 +709,8 @@ def _setup_three_experiments(app_layout, capfd, experiment_conf):
         _make_dirty(app_layout, f"schema_{i}.txt", f"content {i}")
         capfd.readouterr()
         _experiment(
-            app_layout.app_name, note=f"run{i}",
+            app_layout.app_name,
+            note=f"run{i}",
             metrics=[f"loss={loss}", f"acc={acc}"],
         )
         verstrs.append(extract_dev_verstr(capfd.readouterr().out))
@@ -686,9 +719,7 @@ def _setup_three_experiments(app_layout, capfd, experiment_conf):
 
 def test_experiment_metrics_schema_goal_max_sorts_descending(app_layout, capfd):
     """B7: goal: max sorts best (highest) first."""
-    _setup_three_experiments(
-        app_layout, capfd, {"metrics": {"acc": {"goal": "max"}}}
-    )
+    _setup_three_experiments(app_layout, capfd, {"metrics": {"acc": {"goal": "max"}}})
 
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
@@ -699,9 +730,7 @@ def test_experiment_metrics_schema_goal_max_sorts_descending(app_layout, capfd):
 
 def test_experiment_metrics_schema_goal_min_sorts_ascending(app_layout, capfd):
     """B7: goal: min sorts best (lowest) first."""
-    _setup_three_experiments(
-        app_layout, capfd, {"metrics": {"loss": {"goal": "min"}}}
-    )
+    _setup_three_experiments(app_layout, capfd, {"metrics": {"loss": {"goal": "min"}}})
 
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list", sort="loss") == 0
@@ -713,7 +742,8 @@ def test_experiment_metrics_schema_goal_min_sorts_ascending(app_layout, capfd):
 def test_experiment_metrics_schema_primary_default_sort(app_layout, capfd):
     """B7: with no --sort, the primary metric drives the leaderboard order."""
     _setup_three_experiments(
-        app_layout, capfd,
+        app_layout,
+        capfd,
         {"metrics": {"loss": {"goal": "min", "primary": True}}},
     )
 
@@ -729,9 +759,7 @@ def test_experiment_metrics_schema_sort_key_removed(app_layout, capfd):
     A schema entry carrying only `sort` falls back to the default
     (higher-is-better) without crashing or warning.
     """
-    _setup_three_experiments(
-        app_layout, capfd, {"metrics": {"acc": {"sort": "asc"}}}
-    )
+    _setup_three_experiments(app_layout, capfd, {"metrics": {"acc": {"sort": "asc"}}})
 
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
@@ -751,7 +779,8 @@ def test_experiment_create_without_git_remote(app_layout, capfd):
     app_layout.write_file_commit_and_push("test_repo_0", "local_only.txt", "initial")
     subprocess.run(
         ["git", "remote", "remove", "origin"],
-        cwd=app_layout.repo_path, capture_output=True,
+        cwd=app_layout.repo_path,
+        capture_output=True,
     )
     with open(os.path.join(app_layout.repo_path, "local_only.txt"), "w") as f:
         f.write("dirty without a remote")
@@ -875,7 +904,9 @@ def test_exp_run_records_command_exit_code_and_duration(app_layout, capfd):
 
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run", note="a run",
+        app_layout.app_name,
+        action="run",
+        note="a run",
         run_cmd=[_PY, "-c", "print('hello from run')"],
     )
     assert ret == 0
@@ -903,7 +934,8 @@ def test_exp_run_captures_metrics_file(app_layout, capfd):
     )
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run",
+        app_layout.app_name,
+        action="run",
         run_cmd=[_PY, "-c", script],
     )
     assert ret == 0
@@ -923,7 +955,8 @@ def test_exp_run_propagates_child_exit_code(app_layout, capfd):
 
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run",
+        app_layout.app_name,
+        action="run",
         run_cmd=[_PY, "-c", "import sys; sys.exit(3)"],
     )
     assert ret == 3
@@ -942,7 +975,8 @@ def test_exp_run_sets_experiment_env(app_layout, capfd):
     )
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run",
+        app_layout.app_name,
+        action="run",
         run_cmd=[_PY, "-c", script],
     )
     assert ret == 0
@@ -962,7 +996,8 @@ def test_exp_run_clean_tree_creates_experiment(app_layout, capfd):
     # Clean tree right after stamp.
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run",
+        app_layout.app_name,
+        action="run",
         run_cmd=[_PY, "-c", "print('clean run')"],
     )
     assert ret == 0
@@ -990,7 +1025,8 @@ def test_exp_run_cold_start_fresh_repo(app_layout, capfd):
     """Zero setup: exp run on a fresh repo auto-inits, stamps, and records."""
     capfd.readouterr()
     ret = _experiment(
-        "cold_model", action="run",
+        "cold_model",
+        action="run",
         run_cmd=[_PY, "-c", "print('cold start')"],
     )
     assert ret == 0
@@ -1036,7 +1072,9 @@ def test_exp_diff_real_tree_diff_output(app_layout, capfd):
 
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="diff", version=[v_alpha, v_beta],
+        app_layout.app_name,
+        action="diff",
+        version=[v_alpha, v_beta],
     )
     assert ret == 0
     out = capfd.readouterr().out
@@ -1070,7 +1108,9 @@ def test_exp_diff_delta_header_params_metrics(app_layout, capfd):
 
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="diff", version=[v_alpha, v_beta],
+        app_layout.app_name,
+        action="diff",
+        version=[v_alpha, v_beta],
     )
     assert ret == 0
     out = capfd.readouterr().out
@@ -1099,9 +1139,14 @@ def test_exp_run_step_series(app_layout, capfd):
         "    f.write('step=3 loss=0.2 acc=0.8\\n')\n"
     )
     capfd.readouterr()
-    assert _experiment(
-        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
-    ) == 0
+    assert (
+        _experiment(
+            app_layout.app_name,
+            action="run",
+            run_cmd=[_PY, "-c", script],
+        )
+        == 0
+    )
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     log = _exp_log(app_layout, verstr)
@@ -1111,9 +1156,12 @@ def test_exp_run_step_series(app_layout, capfd):
     assert metrics_entries[2]["values"] == {"loss": 0.2, "acc": 0.8}
 
     from version_stamp.cli.experiment import get_metric_series
+
     series = get_metric_series(log)
     assert [(p["step"], p["value"]) for p in series["loss"]] == [
-        (1, 0.9), (2, 0.5), (3, 0.2),
+        (1, 0.9),
+        (2, 0.5),
+        (3, 0.2),
     ]
     assert [(p["step"], p["value"]) for p in series["acc"]] == [(3, 0.8)]
 
@@ -1137,9 +1185,14 @@ def test_exp_run_scalar_metric_lines(app_layout, capfd):
         "    f.write('acc=0.97 f1=0.9\\n')\n"
     )
     capfd.readouterr()
-    assert _experiment(
-        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
-    ) == 0
+    assert (
+        _experiment(
+            app_layout.app_name,
+            action="run",
+            run_cmd=[_PY, "-c", script],
+        )
+        == 0
+    )
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     log = _exp_log(app_layout, verstr)
@@ -1157,8 +1210,12 @@ def test_get_metric_series_unit():
     log = [
         {"timestamp": "t0", "type": "create", "note": "x"},
         {"timestamp": "t1", "type": "metrics", "step": 1, "values": {"loss": 0.9}},
-        {"timestamp": "t2", "type": "metrics", "step": 2,
-         "values": {"loss": 0.4, "acc": 0.7}},
+        {
+            "timestamp": "t2",
+            "type": "metrics",
+            "step": 2,
+            "values": {"loss": 0.4, "acc": 0.7},
+        },
         {"timestamp": "t3", "type": "metrics", "values": {"final_score": 0.95}},
         {"timestamp": "t4", "type": "note", "text": "irrelevant"},
     ]
@@ -1226,6 +1283,8 @@ def test_exp_run_tails_metrics_during_run(app_layout, capfd):
     )
     capfd.readouterr()
     ret = _experiment(
-        app_layout.app_name, action="run", run_cmd=[_PY, "-c", script],
+        app_layout.app_name,
+        action="run",
+        run_cmd=[_PY, "-c", script],
     )
     assert ret == 0, "child timed out waiting to observe its own live metric"

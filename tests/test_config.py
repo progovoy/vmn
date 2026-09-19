@@ -111,16 +111,10 @@ def test_conf_for_branch_removal_of_conf(app_layout, capfd):
 
     main_branch = app_layout._app_backend.be.get_active_branch()
     branch = "b2"
-    app_dir = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name
-    )
+    app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
     flat_conf_path = os.path.join(app_dir, f"{branch}_conf.yml")
-    canonical_conf_path = os.path.join(
-        app_dir, "branch_conf", branch, "conf.yml"
-    )
-    app_layout.write_conf(
-        flat_conf_path, template="[test_{major}][.{minor}][.{patch}]"
-    )
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", branch, "conf.yml")
+    app_layout.write_conf(flat_conf_path, template="[test_{major}][.{minor}][.{patch}]")
 
     assert os.path.exists(flat_conf_path)
 
@@ -234,6 +228,7 @@ def test_config_interactive_save(app_layout, capfd, monkeypatch):
     class FakeResult:
         def __init__(self, val):
             self._val = val
+
         def ask(self):
             return self._val
 
@@ -283,6 +278,7 @@ def test_config_interactive_quit_no_save(app_layout, capfd, monkeypatch):
     class FakeResult:
         def __init__(self, val):
             self._val = val
+
         def ask(self):
             return self._val
 
@@ -330,6 +326,7 @@ def test_config_global(app_layout, capfd, monkeypatch):
     class FakeResult:
         def __init__(self, val):
             self._val = val
+
         def ask(self):
             return self._val
 
@@ -558,9 +555,7 @@ def test_config_gen_root_branch(app_layout):
     _init_app(root_app_name)
 
     reset_logger()
-    ret = vmn_run(
-        ["config", "gen", root_app_name, "--branch", "--root"]
-    )[0]
+    ret = vmn_run(["config", "gen", root_app_name, "--branch", "--root"])[0]
     assert ret == 0
 
     root_app_dir = os.path.join(app_layout.repo_path, ".vmn", "root_app")
@@ -665,9 +660,7 @@ def test_config_gen_sync_dep_branches_requires_gen_branch(app_layout):
     _run_vmn_init()
 
     reset_logger()
-    ret = vmn_run(
-        ["config", "gen", app_layout.app_name, "--sync-dep-branches"]
-    )[0]
+    ret = vmn_run(["config", "gen", app_layout.app_name, "--sync-dep-branches"])[0]
     assert ret == 1
 
     conf_path = os.path.join(
@@ -677,9 +670,7 @@ def test_config_gen_sync_dep_branches_requires_gen_branch(app_layout):
 
     # Rejected on the interactive (non-gen) path as well.
     reset_logger()
-    ret = vmn_run(
-        ["config", app_layout.app_name, "--branch", "--sync-dep-branches"]
-    )[0]
+    ret = vmn_run(["config", app_layout.app_name, "--branch", "--sync-dep-branches"])[0]
     assert ret == 1
 
 

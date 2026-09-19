@@ -39,9 +39,7 @@ def test_stamp_migrates_flat_conf_on_current_branch(app_layout):
     flat_conf_path = os.path.join(app_dir, f"{branch}_conf.yml")
     canonical_conf_path = os.path.join(app_dir, "branch_conf", branch, "conf.yml")
 
-    app_layout.write_conf(
-        flat_conf_path, template="[test_{major}][.{minor}][.{patch}]"
-    )
+    app_layout.write_conf(flat_conf_path, template="[test_{major}][.{minor}][.{patch}]")
 
     subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
@@ -54,10 +52,14 @@ def test_stamp_migrates_flat_conf_on_current_branch(app_layout):
     assert _vmn_status_clean(app_layout.repo_path)
 
     # The stamp commit tracks the canonical conf and no longer the flat one.
-    tracked = subprocess.check_output(
-        ["git", "ls-tree", "-r", "--name-only", "HEAD"],
-        cwd=app_layout.repo_path,
-    ).decode().split()
+    tracked = (
+        subprocess.check_output(
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=app_layout.repo_path,
+        )
+        .decode()
+        .split()
+    )
     rel_flat = os.path.relpath(flat_conf_path, app_layout.repo_path)
     rel_canon = os.path.relpath(canonical_conf_path, app_layout.repo_path)
     assert rel_canon in tracked
@@ -102,9 +104,7 @@ def test_stamp_migrates_root_conf(app_layout):
     branch = "b2"
     root_dir = os.path.join(app_layout.repo_path, ".vmn", "root_app")
     flat_root_conf = os.path.join(root_dir, f"{branch}_root_conf.yml")
-    canonical_root_conf = os.path.join(
-        root_dir, "branch_conf", branch, "root_conf.yml"
-    )
+    canonical_root_conf = os.path.join(root_dir, "branch_conf", branch, "root_conf.yml")
 
     with open(flat_root_conf, "w") as f:
         f.write("conf:\n  external_services: {}\n")
@@ -160,9 +160,7 @@ def test_stamp_migration_prefers_flat_over_legacy_when_canonical_exists(app_layo
 
     branch = "feat/x"
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
-    canonical_conf_path = os.path.join(
-        app_dir, "branch_conf", "feat", "x", "conf.yml"
-    )
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", "feat", "x", "conf.yml")
     flat_conf_path = os.path.join(app_dir, "feat-x_conf.yml")
     legacy_conf_path = os.path.join(app_dir, "feat", "x_conf.yml")
 
@@ -172,9 +170,7 @@ def test_stamp_migration_prefers_flat_over_legacy_when_canonical_exists(app_layo
     os.makedirs(os.path.dirname(legacy_conf_path), exist_ok=True)
     app_layout.write_conf(legacy_conf_path, template="[legacy_{major}]")
 
-    subprocess.call(
-        ["git", "checkout", "-b", branch], cwd=app_layout.repo_path
-    )
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -199,17 +195,13 @@ def test_stamp_migration_flat_wins_over_legacy(app_layout):
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
     flat_conf_path = os.path.join(app_dir, "feat-x_conf.yml")
     legacy_conf_path = os.path.join(app_dir, "feat", "x_conf.yml")
-    canonical_conf_path = os.path.join(
-        app_dir, "branch_conf", "feat", "x", "conf.yml"
-    )
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", "feat", "x", "conf.yml")
 
     app_layout.write_conf(flat_conf_path, template="[flat_{major}]")
     os.makedirs(os.path.dirname(legacy_conf_path), exist_ok=True)
     app_layout.write_conf(legacy_conf_path, template="[legacy_{major}]")
 
-    subprocess.call(
-        ["git", "checkout", "-b", branch], cwd=app_layout.repo_path
-    )
+    subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
 
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -278,9 +270,7 @@ def test_stamp_migration_deleted_branch_prefix_then_pruned(app_layout):
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
     # No branch named "gone" exists -> dashes are treated literally.
     flat_conf_path = os.path.join(app_dir, "gone_conf.yml")
-    canonical_conf_path = os.path.join(
-        app_dir, "branch_conf", "gone", "conf.yml"
-    )
+    canonical_conf_path = os.path.join(app_dir, "branch_conf", "gone", "conf.yml")
     app_layout.write_conf(flat_conf_path, template="[gone_{major}]")
 
     app_layout.write_file_commit_and_push("test_repo_0", "a.txt", "bv")
@@ -354,9 +344,7 @@ def test_stamp_removes_other_branch_canonical_conf(app_layout):
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
 
     other_branch = "b2"
-    other_canonical = os.path.join(
-        app_dir, "branch_conf", other_branch, "conf.yml"
-    )
+    other_canonical = os.path.join(app_dir, "branch_conf", other_branch, "conf.yml")
     os.makedirs(os.path.dirname(other_canonical), exist_ok=True)
     app_layout.write_conf(other_canonical, template="[test_{major}]")
 

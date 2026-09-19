@@ -41,9 +41,7 @@ def build_manager(args):
     data_dir = args.data_dir or DEFAULT_DATA_DIR
     manager = WorkspaceManager(data_dir)
 
-    registered_paths = {
-        os.path.realpath(w.path) for w in manager.list() if w.path
-    }
+    registered_paths = {os.path.realpath(w.path) for w in manager.list() if w.path}
     registered_buckets = {
         (w.bucket, w.prefix) for w in manager.list() if w.kind == "s3"
     }
@@ -71,8 +69,10 @@ def build_manager(args):
         name = f"s3-{args.s3_bucket}"
         if not manager.get(name):
             manager.add_s3(
-                name, args.s3_bucket,
-                prefix=args.s3_prefix, endpoint_url=args.endpoint_url,
+                name,
+                args.s3_bucket,
+                prefix=args.s3_prefix,
+                endpoint_url=args.endpoint_url,
             )
 
     return manager
@@ -97,7 +97,9 @@ def handle_ui(args):
         )
 
     app = create_app(
-        manager, token=token, read_only=args.read_only,
+        manager,
+        token=token,
+        read_only=args.read_only,
         use_index=not args.no_index,
     )
 

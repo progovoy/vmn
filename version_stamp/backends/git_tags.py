@@ -62,7 +62,8 @@ class GitTagsMixin:
     def _sorted_tag_names_from_ver_infos(ver_infos, filter_none=False):
         """Extract tag names from ver_infos, sorted newest first by tagged_date."""
         tag_objects = [
-            vi["tag_object"] for vi in ver_infos.values()
+            vi["tag_object"]
+            for vi in ver_infos.values()
             if not filter_none or vi["tag_object"] is not None
         ]
         tag_objects.sort(key=lambda t: t.object.tagged_date, reverse=True)
@@ -132,7 +133,9 @@ class GitTagsMixin:
             return [], cobj, ver_infos
 
         ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
-        final_list_of_tag_names = self._sorted_tag_names_from_ver_infos(ver_infos, filter_none=True)
+        final_list_of_tag_names = self._sorted_tag_names_from_ver_infos(
+            ver_infos, filter_none=True
+        )
 
         return final_list_of_tag_names, found_tag.commit, ver_infos
 

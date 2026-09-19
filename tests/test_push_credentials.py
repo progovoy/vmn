@@ -25,15 +25,11 @@ class TestInjectCredentialsIntoUrl:
         return m
 
     def test_https_url(self, mixin):
-        result = mixin._inject_credentials_into_url(
-            "https://github.com/owner/repo.git"
-        )
+        result = mixin._inject_credentials_into_url("https://github.com/owner/repo.git")
         assert result == "https://deploy-bot:ghp_abc123@github.com/owner/repo.git"
 
     def test_https_url_no_dotgit_suffix(self, mixin):
-        result = mixin._inject_credentials_into_url(
-            "https://github.com/owner/repo"
-        )
+        result = mixin._inject_credentials_into_url("https://github.com/owner/repo")
         assert result == "https://deploy-bot:ghp_abc123@github.com/owner/repo"
 
     def test_https_url_with_existing_credentials(self, mixin):
@@ -43,9 +39,7 @@ class TestInjectCredentialsIntoUrl:
         assert result == "https://deploy-bot:ghp_abc123@github.com/owner/repo.git"
 
     def test_ssh_shorthand(self, mixin):
-        result = mixin._inject_credentials_into_url(
-            "git@github.com:owner/repo.git"
-        )
+        result = mixin._inject_credentials_into_url("git@github.com:owner/repo.git")
         assert result == "https://deploy-bot:ghp_abc123@github.com/owner/repo.git"
 
     def test_ssh_url(self, mixin):
@@ -58,13 +52,17 @@ class TestInjectCredentialsIntoUrl:
         result = mixin._inject_credentials_into_url(
             "https://github.mycompany.com/org/repo.git"
         )
-        assert result == "https://deploy-bot:ghp_abc123@github.mycompany.com/org/repo.git"
+        assert (
+            result == "https://deploy-bot:ghp_abc123@github.mycompany.com/org/repo.git"
+        )
 
     def test_github_enterprise_ssh(self, mixin):
         result = mixin._inject_credentials_into_url(
             "git@github.mycompany.com:org/repo.git"
         )
-        assert result == "https://deploy-bot:ghp_abc123@github.mycompany.com/org/repo.git"
+        assert (
+            result == "https://deploy-bot:ghp_abc123@github.mycompany.com/org/repo.git"
+        )
 
     def test_https_url_with_port(self, mixin):
         result = mixin._inject_credentials_into_url(
@@ -82,9 +80,7 @@ class TestInjectCredentialsIntoUrl:
         m = GitOpsMixin()
         m._push_user = "user@domain"
         m._push_token = "token/with+special&chars"
-        result = m._inject_credentials_into_url(
-            "https://github.com/owner/repo.git"
-        )
+        result = m._inject_credentials_into_url("https://github.com/owner/repo.git")
         assert "user%40domain" in result
         assert "token%2Fwith%2Bspecial%26chars" in result
         assert result.startswith("https://")
@@ -99,15 +95,11 @@ class TestInjectCredentialsIntoUrl:
         assert result is None
 
     def test_unsupported_protocol_returns_none(self, mixin):
-        result = mixin._inject_credentials_into_url(
-            "ftp://server.com/repo.git"
-        )
+        result = mixin._inject_credentials_into_url("ftp://server.com/repo.git")
         assert result is None
 
     def test_http_url_also_works(self, mixin):
-        result = mixin._inject_credentials_into_url(
-            "http://github.com/owner/repo.git"
-        )
+        result = mixin._inject_credentials_into_url("http://github.com/owner/repo.git")
         assert result == "https://deploy-bot:ghp_abc123@github.com/owner/repo.git"
 
 
@@ -166,7 +158,10 @@ class TestSanitizeLogStr:
 
     def test_masks_https_credentials(self):
         s = "git push https://user:token@github.com/o/r.git refs/heads/main"
-        assert _sanitize_log_str(s) == "git push https://***@github.com/o/r.git refs/heads/main"
+        assert (
+            _sanitize_log_str(s)
+            == "git push https://***@github.com/o/r.git refs/heads/main"
+        )
 
     def test_masks_http_credentials(self):
         s = "git push http://user:token@host/r.git"
@@ -196,7 +191,16 @@ class TestCliArgParsing:
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(
-            ["stamp", "-r", "patch", "--git-push-user", "u", "--git-push-token", "t", "app"]
+            [
+                "stamp",
+                "-r",
+                "patch",
+                "--git-push-user",
+                "u",
+                "--git-push-token",
+                "t",
+                "app",
+            ]
         )
         assert args.git_push_user == "u"
         assert args.git_push_token == "t"
@@ -234,7 +238,16 @@ class TestCliArgParsing:
         from version_stamp.cli.args import parse_user_commands
 
         args = parse_user_commands(
-            ["stamp", "-r", "patch", "--git-push-user", "cli_user", "--git-push-token", "cli_token", "app"]
+            [
+                "stamp",
+                "-r",
+                "patch",
+                "--git-push-user",
+                "cli_user",
+                "--git-push-token",
+                "cli_token",
+                "app",
+            ]
         )
         with mock.patch.dict(
             os.environ,
@@ -344,6 +357,7 @@ class TestUpdateRemoteTrackingRef:
         def side_effect(cmd):
             if "update-ref" in cmd:
                 raise Exception("update-ref failed")
+
         m._be.git.execute.side_effect = side_effect
 
         # Should not raise

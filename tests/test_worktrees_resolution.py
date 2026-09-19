@@ -39,7 +39,9 @@ def _version_ctx(repo, version, changesets=None):
     if changesets is not None:
         app["changesets"] = changesets
     ver_infos = {tag: {"ver_info": {"stamping": {"app": app}}}}
-    backend = SimpleNamespace(changeset=lambda requested: _git(repo, "rev-parse", requested))
+    backend = SimpleNamespace(
+        changeset=lambda requested: _git(repo, "rev-parse", requested)
+    )
     vcs = SimpleNamespace(
         backend=backend,
         configured_deps={"../current": {"remote": "current"}},

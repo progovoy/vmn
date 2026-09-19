@@ -79,9 +79,21 @@ def shallow_clone_dep(dep_info, dest_path, branch_name=None):
 
     target_hash = dep_info.get("hash")
     if target_hash and _git_stdout(dest_path, ["rev-parse", "HEAD"]) != target_hash:
-        if _run_command(
-            ["git", "-C", str(dest_path), "fetch", "--depth", "1", "origin", target_hash]
-        ) != 0:
+        if (
+            _run_command(
+                [
+                    "git",
+                    "-C",
+                    str(dest_path),
+                    "fetch",
+                    "--depth",
+                    "1",
+                    "origin",
+                    target_hash,
+                ]
+            )
+            != 0
+        ):
             return 1
 
     if branch_name:
@@ -102,9 +114,7 @@ def _run_command(cmd):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode == 0:
         return 0
-    VMN_LOGGER.error(
-        f"Git command failed ({' '.join(cmd)}): {result.stderr.strip()}"
-    )
+    VMN_LOGGER.error(f"Git command failed ({' '.join(cmd)}): {result.stderr.strip()}")
     return 1
 
 
@@ -169,7 +179,7 @@ def worktree_registered(repo_path, worktree_path, run_git=run_git):
     expected = os.path.realpath(str(worktree_path))
     for line in result.stdout.splitlines():
         if line.startswith("worktree "):
-            registered = os.path.realpath(line[len("worktree "):])
+            registered = os.path.realpath(line[len("worktree ") :])
             if registered == expected:
                 return True
     return False

@@ -241,7 +241,9 @@ def _methodology_body(sections=None):
     """Build methodology text from selected section keys."""
     if sections is None:
         sections = ALL_METHODOLOGY_KEYS
-    parts = [METHODOLOGY_SECTIONS[k].strip() for k in sections if k in METHODOLOGY_SECTIONS]
+    parts = [
+        METHODOLOGY_SECTIONS[k].strip() for k in sections if k in METHODOLOGY_SECTIONS
+    ]
     if not parts:
         return ""
     return METHODOLOGY_HEADER.strip() + "\n\n" + "\n\n".join(parts)
@@ -301,12 +303,11 @@ def _content_body(methodology, methodology_sections, methodology_only):
     return _skill_body(methodology, methodology_sections)
 
 
-def _install_claude(path, methodology, force, methodology_sections=None,
-                    methodology_only=False):
+def _install_claude(
+    path, methodology, force, methodology_sections=None, methodology_only=False
+):
     if os.path.exists(path) and not force:
-        VMN_LOGGER.error(
-            f"{path} already exists — use --force to overwrite it."
-        )
+        VMN_LOGGER.error(f"{path} already exists — use --force to overwrite it.")
         return 1
     content = (
         "---\n"
@@ -320,8 +321,9 @@ def _install_claude(path, methodology, force, methodology_sections=None,
     return 0
 
 
-def _install_block(path, methodology, methodology_sections=None,
-                   methodology_only=False):
+def _install_block(
+    path, methodology, methodology_sections=None, methodology_only=False
+):
     body = _content_body(methodology, methodology_sections, methodology_only)
     block = f"{BEGIN_MARKER}\n{body}\n{END_MARKER}"
     existing = ""
@@ -332,9 +334,7 @@ def _install_block(path, methodology, methodology_sections=None,
     begin_count = existing.count(BEGIN_MARKER)
     end_count = existing.count(END_MARKER)
     if (begin_count, end_count) not in ((0, 0), (1, 1)):
-        VMN_LOGGER.error(
-            f"Refusing to update {path}: malformed vmn skill markers."
-        )
+        VMN_LOGGER.error(f"Refusing to update {path}: malformed vmn skill markers.")
         return 1
 
     if begin_count:
@@ -361,8 +361,14 @@ def _install_block(path, methodology, methodology_sections=None,
     return 0
 
 
-def install_skill(target, methodology=False, force=False, root=None,
-                  methodology_sections=None, methodology_only=False):
+def install_skill(
+    target,
+    methodology=False,
+    force=False,
+    root=None,
+    methodology_sections=None,
+    methodology_only=False,
+):
     """Write the skill block to an AI tool's instruction file.
 
     ``claude`` creates a self-contained Agent Skill at
@@ -386,14 +392,12 @@ def install_skill(target, methodology=False, force=False, root=None,
 
         path = os.path.join(root, TARGET_PATHS[target])
         if target == "claude":
-            return _install_claude(path, methodology, force,
-                                   methodology_sections, methodology_only)
-        return _install_block(path, methodology,
-                              methodology_sections, methodology_only)
+            return _install_claude(
+                path, methodology, force, methodology_sections, methodology_only
+            )
+        return _install_block(path, methodology, methodology_sections, methodology_only)
     except RuntimeError:
-        VMN_LOGGER.error(
-            "Cannot install vmn skill from an unmanaged directory."
-        )
+        VMN_LOGGER.error("Cannot install vmn skill from an unmanaged directory.")
     except (KeyError, OSError) as exc:
         VMN_LOGGER.error(f"Failed to install vmn skill: {exc}")
     return 1

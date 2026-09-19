@@ -54,9 +54,7 @@ def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
 
     template = env.from_string(template_content)
 
-    VMN_LOGGER.debug(
-        f"Possible keywords for your Jinja template:\n" f"{pformat(data)}"
-    )
+    VMN_LOGGER.debug(f"Possible keywords for your Jinja template:\n" f"{pformat(data)}")
     out = template.render(data)
 
     if os.path.exists(output_path):

@@ -20,8 +20,5 @@ def strip_legacy_completion(content, shell):
     """Remove old-style (pre-managed-block) completion from rc file content."""
     from version_stamp.cli.completion import COMPLETION_MARKER
 
-    legacy_block = (
-        f"\n{COMPLETION_MARKER}\n"
-        f"{LEGACY_COMPLETION_SCRIPTS[shell]}\n"
-    )
+    legacy_block = f"\n{COMPLETION_MARKER}\n" f"{LEGACY_COMPLETION_SCRIPTS[shell]}\n"
     return content.replace(legacy_block, "")

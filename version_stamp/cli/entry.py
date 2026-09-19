@@ -10,11 +10,27 @@ from filelock import FileLock
 
 from version_stamp import version as version_mod
 from version_stamp.backends.factory import get_client
-from version_stamp.core.constants import BOLD_CHAR, BRANCH_CONF_DIR, END_CHAR, VMN_BE_TYPE_GIT, VMN_BE_TYPE_LOCAL_FILE
-from version_stamp.core.logging import VMN_LOGGER, _runtime_ctx, init_stamp_logger, measure_runtime_decorator
+from version_stamp.core.constants import (
+    BOLD_CHAR,
+    BRANCH_CONF_DIR,
+    END_CHAR,
+    VMN_BE_TYPE_GIT,
+    VMN_BE_TYPE_LOCAL_FILE,
+)
+from version_stamp.core.logging import (
+    VMN_LOGGER,
+    _runtime_ctx,
+    init_stamp_logger,
+    measure_runtime_decorator,
+)
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.cli.args import parse_user_commands
-from version_stamp.cli.constants import LOCK_FILE_ENV, LOCK_FILENAME, LOG_FILENAME, VMN_ARGS
+from version_stamp.cli.constants import (
+    LOCK_FILE_ENV,
+    LOCK_FILENAME,
+    LOG_FILENAME,
+    VMN_ARGS,
+)
 from version_stamp.stamping.publisher import VersionControlStamper
 
 # Import all command handlers so dynamic dispatch works
@@ -85,7 +101,8 @@ def _run_experiment_from_snapshot(args):
 
     VMN_LOGGER.error(
         "Action '%s' requires a git repository "
-        "(not available in --from-snapshot mode)", action,
+        "(not available in --from-snapshot mode)",
+        action,
     )
     return 1
 
@@ -142,6 +159,7 @@ def validate_app_name(args):
         VMN_LOGGER.error("App name cannot include a 'branch_conf' path segment")
         raise RuntimeError()
 
+
 def main(command_line=None):
     # Please KEEP this function exactly like this
     # The purpose of this function is to keep the return
@@ -162,35 +180,48 @@ def vmn_run(command_line=None):
 
     if hasattr(args, "completion"):
         from version_stamp.cli.completion import print_completion_setup
+
         return print_completion_setup(args.completion), None
 
     if hasattr(args, "completion_install"):
         from version_stamp.cli.completion import install_completion
+
         return install_completion(args.completion_install), None
 
     if hasattr(args, "completion_uninstall"):
         from version_stamp.cli.completion import uninstall_completion
+
         return uninstall_completion(args.completion_uninstall), None
 
     if args.command in ("skill", "ai"):
         from version_stamp.cli.skill import (
-            install_skill, print_skill, print_methodology,
+            install_skill,
+            print_skill,
+            print_methodology,
             ALL_METHODOLOGY_KEYS,
         )
+
         ai_action = getattr(args, "ai_action", "skill")
         if ai_action is None:
             VMN_LOGGER.error("Usage: vmn ai <skill|methodology>")
             return 1, None
 
         if ai_action == "methodology":
-            picked = [k for k in ALL_METHODOLOGY_KEYS
-                      if getattr(args, f"meth_{k}", False)]
+            picked = [
+                k for k in ALL_METHODOLOGY_KEYS if getattr(args, f"meth_{k}", False)
+            ]
             sections = picked if picked else None
             if args.install:
-                return install_skill(
-                    args.target, methodology=True, force=args.force,
-                    methodology_sections=sections, methodology_only=True,
-                ), None
+                return (
+                    install_skill(
+                        args.target,
+                        methodology=True,
+                        force=args.force,
+                        methodology_sections=sections,
+                        methodology_only=True,
+                    ),
+                    None,
+                )
             return print_methodology(sections), None
 
         methodology = getattr(args, "methodology", False)
@@ -251,9 +282,7 @@ def vmn_run(command_line=None):
                 os.path.join(vmn_path, LOG_FILENAME), args.debug, supress_stdout=True
             )
         else:
-            init_stamp_logger(
-                os.path.join(vmn_path, LOG_FILENAME), args.debug
-            )
+            init_stamp_logger(os.path.join(vmn_path, LOG_FILENAME), args.debug)
 
         command_line = copy.deepcopy(command_line)
 
@@ -285,7 +314,10 @@ def vmn_run(command_line=None):
                 "No git remote configured. vmn needs a remote to push version tags.\n"
                 "Fix: git remote add origin <your-repo-url>"
             )
-        elif "not a git repository" in msg.lower() or "InvalidGitRepositoryError" in type(exc).__name__:
+        elif (
+            "not a git repository" in msg.lower()
+            or "InvalidGitRepositoryError" in type(exc).__name__
+        ):
             VMN_LOGGER.error(
                 "Not inside a git repository.\n"
                 "Fix: run 'git init' first, or cd into a git repo."
@@ -295,15 +327,17 @@ def vmn_run(command_line=None):
                 "This appears to be a shallow clone. vmn needs full history to compute versions.\n"
                 "Fix: git fetch --unshallow"
             )
-        elif "dirty" in msg.lower() or "uncommitted" in msg.lower() or "outgoing" in msg.lower():
+        elif (
+            "dirty" in msg.lower()
+            or "uncommitted" in msg.lower()
+            or "outgoing" in msg.lower()
+        ):
             VMN_LOGGER.error(
                 "Working tree has uncommitted or unpushed changes.\n"
                 "Fix: commit and push your changes, or use --dry-run to preview."
             )
         else:
-            VMN_LOGGER.error(
-                "vmn_run raised exception. Run vmn --debug for details"
-            )
+            VMN_LOGGER.error("vmn_run raised exception. Run vmn --debug for details")
         VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
         err = 1
@@ -320,10 +354,11 @@ def _vmn_run(args, root_path):
         VMN_LOGGER.info("Run vmn -h for help")
         return 1, vmnc
 
-    local_only_command = (
-        is_local_only_island(root_path)
-        and vmnc.args.command in {"stamp", "release", "add"}
-    )
+    local_only_command = is_local_only_island(root_path) and vmnc.args.command in {
+        "stamp",
+        "release",
+        "add",
+    }
     needs_remote = VMN_ARGS[vmnc.args.command] == "remote" or (
         "pull" in vmnc.args and vmnc.args.pull
     )
@@ -370,8 +405,6 @@ def _vmn_run(args, root_path):
     err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
 
     return err, vmnc
-
-
 
 
 if __name__ == "__main__":

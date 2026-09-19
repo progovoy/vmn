@@ -34,9 +34,7 @@ def migrate_branch_confs(backend, app_dirs, dry_run=False):
     moves = []
     for app_dir in app_dirs:
         if os.path.isdir(app_dir):
-            moves.extend(
-                _migrate_app_dir(repo, app_dir, known_branches, dry_run)
-            )
+            moves.extend(_migrate_app_dir(repo, app_dir, known_branches, dry_run))
     return moves
 
 
@@ -79,8 +77,7 @@ def _legacy_confs(app_dir):
         dirnames[:] = [
             d
             for d in dirnames
-            if d not in _PRUNE_DIRS
-            and not _is_app_dir(os.path.join(dirpath, d))
+            if d not in _PRUNE_DIRS and not _is_app_dir(os.path.join(dirpath, d))
         ]
         if dirpath == app_dir:
             continue
@@ -137,9 +134,7 @@ def _resolve_flat_branch(prefix, known_branches):
     the same name; several slashed matches are ambiguous and skipped.
     """
     slashed = {
-        b
-        for b in known_branches
-        if b != prefix and branch_to_conf_prefix(b) == prefix
+        b for b in known_branches if b != prefix and branch_to_conf_prefix(b) == prefix
     }
     if len(slashed) > 1:
         VMN_LOGGER.warning(

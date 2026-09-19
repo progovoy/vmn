@@ -91,7 +91,7 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 
 # Patterns for live Jinja code we need to protect
 JINJA_TAG_RE = re.compile(
-    r'(\{\{.*?\}\}|\{%.*?%\})',
+    r"(\{\{.*?\}\}|\{%.*?%\})",
     re.DOTALL,
 )
 

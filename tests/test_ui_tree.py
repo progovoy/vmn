@@ -65,9 +65,7 @@ def test_ui_version_dag_rc_chain(app_layout, capfd):
     _stamp_app(app_layout.app_name, prerelease="rc")  # 0.0.2-rc.2
 
     client = _client(app_layout)
-    tree = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/tree"
-    ).json()
+    tree = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/tree").json()
 
     by_verstr = {n["verstr"]: n for n in tree["nodes"]}
     assert by_verstr["0.0.2-rc.1"]["base"] == "0.0.2"
@@ -94,9 +92,7 @@ def test_ui_version_dag_release_merges_same_commit(app_layout, capfd):
     )  # 0.0.2+build.1, same commit
 
     client = _client(app_layout)
-    tree = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/tree"
-    ).json()
+    tree = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/tree").json()
 
     verstrs = [n["verstr"] for n in tree["nodes"]]
     assert "0.0.2" in verstrs
@@ -117,14 +113,14 @@ def test_ui_root_topology(app_layout, capfd):
     """Root-app topology: services map per root version, with per-step delta."""
     _run_vmn_init()
     _init_app("root_app/svc1")
-    _stamp_app("root_app/svc1", "patch")     # root 1: svc1@0.0.1
+    _stamp_app("root_app/svc1", "patch")  # root 1: svc1@0.0.1
 
     app_layout.write_file_commit_and_push("test_repo_0", "s2.txt", "x")
     _init_app("root_app/svc2")
-    _stamp_app("root_app/svc2", "patch")     # root 2(+init): svc2 appears
+    _stamp_app("root_app/svc2", "patch")  # root 2(+init): svc2 appears
 
     app_layout.write_file_commit_and_push("test_repo_0", "s1.txt", "y")
-    _stamp_app("root_app/svc1", "minor")     # svc1@0.1.0
+    _stamp_app("root_app/svc1", "minor")  # svc1@0.1.0
 
     client = _client(app_layout)
     r = client.get("/api/v1/workspaces/main/apps/root_app/tree/root")
@@ -151,9 +147,7 @@ def test_ui_dep_graph(app_layout, capfd):
     _stamp_app(app_layout.app_name, "patch")
 
     client = _client(app_layout)
-    r = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/deps"
-    )
+    r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/deps")
     assert r.status_code == 200
     graph = r.json()
 

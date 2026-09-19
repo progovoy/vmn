@@ -10,14 +10,32 @@ from helpers import _init_app, _run_vmn_init, _stamp_app
 def test_ui_args_parse():
     from version_stamp.cli.args import parse_user_commands
 
-    args = parse_user_commands([
-        "ui", "--host", "0.0.0.0", "--port", "9000",
-        "--token", "t0k", "--data-dir", "/tmp/x",
-        "--repo", "/r1", "--repo", "/r2",
-        "--s3-bucket", "bkt", "--s3-prefix", "team/ml",
-        "--endpoint-url", "http://minio:9000",
-        "--read-only", "--no-browser", "--no-index",
-    ])
+    args = parse_user_commands(
+        [
+            "ui",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9000",
+            "--token",
+            "t0k",
+            "--data-dir",
+            "/tmp/x",
+            "--repo",
+            "/r1",
+            "--repo",
+            "/r2",
+            "--s3-bucket",
+            "bkt",
+            "--s3-prefix",
+            "team/ml",
+            "--endpoint-url",
+            "http://minio:9000",
+            "--read-only",
+            "--no-browser",
+            "--no-index",
+        ]
+    )
     assert args.command == "ui"
     assert args.host == "0.0.0.0"
     assert args.port == 9000
@@ -50,16 +68,25 @@ def test_ui_build_manager_from_args(app_layout, capfd):
     _stamp_app(app_layout.app_name, "patch")
 
     data_dir = os.path.join(app_layout.base_dir, "ui_data")
-    args = parse_user_commands([
-        "ui", "--data-dir", data_dir,
-        "--repo", app_layout.repo_path,
-        "--s3-bucket", "team-bucket", "--s3-prefix", "ml",
-    ])
+    args = parse_user_commands(
+        [
+            "ui",
+            "--data-dir",
+            data_dir,
+            "--repo",
+            app_layout.repo_path,
+            "--s3-bucket",
+            "team-bucket",
+            "--s3-prefix",
+            "ml",
+        ]
+    )
     manager = build_manager(args)
 
     by_name = {w.name: w for w in manager.list()}
-    assert any(w.kind == "git" and w.path == app_layout.repo_path
-               for w in by_name.values())
+    assert any(
+        w.kind == "git" and w.path == app_layout.repo_path for w in by_name.values()
+    )
     s3 = [w for w in by_name.values() if w.kind == "s3"]
     assert len(s3) == 1
     assert s3[0].bucket == "team-bucket"

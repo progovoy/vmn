@@ -97,14 +97,10 @@ def test_editable_island_dep_may_diverge_from_config_during_stamp(tmp_path):
     assert commands._is_editable_island_dep(
         str(tmp_path), editable_backend, {"outgoing"}
     )
-    assert not commands._is_editable_island_dep(
-        str(tmp_path), editable_backend, set()
-    )
+    assert not commands._is_editable_island_dep(str(tmp_path), editable_backend, set())
 
 
-def test_stamp_in_local_island_pushes_tag_but_not_island_branch(
-    app_layout, tmp_path
-):
+def test_stamp_in_local_island_pushes_tag_but_not_island_branch(app_layout, tmp_path):
     _run_vmn_init()
     _init_app(app_layout.app_name)
     assert _stamp_app(app_layout.app_name, "patch")[0] == 0
@@ -117,10 +113,20 @@ def test_stamp_in_local_island_pushes_tag_but_not_island_branch(
     ).strip()
     base_path = tmp_path / "islands"
 
-    assert vmn_run([
-        "worktrees", "create", app_layout.app_name,
-        "--island-name", "stamp-test", "--base-path", str(base_path),
-    ])[0] == 0
+    assert (
+        vmn_run(
+            [
+                "worktrees",
+                "create",
+                app_layout.app_name,
+                "--island-name",
+                "stamp-test",
+                "--base-path",
+                str(base_path),
+            ]
+        )[0]
+        == 0
+    )
     island_repo = base_path / "stamp-test" / Path(app_layout.repo_path).name
     app_layout.set_working_dir(str(island_repo))
     (island_repo / "feature.txt").write_text("local feature")
@@ -132,16 +138,34 @@ def test_stamp_in_local_island_pushes_tag_but_not_island_branch(
     err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
     version = ver_info["stamping"]["app"]["_version"]
-    assert subprocess.check_output(
-        ["git", "--git-dir", remote, "rev-parse", branch], text=True
-    ).strip() == remote_branch_before
+    assert (
+        subprocess.check_output(
+            ["git", "--git-dir", remote, "rev-parse", branch], text=True
+        ).strip()
+        == remote_branch_before
+    )
     subprocess.run(
-        ["git", "--git-dir", remote, "rev-parse", f"{app_layout.app_name}_{version}^{{}}"],
+        [
+            "git",
+            "--git-dir",
+            remote,
+            "rev-parse",
+            f"{app_layout.app_name}_{version}^{{}}",
+        ],
         check=True,
         capture_output=True,
     )
 
     app_layout.set_working_dir(app_layout.repo_path)
-    assert vmn_run([
-        "worktrees", "remove", "stamp-test", "--base-path", str(base_path),
-    ])[0] == 0
+    assert (
+        vmn_run(
+            [
+                "worktrees",
+                "remove",
+                "stamp-test",
+                "--base-path",
+                str(base_path),
+            ]
+        )[0]
+        == 0
+    )

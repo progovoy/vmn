@@ -66,12 +66,8 @@ class VersionControlStamper(IVersionsStamper):
         if verstr is None:
             return None
 
-        tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
-            self.name, verstr
-        )
-        base_verstr = VMNBackend.get_base_vmn_version(
-            verstr, self.hide_zero_hotfix
-        )
+        tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(self.name, verstr)
+        base_verstr = VMNBackend.get_base_vmn_version(verstr, self.hide_zero_hotfix)
         release_tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
             self.name, base_verstr
         )
@@ -264,8 +260,8 @@ class VersionControlStamper(IVersionsStamper):
                 from_verstr,
                 hide_zero_hotfix=self.hide_zero_hotfix,
             )
-            release_tag_formatted_app_name = (
-                VMNBackend.serialize_vmn_tag_name(self.name, base_version)
+            release_tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
+                self.name, base_version
             )
             (
                 release_tag_formatted_app_name,
@@ -559,11 +555,10 @@ class VersionControlStamper(IVersionsStamper):
 
         try:
             if self.dry_run:
-                VMN_LOGGER.info(
-                    "Would have pushed with tags.\n" f"tags: {all_tags} "
-                )
+                VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
             else:
                 from version_stamp.cli.worktree_state import is_local_only_island
+
                 _push_published_refs(
                     self.backend,
                     all_tags,
@@ -648,9 +643,7 @@ class VersionControlStamper(IVersionsStamper):
                     label = type_labels.get(commit_type, "Other Changes")
                     grouped_commits.setdefault(label, []).append(entry)
         except Exception:
-            VMN_LOGGER.debug(
-                "Failed to iterate commits for changelog", exc_info=True
-            )
+            VMN_LOGGER.debug("Failed to iterate commits for changelog", exc_info=True)
             return
 
         if not grouped_commits and not breaking_changes:
@@ -699,16 +692,14 @@ class VersionControlStamper(IVersionsStamper):
                 with open(changelog_path, "r") as f:
                     existing_content = f.read()
             except Exception:
-                VMN_LOGGER.debug(
-                    "Failed to read existing changelog", exc_info=True
-                )
+                VMN_LOGGER.debug("Failed to read existing changelog", exc_info=True)
 
         if existing_content:
             # Insert after the first header line if present, otherwise prepend
             header_match = re.match(r"^(# .+\n(?:\n)?)", existing_content)
             if header_match:
                 header = header_match.group(1)
-                rest = existing_content[len(header):]
+                rest = existing_content[len(header) :]
                 updated = header + "\n" + new_entry + "\n" + rest
             else:
                 updated = new_entry + "\n\n" + existing_content
@@ -719,13 +710,9 @@ class VersionControlStamper(IVersionsStamper):
             with open(changelog_path, "w") as f:
                 f.write(updated)
             version_files_to_add.append(changelog_path)
-            VMN_LOGGER.info(
-                f"Generated changelog entry for version {app_version}"
-            )
+            VMN_LOGGER.info(f"Generated changelog entry for version {app_version}")
         except Exception:
-            VMN_LOGGER.debug(
-                "Failed to write changelog file", exc_info=True
-            )
+            VMN_LOGGER.debug("Failed to write changelog file", exc_info=True)
 
     def _create_github_release(self, tag, app_version):
         """Create a GitHub Release via gh CLI. Best-effort -- failures log warnings."""
@@ -734,9 +721,7 @@ class VersionControlStamper(IVersionsStamper):
                 return
 
             if self.dry_run:
-                VMN_LOGGER.info(
-                    f"Would have created GitHub Release for tag {tag}"
-                )
+                VMN_LOGGER.info(f"Would have created GitHub Release for tag {tag}")
                 return
 
             if not shutil.which("gh"):
@@ -755,9 +740,14 @@ class VersionControlStamper(IVersionsStamper):
             body = self._build_release_body(app_version)
 
             cmd = [
-                "gh", "release", "create", tag,
-                "--title", f"v{app_version}",
-                "--notes", body,
+                "gh",
+                "release",
+                "create",
+                tag,
+                "--title",
+                f"v{app_version}",
+                "--notes",
+                body,
             ]
 
             if self.github_release.get("draft", False):
@@ -778,9 +768,7 @@ class VersionControlStamper(IVersionsStamper):
                     f"Failed to create GitHub Release: {result.stderr.strip()}"
                 )
             else:
-                VMN_LOGGER.info(
-                    f"Created GitHub Release for {tag}"
-                )
+                VMN_LOGGER.info(f"Created GitHub Release for {tag}")
         except Exception:
             VMN_LOGGER.warning(
                 "GitHub Release creation failed (best-effort).",
@@ -799,9 +787,7 @@ class VersionControlStamper(IVersionsStamper):
                     content = f.read()
 
                 # Look for a section header like ## [1.2.3] or ## [v1.2.3]
-                section_pattern = (
-                    rf"## \[v?{re.escape(app_version)}\][^\n]*\n"
-                )
+                section_pattern = rf"## \[v?{re.escape(app_version)}\][^\n]*\n"
                 match = re.search(section_pattern, content)
                 if match:
                     start = match.end()
@@ -882,8 +868,7 @@ class VersionControlStamper(IVersionsStamper):
             return []
 
         keep_prefix = (
-            os.path.join(branch_conf_root, cur_branch.replace("/", os.sep))
-            + os.sep
+            os.path.join(branch_conf_root, cur_branch.replace("/", os.sep)) + os.sep
         )
         stale = []
         for dirpath, _dirnames, filenames in os.walk(branch_conf_root):
@@ -897,9 +882,7 @@ class VersionControlStamper(IVersionsStamper):
         branch_conf_root = os.path.join(self.app_dir_path, BRANCH_CONF_DIR)
         if not os.path.isdir(branch_conf_root):
             return
-        for dirpath, _dirnames, _filenames in os.walk(
-            branch_conf_root, topdown=False
-        ):
+        for dirpath, _dirnames, _filenames in os.walk(branch_conf_root, topdown=False):
             try:
                 os.rmdir(dirpath)
             except OSError:
@@ -945,7 +928,9 @@ class VersionControlStamper(IVersionsStamper):
                 include=version_files_to_add,
             )
 
-    def _write_snapshot_file(self, msg, version_id, dir_path, label, version_files_to_add):
+    def _write_snapshot_file(
+        self, msg, version_id, dir_path, label, version_files_to_add
+    ):
         if self.dry_run:
             VMN_LOGGER.info(
                 f"Would have written to {label} snapshot file:\n"
@@ -965,12 +950,16 @@ class VersionControlStamper(IVersionsStamper):
         self, root_app_msg, root_app_version, version_files_to_add
     ):
         dir_path = os.path.join(self.root_app_dir_path, "root_snapshots")
-        self._write_snapshot_file(root_app_msg, root_app_version, dir_path, "root", version_files_to_add)
+        self._write_snapshot_file(
+            root_app_msg, root_app_version, dir_path, "root", version_files_to_add
+        )
 
     @measure_runtime_decorator
     def create_snapshot_file(self, app_msg, version_files_to_add, verstr):
         dir_path = os.path.join(self.app_dir_path, "snapshots")
-        self._write_snapshot_file(app_msg, verstr, dir_path, "app", version_files_to_add)
+        self._write_snapshot_file(
+            app_msg, verstr, dir_path, "app", version_files_to_add
+        )
 
     @measure_runtime_decorator
     def retrieve_remote_changes(self):

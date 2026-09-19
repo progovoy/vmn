@@ -6,6 +6,7 @@ toml
 filelock
 boto3
 moto[s3]
+git-cliff==2.5.0
 fastapi; python_version >= "3.9"
 httpx
 uvicorn; python_version >= "3.9"

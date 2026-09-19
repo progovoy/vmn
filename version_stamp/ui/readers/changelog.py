@@ -70,14 +70,16 @@ def _dep_changelogs(root_path, from_row, to_row):
         if grouped is None:
             continue
 
-        deps.append({
-            "path": path,
-            "name": os.path.basename(path.rstrip("/")),
-            "from_commit": from_commit[:7],
-            "to_commit": to_commit[:7],
-            "breaking": grouped["breaking"],
-            "groups": grouped["groups"],
-        })
+        deps.append(
+            {
+                "path": path,
+                "name": os.path.basename(path.rstrip("/")),
+                "from_commit": from_commit[:7],
+                "to_commit": to_commit[:7],
+                "breaking": grouped["breaking"],
+                "groups": grouped["groups"],
+            }
+        )
 
     deps.sort(key=lambda d: d["name"])
     return deps

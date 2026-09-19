@@ -244,7 +244,7 @@ def test_show_dev_with_dep_version_not_matched(app_layout, capfd):
     assert err == 0
     captured = capfd.readouterr()
     dev_ver = captured.out.strip()
-    assert DEV_VERSION_RE.match(dev_ver), (
-        f"Expected single dev version line, got:\n{captured.out}"
-    )
+    assert DEV_VERSION_RE.match(
+        dev_ver
+    ), f"Expected single dev version line, got:\n{captured.out}"
     assert dev_ver.startswith("0.0.2-dev.")

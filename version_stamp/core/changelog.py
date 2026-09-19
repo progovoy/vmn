@@ -77,6 +77,7 @@ def group_commits(commits):
 
     groups = [
         {"label": label, **by_label[label]}
-        for label in _LABEL_ORDER if label in by_label
+        for label in _LABEL_ORDER
+        if label in by_label
     ]
     return {"breaking": breaking, "groups": groups}

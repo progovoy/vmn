@@ -83,9 +83,7 @@ def test_ui_version_changelog(app_layout, capfd):
     assert cl["from_verstr"] == "0.0.1"
     labels = {g["label"] for g in cl["groups"]}
     assert {"Features", "Bug Fixes"} <= labels
-    descriptions = {
-        c["description"] for g in cl["groups"] for c in g["commits"]
-    }
+    descriptions = {c["description"] for g in cl["groups"] for c in g["commits"]}
     assert {"add widget", "patch leak"} <= descriptions
     # vmn's own stamp commits ("<app>: Stamped version ...") must not leak in —
     # the range runs between the version tags, which point at those commits.
@@ -154,9 +152,7 @@ def test_ui_version_changelog_per_dependency(app_layout, capfd):
     repo1 = deps["repo1"]
     assert repo1["from_commit"] and repo1["to_commit"]
     assert repo1["from_commit"] != repo1["to_commit"]
-    descriptions = {
-        c["description"] for g in repo1["groups"] for c in g["commits"]
-    }
+    descriptions = {c["description"] for g in repo1["groups"] for c in g["commits"]}
     assert {"dep feature", "dep bug"} <= descriptions
 
 

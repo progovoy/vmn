@@ -224,10 +224,20 @@ def _goto(app_name, version=None, root=False):
     return ret
 
 
-def _snapshot(app_name, action="create", version=None, note=None,
-              to_version=None, tool=None, output=None,
-              meta=None, meta_file=None, filter_args=None, latest=False,
-              last=None):
+def _snapshot(
+    app_name,
+    action="create",
+    version=None,
+    note=None,
+    to_version=None,
+    tool=None,
+    output=None,
+    meta=None,
+    meta_file=None,
+    filter_args=None,
+    latest=False,
+    last=None,
+):
     args_list = ["snapshot"]
     if action != "create":
         args_list.append(action)
@@ -323,11 +333,25 @@ def _configure_2_deps(
     return conf
 
 
-def _experiment(app_name, action="create", version=None, note=None,
-                metrics=None, file=None, attach=None, sort=None,
-                top=None, latest=None, tool=None, output=None,
-                keep=None, older_than=None, last=None, run_cmd=None,
-                command="experiment"):
+def _experiment(
+    app_name,
+    action="create",
+    version=None,
+    note=None,
+    metrics=None,
+    file=None,
+    attach=None,
+    sort=None,
+    top=None,
+    latest=None,
+    tool=None,
+    output=None,
+    keep=None,
+    older_than=None,
+    last=None,
+    run_cmd=None,
+    command="experiment",
+):
     args_list = [command]
     if action != "create":
         args_list.append(action)

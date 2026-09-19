@@ -25,9 +25,7 @@ _fetch_version_rows = ver_reader.list_versions
 
 def _experiments_fingerprint(root_path, app_name):
     """Cheap staleness signal: names + mtimes of every experiment dir's files."""
-    base = os.path.join(
-        root_path, ".vmn", app_name.replace("/", os.sep), "experiments"
-    )
+    base = os.path.join(root_path, ".vmn", app_name.replace("/", os.sep), "experiments")
     h = hashlib.sha256()
     try:
         for entry in sorted(os.scandir(base), key=lambda e: e.name):
@@ -49,7 +47,9 @@ def _versions_fingerprint(root_path, app_name):
     prefix = app_name_to_tag_name(app_name)
     result = subprocess.run(
         ["git", "tag", "--list", f"{prefix}_*"],
-        capture_output=True, text=True, cwd=root_path,
+        capture_output=True,
+        text=True,
+        cwd=root_path,
     )
     if result.returncode != 0:
         return "error"
@@ -99,7 +99,9 @@ class WorkspaceIndex:
             rows = _fetch_experiment_rows(self.root_path, app_name)
             self._put(f"exp:v2:{app_name}", fp, rows)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
-        return exp_reader.sort_rows(rows, schema, sort=sort, last=last, offset=offset, limit=limit)
+        return exp_reader.sort_rows(
+            rows, schema, sort=sort, last=last, offset=offset, limit=limit
+        )
 
     def list_versions(self, app_name):
         fp = _versions_fingerprint(self.root_path, app_name)

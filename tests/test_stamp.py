@@ -33,12 +33,12 @@ def test_vmn_init_gitignores_snapshot_dirs(app_layout):
     assert os.path.exists(gitignore_path)
     with open(gitignore_path) as f:
         content = f.read()
-    assert "snapshots" in content.lower(), (
-        f".vmn/.gitignore missing snapshots pattern: {content}"
-    )
-    assert "experiments" in content.lower(), (
-        f".vmn/.gitignore missing experiments pattern: {content}"
-    )
+    assert (
+        "snapshots" in content.lower()
+    ), f".vmn/.gitignore missing snapshots pattern: {content}"
+    assert (
+        "experiments" in content.lower()
+    ), f".vmn/.gitignore missing experiments pattern: {content}"
 
 
 def test_double_stamp_no_commit(app_layout):

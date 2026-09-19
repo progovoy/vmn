@@ -13,9 +13,9 @@ def test_first_stamp_auto_inits_without_errors(app_layout, capfd):
     assert ver_info["stamping"]["app"]["_version"] == "0.0.1"
 
     captured = capfd.readouterr()
-    assert "[ERROR]" not in captured.err, (
-        f"First stamp should not produce ERROR output, got:\n{captured.err}"
-    )
+    assert (
+        "[ERROR]" not in captured.err
+    ), f"First stamp should not produce ERROR output, got:\n{captured.err}"
 
 
 def test_first_stamp_logs_init_progress(app_layout, capfd):
@@ -24,6 +24,6 @@ def test_first_stamp_logs_init_progress(app_layout, capfd):
     _stamp_app(app_layout.app_name, "patch")
 
     captured = capfd.readouterr()
-    assert "initializ" in captured.out.lower(), (
-        f"Expected initialization progress in output, got:\n{captured.out}"
-    )
+    assert (
+        "initializ" in captured.out.lower()
+    ), f"Expected initialization progress in output, got:\n{captured.out}"

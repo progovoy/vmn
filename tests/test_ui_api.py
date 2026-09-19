@@ -36,7 +36,9 @@ def _seed_experiments(app_layout, capfd, n=3):
         _make_dirty(app_layout, f"ui_{i}.txt", f"content {i}")
         capfd.readouterr()
         _experiment(
-            app_layout.app_name, note=f"run{i}", metrics=[f"loss={losses[i]}"],
+            app_layout.app_name,
+            note=f"run{i}",
+            metrics=[f"loss={losses[i]}"],
         )
         verstrs.append(extract_dev_verstr(capfd.readouterr().out))
     return verstrs
@@ -234,9 +236,7 @@ def test_ui_versions_list(app_layout, capfd):
     _seed_experiments(app_layout, capfd, n=1)
     client = _client(app_layout)
 
-    r = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/versions"
-    )
+    r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/versions")
     assert r.status_code == 200
     versions = r.json()
     assert len(versions) >= 1
@@ -252,24 +252,19 @@ def test_ui_two_workspaces_same_remote_are_independent(app_layout, capfd):
     second = os.path.join(app_layout.base_dir, "second_clone")
     subprocess.run(
         ["git", "clone", app_layout.test_app_remote, second],
-        capture_output=True, check=True,
+        capture_output=True,
+        check=True,
     )
 
     client = _client(app_layout, extra_paths={"second": second})
 
-    r1 = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
-    )
-    r2 = client.get(
-        f"/api/v1/workspaces/second/apps/{app_layout.app_name}/experiments"
-    )
+    r1 = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments")
+    r2 = client.get(f"/api/v1/workspaces/second/apps/{app_layout.app_name}/experiments")
     assert len(r1.json()) == 1
     assert r2.json() == []
 
     # Both see the stamped version (it lives in shared git tags).
-    v2 = client.get(
-        f"/api/v1/workspaces/second/apps/{app_layout.app_name}/versions"
-    )
+    v2 = client.get(f"/api/v1/workspaces/second/apps/{app_layout.app_name}/versions")
     assert v2.json()[-1]["verstr"] == "0.0.1"
 
 
@@ -298,14 +293,10 @@ def test_ui_token_auth(app_layout, capfd):
     r = client.get("/api/v1/workspaces")
     assert r.status_code == 401
 
-    r = client.get(
-        "/api/v1/workspaces", headers={"Authorization": "Bearer wrong"}
-    )
+    r = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer wrong"})
     assert r.status_code == 401
 
-    r = client.get(
-        "/api/v1/workspaces", headers={"Authorization": "Bearer s3cret"}
-    )
+    r = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer s3cret"})
     assert r.status_code == 200
 
 
@@ -351,9 +342,7 @@ def test_ui_snapshots_endpoints(app_layout, capfd):
     verstr = extract_dev_verstr(capfd.readouterr().out)
 
     client = _client(app_layout)
-    r = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
-    )
+    r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots")
     assert r.status_code == 200
     rows = r.json()
     assert len(rows) == 1
@@ -379,9 +368,7 @@ def test_ui_root_app_names_in_urls(app_layout, capfd):
     names = [a["name"] for a in r.json()]
     assert "root_app/svc1" in names
 
-    r = client.get(
-        "/api/v1/workspaces/main/apps/root_app-svc1/versions"
-    )
+    r = client.get("/api/v1/workspaces/main/apps/root_app-svc1/versions")
     assert r.status_code == 200
     assert r.json()[-1]["verstr"] == "0.0.1"
 
@@ -404,9 +391,7 @@ def test_ui_metrics_schema_endpoint(app_layout, capfd):
     _stamp_app(app_layout.app_name, "patch")
 
     client = _client(app_layout)
-    r = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/metrics-schema"
-    )
+    r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/metrics-schema")
     assert r.status_code == 200
     schema = r.json()
     assert schema["loss"] == {"goal": "min", "primary": True}

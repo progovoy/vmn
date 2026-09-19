@@ -17,6 +17,7 @@ from version_stamp.core.constants import (
 
 # ── Global logger ────────────────────────────────────────────────────
 
+
 class _LoggerProxy:
     """Thin proxy so ``from ... import VMN_LOGGER`` always sees the live logger.
 
@@ -52,6 +53,7 @@ def reset_logger():
 
 # ── Thread-local runtime context (ARCH-4 fix) ───────────────────────
 
+
 class _RuntimeContext(threading.local):
     def __init__(self):
         super().__init__()
@@ -74,6 +76,7 @@ def get_call_stack():
 
 
 # ── Decorator ────────────────────────────────────────────────────────
+
 
 def measure_runtime_decorator(func):
     @wraps(func)
@@ -112,6 +115,7 @@ def measure_runtime_decorator(func):
 
 # ── Logger filter ────────────────────────────────────────────────────
 
+
 class LevelFilter(logging.Filter):
     def __init__(self, low, high):
         self._low = low
@@ -125,6 +129,7 @@ class LevelFilter(logging.Filter):
 
 
 # ── Logger setup ─────────────────────────────────────────────────────
+
 
 def init_stamp_logger(rotating_log_path=None, debug=False, supress_stdout=False):
     import os

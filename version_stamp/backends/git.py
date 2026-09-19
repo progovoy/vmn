@@ -27,7 +27,11 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_GIT,
     VMN_USER_NAME,
 )
-from version_stamp.core.logging import VMN_LOGGER, get_call_stack, measure_runtime_decorator
+from version_stamp.core.logging import (
+    VMN_LOGGER,
+    get_call_stack,
+    measure_runtime_decorator,
+)
 
 _CREDENTIALS_RE = re.compile(r"(https?://)([^@]+)@")
 
@@ -44,7 +48,7 @@ def _custom_git_execute(self, *args, **kwargs):
     call_stack = get_call_stack()
 
     if VMN_LOGGER:
-        raw_cmd = ' '.join(str(v) for v in args[0])
+        raw_cmd = " ".join(str(v) for v in args[0])
         VMN_LOGGER.debug(
             f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{_sanitize_log_str(raw_cmd)}{END_CHAR}"
         )

@@ -246,7 +246,9 @@ def test_snapshot_note_update(app_layout, capfd):
     assert verstr is not None
 
     # Update note
-    err = _snapshot(app_layout.app_name, action="note", version=verstr, note="updated note")
+    err = _snapshot(
+        app_layout.app_name, action="note", version=verstr, note="updated note"
+    )
     assert err == 0
 
     # Verify updated note
@@ -354,7 +356,9 @@ def test_dev_version_parsing():
 
     # Serialize with dev
     ver = serialize_vmn_version(
-        "1.2.3", dev_commit="abc135f", dev_diff_hash="d4e5f6a",
+        "1.2.3",
+        dev_commit="abc135f",
+        dev_diff_hash="d4e5f6a",
         hide_zero_hotfix=True,
     )
     assert ver == "1.2.3-dev.abc135f.d4e5f6a"
@@ -713,6 +717,7 @@ def test_s3_snapshot_save():
     s3.create_bucket(Bucket="test-bucket")
 
     from version_stamp.cli.snapshot import S3SnapshotStorage
+
     storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
     metadata = {"verstr": "1.0.0-dev.abc1234.def5678", "base_version": "1.0.0"}
@@ -755,6 +760,7 @@ def test_s3_snapshot_load():
     )
 
     from version_stamp.cli.snapshot import S3SnapshotStorage
+
     storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
     loaded_meta, loaded_patches = storage.load("my_app", "1.0.0-dev.abc1234.def5678")
@@ -769,6 +775,7 @@ def test_s3_snapshot_load_not_found():
     s3.create_bucket(Bucket="test-bucket")
 
     from version_stamp.cli.snapshot import S3SnapshotStorage
+
     storage = S3SnapshotStorage("test-bucket")
 
     meta, patches = storage.load("my_app", "nonexistent")
@@ -783,6 +790,7 @@ def test_s3_snapshot_list():
     s3.create_bucket(Bucket="test-bucket")
 
     from version_stamp.cli.snapshot import S3SnapshotStorage
+
     storage = S3SnapshotStorage("test-bucket")
 
     # Save two snapshots
@@ -801,6 +809,7 @@ def test_s3_snapshot_endpoint_url():
     """Test S3 backend passes endpoint_url to boto3."""
     with mock_patch("boto3.client") as mock_boto:
         from version_stamp.cli.snapshot import S3SnapshotStorage
+
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
         mock_boto.assert_called_once_with("s3", endpoint_url="http://localhost:9000")
 
@@ -811,10 +820,24 @@ def test_snapshot_actions_require_init(app_layout, capfd):
 
     assert _snapshot(name, action="list") != 0
     assert _snapshot(name, action="show", version="0.0.1-dev.abc1234.def5678") != 0
-    assert _snapshot(name, action="diff", version="0.0.1-dev.abc1234.def5678",
-                     to_version="current") != 0
-    assert _snapshot(name, action="export", version="0.0.1-dev.abc1234.def5678",
-                     output="/tmp/test_export") != 0
+    assert (
+        _snapshot(
+            name,
+            action="diff",
+            version="0.0.1-dev.abc1234.def5678",
+            to_version="current",
+        )
+        != 0
+    )
+    assert (
+        _snapshot(
+            name,
+            action="export",
+            version="0.0.1-dev.abc1234.def5678",
+            output="/tmp/test_export",
+        )
+        != 0
+    )
 
     # Create action should show helpful guidance
     capfd.readouterr()
@@ -832,7 +855,9 @@ def test_snapshot_export_workdir(app_layout, capfd):
     assert err == 0
 
     # Create dirty state
-    app_layout.write_file_commit_and_push("test_repo_0", "export_test.txt", "initial content")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "export_test.txt", "initial content"
+    )
     app_layout.write_file_commit_and_push(
         "test_repo_0", "export_test.txt", "modified content", commit=False
     )
@@ -935,8 +960,11 @@ def test_snapshot_untracked_files_roundtrip(app_layout, capfd):
     # Remove untracked files and revert tracked changes
     os.remove(untracked1)
     import shutil
+
     shutil.rmtree(subdir)
-    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+    subprocess.run(
+        ["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True
+    )
 
     assert not os.path.exists(untracked1)
     assert not os.path.exists(untracked2)
@@ -1088,7 +1116,9 @@ def test_cached_storage_raises_on_remote_save_failure(cached_storage_with_mock_r
         cached.save(_TEST_APP, _TEST_VERSTR, _TEST_META, {"working_tree": "patch"})
 
 
-def test_cached_storage_raises_on_remote_delete_failure(cached_storage_with_mock_remote):
+def test_cached_storage_raises_on_remote_delete_failure(
+    cached_storage_with_mock_remote,
+):
     """CachedSnapshotStorage must propagate delete errors from remote storage."""
     local, remote, cached = cached_storage_with_mock_remote
     remote.delete.side_effect = Exception("S3 access denied")
@@ -1099,7 +1129,9 @@ def test_cached_storage_raises_on_remote_delete_failure(cached_storage_with_mock
         cached.delete(_TEST_APP, _TEST_VERSTR)
 
 
-def test_cached_storage_raises_on_remote_update_note_failure(cached_storage_with_mock_remote):
+def test_cached_storage_raises_on_remote_update_note_failure(
+    cached_storage_with_mock_remote,
+):
     """CachedSnapshotStorage must propagate update_note errors from remote storage."""
     local, remote, cached = cached_storage_with_mock_remote
     remote.update_note.side_effect = Exception("S3 timeout")
@@ -1110,7 +1142,9 @@ def test_cached_storage_raises_on_remote_update_note_failure(cached_storage_with
         cached.update_note(_TEST_APP, _TEST_VERSTR, "my note")
 
 
-def test_cached_storage_raises_on_remote_save_file_failure(cached_storage_with_mock_remote):
+def test_cached_storage_raises_on_remote_save_file_failure(
+    cached_storage_with_mock_remote,
+):
     """CachedSnapshotStorage must propagate save_file errors from remote storage."""
     _, remote, cached = cached_storage_with_mock_remote
     remote.save_file.side_effect = Exception("S3 write failed")
@@ -1297,12 +1331,15 @@ def test_snapshot_export_without_remote(app_layout, capfd):
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
     assert err == 0
 
-    app_layout.write_file_commit_and_push("test_repo_0", "export_noremote.txt", "initial")
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "export_noremote.txt", "initial"
+    )
 
     # Drop the git remote entirely.
     subprocess.run(
         ["git", "remote", "remove", "origin"],
-        cwd=app_layout.repo_path, capture_output=True,
+        cwd=app_layout.repo_path,
+        capture_output=True,
     )
 
     # Dirty the tracked file (no push possible now).
@@ -1431,7 +1468,9 @@ def test_snapshot_restore_action(app_layout, capfd):
     test_file = os.path.join(app_layout.repo_path, "restore_action.txt")
     verstr = _snapshot_of_state(app_layout, capfd, "restore_action.txt", "snap A")
 
-    subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True)
+    subprocess.run(
+        ["git", "checkout", "."], cwd=app_layout.repo_path, capture_output=True
+    )
     with open(test_file) as f:
         assert f.read() == "committed"
 

@@ -61,20 +61,34 @@ class LocalFileBackend(VMNBackend):
         """Find a specific version file, checking snapshots/ first, then verinfo/."""
         if root:
             snap_path = os.path.join(
-                self.repo_path, ".vmn", app_name, "root_snapshots",
-                str(root_version), "metadata.yml",
+                self.repo_path,
+                ".vmn",
+                app_name,
+                "root_snapshots",
+                str(root_version),
+                "metadata.yml",
             )
             verinfo_path = os.path.join(
-                self.repo_path, ".vmn", app_name, "root_verinfo",
+                self.repo_path,
+                ".vmn",
+                app_name,
+                "root_verinfo",
                 f"{root_version}.yml",
             )
         else:
             snap_path = os.path.join(
-                self.repo_path, ".vmn", app_name, "snapshots",
-                verstr, "metadata.yml",
+                self.repo_path,
+                ".vmn",
+                app_name,
+                "snapshots",
+                verstr,
+                "metadata.yml",
             )
             verinfo_path = os.path.join(
-                self.repo_path, ".vmn", app_name, "verinfo",
+                self.repo_path,
+                ".vmn",
+                app_name,
+                "verinfo",
                 f"{verstr}.yml",
             )
 
@@ -129,7 +143,9 @@ class LocalFileBackend(VMNBackend):
         is_root = "root" in tagd.types
 
         path = self._resolve_version_file(
-            tagd.app_name, tagd.verstr, root=is_root,
+            tagd.app_name,
+            tagd.verstr,
+            root=is_root,
             root_version=tagd.root_version,
         )
 

@@ -65,8 +65,7 @@ def get_utemplate_formatted_version(raw_vmn_version, template, hide_zero_hotfix)
                 continue
 
             formatted_version = (
-                f"{formatted_version}"
-                f"{template[f'{octat}_template'].format(**d)}"
+                f"{formatted_version}" f"{template[f'{octat}_template'].format(**d)}"
             )
 
     if (
@@ -175,9 +174,7 @@ def serialize_vmn_version(
     return vmn_version
 
 
-def serialize_vmn_base_version(
-    major, minor, patch, hotfix=None, hide_zero_hotfix=None
-):
+def serialize_vmn_base_version(major, minor, patch, hotfix=None, hide_zero_hotfix=None):
     if hide_zero_hotfix and hotfix == 0:
         hotfix = None
 
@@ -329,6 +326,7 @@ def deserialize_vmn_tag_name(vmn_tag):
 
 def parse_conventional_commit_message(message):
     from version_stamp.core.constants import CONVENTIONAL_COMMIT_PATTERN
+
     match = CONVENTIONAL_COMMIT_PATTERN.match(message)
     if match:
         return match.groupdict()

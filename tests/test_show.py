@@ -704,14 +704,10 @@ def test_show_and_goto_do_not_migrate(app_layout, capfd):
     branch = "b2"
     app_dir = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name)
     flat_conf_path = os.path.join(app_dir, f"{branch}_conf.yml")
-    app_layout.write_conf(
-        flat_conf_path, template="[test_{major}][.{minor}][.{patch}]"
-    )
+    app_layout.write_conf(flat_conf_path, template="[test_{major}][.{minor}][.{patch}]")
 
     subprocess.call(["git", "checkout", "-b", branch], cwd=app_layout.repo_path)
-    subprocess.call(
-        ["git", "push", "-u", "origin", branch], cwd=app_layout.repo_path
-    )
+    subprocess.call(["git", "push", "-u", "origin", branch], cwd=app_layout.repo_path)
 
     assert _show(app_layout.app_name) == 0
     assert _goto(app_layout.app_name) == 0

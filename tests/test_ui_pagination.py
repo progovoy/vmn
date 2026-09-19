@@ -65,7 +65,10 @@ class TestSortRowsPagination:
         assert result["total"] == 50
         sorted_rows = result["rows"]
         for i in range(len(sorted_rows) - 1):
-            assert sorted_rows[i]["metrics"]["loss"] <= sorted_rows[i + 1]["metrics"]["loss"]
+            assert (
+                sorted_rows[i]["metrics"]["loss"]
+                <= sorted_rows[i + 1]["metrics"]["loss"]
+            )
 
     def test_backward_compat_no_limit(self):
         rows = _make_rows(10)

@@ -44,9 +44,7 @@ def test_tcsh_shellcode_uses_vmn_owned_helper(capsys):
 def test_tcsh_helper_executes_vmn_with_argcomplete_environment(monkeypatch):
     calls = {"dup2": []}
     monkeypatch.setenv("COMMAND_LINE", "vmn show ser")
-    monkeypatch.setattr(
-        completion.sys, "stdout", SimpleNamespace(fileno=lambda: 17)
-    )
+    monkeypatch.setattr(completion.sys, "stdout", SimpleNamespace(fileno=lambda: 17))
     monkeypatch.setattr(os, "open", lambda *args: 23)
     monkeypatch.setattr(
         os, "dup2", lambda source, dest: calls["dup2"].append((source, dest))
@@ -77,18 +75,17 @@ def test_setup_exposes_tcsh_helper_entry_point(monkeypatch):
     captured = {}
     monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
 
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    monkeypatch.chdir(repo_root)
     runpy.run_path("setup.py")
 
     assert (
-        "vmn-argcomplete-tcsh = "
-        "version_stamp.cli.completion:tcsh_completion_main"
+        "vmn-argcomplete-tcsh = " "version_stamp.cli.completion:tcsh_completion_main"
     ) in captured["entry_points"]["console_scripts"]
 
 
 @pytest.mark.parametrize("shell", ["fish", "tcsh"])
-def test_install_completion_is_idempotent_for_all_shells(
-    shell, tmp_path, monkeypatch
-):
+def test_install_completion_is_idempotent_for_all_shells(shell, tmp_path, monkeypatch):
     paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -100,9 +97,7 @@ def test_install_completion_is_idempotent_for_all_shells(
 
 
 @pytest.mark.parametrize("shell", ["bash", "zsh", "fish", "tcsh"])
-def test_install_completion_replaces_existing_block(
-    shell, tmp_path, monkeypatch
-):
+def test_install_completion_replaces_existing_block(shell, tmp_path, monkeypatch):
     paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     paths[shell].write_text(
@@ -134,9 +129,7 @@ def test_uninstall_completion_removes_block(shell, tmp_path, monkeypatch):
     assert completion.COMPLETION_END_MARKER not in content
 
 
-def test_uninstall_completion_preserves_surrounding_content(
-    tmp_path, monkeypatch
-):
+def test_uninstall_completion_preserves_surrounding_content(tmp_path, monkeypatch):
     paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     paths["bash"].write_text("before\n")
@@ -147,9 +140,7 @@ def test_uninstall_completion_preserves_surrounding_content(
     assert paths["bash"].read_text().strip() == "before"
 
 
-def test_uninstall_completion_noop_when_not_installed(
-    tmp_path, monkeypatch, capsys
-):
+def test_uninstall_completion_noop_when_not_installed(tmp_path, monkeypatch, capsys):
     paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     paths["bash"].write_text("just stuff\n")
@@ -196,9 +187,7 @@ def test_zsh_install_ensures_compinit_before_compdef(tmp_path, monkeypatch):
     assert compinit_pos < compdef_pos
 
 
-def test_zsh_install_skips_compinit_guard_when_already_present(
-    tmp_path, monkeypatch
-):
+def test_zsh_install_skips_compinit_guard_when_already_present(tmp_path, monkeypatch):
     paths = _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     paths["zsh"].write_text("autoload -Uz compinit && compinit\n")
@@ -243,9 +232,7 @@ def test_bash_install_uses_existing_bash_profile(tmp_path, monkeypatch):
     assert not (tmp_path / ".bashrc").exists()
 
 
-def test_install_completion_reports_filesystem_errors(
-    tmp_path, monkeypatch, capsys
-):
+def test_install_completion_reports_filesystem_errors(tmp_path, monkeypatch, capsys):
     _safe_legacy_rc_files(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -299,9 +286,7 @@ def test_install_completion_rejects_malformed_managed_blocks(
     assert "malformed" in capsys.readouterr().err.lower()
 
 
-def test_app_completion_resolves_tilde_and_real_path(
-    tmp_path, monkeypatch
-):
+def test_app_completion_resolves_tilde_and_real_path(tmp_path, monkeypatch):
     home = tmp_path / "home"
     repo = home / "repo"
     app_dir = repo / ".vmn" / "service"
@@ -312,9 +297,7 @@ def test_app_completion_resolves_tilde_and_real_path(
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("VMN_WORKING_DIR", "~/repo/src/nested")
 
-    assert completion.app_name_completer("ser", argparse.Namespace()) == [
-        "service"
-    ]
+    assert completion.app_name_completer("ser", argparse.Namespace()) == ["service"]
 
 
 @pytest.mark.parametrize("reserved_segment", ["snapshots", "experiments"])

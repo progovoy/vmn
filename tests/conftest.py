@@ -289,7 +289,9 @@ class FSAppLayoutFixture(object):
     }
 
     def stamp_with_previous_vmn(self, vmn_version):
-        dir_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks")
+        dir_path = os.path.join(
+            os.path.abspath(os.path.dirname(__file__)), "retro_versions_checks"
+        )
         previous_stamper_dir = os.path.join(dir_path, "build_previous_vmn_stamper.sh")
 
         if not os.path.exists(previous_stamper_dir):
@@ -309,6 +311,9 @@ class FSAppLayoutFixture(object):
             )
 
         # Check Docker availability before attempting anything
+        if shutil.which("docker") is None:
+            pytest.skip("Docker is not available")
+
         ret = subprocess.call(
             ["docker", "info"],
             stdout=subprocess.DEVNULL,

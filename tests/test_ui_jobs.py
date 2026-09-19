@@ -154,8 +154,15 @@ def test_ui_exp_create_build_command():
     )
     assert err is None
     assert cmd == [
-        "vmn", "experiment", "create", "my_app",
-        "--note", "swin-t", "--metrics", "loss=0.1", "acc=0.9",
+        "vmn",
+        "experiment",
+        "create",
+        "my_app",
+        "--note",
+        "swin-t",
+        "--metrics",
+        "loss=0.1",
+        "acc=0.9",
     ]
 
     cmd, err = build_command("exp_create", "my_app", {})
@@ -174,13 +181,20 @@ def test_ui_exp_add_build_command():
     from version_stamp.ui.jobs import build_command
 
     cmd, err = build_command(
-        "exp_add", "my_app",
+        "exp_add",
+        "my_app",
         {"verstr": "0.0.1-dev.abc.def", "metrics": {"loss": 0.05}},
     )
     assert err is None
     assert cmd == [
-        "vmn", "experiment", "add", "my_app", "-v", "0.0.1-dev.abc.def",
-        "--metrics", "loss=0.05",
+        "vmn",
+        "experiment",
+        "add",
+        "my_app",
+        "-v",
+        "0.0.1-dev.abc.def",
+        "--metrics",
+        "loss=0.05",
     ]
 
     # verstr is required — you append to a specific run.
@@ -193,7 +207,8 @@ def test_ui_exp_add_build_command():
 
     # Same metric-name validation as exp_create.
     cmd, err = build_command(
-        "exp_add", "my_app",
+        "exp_add",
+        "my_app",
         {"verstr": "0.0.1-dev.abc.def", "metrics": {"bad key": 1}},
     )
     assert cmd is None and err
@@ -222,8 +237,7 @@ def test_ui_exp_add_action(app_layout, capfd):
     assert job["status"] == "succeeded", job.get("log")
 
     detail = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}"
-        f"/experiments/{verstr}"
+        f"/api/v1/workspaces/main/apps/{app_layout.app_name}" f"/experiments/{verstr}"
     ).json()
     assert detail["metrics"]["loss"] == 0.2  # latest overrides the 0.5
     assert detail["metrics"]["acc"] == 0.9
@@ -366,7 +380,8 @@ def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
     second = os.path.join(app_layout.base_dir, "second_clone")
     subprocess.run(
         ["git", "clone", app_layout.test_app_remote, second],
-        capture_output=True, check=True,
+        capture_output=True,
+        check=True,
     )
     app_layout.write_file_commit_and_push("test_repo_0", "iso.txt", "x")
 

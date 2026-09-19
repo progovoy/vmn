@@ -17,7 +17,7 @@ def comment_out_jinja(text: str) -> str:
     Wrap every live tag so it survives rendering, e.g.
         {{ foo }}  →  {% raw %}{{ foo }}{% endraw %}
     """
-    return JINJA_TAG_RE.sub(lambda m: '{% raw %}' + m.group(1) + '{% endraw %}', text)
+    return JINJA_TAG_RE.sub(lambda m: "{% raw %}" + m.group(1) + "{% endraw %}", text)
 
 
 def resolve_root_path():

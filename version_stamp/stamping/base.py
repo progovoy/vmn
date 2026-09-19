@@ -16,7 +16,10 @@ import yaml
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
-from version_stamp.compat.config_keys import migrate_config_keys, warn_vmn_version_file_backend
+from version_stamp.compat.config_keys import (
+    migrate_config_keys,
+    warn_vmn_version_file_backend,
+)
 from version_stamp.compat.template_format import migrate_old_template
 from version_stamp.compat.version_file_084 import read_version_from_old_file
 from version_stamp.core.constants import (
@@ -39,8 +42,8 @@ from version_stamp.core.constants import VER_FILE_NAME
 
 class IVersionsStamper(object):
     _STRUCTURED_BACKEND_SPEC = {
-        "npm":    {"format": "json", "key_path": ["version"]},
-        "cargo":  {"format": "toml", "key_path": ["package", "version"]},
+        "npm": {"format": "json", "key_path": ["version"]},
+        "cargo": {"format": "toml", "key_path": ["package", "version"]},
         "poetry": {"format": "toml", "key_path": ["tool", "poetry", "version"]},
         "pep621": {"format": "toml", "key_path": ["project", "version"]},
     }
@@ -171,9 +174,7 @@ class IVersionsStamper(object):
         if self.root_context:
             self.root_app_name = self.name
         else:
-            self.root_app_name = VMNBackend.get_root_app_name_from_name(
-                self.name
-            )
+            self.root_app_name = VMNBackend.get_root_app_name_from_name(self.name)
 
         self.external_services = None
         self.root_app_dir_path = self.app_dir_path
@@ -319,9 +320,7 @@ class IVersionsStamper(object):
 
         actual_tag, ver_infos = self.backend.get_tag_version_info(actual_tag)
         if not ver_infos:
-            VMN_LOGGER.error(
-                f"Failed to get version info for tag: {actual_tag}"
-            )
+            VMN_LOGGER.error(f"Failed to get version info for tag: {actual_tag}")
 
             return actual_tag, {}
 
@@ -352,7 +351,9 @@ class IVersionsStamper(object):
             try:
                 backend_conf = self.version_backends[backend]
                 if backend in self._STRUCTURED_BACKEND_SPEC:
-                    self._add_files_simple_backend(version_files_to_track_diff, backend_conf)
+                    self._add_files_simple_backend(
+                        version_files_to_track_diff, backend_conf
+                    )
                 else:
                     handler = getattr(self, f"_add_files_{backend}")
                     handler(version_files_to_track_diff, backend_conf)
@@ -363,8 +364,7 @@ class IVersionsStamper(object):
         version_files_to_track_diff = list(dict.fromkeys(version_files_to_track_diff))
 
         self.last_user_changeset = self.backend.get_last_user_changeset(
-            version_files_to_track_diff,
-            self.name
+            version_files_to_track_diff, self.name
         )
         if self.last_user_changeset is None:
             raise RuntimeError(
@@ -463,7 +463,7 @@ class IVersionsStamper(object):
             )
 
     def __del__(self):
-        if hasattr(self, 'backend') and self.backend is not None:
+        if hasattr(self, "backend") and self.backend is not None:
             del self.backend
             self.backend = None
 
@@ -482,7 +482,9 @@ class IVersionsStamper(object):
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
         if tag and globally:
             props = VMNBackend.deserialize_vmn_tag_name(tag)
-            version_number_oct = max(version_number_oct, int(getattr(props, release_mode)))
+            version_number_oct = max(
+                version_number_oct, int(getattr(props, release_mode))
+            )
         version_number_oct += 1
 
         return version_number_oct
@@ -560,9 +562,7 @@ class IVersionsStamper(object):
             )
 
         initialprerelease_count = {}
-        tag_name_prefix = VMNBackend.serialize_vmn_tag_name(
-            self.name, base_version
-        )
+        tag_name_prefix = VMNBackend.serialize_vmn_tag_name(self.name, base_version)
         tag_name_prefix = f"{tag_name_prefix}-*"
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
 
@@ -623,7 +623,9 @@ class IVersionsStamper(object):
 
                 backend_conf = self.version_backends[backend]
                 if backend in self._STRUCTURED_BACKEND_SPEC:
-                    self._write_version_to_structured(version_number, backend_conf, backend)
+                    self._write_version_to_structured(
+                        version_number, backend_conf, backend
+                    )
                 else:
                     handler = getattr(self, f"_write_version_to_{backend}")
                     handler(version_number, backend_conf)
@@ -662,9 +664,7 @@ class IVersionsStamper(object):
                 else:
                     f.write(tomlkit.dumps(data))
         except IOError as e:
-            VMN_LOGGER.error(
-                f"Error writing {backend_name} ver file: {file_path}\n"
-            )
+            VMN_LOGGER.error(f"Error writing {backend_name} ver file: {file_path}\n")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
             raise IOError(e)
@@ -783,8 +783,14 @@ class IVersionsStamper(object):
                 self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
 
                 for jinja_backend_conf_item in jinja_backend_conf:
-                    tmp_path = Path(self.vmn_root_path) / jinja_backend_conf_item["output_file_path"]
-                    final_path = Path(self.vmn_root_path) / jinja_backend_conf_item["_output_file_path"]
+                    tmp_path = (
+                        Path(self.vmn_root_path)
+                        / jinja_backend_conf_item["output_file_path"]
+                    )
+                    final_path = (
+                        Path(self.vmn_root_path)
+                        / jinja_backend_conf_item["_output_file_path"]
+                    )
 
                     final_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -862,5 +868,3 @@ class IVersionsStamper(object):
         with open(self.root_app_conf_path, "w+") as f:
             f.write("# Autogenerated by vmn\n")
             yaml.dump(ver_yml, f, sort_keys=True)
-
-

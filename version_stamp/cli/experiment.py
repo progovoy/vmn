@@ -39,6 +39,7 @@ class _VersionStub:
 # Storage helpers
 # ---------------------------------------------------------------------------
 
+
 def _app_name(vcs, args=None):
     """Derive app name from vcs or CLI args (safe when vcs is None)."""
     if vcs is not None:
@@ -69,8 +70,17 @@ def _get_writer_id(conf_writer_id=None):
 def _merge_conf_into_params(vcs, params):
     """Merge experiment config from conf.yml into params (CLI overrides conf)."""
     exp_conf = getattr(vcs, "experiment", None) or {}
-    storage_conf = exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
-    for key in ("bucket", "backend", "prefix", "endpoint_url", "experiment_dir", "writer_id"):
+    storage_conf = (
+        exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
+    )
+    for key in (
+        "bucket",
+        "backend",
+        "prefix",
+        "endpoint_url",
+        "experiment_dir",
+        "writer_id",
+    ):
         if not params.get(key) or params[key] in ("local", "vmn-experiments"):
             conf_val = storage_conf.get(key)
             if conf_val:
@@ -78,8 +88,12 @@ def _merge_conf_into_params(vcs, params):
 
 
 def _get_experiment_storage(vcs, params):
-    experiment_dir = params.get("experiment_dir") or os.environ.get("VMN_EXPERIMENT_DIR")
-    vmn_root = experiment_dir if experiment_dir else (vcs.vmn_root_path if vcs else None)
+    experiment_dir = params.get("experiment_dir") or os.environ.get(
+        "VMN_EXPERIMENT_DIR"
+    )
+    vmn_root = (
+        experiment_dir if experiment_dir else (vcs.vmn_root_path if vcs else None)
+    )
     return get_snapshot_storage(
         params.get("backend", "local"),
         vmn_root_path=vmn_root,
@@ -108,6 +122,7 @@ def _append_to_log(storage, app_name, verstr, entry):
 # ---------------------------------------------------------------------------
 # Log entry helpers
 # ---------------------------------------------------------------------------
+
 
 def _create_log_entry(entry_type, **kwargs):
     entry = {"timestamp": _now_iso(), "type": entry_type}
@@ -140,7 +155,7 @@ def _parse_metric_line(line):
     step = None
     if tokens and tokens[0].startswith("step="):
         try:
-            step = int(tokens[0][len("step="):])
+            step = int(tokens[0][len("step=") :])
             tokens = tokens[1:]
         except ValueError:
             pass  # "step" used as a metric name; leave tokens intact
@@ -201,9 +216,7 @@ def get_metric_series(log):
         step = entry.get("step")
         ts = entry.get("timestamp")
         for key, value in (entry.get("values") or {}).items():
-            series.setdefault(key, []).append(
-                {"step": step, "ts": ts, "value": value}
-            )
+            series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
     return series
 
 
@@ -212,7 +225,9 @@ def _parse_notes_file(path):
     with open(path) as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"Notes file must be a YAML mapping, got {type(data).__name__}")
+        raise ValueError(
+            f"Notes file must be a YAML mapping, got {type(data).__name__}"
+        )
     return data
 
 
@@ -301,6 +316,7 @@ def _parse_duration(duration_str):
 # Main dispatcher
 # ---------------------------------------------------------------------------
 
+
 @measure_runtime_decorator
 def handle_experiment(vmn_ctx):
     from version_stamp.cli.commands import _get_repo_status, handle_init, _init_app
@@ -321,12 +337,19 @@ def handle_experiment(vmn_ctx):
     _merge_conf_into_params(vcs, params)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
-    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
+    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
+        "VMN_SNAPSHOT_METADATA"
+    )
     if action in ("create", "run") and not from_snapshot:
         expected_status = {"repo_tracked", "app_tracked"}
         optional_status = {
-            "repos_exist_locally", "detached", "pending", "outgoing",
-            "version_not_matched", "dirty_deps", "deps_synced_with_conf",
+            "repos_exist_locally",
+            "detached",
+            "pending",
+            "outgoing",
+            "version_not_matched",
+            "dirty_deps",
+            "deps_synced_with_conf",
         }
         status = _get_repo_status(vcs, expected_status, optional_status)
 
@@ -338,14 +361,18 @@ def handle_experiment(vmn_ctx):
 
             _dirty_ok = {"pending", "outgoing"}
 
-            if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
+            if "repo_tracked" not in status.state and not be.is_path_tracked(
+                vmn_init_file
+            ):
                 VMN_LOGGER.info("Auto-initializing repository...")
                 ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
                 if ret != 0:
                     return 1
                 auto_initialized = True
 
-            if "app_tracked" not in status.state and not be.is_path_tracked(vcs.app_dir_path):
+            if "app_tracked" not in status.state and not be.is_path_tracked(
+                vcs.app_dir_path
+            ):
                 VMN_LOGGER.info(f"Auto-initializing app '{vcs.name}'...")
                 err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
                 if err:
@@ -387,6 +414,7 @@ def handle_experiment(vmn_ctx):
 # create
 # ---------------------------------------------------------------------------
 
+
 def _allocate_run_verstr(storage, app_name, code_verstr):
     """Return the verstr for a new experiment run.
 
@@ -410,7 +438,7 @@ def _allocate_run_verstr(storage, app_name, code_verstr):
         if v == code_verstr:
             runs.append(1)
         elif v.startswith(code_verstr + ".r"):
-            suffix = v[len(code_verstr) + 2:]
+            suffix = v[len(code_verstr) + 2 :]
             if suffix.isdigit():
                 runs.append(int(suffix))
     if not runs:
@@ -421,12 +449,16 @@ def _allocate_run_verstr(storage, app_name, code_verstr):
 @measure_runtime_decorator
 def experiment_create(vcs, params, storage, args):
     extra = {}
-    if getattr(args, 'file', None):
+    if getattr(args, "file", None):
         extra.update(_parse_notes_file(args.file))
 
-    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
+    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
+        "VMN_SNAPSHOT_METADATA"
+    )
     verstr, err = _experiment_create_core(
-        vcs, storage, note=args.note,
+        vcs,
+        storage,
+        note=args.note,
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
     )
@@ -434,15 +466,21 @@ def experiment_create(vcs, params, storage, args):
         return err
 
     app_name = _app_name(vcs, args)
-    if getattr(args, 'metrics', None):
-        _append_to_log(storage, app_name, verstr,
-                       _create_log_entry("metrics", values=_parse_metrics(args.metrics)))
+    if getattr(args, "metrics", None):
+        _append_to_log(
+            storage,
+            app_name,
+            verstr,
+            _create_log_entry("metrics", values=_parse_metrics(args.metrics)),
+        )
 
     print(verstr)
     return 0
 
 
-def _experiment_create_from_snapshot(storage, app_name, snapshot_meta_path, note=None, extra_create_data=None):
+def _experiment_create_from_snapshot(
+    storage, app_name, snapshot_meta_path, note=None, extra_create_data=None
+):
     """Create experiment from an exported snapshot directory (no git required).
 
     snapshot_meta_path: path to vmn_metadata.yml or a directory containing it.
@@ -458,13 +496,17 @@ def _experiment_create_from_snapshot(storage, app_name, snapshot_meta_path, note
         snap_meta = yaml.safe_load(f)
 
     if not isinstance(snap_meta, dict) or "verstr" not in snap_meta:
-        VMN_LOGGER.error("Invalid snapshot metadata (missing verstr): " + snapshot_meta_path)
+        VMN_LOGGER.error(
+            "Invalid snapshot metadata (missing verstr): " + snapshot_meta_path
+        )
         return None, 1
 
     code_verstr = snap_meta["verstr"]
     app = app_name or snap_meta.get("app_name")
     if not app:
-        VMN_LOGGER.error("App name not found in snapshot metadata and not provided via CLI")
+        VMN_LOGGER.error(
+            "App name not found in snapshot metadata and not provided via CLI"
+        )
         return None, 1
 
     verstr = _allocate_run_verstr(storage, app, code_verstr)
@@ -498,7 +540,9 @@ def _experiment_create_from_snapshot(storage, app_name, snapshot_meta_path, note
     return verstr, None
 
 
-def _experiment_create_core(vcs, storage, note=None, from_snapshot=None, extra_create_data=None):
+def _experiment_create_core(
+    vcs, storage, note=None, from_snapshot=None, extra_create_data=None
+):
     """Create the experiment record (snapshot + initial log entry).
 
     Returns (verstr, error_code). error_code is None on success.
@@ -507,11 +551,21 @@ def _experiment_create_core(vcs, storage, note=None, from_snapshot=None, extra_c
     if from_snapshot:
         app_name = _app_name(vcs)
         return _experiment_create_from_snapshot(
-            storage, app_name, from_snapshot, note=note, extra_create_data=extra_create_data
+            storage,
+            app_name,
+            from_snapshot,
+            note=note,
+            extra_create_data=extra_create_data,
         )
 
-    base_version, commit_hash, patches, dirty_states, ver_info, err = \
-        gather_create_data(vcs, allow_clean=True)
+    (
+        base_version,
+        commit_hash,
+        patches,
+        dirty_states,
+        ver_info,
+        err,
+    ) = gather_create_data(vcs, allow_clean=True)
     if err is not None:
         return None, err
 
@@ -519,8 +573,14 @@ def _experiment_create_core(vcs, storage, note=None, from_snapshot=None, extra_c
     verstr = _allocate_run_verstr(storage, vcs.name, code_verstr)
 
     metadata = _build_snapshot_metadata(
-        vcs, verstr, base_version, commit_hash, dirty_states, patches,
-        ver_info, note=note,
+        vcs,
+        verstr,
+        base_version,
+        commit_hash,
+        dirty_states,
+        patches,
+        ver_info,
+        note=note,
     )
     metadata["code_verstr"] = code_verstr
 
@@ -536,6 +596,7 @@ def _experiment_create_core(vcs, storage, note=None, from_snapshot=None, extra_c
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_run(vcs, params, storage, args):
@@ -557,18 +618,22 @@ def experiment_run(vcs, params, storage, args):
         )
         return 1
 
-    from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
-    sync_interval = getattr(args, 'sync_interval', 30)
+    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
+        "VMN_SNAPSHOT_METADATA"
+    )
+    sync_interval = getattr(args, "sync_interval", 30)
 
     extra = {}
-    if getattr(args, 'file', None):
+    if getattr(args, "file", None):
         notes_data = _parse_notes_file(args.file)
         for key in ("params", "hypothesis", "tags"):
             if key in notes_data:
                 extra[key] = notes_data[key]
 
     verstr, err = _experiment_create_core(
-        vcs, storage, note=args.note,
+        vcs,
+        storage,
+        note=args.note,
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
     )
@@ -616,13 +681,29 @@ def experiment_run(vcs, params, storage, args):
     _ingest_metric_records(storage, app_name, verstr, tailer.poll())
     _safe_unlink(metrics_path)
 
-    _append_to_log(storage, app_name, verstr, _create_log_entry(
-        "run", command=run_cmd, exit_code=exit_code, duration_sec=duration,
-    ))
+    _append_to_log(
+        storage,
+        app_name,
+        verstr,
+        _create_log_entry(
+            "run",
+            command=run_cmd,
+            exit_code=exit_code,
+            duration_sec=duration,
+        ),
+    )
 
     _try_sync()
 
-    VMN_LOGGER.info("Experiment " + verstr + ": exited " + str(exit_code) + " in " + str(duration) + "s")
+    VMN_LOGGER.info(
+        "Experiment "
+        + verstr
+        + ": exited "
+        + str(exit_code)
+        + " in "
+        + str(duration)
+        + "s"
+    )
     print(verstr)
     return exit_code
 
@@ -653,6 +734,7 @@ def _safe_unlink(path):
 # ---------------------------------------------------------------------------
 # add
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_add(vcs, params, storage, args):
@@ -695,6 +777,7 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
@@ -749,7 +832,7 @@ def experiment_list(vcs, params, storage, args):
             )
 
     if args.top:
-        rows = rows[:args.top]
+        rows = rows[: args.top]
 
     # Print table
     for idx, (meta, metrics, log) in enumerate(rows, 1):
@@ -763,7 +846,9 @@ def experiment_list(vcs, params, storage, args):
         for k in col_order:
             if k in metrics:
                 v = metrics[k]
-                metric_parts.append(f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}")
+                metric_parts.append(
+                    f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
+                )
 
         metric_str = "  ".join(metric_parts)
         note_str = f" - {note}" if note else ""
@@ -775,6 +860,7 @@ def experiment_list(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 # show
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_show(vcs, params, storage, args):
@@ -793,7 +879,9 @@ def experiment_show(vcs, params, storage, args):
 
     print(f"Experiment: {verstr}")
     print(f"  Branch:    {metadata.get('branch', '?')}")
-    print(f"  Base:      {metadata.get('base_version', '?')} ({metadata.get('base_commit', '?')[:7]})")
+    print(
+        f"  Base:      {metadata.get('base_version', '?')} ({metadata.get('base_commit', '?')[:7]})"
+    )
     print(f"  Created:   {metadata.get('timestamp', '?')}")
     if metadata.get("note"):
         print(f"  Note:      {metadata['note']}")
@@ -826,7 +914,9 @@ def experiment_show(vcs, params, storage, args):
             elif etype == "note":
                 print(f"    [{ts}] note: {entry.get('text', '')}")
             elif etype == "artifact":
-                print(f"    [{ts}] artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)")
+                print(
+                    f"    [{ts}] artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
+                )
             elif etype == "create":
                 note = entry.get("note") or ""
                 print(f"    [{ts}] created{': ' + note if note else ''}")
@@ -839,6 +929,7 @@ def experiment_show(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 # compare
 # ---------------------------------------------------------------------------
+
 
 def _load_experiment_bundle(storage, vcs, verstr, app_name=None):
     """Load (meta, patches, log) for an experiment, or None (logging) on error."""
@@ -868,7 +959,9 @@ def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None, app_nam
     if versions:
         verstrs = []
         for v in versions[:cap] if cap else versions:
-            resolved, err = _resolve_experiment_version(storage, vcs, _VersionStub(version=[v]))
+            resolved, err = _resolve_experiment_version(
+                storage, vcs, _VersionStub(version=[v])
+            )
             if err:
                 VMN_LOGGER.error(err)
                 return None
@@ -898,7 +991,9 @@ def experiment_compare(vcs, params, storage, args):
     last = getattr(args, "last", None) or getattr(args, "top", None)
     app_name = _app_name(vcs, args)
 
-    experiments = _resolve_experiment_bundles(storage, vcs, versions, count=last or 2, app_name=app_name)
+    experiments = _resolve_experiment_bundles(
+        storage, vcs, versions, count=last or 2, app_name=app_name
+    )
     if experiments is None:
         return 1
 
@@ -951,6 +1046,7 @@ def experiment_compare(vcs, params, storage, args):
 # diff
 # ---------------------------------------------------------------------------
 
+
 def _create_entry_params(log):
     create = next((e for e in log if e.get("type") == "create"), {})
     return create.get("params", {}) or {}
@@ -993,11 +1089,10 @@ def experiment_diff(vcs, params, storage, args):
     return _diff_real_tree(vcs, v1, meta1, patches1, v2, meta2, patches2)
 
 
-
-
 # ---------------------------------------------------------------------------
 # restore
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_restore(vcs, params, storage, args):
@@ -1018,6 +1113,7 @@ def experiment_restore(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 # export
 # ---------------------------------------------------------------------------
+
 
 @measure_runtime_decorator
 def experiment_export(vcs, params, storage, args):
@@ -1050,6 +1146,7 @@ def experiment_export(vcs, params, storage, args):
 
     try:
         from version_stamp.cli.snapshot import _materialize_workdir
+
         err = _materialize_workdir(vcs, metadata, patches, dest)
         if err:
             return err
@@ -1079,6 +1176,7 @@ def experiment_export(vcs, params, storage, args):
 # prune
 # ---------------------------------------------------------------------------
 
+
 @measure_runtime_decorator
 def experiment_prune(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
@@ -1095,7 +1193,9 @@ def experiment_prune(vcs, params, storage, args):
         if keep == 0:
             to_delete = list(experiments)
         elif len(experiments) <= keep:
-            print(f"Only {len(experiments)} experiments, nothing to prune (--keep {keep})")
+            print(
+                f"Only {len(experiments)} experiments, nothing to prune (--keep {keep})"
+            )
             return 0
         else:
             to_delete = experiments[:-keep]

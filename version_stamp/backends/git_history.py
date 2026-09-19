@@ -64,12 +64,12 @@ class GitHistoryMixin:
 
         for t, v in ver_infos.items():
             if "stamping" in v["ver_info"]:
-                prev_user_commit = v["ver_info"]["stamping"]["app"]["changesets"]["."]["hash"]
+                prev_user_commit = v["ver_info"]["stamping"]["app"]["changesets"]["."][
+                    "hash"
+                ]
 
                 ret_d, ret_list = self.parse_git_log_to_commit_for_specific_file(
-                    prev_user_commit,
-                    p.hexsha,
-                    version_files_to_track_diff_off
+                    prev_user_commit, p.hexsha, version_files_to_track_diff_off
                 )
 
                 # TODO:: think if we want to support cases where file changed
@@ -173,13 +173,17 @@ class GitHistoryMixin:
         try:
             commit_tag_obj = self._be.commit(tag_name)
         except Exception:
-            tag_name, commit_tag_obj = try_commit_with_dot_zero_suffix(self._be, tag_name)
+            tag_name, commit_tag_obj = try_commit_with_dot_zero_suffix(
+                self._be, tag_name
+            )
             if commit_tag_obj is None:
                 return tag_name, None
 
         return tag_name, commit_tag_obj
 
-    def parse_git_log_to_commit_for_specific_file(self, from_commit, to_commit, filenames):
+    def parse_git_log_to_commit_for_specific_file(
+        self, from_commit, to_commit, filenames
+    ):
         try:
             if not filenames:
                 return {}, []
