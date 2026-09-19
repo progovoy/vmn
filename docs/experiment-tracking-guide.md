@@ -149,23 +149,39 @@ flowchart BT
 
 Mount a shared filesystem that all team members can access. NFS, AWS FSx, GlusterFS, or any POSIX-compatible shared mount works.
 
+Then configure vmn once so nobody has to pass flags every run:
+
+```sh
+vmn config my_app    # opens interactive editor
+```
+
+Set the experiment storage section in `conf.yml`:
+
+```yaml
+# .vmn/my_app/conf.yml
+experiment:
+  storage:
+    experiment_dir: /mnt/shared       # shared mount path
+    # writer_id defaults to hostname — usually correct
+    # writer_id: alice-laptop         # override if needed
+```
+
+> `writer_id` defaults to `hostname` automatically — no config needed in most cases.
+
 ### Each Developer's Workflow
 
 ```sh
-# Set your writer ID (once, in .bashrc or .zshrc)
-export VMN_WRITER_ID=$(hostname)    # or your name: alice-laptop
-
-# Run experiments pointing to the shared mount
+# That's it — experiment_dir comes from config, writer_id from hostname
 vmn exp run my_app \
-    --experiment-dir /mnt/shared \
-    --writer-id $VMN_WRITER_ID \
     --note "lr=0.01, batch=64" \
     -- python train.py --lr 0.01
 
 # Or with manual metrics
 vmn exp create my_app \
-    --experiment-dir /mnt/shared \
     --metrics loss=0.34 acc=0.91 --note "new optimizer"
+
+# CLI flags still work as overrides:
+vmn exp run my_app --experiment-dir /other/mount -- python train.py
 ```
 
 ### Why This Is Safe for Concurrent Writes
@@ -246,7 +262,26 @@ tar xzf /mnt/fsx/snapshot.tar.gz -C /mnt/fsx/code/
 #   your_code/         <- the actual source tree
 ```
 
-#### Step 2: Each Pod's Entrypoint
+#### Step 2: Configure Once (in conf.yml or per-pod flags)
+
+If your snapshot includes `.vmn/my_app/conf.yml`, set it there:
+
+```yaml
+experiment:
+  storage:
+    experiment_dir: /mnt/fsx          # all pods write here
+    # writer_id: defaults to hostname (= pod name in K8s)
+```
+
+Then each pod's entrypoint is just:
+
+```sh
+vmn exp run my_app \
+    --from-snapshot /mnt/fsx/code/vmn_metadata.yml \
+    -- python train.py --lr $LR --batch $BATCH
+```
+
+Or pass flags explicitly (overrides config):
 
 ```sh
 vmn exp run my_app \
@@ -256,13 +291,13 @@ vmn exp run my_app \
     -- python train.py --lr $LR --batch $BATCH
 ```
 
-#### What Each Flag Does
+#### What Each Flag / Config Does
 
-| Flag | What it does |
+| Flag / Config | What it does |
 |------|-------------|
 | `--from-snapshot` | Reads `vmn_metadata.yml` instead of git. No git needed. |
-| `--experiment-dir` | Write to shared mount instead of local `.vmn/` |
-| `--writer-id` | Unique pod ID. Metrics go to `log.<id>.jsonl` (no conflicts) |
+| `--experiment-dir` / `experiment_dir` | Write to shared mount instead of local `.vmn/` |
+| `--writer-id` / `writer_id` | Unique pod ID. Defaults to hostname. Metrics go to `log.<id>.jsonl` |
 
 The experiment verstr includes the pod ID: `1.0.0-dev.abc.def.pod-xyz-123`. Zero collision, zero contention, zero coordination between pods.
 
@@ -322,7 +357,29 @@ aws s3 cp snapshot.tar.gz s3://my-experiments/snapshots/
 #   RUN pip install vmn
 ```
 
-#### Step 2: Each Pod's Entrypoint
+#### Step 2: Configure Once or Pass Flags
+
+Config approach (in `conf.yml` baked into the snapshot):
+
+```yaml
+experiment:
+  storage:
+    backend: s3
+    bucket: my-experiments
+    experiment_dir: /tmp/exp
+    # writer_id: defaults to hostname (= pod name)
+```
+
+Then each pod just runs:
+
+```sh
+vmn exp run my_app \
+    --from-snapshot /workspace/vmn_metadata.yml \
+    --sync-interval 30 \
+    -- python train.py --lr $LR
+```
+
+Or pass everything as flags:
 
 ```sh
 vmn exp run my_app \
@@ -440,18 +497,30 @@ Every command that takes an experiment reference supports these forms:
 
 ---
 
-## Reference: CLI Flags for Multi-User / K8s
+## Reference: CLI Flags & Config for Multi-User / K8s
 
-| Flag | Description |
-|------|-------------|
-| `--from-snapshot <path>` | Path to `vmn_metadata.yml` (skips git) |
-| `--experiment-dir <path>` | Write experiments to shared mount or scratch dir |
-| `--writer-id <id>` | Unique writer ID for this pod/process |
-| `--sync-interval <sec>` | Seconds between S3 metric syncs (default: 30) |
-| `--backend s3` | Use S3 storage backend |
-| `--bucket <name>` | S3 bucket name |
-| `--endpoint-url <url>` | Custom S3 endpoint (MinIO, LocalStack) |
-| `--prefix <prefix>` | Key prefix in bucket (default: `vmn-experiments`) |
+All storage flags can also be set in `conf.yml` under `experiment.storage` — CLI flags override config.
+
+| Flag | Config key | Description |
+|------|-----------|-------------|
+| `--from-snapshot <path>` | — | Path to `vmn_metadata.yml` (skips git) |
+| `--experiment-dir <path>` | `experiment_dir` | Write experiments to shared mount or scratch dir |
+| `--writer-id <id>` | `writer_id` | Unique writer ID (defaults to hostname) |
+| `--sync-interval <sec>` | — | Seconds between S3 metric syncs (default: 30) |
+| `--backend s3` | `backend` | Use S3 storage backend |
+| `--bucket <name>` | `bucket` | S3 bucket name |
+| `--endpoint-url <url>` | `endpoint_url` | Custom S3 endpoint (MinIO, LocalStack) |
+| `--prefix <prefix>` | `prefix` | Key prefix in bucket (default: `vmn-experiments`) |
+
+Example `conf.yml`:
+
+```yaml
+experiment:
+  storage:
+    experiment_dir: /mnt/shared
+    backend: s3               # optional — only for S3 mode
+    bucket: my-experiments    # optional — only for S3 mode
+```
 
 ---
 

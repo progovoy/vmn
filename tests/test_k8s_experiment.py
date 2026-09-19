@@ -321,7 +321,9 @@ def test_get_writer_id_from_hostname(monkeypatch):
     experiment._WRITER_ID = None
 
 
-def test_get_writer_id_fallback_uuid(monkeypatch):
+def test_get_writer_id_fallback_hostname(monkeypatch):
+    """Without VMN_WRITER_ID or HOSTNAME env, falls back to socket.gethostname()."""
+    import socket
     import version_stamp.cli.experiment as experiment
     experiment._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
@@ -329,8 +331,7 @@ def test_get_writer_id_fallback_uuid(monkeypatch):
 
     from version_stamp.cli.experiment import _get_writer_id
     wid = _get_writer_id()
-    assert wid.startswith("w-")
-    assert len(wid) == 10  # "w-" + 8 hex chars
+    assert wid == socket.gethostname()
     experiment._WRITER_ID = None
 
 
@@ -671,3 +672,101 @@ def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
     ret = _run_experiment_from_snapshot(args)
     assert ret == 1
     experiment._WRITER_ID = None
+
+
+# =========================================================================
+# J. Config-based experiment_dir and writer_id
+# =========================================================================
+
+def test_handle_experiment_reads_experiment_dir_from_conf(monkeypatch):
+    """experiment_dir from conf.yml experiment.storage.experiment_dir is used
+    when CLI arg is not provided."""
+    import version_stamp.cli.experiment as experiment
+
+    exp_conf = {"storage": {"experiment_dir": "/mnt/shared/experiments"}}
+    vcs = SimpleNamespace(
+        name="myapp", experiment=exp_conf,
+        snapshot_storage=None, vmn_root_path="/tmp/fake",
+    )
+    params = {
+        "backend": "local", "bucket": None,
+        "prefix": "vmn-experiments", "endpoint_url": None,
+        "experiment_dir": None,
+    }
+
+    experiment._merge_conf_into_params(vcs, params)
+    assert params["experiment_dir"] == "/mnt/shared/experiments"
+
+
+def test_handle_experiment_cli_experiment_dir_overrides_conf(monkeypatch):
+    """CLI --experiment-dir takes precedence over conf.yml."""
+    import version_stamp.cli.experiment as experiment
+
+    exp_conf = {"storage": {"experiment_dir": "/mnt/shared/experiments"}}
+    vcs = SimpleNamespace(
+        name="myapp", experiment=exp_conf,
+        snapshot_storage=None, vmn_root_path="/tmp/fake",
+    )
+    params = {
+        "backend": "local", "bucket": None,
+        "prefix": "vmn-experiments", "endpoint_url": None,
+        "experiment_dir": "/cli/override",
+    }
+
+    experiment._merge_conf_into_params(vcs, params)
+    assert params["experiment_dir"] == "/cli/override"
+
+
+def test_get_writer_id_from_conf(monkeypatch):
+    """writer_id from conf.yml experiment.storage.writer_id is used."""
+    import version_stamp.cli.experiment as experiment
+    experiment._WRITER_ID = None
+    monkeypatch.delenv("VMN_WRITER_ID", raising=False)
+    monkeypatch.delenv("HOSTNAME", raising=False)
+
+    wid = experiment._get_writer_id(conf_writer_id="build-server-1")
+    assert wid == "build-server-1"
+    experiment._WRITER_ID = None
+
+
+def test_get_writer_id_env_overrides_conf(monkeypatch):
+    """VMN_WRITER_ID env var takes precedence over conf.yml."""
+    import version_stamp.cli.experiment as experiment
+    experiment._WRITER_ID = None
+    monkeypatch.setenv("VMN_WRITER_ID", "env-pod")
+
+    wid = experiment._get_writer_id(conf_writer_id="conf-server")
+    assert wid == "env-pod"
+    experiment._WRITER_ID = None
+
+
+def test_get_writer_id_defaults_to_hostname(monkeypatch):
+    """When no env, no conf, writer_id defaults to platform hostname."""
+    import socket
+    import version_stamp.cli.experiment as experiment
+    experiment._WRITER_ID = None
+    monkeypatch.delenv("VMN_WRITER_ID", raising=False)
+    monkeypatch.delenv("HOSTNAME", raising=False)
+
+    wid = experiment._get_writer_id()
+    assert wid == socket.gethostname()
+    experiment._WRITER_ID = None
+
+
+def test_handle_experiment_passes_writer_id_from_conf(monkeypatch):
+    """writer_id from conf is passed through params to _get_writer_id."""
+    import version_stamp.cli.experiment as experiment
+
+    exp_conf = {"storage": {"writer_id": "team-server"}}
+    vcs = SimpleNamespace(
+        name="myapp", experiment=exp_conf,
+        snapshot_storage=None, vmn_root_path="/tmp/fake",
+    )
+    params = {
+        "backend": "local", "bucket": None,
+        "prefix": "vmn-experiments", "endpoint_url": None,
+        "experiment_dir": None, "writer_id": None,
+    }
+
+    experiment._merge_conf_into_params(vcs, params)
+    assert params["writer_id"] == "team-server"

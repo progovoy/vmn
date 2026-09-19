@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import shutil
+import socket
 import uuid
 from dataclasses import dataclass
 from typing import List, Optional
@@ -48,19 +49,32 @@ def _app_name(vcs, args=None):
 _WRITER_ID = None
 
 
-def _get_writer_id():
+def _get_writer_id(conf_writer_id=None):
     """Return a unique writer identifier for concurrent-safe log writes.
 
+    Priority: VMN_WRITER_ID env > conf_writer_id > HOSTNAME env > socket.gethostname().
     Cached for the process lifetime so all log entries land in the same JSONL file.
     """
     global _WRITER_ID
     if _WRITER_ID is None:
         _WRITER_ID = (
             os.environ.get("VMN_WRITER_ID")
+            or conf_writer_id
             or os.environ.get("HOSTNAME")
-            or "w-" + uuid.uuid4().hex[:8]
+            or socket.gethostname()
         )
     return _WRITER_ID
+
+
+def _merge_conf_into_params(vcs, params):
+    """Merge experiment config from conf.yml into params (CLI overrides conf)."""
+    exp_conf = getattr(vcs, "experiment", None) or {}
+    storage_conf = exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
+    for key in ("bucket", "backend", "prefix", "endpoint_url", "experiment_dir", "writer_id"):
+        if not params.get(key) or params[key] in ("local", "vmn-experiments"):
+            conf_val = storage_conf.get(key)
+            if conf_val:
+                params[key] = conf_val
 
 
 def _get_experiment_storage(vcs, params):
@@ -302,15 +316,9 @@ def handle_experiment(vmn_ctx):
         "endpoint_url": getattr(args, "endpoint_url", None),
     }
     params["experiment_dir"] = getattr(args, "experiment_dir", None)
+    params["writer_id"] = getattr(args, "writer_id", None)
 
-    # Read experiment storage config from app conf, CLI overrides
-    exp_conf = getattr(vcs, "experiment", None) or {}
-    storage_conf = exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
-    for key in ("bucket", "backend", "prefix", "endpoint_url"):
-        if not params.get(key) or params[key] in ("local", "vmn-experiments"):
-            conf_val = storage_conf.get(key)
-            if conf_val:
-                params[key] = conf_val
+    _merge_conf_into_params(vcs, params)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
     from_snapshot = getattr(args, 'from_snapshot', None) or os.environ.get("VMN_SNAPSHOT_METADATA")
