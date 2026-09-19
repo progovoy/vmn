@@ -7,23 +7,20 @@ No server, no database — just files on disk (or S3).
 
 ## What Is an Experiment?
 
+```mermaid
+block-beta
+    columns 3
+    block:exp:3
+        columns 2
+        A["1. CODE SNAPSHOT\n(committed + uncommitted)"] B["Your code at that exact moment\n(patches, not full copies)"]
+        C["2. METRICS LOG\n(append-only JSONL)"] D["key=value pairs over time\nloss=0.34, acc=0.91, ..."]
+        E["3. METADATA\n(YAML)"] F["who, when, which branch,\nbase version, notes"]
+    end
+    style exp fill:#f0f4ff,stroke:#1e4682
 ```
-+-------------------------------+
-|  Experiment = 3 things:       |
-|                               |
-|  1. CODE SNAPSHOT             |    Your code at that exact moment
-|     (committed + uncommitted) |    (patches, not full copies)
-|                               |
-|  2. METRICS LOG               |    key=value pairs over time
-|     (append-only JSONL)       |    loss=0.34, acc=0.91, ...
-|                               |
-|  3. METADATA                  |    who, when, which branch,
-|     (YAML)                    |    base version, notes
-+-------------------------------+
 
-Stored in: .vmn/<app>/experiments/<verstr>/
-Format:    plain files — YAML + JSONL — no database
-```
+> **Stored in:** `.vmn/<app>/experiments/<verstr>/`
+> **Format:** plain files — YAML + JSONL — no database
 
 ---
 
@@ -31,26 +28,19 @@ Format:    plain files — YAML + JSONL — no database
 
 You're on your laptop. You have a git repo with vmn set up (`vmn stamp -r patch my_app`). You want to try different configs and track what happened.
 
-```
-YOUR LAPTOP
-+-----------------------------------------+
-|  git repo                               |
-|  +-----------------------------------+  |
-|  | your code (committed+uncommitted) |  |
-|  +-----------------------------------+  |
-|           |                              |
-|           v                              |
-|  vmn exp create / vmn exp run            |
-|           |                              |
-|           v                              |
-|  .vmn/my_app/experiments/                |
-|    +-- 1.0.0-dev.a1b/                   |
-|    |     metadata.yml                    |
-|    |     log.local.jsonl    <-- metrics  |
-|    |     patches/           <-- diffs    |
-|    +-- 1.0.0-dev.a1b.r2/                |
-|          (same code = .r2 suffix)        |
-+-----------------------------------------+
+```mermaid
+flowchart TD
+    subgraph laptop["Your Laptop"]
+        code["Your code\n(committed + uncommitted)"]
+        cmd["vmn exp create / vmn exp run"]
+        subgraph store[".vmn/my_app/experiments/"]
+            e1["1.0.0-dev.a1b/\nmetadata.yml\nlog.local.jsonl\npatches/"]
+            e2["1.0.0-dev.a1b.r2/\n(same code = .r2 suffix)"]
+        end
+        code --> cmd --> store
+    end
+    style laptop fill:#f0f4ff,stroke:#1e4682
+    style store fill:#fff,stroke:#aaa
 ```
 
 ### Option A: Manual Measurements
@@ -125,30 +115,35 @@ Your team shares a repo. Multiple people run experiments at the same time. Every
 
 > **Key idea:** shared NFS mount + per-writer log files = safe concurrent writes
 
-```
-SHARED NFS / FSx MOUNT (/mnt/shared)
-+-------------------------------------------------------+
-|  experiments/my_app/                                   |
-|    +-- 1.0.0-dev.abc.alice/                           |
-|    |     metadata.yml                                  |
-|    |     log.alice-laptop.jsonl                        |
-|    +-- 1.0.0-dev.abc.bob/                             |
-|    |     metadata.yml                                  |
-|    |     log.bob-desktop.jsonl                         |
-|    +-- 1.0.0-dev.def.carol/                           |
-|          metadata.yml                                  |
-|          log.carol-laptop.jsonl                        |
-+-------------------------------------------------------+
-       ^              ^              ^
-       |              |              |
-  +--------+    +--------+    +--------+
-  | Alice  |    |  Bob   |    | Carol  |
-  | laptop |    | desktop|    | laptop |
-  +--------+    +--------+    +--------+
+```mermaid
+flowchart BT
+    subgraph nfs["Shared NFS / FSx Mount — /mnt/shared"]
+        direction TB
+        subgraph alice_exp["1.0.0-dev.abc.alice/"]
+            a_meta["metadata.yml"]
+            a_log["log.alice-laptop.jsonl"]
+        end
+        subgraph bob_exp["1.0.0-dev.abc.bob/"]
+            b_meta["metadata.yml"]
+            b_log["log.bob-desktop.jsonl"]
+        end
+        subgraph carol_exp["1.0.0-dev.def.carol/"]
+            c_meta["metadata.yml"]
+            c_log["log.carol-laptop.jsonl"]
+        end
+    end
 
-Each person: writes their OWN log file (no conflicts)
-Reading:     vmn merges ALL log.*.jsonl files automatically
+    alice["Alice\nlaptop"] --> alice_exp
+    bob["Bob\ndesktop"] --> bob_exp
+    carol["Carol\nlaptop"] --> carol_exp
+
+    style nfs fill:#f0f4ff,stroke:#1e4682
+    style alice fill:#e8f5e9,stroke:#388e3c
+    style bob fill:#fff3e0,stroke:#f57c00
+    style carol fill:#fce4ec,stroke:#c62828
 ```
+
+> Each person writes their **own** log file (no conflicts). When reading, vmn merges **all** `log.*.jsonl` files automatically.
 
 ### Setup: One-Time
 
@@ -202,35 +197,42 @@ You're running a hyperparameter sweep: 100–1000 pods, each with a different co
 
 > Recommended when you already have a shared filesystem (EFS, FSx, NFS).
 
-```
-CONTROL PLANE (your machine or CI)
-+--------------------------------------------------+
-| 1. vmn snapshot export my_app -o snapshot.tar.gz  |
-| 2. tar xzf snapshot.tar.gz -C /mnt/fsx/code/     |
-| 3. kubectl apply -f sweep-job.yaml                |
-+--------------------------------------------------+
-                       |
-                       | shared NFS mount: /mnt/fsx
-                       |
-     +-----------------+-----------------+
-     |                 |                 |
-+----v------+   +-----v-----+   +-------v---+
-|  Pod 1    |   |  Pod 2    |   |  Pod N    |
-|  lr=0.01  |   |  lr=0.03  |   |  lr=0.1   |
-|           |   |           |   |           |
-| NO GIT    |   | NO GIT    |   | NO GIT    |
-| reads:    |   | reads:    |   | reads:    |
-| metadata  |   | metadata  |   | metadata  |
-| .yml      |   | .yml      |   | .yml      |
-|           |   |           |   |           |
-| writes:   |   | writes:   |   | writes:   |
-| log.pod1  |   | log.pod2  |   | log.podN  |
-| .jsonl    |   | .jsonl    |   | .jsonl    |
-+-----------+   +-----------+   +-----------+
+```mermaid
+flowchart TD
+    subgraph cp["Control Plane (your machine / CI)"]
+        step1["1. vmn snapshot export my_app"]
+        step2["2. tar xzf → /mnt/fsx/code/"]
+        step3["3. kubectl apply -f sweep-job.yaml"]
+        step1 --> step2 --> step3
+    end
 
-Each pod: no git, no locks, no coordination.
-vmn ui --repo /mnt/fsx  => leaderboard + live curves
+    step3 -- "shared NFS mount: /mnt/fsx" --> pod1 & pod2 & podN
+
+    subgraph pod1["Pod 1 — lr=0.01"]
+        p1_read["reads: vmn_metadata.yml"]
+        p1_write["writes: log.pod1.jsonl"]
+    end
+
+    subgraph pod2["Pod 2 — lr=0.03"]
+        p2_read["reads: vmn_metadata.yml"]
+        p2_write["writes: log.pod2.jsonl"]
+    end
+
+    subgraph podN["Pod N — lr=0.1"]
+        pN_read["reads: vmn_metadata.yml"]
+        pN_write["writes: log.podN.jsonl"]
+    end
+
+    pod1 & pod2 & podN --> ui["vmn ui --repo /mnt/fsx\nLeaderboard + live curves"]
+
+    style cp fill:#f0f4ff,stroke:#1e4682
+    style pod1 fill:#e8f5e9,stroke:#388e3c
+    style pod2 fill:#fff3e0,stroke:#f57c00
+    style podN fill:#fce4ec,stroke:#c62828
+    style ui fill:#fff9c4,stroke:#f9a825
 ```
+
+> Each pod: **no git**, **no locks**, **no coordination**.
 
 #### Step 1: Export a Snapshot (Control Plane)
 
@@ -278,36 +280,33 @@ vmn exp list my_app --experiment-dir /mnt/fsx --sort loss --top 10
 
 > Use this when pods don't share a filesystem — each writes locally and syncs to S3.
 
-```
-+----------+      +----------+      +----------+
-|  Pod 1   |      |  Pod 2   |      |  Pod N   |
-|          |      |          |      |          |
-| /tmp/exp |      | /tmp/exp |      | /tmp/exp |
-| log.pod1 |      | log.pod2 |      | log.podN |
-| .jsonl   |      | .jsonl   |      | .jsonl   |
-+----+-----+      +-----+----+      +-----+----+
-     |                  |                  |
-     | sync             | sync             | sync
-     | every 30s        | every 30s        | every 30s
-     v                  v                  v
-+------------------------------------------------------+
-|                    S3 BUCKET                          |
-|  s3://my-experiments/vmn-experiments/my_app/          |
-|                                                       |
-|  +-- 1.0.0-dev.abc.pod1/                             |
-|  |     metadata.yml                                   |
-|  |     log.pod1.jsonl   (updated every 30s)          |
-|  +-- 1.0.0-dev.abc.pod2/                             |
-|  |     metadata.yml                                   |
-|  |     log.pod2.jsonl                                 |
-|  +-- 1.0.0-dev.def.podN/                             |
-|        metadata.yml                                   |
-|        log.podN.jsonl                                 |
-+------------------------------------------------------+
-                        |
-                        v
-         vmn ui --s3-bucket my-experiments
-         (leaderboard + live curves)
+```mermaid
+flowchart TD
+    subgraph pod1["Pod 1"]
+        p1["/tmp/exp\nlog.pod1.jsonl"]
+    end
+    subgraph pod2["Pod 2"]
+        p2["/tmp/exp\nlog.pod2.jsonl"]
+    end
+    subgraph podN["Pod N"]
+        pN["/tmp/exp\nlog.podN.jsonl"]
+    end
+
+    pod1 -- "sync every 30s" --> s3
+    pod2 -- "sync every 30s" --> s3
+    podN -- "sync every 30s" --> s3
+
+    subgraph s3["S3 Bucket: my-experiments"]
+        s3a["vmn-experiments/my_app/\n├── verstr.pod1/ log.pod1.jsonl\n├── verstr.pod2/ log.pod2.jsonl\n└── verstr.podN/ log.podN.jsonl"]
+    end
+
+    s3 --> ui["vmn ui --s3-bucket my-experiments\nLeaderboard + live curves"]
+
+    style pod1 fill:#e8f5e9,stroke:#388e3c
+    style pod2 fill:#fff3e0,stroke:#f57c00
+    style podN fill:#fce4ec,stroke:#c62828
+    style s3 fill:#e3f2fd,stroke:#1565c0
+    style ui fill:#fff9c4,stroke:#f9a825
 ```
 
 #### Step 1: Export Snapshot to S3 or Embed in Image
@@ -337,24 +336,23 @@ vmn exp run my_app \
 
 #### How S3 Sync Works
 
-```
-TIMELINE OF A SINGLE POD:
+```mermaid
+sequenceDiagram
+    participant Pod
+    participant Local as /tmp/exp
+    participant S3 as S3 Bucket
 
-t=0s     Pod starts. Reads vmn_metadata.yml.
-         Creates experiment in /tmp/exp (local).
-         Launches: python train.py
-         |
-t=30s    First sync: uploads log.pod1.jsonl to S3
-         (replaces previous S3 object)
-         |
-t=60s    Second sync: uploads again (more metrics now)
-         |
-...      Every 30 seconds, same thing
-         |
-t=end    train.py exits.
-         FINAL sync: uploads complete log to S3.
-         Records exit code + total duration.
-         No metrics lost.
+    Pod->>Local: t=0s: Create experiment, launch train.py
+    Note over Pod,Local: Metrics written to local JSONL
+
+    loop Every 30 seconds
+        Local->>S3: Upload log.pod1.jsonl (replaces previous)
+        Note over S3: Near-live metrics in UI
+    end
+
+    Pod->>Local: t=end: train.py exits
+    Local->>S3: FINAL sync: complete log uploaded
+    Note over S3: Exit code + duration recorded. No metrics lost.
 ```
 
 - **Near-live:** Metrics appear in the UI within 30 seconds of being written
@@ -383,32 +381,28 @@ vmn ui --s3-bucket my-experiments --s3-prefix vmn-experiments
 | S3 support? | Yes | Yes | Yes |
 | Setup | None | Mount or S3 bucket | Snapshot export |
 
+```mermaid
+flowchart TD
+    Q["How many people/pods\nrun experiments?"]
+    Q --> |"Just me"| W1["Workflow 1\nSingle Developer"]
+    Q --> |"2–10 people"| W2["Workflow 2\nMulti-Developer Team"]
+    Q --> |"10+ pods"| W3["Workflow 3\nK8s at Scale"]
+
+    W1 & W2 & W3 --> storage
+
+    subgraph storage["Pick your storage (any workflow)"]
+        local["LOCAL DISK\njust works, simplest"]
+        nfs["NFS / FSx\nshared mount, multi-machine"]
+        s3s["S3\nno shared FS needed"]
+    end
+
+    style W1 fill:#e8f5e9,stroke:#388e3c
+    style W2 fill:#fff3e0,stroke:#f57c00
+    style W3 fill:#fce4ec,stroke:#c62828
+    style storage fill:#f0f4ff,stroke:#1e4682
 ```
-DECISION TREE:
 
-How many people/pods run experiments?
-  |                |                    |
- ONE           2-10 PEOPLE         10+ PODS
-  |                |                    |
-  v                v                    v
-Workflow 1     Workflow 2           Workflow 3
-(single dev)   (multi-dev)          (K8s)
-
-Then pick your storage:
-
-+--------------------------------------------------+
-| Any workflow can use any storage backend:         |
-|                                                   |
-|  LOCAL DISK   just works, simplest, single-machine|
-|  NFS / FSx    shared mount, multi-machine         |
-|  S3           no shared FS needed, works anywhere |
-+--------------------------------------------------+
-
-Typical combos:
-  Single dev   -> local disk (default)
-  Multi-dev    -> NFS or S3
-  K8s at scale -> NFS (recommended) or S3
-```
+> **Typical combos:** Single dev → local disk (default) · Multi-dev → NFS or S3 · K8s → NFS (recommended) or S3
 
 ---
 
