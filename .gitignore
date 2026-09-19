@@ -25,3 +25,9 @@ webui/tsconfig.tsbuildinfo
 .mtd/
 
 *.pdf
+
+# macOS
+.DS_Store
+
+# generated CI reports (pipeline output)
+reports/
