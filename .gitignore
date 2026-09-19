@@ -23,3 +23,5 @@ webui/tsconfig.tsbuildinfo
 
 .claude/
 .mtd/
+
+*.pdf
