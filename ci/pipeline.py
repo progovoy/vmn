@@ -3,7 +3,8 @@
 Launch manually:
     muster run ci/pipeline.py --cache-dir .mtd/cache
 
-Or let the daily schedule fire it via the Muster UI (see ci/README.md).
+Or start the server (./ci/start.sh) and let the daily schedule fire it.
+UI at http://localhost:8000 (no auth needed).
 """
 import os
 import subprocess

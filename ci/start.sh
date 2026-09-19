@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Start the Muster proxy + web UI for vmn local CI.
+# Start the Muster pipeline server + web UI for vmn local CI.
 #
-# First run installs muster into a dedicated venv.  The proxy serves
-# the UI at http://localhost:8000 — trigger runs from the Trigger page,
-# or let the daily schedule fire them automatically.
+# First run installs muster into a dedicated venv.  The server runs in
+# pipeline-only mode (no DAP proxy) with no auth required.
 #
 # Usage:
-#   ./ci/start.sh                  # start proxy + UI
+#   ./ci/start.sh                  # start server + UI
 #   ./ci/start.sh --run-now        # also trigger one run immediately
 set -euo pipefail
 
@@ -43,16 +42,15 @@ if [ ! -f "$SCHED_FILE" ]; then
   "cron": "0 2 * * *",
   "pipeline_file": "ci/pipeline.py",
   "params": {},
+  "cache_dir": ".mtd/cache",
   "enabled": true
 }
 SCHED
 fi
 
-TOKEN="${VMN_CI_TOKEN:-vmn-local-ci}"
-
 echo ""
-echo "Muster proxy starting at http://localhost:8000"
-echo "  UI:       http://localhost:8000/?token=${TOKEN}"
+echo "Muster serve starting at http://localhost:8000"
+echo "  UI:       http://localhost:8000"
 echo "  Pipeline: ci/pipeline.py"
 echo "  Schedule: daily at 02:00 (edit via UI or $SCHED_FILE)"
 echo "  State:    .mtd/runs/"
@@ -67,7 +65,7 @@ if [[ "${1:-}" == "--run-now" ]]; then
         --state-dir .mtd/runs \
         --cache-dir .mtd/cache &
     RUN_PID=$!
-    echo "Run started (pid $RUN_PID), launching proxy ..."
+    echo "Run started (pid $RUN_PID), launching server ..."
 fi
 
-exec "$MUSTER" proxy --web-port 8000 --auth-token "$TOKEN"
+exec "$MUSTER" serve --no-auth --web-port 8000
