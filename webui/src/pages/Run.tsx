@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -8,6 +8,7 @@ import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
 import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
+import { usePolling } from "../hooks/usePolling";
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
@@ -123,6 +124,7 @@ export default function Run() {
   const [detail, setDetail] = useState<ExperimentDetail | null>(null);
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
 
   const load = useCallback(
     () => api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e))),
@@ -132,6 +134,7 @@ export default function Run() {
     load();
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [load, ws, app]);
+  usePolling(load, 3000, live);
 
   const chartData = useMemo(() => {
     if (!detail) return { points: [], metrics: [] as string[] };
@@ -184,6 +187,14 @@ export default function Run() {
       <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
         <h1 className="mono" style={{ fontSize: 20 }}>{meta.verstr}</h1>
         {Boolean(meta.branch) && <span className="badge">{meta.branch as string}</span>}
+        <button
+          className={live ? "primary" : ""}
+          onClick={() => setLive((v) => !v)}
+          style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}
+        >
+          {live && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--good)", animation: "pulse 1.5s infinite" }} />}
+          {live ? "Live" : "Live"}
+        </button>
       </div>
       {Boolean(meta.note) && (
         <p style={{ color: "var(--text-2)", margin: "0 0 20px" }}>
@@ -209,6 +220,22 @@ export default function Run() {
             <div>{runSecs ? `${runSecs}s` : "—"}</div>
           </div>
         </div>
+        {(() => {
+          const um = meta.user_meta as Record<string, unknown> | null | undefined;
+          return um && Object.keys(um).length > 0 ? (
+            <div className="card">
+              <div className="eyebrow">parameters</div>
+              <div className="kv">
+                {Object.entries(um).map(([k, v]) => (
+                  <Fragment key={k}>
+                    <div className="k">{k}</div>
+                    <div className="mono">{String(v)}</div>
+                  </Fragment>
+                ))}
+              </div>
+            </div>
+          ) : null;
+        })()}
         <div className="card">
           <div className="eyebrow">final metrics</div>
           {Object.keys(detail.metrics).length === 0 ? (

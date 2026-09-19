@@ -6,7 +6,11 @@ import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import ParamPlots from "../components/ParamPlots";
+import MetricBarChart from "../components/MetricBarChart";
 import NewExperiment from "../components/NewExperiment";
+import LeaderboardFilter from "../components/LeaderboardFilter";
+import ColumnPicker from "../components/ColumnPicker";
+import { usePolling } from "../hooks/usePolling";
 
 export default function Leaderboard() {
   const { ws, app } = useParams() as { ws: string; app: string };
@@ -16,15 +20,15 @@ export default function Leaderboard() {
   const [sort, setSort] = useState<string | null>(null);
   const [reversed, setReversed] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [chartView, setChartView] = useState<"trend" | "bar">("trend");
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
   const [params, setParams] = useSearchParams();
   const creating = params.get("new") === "1";
+  const [filteredRows, setFilteredRows] = useState<ExperimentRow[] | null>(null);
   const navigate = useNavigate();
 
-  // Ordering comes from the server (goal-aware best-first, same code path as
-  // `vmn exp list`); the client only flips the displayed direction. @N stays
-  // truthful under any sort because rows carry their storage idx.
   const load = useCallback(
     () =>
       api.experiments(ws, app, sort ?? undefined)
@@ -33,13 +37,14 @@ export default function Leaderboard() {
     [ws, app, sort]
   );
   useEffect(() => { load(); }, [load]);
+  usePolling(load, 5000, live);
   useEffect(() => {
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app]);
 
   const displayed = useMemo(
-    () => (reversed ? [...(rows ?? [])].reverse() : rows ?? []),
-    [rows, reversed]
+    () => (reversed ? [...(filteredRows ?? rows ?? [])].reverse() : filteredRows ?? rows ?? []),
+    [filteredRows, rows, reversed]
   );
 
   const primary = useMemo(
@@ -54,7 +59,6 @@ export default function Leaderboard() {
     return [...fromSchema, ...extras];
   }, [rows, schema]);
 
-  // Per-column display facts, computed once per data change (not per cell).
   const colMeta = useMemo(() => {
     const meta: Record<string, {
       goal: "min" | "max"; best: number | null; isBar: boolean;
@@ -76,6 +80,22 @@ export default function Leaderboard() {
     });
     return meta;
   }, [rows, metricCols, schema, primary]);
+
+  const paramCols = useMemo(() => {
+    const keys = new Set<string>();
+    rows?.forEach((r) => {
+      if (r.user_meta) Object.keys(r.user_meta).forEach((k) => keys.add(k));
+    });
+    return [...keys].sort();
+  }, [rows]);
+
+  const [visibleParams, setVisibleParams] = useState<string[]>([]);
+  useEffect(() => { setVisibleParams(paramCols); }, [paramCols]);
+
+  const toggleParam = (col: string) =>
+    setVisibleParams((cur) =>
+      cur.includes(col) ? cur.filter((c) => c !== col) : [...cur, col]
+    );
 
   const clickSort = (m: string) => {
     if (sort === m) setReversed((r) => !r);
@@ -112,7 +132,9 @@ export default function Leaderboard() {
     <>
       <PageHead title={appName} what="experiment leaderboard" />
       <p className="page-sub">
-        {rows.length} runs
+        {filteredRows && filteredRows.length !== rows.length
+          ? `${filteredRows.length} of ${rows.length} runs`
+          : `${rows.length} runs`}
         {sortLabel && (
           <>
             {" · sorted by "}<b>{sortLabel}</b>
@@ -146,7 +168,7 @@ export default function Leaderboard() {
               vmn exp create {appName}
             </div>
             <button className="primary" onClick={() => openCreate(true)}>
-              ＋ New experiment
+              + New experiment
             </button>
           </div>
         )
@@ -156,6 +178,14 @@ export default function Leaderboard() {
             <span className="legend-chip">
               <span className="sq" /> best in column
             </span>
+            <button
+              className={live ? "primary" : ""}
+              onClick={() => setLive((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+            >
+              {live && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--good)", animation: "pulse 1.5s infinite" }} />}
+              {live ? "Live" : "Live"}
+            </button>
             <span className="spacer" />
             {selected.length === 2 && (
               <button
@@ -170,11 +200,23 @@ export default function Leaderboard() {
               </button>
             )}
             {!creating && (
-              <button onClick={() => openCreate(true)}>＋ New experiment</button>
+              <button onClick={() => openCreate(true)}>+ New experiment</button>
+            )}
+            {paramCols.length > 0 && (
+              <ColumnPicker columns={paramCols} visible={visibleParams} onToggle={toggleParam} />
             )}
           </div>
 
-          <ParamPlots rows={rows} metricCols={metricCols} schema={schema} />
+          <LeaderboardFilter rows={rows} onFilter={setFilteredRows} />
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <button className={chartView === "trend" ? "primary" : ""} onClick={() => setChartView("trend")}>Trend</button>
+            <button className={chartView === "bar" ? "primary" : ""} onClick={() => setChartView("bar")}>Bar</button>
+          </div>
+          {chartView === "trend"
+            ? <ParamPlots rows={displayed} metricCols={metricCols} schema={schema} />
+            : <MetricBarChart rows={displayed} metricCols={metricCols} schema={schema} />
+          }
 
           <div className="card flush">
             <div className="tbl-scroll" ref={parentRef} style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
@@ -199,6 +241,9 @@ export default function Leaderboard() {
                         )}
                         {sort === m ? (reversed ? " ▴" : " ▾") : ""}
                       </th>
+                    ))}
+                    {visibleParams.map((p) => (
+                      <th key={`p-${p}`} style={{ color: "var(--text-3)" }}>{p}</th>
                     ))}
                     <th>note</th>
                     <th className="num" style={{ paddingRight: 16 }}>when</th>
@@ -274,6 +319,11 @@ export default function Leaderboard() {
                             </td>
                           );
                         })}
+                        {visibleParams.map((p) => (
+                          <td key={`p-${p}`} className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>
+                            {r.user_meta?.[p] != null ? String(r.user_meta[p]) : "—"}
+                          </td>
+                        ))}
                         <td className="note-cell">{r.note}</td>
                         <td className="when-cell" title={r.timestamp ?? ""}>
                           {relTime(r.timestamp)}

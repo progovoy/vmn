@@ -506,3 +506,8 @@ button.link:hover { border: none; text-decoration: underline; }
 .cl-dep-name { font-weight: 600; font-size: 13px; color: var(--text); }
 .cl-dep-range { font-size: 11px; color: var(--text-3); }
 .cl-dep-arrow { margin: 0 5px; color: var(--text-3); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
