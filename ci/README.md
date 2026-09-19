@@ -45,7 +45,7 @@ Instead of waiting for the 2am daily run:
 
 ```mermaid
 graph LR
-    setup_venv["🔒 setup_venv<br/><i>cached</i>"]
+    setup_venv["setup_venv<br/><i>verify venv</i>"]
     lint["lint<br/><i>ruff check</i>"]
     run_tests["run_tests<br/><i>pytest -n 29</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
@@ -67,15 +67,19 @@ graph LR
 
 | Stage | What it does | Cached? |
 |-------|-------------|---------|
-| `setup_venv` | Creates `.mtd/ci_venv/`, installs all deps from `tests/requirements.txt` + `tests/test_requirements.txt`, installs vmn in editable mode | Yes (content-addressed) |
+| `setup_venv` | Verifies the muster-built venv (`import version_stamp`) so the DAG blocks here if deps are broken | No |
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `run_tests` | Runs `pytest tests/ -n 29` (parallel, 29 workers), produces JUnit XML + HTML report | No |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `summary` | Collects lint/tests/typecheck results into one report | No |
 
-`setup_venv` is cached — if nothing changed in the requirements files or vmn
-source, it restores instantly on subsequent runs. The three middle stages run
-in parallel (they only depend on the venv, not on each other).
+Every stage declares `requires` (`tests/requirements.txt` +
+`tests/test_requirements.txt` + vmn installed editable). muster builds that venv
+once, content-addressed by the requirements files' contents under `.mtd/envs/`,
+and all four stages run inside it — no hand-rolled venv or `pip install`. The
+venv rebuilds only when a requirements file changes. `setup_venv` runs first
+(the others depend on its `reports/venv.txt`) so the one-time build happens once,
+not in a three-way race; the three middle stages then run in parallel.
 
 Lint and typecheck are report-only — they don't fail the pipeline on warnings.
 `run_tests` only fails on pytest crashes (exit code > 1), not on test failures
@@ -129,7 +133,7 @@ pause it. You can also edit schedules through the web UI.
 |------|---------|
 | `ci/pipeline.py` | Pipeline definition (stages, DAG) |
 | `ci/start.sh` | Bootstrap + launch script |
-| `.mtd/ci_venv/` | Dedicated venv for running tests |
+| `.mtd/envs/` | muster-built venvs for running tests, keyed by requirements contents |
 | `.mtd/muster_venv/` | Dedicated venv for muster itself |
 | `.mtd/runs/` | Run history (state.json, cards, console logs) |
 | `.mtd/cache/` | Content-addressed stage cache |

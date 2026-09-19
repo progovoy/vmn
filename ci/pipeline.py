@@ -1,5 +1,10 @@
 """Local CI pipeline for vmn — runs tests daily in a dedicated venv.
 
+The venv is built by muster from each stage's ``requires`` (see
+substrate/envs.py): declared reqs files + vmn installed editable. muster
+content-addresses the venv by the reqs files' contents, so all four stages
+share one venv and it rebuilds only when a requirements file changes.
+
 Launch manually:
     muster run ci/pipeline.py --cache-dir .mtd/cache
 
@@ -13,26 +18,10 @@ import sys
 from debug_router.pipeline import Pipeline, stage
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VENV_DIR = os.path.join(REPO_ROOT, '.mtd', 'ci_venv')
-PYTHON = os.path.join(VENV_DIR, 'bin', 'python')
-PIP = os.path.join(VENV_DIR, 'bin', 'pip')
-
-
-def _run(cmd, label, cwd=REPO_ROOT, env=None):
-    result = subprocess.run(cmd, cwd=cwd, env=env,
-                            capture_output=True, text=True)
-    if result.returncode != 0:
-        msg = result.stdout + result.stderr
-        raise RuntimeError(f'{label} failed (exit {result.returncode}):\n{msg}')
-    return result
-
-
-def _venv_env():
-    env = dict(os.environ)
-    env['VIRTUAL_ENV'] = VENV_DIR
-    env['PATH'] = os.path.join(VENV_DIR, 'bin') + os.pathsep + env['PATH']
-    env.pop('PYTHONPATH', None)
-    return env
+# muster builds/reuses one venv from this spec (cwd is the repo, so ``-e .`` and
+# the relative reqs paths resolve here). Stages declaring it run inside that venv.
+REQUIRES = ['-r', 'tests/requirements.txt',
+            '-r', 'tests/test_requirements.txt', '-e', '.']
 
 
 def _write(ctx, rel, text):
@@ -42,51 +31,42 @@ def _write(ctx, rel, text):
         fh.write(text)
 
 
-@stage(outputs=['reports/venv.txt'], deterministic=True)
+@stage(requires=REQUIRES, outputs=['reports/venv.txt'])
 def setup_venv(ctx):
-    if not os.path.isfile(PYTHON):
-        _run([sys.executable, '-m', 'venv', '--clear', VENV_DIR],
-             'venv creation')
-    _run([PIP, 'install', '--quiet', '-r',
-          os.path.join(REPO_ROOT, 'tests', 'requirements.txt')],
-         'install requirements')
-    _run([PIP, 'install', '--quiet', '-r',
-          os.path.join(REPO_ROOT, 'tests', 'test_requirements.txt')],
-         'install test requirements')
-    _run([PIP, 'install', '--quiet', '-e', REPO_ROOT],
-         'install vmn editable')
-    result = _run([PYTHON, '-c', 'import version_stamp; print("ok")'],
-                  'verify import')
-    _write(ctx, 'reports/venv.txt', f'venv ready: {VENV_DIR}\n')
+    result = subprocess.run([sys.executable, '-c',
+                             'import version_stamp; print("ok")'],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError('venv verify failed:\n'
+                           + result.stdout + result.stderr)
+    _write(ctx, 'reports/venv.txt', 'venv ready\n')
 
 
-@stage(inputs=['reports/venv.txt'], outputs=['reports/lint.txt'])
+@stage(requires=REQUIRES, inputs=['reports/venv.txt'], outputs=['reports/lint.txt'])
 def lint(ctx):
-    env = _venv_env()
     result = subprocess.run(
-        [PYTHON, '-m', 'ruff', 'check', os.path.join(REPO_ROOT, 'version_stamp'),
-         '--output-format', 'concise'],
-        cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+        [sys.executable, '-m', 'ruff', 'check',
+         os.path.join(REPO_ROOT, 'version_stamp'), '--output-format', 'concise'],
+        capture_output=True, text=True)
     _write(ctx, 'reports/lint.txt',
            result.stdout + f'\nexit code: {result.returncode}\n')
 
 
-@stage(inputs=['reports/venv.txt'], outputs=['reports/tests.xml', 'reports/tests.txt'])
+@stage(requires=REQUIRES, inputs=['reports/venv.txt'],
+       outputs=['reports/tests.xml', 'reports/tests.txt'])
 def run_tests(ctx):
-    env = _venv_env()
     xml_path = os.path.join(ctx.workspace, 'reports', 'tests.xml')
     html_path = os.path.join(ctx.workspace, 'reports', 'tests.html')
     os.makedirs(os.path.join(ctx.workspace, 'reports'), exist_ok=True)
     cmd = [
-        PYTHON, '-m', 'pytest',
+        sys.executable, '-m', 'pytest',
         os.path.join(REPO_ROOT, 'tests'),
         '-n', '29',
         f'--junitxml={xml_path}',
         f'--html={html_path}', '--self-contained-html',
         '-vv',
     ]
-    result = subprocess.run(cmd, cwd=REPO_ROOT, env=env,
-                            capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
     lines = result.stdout.strip().split('\n')
     summary = '\n'.join(lines[-10:]) + f'\nexit code: {result.returncode}\n'
     _write(ctx, 'reports/tests.txt', summary)
@@ -96,13 +76,12 @@ def run_tests(ctx):
             + result.stdout[-2000:] + '\n' + result.stderr[-2000:])
 
 
-@stage(inputs=['reports/venv.txt'], outputs=['reports/typecheck.txt'])
+@stage(requires=REQUIRES, inputs=['reports/venv.txt'], outputs=['reports/typecheck.txt'])
 def typecheck(ctx):
-    env = _venv_env()
     result = subprocess.run(
-        [PYTHON, '-m', 'mypy', os.path.join(REPO_ROOT, 'version_stamp'),
+        [sys.executable, '-m', 'mypy', os.path.join(REPO_ROOT, 'version_stamp'),
          '--ignore-missing-imports'],
-        cwd=REPO_ROOT, env=env, capture_output=True, text=True)
+        capture_output=True, text=True)
     _write(ctx, 'reports/typecheck.txt',
            result.stdout + f'\nexit code: {result.returncode}\n')
 
