@@ -181,6 +181,7 @@ Rules:
 - No implementation code exists without a test that demanded it.
 - Never weaken, delete, or rewrite a test to make it pass — if the test seems wrong, stop and ask.
 - Config-only changes, documentation, and pure refactors (where existing tests still cover behavior) are exempt.
+- **Parallel worktrees do not bypass TDD.** Each worktree must follow its own red-green-refactor cycle internally. Write tests first in the worktree, then implement.
 """,
     "boyscout": r"""### Boy Scout rule
 - When you're already modifying a function or file, improve clarity of what you touch — rename an unclear variable, simplify a conditional, extract a helper.
@@ -188,6 +189,7 @@ Rules:
 - If you spot a larger cleanup opportunity outside your current scope, spawn a subagent in a separate worktree to handle it — don't block or pollute the current task's diff.
 """,
     "worktrees": r"""### Parallel worktree workflow
+- Split big tasks into separate worktrees and run in parallel, but **TDD takes precedence**. Each worktree agent must follow TDD internally: write tests first (red), then implement (green). If multiple worktrees touch independent features, each worktree owns its own red-green-refactor cycle.
 - Use `vmn worktrees create` to spawn isolated islands for independent features or experiments.
 - Never push island branches to remote — they are local-only.
 - Run the full test suite in the island before merging back.
