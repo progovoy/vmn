@@ -48,10 +48,16 @@ graph LR
     lint["lint<br/><i>ruff check</i>"]
     run_tests["run_tests<br/><i>pytest -n 29</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
+    run_tests --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
+    stamp --> build["build<br/><i>make _build</i>"]
+    build --> upload["upload<br/><i>make upload</i>"]
 
     style lint fill:#264653,stroke:#1d3557,color:#fff
     style run_tests fill:#264653,stroke:#1d3557,color:#fff
     style typecheck fill:#264653,stroke:#1d3557,color:#fff
+    style stamp fill:#2a9d8f,stroke:#1d3557,color:#fff
+    style build fill:#2a9d8f,stroke:#1d3557,color:#fff
+    style upload fill:#2a9d8f,stroke:#1d3557,color:#fff
 ```
 
 | Stage | What it does | Cached? |
@@ -59,6 +65,52 @@ graph LR
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `run_tests` | Runs `pytest tests/ -n 29` (parallel, 29 workers), produces JUnit XML + HTML report | No |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
+| `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
+| `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |
+| `upload` | **Optional.** `make upload` (twine) when `--param upload=1` is set | No |
+
+## Release lane (optional stages)
+
+`stamp`, `build`, and `upload` are **opt-in**: each records a `skipped` status
+(via `ctx.skip`, not a fake `succeeded`) unless its run param is set, so the
+daily/manual test run stays test-only and reads honestly in the UI. When set,
+they reuse the repo's `Makefile` targets and run after `run_tests` (the DAG is
+`run_tests → stamp → build → upload`), so a release never ships on a crashed
+test run. A skipped stage still satisfies its dependents, so the chain proceeds.
+Being side-effecting, they are never cached.
+
+The three params are independent — pass only the steps you want:
+
+```bash
+MUSTER=.mtd/muster_venv/bin/muster
+
+# Stamp a patch, build the wheel, and upload — the full release:
+$MUSTER run ci/pipeline.py --cache-dir .mtd/cache \
+    --param stamp=patch --param build=1 --param upload=1
+
+# Just stamp a minor version (no build/upload):
+$MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param stamp=minor
+
+# Just build a wheel to test packaging (no stamp, no upload):
+$MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param build=1
+```
+
+| Param | Accepted values | Maps to |
+|-------|-----------------|---------|
+| `stamp` | `major` / `minor` / `patch` / `rc` | `make _major` / `_minor` / `_patch` / `_rc` |
+| `build` | `1` / `true` / `yes` / `on` | `make _build` |
+| `upload` | `1` / `true` / `yes` / `on` | `make upload` |
+
+An unknown `stamp` value fails the stage rather than silently skipping. `build`
+needs `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
+the system `PATH`, so tools installed outside the venv still resolve. When
+`stamp=rc` and `build` are combined, `build` passes the prerelease template
+through to `make _build` (the Makefile's `rc:` target relies on that surviving
+within one make process, which separate stages don't), so the wheel embeds
+`0.10.2-rc.N` rather than `0.10.2`.
+
+You can also set these on a schedule via its `params` object, e.g. a weekly
+release schedule with `{"stamp": "patch", "build": "1", "upload": "1"}`.
 
 The pipeline sets `workspace=".."`, so muster anchors every run to the repo
 root (this file lives in `ci/`, and muster resolves a relative pipeline
