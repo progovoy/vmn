@@ -1,0 +1,130 @@
+import { useMemo, useState } from "react";
+import {
+  CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YAxis,
+} from "recharts";
+import type { ExperimentRow, MetricsSchema } from "../types";
+import { fmtVal, metricGoal } from "../util";
+
+interface Props {
+  rows: ExperimentRow[];
+  metricCols: string[];
+  paramCols: string[];
+  schema: MetricsSchema | null;
+}
+
+function numericValue(row: ExperimentRow, col: string, paramCols: string[]): number | null {
+  if (paramCols.includes(col)) {
+    const v = row.user_meta?.[col];
+    return typeof v === "number" ? v : null;
+  }
+  const v = row.metrics[col];
+  return typeof v === "number" ? v : null;
+}
+
+export default function MetricScatter({ rows, metricCols, paramCols, schema }: Props) {
+  const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
+
+  const defaultX = metricCols[0] ?? paramCols[0] ?? "";
+  const defaultY = metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "";
+
+  const [xCol, setXCol] = useState(defaultX);
+  const [yCol, setYCol] = useState(defaultY);
+
+  const yGoal = metricGoal(schema, yCol);
+
+  const data = useMemo(() =>
+    rows
+      .map((r) => {
+        const x = numericValue(r, xCol, paramCols);
+        const y = numericValue(r, yCol, paramCols);
+        if (x === null || y === null) return null;
+        return { x, y, verstr: r.verstr };
+      })
+      .filter((d): d is { x: number; y: number; verstr: string } => d !== null),
+    [rows, xCol, yCol, paramCols]
+  );
+
+  const bestY = useMemo(() => {
+    if (data.length === 0) return null;
+    const vals = data.map((d) => d.y);
+    return yGoal === "min" ? Math.min(...vals) : Math.max(...vals);
+  }, [data, yGoal]);
+
+  const large = data.length > 2000;
+
+  const bestData = useMemo(
+    () => data.filter((d) => d.y === bestY),
+    [data, bestY]
+  );
+  const restData = useMemo(
+    () => data.filter((d) => d.y !== bestY),
+    [data, bestY]
+  );
+
+  return (
+    <div className="card">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div className="eyebrow" style={{ marginBottom: 0 }}>scatter plot</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+          X
+          <select
+            role="combobox"
+            value={xCol}
+            onChange={(e) => setXCol(e.target.value)}
+            style={{ minWidth: 80 }}
+          >
+            {allCols.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+          Y
+          <select
+            role="combobox"
+            value={yCol}
+            onChange={(e) => setYCol(e.target.value)}
+            style={{ minWidth: 80 }}
+          >
+            {allCols.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <ScatterChart width={480} height={320} margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
+          <CartesianGrid stroke="var(--line)" />
+          <XAxis
+            type="number" dataKey="x" name={xCol} stroke="#85847a"
+            tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
+          />
+          <YAxis
+            type="number" dataKey="y" name={yCol} stroke="#85847a"
+            tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
+          />
+          {!large && (
+            <Tooltip
+              formatter={(v: number) => fmtVal(v)}
+              contentStyle={{
+                background: "var(--panel-2)",
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                color: "var(--text)",
+                fontSize: 12,
+              }}
+            />
+          )}
+          <Scatter
+            data={restData}
+            fill="var(--accent)"
+            isAnimationActive={false}
+            shape={large ? <circle r={2} /> : undefined}
+          />
+          <Scatter
+            data={bestData}
+            fill="var(--good)"
+            isAnimationActive={false}
+            shape={large ? <circle r={3} /> : undefined}
+          />
+        </ScatterChart>
+      </div>
+    </div>
+  );
+}
