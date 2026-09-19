@@ -11,7 +11,9 @@ Omit any Claude co-author trailer unless I explicitly ask for it.
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 # Splitting tasks
-Always split big tasks into separate worktrees and do in parallel.
+Split big tasks into separate worktrees and do in parallel, but TDD takes precedence.
+Each worktree agent must follow TDD internally: write its tests first (red), then implement (green).
+If multiple worktrees touch independent features, each worktree owns its own red-green-refactor cycle.
 Each worktree agent should write ~200-300 lines max per file. If writing more, split into additional worktrees.
 When finished - always try /simplify on the change.
 
