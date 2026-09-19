@@ -8,6 +8,8 @@ import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
 import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
+import SmoothingSlider from "../components/SmoothingSlider";
+import { ema } from "../hooks/useSmoothing";
 import { usePolling } from "../hooks/usePolling";
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
@@ -87,6 +89,20 @@ function AppendMetrics({ ws, app, appName, verstr, onAdded }: {
   );
 }
 
+function fmtWallTick(ms: number): string {
+  const d = new Date(ms);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+function fmtRelTick(secs: number): string {
+  if (secs < 60) return `${Math.round(secs)}s`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m`;
+  return `${Math.round(secs / 3600)}h`;
+}
+
 const DOT_COLOR: Record<string, string> = {
   create: "var(--accent)",
   run: "var(--good)",
@@ -125,6 +141,8 @@ export default function Run() {
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
+  const [alpha, setAlpha] = useState(0);
+  const [xMode, setXMode] = useState<"step" | "wall" | "relative">("step");
 
   const load = useCallback(
     () => api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e))),
@@ -136,15 +154,42 @@ export default function Run() {
   }, [load, ws, app]);
   usePolling(load, 3000, live);
 
+  const hasTimestamps = useMemo(() => {
+    if (!detail) return false;
+    return Object.values(detail.series).every((pts) =>
+      pts.every((p) => p.ts != null)
+    );
+  }, [detail]);
+
   const chartData = useMemo(() => {
     if (!detail) return { points: [], metrics: [] as string[] };
     const metrics = Object.keys(detail.series).filter(
       (m) => detail.series[m].length > 1
     );
+
+    let firstTs = Infinity;
+    if (xMode !== "step") {
+      metrics.forEach((m) =>
+        detail.series[m].forEach((p) => {
+          if (p.ts) {
+            const t = new Date(p.ts).getTime();
+            if (t < firstTs) firstTs = t;
+          }
+        })
+      );
+    }
+
     const byX = new Map<number, Record<string, number>>();
     metrics.forEach((m) =>
       detail.series[m].forEach((p, i) => {
-        const x = p.step ?? i;
+        let x: number;
+        if (xMode === "wall" && p.ts) {
+          x = new Date(p.ts).getTime();
+        } else if (xMode === "relative" && p.ts) {
+          x = (new Date(p.ts).getTime() - firstTs) / 1000;
+        } else {
+          x = p.step ?? i;
+        }
         const row = byX.get(x) ?? { x };
         row[m] = p.value;
         byX.set(x, row as Record<string, number>);
@@ -163,7 +208,18 @@ export default function Run() {
       }
     }
     return { points: arr, metrics };
-  }, [detail]);
+  }, [detail, xMode]);
+
+  const smoothedPoints = useMemo(() => {
+    if (alpha === 0 || chartData.points.length === 0) return chartData.points;
+    const smoothed = chartData.points.map((p) => ({ ...p }));
+    for (const m of chartData.metrics) {
+      const raw = chartData.points.map((p) => p[m] as number);
+      const sm = ema(raw, alpha);
+      sm.forEach((v, i) => { (smoothed[i] as Record<string, number>)[`${m}__smooth`] = v; });
+    }
+    return smoothed;
+  }, [chartData, alpha]);
 
   if (error) return <div className="error">{error}</div>;
   if (!detail) return <Skeleton />;
@@ -282,8 +338,23 @@ export default function Run() {
               justifyContent: "space-between", marginBottom: 14,
             }}
           >
-            <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
-            <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
+              <div style={{ display: "flex", gap: 2, fontSize: 11 }}>
+                {(["step", "wall", "relative"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    className={xMode === mode ? "primary" : ""}
+                    style={{ padding: "2px 8px", fontSize: 11, borderRadius: 4 }}
+                    disabled={mode !== "step" && !hasTimestamps}
+                    onClick={() => setXMode(mode)}
+                  >
+                    {mode === "step" ? "Step" : mode === "wall" ? "Wall" : "Relative"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12 }}>
               {chartData.metrics.map((m) => (
                 <span
                   key={m}
@@ -301,15 +372,21 @@ export default function Run() {
                   {m}
                 </span>
               ))}
+              <SmoothingSlider value={alpha} onChange={setAlpha} />
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData.points}>
+            <LineChart data={smoothedPoints}>
               <CartesianGrid stroke="var(--line)" vertical={false} />
               <XAxis
                 dataKey="x"
                 stroke="#85847a"
                 tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
+                tickFormatter={
+                  xMode === "wall" ? fmtWallTick
+                    : xMode === "relative" ? fmtRelTick
+                    : undefined
+                }
               />
               <YAxis
                 stroke="#85847a"
@@ -325,15 +402,32 @@ export default function Run() {
                 }}
               />
               {chartData.metrics.map((m) => (
-                <Line
-                  key={m}
-                  type="monotone"
-                  dataKey={m}
-                  stroke={seriesColor(chartData.metrics, m)}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
+                <Fragment key={m}>
+                  {alpha > 0 && (
+                    <Line
+                      key={`${m}-raw`}
+                      type="monotone"
+                      dataKey={m}
+                      stroke={seriesColor(chartData.metrics, m)}
+                      strokeWidth={1}
+                      strokeOpacity={0.3}
+                      strokeDasharray="4 2"
+                      dot={false}
+                      isAnimationActive={false}
+                      name={`${m} (raw)`}
+                    />
+                  )}
+                  <Line
+                    key={alpha > 0 ? `${m}-smooth` : m}
+                    type="monotone"
+                    dataKey={alpha > 0 ? `${m}__smooth` : m}
+                    stroke={seriesColor(chartData.metrics, m)}
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                    name={alpha > 0 ? `${m} (smooth)` : m}
+                  />
+                </Fragment>
               ))}
             </LineChart>
           </ResponsiveContainer>

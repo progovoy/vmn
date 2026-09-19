@@ -9,6 +9,7 @@ import ParamPlots from "../components/ParamPlots";
 import MetricBarChart from "../components/MetricBarChart";
 import MetricScatter from "../components/MetricScatter";
 import ParallelCoordinates from "../components/ParallelCoordinates";
+import GroupedMetrics from "../components/GroupedMetrics";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import ColumnPicker from "../components/ColumnPicker";
@@ -22,7 +23,7 @@ export default function Leaderboard() {
   const [sort, setSort] = useState<string | null>(null);
   const [reversed, setReversed] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [chartView, setChartView] = useState<"trend" | "bar" | "scatter" | "parallel">("trend");
+  const [chartView, setChartView] = useState<"trend" | "bar" | "scatter" | "parallel" | "grouped">("trend");
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
@@ -216,11 +217,13 @@ export default function Leaderboard() {
             <button className={chartView === "bar" ? "primary" : ""} onClick={() => setChartView("bar")}>Bar</button>
             <button className={chartView === "scatter" ? "primary" : ""} onClick={() => setChartView("scatter")}>Scatter</button>
             <button className={chartView === "parallel" ? "primary" : ""} onClick={() => setChartView("parallel")}>Parallel</button>
+            <button className={chartView === "grouped" ? "primary" : ""} onClick={() => setChartView("grouped")}>Grouped</button>
           </div>
           {chartView === "trend" && <ParamPlots rows={displayed} metricCols={metricCols} schema={schema} />}
           {chartView === "bar" && <MetricBarChart rows={displayed} metricCols={metricCols} schema={schema} />}
           {chartView === "scatter" && <MetricScatter rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
           {chartView === "parallel" && <ParallelCoordinates rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
+          {chartView === "grouped" && <GroupedMetrics rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
 
           <div className="card flush">
             <div className="tbl-scroll" ref={parentRef} style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
