@@ -60,13 +60,20 @@ graph LR
 | `run_tests` | Runs `pytest tests/ -n 29` (parallel, 29 workers), produces JUnit XML + HTML report | No |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 
+The pipeline sets `workspace=".."`, so muster anchors every run to the repo
+root (this file lives in `ci/`, and muster resolves a relative pipeline
+workspace against the pipeline file). That means a run tests the checked-out
+repo in place whether it's launched from the CLI, the UI **Trigger** button, or
+the daily schedule — muster doesn't drop it in an empty per-run scratch dir.
+
 The three stages have no dependencies, so they run in parallel. Every stage
 declares `requires` (`tests/requirements.txt` + `tests/test_requirements.txt` +
 vmn installed editable). muster builds that venv once, content-addressed by the
 requirements files' contents under `.mtd/envs/`, and all three stages run inside
-it — no hand-rolled venv or `pip install`. The venv rebuilds only when a
-requirements file changes; muster's build lock serializes the concurrent
-builders, so the first stage to need it builds it and the others reuse it.
+it — no hand-rolled venv or `pip install`. Because the workspace is the repo,
+that venv persists across runs and rebuilds only when a requirements file
+changes; muster's build lock serializes the concurrent builders, so the first
+stage to need it builds it and the others reuse it.
 
 Each stage runs its tool through `ctx.run` (bare names resolve via the venv's
 `bin` on `PATH`), which captures the tool output into a per-stage **card** shown

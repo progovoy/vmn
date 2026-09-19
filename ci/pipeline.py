@@ -1,14 +1,20 @@
 """Local CI pipeline for vmn — runs tests daily in a dedicated venv.
 
+``workspace=".."`` anchors every run to the repo root (this file lives in
+``ci/``): muster resolves a relative pipeline workspace against the pipeline
+file, so the run tests the checked-out repo whether it's launched from the CLI,
+the UI trigger, or the daily schedule — not an empty per-run scratch dir.
+
 The venv is built by muster from each stage's ``requires`` (see
 substrate/envs.py): declared reqs files + vmn installed editable. muster
-content-addresses the venv by the reqs files' contents, so all stages share one
-venv and it rebuilds only when a requirements file changes; concurrent builders
-are serialized by muster's build lock, so the three stages run in parallel.
+content-addresses the venv by the reqs files' contents (under ``.mtd/envs``), so
+all stages share one venv, it persists across runs, and it rebuilds only when a
+requirements file changes; concurrent builders are serialized by muster's build
+lock, so the three stages run in parallel.
 
 Each stage runs its tool with ``ctx.run`` (bare names resolve via the venv's
-bin on PATH, cwd is the workspace) which captures the output into a per-stage
-card shown in the UI.
+bin on PATH, cwd is the workspace = repo root) which captures the output into a
+per-stage card shown in the UI.
 
 Launch manually:
     muster run ci/pipeline.py --cache-dir .mtd/cache
@@ -65,4 +71,4 @@ def typecheck(ctx):
     ctx.run(["mypy", "version_stamp", "--ignore-missing-imports"], check=False)
 
 
-pipeline = Pipeline("vmn-ci", stages=[lint, run_tests, typecheck])
+pipeline = Pipeline("vmn-ci", stages=[lint, run_tests, typecheck], workspace="..")
