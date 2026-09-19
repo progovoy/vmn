@@ -11,6 +11,7 @@ import { JobCard, Skeleton, useJob } from "../components/ui";
 import SmoothingSlider from "../components/SmoothingSlider";
 import { ema } from "../hooks/useSmoothing";
 import { usePolling } from "../hooks/usePolling";
+import ArtifactsList from "../components/ArtifactsList";
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
@@ -466,6 +467,14 @@ export default function Run() {
           </div>
         </div>
       </div>
+      {detail.artifacts && detail.artifacts.length > 0 && (
+        <ArtifactsList
+          artifacts={detail.artifacts}
+          downloadUrl={(filename) =>
+            `/api/v1/workspaces/${ws}/apps/${app}/experiments/${encodeURIComponent(meta.verstr as string)}/artifacts/${encodeURIComponent(filename)}`
+          }
+        />
+      )}
     </>
   );
 }

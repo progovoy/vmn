@@ -74,7 +74,7 @@ def test_get_experiment_from_storage(tmp_path):
     assert isinstance(result["log"], list)
     assert len(result["log"]) > 0
     assert "series" in result
-    assert "artifacts_dir" in result
+    assert "artifacts" in result
     assert "patches" in result
     for key in ("working_tree", "local_commits", "untracked_files"):
         assert key in result["patches"]

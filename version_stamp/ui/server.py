@@ -9,7 +9,7 @@ illegal in app names.
 import os
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core.version_math import tag_name_to_app_name
@@ -165,6 +165,28 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         if err:
             raise HTTPException(404, err)
         return detail
+
+    @app.get(
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+        "/experiments/{verstr}/artifacts/{filename}"
+    )
+    def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
+        ws = _experiment_workspace(ws_name)
+        app_name = tag_name_to_app_name(app_tag)
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            art_dir = s3_storage.list_artifact_files(app_name, verstr)
+        else:
+            storage = exp_reader.experiment_storage(ws.path)
+            art_dir = storage.list_artifact_files(app_name, verstr)
+        if not art_dir:
+            raise HTTPException(404, "No artifacts")
+        filepath = os.path.join(art_dir, filename)
+        if not os.path.abspath(filepath).startswith(os.path.abspath(art_dir)):
+            raise HTTPException(400, "Invalid filename")
+        if not os.path.isfile(filepath):
+            raise HTTPException(404, f"Artifact {filename} not found")
+        return FileResponse(filepath, filename=filename)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):

@@ -70,6 +70,7 @@ export interface ExperimentDetail {
   metrics: Record<string, number | string>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
+  artifacts?: { name: string; size: number }[];
 }
 
 export interface VersionRow {

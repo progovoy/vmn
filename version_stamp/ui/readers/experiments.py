@@ -142,6 +142,18 @@ def list_experiments(root_path, app_name, sort=None, last=None, offset=0, limit=
     )
 
 
+def _list_artifacts(storage, app_name, verstr):
+    art_dir = storage.list_artifact_files(app_name, verstr)
+    if not art_dir or not os.path.isdir(art_dir):
+        return []
+    result = []
+    for name in sorted(os.listdir(art_dir)):
+        path = os.path.join(art_dir, name)
+        if os.path.isfile(path):
+            result.append({"name": name, "size": os.path.getsize(path)})
+    return result
+
+
 def get_experiment(root_path, app_name, verstr_ref):
     """Full experiment detail; the ref supports @N / prefix / 'latest'."""
     storage = experiment_storage(root_path)
@@ -161,7 +173,7 @@ def get_experiment(root_path, app_name, verstr_ref):
         "log": log,
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
-        "artifacts_dir": storage.list_artifact_files(app_name, verstr),
+        "artifacts": _list_artifacts(storage, app_name, verstr),
         "patches": {
             k: bool(patches.get(k))
             for k in ("working_tree", "local_commits", "untracked_files")
@@ -193,7 +205,7 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
         "log": log,
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
-        "artifacts_dir": storage.list_artifact_files(app_name, verstr),
+        "artifacts": _list_artifacts(storage, app_name, verstr),
         "patches": {
             k: bool(patches.get(k)) if patches else False
             for k in ("working_tree", "local_commits", "untracked_files")
