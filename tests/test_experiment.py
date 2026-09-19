@@ -526,18 +526,13 @@ def test_exp_alias(app_layout, capfd):
 
 
 def _exp_log(app_layout, verstr):
-    """Load an experiment's log.yml from disk."""
-    safe = verstr.replace("+", "_plus_")
-    log_path = os.path.join(
-        app_layout.repo_path,
-        ".vmn",
-        app_layout.app_name,
-        "experiments",
-        safe,
-        "log.yml",
+    """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
+    from version_stamp.cli.snapshot import get_snapshot_storage
+
+    storage = get_snapshot_storage(
+        "local", vmn_root_path=app_layout.repo_path, subdir="experiments"
     )
-    with open(log_path) as f:
-        return yaml.safe_load(f)
+    return storage.load_merged_log(app_layout.app_name, verstr)
 
 
 def test_experiment_create_same_state_creates_new_run(app_layout, capfd):
