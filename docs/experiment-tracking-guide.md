@@ -374,33 +374,40 @@ vmn ui --s3-bucket my-experiments --s3-prefix vmn-experiments
 
 ## Choosing a Workflow
 
-|  | Single Dev | Multi-Dev NFS | K8s NFS / S3 |
+|  | Single Dev | Multi-Dev Team | K8s at Scale |
 |--|-----------|--------------|--------------|
 | Git needed? | Yes | Yes | No (snapshot) |
-| Shared FS? | No | Yes (NFS/FSx) | NFS or S3 |
+| Shared FS? | No | Optional (NFS/FSx) | Optional (NFS or S3) |
 | Concurrent? | No | Yes | Yes (1000+ pods) |
 | Writer ID? | Optional | Recommended | Required |
-| S3 support? | No | No | Yes |
-| Setup | None | Mount + env var | Snapshot export |
+| S3 support? | Yes | Yes | Yes |
+| Setup | None | Mount or S3 bucket | Snapshot export |
 
 ```
 DECISION TREE:
 
-Are you the only person running experiments?
-  |                          |
- YES                        NO
-  |                          |
-  v                     Do you have a shared filesystem?
-Workflow 1                   |                    |
-(single dev)               YES                   NO
-                            |                    |
-                       Are pods or        Workflow 3B
-                       just people?       (K8s + S3)
-                        |        |
-                     PEOPLE     PODS
-                        |        |
-                    Workflow 2   Workflow 3A
-                    (multi-dev)  (K8s + NFS)
+How many people/pods run experiments?
+  |                |                    |
+ ONE           2-10 PEOPLE         10+ PODS
+  |                |                    |
+  v                v                    v
+Workflow 1     Workflow 2           Workflow 3
+(single dev)   (multi-dev)          (K8s)
+
+Then pick your storage:
+
++--------------------------------------------------+
+| Any workflow can use any storage backend:         |
+|                                                   |
+|  LOCAL DISK   just works, simplest, single-machine|
+|  NFS / FSx    shared mount, multi-machine         |
+|  S3           no shared FS needed, works anywhere |
++--------------------------------------------------+
+
+Typical combos:
+  Single dev   -> local disk (default)
+  Multi-dev    -> NFS or S3
+  K8s at scale -> NFS (recommended) or S3
 ```
 
 ---
