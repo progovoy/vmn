@@ -6,6 +6,7 @@ import {
 import { api, appName as toAppName } from "../api";
 import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
+import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
@@ -146,8 +147,19 @@ export default function Run() {
         byX.set(x, row as Record<string, number>);
       })
     );
-    const points = [...byX.values()].sort((a, b) => a.x - b.x);
-    return { points, metrics };
+    let arr = [...byX.values()].sort((a, b) => a.x - b.x);
+    if (arr.length > 1000) {
+      const primaryMetric = metrics[0];
+      if (primaryMetric) {
+        const downsampled = downsampleLTTB(
+          arr.map(d => ({ x: d.x, y: (d[primaryMetric] as number) ?? 0 })),
+          500
+        );
+        const keepSteps = new Set(downsampled.map(d => d.x));
+        arr = arr.filter(d => keepSteps.has(d.x));
+      }
+    }
+    return { points: arr, metrics };
   }, [detail]);
 
   if (error) return <div className="error">{error}</div>;

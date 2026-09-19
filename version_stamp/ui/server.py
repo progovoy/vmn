@@ -129,16 +129,26 @@ def create_app(manager, token=None, read_only=False, use_index=True):
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments")
     def list_experiments(ws_name: str, app_tag: str, sort: str = None,
-                         last: int = None):
+                         last: int = None, offset: int = 0,
+                         limit: int = None):
         ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
-            return exp_reader.list_experiments_from_storage(s3_storage, app_name, sort=sort, last=last)
+            return exp_reader.list_experiments_from_storage(
+                s3_storage, app_name, sort=sort, last=last,
+                offset=offset, limit=limit,
+            )
         index = _index_for(ws)
         if index:
-            return index.list_experiments(app_name, sort=sort, last=last)
-        return exp_reader.list_experiments(ws.path, app_name, sort=sort, last=last)
+            return index.list_experiments(
+                app_name, sort=sort, last=last,
+                offset=offset, limit=limit,
+            )
+        return exp_reader.list_experiments(
+            ws.path, app_name, sort=sort, last=last,
+            offset=offset, limit=limit,
+        )
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"

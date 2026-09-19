@@ -1,180 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
-import { JobCard, PageHead, Skeleton, useJob } from "../components/ui";
-
-/** One small chart per metric — each on its own scale, so a loss (~0.1) and
- *  an accuracy (~0.9) don't get squashed onto a shared axis. Same visual
- *  language as the run-detail training curves, in a small-multiples grid. */
-function ParamPlots({ rows, metricCols, schema }: {
-  rows: ExperimentRow[]; metricCols: string[]; schema: MetricsSchema | null;
-}) {
-  const plotCols = useMemo(
-    () => metricCols.filter(
-      (m) => rows.filter((r) => typeof r.metrics[m] === "number").length > 1
-    ),
-    [rows, metricCols]
-  );
-  const points = useMemo(
-    () => [...rows].sort((a, b) => a.idx - b.idx),
-    [rows]
-  );
-
-  if (plotCols.length === 0) return null;
-
-  return (
-    <div className="card">
-      <div className="eyebrow">metrics across runs</div>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-        gap: 20,
-      }}>
-        {plotCols.map((m) => {
-          const goal = metricGoal(schema, m);
-          const color = seriesColor(plotCols, m);
-          const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | undefined }));
-          const vals = data.map((d) => d.v).filter((v): v is number => typeof v === "number");
-          const best = vals.length
-            ? (goal === "min" ? Math.min(...vals) : Math.max(...vals))
-            : null;
-          return (
-            <div key={m}>
-              <div style={{
-                display: "flex", alignItems: "baseline", justifyContent: "space-between",
-                marginBottom: 6, fontSize: 12,
-              }}>
-                <span className="mono" style={{ color: "var(--text-2)" }}>
-                  {m}{" "}
-                  <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>
-                </span>
-                {best !== null && (
-                  <span style={{ color: "var(--good)", fontSize: 11 }}>best {fmtVal(best)}</span>
-                )}
-              </div>
-              <ResponsiveContainer width="100%" height={110}>
-                <LineChart data={data}>
-                  <CartesianGrid stroke="var(--line)" vertical={false} />
-                  <XAxis dataKey="x" hide />
-                  <YAxis
-                    width={34} stroke="#85847a"
-                    tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
-                  />
-                  <Tooltip
-                    labelFormatter={(x) => `@${x}`}
-                    formatter={(v: number) => fmtVal(v)}
-                    contentStyle={{
-                      background: "var(--panel-2)",
-                      border: "1px solid var(--line)",
-                      borderRadius: 8,
-                      color: "var(--text)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="v"
-                    stroke={color}
-                    strokeWidth={2}
-                    dot={{ r: 2.5 }}
-                    connectNulls
-                    isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Inline `vmn exp create` — note + metrics, run as a streamed job. */
-function NewExperiment({ ws, app, appName, onCreated, onClose }: {
-  ws: string; app: string; appName: string;
-  onCreated: () => void; onClose: () => void;
-}) {
-  const [note, setNote] = useState("");
-  const [metricsText, setMetricsText] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
-  const { job, error, run } = useJob((j) => {
-    if (j.status === "succeeded") onCreated();
-  });
-
-  const parseMetrics = (): Record<string, string> | null => {
-    const out: Record<string, string> = {};
-    for (const pair of metricsText.trim().split(/\s+/).filter(Boolean)) {
-      const eq = pair.indexOf("=");
-      if (eq < 1) {
-        setParseError(`"${pair}" is not key=value`);
-        return null;
-      }
-      out[pair.slice(0, eq)] = pair.slice(eq + 1);
-    }
-    setParseError(null);
-    return out;
-  };
-
-  const submit = () => {
-    const metrics = parseMetrics();
-    if (metrics === null) return;
-    run(ws, app, "exp_create", {
-      note: note || undefined,
-      metrics: Object.keys(metrics).length ? metrics : undefined,
-    });
-  };
-
-  const running = job?.status === "running";
-  const cli =
-    `vmn exp create ${appName}` +
-    (note ? ` --note "${note}"` : "") +
-    (metricsText.trim() ? ` --metrics ${metricsText.trim()}` : "");
-
-  return (
-    <div className="card">
-      <div className="eyebrow">new experiment</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
-        Captures the workspace's current working state — dirty files, local
-        commits, untracked files — as a reproducible experiment.
-      </p>
-      <div className="card-grid-2" style={{ marginBottom: 12 }}>
-        <label className="field">
-          note
-          <input
-            placeholder="swin-t + mixup 0.2"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            autoFocus
-          />
-        </label>
-        <label className="field">
-          metrics (key=value, space-separated)
-          <input
-            className="mono"
-            placeholder="loss=0.12 acc=0.94"
-            value={metricsText}
-            onChange={(e) => setMetricsText(e.target.value)}
-          />
-        </label>
-      </div>
-      <div className="toolbar" style={{ marginBottom: 0 }}>
-        <button className="primary" onClick={submit} disabled={running}>
-          {running ? "Capturing…" : "Create experiment"}
-        </button>
-        <button onClick={onClose}>Cancel</button>
-        {(parseError || error) && <span className="error">{parseError || error}</span>}
-      </div>
-      <div className="cli-hint">{cli}</div>
-      {job && job.status === "failed" && <JobCard job={job} />}
-    </div>
-  );
-}
+import { fmtVal, metricGoal, relTime } from "../util";
+import { PageHead, Skeleton } from "../components/ui";
+import ParamPlots from "../components/ParamPlots";
+import NewExperiment from "../components/NewExperiment";
 
 export default function Leaderboard() {
   const { ws, app } = useParams() as { ws: string; app: string };
@@ -265,6 +97,14 @@ export default function Leaderboard() {
 
   const sortLabel = sort ?? primary;
 
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: displayed.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 48,
+    overscan: 20,
+  });
+
   if (error) return <div className="error">{error}</div>;
   if (rows === null) return <Skeleton />;
 
@@ -337,7 +177,7 @@ export default function Leaderboard() {
           <ParamPlots rows={rows} metricCols={metricCols} schema={schema} />
 
           <div className="card flush">
-            <div className="tbl-scroll">
+            <div className="tbl-scroll" ref={parentRef} style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
               <table style={{ minWidth: 760 }}>
                 <thead>
                   <tr>
@@ -364,72 +204,83 @@ export default function Leaderboard() {
                     <th className="num" style={{ paddingRight: 16 }}>when</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {displayed.map((r) => (
-                    <tr
-                      key={r.verstr}
-                      className={[
-                        "row",
-                        selected.includes(r.verstr) ? "checked" : "",
-                        flash === r.verstr ? "flash" : "",
-                      ].join(" ")}
-                      onClick={() =>
-                        navigate(
-                          `/ws/${ws}/app/${app}/run/${encodeURIComponent(r.verstr)}`
-                        )
-                      }
-                    >
-                      <td
-                        style={{ paddingLeft: 16 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(r.verstr)}
-                          onChange={() => toggle(r.verstr)}
-                        />
-                      </td>
-                      <td className="idx-cell">@{r.idx}</td>
-                      <td>
-                        <span className="mono" style={{ color: "var(--accent)" }}>
-                          {r.verstr}
-                        </span>
-                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
-                          {r.branch}
-                        </div>
-                      </td>
-                      {metricCols.map((m) => {
-                        const v = r.metrics[m];
-                        const col = colMeta[m];
-                        const isBest =
-                          typeof v === "number" && v === col.best && rows.length > 1;
-                        const isBar = col.isBar && typeof v === "number";
-                        let frac = 0;
-                        if (isBar) {
-                          const span = col.max - col.min;
-                          frac = span === 0 ? 1 : (v - col.min) / span;
-                          if (col.goal === "min") frac = 1 - frac;
+                <tbody style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const r = displayed[virtualRow.index];
+                    return (
+                      <tr
+                        key={r.verstr}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: virtualRow.size,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                        className={[
+                          "row",
+                          selected.includes(r.verstr) ? "checked" : "",
+                          flash === r.verstr ? "flash" : "",
+                        ].join(" ")}
+                        onClick={() =>
+                          navigate(
+                            `/ws/${ws}/app/${app}/run/${encodeURIComponent(r.verstr)}`
+                          )
                         }
-                        return (
-                          <td key={m} className={isBar ? "bar-cell" : ""}>
-                            {isBar && (
-                              <span
-                                className="bar"
-                                style={{ width: `${8 + frac * 62}px` }}
-                              />
-                            )}
-                            <span className={`metric${isBest ? " best" : ""}`}>
-                              {fmtVal(v)}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="note-cell">{r.note}</td>
-                      <td className="when-cell" title={r.timestamp ?? ""}>
-                        {relTime(r.timestamp)}
-                      </td>
-                    </tr>
-                  ))}
+                      >
+                        <td
+                          style={{ paddingLeft: 16 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(r.verstr)}
+                            onChange={() => toggle(r.verstr)}
+                          />
+                        </td>
+                        <td className="idx-cell">@{r.idx}</td>
+                        <td>
+                          <span className="mono" style={{ color: "var(--accent)" }}>
+                            {r.verstr}
+                          </span>
+                          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
+                            {r.branch}
+                          </div>
+                        </td>
+                        {metricCols.map((m) => {
+                          const v = r.metrics[m];
+                          const col = colMeta[m];
+                          const isBest =
+                            typeof v === "number" && v === col.best && rows.length > 1;
+                          const isBar = col.isBar && typeof v === "number";
+                          let frac = 0;
+                          if (isBar) {
+                            const span = col.max - col.min;
+                            frac = span === 0 ? 1 : (v - col.min) / span;
+                            if (col.goal === "min") frac = 1 - frac;
+                          }
+                          return (
+                            <td key={m} className={isBar ? "bar-cell" : ""}>
+                              {isBar && (
+                                <span
+                                  className="bar"
+                                  style={{ width: `${8 + frac * 62}px` }}
+                                />
+                              )}
+                              <span className={`metric${isBest ? " best" : ""}`}>
+                                {fmtVal(v)}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="note-cell">{r.note}</td>
+                        <td className="when-cell" title={r.timestamp ?? ""}>
+                          {relTime(r.timestamp)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

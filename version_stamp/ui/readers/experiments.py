@@ -93,8 +93,13 @@ def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     return rows
 
 
-def sort_rows(rows, schema, sort=None, last=None):
-    """Pure ordering over fetched rows — semantics identical to ``vmn exp list``."""
+def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
+    """Pure ordering over fetched rows — semantics identical to ``vmn exp list``.
+
+    When *limit* is given, returns ``{"rows": [...], "total": N}`` for
+    paginated responses.  Without *limit*, returns a plain list (backward
+    compatible).
+    """
     if last:
         rows = rows[-int(last):]
     rows = list(rows)
@@ -120,15 +125,20 @@ def sort_rows(rows, schema, sort=None, last=None):
                 key=_key(primary),
                 reverse=_metric_sort_descending(schema, primary),
             )
+
+    if limit is not None:
+        total = len(rows)
+        rows = rows[offset:offset + limit]
+        return {"rows": rows, "total": total}
     return rows
 
 
-def list_experiments(root_path, app_name, sort=None, last=None):
+def list_experiments(root_path, app_name, sort=None, last=None, offset=0, limit=None):
     """Leaderboard rows, ordered exactly like ``vmn exp list``."""
     return sort_rows(
         fetch_experiment_rows(root_path, app_name),
         metrics_schema(root_path, app_name),
-        sort=sort, last=last,
+        sort=sort, last=last, offset=offset, limit=limit,
     )
 
 
@@ -162,11 +172,11 @@ def get_experiment(root_path, app_name, verstr_ref):
 # ---- Storage-backend functions (S3 / remote workspaces) ----
 
 
-def list_experiments_from_storage(storage, app_name, sort=None, last=None):
+def list_experiments_from_storage(storage, app_name, sort=None, last=None, offset=0, limit=None):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
     rows = fetch_experiment_rows(app_name=app_name, storage=storage)
     schema = {}  # No app conf available for S3 workspaces
-    return sort_rows(rows, schema, sort=sort, last=last)
+    return sort_rows(rows, schema, sort=sort, last=last, offset=offset, limit=limit)
 
 
 def get_experiment_from_storage(storage, app_name, verstr_ref):

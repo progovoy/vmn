@@ -90,7 +90,7 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def list_experiments(self, app_name, sort=None, last=None):
+    def list_experiments(self, app_name, sort=None, last=None, offset=0, limit=None):
         fp = _experiments_fingerprint(self.root_path, app_name)
         # v2: rows carry the storage-order idx; the scope bump invalidates
         # cached payloads from before it existed.
@@ -99,7 +99,7 @@ class WorkspaceIndex:
             rows = _fetch_experiment_rows(self.root_path, app_name)
             self._put(f"exp:v2:{app_name}", fp, rows)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
-        return exp_reader.sort_rows(rows, schema, sort=sort, last=last)
+        return exp_reader.sort_rows(rows, schema, sort=sort, last=last, offset=offset, limit=limit)
 
     def list_versions(self, app_name):
         fp = _versions_fingerprint(self.root_path, app_name)

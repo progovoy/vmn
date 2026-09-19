@@ -65,6 +65,16 @@ export const api = {
       `/workspaces/${ws}/apps/${appTag(app)}/experiments` +
         (sort ? `?sort=${encodeURIComponent(sort)}` : "")
     ),
+  experimentsPaged: (ws: string, app: string, opts?: { sort?: string; offset?: number; limit?: number }) => {
+    const p: Record<string, string> = {
+      offset: String(opts?.offset ?? 0),
+      limit: String(opts?.limit ?? 200),
+    };
+    if (opts?.sort) p.sort = opts.sort;
+    return get<{ rows: ExperimentRow[]; total: number }>(
+      `/workspaces/${ws}/apps/${appTag(app)}/experiments?${new URLSearchParams(p)}`
+    );
+  },
   experiment: (ws: string, app: string, verstr: string) =>
     get<ExperimentDetail>(
       `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}`

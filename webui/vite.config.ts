@@ -1,9 +1,14 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Build straight into the Python package so the wheel ships the SPA.
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test-setup.ts"],
+    globals: true,
+  },
   build: {
     outDir: "../version_stamp/ui/static",
     emptyOutDir: true,
