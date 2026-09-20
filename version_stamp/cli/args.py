@@ -5,13 +5,13 @@ import sys
 
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
+from version_stamp.cli.constants import VMN_ARGS
 from version_stamp.core.constants import (
     SEMVER_BUILDMETADATA_REGEX,
     VMN_VERSION_FORMAT,
     VMN_VERSTR_REGEX,
 )
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.cli.constants import VMN_ARGS
 
 
 def parse_user_commands(command_line):

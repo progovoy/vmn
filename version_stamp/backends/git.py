@@ -53,7 +53,7 @@ def _custom_git_execute(self, *args, **kwargs):
             f"{BOLD_CHAR}{'  ' * (len(call_stack) - 1)}{_sanitize_log_str(raw_cmd)}{END_CHAR}"
         )
 
-    original_execute = getattr(self.__class__, "_execute")
+    original_execute = self.__class__._execute
     originally_extended_output = "with_extended_output" in kwargs
     kwargs["with_extended_output"] = True
 

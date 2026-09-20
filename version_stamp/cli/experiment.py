@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
 import datetime
-import json
 import os
 import shutil
 import socket
-import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
 import yaml
 
-from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.cli.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
-    _diff_with_external_tool,
     _diff_real_tree,
+    _diff_with_external_tool,
     _now_iso,
     _relative_timestamp,
     _resolve_verstr,
@@ -27,6 +24,7 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
+from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
 @dataclass
@@ -92,7 +90,7 @@ def _get_experiment_storage(vcs, params):
         "VMN_EXPERIMENT_DIR"
     )
     vmn_root = (
-        experiment_dir if experiment_dir else (vcs.vmn_root_path if vcs else None)
+        experiment_dir or (vcs.vmn_root_path if vcs else None)
     )
     return get_snapshot_storage(
         params.get("backend", "local"),
@@ -319,7 +317,7 @@ def _parse_duration(duration_str):
 
 @measure_runtime_decorator
 def handle_experiment(vmn_ctx):
-    from version_stamp.cli.commands import _get_repo_status, handle_init, _init_app
+    from version_stamp.cli.commands import _get_repo_status, _init_app, handle_init
 
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args
@@ -886,7 +884,7 @@ def experiment_show(vcs, params, storage, args):
     if metadata.get("note"):
         print(f"  Note:      {metadata['note']}")
     if metadata.get("has_dep_patches"):
-        print(f"  Deps:      patches captured")
+        print("  Deps:      patches captured")
 
     # Patch stats
     for ptype in ("working_tree", "local_commits"):

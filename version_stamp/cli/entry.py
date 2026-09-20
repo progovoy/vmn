@@ -8,8 +8,34 @@ from pprint import pformat
 
 from filelock import FileLock
 
-from version_stamp import version as version_mod
 from version_stamp.backends.factory import get_client
+from version_stamp.cli.args import parse_user_commands
+
+# Import all command handlers so dynamic dispatch works
+from version_stamp.cli.commands import (  # noqa: F401
+    handle_add,
+    handle_gen,
+    handle_goto,
+    handle_init,
+    handle_init_app,
+    handle_release,
+    handle_show,
+    handle_snapshot,
+    handle_stamp,
+)
+from version_stamp.cli.config_tui import handle_config  # noqa: F401
+from version_stamp.cli.constants import (
+    LOCK_FILE_ENV,
+    LOCK_FILENAME,
+    LOG_FILENAME,
+    VMN_ARGS,
+)
+from version_stamp.cli.experiment import handle_experiment
+from version_stamp.cli.worktree_state import (
+    WORKTREE_READONLY_MARKER,
+    is_local_only_island,
+)
+from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 from version_stamp.core.constants import (
     BOLD_CHAR,
     BRANCH_CONF_DIR,
@@ -24,36 +50,9 @@ from version_stamp.core.logging import (
     measure_runtime_decorator,
 )
 from version_stamp.core.utils import resolve_root_path
-from version_stamp.cli.args import parse_user_commands
-from version_stamp.cli.constants import (
-    LOCK_FILE_ENV,
-    LOCK_FILENAME,
-    LOG_FILENAME,
-    VMN_ARGS,
-)
 from version_stamp.stamping.publisher import VersionControlStamper
 
-# Import all command handlers so dynamic dispatch works
-from version_stamp.cli.commands import (  # noqa: F401
-    handle_init,
-    handle_init_app,
-    handle_stamp,
-    handle_release,
-    handle_show,
-    handle_gen,
-    handle_goto,
-    handle_add,
-    handle_snapshot,
-)
-from version_stamp.cli.config_tui import handle_config  # noqa: F401
-from version_stamp.cli.experiment import handle_experiment  # noqa: F401
-from version_stamp.cli.worktree_state import (
-    WORKTREE_READONLY_MARKER,
-    is_local_only_island,
-)
-from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
-
-handle_exp = handle_experiment  # alias  # noqa: F811
+handle_exp = handle_experiment  # alias
 
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
@@ -62,13 +61,13 @@ def _run_experiment_from_snapshot(args):
     """Run experiment commands without a git repo (from-snapshot mode)."""
     from version_stamp.cli.experiment import (
         _get_experiment_storage,
-        experiment_create,
-        experiment_run,
         experiment_add,
-        experiment_list,
-        experiment_show,
         experiment_compare,
+        experiment_create,
+        experiment_list,
         experiment_prune,
+        experiment_run,
+        experiment_show,
     )
 
     if getattr(args, "writer_id", None):
@@ -118,7 +117,7 @@ def _reject_readonly_version_creation(args, root_path):
     return True
 
 
-class VMNContainer(object):
+class VMNContainer:
     @measure_runtime_decorator
     def __init__(self, args, root_path):
         self.args = args
@@ -195,10 +194,10 @@ def vmn_run(command_line=None):
 
     if args.command in ("skill", "ai"):
         from version_stamp.cli.skill import (
-            install_skill,
-            print_skill,
-            print_methodology,
             ALL_METHODOLOGY_KEYS,
+            install_skill,
+            print_methodology,
+            print_skill,
         )
 
         ai_action = getattr(args, "ai_action", "skill")
@@ -210,7 +209,7 @@ def vmn_run(command_line=None):
             picked = [
                 k for k in ALL_METHODOLOGY_KEYS if getattr(args, f"meth_{k}", False)
             ]
-            sections = picked if picked else None
+            sections = picked or None
             if args.install:
                 return (
                     install_skill(
@@ -394,7 +393,7 @@ def _vmn_run(args, root_path):
 
                 dep_be, err = get_client(full_path, vmnc.vcs.be_type)
                 if err:
-                    err_str = "Failed to create backend {0}. Exiting".format(err)
+                    err_str = f"Failed to create backend {err}. Exiting"
                     VMN_LOGGER.error(err_str)
                     raise RuntimeError(err_str)
 

@@ -7,7 +7,7 @@ instance-level interface that concrete backends must implement.
 """
 from abc import ABC, abstractmethod
 
-from version_stamp.core.version_math import (  # noqa: F401 — re-export for convenience
+from version_stamp.core.version_math import (
     app_name_to_tag_name,
     deserialize_tag_name,
     deserialize_vmn_tag_name,

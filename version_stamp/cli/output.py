@@ -9,6 +9,7 @@ import yaml
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
 from version_stamp.backends.git import GitBackend
+from version_stamp.cli.constants import LOG_FILENAME
 from version_stamp.compat.goto_changesets import extract_changesets_or_warn
 from version_stamp.core.constants import (
     POOL_SIZE_CLONES,
@@ -22,7 +23,6 @@ from version_stamp.core.logging import (
     measure_runtime_decorator,
 )
 from version_stamp.core.utils import resolve_root_path
-from version_stamp.cli.constants import LOG_FILENAME
 from version_stamp.stamping.publisher import VersionControlStamper
 from version_stamp.stamping.template_data import (
     create_data_dict_for_jinja2,
@@ -79,7 +79,7 @@ def show(vcs, params, verstr=None):
 
     if ver_info is None:
         VMN_LOGGER.error(
-            "Version information was not found " "for {0}.".format(vcs.name)
+            "Version information was not found " f"for {vcs.name}."
         )
 
         raise RuntimeError()
@@ -107,9 +107,9 @@ def show(vcs, params, verstr=None):
     if params.get("dev") and not params.get("from_file") and dirty_states:
         try:
             from version_stamp.cli.snapshot import (
-                _generate_patches,
-                _generate_dep_patches,
                 _compute_verstr,
+                _generate_dep_patches,
+                _generate_patches,
             )
 
             commit_hash = vcs.backend.changeset()
@@ -310,7 +310,7 @@ def gen(vcs, params, verstr_range=None):
 
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         VMN_LOGGER.error(
-            "Version information was not found " "for {0}.".format(vcs.name)
+            "Version information was not found " f"for {vcs.name}."
         )
 
         raise RuntimeError()
@@ -403,7 +403,6 @@ def get_dirty_states(optional_status, status):
             VMN_LOGGER.debug(f"Debug for dirty states call:{debug_msg}")
     except Exception:
         VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-        pass
 
     return dirty_states
 
@@ -412,8 +411,8 @@ def _goto_dev_version(vcs, params, version):
     """Handle goto for dev versions: checkout base commit + apply snapshot patches."""
     from version_stamp.cli.snapshot import (
         LocalSnapshotStorage,
-        get_snapshot_storage,
         _restore_with_safety_net,
+        get_snapshot_storage,
     )
 
     storage = LocalSnapshotStorage(vcs.vmn_root_path)
@@ -619,7 +618,7 @@ def _update_repo(args):
     try:
         err = client.check_for_pending_changes()
         if err:
-            VMN_LOGGER.info("{0}. Aborting update operation ".format(err))
+            VMN_LOGGER.info(f"{err}. Aborting update operation ")
             return {"repo": rel_path, "status": 1, "description": err}
 
     except Exception:
@@ -633,10 +632,10 @@ def _update_repo(args):
         if not client.in_detached_head():
             err = client.check_for_outgoing_changes()
             if err:
-                VMN_LOGGER.info("{0}. Aborting update operation".format(err))
+                VMN_LOGGER.info(f"{err}. Aborting update operation")
                 return {"repo": rel_path, "status": 1, "description": err}
 
-        VMN_LOGGER.info("Updating {0}".format(rel_path))
+        VMN_LOGGER.info(f"Updating {rel_path}")
 
         if pull:
             try:
@@ -650,7 +649,7 @@ def _update_repo(args):
         if changeset is None:
             if tag is not None:
                 client.checkout(tag=tag)
-                VMN_LOGGER.info("Updated {0} to tag {1}".format(rel_path, tag))
+                VMN_LOGGER.info(f"Updated {rel_path} to tag {tag}")
             else:
                 rev = client.checkout_branch(branch_name=branch_name)
                 if rev is None:
@@ -658,16 +657,16 @@ def _update_repo(args):
 
                 if branch_name is not None:
                     VMN_LOGGER.info(
-                        "Updated {0} to branch {1}".format(rel_path, branch_name)
+                        f"Updated {rel_path} to branch {branch_name}"
                     )
                 else:
                     VMN_LOGGER.info(
-                        "Updated {0} to changeset {1}".format(rel_path, rev)
+                        f"Updated {rel_path} to changeset {rev}"
                     )
         else:
             client.checkout(rev=changeset)
 
-            VMN_LOGGER.info("Updated {0} to {1}".format(rel_path, changeset))
+            VMN_LOGGER.info(f"Updated {rel_path} to {changeset}")
     except Exception as e:
         reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
@@ -696,7 +695,7 @@ def _clone_repo(args):
     if os.path.exists(path):
         return {"repo": rel_path, "status": 0, "description": None}
 
-    VMN_LOGGER.info("Cloning {0}..".format(rel_path))
+    VMN_LOGGER.info(f"Cloning {rel_path}..")
     try:
         if vcs_type == VMN_BE_TYPE_GIT:
             GitBackend.clone(path, remote)
@@ -708,9 +707,7 @@ def _clone_repo(args):
         except Exception:
             pass
 
-        err = "Failed to clone {0} repository. " "Description: {1}".format(
-            rel_path, exc.args
-        )
+        err = f"Failed to clone {rel_path} repository. " f"Description: {exc.args}"
         return {"repo": rel_path, "status": 1, "description": err}
 
     return {"repo": rel_path, "status": 0, "description": None}

@@ -31,7 +31,7 @@ class _LoggerProxy:
         target = _logger_holder[0]
         if target is None:
             raise AttributeError(
-                f"VMN_LOGGER is not initialized (call init_stamp_logger first)"
+                "VMN_LOGGER is not initialized (call init_stamp_logger first)"
             )
         return getattr(target, name)
 

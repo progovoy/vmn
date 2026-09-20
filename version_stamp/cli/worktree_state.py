@@ -39,8 +39,7 @@ def _ignore_island_markers(checkout):
         with open(exclude_path) as stream:
             existing = {line.strip() for line in stream}
     with open(exclude_path, "a") as stream:
-        for pattern in sorted(patterns - existing):
-            stream.write(f"{pattern}\n")
+        stream.writelines(f"{pattern}\n" for pattern in sorted(patterns - existing))
 
 
 def is_local_only_island(root_path):

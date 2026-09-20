@@ -14,19 +14,19 @@ from rich.table import Table
 from rich.text import Text
 
 from version_stamp.backends.git import GitBackend
-from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.cli.constants import (
+    _CONFIG_DESCRIPTIONS,
+    _ROOT_CONFIG_DESCRIPTIONS,
+    INIT_FILENAME,
+)
 from version_stamp.core.constants import BRANCH_CONF_DIR
-from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
+from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import (
     branch_conf_canonical_path,
     resolve_branch_conf_path,
 )
 from version_stamp.core.version_math import get_root_app_name_from_name
-from version_stamp.cli.constants import (
-    INIT_FILENAME,
-    _CONFIG_DESCRIPTIONS,
-    _ROOT_CONFIG_DESCRIPTIONS,
-)
 from version_stamp.stamping.base import IVersionsStamper
 
 
@@ -34,7 +34,7 @@ from version_stamp.stamping.base import IVersionsStamper
 def _read_raw_conf(conf_path):
     if not os.path.isfile(conf_path):
         return {}
-    with open(conf_path, "r") as f:
+    with open(conf_path) as f:
         data = yaml.safe_load(f)
     if data and "conf" in data:
         return data["conf"]
@@ -257,7 +257,6 @@ def _config_interactive(conf_path, descriptions, vmn_root_path):
 
         choices = []
         for key in keys:
-            meta = descriptions[key]
             current = raw_conf.get(key, VMN_DEFAULT_CONF.get(key))
             short = _format_value_short(current)
             pad = "." * max(1, 40 - len(key) - len(short))
@@ -441,7 +440,7 @@ def _edit_version_backends(current, vmn_root_path):
                 continue
 
             if be_type in known_structured:
-                path = questionary.text(f"  Path to file (relative to repo root)").ask()
+                path = questionary.text("  Path to file (relative to repo root)").ask()
                 if path is None:
                     continue
                 full = os.path.join(vmn_root_path, path)
@@ -776,7 +775,7 @@ def _edit_external_services(current):
 def _edit_generic_dict(key, current):
     print(f"  Current value: {yaml.dump(current, default_flow_style=False).strip()}")
     val = questionary.text(
-        f"  Enter YAML value (or Enter to keep current)",
+        "  Enter YAML value (or Enter to keep current)",
     ).ask()
     if val is None or val.strip() == "":
         return _SENTINEL

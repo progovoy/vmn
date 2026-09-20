@@ -120,7 +120,7 @@ class LocalFileBackend(VMNBackend):
         if not latest_file:
             return None, {}
 
-        with open(latest_file, "r") as f:
+        with open(latest_file) as f:
             ver_infos["none"]["ver_info"] = yaml.safe_load(f)
             return "none", ver_infos
 
@@ -152,7 +152,7 @@ class LocalFileBackend(VMNBackend):
         ver_infos = {}
         if path is not None:
             try:
-                with open(path, "r") as f:
+                with open(path) as f:
                     ver_infos = {
                         tag_name: {
                             "ver_info": None,
@@ -178,7 +178,7 @@ class LocalFileBackend(VMNBackend):
         ver_infos = {}
         tag_names = []
         if files:
-            with open(files[0], "r") as f:
+            with open(files[0]) as f:
                 data = yaml.safe_load(f)
                 if root_context:
                     ver = data["stamping"]["root_app"]["version"]

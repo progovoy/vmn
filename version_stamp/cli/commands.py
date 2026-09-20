@@ -3,40 +3,33 @@
 import copy
 import os
 import random
-import re
 import time
 from pathlib import Path
 
-import yaml
 from packaging import version as pversion
 
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
+from version_stamp.cli.config_tui import handle_config  # noqa: F401
+from version_stamp.cli.constants import (
+    IGNORED_FILES,
+    INIT_FILENAME,
+    RepoStatus,
+)
+from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.constants import (
     INIT_COMMIT_MESSAGE,
-    RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     RELATIVE_TO_GLOBAL_TYPE,
     VMN_USER_NAME,
     VMN_VERSION_FORMAT,
 )
-from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import WrongTagFormatException
 from version_stamp.core.version_math import (
     compare_release_modes,
     parse_conventional_commit_message,
 )
-from version_stamp.cli.constants import (
-    IGNORED_FILES,
-    INIT_FILENAME,
-    LOG_FILENAME,
-    RepoStatus,
-    VER_FILE_NAME,
-    VMN_ARGS,
-)
-from version_stamp.cli.config_tui import handle_config  # noqa: F401
 
 _STATUS_DESCRIPTIONS = {
     "repos_exist_locally": "all dependency repos are cloned locally",
@@ -75,8 +68,7 @@ def handle_init(vmn_ctx, extra_optional=None):
     git_ignore_path = os.path.join(vmn_path, ".gitignore")
 
     with open(git_ignore_path, "w+") as f:
-        for ignored_file in IGNORED_FILES:
-            f.write(f"{ignored_file}{os.linesep}")
+        f.writelines(f"{ignored_file}{os.linesep}" for ignored_file in IGNORED_FILES)
 
     # TODO:: revert in case of failure. Use the publish_commit function
     be.commit(
@@ -102,13 +94,11 @@ def handle_init_app(vmn_ctx):
 
     if vmn_ctx.vcs.dry_run:
         VMN_LOGGER.info(
-            "Would have initialized app tracking on {0}".format(
-                vmn_ctx.vcs.root_app_dir_path
-            )
+            f"Would have initialized app tracking on {vmn_ctx.vcs.root_app_dir_path}"
         )
     else:
         VMN_LOGGER.info(
-            "Initialized app tracking on {0}".format(vmn_ctx.vcs.root_app_dir_path)
+            f"Initialized app tracking on {vmn_ctx.vcs.root_app_dir_path}"
         )
 
     return 0
@@ -854,7 +844,7 @@ def handle_snapshot(vmn_ctx):
     # When no version is given, default to the most recent snapshot; for diff,
     # default the second side to the live working state ("current").
     if action in ("show", "note", "diff", "export", "restore"):
-        from version_stamp.cli.snapshot import _resolve_verstr, _get_storage
+        from version_stamp.cli.snapshot import _get_storage, _resolve_verstr
 
         latest = getattr(vmn_ctx.args, "latest", False)
         verstr = vmn_ctx.args.version
@@ -1021,7 +1011,7 @@ def _get_repo_status(
 
             dep_be, err = get_client(full_path, vcs.be_type)
             if err:
-                err_str = "Failed to create backend {0}. Exiting".format(err)
+                err_str = f"Failed to create backend {err}. Exiting"
                 VMN_LOGGER.error(err_str)
                 raise RuntimeError(err_str)
 
@@ -1115,7 +1105,7 @@ def _get_repo_status(
         for msg in expected_status - status.state:
             if msg in suppress_errors:
                 continue
-            if msg in status.err_msgs and status.err_msgs[msg]:
+            if status.err_msgs.get(msg):
                 VMN_LOGGER.error(status.err_msgs[msg])
 
         status.error = True
@@ -1125,7 +1115,7 @@ def _get_repo_status(
     unexpected = (status.state - expected_status) - optional_status
     if unexpected:
         for msg in unexpected:
-            if msg in status.err_msgs and status.err_msgs[msg]:
+            if status.err_msgs.get(msg):
                 VMN_LOGGER.error(status.err_msgs[msg])
 
         desc = ", ".join(
@@ -1265,10 +1255,7 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
 
             VMN_LOGGER.warning(
                 "Failed to publish. Will try to auto-increase "
-                "from {0} to {1}".format(
-                    current_version,
-                    versions_be_ifc.gen_advanced_version(override_verstr)[0],
-                )
+                f"from {current_version} to {versions_be_ifc.gen_advanced_version(override_verstr)[0]}"
             )
         elif err == 2:
             if not pull:

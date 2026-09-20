@@ -80,7 +80,8 @@ def build_manager(args):
 
 def handle_ui(args):
     try:
-        import uvicorn  # noqa: F401
+        import uvicorn
+
         from version_stamp.ui.server import create_app
     except ImportError:
         VMN_LOGGER.error(

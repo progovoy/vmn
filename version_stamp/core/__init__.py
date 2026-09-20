@@ -8,6 +8,7 @@ This package has no VCS or I/O dependencies beyond the standard library
 # ── Re-export public API ─────────────────────────────────────────────
 
 from version_stamp.core.constants import (  # noqa: F401
+    _VMN_VERSION_REGEX,
     BOLD_CHAR,
     CONVENTIONAL_COMMIT_PATTERN,
     END_CHAR,
@@ -42,11 +43,10 @@ from version_stamp.core.constants import (  # noqa: F401
     VMN_VERSION_FORMAT,
     VMN_VERSION_REGEX,
     VMN_VERSTR_REGEX,
-    _VMN_VERSION_REGEX,
 )
 from version_stamp.core.logging import (  # noqa: F401
-    LevelFilter,
     VMN_LOGGER,
+    LevelFilter,
     clear_logger_handlers,
     get_call_stack,
     init_log_file_handler,
@@ -55,9 +55,9 @@ from version_stamp.core.logging import (  # noqa: F401
     reset_runtime_context,
 )
 from version_stamp.core.models import (  # noqa: F401
+    VMN_DEFAULT_CONF,
     AppConf,
     TagProps,
-    VMN_DEFAULT_CONF,
     VersionProps,
 )
 from version_stamp.core.utils import (  # noqa: F401

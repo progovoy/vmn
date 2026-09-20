@@ -13,7 +13,7 @@ Attached checkouts belong to the user and are never touched on remove.
 import os
 import re
 import shutil
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 

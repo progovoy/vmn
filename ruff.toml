@@ -1,0 +1,27 @@
+# Lint gate for the CI `lint` stage (see ci/pipeline.py).
+#
+# Scoped on purpose: enforce rules that catch real problems (dead code, bad
+# imports, outdated syntax, likely bugs) while not failing on stylistic or
+# defensive-coding choices used deliberately throughout vmn.
+target-version = "py38"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "PIE", "FURB", "RUF"]
+ignore = [
+    "BLE001",  # blind `except Exception` is an intentional best-effort pattern
+    "B904",    # exception chaining (raise ... from) not used consistently yet
+    "B006",    # mutable defaults are used carefully, not worth reworking now
+    "B007",    # unused loop control variables
+    "B027",    # empty non-abstract base methods
+    "UP030",   # implicit str.format field refs — not worth the churn now
+    "UP035",   # typing.List/Dict imports — kept for py38 readability
+    "PIE810",  # multiple startswith/endswith calls vs a tuple
+    "RUF001",  # ambiguous unicode chars in strings
+    "RUF002",  # ambiguous unicode chars in docstrings
+    "RUF005",  # collection-literal concatenation style
+    "RUF012",  # mutable class-attribute defaults
+    "RUF013",  # implicit Optional in existing signatures
+    "RUF015",  # single-element slice vs next(iter(...))
+    "RUF034",  # useless if-else
+    "RUF059",  # `_`-style unused unpacked tuple vars are used throughout
+]

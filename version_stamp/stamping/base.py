@@ -9,7 +9,6 @@ import shutil
 from dataclasses import fields
 from pathlib import Path
 
-import jinja2
 import tomlkit
 import yaml
 
@@ -26,21 +25,20 @@ from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     RELATIVE_TO_GLOBAL_TYPE,
     SUPPORTED_REGEX_VARS,
+    VER_FILE_NAME,
     VMN_TEMPLATE_REGEX,
     VMN_VERSION_FORMAT,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.models import AppConf, VMN_DEFAULT_CONF
+from version_stamp.core.models import VMN_DEFAULT_CONF, AppConf
 from version_stamp.core.utils import comment_out_jinja, resolve_branch_conf_path
 from version_stamp.stamping.template_data import (
     create_data_dict_for_jinja2,
     gen_jinja2_template_from_data,
 )
 
-from version_stamp.core.constants import VER_FILE_NAME
 
-
-class IVersionsStamper(object):
+class IVersionsStamper:
     _STRUCTURED_BACKEND_SPEC = {
         "npm": {"format": "json", "key_path": ["version"]},
         "cargo": {"format": "toml", "key_path": ["package", "version"]},
@@ -93,7 +91,7 @@ class IVersionsStamper(object):
             inherit_env=True,
         )
         if err:
-            err_str = "Failed to create backend {0}. Exiting".format(err)
+            err_str = f"Failed to create backend {err}. Exiting"
             VMN_LOGGER.error(err_str)
             raise RuntimeError(err_str)
 
@@ -132,7 +130,7 @@ class IVersionsStamper(object):
         if os.path.isfile(self.app_conf_path):
             self.conf_file_exists = True
 
-            with open(self.app_conf_path, "r") as f:
+            with open(self.app_conf_path) as f:
                 data = yaml.safe_load(f)
                 if "conf" in data:
                     if "template" in data["conf"]:
@@ -218,7 +216,7 @@ class IVersionsStamper(object):
         if not os.path.exists(self.version_file_path):
             return None, None
 
-        with open(self.version_file_path, "r") as fid:
+        with open(self.version_file_path) as fid:
             ver_dict = yaml.safe_load(fid)
             legacy_verstr = read_version_from_old_file(
                 ver_dict, VMNBackend.serialize_vmn_version, self.hide_zero_hotfix
@@ -647,7 +645,7 @@ class IVersionsStamper(object):
 
         file_path = os.path.join(self.vmn_root_path, backend_conf["path"])
         try:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 if spec["format"] == "json":
                     data = json.load(f)
                 else:
@@ -663,11 +661,11 @@ class IVersionsStamper(object):
                     json.dump(data, f, indent=4, sort_keys=True)
                 else:
                     f.write(tomlkit.dumps(data))
-        except IOError as e:
+        except OSError as e:
             VMN_LOGGER.error(f"Error writing {backend_name} ver file: {file_path}\n")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-            raise IOError(e)
+            raise OSError(e)
         except Exception as e:
             VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)
@@ -737,7 +735,7 @@ class IVersionsStamper(object):
                     input_file_path = os.path.join(
                         self.vmn_root_path, file_section["input_file_path"]
                     )
-                    with open(input_file_path, "r") as file:
+                    with open(input_file_path) as file:
                         content = file.read()
 
                         content = comment_out_jinja(content)
@@ -806,11 +804,11 @@ class IVersionsStamper(object):
             with open(file_path, "w") as fid:
                 ver_dict = {"version_to_stamp_from": verstr}
                 yaml.dump(ver_dict, fid)
-        except IOError as e:
+        except OSError as e:
             VMN_LOGGER.error(f"Error writing ver file: {file_path}\n")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-            raise IOError(e)
+            raise OSError(e)
         except Exception as e:
             VMN_LOGGER.debug(e, exc_info=True)
             raise RuntimeError(e)

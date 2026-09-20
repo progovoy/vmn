@@ -105,7 +105,6 @@ class SnapshotStorage(ABC):
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         """Sync the writer's log file to remote storage. No-op by default."""
-        pass
 
 
 def _write_patches_to_dir(directory, patches):
@@ -1146,7 +1145,7 @@ def _build_user_meta(meta_args, meta_file):
             raise ValueError("Invalid meta file format")
     if meta_args:
         result.update(_parse_meta_args(meta_args))
-    return result if result else None
+    return result or None
 
 
 def gather_create_data(vcs, allow_clean=False):

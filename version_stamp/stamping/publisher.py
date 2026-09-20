@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from version_stamp.backends.base import VMNBackend
+from version_stamp.compat.branch_conf import migrate_branch_confs
 from version_stamp.core.constants import (
     BRANCH_CONF_DIR,
     PUBLISH_MAX_RETRIES,
@@ -25,7 +26,6 @@ from version_stamp.core.constants import (
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.version_math import parse_conventional_commit_message
 from version_stamp.stamping.base import IVersionsStamper
-from version_stamp.compat.branch_conf import migrate_branch_confs
 
 
 def _push_published_refs(backend, tags, local_only=False):
@@ -396,7 +396,7 @@ class VersionControlStamper(IVersionsStamper):
             }
         )
 
-        return "{0}".format(root_version)
+        return f"{root_version}"
 
     def get_files_to_add_to_index(self, paths):
         changed = [
@@ -689,7 +689,7 @@ class VersionControlStamper(IVersionsStamper):
         existing_content = ""
         if os.path.exists(changelog_path):
             try:
-                with open(changelog_path, "r") as f:
+                with open(changelog_path) as f:
                     existing_content = f.read()
             except Exception:
                 VMN_LOGGER.debug("Failed to read existing changelog", exc_info=True)
@@ -783,7 +783,7 @@ class VersionControlStamper(IVersionsStamper):
         )
         if os.path.isfile(changelog_path):
             try:
-                with open(changelog_path, "r") as f:
+                with open(changelog_path) as f:
                     content = f.read()
 
                 # Look for a section header like ## [1.2.3] or ## [v1.2.3]

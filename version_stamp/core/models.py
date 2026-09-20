@@ -4,7 +4,6 @@ from typing import Optional, Set
 
 from version_stamp.core.constants import VMN_OLD_TEMPLATE
 
-
 # ── Version data classes ─────────────────────────────────────────────
 
 

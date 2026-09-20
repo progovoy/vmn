@@ -7,28 +7,45 @@ import shutil
 
 from version_stamp.cli.worktree_git import (
     cleanup_island as _cleanup_island,
+)
+from version_stamp.cli.worktree_git import (
     create_dep_worktree as _create_dep_worktree,
+)
+from version_stamp.cli.worktree_git import (
     create_main_worktree as _create_main_worktree,
+)
+from version_stamp.cli.worktree_git import (
     git_current_branch as _git_current_branch,
+)
+from version_stamp.cli.worktree_git import (
     git_remote_url as _git_remote_url,
+)
+from version_stamp.cli.worktree_git import (
     remove_registered_worktree,
-    run_git as _run_git,
-    shallow_clone_dep as _shallow_clone_dep,
     source_repo_from_worktree,
 )
+from version_stamp.cli.worktree_git import (
+    run_git as _run_git,
+)
+from version_stamp.cli.worktree_git import (
+    shallow_clone_dep as _shallow_clone_dep,
+)
 from version_stamp.cli.worktree_sources import (
-    deps_from_configured as _deps_from_configured,
-    deps_from_version as _deps_from_version,
     find_dep_repo_path as _find_dep_repo_path,
+)
+from version_stamp.cli.worktree_sources import (
     resolve_deps as _resolve_deps,
+)
+from version_stamp.cli.worktree_sources import (
     resolve_version_source as _resolve_version_source,
 )
 from version_stamp.cli.worktree_state import (
     ISLAND_MANIFEST_FILENAME,
-    WORKTREE_ISLAND_MARKER,
-    WORKTREE_READONLY_MARKER,
-    is_local_only_island,
+)
+from version_stamp.cli.worktree_state import (
     write_island_markers as _write_island_markers,
+)
+from version_stamp.cli.worktree_state import (
     write_manifest as _write_manifest,
 )
 from version_stamp.compat.worktree_manifest import legacy_dep_source

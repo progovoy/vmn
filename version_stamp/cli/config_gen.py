@@ -3,13 +3,13 @@
 import dataclasses
 import os
 
-from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.models import AppConf
 from version_stamp.cli.config_tui import (
     _resolve_conf_target,
     _resolve_seeded_branch_conf,
     _write_full_config,
 )
+from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.models import AppConf
 
 
 def handle_config_gen(vmn_ctx):

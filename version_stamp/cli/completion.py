@@ -8,7 +8,6 @@ import tempfile
 from version_stamp.compat.completion import strip_legacy_completion
 from version_stamp.core.utils import resolve_root_path
 
-
 SUPPORTED_SHELLS = ("bash", "zsh", "fish", "tcsh")
 COMPLETION_MARKER = "# vmn shell completion"
 COMPLETION_END_MARKER = "# end vmn shell completion"
@@ -271,7 +270,7 @@ def install_completion(shell=None):
     try:
         content = ""
         if os.path.exists(rc_path):
-            with open(rc_path, "r", encoding="utf-8") as f:
+            with open(rc_path, encoding="utf-8") as f:
                 content = f.read()
         content = strip_legacy_completion(content, shell)
         if _has_malformed_completion_block(content):
@@ -312,7 +311,7 @@ def uninstall_completion(shell=None):
         if not os.path.exists(rc_path):
             print(f"Completion not installed ({rc_path} does not exist)")
             return 0
-        with open(rc_path, "r", encoding="utf-8") as f:
+        with open(rc_path, encoding="utf-8") as f:
             content = f.read()
         if COMPLETION_MARKER not in content:
             print(f"Completion not installed in {rc_path}")

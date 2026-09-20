@@ -18,7 +18,7 @@ def create_data_dict_for_jinja2(
     tmplt_value.update(ver_info["stamping"]["app"])
 
     if custom_values_path is not None:
-        with open(custom_values_path, "r") as f:
+        with open(custom_values_path) as f:
             ret = yaml.safe_load(f)
             tmplt_value.update(ret)
 
