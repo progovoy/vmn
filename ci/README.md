@@ -141,6 +141,78 @@ Lint and typecheck are report-only — they don't fail the pipeline on warnings.
 suite. The JUnit/HTML report and the stage card are written before the failure,
 so a red run still carries the full output.
 
+## Running on a central server (clean clone)
+
+The setup above runs the pipeline **on top of your dev tree** (`workspace=".."`
+anchors each run to the checked-out repo, uncommitted changes and all) — ideal
+for local iteration. A central/shared muster server should instead test a
+**clean clone of a committed ref**, so a dirty working tree can't taint results.
+Muster's **workspace checkout** feature does exactly this, and — importantly —
+the *same* `ci/pipeline.py` works in both places unchanged:
+
+| Mode | Who runs it | `ci/pipeline.py` read from | `workspace=".."` resolves to |
+|------|-------------|----------------------------|------------------------------|
+| **Local dev** | `muster run ci/pipeline.py` | your dev tree `…/vmn/ci/` | your working tree |
+| **Central server** | a workspace checkout | `<checkout>/repo/ci/` | the clean clone |
+
+That works because `workspace` is resolved **relative to the pipeline file's own
+directory** (`_resolve_workspace`), and a *checkout*'s copy of the pipeline lives
+inside the clone — so `..` lands on the clone root. There is **no chicken-and-egg**
+for params: the clone is created first, then the trigger form inspects
+`ci/pipeline.py` *from inside the clone* (`resolve_trigger_file`), so a ref's
+params come from that ref's own pipeline file. It's a true per-ref recipe, with
+the clone as the bootstrap.
+
+### Recipe
+
+Do it from the **Workspaces** panel in the UI, or via the API:
+
+```bash
+BASE=http://central-host:8000
+
+# 1. Create a workspace: clone vmn at a committed ref (defaults to the repo's
+#    default branch when ref is omitted). Returns {"workspace_id": "ws-…"}.
+WS=$(curl -s -X POST $BASE/api/workspaces \
+  -H 'content-type: application/json' \
+  -d '{"repo_url":"https://github.com/progovoy/vmn","ref":"master"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["workspace_id"])')
+
+# 2. Wait for it to finish cloning (status: cloning → setup → ready).
+until [ "$(curl -s $BASE/api/workspaces/$WS | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')" = ready ]; do sleep 2; done
+
+# 3. Trigger the pipeline from inside the checkout. pipeline_file is
+#    checkout-relative; the run uses the clone as its workspace.
+curl -s -X POST $BASE/api/pipeline/runs \
+  -H 'content-type: application/json' \
+  -d "{\"workspace_id\":\"$WS\",\"pipeline_file\":\"ci/pipeline.py\",\"params\":{}}"
+
+# Re-test a newer commit later: refresh the same workspace (fetch → reset --hard
+#   → clean -fdx) and trigger again.
+curl -s -X POST $BASE/api/workspaces/$WS/refresh
+```
+
+`GET /api/workspaces/refs?repo_url=…` lists a repo's branches/tags (via
+`git ls-remote`) to populate the ref picker.
+
+### Caveats specific to vmn
+
+- **Clones are full-depth by design — do not add `--depth`.** `vmn stamp` and
+  `vmn goto` both walk annotated tags across history to compute versions; a
+  shallow clone lacks them, so stamping/goto would produce wrong versions or
+  fail. Shallow-clone is intentionally unsupported (see the note in muster's
+  `workspace_lifecycle.py`); the speed win isn't worth breaking correctness.
+- **Multi-repo `deps` need reconstruction in the clone.** In your dev tree,
+  dependent repos sit alongside vmn; next to a fresh clone they don't. Use the
+  workspace's `vmn_app`/`vmn_version` (via a template) so `vmn goto` restores the
+  dependent checkouts, or a `setup_cmd` that clones them — otherwise any stage
+  that reaches for a sibling repo will fail.
+- **Cold venv cache per checkout.** Muster content-addresses the test venv under
+  the workspace's `.mtd/envs/`, so a fresh clone rebuilds it. Point the run at a
+  shared `cache_dir` on a persistent volume to avoid a cold build every time.
+- **Clean env has no push credentials.** The clone has no local git creds; the
+  release lane's push uses `--git-push-user`/`--git-push-token` (or the
+  `VMN_GIT_PUSH_USER`/`VMN_GIT_PUSH_TOKEN` env fallbacks) for exactly this.
+
 ## Useful commands
 
 All commands use the muster CLI from the dedicated venv:
