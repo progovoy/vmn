@@ -7,7 +7,7 @@ import filelock
 import yaml
 
 from version_stamp.backends.base import VMNBackend
-from version_stamp.cli.constants import VER_FILE_NAME
+from version_stamp.core.constants import VER_FILE_NAME
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
 from version_stamp.stamping.base import IVersionsStamper

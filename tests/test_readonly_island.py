@@ -1,7 +1,7 @@
 import pytest
 
 from version_stamp.cli import entry
-from version_stamp.cli.worktrees import WORKTREE_READONLY_MARKER
+from version_stamp.cli.worktree_state import WORKTREE_READONLY_MARKER
 from version_stamp.core.logging import init_stamp_logger
 
 

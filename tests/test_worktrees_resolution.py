@@ -3,7 +3,7 @@ import os
 import subprocess
 from types import SimpleNamespace
 
-from version_stamp.cli import worktrees
+from version_stamp.cli import worktree_sources, worktree_state, worktrees
 from version_stamp.core.logging import init_stamp_logger
 
 
@@ -103,7 +103,7 @@ def test_dependency_basename_collision_is_rejected():
         },
     )
 
-    assert worktrees._deps_from_configured(SimpleNamespace(vcs=vcs)) is None
+    assert worktree_sources.deps_from_configured(SimpleNamespace(vcs=vcs)) is None
 
 
 def test_unknown_editable_dependency_is_rejected(tmp_path, caplog):
@@ -158,8 +158,8 @@ def test_no_stamp_marker_is_written_to_main_and_dependency_checkouts(tmp_path):
     main.mkdir()
     dep.mkdir()
 
-    worktrees._write_island_markers([main, dep], readonly=True)
+    worktree_state.write_island_markers([main, dep], readonly=True)
 
     for checkout in (main, dep):
-        assert (checkout / ".vmn" / worktrees.WORKTREE_ISLAND_MARKER).is_file()
-        assert (checkout / ".vmn" / worktrees.WORKTREE_READONLY_MARKER).is_file()
+        assert (checkout / ".vmn" / worktree_state.WORKTREE_ISLAND_MARKER).is_file()
+        assert (checkout / ".vmn" / worktree_state.WORKTREE_READONLY_MARKER).is_file()

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from helpers import _init_app, _run_vmn_init, _stamp_app
 from version_stamp.backends.git_ops import GitOpsMixin
-from version_stamp.cli import commands, entry, worktrees
+from version_stamp.cli import commands, entry, worktree_state
 from version_stamp.cli.entry import vmn_run
 from version_stamp.stamping.publisher import _push_published_refs
 
@@ -17,7 +17,7 @@ class Args(SimpleNamespace):
 def test_local_only_island_skips_remote_branch_preparation(tmp_path, monkeypatch):
     vmn_dir = tmp_path / ".vmn"
     vmn_dir.mkdir()
-    (vmn_dir / worktrees.WORKTREE_ISLAND_MARKER).touch()
+    (vmn_dir / worktree_state.WORKTREE_ISLAND_MARKER).touch()
     prepare_calls = []
     backend = SimpleNamespace(
         selected_remote=object(),
@@ -70,10 +70,10 @@ def test_git_backend_can_push_tags_without_remote_branch():
 
 
 def test_no_stamp_marker_takes_precedence_over_local_only_marker(tmp_path):
-    worktrees._write_island_markers([tmp_path], readonly=True)
+    worktree_state.write_island_markers([tmp_path], readonly=True)
 
-    assert worktrees.is_local_only_island(tmp_path)
-    assert (Path(tmp_path) / ".vmn" / worktrees.WORKTREE_READONLY_MARKER).is_file()
+    assert worktree_state.is_local_only_island(tmp_path)
+    assert (Path(tmp_path) / ".vmn" / worktree_state.WORKTREE_READONLY_MARKER).is_file()
 
 
 def test_local_only_stamp_pull_fetches_without_merging_branch():
@@ -91,7 +91,7 @@ def test_local_only_stamp_pull_fetches_without_merging_branch():
 
 
 def test_editable_island_dep_may_diverge_from_config_during_stamp(tmp_path):
-    worktrees._write_island_markers([tmp_path], readonly=False)
+    worktree_state.write_island_markers([tmp_path], readonly=False)
     editable_backend = SimpleNamespace(in_detached_head=lambda: False)
 
     assert commands._is_editable_island_dep(

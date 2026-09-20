@@ -4,7 +4,7 @@ import subprocess
 import pytest
 import yaml
 
-from version_stamp.cli.constants import VER_FILE_NAME
+from version_stamp.core.constants import VER_FILE_NAME
 
 from helpers import (
     _init_app,
