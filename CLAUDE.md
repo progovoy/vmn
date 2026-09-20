@@ -86,6 +86,9 @@ Run a specific test:
 ./tests/run_pytest.sh --specific_test <test_name>
 ```
 
+CI is the local Muster pipeline in `ci/pipeline.py` (`./ci/start.sh`, see
+`ci/README.md`) — there is no GitHub Actions workflow.
+
 Skip a test:
 ```sh
 ./tests/run_pytest.sh --skip_test <test_name>

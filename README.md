@@ -8,7 +8,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/progovoy/vmn/actions/workflows/tests.yml"><img src="https://github.com/progovoy/vmn/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/v/vmn?logo=pypi&logoColor=white&label=PyPI" alt="PyPI version"></a>
   <a href="https://pypi.org/project/vmn/"><img src="https://img.shields.io/pypi/pyversions/vmn?logo=python&logoColor=white" alt="Supported Python versions"></a>
   <a href="https://github.com/progovoy/vmn/blob/master/LICENSE.txt"><img src="https://img.shields.io/github/license/progovoy/vmn" alt="MIT license"></a>
