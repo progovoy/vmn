@@ -46,11 +46,9 @@ REQUIRES = [
 
 @stage(requires=REQUIRES)
 def lint(ctx):
-    # report-only: warnings don't fail the pipeline.
-    ctx.run(
-        ["ruff", "check", "version_stamp", "--output-format", "concise"],
-        check=False,
-    )
+    # ctx.run defaults to check=True: ruff finding lint errors (exit 1) fails the
+    # stage so the pipeline goes red instead of reporting green on a broken lint.
+    ctx.run(["ruff", "check", "version_stamp", "--output-format", "concise"])
 
 
 @stage(requires=REQUIRES, outputs=["reports/tests.xml", "reports/tests.html"])

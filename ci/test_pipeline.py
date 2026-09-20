@@ -82,6 +82,23 @@ def test_run_tests_fails_on_pytest_crash(mod):
         mod.run_tests(ctx)
 
 
+# ---- lint --------------------------------------------------------------
+
+
+def test_lint_passes_on_exit_zero(mod):
+    ctx = FakeCtx(run_returncode=0)
+    mod.lint(ctx)  # green: no exception
+    assert ctx.calls and ctx.calls[0][0][0] == "ruff"
+
+
+def test_lint_fails_on_ruff_error(mod):
+    # exit 1 = ruff found lint errors. The stage must go RED (raise) so the
+    # pipeline fails, rather than reporting green on a broken lint.
+    ctx = FakeCtx(run_returncode=1)
+    with pytest.raises(RuntimeError):
+        mod.lint(ctx)
+
+
 # ---- stamp -------------------------------------------------------------
 
 
