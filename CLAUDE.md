@@ -73,8 +73,11 @@ vmn --version  # Should see 0.0.0 if installed successfully
 
 ## Running Tests
 
-Tests require Docker. Run the full test suite:
+Tests require Docker. Activate the test venv first — the suite runs through the
+active interpreter's `coverage`/`pytest`, and the release-notes tests need the
+`git-cliff` binary that `tests/test_requirements.txt` installs into it.
 ```sh
+source ./venv/bin/activate
 ./tests/run_pytest.sh
 ```
 

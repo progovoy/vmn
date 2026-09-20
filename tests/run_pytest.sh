@@ -86,9 +86,16 @@ rm -rf ${REPO_ROOT}/version_stamp/__pycache__
 # (mtime, size) check accepts the stale bytecode.
 rm -rf "${HOME}/Library/Caches/com.apple.python${REPO_ROOT}"
 
+PYTHON=${PYTHON:-python3}
+if ! ${PYTHON} -c 'import coverage, pytest' 2>/dev/null; then
+	echo "${PYTHON} cannot import coverage/pytest. Activate the test venv" \
+	     "(or set PYTHON=<interpreter>) and install tests/test_requirements.txt." >&2
+	exit 1
+fi
+
 echo "Will run:"
 PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
-cmd='coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
+cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
 
 echo "${cmd}"
 eval "${cmd}"
