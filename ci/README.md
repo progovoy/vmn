@@ -21,10 +21,8 @@ flowchart TD
     B -- no --> C["create venv<br/>Python 3.12"]
     B -- yes --> D["pip install muster"]
     C --> D
-    D --> E{UI built?}
-    E -- no --> F["npm install + build"]
-    E -- yes --> G["seed daily schedule"]
-    F --> G
+    D --> E["rebuild web UI<br/>(npm run build)"]
+    E --> G["seed daily schedule"]
     G --> H["muster serve --no-auth :8000"]
     H --> I["🌐 http://localhost:8000"]
 ```
@@ -79,7 +77,11 @@ they reuse the repo's `Makefile` targets and run after `run_tests` (the DAG is
 test run. A skipped stage still satisfies its dependents, so the chain proceeds.
 Being side-effecting, they are never cached.
 
-The three params are independent — pass only the steps you want:
+The three params are **declared** on their stages (`@stage(params=[Param(...)])`),
+so the trigger UI renders them as typed fields — a `stamp` dropdown and
+`build`/`upload` checkboxes, each with help text — and muster validates and
+coerces them (against the declared choices / to real bools) before any stage
+runs. They're independent — pass only the steps you want:
 
 ```bash
 MUSTER=.mtd/muster_venv/bin/muster
@@ -101,7 +103,8 @@ $MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param build=1
 | `build` | `1` / `true` / `yes` / `on` | `make _build` |
 | `upload` | `1` / `true` / `yes` / `on` | `make upload` |
 
-An unknown `stamp` value fails the stage rather than silently skipping. `build`
+muster rejects an unknown `stamp` value against the declared choices before any
+stage runs, so a typo fails fast rather than silently skipping. `build`
 needs `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
 the system `PATH`, so tools installed outside the venv still resolve. When
 `stamp=rc` and `build` are combined, `build` passes the prerelease template
@@ -133,8 +136,10 @@ in the run UI. `run_tests` additionally writes `reports/tests.xml` (JUnit) and
 `reports/tests.html` as downloadable artifacts.
 
 Lint and typecheck are report-only — they don't fail the pipeline on warnings.
-`run_tests` only fails on pytest crashes (exit code > 1), not on test failures
-(exit code 1), so you always get the full report.
+`run_tests` fails the stage (red) on any nonzero pytest exit — test failures
+(exit 1) as well as a pytest crash (exit >1); it never shows green over a broken
+suite. The JUnit/HTML report and the stage card are written before the failure,
+so a red run still carries the full output.
 
 ## Useful commands
 
@@ -230,8 +235,8 @@ Build it from source:
 cd ../multi_target_debugger/ui && npm install && npm run build
 ```
 
-Or add Node to your PATH and re-run `./ci/start.sh` — the script auto-builds
-if `ui/dist/` doesn't exist.
+Or add Node to your PATH and re-run `./ci/start.sh` — it rebuilds the web UI
+from source on every start, so UI changes always ship and never go stale.
 
 **Tests fail with Docker errors**
 

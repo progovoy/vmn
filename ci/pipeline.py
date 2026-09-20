@@ -30,7 +30,7 @@ Or start the server (./ci/start.sh) and let the daily schedule fire it.
 UI at http://localhost:8000 (no auth needed).
 """
 
-from debug_router.pipeline import Pipeline, stage
+from debug_router.pipeline import Param, Pipeline, stage
 
 # muster builds/reuses one venv from this spec (cwd is the repo, so ``-e .`` and
 # the relative reqs paths resolve here). Stages declaring it run inside that venv.
@@ -55,7 +55,11 @@ def lint(ctx):
 
 @stage(requires=REQUIRES, outputs=["reports/tests.xml", "reports/tests.html"])
 def run_tests(ctx):
-    result = ctx.run(
+    # ctx.run defaults to check=True: it writes the output card, then fails the
+    # stage on any nonzero exit — test failures (exit 1) and pytest crashes
+    # (exit >1) both go red. pytest writes the JUnit/HTML report as it runs, so a
+    # red stage still carries the full output.
+    ctx.run(
         [
             "pytest",
             "tests",
@@ -65,12 +69,8 @@ def run_tests(ctx):
             "--html=reports/tests.html",
             "--self-contained-html",
             "-vv",
-        ],
-        check=False,
+        ]
     )
-    # exit 1 = tests failed (keep the report); >1 = pytest itself crashed.
-    if result.returncode not in (0, 1):
-        raise RuntimeError(f"pytest crashed (exit {result.returncode})")
 
 
 @stage(requires=REQUIRES)
@@ -80,48 +80,59 @@ def typecheck(ctx):
 
 
 # --- optional release lane -------------------------------------------------
-# stamp -> build -> upload run only when their run param is set (skip otherwise),
-# after run_tests so a release never ships on a crashed test run. They reuse the
-# Makefile targets and are side-effecting, so they stay non-deterministic (never
-# cached). Trigger with e.g.:
+# stamp -> build -> upload run only when their declared run param is set (skip
+# otherwise), after run_tests so a release never ships on a crashed test run.
+# muster validates and coerces the params from the declarations below (stamp
+# against STAMP_MODES; build/upload to real bools) before any stage runs, so the
+# stages just read ctx.params. They reuse the Makefile targets and are
+# side-effecting, so they stay non-deterministic (never cached). Trigger e.g.:
 #   muster run ci/pipeline.py --param stamp=patch --param build=1 --param upload=1
-_STAMP_MODES = {"major", "minor", "patch", "rc"}
-_TRUTHY = {"1", "true", "yes", "on"}
+STAMP_MODES = ["major", "minor", "patch", "rc"]
 # Makefile `_rc` sets this via $(eval), which only survives into `_build` within
 # one make process. stamp and build are separate `make` calls here, so pass it
 # through explicitly for rc — else the wheel embeds 0.10.2 instead of 0.10.2-rc.N.
 _RC_BUILD_ARG = "EXTRA_SHOW_ARGS=--template [{major}][.{minor}][.{patch}][{prerelease}]"
 
 
-def _param(ctx, key):
-    return str(ctx.params.get(key, "")).strip().lower()
-
-
-@stage(requires=REQUIRES, after=["run_tests"])
+@stage(
+    requires=REQUIRES,
+    after=["run_tests"],
+    params=[
+        Param(
+            "stamp",
+            choices=STAMP_MODES,
+            help="Stamp a version (make _<mode>); leave unset to skip",
+        )
+    ],
+)
 def stamp(ctx):
-    mode = _param(ctx, "stamp")
+    mode = ctx.params.get("stamp")
     if not mode:
         ctx.skip("no stamp requested")
-    if mode not in _STAMP_MODES:
-        raise RuntimeError(
-            f"stamp param must be one of {sorted(_STAMP_MODES)}, got {mode!r}"
-        )
     ctx.run(["make", f"_{mode}"])
 
 
-@stage(requires=REQUIRES, after=["stamp"])
+@stage(
+    requires=REQUIRES,
+    after=["stamp"],
+    params=[Param("build", default=False, help="Build the wheel (make _build)")],
+)
 def build(ctx):
-    if _param(ctx, "build") not in _TRUTHY:
+    if not ctx.params["build"]:
         ctx.skip("build not requested")
     cmd = ["make", "_build"]
-    if _param(ctx, "stamp") == "rc":
+    if ctx.params.get("stamp") == "rc":
         cmd.append(_RC_BUILD_ARG)
     ctx.run(cmd)
 
 
-@stage(requires=REQUIRES, after=["build"])
+@stage(
+    requires=REQUIRES,
+    after=["build"],
+    params=[Param("upload", default=False, help="Upload the wheel (make upload)")],
+)
 def upload(ctx):
-    if _param(ctx, "upload") not in _TRUTHY:
+    if not ctx.params["upload"]:
         ctx.skip("upload not requested")
     ctx.run(["make", "upload"])
 

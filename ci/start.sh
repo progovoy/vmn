@@ -26,6 +26,19 @@ echo "Installing muster from $MTD_ROOT ..."
 
 MUSTER="$VENV_DIR/bin/muster"
 
+# ---- always rebuild the web UI against the latest muster source ----
+# muster is installed editable, so `muster serve` serves $MTD_ROOT/ui/dist.
+# Rebuild it on every start so UI source changes always ship (no stale bundle);
+# node_modules is installed only when missing since deps rarely change.
+UI_DIR="$MTD_ROOT/ui"
+if command -v npm >/dev/null 2>&1; then
+    [ -d "$UI_DIR/node_modules" ] || (cd "$UI_DIR" && npm install)
+    echo "Rebuilding muster web UI from $UI_DIR ..."
+    (cd "$UI_DIR" && npm run build)
+else
+    echo "npm not found — skipping UI rebuild (serving existing ui/dist)." >&2
+fi
+
 # ---- ensure .mtd dirs exist ----
 mkdir -p "$REPO_ROOT/.mtd/cache"
 mkdir -p "$REPO_ROOT/.mtd/runs"
