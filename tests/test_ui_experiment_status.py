@@ -301,6 +301,98 @@ def test_appending_to_a_writer_log_invalidates_the_cache(app_layout):
     assert rows[0]["last_metric_at"] == "2026-09-21T12:09:00Z"
 
 
+def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
+    """The volatile run-state cache absorbs heartbeats.
+
+    A rewritten ``run_state.yml`` must serve a new status without re-reading
+    every experiment's metadata and logs.
+    """
+    import version_stamp.ui.index as index_mod
+
+    _write_experiment(
+        app_layout,
+        "0.0.1",
+        run_state=_running_state(),
+        metrics=[("2026-09-21T12:00:00Z", {"loss": 0.5})],
+    )
+    idx = _index(app_layout)
+    assert idx.list_experiments(app_layout.app_name)[0]["status"] == "running"
+
+    def _boom(*a, **kw):
+        raise AssertionError("a heartbeat invalidated the expensive row cache")
+
+    monkeypatch.setattr(index_mod, "_fetch_experiment_rows", _boom)
+
+    path = os.path.join(_exp_dir(app_layout, "0.0.1"), "run_state.yml")
+    with open(path, "w") as f:
+        yaml.dump(_finished_state(3), f, sort_keys=False)
+    later = os.stat(path).st_mtime + 5
+    os.utime(path, (later, later))
+
+    row = idx.list_experiments(app_layout.app_name)[0]
+    assert row["status"] == "failed"  # read from the fresh run state
+    assert row["metrics"]["loss"] == 0.5  # served from the untouched heavy cache
+
+
+def test_detail_status_only_reads_its_own_subtree(app_layout, monkeypatch):
+    """A run-detail read must not scan the whole workspace for its status."""
+    from version_stamp.ui.readers import experiments as exp_reader
+
+    _write_experiment(app_layout, "0.0.1", run_state=_running_state())
+    _write_experiment(
+        app_layout, "0.0.2", run_state=_finished_state(0), parent="0.0.1"
+    )
+    _write_experiment(
+        app_layout, "0.0.3", run_state=_finished_state(1), parent="0.0.1"
+    )
+    for verstr in ("0.0.4", "0.0.5", "0.0.6"):
+        _write_experiment(app_layout, verstr, run_state=_running_state())
+
+    run_state_reads = []
+    real_run_state = exp_reader.load_run_state
+    log_reads = []
+    real_log = exp_reader._load_log
+
+    def _counted_run_state(storage, app_name, verstr):
+        run_state_reads.append(verstr)
+        return real_run_state(storage, app_name, verstr)
+
+    def _counted_log(storage, app_name, verstr):
+        log_reads.append(verstr)
+        return real_log(storage, app_name, verstr)
+
+    monkeypatch.setattr(exp_reader, "load_run_state", _counted_run_state)
+    monkeypatch.setattr(exp_reader, "_load_log", _counted_log)
+
+    detail = (
+        _client(app_layout)
+        .get(f"{API}/{app_layout.app_name}/experiments/0.0.1")
+        .json()
+    )
+
+    assert detail["status"]["tree_status"] == "failed"
+    assert sorted(detail["status"]["children"]) == ["0.0.2", "0.0.3"]
+    assert sorted(set(run_state_reads)) == ["0.0.1", "0.0.2", "0.0.3"]
+    assert log_reads == ["0.0.1"]  # only the experiment being shown
+
+
+@pytest.mark.parametrize("use_index", [True, False])
+def test_status_filter_applies_before_pagination(app_layout, use_index):
+    """``total`` counts filtered rows, so paging walks the filtered set."""
+    _seed_all_statuses(app_layout)
+    client = _client(app_layout, use_index=use_index)
+    url = f"{API}/{app_layout.app_name}/experiments"
+    params = {"status": "running,stuck", "limit": 1}
+
+    first = client.get(url, params=params).json()
+    assert first["total"] == 2
+    assert [r["verstr"] for r in first["rows"]] == ["0.0.2"]
+
+    second = client.get(url, params={**params, "offset": 1}).json()
+    assert second["total"] == 2
+    assert [r["verstr"] for r in second["rows"]] == ["0.0.3"]
+
+
 def test_status_query_filter(app_layout):
     _seed_all_statuses(app_layout)
     client = _client(app_layout)

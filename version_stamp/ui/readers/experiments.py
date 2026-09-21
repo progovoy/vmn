@@ -7,8 +7,6 @@ CLI always agree.
 """
 import os
 
-import yaml
-
 from version_stamp.cli.experiment import (
     _get_latest_metrics,
     _load_log,
@@ -16,7 +14,11 @@ from version_stamp.cli.experiment import (
     get_metric_series,
 )
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
-from version_stamp.core.experiment_status import status_fields
+from version_stamp.core.experiment_status import (
+    derive_status,
+    load_run_state,
+    status_fields,
+)
 from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.versions import version_counts
@@ -69,15 +71,6 @@ def list_apps(root_path):
     return rows
 
 
-def _load_run_state(storage, app_name, verstr):
-    """The run's ``run_state.yml``, or None when no run was ever started."""
-    data = storage.load_file(app_name, verstr, "run_state.yml")
-    if not data:
-        return None
-    parsed = yaml.safe_load(data)
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _last_metric_at(log):
     """Timestamp of the newest ``metrics`` entry (the log is time-ordered)."""
     for entry in reversed(log):
@@ -88,10 +81,12 @@ def _last_metric_at(log):
 
 def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     """Leaderboard rows in storage order (oldest first). The expensive read:
-    every experiment's metadata + log + run state.
+    every experiment's metadata + log.
 
-    Rows carry *raw* inputs only — the time-derived status lives in
-    :func:`annotate_status`, so these rows are safe to cache.
+    Rows are *stable*: they change only when metadata or a log file changes, so
+    a cache of them survives the run-state heartbeats. The volatile half lives
+    in :func:`fetch_run_states` and the time-derived status in
+    :func:`annotate_status`.
 
     Accepts either ``root_path`` (local checkout) or a pre-built ``storage``
     backend (S3 / remote workspaces).
@@ -116,24 +111,49 @@ def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
                 "metrics": _get_latest_metrics(log),
                 "parent": meta.get("parent"),
                 "last_metric_at": _last_metric_at(log),
-                "run_state": _load_run_state(storage, app_name, meta["verstr"]),
             }
         )
     return rows
 
 
-def annotate_status(rows, now=None):
+def fetch_run_states(root_path=None, app_name=None, storage=None, verstrs=None):
+    """``{verstr: raw run state}`` — the cheap, volatile half of a read.
+
+    One tiny file per experiment, rewritten by every heartbeat, which is why it
+    is fetched (and cached) apart from the rows.
+    """
+    if storage is None:
+        storage = experiment_storage(root_path)
+    if verstrs is None:
+        verstrs = [meta["verstr"] for meta in storage.list_snapshots(app_name)]
+    return {verstr: load_run_state(storage, app_name, verstr) for verstr in verstrs}
+
+
+def annotate_status(rows, run_states=None, now=None):
     """Derive each row's status and nesting from its raw run state.
 
     Time-dependent by design (a stale heartbeat means ``stuck``), so this must
     run on every response and its output must never be cached.
+
+    The status fields are written onto *rows* in place and ``annotate_tree``
+    returns the copies callers get back — one copy per response, not three.
+    Callers pass rows they just fetched or deserialized, never rows they keep.
     """
-    derived = []
+    run_states = run_states or {}
     for row in rows:
-        row = dict(row)
-        row.update(status_fields(row.pop("run_state", None), now=now))
-        derived.append(row)
-    return annotate_tree(derived)
+        row.update(status_fields(run_states.get(row["verstr"]), now=now))
+    return annotate_tree(rows)
+
+
+def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
+    """Leaderboard rows plus their derived status, straight from storage."""
+    if storage is None:
+        storage = experiment_storage(root_path)
+    rows = fetch_experiment_rows(app_name=app_name, storage=storage)
+    run_states = fetch_run_states(
+        app_name=app_name, storage=storage, verstrs=[r["verstr"] for r in rows]
+    )
+    return annotate_status(rows, run_states, now=now)
 
 
 def filter_by_status(rows, status=None):
@@ -191,9 +211,8 @@ def list_experiments(
     root_path, app_name, sort=None, last=None, offset=0, limit=None, status=None
 ):
     """Leaderboard rows, ordered exactly like ``vmn exp list``."""
-    rows = annotate_status(fetch_experiment_rows(root_path, app_name))
     return sort_rows(
-        filter_by_status(rows, status),
+        filter_by_status(rows_with_status(root_path, app_name), status),
         metrics_schema(root_path, app_name),
         sort=sort,
         last=last,
@@ -224,11 +243,51 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
 )
 
 
-def _status_detail(storage, app_name, verstr):
-    """One experiment's status payload, including its place in the run tree."""
-    rows = annotate_status(fetch_experiment_rows(app_name=app_name, storage=storage))
-    row = next((r for r in rows if r["verstr"] == verstr), {})
-    return {k: row.get(k) for k in _DETAIL_STATUS_KEYS}
+def _subtree_verstrs(verstr, children_of):
+    """*verstr* and everything below it, cycle-safe."""
+    seen, stack, out = set(), [verstr], []
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        out.append(current)
+        stack.extend(children_of.get(current, []))
+    return out
+
+
+def _status_detail(storage, app_name, verstr, metadata, log):
+    """One experiment's status payload, including its place in the run tree.
+
+    Costs one metadata listing plus one run-state read per subtree member — the
+    whole workspace is never re-read, and no log is touched: *metadata* and
+    *log* come from the caller, which already loaded both.
+    """
+    nodes = [
+        {"verstr": meta["verstr"], "parent": meta.get("parent")}
+        for meta in storage.list_snapshots(app_name)
+    ]
+    children_of = {}
+    for node in nodes:
+        if node["parent"] and node["parent"] != node["verstr"]:
+            children_of.setdefault(node["parent"], []).append(node["verstr"])
+
+    subtree = set(_subtree_verstrs(verstr, children_of))
+    run_state = None
+    for node in nodes:
+        if node["verstr"] not in subtree:
+            continue
+        state = load_run_state(storage, app_name, node["verstr"])
+        node["status"] = derive_status(state)
+        if node["verstr"] == verstr:
+            run_state = state
+
+    row = next((r for r in annotate_tree(nodes) if r["verstr"] == verstr), {})
+    detail = status_fields(run_state)
+    detail.update({k: row.get(k) for k in ("children", "kind", "depth", "tree_status")})
+    detail["parent"] = metadata.get("parent")
+    detail["last_metric_at"] = _last_metric_at(log)
+    return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
 def get_experiment(root_path, app_name, verstr_ref):
@@ -249,7 +308,7 @@ def get_experiment(root_path, app_name, verstr_ref):
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
         "artifacts": _list_artifacts(storage, app_name, verstr),
-        "status": _status_detail(storage, app_name, verstr),
+        "status": _status_detail(storage, app_name, verstr, metadata, log),
         "patches": {
             k: bool(patches.get(k))
             for k in ("working_tree", "local_commits", "untracked_files")
@@ -264,10 +323,9 @@ def list_experiments_from_storage(
     storage, app_name, sort=None, last=None, offset=0, limit=None, status=None
 ):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
-    rows = annotate_status(fetch_experiment_rows(app_name=app_name, storage=storage))
     schema = {}  # No app conf available for S3 workspaces
     return sort_rows(
-        filter_by_status(rows, status),
+        filter_by_status(rows_with_status(app_name=app_name, storage=storage), status),
         schema,
         sort=sort,
         last=last,
@@ -291,7 +349,7 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
         "artifacts": _list_artifacts(storage, app_name, verstr),
-        "status": _status_detail(storage, app_name, verstr),
+        "status": _status_detail(storage, app_name, verstr, metadata, log),
         "patches": {
             k: bool(patches.get(k)) if patches else False
             for k in ("working_tree", "local_commits", "untracked_files")

@@ -14,17 +14,29 @@ import sqlite3
 import subprocess
 import threading
 
+from version_stamp.core.experiment_status import RUN_STATE_FILE
 from version_stamp.core.version_math import app_name_to_tag_name
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
 
 # Module-level aliases: the expensive fetches the cache guards.
 _fetch_experiment_rows = exp_reader.fetch_experiment_rows
+_fetch_run_states = exp_reader.fetch_run_states
 _fetch_version_rows = ver_reader.list_versions
 
 
-def _experiments_fingerprint(root_path, app_name):
-    """Cheap staleness signal: names + mtimes of every experiment dir's files."""
+def _is_stable_file(name):
+    """Files the leaderboard rows are derived from: metadata and the logs
+    (``log.yml`` plus the per-writer ``log.<writer>.jsonl``)."""
+    return name == "metadata.yml" or name.startswith("log.")
+
+
+def _experiments_fingerprint(root_path, app_name, wanted):
+    """Cheap staleness signal: mtimes of the experiment files *wanted* names.
+
+    Only the files that feed the payload are stat'ed — snapshot patches and
+    tarballs are named, ignored, and never touched.
+    """
     base = os.path.join(root_path, ".vmn", app_name.replace("/", os.sep), "experiments")
     h = hashlib.sha256()
     try:
@@ -32,13 +44,15 @@ def _experiments_fingerprint(root_path, app_name):
             if not entry.is_dir():
                 continue
             try:
-                files = sorted(os.scandir(entry.path), key=lambda e: e.name)
+                names = sorted(f.name for f in os.scandir(entry.path) if wanted(f.name))
             except OSError:
                 continue
-            for f in files:
-                if not f.is_file():
+            for name in names:
+                try:
+                    st = os.stat(os.path.join(entry.path, name))
+                except OSError:
                     continue
-                h.update(f"{entry.name}/{f.name}:{f.stat().st_mtime_ns}\n".encode())
+                h.update(f"{entry.name}/{name}:{st.st_mtime_ns}\n".encode())
     except OSError:
         return "empty"
     return h.hexdigest()
@@ -92,18 +106,39 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
+    def _experiment_rows(self, app_name):
+        """The expensive half: metadata + logs, invalidated only by those."""
+        fp = _experiments_fingerprint(self.root_path, app_name, _is_stable_file)
+        # v4: rows no longer carry the raw run state (it has its own entry);
+        # the scope bump discards payloads written before the split.
+        scope = f"exp:rows:v4:{app_name}"
+        rows = self._get(scope, fp)
+        if rows is None:
+            rows = _fetch_experiment_rows(self.root_path, app_name)
+            self._put(scope, fp, rows)
+        return rows
+
+    def _run_states(self, app_name, verstrs):
+        """The volatile half: a heartbeat invalidates only this entry."""
+        fp = _experiments_fingerprint(
+            self.root_path, app_name, lambda name: name == RUN_STATE_FILE
+        )
+        scope = f"exp:runstates:v1:{app_name}"
+        states = self._get(scope, fp)
+        if states is None:
+            states = _fetch_run_states(
+                root_path=self.root_path, app_name=app_name, verstrs=verstrs
+            )
+            self._put(scope, fp, states)
+        return states
+
     def list_experiments(
         self, app_name, sort=None, last=None, offset=0, limit=None, status=None
     ):
-        fp = _experiments_fingerprint(self.root_path, app_name)
-        # v3: rows carry the raw run state; the scope bump invalidates cached
-        # payloads from before it existed.
-        rows = self._get(f"exp:v3:{app_name}", fp)
-        if rows is None:
-            rows = _fetch_experiment_rows(self.root_path, app_name)
-            self._put(f"exp:v3:{app_name}", fp, rows)
+        rows = self._experiment_rows(app_name)
+        run_states = self._run_states(app_name, [r["verstr"] for r in rows])
         # Status is derived from the current time, so never from the cache.
-        rows = exp_reader.annotate_status(rows)
+        rows = exp_reader.annotate_status(rows, run_states)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
         return exp_reader.sort_rows(
             exp_reader.filter_by_status(rows, status),
