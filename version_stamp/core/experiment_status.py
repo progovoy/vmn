@@ -12,7 +12,11 @@ node, and nothing was left behind to say so.
 """
 import datetime
 
-CREATED = "created"  # experiment exists, no run was ever started
+import yaml
+
+from version_stamp.core.logging import VMN_LOGGER
+
+CREATED ="created"  # experiment exists, no run was ever started
 RUNNING = "running"  # heartbeat is fresh
 STUCK = "stuck"  # claims running, heartbeat went stale
 SUCCEEDED = "succeeded"  # finished, exit code 0
@@ -24,7 +28,22 @@ DEFAULT_HEARTBEAT_INTERVAL_SEC = 30
 STALE_MULTIPLIER = 3
 MIN_STALE_SEC = 60
 
-_UNFINISHED = (CREATED, RUNNING, STUCK)
+RUN_STATE_FILE = "run_state.yml"
+
+
+def load_run_state(storage, app_name, verstr):
+    """Return the run state of an experiment, or None when there is none.
+
+    Never raises: an experiment that was created but never run has no run
+    state, and a half-written file is no better than a missing one.
+    """
+    try:
+        raw = storage.load_file(app_name, verstr, RUN_STATE_FILE)
+        state = yaml.safe_load(raw) if raw else None
+    except Exception:
+        VMN_LOGGER.debug("Failed to load run state", exc_info=True)
+        return None
+    return state if isinstance(state, dict) else None
 
 
 def parse_iso(ts):
@@ -59,10 +78,6 @@ def stale_after_sec(run_state):
     except (TypeError, ValueError):
         interval = DEFAULT_HEARTBEAT_INTERVAL_SEC
     return max(interval * STALE_MULTIPLIER, MIN_STALE_SEC)
-
-
-def is_finished(status):
-    return status not in _UNFINISHED
 
 
 def derive_status(run_state, now=None):

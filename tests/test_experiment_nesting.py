@@ -128,6 +128,108 @@ def test_unknown_parent_reference_fails(app_layout, capfd):
     assert _exp("create", app_layout.app_name, "--parent", "@9") != 0
 
 
+def test_stale_env_experiment_id_is_ignored(app_layout, capfd):
+    """A pruned outer run must not fail — or mis-parent — someone's training run."""
+    _bootstrap(app_layout)
+
+    os.environ["VMN_EXPERIMENT_ID"] = "0.0.1-dev.deadbeef"
+    try:
+        capfd.readouterr()
+        assert _experiment(app_layout.app_name) == 0
+        verstr = extract_dev_verstr(capfd.readouterr().out)
+    finally:
+        os.environ.pop("VMN_EXPERIMENT_ID", None)
+
+    assert "parent" not in _metadata(app_layout, verstr)
+
+
+def test_env_experiment_id_resolves_references(app_layout, capfd):
+    _bootstrap(app_layout)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="outer") == 0
+    outer = extract_dev_verstr(capfd.readouterr().out)
+
+    os.environ["VMN_EXPERIMENT_ID"] = "@1"
+    try:
+        capfd.readouterr()
+        assert _experiment(app_layout.app_name, note="inner") == 0
+        inner = extract_dev_verstr(capfd.readouterr().out)
+    finally:
+        os.environ.pop("VMN_EXPERIMENT_ID", None)
+
+    assert _metadata(app_layout, inner)["parent"] == outer
+
+
+def test_show_reads_run_state_only_within_the_subtree(app_layout, capfd, monkeypatch):
+    """`exp show` must not read every experiment's run state to print one Subtree."""
+    from version_stamp.cli import experiment as exp_mod
+
+    _bootstrap(app_layout)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="outer") == 0
+    outer = extract_dev_verstr(capfd.readouterr().out)
+
+    os.environ["VMN_EXPERIMENT_ID"] = outer
+    try:
+        capfd.readouterr()
+        assert _experiment(app_layout.app_name, note="inner") == 0
+        inner = extract_dev_verstr(capfd.readouterr().out)
+    finally:
+        os.environ.pop("VMN_EXPERIMENT_ID", None)
+
+    unrelated = []
+    for i in range(4):
+        capfd.readouterr()
+        assert _experiment(app_layout.app_name, note=f"other{i}") == 0
+        unrelated.append(extract_dev_verstr(capfd.readouterr().out))
+    assert len(set(unrelated)) == 4
+
+    reads = []
+    real_load = exp_mod.load_run_state
+
+    def _counting(storage, app_name, verstr):
+        reads.append(verstr)
+        return real_load(storage, app_name, verstr)
+
+    monkeypatch.setattr(exp_mod, "load_run_state", _counting)
+    capfd.readouterr()
+    exp_mod._print_status_block(
+        _storage(app_layout),
+        app_layout.app_name,
+        outer,
+        _metadata(app_layout, outer),
+    )
+    out = capfd.readouterr().out
+    assert inner in out, "Children must still be printed"
+    assert set(reads) <= {outer, inner}, reads
+    assert len(reads) <= 3, reads
+
+
+def test_show_skips_tree_reads_for_a_lone_experiment(app_layout, capfd, monkeypatch):
+    from version_stamp.cli import experiment as exp_mod
+
+    _bootstrap(app_layout)
+    os.environ.pop("VMN_EXPERIMENT_ID", None)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, note="solo") == 0
+    solo = extract_dev_verstr(capfd.readouterr().out)
+
+    reads = []
+    real_load = exp_mod.load_run_state
+    monkeypatch.setattr(
+        exp_mod,
+        "load_run_state",
+        lambda s, a, v: (reads.append(v), real_load(s, a, v))[1],
+    )
+    exp_mod._print_status_block(
+        _storage(app_layout), app_layout.app_name, solo, _metadata(app_layout, solo)
+    )
+    assert reads == [solo]
+
+
 def test_experiment_is_never_its_own_parent():
     from version_stamp.cli.experiment import _attach_parent
 

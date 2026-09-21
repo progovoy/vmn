@@ -99,14 +99,6 @@ def test_exit_code_wins_over_a_stale_heartbeat():
     assert st.derive_status(state, now=NOW) == st.SUCCEEDED
 
 
-def test_is_finished():
-    assert st.is_finished(st.SUCCEEDED)
-    assert st.is_finished(st.FAILED)
-    assert not st.is_finished(st.RUNNING)
-    assert not st.is_finished(st.STUCK)
-    assert not st.is_finished(st.CREATED)
-
-
 # ---- status_fields --------------------------------------------------------
 
 

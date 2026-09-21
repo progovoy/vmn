@@ -26,8 +26,10 @@ from version_stamp.cli.snapshot import (
 )
 from version_stamp.core.experiment_status import (
     DEFAULT_HEARTBEAT_INTERVAL_SEC,
+    RUN_STATE_FILE,
     STUCK,
     derive_status,
+    load_run_state,
     status_fields,
 )
 from version_stamp.core.experiment_tree import annotate_tree
@@ -124,27 +126,11 @@ def _append_to_log(storage, app_name, verstr, entry):
     storage.append_log_entry(app_name, verstr, _get_writer_id(), entry)
 
 
-RUN_STATE_FILE = "run_state.yml"
-
-
-def load_run_state(storage, app_name, verstr):
-    """Return the run state of an experiment, or None when there is none.
-
-    Never raises: an experiment that was created but never run has no run
-    state, and a half-written file is no better than a missing one.
-    """
-    try:
-        raw = storage.load_file(app_name, verstr, RUN_STATE_FILE)
-        state = yaml.safe_load(raw) if raw else None
-    except Exception:
-        VMN_LOGGER.debug("Failed to load run state", exc_info=True)
-        return None
-    return state if isinstance(state, dict) else None
-
-
-def _save_run_state(storage, app_name, verstr, state):
+def _save_run_state(storage, app_name, verstr, run_state, **updates):
+    """Apply ``updates`` to the run state and publish it."""
+    run_state.update(updates)
     storage.save_file(
-        app_name, verstr, RUN_STATE_FILE, yaml.dump(state, sort_keys=False)
+        app_name, verstr, RUN_STATE_FILE, yaml.dump(run_state, sort_keys=False)
     )
 
 
@@ -158,16 +144,25 @@ def _resolve_parent(storage, app_name, args):
     """Parent verstr for a new experiment. Returns (parent, error_code).
 
     ``--parent`` wins over the ``VMN_EXPERIMENT_ID`` exported by an enclosing
-    ``vmn exp run``.
+    ``vmn exp run``. Both are resolved against storage, so a parent is only ever
+    recorded if it exists. An explicit ``--parent`` that cannot be resolved is a
+    hard error; a stale env id is dropped with a warning — the outer run may
+    simply have been pruned, which is no reason to fail this one.
     """
     ref = getattr(args, "parent", None) if args is not None else None
+    explicit = bool(ref)
+    ref = ref or os.environ.get("VMN_EXPERIMENT_ID")
     if not ref:
-        return os.environ.get("VMN_EXPERIMENT_ID") or None, None
+        return None, None
+
     verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
-    if err:
+    if not err:
+        return verstr, None
+    if explicit:
         VMN_LOGGER.error(err)
         return None, 1
-    return verstr, None
+    VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -769,22 +764,22 @@ def experiment_run(vcs, params, storage, args):
             _try_sync()
             last_sync = time.monotonic()
         if time.monotonic() - last_heartbeat >= heartbeat_interval:
-            run_state["heartbeat"] = _now_iso()
-            _save_run_state(storage, app_name, verstr, run_state)
+            _save_run_state(storage, app_name, verstr, run_state, heartbeat=_now_iso())
             last_heartbeat = time.monotonic()
         time.sleep(_METRICS_TAIL_INTERVAL)
     exit_code = proc.returncode
     duration = round(time.monotonic() - start, 3)
 
-    run_state.update(
-        {
-            "state": "finished",
-            "exit_code": exit_code,
-            "finished_at": _now_iso(),
-            "duration_sec": duration,
-        }
+    _save_run_state(
+        storage,
+        app_name,
+        verstr,
+        run_state,
+        state="finished",
+        exit_code=exit_code,
+        finished_at=_now_iso(),
+        duration_sec=duration,
     )
-    _save_run_state(storage, app_name, verstr, run_state)
 
     _ingest_metric_records(storage, app_name, verstr, tailer.poll())
     _safe_unlink(metrics_path)
@@ -999,6 +994,32 @@ def experiment_list(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
+def _subtree_metas(verstr, metas):
+    """``verstr``'s row plus every experiment reachable from it via ``parent``.
+
+    Metadata-only, so the caller can read run state for just these — a run tree
+    is a handful of rows even when the app has thousands of experiments.
+    """
+    children_of = {}
+    for meta in metas:
+        parent = meta.get("parent")
+        if parent and parent != meta["verstr"]:
+            children_of.setdefault(parent, []).append(meta)
+    by_verstr = {m["verstr"]: m for m in metas}
+
+    subtree = []
+    seen = set()
+    queue = [by_verstr[verstr]] if verstr in by_verstr else []
+    while queue:
+        meta = queue.pop(0)
+        if meta["verstr"] in seen:
+            continue
+        seen.add(meta["verstr"])
+        subtree.append(meta)
+        queue.extend(children_of.get(meta["verstr"], []))
+    return subtree
+
+
 def _print_status_block(storage, app_name, verstr, metadata):
     """Derived run status, runner identity and the experiment's nesting."""
     fields = status_fields(load_run_state(storage, app_name, verstr))
@@ -1012,15 +1033,16 @@ def _print_status_block(storage, app_name, verstr, metadata):
     if fields["status"] == STUCK:
         print(f"  Heartbeat: last seen {_relative_timestamp(fields['heartbeat'])}")
 
-    metas = storage.list_snapshots(app_name)
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")
-    children = [m["verstr"] for m in metas if m.get("parent") == verstr]
-    if children:
-        print(f"  Children:  {', '.join(children)}")
-        node = _status_tree(storage, app_name, metas).get(verstr, {})
-        if node.get("tree_status") and node["tree_status"] != fields["status"]:
-            print(f"  Subtree:   {node['tree_status']}")
+
+    subtree = _subtree_metas(verstr, storage.list_snapshots(app_name))
+    if len(subtree) <= 1:
+        return  # no children: nothing to roll up
+    node = _status_tree(storage, app_name, subtree)[verstr]
+    print(f"  Children:  {', '.join(node['children'])}")
+    if node["tree_status"] and node["tree_status"] != fields["status"]:
+        print(f"  Subtree:   {node['tree_status']}")
 
 
 @measure_runtime_decorator
