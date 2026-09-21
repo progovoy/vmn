@@ -7,14 +7,13 @@ key, a different timestamp format — fails here instead of silently reporting
 every run as ``created``.
 """
 import os
-import sys
 
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from helpers import _exp, _init_app, _run_vmn_init, _stamp_app
+from helpers import _PROJECT_ROOT, _PY, _bootstrap, _exec_script, _exp
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -29,13 +28,6 @@ def _client(app_layout, use_index=True):
     except WorkspaceError:
         pass  # a previous client in this test already attached it
     return TestClient(create_app(manager, use_index=use_index))
-
-
-def _bootstrap(app_layout):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    err, _, _ = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
 
 
 def _rows(app_layout, use_index=True, **params):
@@ -53,21 +45,13 @@ def _detail(app_layout, verstr):
     return resp.json()
 
 
-def _script(app_layout, name, body):
-    path = os.path.join(app_layout.repo_path, name)
-    with open(path, "w") as f:
-        f.write(body)
-    os.chmod(path, 0o755)
-    return path
-
-
 @pytest.mark.parametrize(
     "exit_code,expected",
     [(0, "succeeded"), (3, "failed")],
 )
 def test_real_run_status_reaches_the_api(app_layout, capfd, exit_code, expected):
     _bootstrap(app_layout)
-    script = _script(
+    script = _exec_script(
         app_layout,
         "job.py",
         "import os, sys\n"
@@ -75,7 +59,7 @@ def test_real_run_status_reaches_the_api(app_layout, capfd, exit_code, expected)
         f"sys.exit({exit_code})\n",
     )
     capfd.readouterr()
-    err = _exp(app_layout.app_name, action="run", run_cmd=[sys.executable, script])
+    err = _exp(app_layout.app_name, action="run", run_cmd=[_PY, script])
     assert err == exit_code
 
     rows = _rows(app_layout)
@@ -114,22 +98,21 @@ def test_created_experiment_reports_created(app_layout, capfd):
 def test_nested_sweep_is_outer_and_inner_through_the_api(app_layout, capfd):
     """A sweep script calling `vmn exp run` per trial: one outer, two inner."""
     _bootstrap(app_layout)
-    trial = _script(
+    trial = _exec_script(
         app_layout,
         "trial.py",
         "import os\n"
         "open(os.environ['VMN_METRICS_FILE'], 'a').write('loss=0.5\\n')\n",
     )
     env_path = os.environ.get("PYTHONPATH", "")
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sweep = _script(
+    sweep = _exec_script(
         app_layout,
         "sweep.sh",
         "#!/bin/sh\nset -e\n"
-        f'export PYTHONPATH="{repo_root}:{env_path}"\n'
+        f'export PYTHONPATH="{_PROJECT_ROOT}:{env_path}"\n'
         f"for i in 1 2; do\n"
-        f'  "{sys.executable}" -m version_stamp.cli.entry exp run '
-        f'{app_layout.app_name} -- "{sys.executable}" "{trial}"\n'
+        f'  "{_PY}" -m version_stamp.cli.entry exp run '
+        f'{app_layout.app_name} -- "{_PY}" "{trial}"\n'
         "done\n",
     )
     capfd.readouterr()
@@ -156,16 +139,15 @@ def test_nested_sweep_is_outer_and_inner_through_the_api(app_layout, capfd):
 
 def test_failed_inner_makes_the_sweep_read_as_failed(app_layout, capfd):
     _bootstrap(app_layout)
-    trial = _script(app_layout, "boom.py", "import sys\nsys.exit(1)\n")
+    trial = _exec_script(app_layout, "boom.py", "import sys\nsys.exit(1)\n")
     env_path = os.environ.get("PYTHONPATH", "")
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sweep = _script(
+    sweep = _exec_script(
         app_layout,
         "sweep.sh",
         "#!/bin/sh\n"
-        f'export PYTHONPATH="{repo_root}:{env_path}"\n'
-        f'"{sys.executable}" -m version_stamp.cli.entry exp run '
-        f'{app_layout.app_name} -- "{sys.executable}" "{trial}" || true\n',
+        f'export PYTHONPATH="{_PROJECT_ROOT}:{env_path}"\n'
+        f'"{_PY}" -m version_stamp.cli.entry exp run '
+        f'{app_layout.app_name} -- "{_PY}" "{trial}" || true\n',
     )
     capfd.readouterr()
     assert _exp(app_layout.app_name, action="run", run_cmd=[sweep]) == 0
@@ -178,12 +160,12 @@ def test_failed_inner_makes_the_sweep_read_as_failed(app_layout, capfd):
 
 def test_status_filter_over_real_runs(app_layout, capfd):
     _bootstrap(app_layout)
-    ok = _script(app_layout, "ok.py", "pass\n")
-    bad = _script(app_layout, "bad.py", "import sys\nsys.exit(2)\n")
+    ok = _exec_script(app_layout, "ok.py", "pass\n")
+    bad = _exec_script(app_layout, "bad.py", "import sys\nsys.exit(2)\n")
     capfd.readouterr()
-    assert _exp(app_layout.app_name, action="run", run_cmd=[sys.executable, ok]) == 0
+    assert _exp(app_layout.app_name, action="run", run_cmd=[_PY, ok]) == 0
     app_layout.write_file_commit_and_push("test_repo_0", "churn.txt", "x")
-    assert _exp(app_layout.app_name, action="run", run_cmd=[sys.executable, bad]) == 2
+    assert _exp(app_layout.app_name, action="run", run_cmd=[_PY, bad]) == 2
 
     failed = _rows(app_layout, status="failed")
     assert [r["status"] for r in failed] == ["failed"]

@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 
 from version_stamp.backends.base import VMNBackend
 from version_stamp.cli.entry import vmn_run
@@ -10,6 +11,11 @@ from version_stamp.core.constants import (
 from version_stamp.core.logging import reset_logger
 
 DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}(?:\.r\d+)?$")
+
+_PY = sys.executable or "python3"
+# Subprocesses must import the version_stamp under test, not the one the venv
+# has installed editable from the main checkout.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def extract_dev_verstr(output):
@@ -52,6 +58,30 @@ def _init_app(app_name, starting_version="0.0.0"):
         merged_dict = {**(vmn_ctx.params), **(vmn_ctx.vcs.__dict__)}
 
     return ret, ver_info, merged_dict
+
+
+def _bootstrap(app_layout):
+    """init repo, init the app and stamp it once - the usual starting point."""
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+
+
+def _storage(app_layout, subdir="experiments"):
+    from version_stamp.cli.snapshot import get_snapshot_storage
+
+    return get_snapshot_storage(
+        "local", vmn_root_path=app_layout.repo_path, subdir=subdir
+    )
+
+
+def _exec_script(app_layout, name, body, repo_name="test_repo_0"):
+    """Write an executable, uncommitted script into the repo and return its path."""
+    app_layout.write_file_commit_and_push(
+        repo_name, name, body, commit=False, push=False, add_exec=True
+    )
+    return os.path.join(app_layout._repos[repo_name]["path"], name)
 
 
 def _release_app(app_name, version=None, stamp=False):
@@ -351,6 +381,7 @@ def _experiment(
     last=None,
     run_cmd=None,
     command="experiment",
+    extra_args=None,
 ):
     args_list = [command]
     if action != "create":
@@ -387,6 +418,8 @@ def _experiment(
         args_list.extend(["--keep", str(keep)])
     if older_than is not None:
         args_list.extend(["--older-than", older_than])
+    if extra_args:
+        args_list.extend(extra_args)
     if run_cmd is not None:
         args_list.append("--")
         args_list.extend(run_cmd)
