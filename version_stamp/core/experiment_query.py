@@ -30,6 +30,11 @@ expression, so a query and its ``not`` always partition the rows. ``= null`` is
 how you ask for absence; ``!= x`` is therefore true for a row that has no ``x``.
 Values of unlike types (number vs string, bool vs number) never order — the
 comparison is false, never a ``TypeError``.
+
+``metrics.x`` and ``params.x`` read different dicts: ``params`` carries the
+values the run was given verbatim, so ``params.model = "xgb"`` and
+``params.cache = true`` match strings and booleans, while ``metrics`` is the
+numeric fold the leaderboard sorts and charts.
 """
 
 # Every non-metric field a row can carry, from ``experiment_row`` +
@@ -44,10 +49,10 @@ ROW_FIELDS = frozenset(
     """.split()
 )
 
-# ``latest_metrics`` folds params into the metrics dict, so ``params.lr`` and
-# ``metrics.lr`` address the same value. Aliasing (rather than rejecting) keeps
-# MLflow-shaped queries working without inventing a second lookup.
-METRIC_PREFIXES = ("metrics", "params")
+# Each dotted prefix reads its own dict on the row. ``params`` holds values
+# verbatim (so ``params.model = "xgb"`` and ``params.cache = true`` work);
+# ``metrics`` holds the numeric fold, which is what sorting and charts use.
+DICT_PREFIXES = ("metrics", "params")
 
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")
@@ -135,9 +140,9 @@ def _getter(name, pos):
         if name not in ROW_FIELDS:
             _fail(f"unknown field '{name}'", pos)
         return lambda row: row.get(name)
-    if len(parts) == 2 and parts[0] in METRIC_PREFIXES:
-        key = parts[1]
-        return lambda row: (row.get("metrics") or {}).get(key)
+    if len(parts) == 2 and parts[0] in DICT_PREFIXES:
+        prefix, key = parts
+        return lambda row: (row.get(prefix) or {}).get(key)
     _fail(f"unknown field '{name}'", pos)
 
 

@@ -9,6 +9,7 @@ import os
 
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
 from version_stamp.core.experiment_log import (
+    effective_params,
     experiment_row,
     filter_by_status,
     last_metric_at,
@@ -226,6 +227,7 @@ def get_experiment(root_path, app_name, verstr_ref):
     return {
         "metadata": metadata,
         "log": log,
+        "params": effective_params(log),
         "metrics": latest_metrics(log),
         "series": metric_series(log),
         "artifacts": list_artifacts(storage, app_name, verstr),
@@ -267,6 +269,7 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
     return {
         "metadata": metadata,
         "log": log,
+        "params": effective_params(log),
         "metrics": latest_metrics(log),
         "series": metric_series(log),
         "artifacts": list_artifacts(storage, app_name, verstr),

@@ -223,9 +223,39 @@ def test_nested_metric_access():
     assert _verstrs("metrics.acc >= 0.9") == ["0.0.1"]
 
 
-def test_params_prefix_aliases_metrics():
-    rows = [_row("1.0.0", metrics={"lr": 0.01}), _row("2.0.0", metrics={"lr": 0.5})]
+def test_params_prefix_resolves_against_the_rows_params_not_metrics():
+    """``params.`` addresses the row's verbatim params dict, ``metrics.`` the metrics.
+
+    It used to alias the metrics lookup, which made a string param unqueryable.
+    """
+    rows = [
+        _row("1.0.0", params={"lr": 0.01}, metrics={"lr": 0.01, "loss": 9.0}),
+        _row("2.0.0", params={"lr": 0.5}, metrics={"lr": 0.5, "loss": 0.1}),
+    ]
     assert _verstrs("params.lr < 0.1", rows) == ["1.0.0"]
+    assert _verstrs("params.loss < 1", rows) == []
+    assert _verstrs("metrics.loss < 1", rows) == ["2.0.0"]
+
+
+def test_params_prefix_matches_a_string_param():
+    rows = [
+        _row("1.0.0", params={"model": "xgb"}, metrics={}),
+        _row("2.0.0", params={"model": "linear"}, metrics={}),
+    ]
+    assert _verstrs('params.model = "xgb"', rows) == ["1.0.0"]
+
+
+def test_params_prefix_matches_a_boolean_param():
+    rows = [
+        _row("1.0.0", params={"cache": True}, metrics={"cache": 1.0}),
+        _row("2.0.0", params={"cache": False}, metrics={"cache": 0.0}),
+    ]
+    assert _verstrs("params.cache = true", rows) == ["1.0.0"]
+    assert _verstrs("params.cache = false", rows) == ["2.0.0"]
+
+
+def test_params_prefix_on_a_row_without_params_matches_nothing():
+    assert _verstrs('params.model = "xgb"') == []
 
 
 def test_unknown_top_level_field_is_a_query_error():

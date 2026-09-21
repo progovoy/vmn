@@ -107,10 +107,13 @@ def metric_sort_descending(schema, key):
 
 
 def experiment_row(idx, meta, log):
-    """One leaderboard row: an experiment's metadata plus its folded metrics.
+    """One leaderboard row: an experiment's metadata, params and folded metrics.
 
     *idx* is the 1-based storage index — what ``vmn exp show <app> -v @N``
     resolves — and is assigned before any sort so it sticks to the row.
+
+    ``params`` carries every param verbatim; ``metrics`` stays numeric-only (with
+    the numeric params folded in), because sorting and charting depend on that.
     """
     return {
         "idx": idx,
@@ -121,6 +124,7 @@ def experiment_row(idx, meta, log):
         "branch": meta.get("branch"),
         "base_version": meta.get("base_version"),
         "user_meta": meta.get("user_meta"),
+        "params": effective_params(log),
         "metrics": latest_metrics(log),
         "parent": meta.get("parent"),
         "last_metric_at": last_metric_at(log),

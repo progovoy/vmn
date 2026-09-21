@@ -113,6 +113,35 @@ def test_experiment_row_carries_metadata_metrics_and_last_metric_at():
     assert row["last_metric_at"] == "t9"
 
 
+def test_experiment_row_carries_params_verbatim():
+    """Params reach the row untouched — the metrics fold cannot carry a string."""
+    log = [{"type": "create", "params": {"lr": 0.01, "model": "xgb", "cache": True}}]
+    row = experiment_row(1, {"verstr": "0.0.1"}, log)
+    assert row["params"] == {"lr": 0.01, "model": "xgb", "cache": True}
+    assert row["params"]["cache"] is True
+
+
+def test_experiment_row_params_keeps_a_numeric_param_in_metrics_too():
+    log = [{"type": "create", "params": {"lr": "0.01"}}]
+    row = experiment_row(1, {"verstr": "0.0.1"}, log)
+    assert row["params"] == {"lr": "0.01"}
+    assert row["metrics"] == {"lr": 0.01}
+
+
+def test_experiment_row_params_folds_a_mid_run_params_entry_over_create():
+    log = [
+        {"type": "create", "params": {"lr": 0.01, "model": "xgb"}},
+        {"type": "params", "params": {"lr": 0.05}},
+    ]
+    row = experiment_row(1, {"verstr": "0.0.1"}, log)
+    assert row["params"] == {"lr": 0.05, "model": "xgb"}
+
+
+def test_experiment_row_params_is_an_empty_dict_without_params():
+    row = experiment_row(1, {"verstr": "0.0.1"}, [_metrics({"loss": 0.5})])
+    assert row["params"] == {}
+
+
 def test_filter_by_status_takes_a_list_or_a_comma_separated_string():
     rows = [{"status": "failed"}, {"status": "succeeded"}, {"status": "running"}]
     assert filter_by_status(rows, "failed, running") == [rows[0], rows[2]]
