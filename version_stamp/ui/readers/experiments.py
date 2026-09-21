@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """Read-side access to experiments for the vmn ui API.
 
-Pure, lock-free reads over the same storage layer the CLI uses. Sorting
-semantics intentionally mirror ``vmn exp list`` so the web leaderboard and the
-CLI always agree.
+Pure, lock-free reads over the same storage layer the CLI uses. Rows are folded
+by :mod:`version_stamp.core.experiment_log` — the module ``vmn exp`` folds its
+own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
-from version_stamp.cli.experiment import (
-    _get_latest_metrics,
-    _load_log,
-    _metric_sort_descending,
-    get_metric_series,
-)
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.core.experiment_log import (
+    experiment_row,
+    filter_by_status,
+    last_metric_at,
+    latest_metrics,
+    list_artifacts,
+    metric_series,
+    sort_by_metric,
+)
+from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_status import (
     derive_status,
     load_run_state,
     status_fields,
 )
-from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_tree import (
+    annotate_tree,
+    children_by_parent,
+    subtree_verstrs,
+)
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.versions import version_counts
 
@@ -71,14 +79,6 @@ def list_apps(root_path):
     return rows
 
 
-def _last_metric_at(log):
-    """Timestamp of the newest ``metrics`` entry (the log is time-ordered)."""
-    for entry in reversed(log):
-        if entry.get("type") == "metrics":
-            return entry.get("timestamp")
-    return None
-
-
 def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     """Leaderboard rows in storage order (oldest first). The expensive read:
     every experiment's metadata + log.
@@ -94,25 +94,9 @@ def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     if storage is None:
         storage = experiment_storage(root_path)
     rows = []
-    for i, meta in enumerate(storage.list_snapshots(app_name)):
+    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
         log = _load_log(storage, app_name, meta["verstr"])
-        rows.append(
-            {
-                # 1-based storage index: what `vmn exp show <app> -v @N` resolves.
-                # Assigned before any sort so it sticks to the row.
-                "idx": i + 1,
-                "verstr": meta["verstr"],
-                "code_verstr": meta.get("code_verstr", meta["verstr"]),
-                "timestamp": meta.get("timestamp"),
-                "note": meta.get("note"),
-                "branch": meta.get("branch"),
-                "base_version": meta.get("base_version"),
-                "user_meta": meta.get("user_meta"),
-                "metrics": _get_latest_metrics(log),
-                "parent": meta.get("parent"),
-                "last_metric_at": _last_metric_at(log),
-            }
-        )
+        rows.append(experiment_row(idx, meta, log))
     return rows
 
 
@@ -156,14 +140,6 @@ def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
     return annotate_status(rows, run_states, now=now)
 
 
-def filter_by_status(rows, status=None):
-    """Keep rows whose status is in a comma-separated allow list."""
-    if not status:
-        return rows
-    wanted = {s.strip() for s in status.split(",")}
-    return [r for r in rows if r["status"] in wanted]
-
-
 def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
     """Pure ordering over fetched rows — semantics identical to ``vmn exp list``.
 
@@ -173,32 +149,7 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
     """
     if last:
         rows = rows[-int(last) :]
-    rows = list(rows)
-
-    all_keys = set()
-    for r in rows:
-        all_keys.update(r["metrics"].keys())
-
-    def _key(metric):
-        return lambda r: (
-            r["metrics"].get(metric) is None,
-            r["metrics"].get(metric, 0),
-        )
-
-    if sort and sort in all_keys:
-        # Match `vmn exp list`: a metric drives direction only via its own
-        # schema entry; a key absent from the schema sorts ascending.
-        desc = (
-            _metric_sort_descending(schema, sort) if sort in (schema or {}) else False
-        )
-        rows.sort(key=_key(sort), reverse=desc)
-    elif not sort and schema:
-        primary = next((k for k, v in schema.items() if v.get("primary")), None)
-        if primary and primary in all_keys:
-            rows.sort(
-                key=_key(primary),
-                reverse=_metric_sort_descending(schema, primary),
-            )
+    rows = sort_by_metric(list(rows), schema, sort=sort)
 
     if limit is not None:
         total = len(rows)
@@ -221,18 +172,6 @@ def list_experiments(
     )
 
 
-def _list_artifacts(storage, app_name, verstr):
-    art_dir = storage.list_artifact_files(app_name, verstr)
-    if not art_dir or not os.path.isdir(art_dir):
-        return []
-    result = []
-    for name in sorted(os.listdir(art_dir)):
-        path = os.path.join(art_dir, name)
-        if os.path.isfile(path):
-            result.append({"name": name, "size": os.path.getsize(path)})
-    return result
-
-
 _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "parent",
     "children",
@@ -241,19 +180,6 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "tree_status",
     "last_metric_at",
 )
-
-
-def _subtree_verstrs(verstr, children_of):
-    """*verstr* and everything below it, cycle-safe."""
-    seen, stack, out = set(), [verstr], []
-    while stack:
-        current = stack.pop()
-        if current in seen:
-            continue
-        seen.add(current)
-        out.append(current)
-        stack.extend(children_of.get(current, []))
-    return out
 
 
 def _status_detail(storage, app_name, verstr, metadata, log):
@@ -267,12 +193,7 @@ def _status_detail(storage, app_name, verstr, metadata, log):
         {"verstr": meta["verstr"], "parent": meta.get("parent")}
         for meta in storage.list_snapshots(app_name)
     ]
-    children_of = {}
-    for node in nodes:
-        if node["parent"] and node["parent"] != node["verstr"]:
-            children_of.setdefault(node["parent"], []).append(node["verstr"])
-
-    subtree = set(_subtree_verstrs(verstr, children_of))
+    subtree = set(subtree_verstrs(verstr, children_by_parent(nodes)))
     run_state = None
     for node in nodes:
         if node["verstr"] not in subtree:
@@ -286,7 +207,7 @@ def _status_detail(storage, app_name, verstr, metadata, log):
     detail = status_fields(run_state)
     detail.update({k: row.get(k) for k in ("children", "kind", "depth", "tree_status")})
     detail["parent"] = metadata.get("parent")
-    detail["last_metric_at"] = _last_metric_at(log)
+    detail["last_metric_at"] = last_metric_at(log)
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
@@ -305,9 +226,9 @@ def get_experiment(root_path, app_name, verstr_ref):
     return {
         "metadata": metadata,
         "log": log,
-        "metrics": _get_latest_metrics(log),
-        "series": get_metric_series(log),
-        "artifacts": _list_artifacts(storage, app_name, verstr),
+        "metrics": latest_metrics(log),
+        "series": metric_series(log),
+        "artifacts": list_artifacts(storage, app_name, verstr),
         "status": _status_detail(storage, app_name, verstr, metadata, log),
         "patches": {
             k: bool(patches.get(k))
@@ -346,9 +267,9 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
     return {
         "metadata": metadata,
         "log": log,
-        "metrics": _get_latest_metrics(log),
-        "series": get_metric_series(log),
-        "artifacts": _list_artifacts(storage, app_name, verstr),
+        "metrics": latest_metrics(log),
+        "series": metric_series(log),
+        "artifacts": list_artifacts(storage, app_name, verstr),
         "status": _status_detail(storage, app_name, verstr, metadata, log),
         "patches": {
             k: bool(patches.get(k)) if patches else False

@@ -24,6 +24,14 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
+from version_stamp.core.experiment_log import (
+    effective_params,
+    entry_params,
+    latest_metrics,
+    load_log,
+    metric_series,
+    metric_sort_descending,
+)
 from version_stamp.core.experiment_status import (
     DEFAULT_HEARTBEAT_INTERVAL_SEC,
     RUN_STATE_FILE,
@@ -34,6 +42,16 @@ from version_stamp.core.experiment_status import (
 )
 from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+
+# The log-folding helpers moved to core.experiment_log so the ui readers and the
+# version_stamp.exp SDK can share them without importing the CLI. These aliases
+# keep the old private names importable for existing callers.
+_create_entry_params = effective_params
+_entry_params = entry_params
+_get_latest_metrics = latest_metrics
+_load_log = load_log
+_metric_sort_descending = metric_sort_descending
+get_metric_series = metric_series
 
 
 @dataclass
@@ -107,11 +125,6 @@ def _get_experiment_storage(vcs, params):
         endpoint_url=params.get("endpoint_url"),
         subdir="experiments",
     )
-
-
-def _load_log(storage, app_name, verstr):
-    """Load experiment log from storage, merging per-writer JSONL files."""
-    return storage.load_merged_log(app_name, verstr)
 
 
 def _save_log(storage, app_name, verstr, log):
@@ -247,23 +260,6 @@ class _MetricsTailer:
         return records
 
 
-def get_metric_series(log):
-    """Fold a log into per-metric point lists for charting.
-
-    Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order.
-    """
-    series = {}
-    for entry in log:
-        if entry.get("type") != "metrics":
-            continue
-        step = entry.get("step")
-        ts = entry.get("timestamp")
-        for key, value in (entry.get("values") or {}).items():
-            series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series
-
-
 def _parse_notes_file(path):
     """Read a YAML file and return as dict."""
     with open(path) as f:
@@ -295,47 +291,6 @@ def _get_metrics_schema(vcs):
     if isinstance(exp_conf, dict):
         return exp_conf.get("metrics", {})
     return {}
-
-
-def _metric_sort_descending(schema, key):
-    """Whether metric ``key`` sorts best-first as descending (higher is better).
-
-    Driven by ``goal: min|max`` in the metrics schema (``max`` = higher-is-better
-    = descending). Unspecified metrics default to higher-is-better.
-    """
-    entry = (schema or {}).get(key, {}) or {}
-    goal = entry.get("goal")
-    if goal is None:
-        return True
-    if goal not in ("min", "max"):
-        VMN_LOGGER.warning(f"Invalid goal '{goal}' for metric '{key}'; using 'max'")
-        goal = "max"
-    return goal == "max"
-
-
-def _entry_params(entry):
-    """Params carried by a log entry.
-
-    `create` records params up front, `run.log_params()` mid-run.
-    """
-    if entry.get("type") in ("create", "params"):
-        return entry.get("params") or {}
-    return {}
-
-
-def _get_latest_metrics(log):
-    """Scan log entries and return the latest value for each metric."""
-    metrics = {}
-    for entry in log:
-        if entry.get("type") == "metrics" and "values" in entry:
-            metrics.update(entry["values"])
-        else:
-            for k, v in _entry_params(entry).items():
-                try:
-                    metrics[k] = float(v)
-                except (ValueError, TypeError):
-                    pass
-    return metrics
 
 
 def _resolve_experiment_version(storage, vcs, args, default_latest=False):
@@ -826,7 +781,7 @@ def _ingest_metric_records(storage, app_name, verstr, records):
     """Append one metrics log entry per parsed (step, values) record."""
     if not records:
         return
-    log = _load_log(storage, app_name, verstr)
+    log = load_log(storage, app_name, verstr)
     for step, values in records:
         entry = _create_log_entry("metrics", values=values)
         if step is not None:
@@ -929,8 +884,8 @@ def experiment_list(vcs, params, storage, args):
     rows = []
     all_metric_keys = set()
     for meta in experiments:
-        log = _load_log(storage, app_name, meta["verstr"])
-        metrics = _get_latest_metrics(log)
+        log = load_log(storage, app_name, meta["verstr"])
+        metrics = latest_metrics(log)
         all_metric_keys.update(metrics.keys())
         rows.append((meta, metrics, log))
 
@@ -950,7 +905,7 @@ def experiment_list(vcs, params, storage, args):
     if sort_key and sort_key in all_metric_keys:
         sort_desc = False
         if schema and sort_key in schema:
-            sort_desc = _metric_sort_descending(schema, sort_key)
+            sort_desc = metric_sort_descending(schema, sort_key)
         rows.sort(
             key=lambda r: (r[1].get(sort_key) is None, r[1].get(sort_key, 0)),
             reverse=sort_desc,
@@ -958,7 +913,7 @@ def experiment_list(vcs, params, storage, args):
     elif not sort_key and schema:
         primary = next((k for k, v in schema.items() if v.get("primary")), None)
         if primary and primary in all_metric_keys:
-            sort_desc = _metric_sort_descending(schema, primary)
+            sort_desc = metric_sort_descending(schema, primary)
             rows.sort(
                 key=lambda r: (r[1].get(primary) is None, r[1].get(primary, 0)),
                 reverse=sort_desc,
@@ -1066,7 +1021,7 @@ def experiment_show(vcs, params, storage, args):
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
-    log = _load_log(storage, app_name, verstr)
+    log = load_log(storage, app_name, verstr)
 
     print(f"Experiment: {verstr}")
     print(f"  Branch:    {metadata.get('branch', '?')}")
@@ -1087,7 +1042,7 @@ def experiment_show(vcs, params, storage, args):
             print(f"  {ptype}: {lines} lines")
 
     # Metrics from log
-    metrics = _get_latest_metrics(log)
+    metrics = latest_metrics(log)
     if metrics:
         print("\n  Metrics:")
         for k, v in sorted(metrics.items()):
@@ -1137,7 +1092,7 @@ def _load_experiment_bundle(storage, vcs, verstr, app_name=None):
     if meta is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return None
-    return meta, patches, _load_log(storage, app_name, verstr)
+    return meta, patches, load_log(storage, app_name, verstr)
 
 
 def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None, app_name=None):
@@ -1201,7 +1156,7 @@ def experiment_compare(vcs, params, storage, args):
     all_keys = set()
     exp_metrics = []
     for meta, patches, log in experiments:
-        m = _get_latest_metrics(log)
+        m = latest_metrics(log)
         exp_metrics.append(m)
         all_keys.update(m.keys())
 
@@ -1246,14 +1201,6 @@ def experiment_compare(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _create_entry_params(log):
-    """Effective params: the `create` entry's, folded with later `params` ones."""
-    params = {}
-    for entry in log:
-        params.update(_entry_params(entry))
-    return params
-
-
 def _fmt_val(v):
     return f"{v:.4g}" if isinstance(v, float) else str(v)
 
@@ -1279,8 +1226,8 @@ def experiment_diff(vcs, params, storage, args):
     v1, v2 = meta1["verstr"], meta2["verstr"]
 
     print(f"Comparing {v1} -> {v2}\n")
-    _print_delta_line("params", _create_entry_params(log1), _create_entry_params(log2))
-    _print_delta_line("metrics", _get_latest_metrics(log1), _get_latest_metrics(log2))
+    _print_delta_line("params", effective_params(log1), effective_params(log2))
+    _print_delta_line("metrics", latest_metrics(log1), latest_metrics(log2))
     print()
 
     tool = getattr(args, "tool", None) or get_git_difftool(vcs)
@@ -1333,7 +1280,7 @@ def experiment_export(vcs, params, storage, args):
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
-    log = _load_log(storage, app_name, verstr)
+    log = load_log(storage, app_name, verstr)
 
     safe_verstr = verstr.replace("+", "_plus_")
     output_path = args.output or f"{safe_verstr}.tar.gz"

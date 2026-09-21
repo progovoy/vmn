@@ -220,6 +220,26 @@ def test_experiment_is_never_its_own_parent():
     assert meta["parent"] == "v0"
 
 
+def test_children_by_parent_indexes_edges_and_drops_self_parents():
+    from version_stamp.core.experiment_tree import children_by_parent
+
+    nodes = [
+        {"verstr": "a", "parent": None},
+        {"verstr": "b", "parent": "a"},
+        {"verstr": "c", "parent": "a"},
+        {"verstr": "d", "parent": "d"},
+    ]
+    assert children_by_parent(nodes) == {"a": ["b", "c"]}
+
+
+def test_subtree_verstrs_walks_down_and_survives_a_cycle():
+    from version_stamp.core.experiment_tree import subtree_verstrs
+
+    children_of = {"a": ["b"], "b": ["c"], "c": ["a"]}
+    assert sorted(subtree_verstrs("a", children_of)) == ["a", "b", "c"]
+    assert subtree_verstrs("solo", {}) == ["solo"]
+
+
 def test_nested_exp_run_produces_one_outer_and_two_inner(app_layout, capfd):
     _bootstrap(app_layout)
 

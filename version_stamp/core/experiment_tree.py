@@ -32,6 +32,29 @@ def rollup_status(statuses):
     return next((c for c in _PRECEDENCE if c in statuses), None)
 
 
+def children_by_parent(nodes):
+    """``{parent verstr: [child verstr]}`` — a run is never its own child."""
+    children_of = {}
+    for node in nodes:
+        parent = node.get("parent")
+        if parent and parent != node["verstr"]:
+            children_of.setdefault(parent, []).append(node["verstr"])
+    return children_of
+
+
+def subtree_verstrs(verstr, children_of):
+    """*verstr* and everything below it, cycle-safe."""
+    seen, stack, out = set(), [verstr], []
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        out.append(current)
+        stack.extend(children_of.get(current, []))
+    return out
+
+
 def _depth(verstr, parent_of):
     """Distance to the top of the parent chain. A cycle stops at its entry point."""
     depth = 0
@@ -67,11 +90,7 @@ def annotate_tree(rows):
     by_verstr = {r["verstr"]: r for r in rows}
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
-    children_of = {}
-    for row in rows:
-        parent = row.get("parent")
-        if parent and parent != row["verstr"]:
-            children_of.setdefault(parent, []).append(row["verstr"])
+    children_of = children_by_parent(rows)
 
     for row in rows:
         verstr = row["verstr"]
