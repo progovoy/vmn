@@ -148,3 +148,21 @@ The list endpoint accepts a `status` query parameter (comma-separated) to filter
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
   "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?status=running,stuck"
 ```
+
+### Filtering with a query
+
+The same endpoint takes `q`, an expression over the row fields, metrics and
+params — the same [query language](sdk.md#the-query-language) the Python SDK's
+`list_runs(query=...)` takes:
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'q=metrics.loss < 0.5 and params.optimizer = "adam"' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments"
+```
+
+- `q` and `status` compose as **and** when both are given.
+- Filtering happens **before** pagination, so `offset`/`limit` page through the
+  matches and the `total` in the response counts matches, not all runs.
+- An invalid query is a **400** carrying the parser's message and character
+  offset (`unknown field 'statuz' at offset 0`).
