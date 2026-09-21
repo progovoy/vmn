@@ -86,6 +86,15 @@ input, select, button, textarea { font-family: inherit; }
 }
 tr.flash { animation: flashbg 1.8s ease-out; }
 
+/* Every status indicator is the same dot — geometry and pulse live here once,
+ * each vocabulary only picks its own colors further down. */
+.status-dot, .status-pill .dot, .job-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+}
+.status-dot.pulse, .status-pill.running .dot, .job-dot.running {
+  animation: dot 1.2s ease-in-out infinite;
+}
+
 /* ---------- shell ---------- */
 .shell { display: flex; height: 100vh; overflow: hidden; }
 
@@ -147,11 +156,7 @@ tr.flash { animation: flashbg 1.8s ease-out; }
 .copy-path button { flex: none; }
 .sb-group .copy-path { margin-top: 6px; padding: 0 4px; }
 
-.status-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--good);
-  flex: none;
-}
-.status-dot.pulse { animation: dot 2.4s ease-in-out infinite; }
+.status-dot { background: var(--good); }
 
 .sb-nav { padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
 .sb-nav a {
@@ -317,10 +322,7 @@ input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent);
   border: 1px solid var(--line-2); color: var(--text-3);
   background: var(--panel-2);
 }
-.status-pill .dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: currentColor; flex: none;
-}
+.status-pill .dot { background: currentColor; }
 .status-pill .warn { font-size: 10.5px; }
 .status-pill.succeeded { color: var(--good); border-color: color-mix(in srgb, var(--good) 50%, transparent); }
 .status-pill.failed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
@@ -329,7 +331,6 @@ input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent);
   background: color-mix(in srgb, var(--hotfix) 12%, transparent);
 }
 .status-pill.running { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
-.status-pill.running .dot { animation: dot 1.2s ease-in-out infinite; }
 
 td.status-cell { white-space: nowrap; }
 .nest { display: flex; align-items: center; gap: 5px; }
@@ -437,8 +438,7 @@ button.link:hover { border: none; text-decoration: underline; }
 /* ---------- job ---------- */
 .job-head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
 .job-head .title { font-size: 13px; font-weight: 600; }
-.job-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.job-dot.running { background: var(--accent); animation: dot 1s ease-in-out infinite; }
+.job-dot.running { background: var(--accent); }
 .job-dot.succeeded { background: var(--good); }
 .job-dot.failed { background: var(--bad); }
 

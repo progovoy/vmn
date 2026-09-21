@@ -5,7 +5,9 @@ import {
 } from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
-import { fmtDuration, fmtVal, metricGoal, relTime, seriesColor } from "../util";
+import {
+  fmtDuration, fmtVal, metricGoal, pollIntervalMs, relTime, seriesColor,
+} from "../util";
 import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
 import SmoothingSlider from "../components/SmoothingSlider";
@@ -154,9 +156,11 @@ export default function Run() {
     load();
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [load, ws, app]);
-  // Follow a live run on its own, even with the Live toggle off.
+  // Follow a live run on its own, even with the Live toggle off. One cadence
+  // either way — the payload only changes when the runner beats.
   const running = detail?.status?.status === "running";
-  usePolling(load, live ? 3000 : 5000, live || running);
+  const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
+  usePolling(load, pollMs, live || running);
 
   const hasTimestamps = useMemo(() => {
     if (!detail) return false;

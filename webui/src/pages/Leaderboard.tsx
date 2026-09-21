@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, relTime } from "../util";
+import { fmtVal, metricGoal, pollIntervalMs, relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import ParamPlots from "../components/ParamPlots";
 import MetricBarChart from "../components/MetricBarChart";
@@ -42,12 +42,19 @@ export default function Leaderboard() {
     [ws, app, sort, statusFilter]
   );
   useEffect(() => { load(); }, [load]);
-  // Keep refreshing on our own while a run is still in flight.
+  // Keep refreshing on our own while a run is still in flight, at the cadence
+  // its heartbeat can actually move the status at.
   const anyRunning = useMemo(
     () => (rows ?? []).some((r) => r.status === "running"),
     [rows]
   );
-  usePolling(load, 5000, live || anyRunning);
+  const heartbeatSec = useMemo(() => {
+    const beats = (rows ?? [])
+      .map((r) => r.heartbeat_interval_sec)
+      .filter((v): v is number => typeof v === "number");
+    return beats.length ? Math.min(...beats) : null;
+  }, [rows]);
+  usePolling(load, pollIntervalMs(heartbeatSec), live || anyRunning);
   useEffect(() => {
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app]);

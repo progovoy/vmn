@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 vi.mock("../../api", () => ({
@@ -157,7 +157,7 @@ describe("Leaderboard status column", () => {
 });
 
 describe("Leaderboard status filter", () => {
-  it("narrows the visible rows to the picked statuses", async () => {
+  it("shows exactly the rows the server returned for the picked statuses", async () => {
     mockedApi.experiments.mockResolvedValue([
       row(1, "succeeded"), row(2, "running"), row(3, "stuck"),
     ]);
@@ -167,14 +167,17 @@ describe("Leaderboard status filter", () => {
     await waitFor(() => expect(screen.getByText(/3\s*runs/)).toBeInTheDocument());
     expect(document.querySelectorAll(".status-pill")).toHaveLength(3);
 
+    mockedApi.experiments.mockResolvedValue([row(2, "running"), row(3, "stuck")]);
     fireEvent.click(screen.getByRole("button", { name: "running" }));
     fireEvent.click(screen.getByRole("button", { name: "stuck" }));
 
     await waitFor(() =>
-      expect(screen.getByText(/2 of 3 runs/)).toBeInTheDocument()
+      expect(document.querySelectorAll(".status-pill")).toHaveLength(2)
     );
     expect(screen.queryByText("0.0.1-rc.1")).not.toBeInTheDocument();
     expect(screen.getByText("0.0.2-rc.1")).toBeInTheDocument();
+    // The toggles must survive the narrowed response, or there is no way back.
+    expect(screen.getByRole("button", { name: "succeeded" })).toBeInTheDocument();
   });
 
   it("requests the picked statuses from the server", async () => {
@@ -193,6 +196,11 @@ describe("Leaderboard status filter", () => {
   });
 });
 
+/** Advance fake time with React's work flushed, so the poll timer is armed
+ *  before the clock moves. */
+const tick = (ms: number) =>
+  act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
 describe("Leaderboard auto-refresh", () => {
   it("polls while a row is running and stops once none are", async () => {
     vi.useFakeTimers();
@@ -200,15 +208,48 @@ describe("Leaderboard auto-refresh", () => {
     mockedApi.metricsSchema.mockResolvedValue({});
 
     renderLeaderboard();
-    await vi.advanceTimersByTimeAsync(0);
+    await tick(0);
     expect(mockedApi.experiments).toHaveBeenCalledTimes(1);
 
     mockedApi.experiments.mockResolvedValue([row(1, "succeeded")]);
-    await vi.advanceTimersByTimeAsync(5000);
+    await tick(15000);
     expect(mockedApi.experiments).toHaveBeenCalledTimes(2);
 
-    await vi.advanceTimersByTimeAsync(15000);
+    await tick(60000);
     expect(mockedApi.experiments).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it("follows the rows' heartbeat interval instead of a fixed 5s", async () => {
+    vi.useFakeTimers();
+    mockedApi.experiments.mockResolvedValue([
+      row(1, "running", { heartbeat_interval_sec: 10 }),
+    ]);
+
+    renderLeaderboard();
+    await tick(0);
+    expect(mockedApi.experiments).toHaveBeenCalledTimes(1);
+
+    // A 10s heartbeat floors at the 5s minimum, so it still feels live.
+    await tick(5000);
+    expect(mockedApi.experiments).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it("stops polling while the tab is hidden", async () => {
+    vi.useFakeTimers();
+    const visibility = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockReturnValue("hidden");
+    mockedApi.experiments.mockResolvedValue([row(1, "running")]);
+
+    renderLeaderboard();
+    await tick(0);
+    expect(mockedApi.experiments).toHaveBeenCalledTimes(1);
+
+    await tick(60000);
+    expect(mockedApi.experiments).toHaveBeenCalledTimes(1);
+    visibility.mockRestore();
     vi.useRealTimers();
   });
 });

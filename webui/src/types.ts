@@ -57,6 +57,8 @@ export interface RunStatus {
   command: string[] | null;
   /** Seconds since the last heartbeat. */
   stale_sec: number | null;
+  /** How often the runner beats — the cadence status can change at. */
+  heartbeat_interval_sec?: number | null;
   /** Verstr of the outer run that launched this one. */
   parent: string | null;
   children: string[];
