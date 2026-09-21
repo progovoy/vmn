@@ -45,7 +45,7 @@ from version_stamp.core.experiment_writer import (
     save_run_state,
 )
 from version_stamp.core.utils import now_iso, resolve_root_path
-from version_stamp.exp import APP_NAME_ENV, _resolve_app_name
+from version_stamp.exp import APP_NAME_ENV, _resolve_app_name, sysmetrics
 from version_stamp.exp.heartbeat import Heartbeat
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
@@ -173,11 +173,17 @@ def start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
+    system_metrics=False,
 ):
     """Create an experiment, mark it running and return the open ``Run``.
 
     ``app_name=None`` resolves the app from the current checkout. Use the result
     as a context manager, or call ``finish()`` yourself.
+
+    ``system_metrics=True`` records this process's CPU and memory (and GPU, with
+    ``pynvml``) as ``sys_*`` metrics on every heartbeat. Off by default: it adds
+    a log entry per beat, which a run that only wants its own metrics should not
+    pay for.
     """
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
@@ -216,6 +222,7 @@ def start_run(
         app_name,
         verstr,
         heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
+        system_metrics=system_metrics,
     )
     run._open()
     return run
@@ -224,7 +231,9 @@ def start_run(
 class Run:
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
-    def __init__(self, storage, app_name, verstr, heartbeat_interval_sec):
+    def __init__(
+        self, storage, app_name, verstr, heartbeat_interval_sec, system_metrics=False
+    ):
         self._storage = storage
         self.app_name = app_name
         self.id = verstr
@@ -249,6 +258,8 @@ class Run:
             "duration_sec": None,
         }
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
+        # No pid: this process *is* the workload.
+        self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -334,6 +345,7 @@ class Run:
 
     def _beat(self):
         self._publish(heartbeat=now_iso())
+        self._sampler.tick()
 
     def _sync(self):
         try:

@@ -575,6 +575,10 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     import tempfile
     import time
 
+    # Imported here, not at module scope: version_stamp.exp's package __init__
+    # imports this module, so a top-level import would be circular.
+    from version_stamp.exp import sysmetrics
+
     run_cmd = getattr(args, "run_cmd", None)
     if not run_cmd:
         VMN_LOGGER.error(
@@ -661,6 +665,15 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
         except Exception:
             VMN_LOGGER.debug("S3 sync failed", exc_info=True)
 
+    # The child is the workload, so it is the child's tree that gets measured.
+    sampler = sysmetrics.Sampler(
+        lambda values: _ingest_metric_records(
+            storage, app_name, verstr, [(None, values)]
+        ),
+        getattr(args, "system_metrics", False),
+        pid=proc.pid,
+    )
+
     last_sync = time.monotonic()
     last_heartbeat = time.monotonic()
     while proc.poll() is None:
@@ -670,6 +683,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
             last_sync = time.monotonic()
         if time.monotonic() - last_heartbeat >= heartbeat_interval:
             _save_run_state(storage, app_name, verstr, run_state, heartbeat=_now_iso())
+            sampler.tick()
             last_heartbeat = time.monotonic()
         time.sleep(_METRICS_TAIL_INTERVAL)
     exit_code = proc.returncode

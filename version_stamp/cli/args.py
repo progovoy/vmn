@@ -664,6 +664,14 @@ def _add_experiment_parser(subprasers, name):
         "A run whose heartbeat goes stale is reported as stuck.",
     )
     pexp.add_argument(
+        "--system-metrics",
+        action="store_true",
+        default=False,
+        help="Record the child process tree's CPU/memory (and GPU, with pynvml) as "
+        "sys_* metrics on every heartbeat during 'run'. Needs "
+        "'pip install vmn[sysmetrics]'; without it, nothing is recorded.",
+    )
+    pexp.add_argument(
         "--parent",
         default=None,
         help="Parent experiment for a nested run (verstr, unique prefix, @N or "

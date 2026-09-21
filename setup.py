@@ -25,6 +25,9 @@ setuptools.setup(
         "ui": ["fastapi>=0.110", "uvicorn>=0.29"],
         "s3": ["boto3"],
         "changelog": ["git-cliff==2.5.0; python_version >= '3.8'"],
+        # GPU metrics need pynvml too, which stays out of every extra: it is
+        # useless without a driver and would break installs on CPU-only hosts.
+        "sysmetrics": ["psutil>=5.9"],
     },
     package_dir={"version_stamp": "version_stamp"},
     packages=[
