@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
+from version_stamp.core.experiment_query import QueryError
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
@@ -138,39 +139,27 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         offset: int = 0,
         limit: int = None,
         status: str = None,
+        q: str = None,
     ):
         ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
-        s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            return exp_reader.list_experiments_from_storage(
-                s3_storage,
-                app_name,
-                sort=sort,
-                last=last,
-                offset=offset,
-                limit=limit,
-                status=status,
-            )
-        index = _index_for(ws)
-        if index:
-            return index.list_experiments(
-                app_name,
-                sort=sort,
-                last=last,
-                offset=offset,
-                limit=limit,
-                status=status,
-            )
-        return exp_reader.list_experiments(
-            ws.path,
-            app_name,
-            sort=sort,
-            last=last,
-            offset=offset,
-            limit=limit,
-            status=status,
+        filters = dict(
+            sort=sort, last=last, offset=offset, limit=limit, status=status, query=q
         )
+        # A query that will not compile is the caller's typo: answer 400 with the
+        # compiler's message (it carries the offset), not a 500 or an empty list.
+        try:
+            s3_storage = _exp_storage_for(ws)
+            if s3_storage:
+                return exp_reader.list_experiments_from_storage(
+                    s3_storage, app_name, **filters
+                )
+            index = _index_for(ws)
+            if index:
+                return index.list_experiments(app_name, **filters)
+            return exp_reader.list_experiments(ws.path, app_name, **filters)
+        except QueryError as e:
+            raise HTTPException(400, str(e))
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"

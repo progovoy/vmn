@@ -23,7 +23,11 @@ async function get<T>(path: string): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `HTTP ${res.status}`);
+    // The status rides along: a 400 is the caller's input (a bad experiment
+    // query, say) and is shown next to the input, not as a page error.
+    throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
+      status: res.status,
+    });
   }
   return res.json();
 }
@@ -60,13 +64,16 @@ export const api = {
     get<AppConfig>(
       `/workspaces/${ws}/apps/${appTag(app)}/config${v ? `?v=${encodeURIComponent(v)}` : ""}`
     ),
-  experiments: (ws: string, app: string, sort?: string, status?: string) => {
+  experiments: (
+    ws: string, app: string, sort?: string, status?: string, query?: string
+  ) => {
     const p = new URLSearchParams();
     if (sort) p.set("sort", sort);
     if (status) p.set("status", status);
-    const q = p.toString();
+    if (query) p.set("q", query);
+    const qs = p.toString();
     return get<ExperimentRow[]>(
-      `/workspaces/${ws}/apps/${appTag(app)}/experiments${q ? `?${q}` : ""}`
+      `/workspaces/${ws}/apps/${appTag(app)}/experiments${qs ? `?${qs}` : ""}`
     );
   },
   experimentsPaged: (ws: string, app: string, opts?: { sort?: string; offset?: number; limit?: number }) => {

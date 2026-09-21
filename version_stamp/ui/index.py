@@ -135,15 +135,23 @@ class WorkspaceIndex:
         return states
 
     def list_experiments(
-        self, app_name, sort=None, last=None, offset=0, limit=None, status=None
+        self,
+        app_name,
+        sort=None,
+        last=None,
+        offset=0,
+        limit=None,
+        status=None,
+        query=None,
     ):
         rows = self._experiment_rows(app_name)
         run_states = self._run_states(app_name, [r["verstr"] for r in rows])
         # Status is derived from the current time, so never from the cache.
         rows = exp_reader.annotate_status(rows, run_states)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
+        # ``query`` is a per-request filter over derived rows: never cached.
         return exp_reader.sort_rows(
-            exp_reader.filter_by_status(rows, status),
+            exp_reader.apply_filters(rows, status, query),
             schema,
             sort=sort,
             last=last,

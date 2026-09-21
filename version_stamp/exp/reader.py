@@ -33,6 +33,7 @@ from version_stamp.core.experiment_log import (
     sort_by_metric,
 )
 from version_stamp.core.experiment_log import load_log as _load_log
+from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import (
     derive_status,
     load_run_state,
@@ -128,7 +129,9 @@ def _all_rows(app_name, storage):
 # ---------------------------------------------------------------------------
 
 
-def list_runs(app_name=None, storage=None, sort=None, last=None, status=None):
+def list_runs(
+    app_name=None, storage=None, sort=None, last=None, status=None, query=None
+):
     """Runs of an app, oldest first unless *sort* or a primary metric reorders.
 
     Args:
@@ -139,9 +142,13 @@ def list_runs(app_name=None, storage=None, sort=None, last=None, status=None):
         sort: a metric name to order by.
         last: keep only the *last* runs (applied before sorting).
         status: keep only these statuses — a list or a comma-separated string.
+        query: an experiment query (``metrics.loss < 0.5 and params.model = "xgb"``),
+            ANDed with *status* and applied before *last* and *sort*. Raises
+            :class:`~version_stamp.core.experiment_query.QueryError` when it will
+            not compile — a caller wants the error, not a silent empty list.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    rows = filter_by_status(_all_rows(app_name, storage), status)
+    rows = filter_rows(filter_by_status(_all_rows(app_name, storage), status), query)
     if last:
         rows = rows[-int(last) :]
     return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)

@@ -382,6 +382,13 @@ button.link:hover { border: none; text-decoration: underline; }
   background: var(--panel-2); color: var(--text);
   border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px; font-size: 13px;
 }
+.toolbar input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--bad) 60%, transparent);
+}
+.query-row {
+  display: flex; gap: 8px; align-items: center; flex: 1 1 100%;
+}
+.query-error { color: var(--bad); font-size: 12px; }
 
 /* ---------- kv, cli, diff, timeline ---------- */
 .kv { display: grid; grid-template-columns: 88px 1fr; row-gap: 9px; font-size: 13px; }

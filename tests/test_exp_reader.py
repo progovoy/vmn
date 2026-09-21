@@ -301,6 +301,69 @@ def test_status_filter_accepts_a_string_or_a_list(app_layout):
     assert len(_runs(app_layout, status=None)) == 5
 
 
+def _seed_for_queries(app_layout):
+    """Five runs carrying statuses, metrics and params the query language reads."""
+    expected = _seed_all_statuses(app_layout)
+    for verstr, loss, params in (
+        ("0.0.1", 0.9, {"model": "xgb"}),
+        ("0.0.2", 0.1, {"model": "xgb", "cache": True}),
+        ("0.0.3", 0.4, {"model": "linear"}),
+        ("0.0.4", 0.2, {"model": "linear"}),
+        ("0.0.5", 2.0, {}),
+    ):
+        _append_log(
+            app_layout,
+            verstr,
+            {"timestamp": "2026-09-21T12:00:00Z", "type": "create", "params": params},
+        )
+        _append_log(app_layout, verstr, _metrics_entry("2026-09-21T12:05:00Z", {"loss": loss}))
+    return expected
+
+
+def test_query_filters_on_metrics_and_params(app_layout):
+    _seed_for_queries(app_layout)
+
+    rows = _runs(app_layout, query="metrics.loss < 0.5")
+    assert sorted(r["verstr"] for r in rows) == ["0.0.2", "0.0.3", "0.0.4"]
+
+    rows = _runs(app_layout, query='params.model = "xgb"')
+    assert sorted(r["verstr"] for r in rows) == ["0.0.1", "0.0.2"]
+
+    rows = _runs(app_layout, query="params.cache = true")
+    assert [r["verstr"] for r in rows] == ["0.0.2"]
+
+    assert len(_runs(app_layout, query=None)) == 5
+
+
+def test_query_composes_with_the_status_filter(app_layout):
+    _seed_for_queries(app_layout)
+
+    rows = _runs(app_layout, query="metrics.loss < 0.5", status="succeeded,failed")
+    assert sorted(r["verstr"] for r in rows) == ["0.0.4"]
+
+    rows = _runs(app_layout, query='status in ("failed", "created")')
+    assert sorted(r["verstr"] for r in rows) == ["0.0.1", "0.0.5"]
+
+
+def test_query_filters_before_last_and_sort(app_layout):
+    _seed_for_queries(app_layout)
+
+    rows = _runs(app_layout, query="metrics.loss < 0.5", last=2, sort="loss")
+    assert [r["verstr"] for r in rows] == ["0.0.4", "0.0.3"]
+
+
+def test_query_error_propagates_to_the_caller(app_layout):
+    from version_stamp.core.experiment_query import QueryError
+
+    _seed_for_queries(app_layout)
+    with pytest.raises(QueryError) as excinfo:
+        _runs(app_layout, query="metrics.loss <")
+    assert "at offset" in str(excinfo.value)
+
+    with pytest.raises(QueryError):
+        _runs(app_layout, query="bogus_field = 1")
+
+
 def test_last_keeps_the_most_recent_rows(app_layout):
     _seed_all_statuses(app_layout)
     rows = _runs(app_layout, last=2)
