@@ -186,6 +186,34 @@ def test_detail_endpoint_reports_status_and_keeps_existing_keys(app_layout):
             assert key in detail["status"], key
 
 
+def _write_create_params(app_layout, verstr, params):
+    path = os.path.join(_exp_dir(app_layout, verstr), "log.w0.jsonl")
+    entry = {"timestamp": "2026-09-21T12:00:00Z", "type": "create", "params": params}
+    with open(path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def test_list_endpoint_carries_params_verbatim(app_layout):
+    _write_experiment(app_layout, "0.0.1")
+    _write_create_params(app_layout, "0.0.1", {"lr": 0.01, "model": "xgb", "cache": True})
+
+    rows = _client(app_layout).get(f"{API}/{app_layout.app_name}/experiments").json()
+    assert rows[0]["params"] == {"lr": 0.01, "model": "xgb", "cache": True}
+    assert rows[0]["metrics"] == {"lr": 0.01, "cache": 1.0}
+
+
+def test_detail_endpoint_carries_params_verbatim(app_layout):
+    _write_experiment(app_layout, "0.0.1")
+    _write_create_params(app_layout, "0.0.1", {"model": "xgb", "cache": False})
+
+    detail = (
+        _client(app_layout)
+        .get(f"{API}/{app_layout.app_name}/experiments/0.0.1")
+        .json()
+    )
+    assert detail["params"] == {"model": "xgb", "cache": False}
+
+
 def test_stale_heartbeat_without_exit_code_is_stuck(app_layout):
     state = _running_state()
     state.pop("exit_code")

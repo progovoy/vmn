@@ -81,6 +81,9 @@ export interface ExperimentRow extends Partial<RunStatus> {
   branch: string | null;
   base_version: string | null;
   user_meta: Record<string, unknown> | null;
+  /** Params as logged, verbatim — strings and booleans included. */
+  params?: Record<string, unknown>;
+  /** The numeric fold: metrics plus any param that parses as a number. */
   metrics: Record<string, number | string>;
 }
 
@@ -100,6 +103,8 @@ export interface LogEntry {
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
   log: LogEntry[];
+  /** Params as logged, verbatim — strings and booleans included. */
+  params?: Record<string, unknown>;
   metrics: Record<string, number | string>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;

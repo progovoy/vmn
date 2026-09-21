@@ -132,6 +132,38 @@ def test_list_runs_reports_every_status(app_layout):
     assert {r["verstr"]: r["status"] for r in rows} == expected
 
 
+def test_list_runs_row_carries_params_verbatim(app_layout):
+    _write_experiment(
+        app_layout,
+        "0.0.1",
+        log=[
+            {
+                "timestamp": "2026-09-21T12:00:00Z",
+                "type": "create",
+                "params": {"lr": 0.01, "model": "xgb", "cache": True},
+            }
+        ],
+    )
+    row = _runs(app_layout)[0]
+    assert row["params"] == {"lr": 0.01, "model": "xgb", "cache": True}
+
+
+def test_get_run_carries_params_verbatim(app_layout):
+    _write_experiment(
+        app_layout,
+        "0.0.1",
+        log=[
+            {
+                "timestamp": "2026-09-21T12:00:00Z",
+                "type": "create",
+                "params": {"model": "xgb", "cache": False},
+            }
+        ],
+    )
+    run = get_run(app_layout.app_name, "0.0.1", storage=_storage(app_layout))
+    assert run["params"] == {"model": "xgb", "cache": False}
+
+
 def test_row_carries_metadata_metrics_and_status_fields(app_layout):
     _write_experiment(
         app_layout,
