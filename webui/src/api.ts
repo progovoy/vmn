@@ -60,11 +60,15 @@ export const api = {
     get<AppConfig>(
       `/workspaces/${ws}/apps/${appTag(app)}/config${v ? `?v=${encodeURIComponent(v)}` : ""}`
     ),
-  experiments: (ws: string, app: string, sort?: string) =>
-    get<ExperimentRow[]>(
-      `/workspaces/${ws}/apps/${appTag(app)}/experiments` +
-        (sort ? `?sort=${encodeURIComponent(sort)}` : "")
-    ),
+  experiments: (ws: string, app: string, sort?: string, status?: string) => {
+    const p = new URLSearchParams();
+    if (sort) p.set("sort", sort);
+    if (status) p.set("status", status);
+    const q = p.toString();
+    return get<ExperimentRow[]>(
+      `/workspaces/${ws}/apps/${appTag(app)}/experiments${q ? `?${q}` : ""}`
+    );
+  },
   experimentsPaged: (ws: string, app: string, opts?: { sort?: string; offset?: number; limit?: number }) => {
     const p: Record<string, string> = {
       offset: String(opts?.offset ?? 0),

@@ -13,6 +13,7 @@ import GroupedMetrics from "../components/GroupedMetrics";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import ColumnPicker from "../components/ColumnPicker";
+import StatusPill from "../components/StatusPill";
 import { usePolling } from "../hooks/usePolling";
 
 export default function Leaderboard() {
@@ -30,17 +31,23 @@ export default function Leaderboard() {
   const [params, setParams] = useSearchParams();
   const creating = params.get("new") === "1";
   const [filteredRows, setFilteredRows] = useState<ExperimentRow[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
   const navigate = useNavigate();
 
   const load = useCallback(
     () =>
-      api.experiments(ws, app, sort ?? undefined)
+      api.experiments(ws, app, sort ?? undefined, statusFilter || undefined)
         .then(setRows)
         .catch((e) => setError(String(e))),
-    [ws, app, sort]
+    [ws, app, sort, statusFilter]
   );
   useEffect(() => { load(); }, [load]);
-  usePolling(load, 5000, live);
+  // Keep refreshing on our own while a run is still in flight.
+  const anyRunning = useMemo(
+    () => (rows ?? []).some((r) => r.status === "running"),
+    [rows]
+  );
+  usePolling(load, 5000, live || anyRunning);
   useEffect(() => {
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app]);
@@ -222,7 +229,11 @@ export default function Leaderboard() {
             )}
           </div>
 
-          <LeaderboardFilter rows={rows} onFilter={setFilteredRows} />
+          <LeaderboardFilter
+            rows={rows}
+            onFilter={setFilteredRows}
+            onStatusChange={setStatusFilter}
+          />
 
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <button className={chartView === "trend" ? "primary" : ""} onClick={() => setChartView("trend")}>Trend</button>
@@ -244,6 +255,7 @@ export default function Leaderboard() {
                   <tr>
                     <th style={{ width: 34, paddingLeft: 16 }}></th>
                     <th style={{ width: 40 }}>#</th>
+                    <th style={{ width: 110 }}>status</th>
                     <th>experiment</th>
                     {metricCols.map((m) => (
                       <th
@@ -304,10 +316,33 @@ export default function Leaderboard() {
                           />
                         </td>
                         <td className="idx-cell">@{r.idx}</td>
+                        <td className="status-cell">
+                          {r.status && (
+                            <StatusPill
+                              status={r.status}
+                              exitCode={r.exit_code}
+                              durationSec={r.duration_sec}
+                              staleSec={r.stale_sec}
+                            />
+                          )}
+                        </td>
                         <td>
-                          <span className="mono" style={{ color: "var(--accent)" }}>
-                            {r.verstr}
-                          </span>
+                          <div className="nest" style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
+                            {(r.depth ?? 0) > 0 && (
+                              <span className="nest-mark" title="inner run">⤷</span>
+                            )}
+                            <span className="mono" style={{ color: "var(--accent)" }}>
+                              {r.verstr}
+                            </span>
+                            {r.children && r.children.length > 0 && (
+                              <span className="tree-roll">
+                                {r.children.length} inner
+                                {r.tree_status && r.tree_status !== r.status
+                                  ? ` · tree ${r.tree_status}`
+                                  : ""}
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
                             {r.branch}
                           </div>

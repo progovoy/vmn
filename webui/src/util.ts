@@ -20,6 +20,14 @@ export function fmtVal(v: number | string | null | undefined): string {
 }
 
 
+/** Compact duration for run status labels: 42s / 7m / 2h. */
+export function fmtDuration(secs: number | null | undefined): string {
+  if (secs == null) return "—";
+  if (secs < 60) return `${Math.round(secs)}s`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m`;
+  return `${Math.round(secs / 3600)}h`;
+}
+
 /** Copy to clipboard, falling back to execCommand where the async
  *  clipboard API is unavailable (plain-http hosts) or denied. */
 export async function copyText(text: string): Promise<boolean> {
