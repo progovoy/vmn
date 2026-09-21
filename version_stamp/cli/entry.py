@@ -6,8 +6,6 @@ import pathlib
 import sys
 from pprint import pformat
 
-from filelock import FileLock
-
 from version_stamp.backends.factory import get_client
 from version_stamp.cli.args import parse_user_commands
 
@@ -25,12 +23,10 @@ from version_stamp.cli.commands import (  # noqa: F401
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.cli.constants import (
-    LOCK_FILE_ENV,
-    LOCK_FILENAME,
     LOG_FILENAME,
     VMN_ARGS,
 )
-from version_stamp.cli.experiment import handle_experiment
+from version_stamp.cli.experiment import get_repo_lock, handle_experiment
 from version_stamp.cli.worktree_state import (
     WORKTREE_READONLY_MARKER,
     is_local_only_island,
@@ -118,6 +114,11 @@ def _reject_readonly_version_creation(args, root_path):
 
 
 class VMNContainer:
+    # The per-repo lock vmn_run holds while the command runs. _vmn_run attaches
+    # it so a command that supervises a long-lived child can release it once its
+    # own mutating phase is over.
+    repo_lock = None
+
     @measure_runtime_decorator
     def __init__(self, args, root_path):
         self.args = args
@@ -267,11 +268,7 @@ def vmn_run(command_line=None):
     err = 0
     vmnc = None
     try:
-        lock_file_path = os.path.join(vmn_path, LOCK_FILENAME)
-        if LOCK_FILE_ENV in os.environ:
-            lock_file_path = os.environ[LOCK_FILE_ENV]
-
-        lock = FileLock(lock_file_path)
+        lock = get_repo_lock(root_path)
 
         # start of non-parallel code section
         lock.acquire()
@@ -301,9 +298,10 @@ def vmn_run(command_line=None):
             os.environ["VMN_WRITER_ID"] = args.writer_id
 
         # Call the actual function
-        err, vmnc = _vmn_run(args, root_path)
+        err, vmnc = _vmn_run(args, root_path, lock)
         # We only need it here. In other, Exception cases -
-        # the unlock will happen naturally because the process will exit
+        # the unlock will happen naturally because the process will exit.
+        # A no-op if the command already released it (see `vmn exp run`).
         lock.release()
 
     except Exception as exc:
@@ -347,8 +345,9 @@ def vmn_run(command_line=None):
 
 
 @measure_runtime_decorator
-def _vmn_run(args, root_path):
+def _vmn_run(args, root_path, lock=None):
     vmnc = VMNContainer(args, root_path)
+    vmnc.repo_lock = lock
     if vmnc.args.command not in VMN_ARGS:
         VMN_LOGGER.info("Run vmn -h for help")
         return 1, vmnc
