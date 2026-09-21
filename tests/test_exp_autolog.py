@@ -81,22 +81,35 @@ def _install_fake_sklearn(estimators=(FakeSVC, FakeBoom), with_all_estimators=Tr
     return sklearn
 
 
+#: Roots to purge around a fake-sklearn test, with the fake itself first.
+_POISONED_ROOTS = (
+    "sklearn",
+    "xgboost",
+    "lightning",
+    "pytorch_lightning",
+    "lightning_fabric",
+)
+
+
 def _shadowed_modules():
-    """Every real module the fake would shadow, plus anything that lazily
-    imports it.
+    """Every real module the fake would shadow, plus anything that imports it.
 
     A counterfeit ``sklearn`` in ``sys.modules`` poisons more than itself:
     xgboost imports sklearn on demand and caches the failure, so a later test
-    against the real libraries dies with "sklearn needs to be installed". Purge
-    the whole subtree of both and let them import fresh.
+    against the real libraries dies with "sklearn needs to be installed".
+    Lightning is worse — the fake module has no ``__spec__``, so importing
+    ``lightning`` while it is installed aborts partway and leaves its ``fabric``
+    package half-built, and *every* later Lightning import in the process dies in
+    that package's circular-import graveyard. Hence the mirrored roots:
+    ``lightning`` vendors ``lightning.fabric`` while ``pytorch_lightning`` uses
+    the standalone ``lightning_fabric``. Purge each whole subtree and let them
+    import fresh.
     """
+    subtrees = tuple(f"{root}." for root in _POISONED_ROOTS)
     return [
         name
         for name in list(sys.modules)
-        if name == "sklearn"
-        or name.startswith("sklearn.")
-        or name == "xgboost"
-        or name.startswith("xgboost.")
+        if name in _POISONED_ROOTS or name.startswith(subtrees)
     ]
 
 
