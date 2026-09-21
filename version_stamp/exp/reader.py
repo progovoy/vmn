@@ -29,9 +29,14 @@ from version_stamp.cli.experiment import (
     get_metric_series,
 )
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
-from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_status import (
+    derive_status,
+    load_run_state,
+    status_fields,
+)
 from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.core.utils import resolve_root_path
+from version_stamp.exp import _resolve_app_name
 
 EXPERIMENTS_DIR = "experiments"
 
@@ -61,25 +66,6 @@ def _apps_with_experiments(root_path):
     return sorted(apps)
 
 
-def _resolve_app_name(root_path):
-    """The app to read when the caller named none.
-
-    ``VMN_APP_NAME`` is what ``vmn exp run`` exports to its child, so a script
-    launched by a run needs no argument. Outside a run, a repo with a single
-    experiment-bearing app is unambiguous; anything else has to be named.
-    """
-    from_env = os.environ.get("VMN_APP_NAME")
-    if from_env:
-        return from_env
-    apps = _apps_with_experiments(root_path)
-    if len(apps) == 1:
-        return apps[0]
-    raise ValueError(
-        f"Cannot infer the app name from apps with experiments "
-        f"({', '.join(apps) or 'none'}). Pass app_name= or set VMN_APP_NAME."
-    )
-
-
 def _resolve(app_name, storage):
     """Fill in the app name and storage from the current repo.
 
@@ -88,8 +74,7 @@ def _resolve(app_name, storage):
     say) and there is no conf.yml to read.
     """
     root_path = None if (app_name and storage) else resolve_root_path()
-    if not app_name:
-        app_name = _resolve_app_name(root_path)
+    app_name = _resolve_app_name(app_name, lambda: _apps_with_experiments(root_path))
     return app_name, storage or _experiment_storage(root_path), root_path
 
 
@@ -140,20 +125,19 @@ def _row(idx, meta, log):
     }
 
 
-def _rows_and_logs(app_name, storage):
-    """Every run of an app, status-annotated, plus the log each row was built
-    from — so a caller that needs a log does not read it twice.
+def _all_rows(app_name, storage):
+    """Every run of an app, status-annotated, in storage order (oldest first).
 
-    Rows come in storage order (oldest first).
+    Reads every run's log and run state, which is what listing needs; asking
+    about a single run goes through :func:`_subtree_row` instead.
     """
-    rows, logs = [], {}
+    rows = []
     for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
         verstr = meta["verstr"]
-        logs[verstr] = _load_log(storage, app_name, verstr)
-        row = _row(idx, meta, logs[verstr])
+        row = _row(idx, meta, _load_log(storage, app_name, verstr))
         row.update(status_fields(load_run_state(storage, app_name, verstr)))
         rows.append(row)
-    return annotate_tree(rows), logs
+    return annotate_tree(rows)
 
 
 def _filter_by_status(rows, status):
@@ -205,7 +189,7 @@ def list_runs(app_name=None, storage=None, sort=None, last=None, status=None):
         status: keep only these statuses — a list or a comma-separated string.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    rows = _filter_by_status(_rows_and_logs(app_name, storage)[0], status)
+    rows = _filter_by_status(_all_rows(app_name, storage), status)
     if last:
         rows = rows[-int(last) :]
     return _sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)
@@ -222,6 +206,57 @@ def _artifacts(storage, app_name, verstr):
     ]
 
 
+def _subtree_verstrs(verstr, children_of):
+    """*verstr* and everything below it, cycle-safe."""
+    seen, stack, out = set(), [verstr], []
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        out.append(current)
+        stack.extend(children_of.get(current, []))
+    return out
+
+
+def _subtree_row(app_name, storage, verstr):
+    """The row for one run, costing the run's subtree rather than the workspace.
+
+    A metadata-only listing gives the parent/child edges and the row's index; run
+    states are then read for the subtree alone, which is all ``tree_status`` can
+    depend on. No log is read here — the caller loads the one it needs.
+    """
+    nodes, target = [], None
+    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
+        node = {"idx": idx, "meta": meta, "verstr": meta["verstr"]}
+        node["parent"] = meta.get("parent")
+        nodes.append(node)
+        if node["verstr"] == verstr:
+            target = node
+    if target is None:
+        return None, None
+
+    children_of = {}
+    for node in nodes:
+        if node["parent"] and node["parent"] != node["verstr"]:
+            children_of.setdefault(node["parent"], []).append(node["verstr"])
+
+    subtree = set(_subtree_verstrs(verstr, children_of))
+    run_state = None
+    for node in nodes:
+        if node["verstr"] not in subtree:
+            continue
+        state = load_run_state(storage, app_name, node["verstr"])
+        node["status"] = derive_status(state)
+        if node["verstr"] == verstr:
+            run_state = state
+
+    tree = next(r for r in annotate_tree(nodes) if r["verstr"] == verstr)
+    status = status_fields(run_state)
+    status.update({k: tree[k] for k in ("children", "kind", "depth", "tree_status")})
+    return target, status
+
+
 def get_run(app_name=None, ref="latest", storage=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series`` and ``artifacts``.
 
@@ -233,12 +268,13 @@ def get_run(app_name=None, ref="latest", storage=None):
     if err:
         raise ValueError(err)
 
-    rows, logs = _rows_and_logs(app_name, storage)
-    row = next((r for r in rows if r["verstr"] == verstr), None)
-    if row is None:
+    target, status = _subtree_row(app_name, storage, verstr)
+    if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
-    log = logs[verstr]
+    log = _load_log(storage, app_name, verstr)
+    row = _row(target["idx"], target["meta"], log)
+    row.update(status)
     row["log"] = log
     row["series"] = get_metric_series(log)
     row["artifacts"] = _artifacts(storage, app_name, verstr)
