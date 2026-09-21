@@ -14,7 +14,8 @@ import pytest
 
 pytest.importorskip("debug_router")
 
-from debug_router.pipeline import StageSkipped  # noqa: E402
+from debug_router.pipeline import StageSkipped, conditions  # noqa: E402
+from debug_router.pipeline.conditions import ConditionContext  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 
@@ -117,15 +118,8 @@ def test_stamp_runs_matching_make_target(mod, mode, target):
     assert ctx.calls == [(["make", target], {})]
 
 
-def test_stamp_skips_when_param_absent(mod):
-    # An optional param with no default is omitted by muster when unset, so
-    # ctx.params.get("stamp") is None and the stage skips.
-    ctx = FakeCtx()
-    with pytest.raises(StageSkipped):
-        mod.stamp(ctx)
-    assert ctx.calls == []
-    assert ctx.skipped is not None
-
+# Whether stamp runs at all is now a `when=` condition, not a ctx.skip inside the
+# body — see the conditional-release-lane tests below.
 
 # An unknown stamp mode is rejected by muster (against the declared choices)
 # before the stage runs, so the stage no longer validates it — see
@@ -140,15 +134,6 @@ def test_build_runs_make_build_when_enabled(mod):
     ctx = FakeCtx(build=True)
     mod.build(ctx)
     assert ctx.calls == [(["make", "_build"], {})]
-
-
-def test_build_skips_when_disabled(mod):
-    # build defaults to False, so muster always delivers it as a real bool.
-    ctx = FakeCtx(build=False)
-    with pytest.raises(StageSkipped):
-        mod.build(ctx)
-    assert ctx.calls == []
-    assert ctx.skipped is not None
 
 
 def test_build_passes_prerelease_template_for_rc(mod):
@@ -185,12 +170,56 @@ def test_upload_runs_make_upload_when_enabled(mod):
     assert ctx.calls == [(["make", "upload"], {})]
 
 
-def test_upload_skips_when_disabled(mod):
-    ctx = FakeCtx(upload=False)
-    with pytest.raises(StageSkipped):
-        mod.upload(ctx)
-    assert ctx.calls == []
-    assert ctx.skipped is not None
+# ---- conditional release lane ------------------------------------------
+# The release stages declare `when=`, so muster decides before the stage takes a
+# slot: an unrequested stage never resolves the venv or starts a subprocess, and
+# `muster inspect` shows it as "would skip" without running anything.
+
+
+def _cond(**params):
+    return ConditionContext(params=params)
+
+
+@pytest.mark.parametrize("name", ["stamp", "build", "upload"])
+def test_release_stage_is_not_scheduled_without_its_param(mod, name):
+    assert conditions.should_run(mod.pipeline.get_stage(name), _cond()) is False
+
+
+@pytest.mark.parametrize(
+    "name,params",
+    [
+        ("stamp", {"stamp": "patch"}),
+        ("build", {"build": True}),
+        ("upload", {"upload": True}),
+    ],
+)
+def test_release_stage_is_scheduled_when_its_param_is_set(mod, name, params):
+    spec = mod.pipeline.get_stage(name)
+    # Assert the condition exists, or this passes vacuously: an unconditional
+    # stage always runs.
+    assert conditions.is_conditional(spec)
+    assert conditions.should_run(spec, _cond(**params)) is True
+
+
+def test_build_is_independent_of_stamp(mod):
+    # `--param build=1` alone still builds: a when=-skipped stage satisfies the
+    # default all_success trigger in muster, so skipping stamp doesn't cascade.
+    ctx = _cond(build=True)
+    assert conditions.should_run(mod.pipeline.get_stage("build"), ctx) is True
+    assert conditions.should_run(mod.pipeline.get_stage("stamp"), ctx) is False
+
+
+# ---- caching -----------------------------------------------------------
+
+
+def test_run_tests_is_cached_on_the_sources_it_reads(mod):
+    # The daily run re-ran the whole suite even when nothing changed. Declaring
+    # the trees the tests actually read makes the stage content-addressable, so
+    # an unchanged repo restores the JUnit/HTML reports instead of re-running.
+    spec = mod.pipeline.get_stage("run_tests")
+    assert spec.deterministic is True
+    assert set(spec.inputs) == {"version_stamp", "tests", "setup.py"}
+    assert spec.outputs  # a cache hit must restore the reports the UI renders
 
 
 # ---- wiring ------------------------------------------------------------

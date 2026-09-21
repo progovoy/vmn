@@ -51,7 +51,18 @@ def lint(ctx):
     ctx.run(["ruff", "check", "version_stamp", "--output-format", "concise"])
 
 
-@stage(requires=REQUIRES, outputs=["reports/tests.xml", "reports/tests.html"])
+# deterministic=True + declared inputs make this content-addressable: the key is
+# the stage's source closure, the hash of the trees below, and the venv
+# fingerprint (muster keys that on the requirements files' contents). An
+# unchanged repo restores reports/ from the cache instead of re-running the
+# suite; setup.py is an input because `-e .` decides what the tests import, and
+# muster's tree hashing ignores __pycache__ so bytecode never churns the key.
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["version_stamp", "tests", "setup.py"],
+    outputs=["reports/tests.xml", "reports/tests.html"],
+)
 def run_tests(ctx):
     # ctx.run defaults to check=True: it writes the output card, then fails the
     # stage on any nonzero exit — test failures (exit 1) and pytest crashes
@@ -78,8 +89,13 @@ def typecheck(ctx):
 
 
 # --- optional release lane -------------------------------------------------
-# stamp -> build -> upload run only when their declared run param is set (skip
-# otherwise), after run_tests so a release never ships on a crashed test run.
+# stamp -> build -> upload run only when their declared run param is set, after
+# run_tests so a release never ships on a crashed test run. The gate is a
+# `when=` condition, which muster evaluates once per run *before* the stage takes
+# a slot — so an unrequested stage costs nothing (no venv, no subprocess) and
+# `muster inspect` reports it as "would skip" without running anything. Each
+# param stays independent: a when=-skipped stage satisfies the default
+# all_success trigger, so skipping stamp does not skip build.
 # muster validates and coerces the params from the declarations below (stamp
 # against STAMP_MODES; build/upload to real bools) before any stage runs, so the
 # stages just read ctx.params. They reuse the Makefile targets and are
@@ -95,6 +111,7 @@ _RC_BUILD_ARG = "EXTRA_SHOW_ARGS=--template [{major}][.{minor}][.{patch}][{prere
 @stage(
     requires=REQUIRES,
     after=["run_tests"],
+    when=lambda c: bool(c.params.get("stamp")),
     params=[
         Param(
             "stamp",
@@ -104,20 +121,16 @@ _RC_BUILD_ARG = "EXTRA_SHOW_ARGS=--template [{major}][.{minor}][.{patch}][{prere
     ],
 )
 def stamp(ctx):
-    mode = ctx.params.get("stamp")
-    if not mode:
-        ctx.skip("no stamp requested")
-    ctx.run(["make", f"_{mode}"])
+    ctx.run(["make", f"_{ctx.params['stamp']}"])
 
 
 @stage(
     requires=REQUIRES,
     after=["stamp"],
+    when=lambda c: bool(c.params.get("build")),
     params=[Param("build", default=False, help="Build the wheel (make _build)")],
 )
 def build(ctx):
-    if not ctx.params["build"]:
-        ctx.skip("build not requested")
     cmd = ["make", "_build"]
     if ctx.params.get("stamp") == "rc":
         cmd.append(_RC_BUILD_ARG)
@@ -127,11 +140,10 @@ def build(ctx):
 @stage(
     requires=REQUIRES,
     after=["build"],
+    when=lambda c: bool(c.params.get("upload")),
     params=[Param("upload", default=False, help="Upload the wheel (make upload)")],
 )
 def upload(ctx):
-    if not ctx.params["upload"]:
-        ctx.skip("upload not requested")
     ctx.run(["make", "upload"])
 
 

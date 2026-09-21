@@ -1251,28 +1251,33 @@ def test_exp_run_tails_metrics_during_run(app_layout, capfd):
     """Metrics written mid-run are in the log while the child is still alive.
 
     The child writes a metric, then waits for the log to contain it (observed
-    via a poll loop reading its own experiment's log.yml), then exits 0 —
+    via a poll loop over its own experiment's log files), then exits 0 —
     so a pass proves live tailing, not post-exit parsing.
+
+    It globs ``log.*`` rather than naming one file: appends land in the
+    per-writer ``log.<writer>.jsonl``, and which file holds an entry is a
+    storage detail this test has no business pinning.
     """
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
 
     script = (
-        "import os, time, sys\n"
+        "import glob, os, time, sys\n"
         "root = os.getcwd()\n"
         "app = os.environ['VMN_APP_NAME']\n"
         "verstr = os.environ['VMN_EXPERIMENT_ID'].replace('+', '_plus_')\n"
-        "log_path = os.path.join(root, '.vmn', app, 'experiments', verstr, 'log.yml')\n"
+        "exp_dir = os.path.join(root, '.vmn', app, 'experiments', verstr)\n"
         "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
         "    f.write('step=1 live=1.0\\n')\n"
         "deadline = time.time() + 30\n"
         "while time.time() < deadline:\n"
-        "    try:\n"
-        "        if 'live' in open(log_path).read():\n"
-        "            sys.exit(0)\n"
-        "    except OSError:\n"
-        "        pass\n"
+        "    for path in glob.glob(os.path.join(exp_dir, 'log.*')):\n"
+        "        try:\n"
+        "            if 'live' in open(path).read():\n"
+        "                sys.exit(0)\n"
+        "        except OSError:\n"
+        "            pass\n"
         "    time.sleep(0.2)\n"
         "sys.exit(7)\n"
     )
