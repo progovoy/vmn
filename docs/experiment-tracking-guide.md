@@ -75,7 +75,8 @@ What happens step by step:
 2. Launches your command, streams output to your terminal
 3. Sets `$VMN_METRICS_FILE` — your script writes key=value lines there
 4. vmn tails that file live (metrics appear in the UI in real time)
-5. When command exits, vmn records exit code + duration
+5. Writes a `run_state.yml` with a heartbeat while the command is alive
+6. When command exits, vmn records exit code + duration
 
 ### Writing Metrics From Your Script
 
@@ -463,6 +464,140 @@ flowchart TD
 
 ---
 
+## Run Status: Did My Job Die?
+
+At scale the common failure isn't a crash — it's a pod that goes away. The node
+is reclaimed, the OOM killer fires, the spot instance is taken back. Nothing
+writes "I failed" anywhere, and a naive tracker shows that run as still running
+forever.
+
+vmn solves this with a **heartbeat**. `vmn exp run` writes a `run_state.yml`
+alongside `metadata.yml` and keeps refreshing it while the child process lives:
+
+```yaml
+state: running          # "running" while alive, "finished" after the child exits
+command: [python, train.py]
+pid: 12345
+host: pod-xyz-123
+started_at: 2026-09-21T12:00:00Z
+heartbeat: 2026-09-21T12:03:00Z   # refreshed while the child is alive
+heartbeat_interval_sec: 30
+exit_code: null         # an int once finished
+finished_at: null
+duration_sec: null
+```
+
+Because this file lives next to the metrics, it rides the same storage you
+already configured — the shared NFS mount, or the S3 prefix.
+
+```sh
+vmn exp run my_app --heartbeat-interval 10 -- python train.py
+```
+
+### Status Is Derived, Never Stored
+
+vmn computes status from `run_state.yml` plus the current clock. Nobody has to
+mark a dead run as dead:
+
+| Status | Means | Typical cause |
+|--------|-------|---------------|
+| `created` | experiment exists, no command ever started | made with `vmn exp create` |
+| `running` | heartbeat is fresh | healthy |
+| `stuck` | says running, heartbeat went stale, no exit code | node lost, OOM-killed, pod evicted |
+| `succeeded` | finished, exit code 0 | happy path |
+| `failed` | finished, non-zero exit code | your command errored |
+
+The staleness window is `max(3 × heartbeat_interval_sec, 60s)`, so a slow
+filesystem or a couple of missed beats never produces a false `stuck`.
+
+> **Honest limitation:** a process that is **hung but alive** keeps
+> heartbeating, so it reads as `running`. To catch that, look at
+> `last_metric_at` (surfaced in the UI and API): a run that's alive but hasn't
+> logged a metric in an hour is alive and not making progress. The heartbeat
+> answers "is the process there", not "is the process useful".
+
+### The Triage Workflow
+
+```sh
+# 1. What's still supposedly alive?
+vmn exp list my_app --experiment-dir /mnt/fsx
+
+# 2. Anything flagged stuck? Get the details.
+vmn exp show my_app -v <verstr> --experiment-dir /mnt/fsx
+#    -> Status: stuck (no heartbeat for 14m, pid 12345 on pod-xyz-123)
+
+# 3. Reproduce the dead run's exact code state and try again locally
+vmn exp restore my_app -v <verstr>
+```
+
+In the web UI the same thing is one glance: each run carries a color-coded
+status pill, `running` pulses, `stuck` is flagged, and the page auto-refreshes
+while anything is unfinished.
+
+---
+
+## Outer & Inner Jobs (Sweeps)
+
+A sweep is naturally two levels: one job that launches trials, and the trials.
+vmn reconstructs that shape for free.
+
+`vmn exp run` exports `VMN_EXPERIMENT_ID` to its child. **Any experiment created
+while that variable is set records it as its `parent`.** So if your sweep driver
+is itself wrapped in `vmn exp run`, every trial it launches lands underneath it:
+
+```sh
+#!/usr/bin/env bash
+# sweep.sh
+for lr in 0.001 0.01 0.1; do
+    vmn exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
+done
+```
+
+```sh
+vmn exp run my_app --note "lr sweep" -- ./sweep.sh
+```
+
+When the trials run somewhere that doesn't inherit your environment — a K8s pod,
+a Slurm step, a remote worker — pass the parent explicitly instead. Plumb the
+driver's verstr through as an env var or arg and use `--parent`:
+
+```sh
+vmn exp run my_app --parent "$SWEEP_ID" -- python train.py --lr "$LR"
+```
+
+`--parent` accepts the same references as everything else: a full verstr, a
+unique prefix, `@N`, or `latest`. It works on `vmn exp create` too.
+
+### Rollup: One Bad Trial Fails the Sweep
+
+Each run has a `kind` — `outer` (has children), `inner` (has a parent), or
+`single`. An outer job additionally has a **`tree_status`**: the rollup over
+itself and its entire subtree, resolved by precedence
+
+```
+failed > stuck > running > created > succeeded
+```
+
+So a 200-trial sweep reads `running` until every trial is done, then
+`succeeded` only if all of them succeeded. One OOM-killed pod shows up as
+`stuck` at the top; one non-zero exit shows up as `failed`. You don't scroll the
+list to find out whether the sweep was clean.
+
+`vmn exp list` indents inner runs under their outer run:
+
+```
+    VERSION                             STATUS      NOTE
+[1] 1.6.0-dev.a1b2c3d.9f8e7d6           failed      lr sweep
+[2]   1.6.0-dev.a1b2c3d.9f8e7d6.r2      succeeded   lr=0.001
+[3]   1.6.0-dev.a1b2c3d.1122334         succeeded   lr=0.01
+[4]   1.6.0-dev.a1b2c3d.5566778         failed      lr=0.1
+```
+
+`vmn exp show` prints `Parent:` on a trial and `Children:` on the driver, and
+the web UI nests the trials under their sweep row.
+
+---
+
 ## Reference: Addressing Experiments
 
 Every command that takes an experiment reference supports these forms:
@@ -491,7 +626,7 @@ Every command that takes an experiment reference supports these forms:
 
 | Variable | Purpose |
 |----------|---------|
-| `VMN_EXPERIMENT_ID` | The verstr assigned to this run |
+| `VMN_EXPERIMENT_ID` | The verstr assigned to this run. Any experiment created while it is set is recorded as an [inner job](#outer--inner-jobs-sweeps) of this one |
 | `VMN_APP_NAME` | The app name |
 | `VMN_METRICS_FILE` | Path to write key=value metric lines |
 
@@ -507,6 +642,8 @@ All storage flags can also be set in `conf.yml` under `experiment.storage` — C
 | `--experiment-dir <path>` | `experiment_dir` | Write experiments to shared mount or scratch dir |
 | `--writer-id <id>` | `writer_id` | Unique writer ID (defaults to hostname) |
 | `--sync-interval <sec>` | — | Seconds between S3 metric syncs (default: 30) |
+| `--heartbeat-interval <sec>` | — | Seconds between heartbeat refreshes (default: 30) |
+| `--parent <ref>` | — | Attach the run as an inner job of another experiment |
 | `--backend s3` | `backend` | Use S3 storage backend |
 | `--bucket <name>` | `bucket` | S3 bucket name |
 | `--endpoint-url <url>` | `endpoint_url` | Custom S3 endpoint (MinIO, LocalStack) |
@@ -634,6 +771,6 @@ vmn ui --s3-bucket my-experiments # S3 mode
 
 ```sh
 vmn exp list my_app --experiment-dir /mnt/fsx --sort loss --top 5
-vmn exp show my_app -v <best-verstr> --experiment-dir /mnt/fsx
+vmn exp show my_app -v <best-verstr> --experiment-dir /mnt/fsx   # incl. Status:
 vmn exp restore my_app -v <best-verstr>  # checkout that code
 ```
