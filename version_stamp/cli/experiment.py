@@ -313,15 +313,24 @@ def _metric_sort_descending(schema, key):
     return goal == "max"
 
 
+def _entry_params(entry):
+    """Params carried by a log entry.
+
+    `create` records params up front, `run.log_params()` mid-run.
+    """
+    if entry.get("type") in ("create", "params"):
+        return entry.get("params") or {}
+    return {}
+
+
 def _get_latest_metrics(log):
     """Scan log entries and return the latest value for each metric."""
     metrics = {}
     for entry in log:
         if entry.get("type") == "metrics" and "values" in entry:
             metrics.update(entry["values"])
-        elif entry.get("type") in ("create", "params") and "params" in entry:
-            # `create` records params up front, `run.log_params()` mid-run.
-            for k, v in entry["params"].items():
+        else:
+            for k, v in _entry_params(entry).items():
                 try:
                     metrics[k] = float(v)
                 except (ValueError, TypeError):
@@ -1094,6 +1103,13 @@ def experiment_show(vcs, params, storage, args):
                 vals = entry.get("values", {})
                 val_str = ", ".join(f"{k}={v}" for k, v in vals.items())
                 print(f"    [{ts}] metrics: {val_str}")
+            elif etype == "params":
+                vals = entry.get("params", {})
+                val_str = ", ".join(f"{k}={v}" for k, v in vals.items())
+                print(f"    [{ts}] params: {val_str}")
+            elif etype == "error":
+                exc = entry.get("exception", "?")
+                print(f"    [{ts}] error: {exc}: {entry.get('message', '')}")
             elif etype == "note":
                 print(f"    [{ts}] note: {entry.get('text', '')}")
             elif etype == "artifact":
@@ -1231,8 +1247,11 @@ def experiment_compare(vcs, params, storage, args):
 
 
 def _create_entry_params(log):
-    create = next((e for e in log if e.get("type") == "create"), {})
-    return create.get("params", {}) or {}
+    """Effective params: the `create` entry's, folded with later `params` ones."""
+    params = {}
+    for entry in log:
+        params.update(_entry_params(entry))
+    return params
 
 
 def _fmt_val(v):
