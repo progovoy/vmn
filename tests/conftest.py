@@ -574,6 +574,31 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("app_layout", ["git"], indirect=True)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def vmn_env_guard():
+    """Undo every VMN_* env change a test - or the vmn code it runs - makes.
+
+    ``version_stamp/cli/entry.py`` assigns to ``os.environ["VMN_WRITER_ID"]``,
+    so leaks are not only a test's fault, and ``monkeypatch.delenv`` on such a
+    value makes monkeypatch *restore* it at teardown. Being autouse, the
+    snapshot is taken before any other function-scoped fixture runs (notably
+    ``app_layout``, which sets ``VMN_WORKING_DIR``) and restored after they are
+    all torn down, so it cleans up after them instead of fighting them.
+    """
+    from version_stamp.cli import experiment
+
+    saved = {k: v for k, v in os.environ.items() if k.startswith("VMN_")}
+
+    yield
+
+    for key in [k for k in os.environ if k.startswith("VMN_")]:
+        if key not in saved:
+            del os.environ[key]
+    os.environ.update(saved)
+    # The other half of the same leak: a cached writer id outlives its env var.
+    experiment._WRITER_ID = None
+
+
 @pytest.fixture(scope="function")
 def app_layout(request, tmpdir):
     from pathlib import Path
