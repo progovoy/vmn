@@ -37,6 +37,8 @@ values the run was given verbatim, so ``params.model = "xgb"`` and
 numeric fold the leaderboard sorts and charts.
 """
 
+import functools
+
 # Every non-metric field a row can carry, from ``experiment_row`` +
 # ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``.
 # Spelled out so a typo is a query error instead of a silently empty result.
@@ -294,11 +296,16 @@ class _Parser:
 # ---------------------------------------------------------------------------
 
 
+@functools.lru_cache(maxsize=256)
 def compile_query(text):
     """Compile query *text* into a ``row -> bool`` predicate.
 
     Raises :class:`QueryError` for bad syntax, an unknown field or an operator
     used with a literal it cannot work on.
+
+    Cached: the dashboard polls with an unchanged query, and a predicate is a
+    stateless closure over the parsed expression, so it is safe to share. An
+    exception is not cached — a bad query re-raises from a fresh parse.
     """
     if not text or not text.strip():
         raise QueryError("empty query")

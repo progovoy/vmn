@@ -426,3 +426,20 @@ def test_predicate_tolerates_a_row_missing_status_entirely():
     assert filter_rows([{"verstr": "1.0.0"}], "status = null") == [
         {"verstr": "1.0.0"}
     ]
+
+
+def test_compiling_the_same_query_reuses_the_predicate():
+    """The dashboard polls with an unchanged ``q``; reparsing it every request
+    is pure waste, so identical text must hand back the identical predicate."""
+    first = compile_query('metrics.loss < 0.5 and status = "succeeded"')
+    second = compile_query('metrics.loss < 0.5 and status = "succeeded"')
+    assert first is second
+    # Still a correct predicate, not just a cached object.
+    assert first({"status": "succeeded", "metrics": {"loss": 0.2}}) is True
+    assert first({"status": "failed", "metrics": {"loss": 0.2}}) is False
+
+
+def test_a_bad_query_is_not_cached_as_a_success():
+    for _ in range(2):
+        with pytest.raises(QueryError):
+            compile_query("metrics.loss <")
