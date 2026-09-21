@@ -1,10 +1,15 @@
 """Framework autologging: ``from version_stamp.exp import autolog``.
 
-No ML framework is installed in the test venv (and none should be — torch alone
-is gigabytes), so these tests inject a minimal fake ``sklearn`` package into
-``sys.modules`` and run the *real* patching logic against it. That exercises
-what actually breaks in autologging — target discovery, param capture,
-idempotency, restoration, error containment — without the dependency.
+Fast unit coverage of the patching machinery — target discovery, param capture,
+idempotency, restoration, error containment — against a minimal fake
+``sklearn`` injected into ``sys.modules``, so these run in milliseconds and
+without a framework import.
+
+The real libraries *are* installed, and the adapters are tested against them in
+tests/test_exp_autolog_real.py and tests/test_exp_autolog_dl.py. Both layers
+earn their place: a fake cannot tell you that a Pipeline fits its steps through
+the same patched method, and the real thing cannot tell you quickly that a
+double patch is idempotent.
 """
 import logging
 import os

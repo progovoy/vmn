@@ -17,6 +17,7 @@ moto[s3]
 fastapi
 httpx
 uvicorn
+psutil
 scikit-learn
 xgboost
 torch
