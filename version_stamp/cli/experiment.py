@@ -319,7 +319,8 @@ def _get_latest_metrics(log):
     for entry in log:
         if entry.get("type") == "metrics" and "values" in entry:
             metrics.update(entry["values"])
-        elif entry.get("type") == "create" and "params" in entry:
+        elif entry.get("type") in ("create", "params") and "params" in entry:
+            # `create` records params up front, `run.log_params()` mid-run.
             for k, v in entry["params"].items():
                 try:
                     metrics[k] = float(v)
