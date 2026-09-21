@@ -16,7 +16,7 @@ import yaml
 
 from version_stamp.core.logging import VMN_LOGGER
 
-CREATED ="created"  # experiment exists, no run was ever started
+CREATED = "created"  # experiment exists, no run was ever started
 RUNNING = "running"  # heartbeat is fresh
 STUCK = "stuck"  # claims running, heartbeat went stale
 SUCCEEDED = "succeeded"  # finished, exit code 0

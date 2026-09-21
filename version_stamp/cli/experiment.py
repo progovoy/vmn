@@ -98,9 +98,7 @@ def _get_experiment_storage(vcs, params):
     experiment_dir = params.get("experiment_dir") or os.environ.get(
         "VMN_EXPERIMENT_DIR"
     )
-    vmn_root = (
-        experiment_dir or (vcs.vmn_root_path if vcs else None)
-    )
+    vmn_root = experiment_dir or (vcs.vmn_root_path if vcs else None)
     return get_snapshot_storage(
         params.get("backend", "local"),
         vmn_root_path=vmn_root,
