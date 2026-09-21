@@ -14,9 +14,10 @@ performance/benchmark runs, load tests, data-pipeline outputs, compiler flag
 comparisons.** If you can print a `key=value`, vmn can track it.
 
 - [Mental model](#mental-model)
-- [Three ways to record an experiment](#three-ways-to-record-an-experiment)
+- [Four ways to record an experiment](#four-ways-to-record-an-experiment)
 - [Without a script: config sweeps & performance tests](#without-a-script-config-sweeps--performance-tests)
 - [With a command: `exp run` and the metrics file](#with-a-command-exp-run-and-the-metrics-file)
+- [From Python: the SDK](#from-python-the-sdk)
 - [Run status: did my job die?](#run-status-did-my-job-die)
 - [Outer & inner jobs (sweeps)](#outer--inner-jobs-sweeps)
 - [Addressing experiments](#addressing-experiments)
@@ -60,17 +61,19 @@ separate `vmn init` or `vmn stamp` is required.
 
 ---
 
-## Three ways to record an experiment
+## Four ways to record an experiment
 
 | You want to… | Use |
 |---|---|
 | Capture the tree and type in the numbers yourself | `exp create … --metrics k=v` |
 | Add more numbers/notes/files to an existing run later | `exp add …` |
 | Let vmn run a command and slurp metrics it emits | `exp run … -- <cmd>` |
+| Log from inside your own Python process | [`start_run(...)`](#from-python-the-sdk) |
 
-All three snapshot the working tree (dirty or clean). They differ only in *how*
-the metrics get in. You can mix them — e.g. `exp run` a benchmark, then `exp add`
-a hand-measured number afterward.
+All four snapshot the working tree (dirty or clean). They differ only in *how*
+the metrics get in, and they produce the same run on disk. You can mix them —
+e.g. `exp run` a benchmark, then `exp add` a hand-measured number afterward, or
+`exp show` a run your Python script opened.
 
 ---
 
@@ -210,6 +213,28 @@ log_metric("p99_ms", final_p99())                  # -> a final scalar
 
 ---
 
+## From Python: the SDK
+
+When the workload is already Python, you don't need `exp run` or a metrics file
+at all — open the run in-process:
+
+```python
+from version_stamp.exp import start_run
+
+with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
+    for step, loss in enumerate(train()):
+        run.log_metric("loss", loss, step=step)
+    run.log_metrics({"acc": 0.91})
+    print(run.id)     # 1.6.0-dev.a1b2c3d.e4f5g6h
+```
+
+The result is **the same run** the CLI would have written: same verstr, same
+files, same heartbeat — so `exp list`, `exp show`, `exp compare`, the web UI and
+S3 sync all work on it unchanged, and nesting still produces outer/inner jobs.
+Full guide, including the read-side API: [docs/sdk.md](sdk.md).
+
+---
+
 ## Run status: did my job die?
 
 A long run can end in three ways: it finishes cleanly, it finishes with an
@@ -237,6 +262,10 @@ The beat interval defaults to 30 seconds and is tunable:
 ```sh
 vmn exp run my_app --heartbeat-interval 10 -- python train.py
 ```
+
+An [SDK](sdk.md) run has no supervising process, so it beats from its own daemon
+thread — `start_run(..., heartbeat_interval_sec=10)` — and everything below
+applies to it identically.
 
 ### Derived statuses
 
