@@ -78,7 +78,8 @@ def derive_status(run_state, now=None):
 
     # No exit code: only the heartbeat can tell a live run from a dead one.
     # Before the first beat lands, the start time stands in for it.
-    age = _age_sec(run_state.get("heartbeat"), now := _now(now))
+    now = _now(now)
+    age = _age_sec(run_state.get("heartbeat"), now)
     if age is None and run_state.get("heartbeat") is None:
         age = _age_sec(run_state.get("started_at"), now)
     if age is None:

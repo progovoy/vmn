@@ -228,3 +228,27 @@ def test_exp_show_prints_parent_and_children(app_layout, capfd):
     out = capfd.readouterr().out
     assert "Children:" in out
     assert inner in out
+
+
+def test_exp_show_reports_a_subtree_status_that_differs(app_layout, capfd):
+    """`exp list` flags a sweep whose trial failed; `show` must agree."""
+    _bootstrap(app_layout)
+
+    capfd.readouterr()
+    assert _exp_run(app_layout.app_name, [_PY, "-c", "print(1)"]) == 0
+    outer = _last_dev_verstr(capfd.readouterr().out)
+
+    os.environ["VMN_EXPERIMENT_ID"] = outer
+    try:
+        capfd.readouterr()
+        assert _exp_run(app_layout.app_name, [_PY, "-c", "import sys;sys.exit(3)"]) == 3
+    finally:
+        os.environ.pop("VMN_EXPERIMENT_ID", None)
+
+    capfd.readouterr()
+    assert _experiment(app_layout.app_name, action="show", version=outer) == 0
+    out = capfd.readouterr().out
+    assert "Status:" in out
+    assert "succeeded" in out, "the sweep's own command exited 0"
+    assert "Subtree:" in out, "a failed trial must be visible on the outer run"
+    assert "failed" in out

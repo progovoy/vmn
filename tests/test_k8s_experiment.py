@@ -766,7 +766,9 @@ def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
     ret = _run_experiment_from_snapshot(args)
     assert ret == 0
     assert os.environ.get("VMN_WRITER_ID") == "my-pod"
-    monkeypatch.delenv("VMN_WRITER_ID", raising=False)
+    # Plain pop, not monkeypatch.delenv: delenv would record "my-pod" as the
+    # value to restore at teardown and leak it into every later test.
+    os.environ.pop("VMN_WRITER_ID", None)
     experiment._WRITER_ID = None
 
 

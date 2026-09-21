@@ -322,16 +322,17 @@ answer you usually want from a glance.
 Inner runs are indented under their outer run:
 
 ```
-    VERSION                             STATUS      NOTE
-[1] 1.6.0-dev.a1b2c3d.9f8e7d6           failed      lr sweep
-[2]   1.6.0-dev.a1b2c3d.9f8e7d6.r2      succeeded   lr=0.001
-[3]   1.6.0-dev.a1b2c3d.1122334         succeeded   lr=0.01
-[4]   1.6.0-dev.a1b2c3d.5566778         failed      lr=0.1
+[1] 1.6.0-dev.a1b2c3d.9f8e7d6  succeeded/failed  (3s ago)  - lr sweep
+  [2] 1.6.0-dev.a1b2c3d.9f8e7d6.r2  succeeded  (2s ago)  loss=0.31  - lr=0.001
+  [3] 1.6.0-dev.a1b2c3d.1122334  succeeded  (2s ago)  loss=0.28  - lr=0.01
+  [4] 1.6.0-dev.a1b2c3d.5566778  failed  (1s ago)  - lr=0.1
 ```
 
-One trial failed, so the sweep's `tree_status` is `failed` even if the sweep
-script itself exited fine. `exp show` on the outer run prints `Children:`, and
-on a trial prints `Parent:`.
+The sweep script itself exited 0, but one trial failed — so the outer row reads
+`succeeded/failed`: **its own status, then its subtree's**. A single status token
+means the two agree. `exp show` on the outer run prints `Children:` and a
+`Subtree:` line when the rollup differs from its own status; on a trial it
+prints `Parent:`.
 
 ---
 

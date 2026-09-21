@@ -1012,15 +1012,15 @@ def _print_status_block(storage, app_name, verstr, metadata):
     if fields["status"] == STUCK:
         print(f"  Heartbeat: last seen {_relative_timestamp(fields['heartbeat'])}")
 
+    metas = storage.list_snapshots(app_name)
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")
-    children = [
-        m["verstr"]
-        for m in storage.list_snapshots(app_name)
-        if m.get("parent") == verstr
-    ]
+    children = [m["verstr"] for m in metas if m.get("parent") == verstr]
     if children:
         print(f"  Children:  {', '.join(children)}")
+        node = _status_tree(storage, app_name, metas).get(verstr, {})
+        if node.get("tree_status") and node["tree_status"] != fields["status"]:
+            print(f"  Subtree:   {node['tree_status']}")
 
 
 @measure_runtime_decorator
