@@ -5,13 +5,14 @@ import {
 } from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, relTime, seriesColor } from "../util";
+import { fmtDuration, fmtVal, metricGoal, relTime, seriesColor } from "../util";
 import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
 import SmoothingSlider from "../components/SmoothingSlider";
 import { ema } from "../hooks/useSmoothing";
 import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
+import StatusPill from "../components/StatusPill";
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
@@ -153,7 +154,9 @@ export default function Run() {
     load();
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [load, ws, app]);
-  usePolling(load, 3000, live);
+  // Follow a live run on its own, even with the Live toggle off.
+  const running = detail?.status?.status === "running";
+  usePolling(load, live ? 3000 : 5000, live || running);
 
   const hasTimestamps = useMemo(() => {
     if (!detail) return false;
@@ -226,7 +229,10 @@ export default function Run() {
   if (!detail) return <Skeleton />;
 
   const meta = detail.metadata;
+  const st = detail.status;
   const appName = toAppName(app);
+  const runUrl = (v: string) =>
+    `/ws/${ws}/app/${app}/run/${encodeURIComponent(v)}`;
   const captured =
     Object.entries(detail.patches)
       .filter(([, v]) => v)
@@ -257,6 +263,69 @@ export default function Run() {
         <p style={{ color: "var(--text-2)", margin: "0 0 20px" }}>
           {meta.note as string}
         </p>
+      )}
+
+      {st && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="eyebrow">status</div>
+          <div className="status-head">
+            <StatusPill
+              status={st.status}
+              exitCode={st.exit_code}
+              durationSec={st.duration_sec}
+              staleSec={st.stale_sec}
+            />
+            {st.status === "stuck" && st.stale_sec != null && (
+              <span className="stale">
+                ⚠ no heartbeat for {fmtDuration(st.stale_sec)}
+              </span>
+            )}
+            {st.tree_status && st.tree_status !== st.status && (
+              <span className="tree-roll">tree {st.tree_status}</span>
+            )}
+          </div>
+          <div className="kv" style={{ marginTop: 12 }}>
+            {st.exit_code !== null && (
+              <><div className="k">exit code</div><div className="mono">{st.exit_code}</div></>
+            )}
+            <div className="k">duration</div>
+            <div>{st.duration_sec !== null ? `${st.duration_sec}s` : "—"}</div>
+            {st.pid !== null && (
+              <><div className="k">pid</div><div className="mono">{st.pid}</div></>
+            )}
+            {Boolean(st.host) && (
+              <><div className="k">host</div><div className="mono">{st.host}</div></>
+            )}
+            {Boolean(st.heartbeat) && (
+              <>
+                <div className="k">heartbeat</div>
+                <div title={st.heartbeat ?? ""}>{relTime(st.heartbeat)}</div>
+              </>
+            )}
+            {st.command && st.command.length > 0 && (
+              <>
+                <div className="k">command</div>
+                <div className="mono">{st.command.join(" ")}</div>
+              </>
+            )}
+            {Boolean(st.parent) && (
+              <>
+                <div className="k">parent</div>
+                <div><Link className="mono" to={runUrl(st.parent!)}>{st.parent}</Link></div>
+              </>
+            )}
+            {st.children.length > 0 && (
+              <>
+                <div className="k">children</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {st.children.map((c) => (
+                    <Link key={c} className="mono" to={runUrl(c)}>{c}</Link>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="card-grid-2" style={{ marginBottom: 16 }}>

@@ -38,7 +38,38 @@ export interface Job {
   noop: boolean;
 }
 
-export interface ExperimentRow {
+/** Lifecycle of a `vmn exp run` — "stuck" means the heartbeat went stale
+ *  without an exit code, i.e. the runner died. */
+export type RunState = "created" | "running" | "stuck" | "succeeded" | "failed";
+
+/** Job status of a run, served both inline on list rows and as the detail
+ *  response's `status` object. */
+export interface RunStatus {
+  status: RunState;
+  exit_code: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  heartbeat: string | null;
+  /** Elapsed while running, final duration once finished. */
+  duration_sec: number | null;
+  pid: number | null;
+  host: string | null;
+  command: string[] | null;
+  /** Seconds since the last heartbeat. */
+  stale_sec: number | null;
+  /** Verstr of the outer run that launched this one. */
+  parent: string | null;
+  children: string[];
+  kind: "outer" | "inner" | "single";
+  /** 0 for a top-level run. */
+  depth: number;
+  /** Rollup over this run and its whole subtree. */
+  tree_status: string | null;
+  last_metric_at: string | null;
+}
+
+/** Status fields are optional: older servers omit them entirely. */
+export interface ExperimentRow extends Partial<RunStatus> {
   /** 1-based storage-order index — what `vmn exp show <app> -v @N` resolves. */
   idx: number;
   verstr: string;
@@ -71,6 +102,7 @@ export interface ExperimentDetail {
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   artifacts?: { name: string; size: number }[];
+  status?: RunStatus;
 }
 
 export interface VersionRow {
