@@ -24,6 +24,13 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
+from version_stamp.core.experiment_status import (
+    DEFAULT_HEARTBEAT_INTERVAL_SEC,
+    STUCK,
+    derive_status,
+    status_fields,
+)
+from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
@@ -115,6 +122,52 @@ def _save_log(storage, app_name, verstr, log):
 def _append_to_log(storage, app_name, verstr, entry):
     """Append an entry to the experiment log using per-writer JSONL files."""
     storage.append_log_entry(app_name, verstr, _get_writer_id(), entry)
+
+
+RUN_STATE_FILE = "run_state.yml"
+
+
+def load_run_state(storage, app_name, verstr):
+    """Return the run state of an experiment, or None when there is none.
+
+    Never raises: an experiment that was created but never run has no run
+    state, and a half-written file is no better than a missing one.
+    """
+    try:
+        raw = storage.load_file(app_name, verstr, RUN_STATE_FILE)
+        state = yaml.safe_load(raw) if raw else None
+    except Exception:
+        VMN_LOGGER.debug("Failed to load run state", exc_info=True)
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def _save_run_state(storage, app_name, verstr, state):
+    storage.save_file(
+        app_name, verstr, RUN_STATE_FILE, yaml.dump(state, sort_keys=False)
+    )
+
+
+def _attach_parent(metadata, parent):
+    """Record the experiment that launched this one — never the run itself."""
+    if parent and parent != metadata["verstr"]:
+        metadata["parent"] = parent
+
+
+def _resolve_parent(storage, app_name, args):
+    """Parent verstr for a new experiment. Returns (parent, error_code).
+
+    ``--parent`` wins over the ``VMN_EXPERIMENT_ID`` exported by an enclosing
+    ``vmn exp run``.
+    """
+    ref = getattr(args, "parent", None) if args is not None else None
+    if not ref:
+        return os.environ.get("VMN_EXPERIMENT_ID") or None, None
+    verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
+    if err:
+        VMN_LOGGER.error(err)
+        return None, 1
+    return verstr, None
 
 
 # ---------------------------------------------------------------------------
@@ -453,17 +506,22 @@ def experiment_create(vcs, params, storage, args):
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
     )
+    app_name = _app_name(vcs, args)
+    parent, err = _resolve_parent(storage, app_name, args)
+    if err is not None:
+        return err
+
     verstr, err = _experiment_create_core(
         vcs,
         storage,
         note=args.note,
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
+        parent=parent,
     )
     if err is not None:
         return err
 
-    app_name = _app_name(vcs, args)
     if getattr(args, "metrics", None):
         _append_to_log(
             storage,
@@ -477,7 +535,12 @@ def experiment_create(vcs, params, storage, args):
 
 
 def _experiment_create_from_snapshot(
-    storage, app_name, snapshot_meta_path, note=None, extra_create_data=None
+    storage,
+    app_name,
+    snapshot_meta_path,
+    note=None,
+    extra_create_data=None,
+    parent=None,
 ):
     """Create experiment from an exported snapshot directory (no git required).
 
@@ -528,6 +591,7 @@ def _experiment_create_from_snapshot(
     }
     if snap_meta.get("changesets"):
         metadata["changesets"] = snap_meta["changesets"]
+    _attach_parent(metadata, parent)
 
     entry = _create_log_entry("create", note=note)
     if extra_create_data:
@@ -539,7 +603,7 @@ def _experiment_create_from_snapshot(
 
 
 def _experiment_create_core(
-    vcs, storage, note=None, from_snapshot=None, extra_create_data=None
+    vcs, storage, note=None, from_snapshot=None, extra_create_data=None, parent=None
 ):
     """Create the experiment record (snapshot + initial log entry).
 
@@ -554,6 +618,7 @@ def _experiment_create_core(
             from_snapshot,
             note=note,
             extra_create_data=extra_create_data,
+            parent=parent,
         )
 
     (
@@ -581,6 +646,7 @@ def _experiment_create_core(
         note=note,
     )
     metadata["code_verstr"] = code_verstr
+    _attach_parent(metadata, parent)
 
     entry = _create_log_entry("create", note=note)
     if extra_create_data:
@@ -620,6 +686,9 @@ def experiment_run(vcs, params, storage, args):
         "VMN_SNAPSHOT_METADATA"
     )
     sync_interval = getattr(args, "sync_interval", 30)
+    heartbeat_interval = (
+        getattr(args, "heartbeat_interval", None) or DEFAULT_HEARTBEAT_INTERVAL_SEC
+    )
 
     extra = {}
     if getattr(args, "file", None):
@@ -628,17 +697,22 @@ def experiment_run(vcs, params, storage, args):
             if key in notes_data:
                 extra[key] = notes_data[key]
 
+    app_name = _app_name(vcs, args)
+    parent, err = _resolve_parent(storage, app_name, args)
+    if err is not None:
+        return err
+
     verstr, err = _experiment_create_core(
         vcs,
         storage,
         note=args.note,
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
+        parent=parent,
     )
     if err is not None:
         return err
 
-    app_name = _app_name(vcs, args)
     cwd = vcs.vmn_root_path if vcs else os.environ.get("VMN_WORKING_DIR", os.getcwd())
 
     fd, metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
@@ -647,6 +721,12 @@ def experiment_run(vcs, params, storage, args):
     env["VMN_EXPERIMENT_ID"] = verstr
     env["VMN_APP_NAME"] = app_name or ""
     env["VMN_METRICS_FILE"] = metrics_path
+    # This process holds the repo-wide vmn lock for as long as the child runs; a
+    # nested `vmn exp run` would deadlock on it. Give each nesting level its own
+    # lock file, keyed by the experiment it belongs to.
+    env["VMN_LOCK_FILE_PATH"] = os.path.join(
+        tempfile.gettempdir(), "vmn-run-" + verstr.replace("/", "-") + ".lock"
+    )
 
     VMN_LOGGER.info("Experiment " + verstr + ": running " + " ".join(run_cmd))
     tailer = _MetricsTailer(metrics_path)
@@ -658,6 +738,21 @@ def experiment_run(vcs, params, storage, args):
         _safe_unlink(metrics_path)
         return 1
 
+    started_at = _now_iso()
+    run_state = {
+        "state": "running",
+        "command": list(run_cmd),
+        "pid": proc.pid,
+        "host": socket.gethostname(),
+        "started_at": started_at,
+        "heartbeat": started_at,
+        "heartbeat_interval_sec": heartbeat_interval,
+        "exit_code": None,
+        "finished_at": None,
+        "duration_sec": None,
+    }
+    _save_run_state(storage, app_name, verstr, run_state)
+
     writer_id = _get_writer_id()
 
     def _try_sync():
@@ -667,14 +762,29 @@ def experiment_run(vcs, params, storage, args):
             VMN_LOGGER.debug("S3 sync failed", exc_info=True)
 
     last_sync = time.monotonic()
+    last_heartbeat = time.monotonic()
     while proc.poll() is None:
         _ingest_metric_records(storage, app_name, verstr, tailer.poll())
         if sync_interval and time.monotonic() - last_sync > sync_interval:
             _try_sync()
             last_sync = time.monotonic()
+        if time.monotonic() - last_heartbeat >= heartbeat_interval:
+            run_state["heartbeat"] = _now_iso()
+            _save_run_state(storage, app_name, verstr, run_state)
+            last_heartbeat = time.monotonic()
         time.sleep(_METRICS_TAIL_INTERVAL)
     exit_code = proc.returncode
     duration = round(time.monotonic() - start, 3)
+
+    run_state.update(
+        {
+            "state": "finished",
+            "exit_code": exit_code,
+            "finished_at": _now_iso(),
+            "duration_sec": duration,
+        }
+    )
+    _save_run_state(storage, app_name, verstr, run_state)
 
     _ingest_metric_records(storage, app_name, verstr, tailer.poll())
     _safe_unlink(metrics_path)
@@ -777,6 +887,28 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
+def _status_tree(storage, app_name, metas):
+    """Annotated nesting/status rows for the given experiments, by verstr."""
+    rows = [
+        {
+            "verstr": meta["verstr"],
+            "parent": meta.get("parent"),
+            "status": derive_status(load_run_state(storage, app_name, meta["verstr"])),
+        }
+        for meta in metas
+    ]
+    return {row["verstr"]: row for row in annotate_tree(rows)}
+
+
+def _status_token(node):
+    """A run's own status, plus its subtree's when the two disagree."""
+    status = node["status"]
+    tree_status = node.get("tree_status")
+    if tree_status and tree_status != status:
+        return f"{status}/{tree_status}"
+    return status
+
+
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
@@ -832,8 +964,11 @@ def experiment_list(vcs, params, storage, args):
     if args.top:
         rows = rows[: args.top]
 
+    tree = _status_tree(storage, app_name, [meta for meta, _, _ in rows])
+
     # Print table
     for idx, (meta, metrics, log) in enumerate(rows, 1):
+        node = tree[meta["verstr"]]
         ts = _relative_timestamp(meta["timestamp"])
         note = meta.get("note") or ""
         create_entry = next((e for e in log if e.get("type") == "create"), None)
@@ -850,7 +985,11 @@ def experiment_list(vcs, params, storage, args):
 
         metric_str = "  ".join(metric_parts)
         note_str = f" - {note}" if note else ""
-        print(f"[{idx}] {meta['verstr']}  ({ts})  {metric_str}{note_str}")
+        indent = "  " * node["depth"]
+        print(
+            f"{indent}[{idx}] {meta['verstr']}  {_status_token(node)}  "
+            f"({ts})  {metric_str}{note_str}"
+        )
 
     return 0
 
@@ -858,6 +997,30 @@ def experiment_list(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 # show
 # ---------------------------------------------------------------------------
+
+
+def _print_status_block(storage, app_name, verstr, metadata):
+    """Derived run status, runner identity and the experiment's nesting."""
+    fields = status_fields(load_run_state(storage, app_name, verstr))
+    print(f"  Status:    {fields['status']}")
+    if fields["exit_code"] is not None:
+        print(f"  Exit code: {fields['exit_code']}")
+    if fields["duration_sec"] is not None:
+        print(f"  Duration:  {fields['duration_sec']}s")
+    if fields["pid"]:
+        print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
+    if fields["status"] == STUCK:
+        print(f"  Heartbeat: last seen {_relative_timestamp(fields['heartbeat'])}")
+
+    if metadata.get("parent"):
+        print(f"  Parent:    {metadata['parent']}")
+    children = [
+        m["verstr"]
+        for m in storage.list_snapshots(app_name)
+        if m.get("parent") == verstr
+    ]
+    if children:
+        print(f"  Children:  {', '.join(children)}")
 
 
 @measure_runtime_decorator
@@ -885,6 +1048,7 @@ def experiment_show(vcs, params, storage, args):
         print(f"  Note:      {metadata['note']}")
     if metadata.get("has_dep_patches"):
         print("  Deps:      patches captured")
+    _print_status_block(storage, app_name, verstr, metadata)
 
     # Patch stats
     for ptype in ("working_tree", "local_commits"):

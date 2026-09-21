@@ -657,6 +657,19 @@ def _add_experiment_parser(subprasers, name):
         "Set to 0 to disable periodic sync.",
     )
     pexp.add_argument(
+        "--heartbeat-interval",
+        type=int,
+        default=30,
+        help="Seconds between run-state heartbeats during 'run' (default: 30). "
+        "A run whose heartbeat goes stale is reported as stuck.",
+    )
+    pexp.add_argument(
+        "--parent",
+        default=None,
+        help="Parent experiment for a nested run (verstr, unique prefix, @N or "
+        "latest). Defaults to the VMN_EXPERIMENT_ID of the launching run.",
+    )
+    pexp.add_argument(
         "--backend",
         default="local",
         choices=["local", "s3"],
