@@ -24,38 +24,26 @@ SINGLE = "single"  # neither
 # What a mixed subtree reports. A single failure is the headline; an unfinished
 # run outranks a clean one, because the subtree isn't done yet.
 _PRECEDENCE = (FAILED, STUCK, RUNNING, CREATED, SUCCEEDED)
-_MAX_DEPTH = 64  # cycle guard: a parent chain can't legitimately be deeper
 
 
 def rollup_status(statuses):
     """The single status that best describes a set of runs, or None if empty."""
-    statuses = [s for s in statuses if s]
-    if not statuses:
-        return None
-    for candidate in _PRECEDENCE:
-        if candidate in statuses:
-            return candidate
-    return statuses[0]
+    statuses = {s for s in statuses if s}
+    return next((c for c in _PRECEDENCE if c in statuses), None)
 
 
-def _depth(verstr, parent_of, known):
-    """Distance to the top of the parent chain, capped to survive cycles."""
-    if verstr in known:
-        return known[verstr]
+def _depth(verstr, parent_of):
+    """Distance to the top of the parent chain. A cycle stops at its entry point."""
     depth = 0
     seen = {verstr}
     cursor = verstr
-    while depth < _MAX_DEPTH:
+    while True:
         parent = parent_of.get(cursor)
         if not parent or parent in seen:
-            break
+            return depth
         depth += 1
         seen.add(parent)
         cursor = parent
-        if parent not in parent_of:
-            break  # parent isn't in this listing; it still counts as one level
-    known[verstr] = depth
-    return depth
 
 
 def _subtree_statuses(verstr, children_of, by_verstr, seen=None):
@@ -85,7 +73,6 @@ def annotate_tree(rows):
         if parent and parent != row["verstr"]:
             children_of.setdefault(parent, []).append(row["verstr"])
 
-    known_depths = {}
     for row in rows:
         verstr = row["verstr"]
         children = children_of.get(verstr, [])
@@ -96,7 +83,7 @@ def annotate_tree(rows):
             row["kind"] = INNER
         else:
             row["kind"] = SINGLE
-        row["depth"] = _depth(verstr, parent_of, known_depths)
+        row["depth"] = _depth(verstr, parent_of)
         row["tree_status"] = rollup_status(
             _subtree_statuses(verstr, children_of, by_verstr)
         )
