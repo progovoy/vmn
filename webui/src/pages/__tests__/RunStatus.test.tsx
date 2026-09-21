@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 // Polyfill ResizeObserver for jsdom (recharts needs it)
@@ -153,26 +153,49 @@ describe("Run status block", () => {
   });
 });
 
+/** Advance fake time with React's work flushed, so the poll timer is armed
+ *  before the clock moves. */
+const tick = (ms: number) =>
+  act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
 describe("Run auto-refresh", () => {
   it("polls a running experiment and stops once it finishes", async () => {
     vi.useFakeTimers();
     mockedApi.experiment.mockResolvedValue(makeDetail(status("running")));
 
     renderRun();
-    await vi.advanceTimersByTimeAsync(0);
+    await tick(0);
     expect(mockedApi.experiment).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(5000);
+    await tick(15000);
     expect(mockedApi.experiment).toHaveBeenCalledTimes(2);
 
     mockedApi.experiment.mockResolvedValue(
       makeDetail(status("succeeded", { exit_code: 0 }))
     );
-    await vi.advanceTimersByTimeAsync(5000);
+    await tick(15000);
     expect(mockedApi.experiment).toHaveBeenCalledTimes(3);
 
-    await vi.advanceTimersByTimeAsync(20000);
+    await tick(60000);
     expect(mockedApi.experiment).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it("follows the run's own heartbeat interval", async () => {
+    vi.useFakeTimers();
+    mockedApi.experiment.mockResolvedValue(
+      makeDetail(status("running", { heartbeat_interval_sec: 60 }))
+    );
+
+    renderRun();
+    await tick(0);
+    expect(mockedApi.experiment).toHaveBeenCalledTimes(1);
+
+    // Half of a 60s heartbeat — the 15s default goes by without a refetch.
+    await tick(15000);
+    expect(mockedApi.experiment).toHaveBeenCalledTimes(1);
+    await tick(15000);
+    expect(mockedApi.experiment).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
 });

@@ -80,32 +80,70 @@ describe("LeaderboardFilter status toggles", () => {
   const last = (onFilter: ReturnType<typeof vi.fn>) =>
     onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
 
-  it("offers only the statuses present in the rows", () => {
-    render(<LeaderboardFilter rows={STATUS_ROWS} onFilter={() => {}} />);
-    expect(screen.getByRole("button", { name: "running" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "stuck" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "failed" })).not.toBeInTheDocument();
-  });
+  const ALL_STATUSES = ["running", "stuck", "failed", "succeeded", "created"];
 
-  it("renders no status toggles when rows carry no status", () => {
+  it("offers every status regardless of what the rows carry", () => {
     render(<LeaderboardFilter rows={ROWS} onFilter={() => {}} />);
-    expect(screen.queryByRole("button", { name: "running" })).not.toBeInTheDocument();
+    ALL_STATUSES.forEach((s) =>
+      expect(screen.getByRole("button", { name: s })).toBeInTheDocument()
+    );
   });
 
-  it("keeps only rows with the picked statuses", () => {
+  it("keeps every toggle available once the server filtered the rows", () => {
+    // The list endpoint answers a ?status= filter, so the rows coming back
+    // only carry the picked status — the toggles must not shrink with them.
+    const { rerender } = render(
+      <LeaderboardFilter rows={STATUS_ROWS} onFilter={() => {}} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "running" }));
+    rerender(
+      <LeaderboardFilter rows={[STATUS_ROWS[0]]} onFilter={() => {}} />
+    );
+    ALL_STATUSES.forEach((s) =>
+      expect(screen.getByRole("button", { name: s })).toBeInTheDocument()
+    );
+    expect(screen.getByRole("button", { name: "stuck" }))
+      .toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("leaves row filtering to the server", () => {
     const onFilter = vi.fn();
     render(<LeaderboardFilter rows={STATUS_ROWS} onFilter={onFilter} />);
     fireEvent.click(screen.getByRole("button", { name: "running" }));
-    expect(last(onFilter).map((r) => r.status)).toEqual(["running"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "stuck" }));
-    expect(last(onFilter).map((r) => r.status)).toEqual(["running", "stuck"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "running" }));
-    expect(last(onFilter).map((r) => r.status)).toEqual(["stuck"]);
+    expect(last(onFilter)).toHaveLength(3);
   });
 
-  it("marks a picked status as pressed and reports it upward", () => {
+  it("marks a picked status as pressed and reports the CSV in display order", () => {
+    const onStatusChange = vi.fn();
+    render(
+      <LeaderboardFilter
+        rows={STATUS_ROWS}
+        onFilter={() => {}}
+        onStatusChange={onStatusChange}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "stuck" }));
+    fireEvent.click(screen.getByRole("button", { name: "running" }));
+    expect(screen.getByRole("button", { name: "running" }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(onStatusChange).toHaveBeenLastCalledWith("running,stuck");
+  });
+
+  it("reports each status change exactly once", () => {
+    const onStatusChange = vi.fn();
+    render(
+      <LeaderboardFilter
+        rows={STATUS_ROWS}
+        onFilter={() => {}}
+        onStatusChange={onStatusChange}
+      />
+    );
+    onStatusChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "running" }));
+    expect(onStatusChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("clear resets the status toggles too", () => {
     const onStatusChange = vi.fn();
     render(
       <LeaderboardFilter
@@ -115,17 +153,9 @@ describe("LeaderboardFilter status toggles", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "running" }));
-    fireEvent.click(screen.getByRole("button", { name: "stuck" }));
-    expect(screen.getByRole("button", { name: "running" }))
-      .toHaveAttribute("aria-pressed", "true");
-    expect(onStatusChange).toHaveBeenLastCalledWith("running,stuck");
-  });
-
-  it("clear resets the status toggles too", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={STATUS_ROWS} onFilter={onFilter} />);
-    fireEvent.click(screen.getByRole("button", { name: "running" }));
     fireEvent.click(screen.getByTitle(/clear/i));
-    expect(last(onFilter)).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "running" }))
+      .toHaveAttribute("aria-pressed", "false");
+    expect(onStatusChange).toHaveBeenLastCalledWith("");
   });
 });

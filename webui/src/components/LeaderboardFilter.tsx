@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ExperimentRow, RunState } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 
-/** Display order of the status toggles (only those present are shown). */
+/** Every status, in display order. Static on purpose: the list endpoint answers
+ *  the `?status=` filter, so the rows on hand no longer show what else exists. */
 const STATUS_ORDER: RunState[] = [
   "running", "stuck", "failed", "succeeded", "created",
 ];
@@ -24,19 +25,14 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
     return [...set].sort();
   }, [rows]);
 
-  const knownStatuses = useMemo(() => {
-    const set = new Set(rows.map((r) => r.status));
-    return STATUS_ORDER.filter((s) => set.has(s));
-  }, [rows]);
-
   const toggleStatus = (s: RunState) =>
-    setStatuses((cur) => {
-      const next = cur.includes(s)
-        ? cur.filter((x) => x !== s)
-        : STATUS_ORDER.filter((x) => x === s || cur.includes(x));
-      onStatusChange?.(next.join(","));
-      return next;
-    });
+    setStatuses((cur) =>
+      cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]
+    );
+
+  useEffect(() => {
+    onStatusChange?.(STATUS_ORDER.filter((s) => statuses.includes(s)).join(","));
+  }, [statuses, onStatusChange]);
 
   useEffect(() => {
     let filtered = rows;
@@ -51,17 +47,13 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
     if (branch) {
       filtered = filtered.filter((r) => r.branch === branch);
     }
-    if (statuses.length) {
-      filtered = filtered.filter((r) => r.status && statuses.includes(r.status));
-    }
     onFilter(filtered);
-  }, [rows, debouncedSearch, branch, statuses, onFilter]);
+  }, [rows, debouncedSearch, branch, onFilter]);
 
   const clear = () => {
     setSearch("");
     setBranch("");
     setStatuses([]);
-    onStatusChange?.("");
   };
 
   const hasFilter = search || branch || statuses.length > 0;
@@ -86,7 +78,7 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
           <option key={b} value={b}>{b}</option>
         ))}
       </select>
-      {knownStatuses.map((s) => (
+      {STATUS_ORDER.map((s) => (
         <button
           key={s}
           className="status-toggle"
