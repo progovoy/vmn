@@ -233,6 +233,11 @@ files, same heartbeat — so `exp list`, `exp show`, `exp compare`, the web UI a
 S3 sync all work on it unchanged, and nesting still produces outer/inner jobs.
 Full guide, including the read-side API: [docs/sdk.md](sdk.md).
 
+Two things only the SDK gives you: [autologging](sdk.md#autologging) — one
+`autolog()` call records scikit-learn hyperparameters, scores and fitted models
+with no logging in your training code — and the [query
+language](sdk.md#the-query-language) for filtering runs on metrics and params.
+
 ---
 
 ## Run status: did my job die?
@@ -409,6 +414,11 @@ duration) plus any metrics it emits to `$VMN_METRICS_FILE`. Publishes a
 [`run_state.yml`](#run-status-did-my-job-die) with a heartbeat while the command
 is alive.
 
+Only creating the experiment takes the per-repo vmn lock; it is released before
+the command starts. So a run that trains for hours leaves the repo usable — other
+`vmn` commands, including ones the command itself runs, are unaffected, and
+nesting `vmn exp run` inside `vmn exp run` works.
+
 ```sh
 vmn exp run my_app --note "lr 0.01" -- python train.py --lr 0.01
 vmn exp run my_app -- ./perf_test.sh
@@ -442,6 +452,10 @@ vmn exp list my_app                        # all
 vmn exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
 vmn exp list my_app --last 10              # most recent 10
 ```
+
+Richer filtering — `metrics.loss < 0.5 and status = "succeeded"` — is available
+from the SDK reader and the REST API via [the query
+language](sdk.md#the-query-language), not yet as a flag here.
 
 ### `show`
 
