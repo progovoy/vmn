@@ -137,6 +137,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         last: int = None,
         offset: int = 0,
         limit: int = None,
+        status: str = None,
     ):
         ws = _experiment_workspace(ws_name)
         app_name = tag_name_to_app_name(app_tag)
@@ -149,6 +150,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
                 last=last,
                 offset=offset,
                 limit=limit,
+                status=status,
             )
         index = _index_for(ws)
         if index:
@@ -158,6 +160,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
                 last=last,
                 offset=offset,
                 limit=limit,
+                status=status,
             )
         return exp_reader.list_experiments(
             ws.path,
@@ -166,6 +169,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
             last=last,
             offset=offset,
             limit=limit,
+            status=status,
         )
 
     @app.get(

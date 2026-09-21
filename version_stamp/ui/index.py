@@ -31,12 +31,14 @@ def _experiments_fingerprint(root_path, app_name):
         for entry in sorted(os.scandir(base), key=lambda e: e.name):
             if not entry.is_dir():
                 continue
-            for fname in ("metadata.yml", "log.yml"):
-                try:
-                    st = os.stat(os.path.join(entry.path, fname))
-                    h.update(f"{entry.name}/{fname}:{st.st_mtime_ns}\n".encode())
-                except OSError:
+            try:
+                files = sorted(os.scandir(entry.path), key=lambda e: e.name)
+            except OSError:
+                continue
+            for f in files:
+                if not f.is_file():
                     continue
+                h.update(f"{entry.name}/{f.name}:{f.stat().st_mtime_ns}\n".encode())
     except OSError:
         return "empty"
     return h.hexdigest()
@@ -90,17 +92,26 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def list_experiments(self, app_name, sort=None, last=None, offset=0, limit=None):
+    def list_experiments(
+        self, app_name, sort=None, last=None, offset=0, limit=None, status=None
+    ):
         fp = _experiments_fingerprint(self.root_path, app_name)
-        # v2: rows carry the storage-order idx; the scope bump invalidates
-        # cached payloads from before it existed.
-        rows = self._get(f"exp:v2:{app_name}", fp)
+        # v3: rows carry the raw run state; the scope bump invalidates cached
+        # payloads from before it existed.
+        rows = self._get(f"exp:v3:{app_name}", fp)
         if rows is None:
             rows = _fetch_experiment_rows(self.root_path, app_name)
-            self._put(f"exp:v2:{app_name}", fp, rows)
+            self._put(f"exp:v3:{app_name}", fp, rows)
+        # Status is derived from the current time, so never from the cache.
+        rows = exp_reader.annotate_status(rows)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
         return exp_reader.sort_rows(
-            rows, schema, sort=sort, last=last, offset=offset, limit=limit
+            exp_reader.filter_by_status(rows, status),
+            schema,
+            sort=sort,
+            last=last,
+            offset=offset,
+            limit=limit,
         )
 
     def list_versions(self, app_name):
