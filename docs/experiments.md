@@ -17,6 +17,8 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 - [Three ways to record an experiment](#three-ways-to-record-an-experiment)
 - [Without a script: config sweeps & performance tests](#without-a-script-config-sweeps--performance-tests)
 - [With a command: `exp run` and the metrics file](#with-a-command-exp-run-and-the-metrics-file)
+- [Run status: did my job die?](#run-status-did-my-job-die)
+- [Outer & inner jobs (sweeps)](#outer--inner-jobs-sweeps)
 - [Addressing experiments](#addressing-experiments)
 - [Subcommand reference](#subcommand-reference)
 - [Structured notes & params](#structured-notes--params)
@@ -158,7 +160,7 @@ vmn sets three environment variables for the child process:
 
 | Variable | Value |
 |---|---|
-| `VMN_EXPERIMENT_ID` | the verstr of this run |
+| `VMN_EXPERIMENT_ID` | the verstr of this run — also how [nesting](#outer--inner-jobs-sweeps) is detected |
 | `VMN_APP_NAME` | the app name |
 | `VMN_METRICS_FILE` | a path your command appends metrics to |
 
@@ -208,6 +210,131 @@ log_metric("p99_ms", final_p99())                  # -> a final scalar
 
 ---
 
+## Run status: did my job die?
+
+A long run can end in three ways: it finishes cleanly, it finishes with an
+error, or the machine underneath it disappears without anybody writing that
+down. `exp run` handles the third case by keeping a **heartbeat**.
+
+While the child process is alive, `exp run` maintains a `run_state.yml` next to
+the experiment's `metadata.yml` (same directory locally, same key prefix on S3):
+
+```yaml
+state: running          # "running" while alive, "finished" after the child exits
+command: [python, train.py]
+pid: 12345
+host: somebox
+started_at: 2026-09-21T12:00:00Z
+heartbeat: 2026-09-21T12:03:00Z   # refreshed while the child is alive
+heartbeat_interval_sec: 30
+exit_code: null         # an int once finished
+finished_at: null
+duration_sec: null
+```
+
+The beat interval defaults to 30 seconds and is tunable:
+
+```sh
+vmn exp run my_app --heartbeat-interval 10 -- python train.py
+```
+
+### Derived statuses
+
+Status is **never stored** — it is derived from `run_state.yml` plus the current
+time, so a run whose machine vanished does not need anybody to update a record:
+
+| Status | Means |
+|---|---|
+| `created` | the experiment exists but no command was ever started (e.g. `exp create`) |
+| `running` | the heartbeat is fresh |
+| `stuck` | claims to be running, but the heartbeat went stale and there is no exit code |
+| `succeeded` | finished, exit code 0 |
+| `failed` | finished, non-zero exit code |
+
+`stuck` is the interesting one: the runner died, was OOM-killed, or lost its
+node, and left nothing behind to say so. Several missed beats are tolerated
+before vmn calls a run stuck — the staleness window is
+`max(3 × heartbeat_interval_sec, 60s)`.
+
+> **Honest limitation:** a process that is *hung but alive* keeps heartbeating,
+> so it still reads as `running`. To catch that, watch `last_metric_at` (exposed
+> by the UI and API) — a run that is alive but has logged nothing for a long
+> time is alive but not making progress.
+
+### Seeing it
+
+`exp list` shows a status per row; `exp show` prints a `Status:` line with the
+exit code, duration, and pid/host — plus the heartbeat age when the run is
+`stuck`:
+
+```sh
+vmn exp list my_app
+vmn exp show my_app --latest
+```
+
+---
+
+## Outer & inner jobs (sweeps)
+
+`exp run` exports `VMN_EXPERIMENT_ID` to its child. Any experiment created
+**while that variable is set** records it as its `parent`. So a sweep script
+that itself calls `vmn exp run` per trial automatically produces one **outer**
+job containing **inner** jobs — no wiring required.
+
+```sh
+#!/usr/bin/env bash
+# sweep.sh — each trial becomes an inner job of the run that launched this script
+for lr in 0.001 0.01 0.1; do
+    vmn exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
+done
+```
+
+```sh
+vmn exp run my_app --note "lr sweep" -- ./sweep.sh
+```
+
+You can also parent explicitly, which is handy when the trials are launched from
+somewhere that does not inherit the environment:
+
+```sh
+vmn exp run my_app --parent @3 -- python train.py --lr 0.01
+vmn exp create my_app --parent latest --metrics acc=0.91
+```
+
+`--parent` takes any of the [addressing forms](#addressing-experiments): a full
+verstr, a unique prefix, `@N`, or `latest`.
+
+### kind and tree_status
+
+Each run has a `kind`: `outer` (has children), `inner` (has a parent), or
+`single` (neither). An outer job also gets a **`tree_status`** — the rollup over
+itself and its whole subtree, with precedence:
+
+```
+failed > stuck > running > created > succeeded
+```
+
+One failed trial therefore makes the whole sweep read as failed, which is the
+answer you usually want from a glance.
+
+### What `exp list` looks like
+
+Inner runs are indented under their outer run:
+
+```
+    VERSION                             STATUS      NOTE
+[1] 1.6.0-dev.a1b2c3d.9f8e7d6           failed      lr sweep
+[2]   1.6.0-dev.a1b2c3d.9f8e7d6.r2      succeeded   lr=0.001
+[3]   1.6.0-dev.a1b2c3d.1122334         succeeded   lr=0.01
+[4]   1.6.0-dev.a1b2c3d.5566778         failed      lr=0.1
+```
+
+One trial failed, so the sweep's `tree_status` is `failed` even if the sweep
+script itself exited fine. `exp show` on the outer run prints `Children:`, and
+on a trial prints `Parent:`.
+
+---
+
 ## Addressing experiments
 
 Every subcommand that takes a version accepts, in place of a full verstr:
@@ -239,17 +366,30 @@ identical state starts a new `.rN` run instead of overwriting.
 ```sh
 vmn exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
 vmn exp create my_app -f params.yml --attach initial_weights.pt
+vmn exp create my_app --parent @2 --metrics acc=0.91
 ```
+
+An experiment created with no run has status `created`. `--parent <ref>` attaches
+it as an [inner job](#outer--inner-jobs-sweeps) of another experiment.
 
 ### `run`
 
 Create an experiment, run a command, and record its outcome (exit code,
-duration) plus any metrics it emits to `$VMN_METRICS_FILE`.
+duration) plus any metrics it emits to `$VMN_METRICS_FILE`. Publishes a
+[`run_state.yml`](#run-status-did-my-job-die) with a heartbeat while the command
+is alive.
 
 ```sh
 vmn exp run my_app --note "lr 0.01" -- python train.py --lr 0.01
 vmn exp run my_app -- ./perf_test.sh
+vmn exp run my_app --heartbeat-interval 10 -- python train.py
+vmn exp run my_app --parent latest -- python train.py --lr 0.1
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--heartbeat-interval <sec>` | `30` | How often the run refreshes its heartbeat |
+| `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
 
 ### `add`
 
@@ -264,7 +404,8 @@ vmn exp add my_app -f extra_notes.yml
 
 ### `list`
 
-List experiments, optionally sorted by a metric.
+List experiments with a [status](#run-status-did-my-job-die) per row, optionally
+sorted by a metric. Inner runs are indented under their outer run.
 
 ```sh
 vmn exp list my_app                        # all
@@ -274,8 +415,9 @@ vmn exp list my_app --last 10              # most recent 10
 
 ### `show`
 
-Full details for one experiment: metadata, latest metrics, and the whole log
-timeline.
+Full details for one experiment: metadata, a `Status:` line (exit code,
+duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
+lines, latest metrics, and the whole log timeline.
 
 ```sh
 vmn exp show my_app          # latest
@@ -411,7 +553,10 @@ so you don't repeat them on every command; CLI flags override the config.
 `vmn ui` (from `pip install "vmn[ui]"`) serves a dashboard over the same files:
 a sortable experiment leaderboard, per-run detail with **live training/perf
 curves** (from `step=` series), side-by-side compare with a real code diff, and
-an artifact browser. See [docs/ui.md](ui.md) for the full tour.
+an artifact browser. Each run gets a color-coded
+[status](#run-status-did-my-job-die) pill, inner runs nest under their outer run,
+and the page auto-refreshes while anything is unfinished. See
+[docs/ui.md](ui.md) for the full tour and the API fields.
 
 To get live curves, have your command log `step=`-tagged lines to
 `$VMN_METRICS_FILE` — `exp run` tails the file during the run, so the curve

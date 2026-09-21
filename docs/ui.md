@@ -102,9 +102,49 @@ make leaderboards and the stamp tree instant over large repos. It is derived
 from the source files and rebuilt on staleness (tag list / experiment-dir
 mtimes) — delete it any time. `--no-index` reads directly.
 
+## Run status in the dashboard
+
+Every run row carries a color-coded status pill — `created`, `running`, `stuck`,
+`succeeded`, `failed`. `running` pulses; `stuck` (a run whose heartbeat went
+stale with no exit code — the node died and nothing recorded it) is flagged.
+Inner runs are nested under their outer run, so a sweep collapses to one row
+whose status is the rollup over its whole subtree. The page auto-refreshes while
+anything is unfinished. See
+[docs/experiments.md](experiments.md#run-status-did-my-job-die) for how the
+statuses are derived.
+
 ## API
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
 `.../experiments/{verstr}`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
+
+### Experiment status fields
+
+Every experiment row from `GET .../apps/{app}/experiments` and the
+`.../experiments/{verstr}` detail response carries:
+
+| Field | Meaning |
+|---|---|
+| `status` | `created` / `running` / `stuck` / `succeeded` / `failed` (derived, never stored) |
+| `exit_code` | the command's exit code once finished, else `null` |
+| `started_at` / `finished_at` | ISO-8601 timestamps |
+| `heartbeat` | last heartbeat refresh |
+| `stale_sec` | seconds since the last heartbeat |
+| `duration_sec` | wall-clock run time once finished |
+| `pid` / `host` / `command` | what ran, where |
+| `last_metric_at` | when a metric was last logged — use it to spot a run that is alive but no longer progressing |
+| `parent` / `children` | verstrs linking outer and inner jobs |
+| `kind` | `outer`, `inner` or `single` |
+| `depth` | nesting depth, for indenting the list |
+| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`) |
+
+On the detail response these are also grouped under a top-level `status` object.
+
+The list endpoint accepts a `status` query parameter (comma-separated) to filter:
+
+```sh
+curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?status=running,stuck"
+```

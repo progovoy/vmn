@@ -144,6 +144,9 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata. `--vmp` for a metadata YAML path, `--vmu` for an associated URL.
 - `vmn snapshot [action] <name>`: Capture/restore uncommitted work as a deterministic dev version. Actions: `create` (default), `list`, `show`, `note`, `diff`, `export`, `restore`. Version-taking actions accept a full verstr, a unique prefix, `--latest`, or `@N`.
 - `vmn experiment [action] <name>` (alias `vmn exp`): Local-first experiment tracking (a snapshot + an append-only metrics/notes log). Actions: `create` (default), `run`, `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`. `vmn exp run <name> -- <cmd>` runs a command and ingests `key=value` lines the child writes to `$VMN_METRICS_FILE`. See docs/experiments.md.
+  - `run` publishes `run_state.yml` (state/pid/host/heartbeat/exit_code) next to `metadata.yml` and refreshes a heartbeat while the child lives; `--heartbeat-interval <sec>` (default 30).
+  - Status is derived, never stored: `created`/`running`/`stuck`/`succeeded`/`failed`. `stuck` = claims running but heartbeat stale past `max(3 * interval, 60s)` with no exit code.
+  - Nesting: an experiment created while `VMN_EXPERIMENT_ID` is set records it as its `parent`, so a sweep wrapped in `vmn exp run` yields one outer job with inner jobs. `create`/`run --parent <ref>` sets it explicitly. `kind` is `outer`/`inner`/`single`; an outer job's `tree_status` rolls up its subtree (`failed > stuck > running > created > succeeded`).
 - `vmn ui`: Serve the web dashboard + REST API (`pip install "vmn[ui]"`). `--host`, `--port` (8265), `--token`, `--data-dir`, `--repo` (repeatable), `--s3-bucket`/`--s3-prefix`/`--endpoint-url`, `--read-only`, `--no-browser`, `--no-index`. See docs/ui.md.
 - `vmn skill`: Print the AI-agent skill block to stdout. `--install` writes it instead (`--target claude` → `.claude/skills/vmn/SKILL.md`, `cursor` → `.cursorrules`, `agents` → `AGENTS.md`); `--methodology` appends the opinionated TDD/worktree rules; `--force` overwrites an existing Claude SKILL.md. Cursor/agents targets only rewrite vmn's marker block and preserve surrounding text.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
@@ -168,7 +171,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `GITHUB_TOKEN` / `GH_TOKEN`: Required for GitHub Releases feature
 - `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN`: Fallbacks for `stamp`/`release` `--git-push-user`/`--git-push-token`
 - `VMN_UI_TOKEN`: Fallback for `vmn ui --token`
-- Set *by* vmn for the `vmn exp run` child process: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`
+- Set *by* vmn for the `vmn exp run` child process: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`. `VMN_EXPERIMENT_ID` also drives auto-parenting — any experiment created while it is set becomes an inner job of that run.
 
 ## Docs Layout
 
