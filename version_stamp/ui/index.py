@@ -109,9 +109,11 @@ class WorkspaceIndex:
     def _experiment_rows(self, app_name):
         """The expensive half: metadata + logs, invalidated only by those."""
         fp = _experiments_fingerprint(self.root_path, app_name, _is_stable_file)
-        # v4: rows no longer carry the raw run state (it has its own entry);
-        # the scope bump discards payloads written before the split.
-        scope = f"exp:rows:v4:{app_name}"
+        # Bump this whenever the row *shape* changes: the fingerprint only sees
+        # files, so a shape change with untouched files would otherwise serve
+        # stale rows forever. v4 dropped the raw run state (it has its own
+        # entry); v5 added the verbatim `params` dict.
+        scope = f"exp:rows:v5:{app_name}"
         rows = self._get(scope, fp)
         if rows is None:
             rows = _fetch_experiment_rows(self.root_path, app_name)
