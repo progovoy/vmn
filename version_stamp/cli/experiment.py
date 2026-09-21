@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import yaml
+from filelock import FileLock
 
+from version_stamp.cli.constants import LOCK_FILE_ENV, LOCK_FILENAME
 from version_stamp.cli.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
@@ -52,6 +54,20 @@ _get_latest_metrics = latest_metrics
 _load_log = load_log
 _metric_sort_descending = metric_sort_descending
 get_metric_series = metric_series
+
+
+def get_repo_lock(vmn_root_path):
+    """The per-repo vmn lock that serializes mutations of a checkout.
+
+    One definition for every entry point: the CLI holds it around a command, and
+    ``version_stamp.exp.start_run`` holds it around the mutating create phase.
+    ``$VMN_LOCK_FILE_PATH`` overrides the path for the whole process, which is
+    what a user pointing vmn at a shared lock expects.
+    """
+    return FileLock(
+        os.environ.get(LOCK_FILE_ENV)
+        or os.path.join(vmn_root_path, ".vmn", LOCK_FILENAME)
+    )
 
 
 @dataclass
@@ -397,7 +413,9 @@ def handle_experiment(vmn_ctx):
     if action == "create":
         return experiment_create(vcs, params, storage, args)
     elif action == "run":
-        return experiment_run(vcs, params, storage, args)
+        return experiment_run(
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+        )
     elif action == "add":
         return experiment_add(vcs, params, storage, args)
     elif action == "list":
@@ -621,13 +639,18 @@ def _experiment_create_core(
 
 
 @measure_runtime_decorator
-def experiment_run(vcs, params, storage, args):
+def experiment_run(vcs, params, storage, args, repo_lock=None):
     """Create an experiment, run a command, and record its outcome + metrics.
 
     The child inherits stdio (output streams live) and these env vars:
     VMN_EXPERIMENT_ID, VMN_APP_NAME, VMN_METRICS_FILE. Any ``key=value`` lines the
     child appends to VMN_METRICS_FILE are recorded as a metrics entry. Returns the
     child's exit code.
+
+    ``repo_lock`` is the per-repo lock the CLI entry point acquired. Creating the
+    experiment may auto-initialize the repo and stamp a baseline, so it runs under
+    the lock; supervising the child must not, or a run that trains for hours locks
+    the repo for hours and a nested ``vmn`` deadlocks.
     """
     import subprocess
     import tempfile
@@ -671,6 +694,12 @@ def experiment_run(vcs, params, storage, args):
     if err is not None:
         return err
 
+    # The mutating phase is over: everything below writes only inside this run's
+    # own experiment directory. Hand the repo back to other vmn commands - the
+    # child's included.
+    if repo_lock is not None:
+        repo_lock.release()
+
     cwd = vcs.vmn_root_path if vcs else os.environ.get("VMN_WORKING_DIR", os.getcwd())
 
     fd, metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
@@ -679,12 +708,6 @@ def experiment_run(vcs, params, storage, args):
     env["VMN_EXPERIMENT_ID"] = verstr
     env["VMN_APP_NAME"] = app_name or ""
     env["VMN_METRICS_FILE"] = metrics_path
-    # This process holds the repo-wide vmn lock for as long as the child runs; a
-    # nested `vmn exp run` would deadlock on it. Give each nesting level its own
-    # lock file, keyed by the experiment it belongs to.
-    env["VMN_LOCK_FILE_PATH"] = os.path.join(
-        tempfile.gettempdir(), "vmn-run-" + verstr.replace("/", "-") + ".lock"
-    )
 
     VMN_LOGGER.info("Experiment " + verstr + ": running " + " ".join(run_cmd))
     tailer = _MetricsTailer(metrics_path)

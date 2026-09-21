@@ -31,6 +31,7 @@ from version_stamp.cli.experiment import (
     _resolve_parent,
     _save_artifact,
     _save_run_state,
+    get_repo_lock,
 )
 from version_stamp.cli.snapshot import _now_iso
 from version_stamp.core import logging as vmn_logging
@@ -176,21 +177,27 @@ def start_run(
     vmn_logging.ensure_logger()
     app_name = _resolve_app_name(app_name, _stamped_apps)
     vcs = _build_vcs(app_name)
-    _cold_start(vcs)
-    if storage is None:
-        storage = _build_storage(vcs)
 
-    resolved_parent = _pick_parent(storage, app_name, parent, nested)
+    # Cold start inits the repo and stamps a baseline, and verstr allocation
+    # scans for a free `.rN` - both must not race a concurrent vmn. The rest of
+    # the run writes only inside its own experiment directory, so the lock is
+    # scoped to creation and never held for the life of the run.
+    with get_repo_lock(vcs.vmn_root_path):
+        _cold_start(vcs)
+        if storage is None:
+            storage = _build_storage(vcs)
 
-    verstr, err = _experiment_create_core(
-        vcs,
-        storage,
-        note=note,
-        # Same shape as the CLI's `-f file` params, so _get_latest_metrics and
-        # `exp diff` pick them up unchanged.
-        extra_create_data={"params": dict(params)} if params else None,
-        parent=resolved_parent,
-    )
+        resolved_parent = _pick_parent(storage, app_name, parent, nested)
+
+        verstr, err = _experiment_create_core(
+            vcs,
+            storage,
+            note=note,
+            # Same shape as the CLI's `-f file` params, so _get_latest_metrics
+            # and `exp diff` pick them up unchanged.
+            extra_create_data={"params": dict(params)} if params else None,
+            parent=resolved_parent,
+        )
     if err:
         raise RuntimeError(
             f"Failed to create an experiment for '{app_name}' (error {err}). "
