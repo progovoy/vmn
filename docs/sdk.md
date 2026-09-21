@@ -118,19 +118,46 @@ autolog(frameworks=["sklearn"], log_models=True)   # or name them, and pick whet
 autolog_disable()                                  # restore the originals
 ```
 
-**scikit-learn and xgboost are implemented today**, both covered by integration
-tests that fit real estimators from the real libraries — including the
-meta-estimator and inherited-`fit` cases a stubbed framework cannot expose. For
-xgboost it is the scikit-learn wrappers (`XGBClassifier`, `XGBRegressor`) that
-are autologged; the native `xgboost.train` / `Booster` API is a different shape,
-with no estimator to ask for hyperparameters, and is left alone.
+Supported framework names, each covered by integration tests that train a real
+model from the real library:
 
-torch, lightning and keras are deliberately *not* supported: they are gigabytes
-to install, so an adapter for them could not be tested against the real library
-here, and an adapter written blind is worse than no adapter. Naming an
-unsupported — or simply uninstalled — framework is a silent no-op, so
+| Name | Wraps | Notes |
+|---|---|---|
+| `sklearn` | every estimator's `fit` | includes the meta-estimator and inherited-`fit` cases |
+| `xgboost` | `XGBClassifier.fit`, `XGBRegressor.fit` | the scikit-learn wrappers only |
+| `keras` | `keras.Model.fit` | Keras 3, any backend |
+| `tensorflow` | the same method | `tensorflow.keras.Model` *is* `keras.Model` |
+| `lightning` | `lightning.pytorch.Trainer.fit` | |
+| `pytorch_lightning` | `pytorch_lightning.Trainer.fit` | a separate mirror package, so a separate patch |
+
+Naming an unsupported — or simply uninstalled — framework is a silent no-op, so
 `autolog()` is safe to call at import time in code that may run without any ML
 library present.
+
+For xgboost it is the scikit-learn wrappers that are autologged; the native
+`xgboost.train` / `Booster` API is a different shape, with no estimator to ask
+for hyperparameters, and is left alone. `tensorflow` and `keras` name the same
+underlying function, so requesting both patches it once, not twice. Lightning's
+two import names are genuinely two classes and each gets its own patch, but both
+record under the `lightning_` prefix — a query must not have to care which
+import the training script reached for.
+
+**Plain `torch` is deliberately not a framework**, and no `torch` entry exists.
+Raw PyTorch has no training entry point to wrap: you write the loop, so there is
+no `fit()`. The candidate hooks are worse than nothing — `Module.__call__` fires
+on every forward pass, `Optimizer.step` on every batch, and neither can tell an
+epoch from a step or knows which loss you care about. Raw-torch users log
+explicitly in their own loop, which costs two lines:
+
+```python
+with start_run("my_app", params={"lr": lr, "batch_size": 32}) as run:
+    for epoch in range(epochs):
+        loss = train_one_epoch(model, loader, optimizer)
+        run.log_metric("train_loss", loss, step=epoch)
+```
+
+Lightning is the supported way to get the same thing autologged, because
+`Trainer.fit` is the entry point raw torch lacks.
 
 **Autologging only records inside a run you opened.** With no run open, the
 patched `fit()` is a pass-through plus one debug line. It will never open a run
@@ -154,6 +181,22 @@ with start_run("my_app", note="rbf baseline") as run:
 | `estimator.score(X, y)` after the fit, when it returns a number | `metrics.sklearn_score` |
 | the pickled fitted estimator, when `log_models=True` (the default) | an artifact named `sklearn_<Class>.pkl` |
 
+What each framework can actually give up differs, so what lands differs too:
+
+| | Keras | Lightning |
+|---|---|---|
+| params | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` — read back off the compiled model | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (so call `save_hyperparameters()`) |
+| metrics | one point per epoch from the returned `History`, `metrics.keras_loss` and one per compiled metric | the final `trainer.callback_metrics`, e.g. `metrics.lightning_train_loss` |
+| step series | yes — `History` carries every epoch, so no callback of vmn's is attached to your model | no; log inside `training_step` and Lightning's own loggers keep the curve |
+| `log_models=True` | `keras_<Class>.keras`, the native archive | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`, restorable with `load_from_checkpoint` |
+
+Neither is pickled: a Keras model and a Lightning module full of tensors both
+have a first-class save format, and pickle is not it.
+
+Because the store folds a metric to its latest value, the last point of the Keras
+epoch series *is* `metrics.keras_loss` — the curve and the headline number are
+the same log, not two.
+
 Autologged names are prefixed with the framework name and an **underscore**, not
 a dot: `sklearn_kernel`, never `sklearn.kernel`. The prefix keeps autologged
 values out of the way of your own, and the underscore keeps each name a single
@@ -175,11 +218,23 @@ Three guarantees worth relying on:
   it replaced, so a second `autolog()` recognizes its own work and leaves it
   alone, and `autolog_disable()` puts the exact originals back.
 
-Adding a framework is one function: write `_discover_<name>(module)` in
-`version_stamp/exp/autolog.py`, returning the `(owner, attr)` pairs to wrap
-(each a `fit(self, X, y=None)`-shaped method defined in `owner.__dict__`), and
-register it in `SUPPORTED_FRAMEWORKS` under its import name. Discovery is the
-only framework-specific part; the recording path is shared.
+Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`, in
+`version_stamp/exp/autolog.py`. An adapter answers the five questions the shared
+recording path asks, and everything but the first defaults to the scikit-learn
+answer:
+
+| Field | Answers |
+|---|---|
+| `discover(module)` | which `(owner, attr)` pairs to wrap |
+| `subject(call)` | which object is being trained — `call.instance` by default, the first argument for Lightning |
+| `params(call)` | its hyperparameters, unprefixed — `subject.get_params()` by default |
+| `metrics(call)` | its final metrics — `subject.score(X, y)` by default |
+| `series(call)` | `{name: [per-step values]}`, logged one `log_metrics` per step — empty by default |
+| `save(call, subject, base)` | write the model to `base + ext` and return the path — a pickle by default |
+
+`call` is the intercepted training call: `(instance, args, kwargs, result)`, with
+`result` still `None` while params are captured before training starts. The
+recording path is shared; nothing else needs a branch per framework.
 
 ---
 

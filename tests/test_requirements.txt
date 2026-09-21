@@ -19,3 +19,8 @@ httpx
 uvicorn
 scikit-learn
 xgboost
+torch
+lightning
+pytorch-lightning
+tensorflow
+keras
