@@ -8,16 +8,28 @@ const STATUS_ORDER: RunState[] = [
   "running", "stuck", "failed", "succeeded", "created",
 ];
 
-export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
+/** The syntax hint on the query box: a query that uses most of the language. */
+const QUERY_EXAMPLE = 'metrics.loss < 0.5 and status = "succeeded"';
+
+export default function LeaderboardFilter({
+  rows, onFilter, onStatusChange, onQueryChange, queryError,
+}: {
   rows: ExperimentRow[];
   onFilter: (filtered: ExperimentRow[]) => void;
   /** Picked statuses as the `?status=` CSV the list endpoint takes. */
   onStatusChange?: (csv: string) => void;
+  /** The typed query as the `?q=` the list endpoint takes, debounced. */
+  onQueryChange?: (query: string) => void;
+  /** What the server said about the query it refused; shown beside the box. */
+  queryError?: string | null;
 }) {
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
   const [statuses, setStatuses] = useState<RunState[]>([]);
+  const [query, setQuery] = useState("");
   const debouncedSearch = useDebounce(search);
+  // Long enough that a whole field name is typed before it costs a request.
+  const debouncedQuery = useDebounce(query, 300);
 
   const branches = useMemo(() => {
     const set = new Set<string>();
@@ -33,6 +45,10 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
   useEffect(() => {
     onStatusChange?.(STATUS_ORDER.filter((s) => statuses.includes(s)).join(","));
   }, [statuses, onStatusChange]);
+
+  useEffect(() => {
+    onQueryChange?.(debouncedQuery.trim());
+  }, [debouncedQuery, onQueryChange]);
 
   useEffect(() => {
     let filtered = rows;
@@ -54,9 +70,10 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
     setSearch("");
     setBranch("");
     setStatuses([]);
+    setQuery("");
   };
 
-  const hasFilter = search || branch || statuses.length > 0;
+  const hasFilter = search || branch || query || statuses.length > 0;
 
   return (
     <div className="toolbar" style={{ gap: 8, marginBottom: 0 }}>
@@ -93,6 +110,23 @@ export default function LeaderboardFilter({ rows, onFilter, onStatusChange }: {
           ✕
         </button>
       )}
+      {/* A row of its own, so the query and the server's complaint about it sit
+          together and the rest of the bar keeps its place. */}
+      <div className="query-row">
+        <input
+          type="text"
+          className="mono"
+          aria-label="Filter query"
+          placeholder={QUERY_EXAMPLE}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-invalid={Boolean(queryError)}
+          style={{ flex: 1, minWidth: 220 }}
+        />
+        {queryError && (
+          <span className="query-error" role="alert">{queryError}</span>
+        )}
+      </div>
     </div>
   );
 }

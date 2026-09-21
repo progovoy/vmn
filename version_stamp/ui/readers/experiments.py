@@ -19,6 +19,7 @@ from version_stamp.core.experiment_log import (
     sort_by_metric,
 )
 from version_stamp.core.experiment_log import load_log as _load_log
+from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import (
     derive_status,
     load_run_state,
@@ -141,6 +142,17 @@ def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
     return annotate_status(rows, run_states, now=now)
 
 
+def apply_filters(rows, status=None, query=None):
+    """Both row filters, ANDed: the status whitelist then the query language.
+
+    Runs after status derivation and before :func:`sort_rows`, which owns
+    ordering and paging — so ``total`` counts the rows that matched. Raises
+    :class:`~version_stamp.core.experiment_query.QueryError` on a bad *query*;
+    the API turns that into a 400.
+    """
+    return filter_rows(filter_by_status(rows, status), query)
+
+
 def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
     """Pure ordering over fetched rows — semantics identical to ``vmn exp list``.
 
@@ -160,11 +172,18 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
 
 
 def list_experiments(
-    root_path, app_name, sort=None, last=None, offset=0, limit=None, status=None
+    root_path,
+    app_name,
+    sort=None,
+    last=None,
+    offset=0,
+    limit=None,
+    status=None,
+    query=None,
 ):
     """Leaderboard rows, ordered exactly like ``vmn exp list``."""
     return sort_rows(
-        filter_by_status(rows_with_status(root_path, app_name), status),
+        apply_filters(rows_with_status(root_path, app_name), status, query),
         metrics_schema(root_path, app_name),
         sort=sort,
         last=last,
@@ -243,12 +262,21 @@ def get_experiment(root_path, app_name, verstr_ref):
 
 
 def list_experiments_from_storage(
-    storage, app_name, sort=None, last=None, offset=0, limit=None, status=None
+    storage,
+    app_name,
+    sort=None,
+    last=None,
+    offset=0,
+    limit=None,
+    status=None,
+    query=None,
 ):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
     schema = {}  # No app conf available for S3 workspaces
     return sort_rows(
-        filter_by_status(rows_with_status(app_name=app_name, storage=storage), status),
+        apply_filters(
+            rows_with_status(app_name=app_name, storage=storage), status, query
+        ),
         schema,
         sort=sort,
         last=last,

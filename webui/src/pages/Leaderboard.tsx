@@ -32,15 +32,27 @@ export default function Leaderboard() {
   const creating = params.get("new") === "1";
   const [filteredRows, setFilteredRows] = useState<ExperimentRow[] | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [queryError, setQueryError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const load = useCallback(
-    () =>
-      api.experiments(ws, app, sort ?? undefined, statusFilter || undefined)
-        .then(setRows)
-        .catch((e) => setError(String(e))),
-    [ws, app, sort, statusFilter]
-  );
+  const load = useCallback(() => {
+    const args = [ws, app, sort ?? undefined, statusFilter || undefined] as const;
+    const request = query
+      ? api.experiments(...args, query)
+      : api.experiments(...args);
+    return request
+      .then((next) => {
+        setRows(next);
+        setQueryError(null);
+      })
+      .catch((e) => {
+        // A 400 is the query the user is still typing: say so beside the box
+        // and leave the rows they were reading alone.
+        if ((e as { status?: number }).status === 400) setQueryError(String(e.message));
+        else setError(String(e));
+      });
+  }, [ws, app, sort, statusFilter, query]);
   useEffect(() => { load(); }, [load]);
   // Keep refreshing on our own while a run is still in flight, at the cadence
   // its heartbeat can actually move the status at.
@@ -177,7 +189,9 @@ export default function Leaderboard() {
         />
       )}
 
-      {rows.length === 0 ? (
+      {/* Filtered down to nothing is not "no experiments yet": keep the table
+          and its filter bar, or there is no way back from the query. */}
+      {rows.length === 0 && !query && !statusFilter ? (
         !creating && (
           <div className="empty">
             No experiments yet. Capture your working state:
@@ -240,6 +254,8 @@ export default function Leaderboard() {
             rows={rows}
             onFilter={setFilteredRows}
             onStatusChange={setStatusFilter}
+            onQueryChange={setQuery}
+            queryError={queryError}
           />
 
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
