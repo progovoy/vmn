@@ -720,16 +720,18 @@ _METRICS_TAIL_INTERVAL = 0.5  # seconds between metrics-file polls during a run
 
 
 def _ingest_metric_records(storage, app_name, verstr, records):
-    """Append one metrics log entry per parsed (step, values) record."""
-    if not records:
-        return
-    log = load_log(storage, app_name, verstr)
+    """Append one metrics log entry per parsed (step, values) record.
+
+    Strictly append-only, into this writer's own JSONL file. Reading the merged
+    log and rewriting ``log.yml`` instead would copy every entry already held in
+    a per-writer file into the shared one — duplicating them once per flush —
+    and would clobber anything another writer appended meanwhile.
+    """
     for step, values in records:
         entry = _create_log_entry("metrics", values=values)
         if step is not None:
             entry["step"] = step
-        log.append(entry)
-    _save_log(storage, app_name, verstr, log)
+        _append_to_log(storage, app_name, verstr, entry)
 
 
 def _safe_unlink(path):
