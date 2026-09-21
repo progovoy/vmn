@@ -280,6 +280,9 @@ vmn snapshot restore my_app --latest
 Snapshots extend the same state-recovery model as `goto` to uncommitted work.
 Local-first experiment tracking (`vmn exp`) builds on snapshots to capture
 metrics alongside code state; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
+Python workloads can log in-process instead of shelling out — `from
+version_stamp.exp import start_run`; see
+[docs/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/sdk.md).
 
 Install `vmn[ui]` for a local web dashboard with stamp-tree views and snapshot
 comparison.
@@ -347,6 +350,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 
 - [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
+- [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)
 - [Web UI](https://github.com/progovoy/vmn/blob/master/docs/ui.md)
 - [vmn vs semantic-release](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-semantic-release.md)
 - [vmn vs release-please](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-release-please.md)
