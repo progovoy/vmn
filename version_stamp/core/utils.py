@@ -1,8 +1,25 @@
 #!/usr/bin/env python3
+import datetime
+import hashlib
 import os
 
 from version_stamp.core.constants import BRANCH_CONF_DIR, JINJA_TAG_RE
 from version_stamp.core.logging import VMN_LOGGER
+
+
+def now_iso():
+    """UTC now as the ``...Z`` ISO string every vmn record is timestamped with."""
+    return (
+        datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+    )
+
+
+def sha256_file(abs_path):
+    h = hashlib.sha256()
+    with open(abs_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _clean_split_result(items):

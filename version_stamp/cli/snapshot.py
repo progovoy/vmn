@@ -17,6 +17,12 @@ from pathlib import Path
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.utils import now_iso, sha256_file
+
+# These two are pure helpers that the core write path needs as well, so they
+# live in core.utils now. The old private names stay importable from here.
+_now_iso = now_iso
+_sha256_file = sha256_file
 
 
 def _relative_timestamp(iso_ts):
@@ -860,14 +866,6 @@ def _store_untracked_cache(repo_path, cache):
         VMN_LOGGER.debug("Failed to persist untracked hash cache", exc_info=True)
 
 
-def _sha256_file(abs_path):
-    h = hashlib.sha256()
-    with open(abs_path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 16), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def _hash_untracked_content(repo_path):
     """Hash untracked non-ignored files by their content, deterministically.
 
@@ -1257,12 +1255,6 @@ def _build_snapshot_metadata(
     if changesets:
         metadata["changesets"] = changesets
     return metadata
-
-
-def _now_iso():
-    return (
-        datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-    )
 
 
 @measure_runtime_decorator

@@ -112,6 +112,11 @@ VMN_USER_NAME = "vmn"
 VMN_BE_TYPE_GIT = "git"
 VMN_BE_TYPE_LOCAL_FILE = "local_file"
 
+# ── The per-repo lock ────────────────────────────────────────────────
+
+LOCK_FILE_ENV = "VMN_LOCK_FILE_PATH"
+LOCK_FILENAME = "vmn.lock"
+
 # ── Logging ──────────────────────────────────────────────────────────
 
 GLOBAL_LOG_FILENAME = "global_vmn.log"
