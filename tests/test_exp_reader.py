@@ -320,6 +320,67 @@ def test_get_run_returns_log_series_and_artifacts(app_layout):
     assert run["verstr"] == "0.0.1"
 
 
+def _count_reads(monkeypatch):
+    """Count the per-experiment file reads get_run/list_runs perform."""
+    from version_stamp.exp import reader
+
+    counts = {"run_state": 0, "log": 0}
+    real_state, real_log = reader.load_run_state, reader._load_log
+
+    def counting_state(storage, app_name, verstr):
+        counts["run_state"] += 1
+        return real_state(storage, app_name, verstr)
+
+    def counting_log(storage, app_name, verstr):
+        counts["log"] += 1
+        return real_log(storage, app_name, verstr)
+
+    monkeypatch.setattr(reader, "load_run_state", counting_state)
+    monkeypatch.setattr(reader, "_load_log", counting_log)
+    return counts
+
+
+def _seed_two_trees(app_layout):
+    """Six experiments: a 3-run subtree under 'outer', and 3 unrelated runs."""
+    _write_experiment(app_layout, "0.0.1", run_state=_finished_state(0))
+    _write_experiment(app_layout, "0.0.2", run_state=_running_state())
+    outer = "0.0.3"
+    _write_experiment(app_layout, outer, run_state=_running_state())
+    _write_experiment(
+        app_layout, "0.0.4", parent=outer, run_state=_finished_state(0)
+    )
+    _write_experiment(app_layout, "0.0.5", parent=outer, run_state=_finished_state(9))
+    _write_experiment(app_layout, "0.0.6", run_state=_finished_state(0))
+    return outer
+
+
+def test_get_run_reads_only_the_runs_subtree(app_layout, monkeypatch):
+    outer = _seed_two_trees(app_layout)
+    counts = _count_reads(monkeypatch)
+
+    run = get_run(app_layout.app_name, outer, storage=_storage(app_layout))
+
+    assert sorted(run["children"]) == ["0.0.4", "0.0.5"]
+    assert run["kind"] == "outer"
+    assert run["status"] == "running"
+    assert run["tree_status"] == "failed"  # a failed child is the headline
+    assert run["idx"] == 3
+
+    assert counts["log"] == 1, "only the run's own log is needed"
+    assert counts["run_state"] == 3, "the subtree only: outer + its two children"
+
+
+def test_list_runs_still_reads_the_whole_workspace(app_layout, monkeypatch):
+    _seed_two_trees(app_layout)
+    counts = _count_reads(monkeypatch)
+
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+
+    assert len(rows) == 6
+    assert counts["run_state"] == 6
+    assert counts["log"] == 6
+
+
 def test_get_run_with_no_artifacts(app_layout):
     _write_experiment(app_layout, "0.0.1")
     run = get_run(app_layout.app_name, "0.0.1", storage=_storage(app_layout))

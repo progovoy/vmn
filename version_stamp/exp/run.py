@@ -19,6 +19,7 @@ import sys
 import time
 from types import SimpleNamespace
 
+from version_stamp.cli.constants import INIT_FILENAME
 from version_stamp.cli.experiment import (
     _append_to_log,
     _compute_artifact_info,
@@ -33,9 +34,10 @@ from version_stamp.cli.experiment import (
 )
 from version_stamp.cli.snapshot import _now_iso
 from version_stamp.core import logging as vmn_logging
-from version_stamp.core.constants import VMN_BE_TYPE_GIT, VMN_USER_NAME
+from version_stamp.core.constants import VMN_BE_TYPE_GIT
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.utils import resolve_root_path
+from version_stamp.exp import APP_NAME_ENV, _resolve_app_name
 from version_stamp.exp.heartbeat import Heartbeat
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
@@ -43,7 +45,20 @@ from version_stamp.exp.heartbeat import Heartbeat
 _LOGGER = logging.getLogger(__name__)
 
 EXPERIMENT_ID_ENV = "VMN_EXPERIMENT_ID"
-APP_NAME_ENV = "VMN_APP_NAME"
+
+# The repo state `vmn exp create` demands, and what it tolerates — the SDK
+# cold-starts on exactly the same terms.
+_EXPECTED_STATUS = {"repo_tracked", "app_tracked"}
+_OPTIONAL_STATUS = {
+    "repos_exist_locally",
+    "detached",
+    "pending",
+    "outgoing",
+    "version_not_matched",
+    "dirty_deps",
+    "deps_synced_with_conf",
+}
+_DIRTY_OK = {"pending", "outgoing"}
 
 # A run that reached interpreter exit still open was abandoned — the workload
 # raised past us, called sys.exit(), or simply forgot to finish. It did not
@@ -54,40 +69,10 @@ ABANDONED_EXIT_CODE = 1
 _OPEN_RUNS = []
 
 
-def _ensure_vmn_logger():
-    """Make the shared VMN_LOGGER usable outside the CLI.
-
-    The create/parent helpers reused here log through VMN_LOGGER, a proxy that
-    raises until ``init_stamp_logger`` runs. Point it at a plain stdlib logger
-    instead of calling that: installing handlers and reconfiguring the root
-    logger is the application's decision, not a library's.
-    """
-    if not vmn_logging.VMN_LOGGER:
-        vmn_logging._logger_holder[0] = logging.getLogger(VMN_USER_NAME)
-
-
-def _resolve_app_name(app_name):
-    """The app to record against: explicit, then the env, then the checkout."""
-    if app_name:
-        return app_name
-
-    from_env = os.environ.get(APP_NAME_ENV)
-    if from_env:
-        return from_env
-
+def _stamped_apps():
     from version_stamp.cli.completion import _complete_apps
 
-    apps = _complete_apps("")
-    if len(apps) == 1:
-        return apps[0]
-    if not apps:
-        raise ValueError(
-            "No stamped vmn app found in this repository. "
-            "Run 'vmn stamp -r patch <name>' first, or pass app_name=."
-        )
-    raise ValueError(
-        f"This repository has several vmn apps ({', '.join(apps)}). Pass app_name=."
-    )
+    return _complete_apps("")
 
 
 def _build_vcs(app_name):
@@ -100,6 +85,47 @@ def _build_vcs(app_name):
             "root_path": resolve_root_path(),
             "be_type": VMN_BE_TYPE_GIT,
         }
+    )
+
+
+def _cold_start(vcs):
+    """Auto-initialize vmn tracking and a 0.0.0 baseline, as ``vmn exp`` does.
+
+    ``vmn exp create``/``run`` work in a fresh repo — they init the repo and the
+    app on first use. ``start_run`` is the in-process equivalent, so it must too,
+    and it calls the very same CLI helpers rather than growing its own init.
+    """
+    from version_stamp.cli.commands import _get_repo_status, _init_app, handle_init
+
+    status = _get_repo_status(vcs, _EXPECTED_STATUS, _OPTIONAL_STATUS)
+    if not status.error:
+        return
+
+    be = vcs.backend
+    initialized = False
+    vmn_init_file = os.path.join(vcs.vmn_root_path, ".vmn", INIT_FILENAME)
+
+    if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
+        # handle_init only ever reads vmn_ctx.vcs, so there is no argparse
+        # namespace to fabricate.
+        if handle_init(SimpleNamespace(vcs=vcs), extra_optional=_DIRTY_OK) != 0:
+            raise RuntimeError(_cold_start_failure(vcs.name, "initialize the repo"))
+        initialized = True
+
+    if "app_tracked" not in status.state and not be.is_path_tracked(vcs.app_dir_path):
+        if _init_app(vcs, "0.0.0", extra_optional=_DIRTY_OK):
+            raise RuntimeError(_cold_start_failure(vcs.name, "stamp a baseline"))
+        initialized = True
+
+    if initialized:
+        vcs.update_attrs_from_app_conf_file()
+        vcs.initialize_backend_attrs()
+
+
+def _cold_start_failure(app_name, what):
+    return (
+        f"Could not {what} for '{app_name}' automatically. "
+        f"Run 'vmn stamp -r patch {app_name}' once, then start the run again."
     )
 
 
@@ -145,9 +171,12 @@ def start_run(
     ``app_name=None`` resolves the app from the current checkout. Use the result
     as a context manager, or call ``finish()`` yourself.
     """
-    _ensure_vmn_logger()
-    app_name = _resolve_app_name(app_name)
+    # The reused CLI helpers log through VMN_LOGGER, which raises until something
+    # initializes it — and a library must not call init_stamp_logger.
+    vmn_logging.ensure_logger()
+    app_name = _resolve_app_name(app_name, _stamped_apps)
     vcs = _build_vcs(app_name)
+    _cold_start(vcs)
     if storage is None:
         storage = _build_storage(vcs)
 
@@ -163,7 +192,10 @@ def start_run(
         parent=resolved_parent,
     )
     if err:
-        raise RuntimeError(f"Failed to create an experiment for '{app_name}'")
+        raise RuntimeError(
+            f"Failed to create an experiment for '{app_name}' (error {err}). "
+            f"Run 'vmn exp create {app_name}' to see what the CLI reports."
+        )
 
     run = Run(
         storage,

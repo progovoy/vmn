@@ -51,6 +51,20 @@ def reset_logger():
     _logger_holder[0] = None
 
 
+def ensure_logger():
+    """Return the live VMN_LOGGER target, installing a plain one if there is none.
+
+    For library entry points such as the experiment SDK: VMN_LOGGER raises until
+    something initializes it, and ``init_stamp_logger`` is too invasive for a
+    library — it installs handlers and clears the root logger's. This only fills
+    the hole. It configures no handlers, is idempotent, and leaves an
+    already-initialized CLI logger exactly as it is.
+    """
+    if _logger_holder[0] is None:
+        _logger_holder[0] = logging.getLogger(VMN_USER_NAME)
+    return _logger_holder[0]
+
+
 # ── Thread-local runtime context (ARCH-4 fix) ───────────────────────
 
 

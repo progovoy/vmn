@@ -5,6 +5,7 @@ verstr scheme, same ``metadata.yml``, same per-writer log, same
 ``run_state.yml`` — so every reader (``vmn exp list/show``, the dashboard) works
 on it with no changes.
 """
+import logging
 import os
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import pytest
 import yaml
 
 from version_stamp.core import experiment_status as st
+from version_stamp.core.constants import VMN_USER_NAME
 from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
 from version_stamp.exp import Run, start_run
 from helpers import (
@@ -399,6 +401,85 @@ def test_app_name_env_var_is_honoured(app_layout):
             assert run.app_name == app_layout.app_name
     finally:
         os.environ.pop("VMN_APP_NAME", None)
+
+
+def test_the_write_and_read_sides_share_one_resolver():
+    """One rule, one implementation — two copies would drift apart."""
+    import version_stamp.exp as exp_pkg
+    import version_stamp.exp.reader as reader_mod
+    import version_stamp.exp.run as run_mod
+
+    assert run_mod._resolve_app_name is exp_pkg._resolve_app_name
+    assert reader_mod._resolve_app_name is exp_pkg._resolve_app_name
+
+
+def test_ambiguous_app_name_error_names_the_candidates():
+    from version_stamp.exp import _resolve_app_name
+
+    os.environ.pop("VMN_APP_NAME", None)
+    with pytest.raises(ValueError) as exc:
+        _resolve_app_name(None, lambda: ["alpha", "beta"])
+
+    message = str(exc.value)
+    assert "alpha" in message and "beta" in message
+    assert "app_name=" in message
+
+
+# ---------------------------------------------------------------------------
+# the VMN_LOGGER public entry point the SDK needs
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def pristine_vmn_logger():
+    """A VMN_LOGGER with no handlers and no holder, restored afterwards."""
+    from version_stamp.core import logging as vmn_logging
+
+    logger = logging.getLogger(VMN_USER_NAME)
+    saved_handlers = list(logger.handlers)
+    was_initialized = bool(vmn_logging.VMN_LOGGER)
+
+    logger.handlers[:] = []
+    vmn_logging.reset_logger()
+    yield vmn_logging
+
+    logger.handlers[:] = saved_handlers
+    vmn_logging.reset_logger()
+    if was_initialized:
+        vmn_logging.ensure_logger()
+
+
+def test_ensure_logger_installs_a_handlerless_logger(pristine_vmn_logger):
+    vmn_logging = pristine_vmn_logger
+
+    logger = vmn_logging.ensure_logger()
+
+    assert isinstance(logger, logging.Logger)
+    assert logger.name == VMN_USER_NAME
+    assert logger.handlers == [], "a library must not configure handlers"
+    assert bool(vmn_logging.VMN_LOGGER)
+    vmn_logging.VMN_LOGGER.warning("must not raise AttributeError")
+
+
+def test_ensure_logger_is_idempotent(pristine_vmn_logger):
+    vmn_logging = pristine_vmn_logger
+
+    first = vmn_logging.ensure_logger()
+    second = vmn_logging.ensure_logger()
+
+    assert first is second
+    assert first.handlers == []
+
+
+def test_ensure_logger_leaves_an_initialized_cli_logger_alone(pristine_vmn_logger):
+    vmn_logging = pristine_vmn_logger
+    vmn_logging.init_stamp_logger()
+    cli_handlers = list(logging.getLogger(VMN_USER_NAME).handlers)
+    assert cli_handlers, "init_stamp_logger is expected to install handlers"
+
+    vmn_logging.ensure_logger()
+
+    assert list(logging.getLogger(VMN_USER_NAME).handlers) == cli_handlers
 
 
 # ---------------------------------------------------------------------------
