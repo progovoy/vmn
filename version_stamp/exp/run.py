@@ -20,24 +20,31 @@ import time
 from types import SimpleNamespace
 
 from version_stamp.cli.constants import INIT_FILENAME
+
+# Still upward, and deliberately so: creating an experiment record needs the git
+# snapshot capture and the storage factory, both of which live in
+# version_stamp/cli/snapshot.py. Everything that merely *shapes* a record comes
+# from version_stamp.core.experiment_writer below. Lifting exp/ into its own
+# distribution needs those three to move into core next.
 from version_stamp.cli.experiment import (
-    _append_to_log,
-    _compute_artifact_info,
-    _create_log_entry,
     _experiment_create_core,
     _get_experiment_storage,
-    _get_writer_id,
-    _merge_conf_into_params,
     _resolve_parent,
-    _save_artifact,
-    _save_run_state,
-    get_repo_lock,
 )
-from version_stamp.cli.snapshot import _now_iso
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.constants import VMN_BE_TYPE_GIT
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.core.experiment_writer import (
+    append_to_log,
+    compute_artifact_info,
+    create_log_entry,
+    get_repo_lock,
+    get_writer_id,
+    merge_conf_into_params,
+    save_artifact,
+    save_run_state,
+)
+from version_stamp.core.utils import now_iso, resolve_root_path
 from version_stamp.exp import APP_NAME_ENV, _resolve_app_name
 from version_stamp.exp.heartbeat import Heartbeat
 
@@ -132,7 +139,7 @@ def _cold_start_failure(app_name, what):
 
 def _build_storage(vcs):
     params = {"backend": "local", "prefix": "vmn-experiments"}
-    _merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params)
     return _get_experiment_storage(vcs, params)
 
 
@@ -226,7 +233,7 @@ class Run:
         self._monotonic_start = time.monotonic()
         self._saved_env = {}
 
-        started_at = _now_iso()
+        started_at = now_iso()
         self._state = {
             "state": "running",
             # There is no child command here — the run *is* this process. Its
@@ -262,11 +269,11 @@ class Run:
         self._publish(
             state="finished",
             exit_code=exit_code,
-            finished_at=_now_iso(),
+            finished_at=now_iso(),
             duration_sec=duration,
         )
         self._append(
-            _create_log_entry(
+            create_log_entry(
                 "run",
                 command=self._state["command"],
                 exit_code=exit_code,
@@ -288,7 +295,7 @@ class Run:
             self.finish()
             return False
         self._append(
-            _create_log_entry("error", exception=type(exc).__name__, message=str(exc))
+            create_log_entry("error", exception=type(exc).__name__, message=str(exc))
         )
         self.finish(exit_code=1)
         return False  # never swallow the workload's exception
@@ -299,7 +306,7 @@ class Run:
         self.log_metrics({key: value}, step=step)
 
     def log_metrics(self, mapping, step=None):
-        entry = _create_log_entry("metrics", values=dict(mapping))
+        entry = create_log_entry("metrics", values=dict(mapping))
         if step is not None:
             entry["step"] = step
         self._append(entry)
@@ -307,30 +314,30 @@ class Run:
     def log_params(self, mapping):
         # A `params` entry, not a rewrite of the `create` entry: the log is
         # append-only, so readers fold later params in rather than see them move.
-        self._append(_create_log_entry("params", params=dict(mapping)))
+        self._append(create_log_entry("params", params=dict(mapping)))
 
     def log_note(self, text):
-        self._append(_create_log_entry("note", text=text))
+        self._append(create_log_entry("note", text=text))
 
     def log_artifact(self, path):
-        info = _compute_artifact_info(path)
-        _save_artifact(self._storage, self.app_name, self.id, path)
-        self._append(_create_log_entry("artifact", **info))
+        info = compute_artifact_info(path)
+        save_artifact(self._storage, self.app_name, self.id, path)
+        self._append(create_log_entry("artifact", **info))
 
     # -- internals ---------------------------------------------------------
 
     def _append(self, entry):
-        _append_to_log(self._storage, self.app_name, self.id, entry)
+        append_to_log(self._storage, self.app_name, self.id, entry)
 
     def _publish(self, **updates):
-        _save_run_state(self._storage, self.app_name, self.id, self._state, **updates)
+        save_run_state(self._storage, self.app_name, self.id, self._state, **updates)
 
     def _beat(self):
-        self._publish(heartbeat=_now_iso())
+        self._publish(heartbeat=now_iso())
 
     def _sync(self):
         try:
-            self._storage.sync_log_to_remote(self.app_name, self.id, _get_writer_id())
+            self._storage.sync_log_to_remote(self.app_name, self.id, get_writer_id())
         except Exception:
             _LOGGER.debug("Experiment log sync failed", exc_info=True)
 

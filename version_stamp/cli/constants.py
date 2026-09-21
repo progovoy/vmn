@@ -5,12 +5,12 @@ from typing import Any, Dict, Optional, Set
 
 from version_stamp.core.constants import (
     GLOBAL_LOG_FILENAME,
+    LOCK_FILE_ENV,  # noqa: F401  (re-exported: callers import it from here)
+    LOCK_FILENAME,
 )
 from version_stamp.core.models import AppConf
 
-LOCK_FILE_ENV = "VMN_LOCK_FILE_PATH"
 INIT_FILENAME = "conf.yml"
-LOCK_FILENAME = "vmn.lock"
 LOG_FILENAME = "vmn.log"
 CACHE_FILENAME = "vmn.cache"
 

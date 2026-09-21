@@ -4,28 +4,27 @@ import datetime
 import os
 import shutil
 import socket
+import sys
 from dataclasses import dataclass
+from types import ModuleType
 from typing import List, Optional
 
 import yaml
-from filelock import FileLock
 
-from version_stamp.cli.constants import LOCK_FILE_ENV, LOCK_FILENAME
 from version_stamp.cli.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
     _diff_real_tree,
     _diff_with_external_tool,
-    _now_iso,
     _relative_timestamp,
     _resolve_verstr,
     _restore_with_safety_net,
-    _sha256_file,
     _strip_git_dirs,
     gather_create_data,
     get_git_difftool,
     get_snapshot_storage,
 )
+from version_stamp.core import experiment_writer
 from version_stamp.core.experiment_log import (
     effective_params,
     entry_params,
@@ -36,16 +35,30 @@ from version_stamp.core.experiment_log import (
 )
 from version_stamp.core.experiment_status import (
     DEFAULT_HEARTBEAT_INTERVAL_SEC,
-    RUN_STATE_FILE,
     STUCK,
     derive_status,
     load_run_state,
     status_fields,
 )
 from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_writer import (
+    allocate_run_verstr,
+    append_to_log,
+    attach_parent,
+    compute_artifact_info,
+    create_log_entry,
+    get_repo_lock,  # noqa: F401  (re-exported: cli.entry imports it from here)
+    get_writer_id,
+    merge_conf_into_params,
+    save_artifact,
+    save_log,
+    save_run_state,
+)
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.utils import now_iso
 
-# The log-folding helpers moved to core.experiment_log so the ui readers and the
+# The log-folding helpers moved to core.experiment_log and the record-shaping
+# write primitives to core.experiment_writer, so the ui readers and the
 # version_stamp.exp SDK can share them without importing the CLI. These aliases
 # keep the old private names importable for existing callers.
 _create_entry_params = effective_params
@@ -55,19 +68,40 @@ _load_log = load_log
 _metric_sort_descending = metric_sort_descending
 get_metric_series = metric_series
 
+_allocate_run_verstr = allocate_run_verstr
+_append_to_log = append_to_log
+_attach_parent = attach_parent
+_compute_artifact_info = compute_artifact_info
+_create_log_entry = create_log_entry
+_get_writer_id = get_writer_id
+_merge_conf_into_params = merge_conf_into_params
+_now_iso = now_iso
+_save_artifact = save_artifact
+_save_log = save_log
+_save_run_state = save_run_state
 
-def get_repo_lock(vmn_root_path):
-    """The per-repo vmn lock that serializes mutations of a checkout.
 
-    One definition for every entry point: the CLI holds it around a command, and
-    ``version_stamp.exp.start_run`` holds it around the mutating create phase.
-    ``$VMN_LOCK_FILE_PATH`` overrides the path for the whole process, which is
-    what a user pointing vmn at a shared lock expects.
+class _WriterIdCacheAlias(ModuleType):
+    """Keep ``<this module>._WRITER_ID`` wired to the cache in core.
+
+    The writer-id cache moved to ``core.experiment_writer``, but resetting it by
+    assigning to this module's global is how the test suite (and anything else
+    that has to re-read ``$VMN_WRITER_ID``) has always done it. A data
+    descriptor on the module's type forwards both reads and writes there, so the
+    legacy global stays the one true handle on the cache instead of becoming a
+    dead copy of it.
     """
-    return FileLock(
-        os.environ.get(LOCK_FILE_ENV)
-        or os.path.join(vmn_root_path, ".vmn", LOCK_FILENAME)
-    )
+
+    @property
+    def _WRITER_ID(self):
+        return experiment_writer._WRITER_ID
+
+    @_WRITER_ID.setter
+    def _WRITER_ID(self, value):
+        experiment_writer._WRITER_ID = value
+
+
+sys.modules[__name__].__class__ = _WriterIdCacheAlias
 
 
 @dataclass
@@ -88,46 +122,6 @@ def _app_name(vcs, args=None):
     return getattr(args, "name", None) if args is not None else None
 
 
-_WRITER_ID = None
-
-
-def _get_writer_id(conf_writer_id=None):
-    """Return a unique writer identifier for concurrent-safe log writes.
-
-    Priority: VMN_WRITER_ID env > conf_writer_id > HOSTNAME env > socket.gethostname().
-    Cached for the process lifetime so all log entries land in the same JSONL file.
-    """
-    global _WRITER_ID
-    if _WRITER_ID is None:
-        _WRITER_ID = (
-            os.environ.get("VMN_WRITER_ID")
-            or conf_writer_id
-            or os.environ.get("HOSTNAME")
-            or socket.gethostname()
-        )
-    return _WRITER_ID
-
-
-def _merge_conf_into_params(vcs, params):
-    """Merge experiment config from conf.yml into params (CLI overrides conf)."""
-    exp_conf = getattr(vcs, "experiment", None) or {}
-    storage_conf = (
-        exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
-    )
-    for key in (
-        "bucket",
-        "backend",
-        "prefix",
-        "endpoint_url",
-        "experiment_dir",
-        "writer_id",
-    ):
-        if not params.get(key) or params[key] in ("local", "vmn-experiments"):
-            conf_val = storage_conf.get(key)
-            if conf_val:
-                params[key] = conf_val
-
-
 def _get_experiment_storage(vcs, params):
     experiment_dir = params.get("experiment_dir") or os.environ.get(
         "VMN_EXPERIMENT_DIR"
@@ -141,30 +135,6 @@ def _get_experiment_storage(vcs, params):
         endpoint_url=params.get("endpoint_url"),
         subdir="experiments",
     )
-
-
-def _save_log(storage, app_name, verstr, log):
-    """Save experiment log to storage. Legacy: prefer _append_to_log for new code."""
-    storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
-
-
-def _append_to_log(storage, app_name, verstr, entry):
-    """Append an entry to the experiment log using per-writer JSONL files."""
-    storage.append_log_entry(app_name, verstr, _get_writer_id(), entry)
-
-
-def _save_run_state(storage, app_name, verstr, run_state, **updates):
-    """Apply ``updates`` to the run state and publish it."""
-    run_state.update(updates)
-    storage.save_file(
-        app_name, verstr, RUN_STATE_FILE, yaml.dump(run_state, sort_keys=False)
-    )
-
-
-def _attach_parent(metadata, parent):
-    """Record the experiment that launched this one — never the run itself."""
-    if parent and parent != metadata["verstr"]:
-        metadata["parent"] = parent
 
 
 def _resolve_parent(storage, app_name, args):
@@ -195,12 +165,6 @@ def _resolve_parent(storage, app_name, args):
 # ---------------------------------------------------------------------------
 # Log entry helpers
 # ---------------------------------------------------------------------------
-
-
-def _create_log_entry(entry_type, **kwargs):
-    entry = {"timestamp": _now_iso(), "type": entry_type}
-    entry.update(kwargs)
-    return entry
 
 
 def _parse_metrics(metrics_list):
@@ -285,20 +249,6 @@ def _parse_notes_file(path):
             f"Notes file must be a YAML mapping, got {type(data).__name__}"
         )
     return data
-
-
-def _compute_artifact_info(path):
-    """Compute sha256 and size for an artifact file."""
-    return {
-        "path": os.path.basename(path),
-        "size": os.path.getsize(path),
-        "sha256": _sha256_file(path),
-    }
-
-
-def _save_artifact(storage, app_name, verstr, src_path):
-    """Copy an artifact file into the experiment directory."""
-    storage.save_artifact_file(app_name, verstr, src_path)
 
 
 def _get_metrics_schema(vcs):
@@ -440,37 +390,6 @@ def handle_experiment(vmn_ctx):
 # ---------------------------------------------------------------------------
 # create
 # ---------------------------------------------------------------------------
-
-
-def _allocate_run_verstr(storage, app_name, code_verstr):
-    """Return the verstr for a new experiment run.
-
-    When VMN_WRITER_ID is set (K8s mode), uses pod-unique suffix for zero
-    contention.  Otherwise, uses the existing .rN scan-and-increment.
-    """
-    writer_id = os.environ.get("VMN_WRITER_ID")
-    if writer_id:
-        candidate = code_verstr + "." + writer_id
-        if not storage.exists(app_name, candidate):
-            return candidate
-        for i in range(2, 100000):
-            c = candidate + "." + str(i)
-            if not storage.exists(app_name, c):
-                return c
-        raise RuntimeError("Could not allocate experiment verstr")
-    # Single-user mode: existing scan-and-increment
-    runs = []
-    for meta in storage.list_snapshots(app_name):
-        v = meta.get("verstr", "")
-        if v == code_verstr:
-            runs.append(1)
-        elif v.startswith(code_verstr + ".r"):
-            suffix = v[len(code_verstr) + 2 :]
-            if suffix.isdigit():
-                runs.append(int(suffix))
-    if not runs:
-        return code_verstr
-    return code_verstr + ".r" + str(max(runs) + 1)
 
 
 @measure_runtime_decorator
