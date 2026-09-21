@@ -17,3 +17,5 @@ moto[s3]
 fastapi
 httpx
 uvicorn
+scikit-learn
+xgboost

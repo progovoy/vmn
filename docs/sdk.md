@@ -118,9 +118,16 @@ autolog(frameworks=["sklearn"], log_models=True)   # or name them, and pick whet
 autolog_disable()                                  # restore the originals
 ```
 
-**Only scikit-learn is implemented today.** torch, lightning, xgboost and keras
-are deliberately *not* supported: an adapter written blind against a library that
-cannot be imported and tested here would be worse than no adapter. Naming an
+**scikit-learn and xgboost are implemented today**, both covered by integration
+tests that fit real estimators from the real libraries — including the
+meta-estimator and inherited-`fit` cases a stubbed framework cannot expose. For
+xgboost it is the scikit-learn wrappers (`XGBClassifier`, `XGBRegressor`) that
+are autologged; the native `xgboost.train` / `Booster` API is a different shape,
+with no estimator to ask for hyperparameters, and is left alone.
+
+torch, lightning and keras are deliberately *not* supported: they are gigabytes
+to install, so an adapter for them could not be tested against the real library
+here, and an adapter written blind is worse than no adapter. Naming an
 unsupported — or simply uninstalled — framework is a silent no-op, so
 `autolog()` is safe to call at import time in code that may run without any ML
 library present.
@@ -154,8 +161,13 @@ segment, because [the query language](#the-query-language) resolves only
 two-part dotted paths — `params.sklearn.kernel` would be a parse error, while
 `params.sklearn_kernel` filters normally.
 
-Two guarantees worth relying on:
+Three guarantees worth relying on:
 
+- **One record per training call.** A `Pipeline` fits each step and a forest fits
+  each tree, and those inner `fit()` calls are patched too — but only the
+  outermost one records. So fitting a pipeline gives you
+  `params.sklearn_estimator = "Pipeline"` and one model artifact, not the last
+  sub-estimator's name and one pickle per step.
 - **Autologging never breaks training.** Every recording step is guarded; a
   failure inside it becomes a debug log line. Your `fit()` call, its return value
   and any exception it raises pass through untouched.

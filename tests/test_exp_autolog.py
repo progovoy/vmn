@@ -81,14 +81,33 @@ def _install_fake_sklearn(estimators=(FakeSVC, FakeBoom), with_all_estimators=Tr
     return sklearn
 
 
+def _shadowed_modules():
+    """Every real module the fake would shadow, plus anything that lazily
+    imports it.
+
+    A counterfeit ``sklearn`` in ``sys.modules`` poisons more than itself:
+    xgboost imports sklearn on demand and caches the failure, so a later test
+    against the real libraries dies with "sklearn needs to be installed". Purge
+    the whole subtree of both and let them import fresh.
+    """
+    return [
+        name
+        for name in list(sys.modules)
+        if name == "sklearn"
+        or name.startswith("sklearn.")
+        or name == "xgboost"
+        or name.startswith("xgboost.")
+    ]
+
+
 @pytest.fixture(autouse=True)
 def clean_framework_state():
     """No fake module and no patch may leak into the next test."""
     originals = [
         (cls, cls.__dict__["fit"]) for cls in (FakeBaseEstimator, FakeSVC, FakeBoom)
     ]
-    saved = {name: sys.modules.get(name) for name in _FAKE_MODULES}
-    for name in _FAKE_MODULES:
+    saved = {name: sys.modules[name] for name in _shadowed_modules()}
+    for name in saved:
         sys.modules.pop(name, None)
 
     yield
@@ -96,11 +115,9 @@ def clean_framework_state():
     autolog_disable()
     for cls, original in originals:
         setattr(cls, "fit", original)
-    for name, module in saved.items():
-        if module is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = module
+    for name in _shadowed_modules():
+        sys.modules.pop(name, None)
+    sys.modules.update(saved)
 
 
 class FakeRun:

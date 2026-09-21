@@ -18,16 +18,23 @@ Three rules shape everything here:
   it replaced under :data:`_PATCH_MARKER`, so a second ``autolog()`` recognizes
   its own work and leaves it alone, and :func:`autolog_disable` puts the exact
   original attribute back.
+* **One record per training call.** Meta-estimators train other estimators from
+  inside their own ``fit`` — a pipeline fits each step, a forest fits each tree
+  — and every one of those is a patched ``fit`` too. Only the outermost call
+  records, so the row describes the estimator the user actually trained instead
+  of whichever sub-estimator happened to finish last.
 
 Adding a framework
 ------------------
 Write a discovery function ``_discover_<name>(module) -> [(owner, attr), ...]``
 naming the attributes to wrap — each must be a ``fit(self, X, y=None)``-shaped
-method living in ``owner.__dict__`` — and register it in
-:data:`SUPPORTED_FRAMEWORKS` under its import name. Nothing else needs to
-change: discovery is the only framework-specific part. Only ``sklearn`` ships
-today; torch, lightning, xgboost and keras are deliberately unimplemented
-rather than written blind against APIs that cannot be imported here.
+method living in ``owner.__dict__``, which is what :func:`_fit_owners` resolves
+— and register it in :data:`SUPPORTED_FRAMEWORKS` under its import name.
+Nothing else needs to change: discovery is the only framework-specific part.
+``sklearn`` and ``xgboost`` ship today, both covered by integration tests
+against the real libraries. torch, lightning and keras stay unimplemented: they
+are gigabytes to install, so an adapter for them could not be tested here, and
+an adapter written blind is worse than none.
 """
 import functools
 import importlib
@@ -35,6 +42,7 @@ import logging
 import os
 import pickle
 import tempfile
+import threading
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +51,11 @@ _PATCH_MARKER = "_vmn_autolog_original"
 
 # (owner, attr, original), innermost-last so unwinding restores in reverse.
 _PATCHES = []
+
+# Per-thread "a recording fit is already in progress", so nested training calls
+# stay silent. Thread-local because frameworks fit sub-estimators in worker
+# threads, and two unrelated fits in two threads must each record.
+_LOCAL = threading.local()
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +119,9 @@ def _patch(owner, attr, framework, log_models):
 def _wrap_fit(original, framework, log_models):
     @functools.wraps(original)
     def fit(self, *args, **kwargs):
+        if getattr(_LOCAL, "recording", False):
+            return original(self, *args, **kwargs)  # nested: the outer fit records
+
         run = _current_run()
         if run is None:
             _LOGGER.debug(
@@ -114,11 +130,15 @@ def _wrap_fit(original, framework, log_models):
             )
             return original(self, *args, **kwargs)
 
-        _guarded(_log_hyperparameters, run, framework, self)
-        result = original(self, *args, **kwargs)
-        _guarded(_log_training_score, run, framework, self, args)
-        if log_models:
-            _guarded(_log_model, run, framework, self)
+        _LOCAL.recording = True
+        try:
+            _guarded(_log_hyperparameters, run, framework, self)
+            result = original(self, *args, **kwargs)
+            _guarded(_log_training_score, run, framework, self, args)
+            if log_models:
+                _guarded(_log_model, run, framework, self)
+        finally:
+            _LOCAL.recording = False
         return result
 
     return fit
@@ -193,19 +213,45 @@ def _log_model(run, framework, estimator):
 # ---------------------------------------------------------------------------
 
 
-def _discover_sklearn(module):
-    """Each concrete estimator's own ``fit``, or ``BaseEstimator.fit``.
+def _fit_owners(classes):
+    """``(owner, "fit")`` for each class that *defines* the ``fit`` these inherit.
 
-    Estimators override ``fit`` rather than inherit it, so patching
-    ``BaseEstimator`` alone would intercept almost nothing — hence the walk over
-    ``sklearn.utils.all_estimators()``. The base class is the fallback for
-    installations where that helper is unavailable.
+    Patching ``cls.fit`` only works when ``cls.__dict__`` holds it. Plenty of
+    estimators inherit ``fit`` from a shared base instead —
+    ``RandomForestClassifier`` gets it from the private ``BaseForest``,
+    ``XGBRegressor`` from ``XGBModel`` — and those bases are not themselves
+    listed as estimators, so looking only at each class's own ``__dict__``
+    silently skips them. Resolving the MRO owner catches them, and deduplicating
+    means one wrapper per shared base rather than one per subclass.
     """
-    targets = [
-        (cls, "fit")
-        for cls in _sklearn_estimator_classes()
-        if isinstance(cls, type) and "fit" in vars(cls)
-    ]
+    owners = []
+    seen = set()
+    for cls in classes:
+        owner = _fit_owner(cls)
+        if owner is not None and owner not in seen:
+            seen.add(owner)
+            owners.append((owner, "fit"))
+    return owners
+
+
+def _fit_owner(cls):
+    if not isinstance(cls, type):
+        return None
+    for klass in cls.__mro__:
+        if "fit" in vars(klass):
+            return klass
+    return None
+
+
+def _discover_sklearn(module):
+    """Whichever class owns each estimator's ``fit``, or ``BaseEstimator.fit``.
+
+    ``BaseEstimator`` does not define ``fit`` at all, so there is nothing to
+    patch centrally — hence the walk over ``sklearn.utils.all_estimators()``.
+    The base class is the fallback for installations where that helper is
+    unavailable.
+    """
+    targets = _fit_owners(_sklearn_estimator_classes())
     if targets:
         return targets
 
@@ -224,5 +270,21 @@ def _sklearn_estimator_classes():
     return [cls for _name, cls in all_estimators()]
 
 
+def _discover_xgboost(module):
+    """The scikit-learn wrappers only — their ``fit`` is the shape we handle.
+
+    ``XGBClassifier`` and ``XGBRegressor`` subclass ``sklearn.base.BaseEstimator``,
+    so ``get_params()`` and ``score()`` behave exactly as the recording path
+    already expects. The native ``xgboost.train`` / ``Booster`` API is a
+    different shape — a function taking a params dict, with no estimator to ask
+    for hyperparameters — and is left alone.
+    """
+    names = ("XGBClassifier", "XGBRegressor")
+    return _fit_owners([getattr(module, name, None) for name in names])
+
+
 #: Framework import name -> discovery function. The extension point.
-SUPPORTED_FRAMEWORKS = {"sklearn": _discover_sklearn}
+SUPPORTED_FRAMEWORKS = {
+    "sklearn": _discover_sklearn,
+    "xgboost": _discover_xgboost,
+}
