@@ -36,6 +36,7 @@ def _resolve_app_name(app_name, candidates):
     )
 
 
+from version_stamp.exp.autolog import autolog, autolog_disable  # noqa: E402
 from version_stamp.exp.run import Run, start_run  # noqa: E402  (needs the helper above)
 
-__all__ = ["Run", "start_run"]
+__all__ = ["Run", "autolog", "autolog_disable", "start_run"]
