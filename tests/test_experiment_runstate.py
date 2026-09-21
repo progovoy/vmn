@@ -1,50 +1,25 @@
 """`vmn exp run` publishes live run state; status is derived from it."""
 import os
 import subprocess
-import sys
 import time
 
 import yaml
 
-from version_stamp.cli.entry import vmn_run
-from version_stamp.cli.experiment import load_run_state
 from version_stamp.core import experiment_status as st
-from version_stamp.core.logging import reset_logger
+from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
 from helpers import (
     extract_dev_verstr,
+    _PROJECT_ROOT,
+    _PY,
+    _bootstrap,
     _experiment,
-    _init_app,
-    _run_vmn_init,
-    _stamp_app,
+    _storage,
 )
-
-_PY = sys.executable or "python3"
-RUN_STATE_FILE = "run_state.yml"
-# Subprocesses must import the version_stamp under test, not the one the venv
-# has installed editable from the main checkout.
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def _storage(app_layout):
-    from version_stamp.cli.snapshot import get_snapshot_storage
-
-    return get_snapshot_storage(
-        "local", vmn_root_path=app_layout.repo_path, subdir="experiments"
-    )
 
 
 def _exp_run(app_name, run_cmd, extra=None):
     """`vmn exp run <app> [extra] -- <cmd>` in-process."""
-    args = ["exp", "run", app_name] + list(extra or []) + ["--"] + list(run_cmd)
-    reset_logger()
-    return vmn_run(args)[0]
-
-
-def _bootstrap(app_layout):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    err, _, _ = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
+    return _experiment(app_name, action="run", run_cmd=run_cmd, extra_args=extra)
 
 
 def _run_state(app_layout, verstr):

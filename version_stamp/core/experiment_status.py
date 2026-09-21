@@ -70,14 +70,18 @@ def _age_sec(ts, now):
     return (now - parsed).total_seconds()
 
 
-def stale_after_sec(run_state):
-    """How long a heartbeat may go unrefreshed before the run counts as stuck."""
+def heartbeat_interval_sec(run_state):
+    """The run's heartbeat cadence, falling back to the default."""
     interval = (run_state or {}).get("heartbeat_interval_sec")
     try:
-        interval = float(interval)
+        return float(interval)
     except (TypeError, ValueError):
-        interval = DEFAULT_HEARTBEAT_INTERVAL_SEC
-    return max(interval * STALE_MULTIPLIER, MIN_STALE_SEC)
+        return DEFAULT_HEARTBEAT_INTERVAL_SEC
+
+
+def stale_after_sec(run_state):
+    """How long a heartbeat may go unrefreshed before the run counts as stuck."""
+    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, MIN_STALE_SEC)
 
 
 def derive_status(run_state, now=None):
@@ -131,4 +135,7 @@ def status_fields(run_state, now=None):
         "host": run_state.get("host"),
         "command": run_state.get("command"),
         "stale_sec": None if stale_sec is None else round(stale_sec, 3),
+        # The dashboard sizes its poll interval from this: there is no point
+        # asking for a status more often than the run can publish one.
+        "heartbeat_interval_sec": heartbeat_interval_sec(run_state),
     }

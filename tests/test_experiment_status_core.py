@@ -113,6 +113,13 @@ def test_status_fields_for_a_running_job():
     assert fields["stale_sec"] == pytest.approx(5, abs=1)
     # elapsed wall time so far, not a recorded duration
     assert fields["duration_sec"] == pytest.approx(600, abs=1)
+    # the dashboard sizes its poll interval from this, so it must be serialized
+    assert fields["heartbeat_interval_sec"] == 30
+
+
+def test_status_fields_defaults_the_heartbeat_interval():
+    fields = st.status_fields(_running(interval=None), now=NOW)
+    assert fields["heartbeat_interval_sec"] == st.DEFAULT_HEARTBEAT_INTERVAL_SEC
 
 
 def test_status_fields_prefers_the_recorded_duration_when_finished():

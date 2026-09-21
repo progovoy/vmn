@@ -1,7 +1,5 @@
 """Outer/inner experiment nesting: `vmn exp run` links the runs it spawns."""
 import os
-import stat
-import sys
 
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.experiment_tree import INNER, OUTER, annotate_tree
@@ -9,27 +7,17 @@ from version_stamp.core.logging import reset_logger
 from helpers import (
     DEV_VERSION_RE,
     extract_dev_verstr,
+    _PROJECT_ROOT,
+    _PY,
+    _bootstrap,
+    _exec_script,
     _experiment,
-    _init_app,
-    _run_vmn_init,
-    _stamp_app,
+    _storage,
 )
 
-_PY = sys.executable or "python3"
-# Nested runs are real subprocesses; they must import the version_stamp under
-# test, not the one the venv has installed editable from the main checkout.
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
-def _storage(app_layout):
-    from version_stamp.cli.snapshot import get_snapshot_storage
-
-    return get_snapshot_storage(
-        "local", vmn_root_path=app_layout.repo_path, subdir="experiments"
-    )
-
-
-def _exp(*argv):
+def _exp_argv(*argv):
+    """Raw `vmn exp ...` argv — for flag combinations helpers don't model."""
     reset_logger()
     return vmn_run(["exp"] + list(argv))[0]
 
@@ -45,16 +33,8 @@ def _last_dev_verstr(output):
 
 
 def _exp_run(app_name, run_cmd, extra=None):
-    args = ["exp", "run", app_name] + list(extra or []) + ["--"] + list(run_cmd)
-    reset_logger()
-    return vmn_run(args)[0]
-
-
-def _bootstrap(app_layout):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    err, _, _ = _stamp_app(app_layout.app_name, "patch")
-    assert err == 0
+    """`vmn exp run <app> [extra] -- <cmd>` in-process."""
+    return _experiment(app_name, action="run", run_cmd=run_cmd, extra_args=extra)
 
 
 def _metadata(app_layout, verstr):
@@ -63,11 +43,7 @@ def _metadata(app_layout, verstr):
 
 
 def _write_sweep_script(app_layout, body):
-    path = os.path.join(app_layout.repo_path, "sweep.sh")
-    with open(path, "w") as f:
-        f.write(body)
-    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-    return path
+    return _exec_script(app_layout, "sweep.sh", body)
 
 
 def test_create_without_parent_omits_the_key(app_layout, capfd):
@@ -109,7 +85,7 @@ def test_parent_flag_overrides_env_and_resolves_references(app_layout, capfd):
     os.environ["VMN_EXPERIMENT_ID"] = "0.0.0-dev.bogus"
     try:
         capfd.readouterr()
-        assert _exp("create", app_layout.app_name, "--parent", "@1") == 0
+        assert _exp_argv("create", app_layout.app_name, "--parent", "@1") == 0
         child = extract_dev_verstr(capfd.readouterr().out)
     finally:
         os.environ.pop("VMN_EXPERIMENT_ID", None)
@@ -117,7 +93,7 @@ def test_parent_flag_overrides_env_and_resolves_references(app_layout, capfd):
     assert _metadata(app_layout, child)["parent"] == first
 
     capfd.readouterr()
-    assert _exp("create", app_layout.app_name, "--parent", "latest") == 0
+    assert _exp_argv("create", app_layout.app_name, "--parent", "latest") == 0
     grandchild = extract_dev_verstr(capfd.readouterr().out)
     assert _metadata(app_layout, grandchild)["parent"] == child
 
@@ -125,7 +101,7 @@ def test_parent_flag_overrides_env_and_resolves_references(app_layout, capfd):
 def test_unknown_parent_reference_fails(app_layout, capfd):
     _bootstrap(app_layout)
     capfd.readouterr()
-    assert _exp("create", app_layout.app_name, "--parent", "@9") != 0
+    assert _exp_argv("create", app_layout.app_name, "--parent", "@9") != 0
 
 
 def test_stale_env_experiment_id_is_ignored(app_layout, capfd):
