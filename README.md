@@ -285,6 +285,9 @@ version_stamp.exp import start_run`, plus `autolog()` for scikit-learn
 hyperparameters and scores, and a query language for filtering runs on metrics
 and params; see
 [docs/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/sdk.md).
+Five runnable scripts — a minimal run, a training loop, a nested sweep, queries
+and autologging — live in
+[examples/](https://github.com/progovoy/vmn/blob/master/examples/README.md).
 
 Install `vmn[ui]` for a local web dashboard with stamp-tree views and snapshot
 comparison.

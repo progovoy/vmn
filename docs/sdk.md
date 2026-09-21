@@ -22,6 +22,13 @@ dependencies. It imports `version_stamp.core` and the snapshot helpers and
 nothing else — in particular never `version_stamp.ui` — so the experiment
 feature stays liftable into its own distribution later.
 
+**Runnable versions of what follows live in
+[`examples/`](../examples/README.md)** — five standalone scripts (a minimal run,
+a training loop, a nested sweep, the query language, autologging) that need no
+arguments and no network: `python examples/01_minimal.py` from inside a git repo
+with a remote. They record to the app `vmn_examples`, so they never touch a real
+one.
+
 - [CLI or SDK?](#cli-or-sdk)
 - [Starting a run](#starting-a-run)
 - [Logging](#logging)
