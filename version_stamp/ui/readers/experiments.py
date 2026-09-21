@@ -7,6 +7,8 @@ CLI always agree.
 """
 import os
 
+import yaml
+
 from version_stamp.cli.experiment import (
     _get_latest_metrics,
     _load_log,
@@ -14,6 +16,8 @@ from version_stamp.cli.experiment import (
     get_metric_series,
 )
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.core.experiment_status import status_fields
+from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.versions import version_counts
 
@@ -65,9 +69,29 @@ def list_apps(root_path):
     return rows
 
 
+def _load_run_state(storage, app_name, verstr):
+    """The run's ``run_state.yml``, or None when no run was ever started."""
+    data = storage.load_file(app_name, verstr, "run_state.yml")
+    if not data:
+        return None
+    parsed = yaml.safe_load(data)
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _last_metric_at(log):
+    """Timestamp of the newest ``metrics`` entry (the log is time-ordered)."""
+    for entry in reversed(log):
+        if entry.get("type") == "metrics":
+            return entry.get("timestamp")
+    return None
+
+
 def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
     """Leaderboard rows in storage order (oldest first). The expensive read:
-    every experiment's metadata + log.
+    every experiment's metadata + log + run state.
+
+    Rows carry *raw* inputs only — the time-derived status lives in
+    :func:`annotate_status`, so these rows are safe to cache.
 
     Accepts either ``root_path`` (local checkout) or a pre-built ``storage``
     backend (S3 / remote workspaces).
@@ -90,9 +114,34 @@ def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
                 "base_version": meta.get("base_version"),
                 "user_meta": meta.get("user_meta"),
                 "metrics": _get_latest_metrics(log),
+                "parent": meta.get("parent"),
+                "last_metric_at": _last_metric_at(log),
+                "run_state": _load_run_state(storage, app_name, meta["verstr"]),
             }
         )
     return rows
+
+
+def annotate_status(rows, now=None):
+    """Derive each row's status and nesting from its raw run state.
+
+    Time-dependent by design (a stale heartbeat means ``stuck``), so this must
+    run on every response and its output must never be cached.
+    """
+    derived = []
+    for row in rows:
+        row = dict(row)
+        row.update(status_fields(row.pop("run_state", None), now=now))
+        derived.append(row)
+    return annotate_tree(derived)
+
+
+def filter_by_status(rows, status=None):
+    """Keep rows whose status is in a comma-separated allow list."""
+    if not status:
+        return rows
+    wanted = {s.strip() for s in status.split(",")}
+    return [r for r in rows if r["status"] in wanted]
 
 
 def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
@@ -138,10 +187,13 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
     return rows
 
 
-def list_experiments(root_path, app_name, sort=None, last=None, offset=0, limit=None):
+def list_experiments(
+    root_path, app_name, sort=None, last=None, offset=0, limit=None, status=None
+):
     """Leaderboard rows, ordered exactly like ``vmn exp list``."""
+    rows = annotate_status(fetch_experiment_rows(root_path, app_name))
     return sort_rows(
-        fetch_experiment_rows(root_path, app_name),
+        filter_by_status(rows, status),
         metrics_schema(root_path, app_name),
         sort=sort,
         last=last,
@@ -162,6 +214,23 @@ def _list_artifacts(storage, app_name, verstr):
     return result
 
 
+_DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
+    "parent",
+    "children",
+    "kind",
+    "depth",
+    "tree_status",
+    "last_metric_at",
+)
+
+
+def _status_detail(storage, app_name, verstr):
+    """One experiment's status payload, including its place in the run tree."""
+    rows = annotate_status(fetch_experiment_rows(app_name=app_name, storage=storage))
+    row = next((r for r in rows if r["verstr"] == verstr), {})
+    return {k: row.get(k) for k in _DETAIL_STATUS_KEYS}
+
+
 def get_experiment(root_path, app_name, verstr_ref):
     """Full experiment detail; the ref supports @N / prefix / 'latest'."""
     storage = experiment_storage(root_path)
@@ -180,6 +249,7 @@ def get_experiment(root_path, app_name, verstr_ref):
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
         "artifacts": _list_artifacts(storage, app_name, verstr),
+        "status": _status_detail(storage, app_name, verstr),
         "patches": {
             k: bool(patches.get(k))
             for k in ("working_tree", "local_commits", "untracked_files")
@@ -191,12 +261,19 @@ def get_experiment(root_path, app_name, verstr_ref):
 
 
 def list_experiments_from_storage(
-    storage, app_name, sort=None, last=None, offset=0, limit=None
+    storage, app_name, sort=None, last=None, offset=0, limit=None, status=None
 ):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
-    rows = fetch_experiment_rows(app_name=app_name, storage=storage)
+    rows = annotate_status(fetch_experiment_rows(app_name=app_name, storage=storage))
     schema = {}  # No app conf available for S3 workspaces
-    return sort_rows(rows, schema, sort=sort, last=last, offset=offset, limit=limit)
+    return sort_rows(
+        filter_by_status(rows, status),
+        schema,
+        sort=sort,
+        last=last,
+        offset=offset,
+        limit=limit,
+    )
 
 
 def get_experiment_from_storage(storage, app_name, verstr_ref):
@@ -214,6 +291,7 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
         "metrics": _get_latest_metrics(log),
         "series": get_metric_series(log),
         "artifacts": _list_artifacts(storage, app_name, verstr),
+        "status": _status_detail(storage, app_name, verstr),
         "patches": {
             k: bool(patches.get(k)) if patches else False
             for k in ("working_tree", "local_commits", "untracked_files")
