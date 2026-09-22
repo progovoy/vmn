@@ -105,7 +105,15 @@ def _cold_start(vcs):
     """
     from version_stamp.cli.commands import _get_repo_status, _init_app, handle_init
 
-    status = _get_repo_status(vcs, _EXPECTED_STATUS, _OPTIONAL_STATUS)
+    # An untracked repo or app is the cold-start case this function exists to
+    # handle, so it must not be announced as an error first — that made a
+    # successful first run look like a crash.
+    status = _get_repo_status(
+        vcs,
+        _EXPECTED_STATUS,
+        _OPTIONAL_STATUS,
+        suppress_errors={"repo_tracked", "app_tracked"},
+    )
     if not status.error:
         return
 

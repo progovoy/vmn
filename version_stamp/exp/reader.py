@@ -130,7 +130,7 @@ def _all_rows(app_name, storage):
 
 
 def list_runs(
-    app_name=None, storage=None, sort=None, last=None, status=None, query=None
+    app_name=None, *, storage=None, sort=None, last=None, status=None, query=None
 ):
     """Runs of an app, oldest first unless *sort* or a primary metric reorders.
 
@@ -187,7 +187,7 @@ def _subtree_row(app_name, storage, verstr):
     return target, status
 
 
-def get_run(app_name=None, ref="latest", storage=None):
+def get_run(app_name=None, ref="latest", *, storage=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series`` and ``artifacts``.
 
     *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N``

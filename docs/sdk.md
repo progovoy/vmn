@@ -22,6 +22,11 @@ dependencies. It imports `version_stamp.core` and the snapshot helpers and
 nothing else — in particular never `version_stamp.ui` — so the experiment
 feature stays liftable into its own distribution later.
 
+A run needs a git repo with a remote and a usable git identity: creating one
+commits a snapshot, so `user.name` and `user.email` must be set. In a container
+that means setting them in the image or via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` —
+otherwise the first `start_run` fails on git's "please tell me who you are".
+
 **Runnable versions of what follows live in
 [`examples/`](../examples/README.md)** — five standalone scripts (a minimal run,
 a training loop, a nested sweep, the query language, autologging) that need no
@@ -70,6 +75,7 @@ start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
+    system_metrics=False,
 )
 ```
 
@@ -80,8 +86,9 @@ start_run(
 | `params` | the run's inputs, like `-f params.yml`'s `params:` key |
 | `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) — a full verstr, a unique prefix, `@N`, or `latest` |
 | `nested` | parent to the innermost open in-process run (see [Nesting](#nesting)) |
-| `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses |
+| `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
+| `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn[sysmetrics]"` |
 
 Creating the run snapshots the working tree (dirty or clean) and assigns the
 verstr, available as `run.id`. As with the CLI, the first run in a fresh repo
@@ -282,6 +289,11 @@ with start_run("my_app", note="lr sweep") as sweep:
             trial.log_metric("loss", train(lr))
 ```
 
+In one process it is belt-and-braces: an open run exports `VMN_EXPERIMENT_ID`
+into its own environment, so the inner `start_run` would have found the parent
+anyway. Pass it when you want the parenting to be explicit in the code, or when
+the enclosing run may have been started elsewhere.
+
 Otherwise `VMN_EXPERIMENT_ID` is honored exactly as the CLI honors it, and the
 SDK **exports** it while a run is open — so any subprocess you launch auto-links
 as an inner run:
@@ -312,14 +324,20 @@ for run in list_runs("my_app", query='metrics.loss < 0.5 and params.optimizer = 
 best = get_run("my_app", ref="latest")
 ```
 
-- `list_runs(app_name=None, storage=None, sort=None, last=None, status=None,
+- `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None,
   query=None)` — `sort` picks the metric to order by (the configured [primary
   metric](experiments.md#metrics-schema-sorting--goals) when omitted), `last`
   caps the result count, `status` filters to one derived status, and `query` is
   [the query language](#the-query-language). A bad query raises `QueryError`.
-- `get_run(app_name=None, ref="latest", storage=None)` — `ref` takes any
+  Everything after `app_name` is keyword-only, so a query passed positionally
+  cannot be mistaken for `storage`.
+- `get_run(app_name=None, ref="latest", *, storage=None)` — `ref` takes any
   [addressing form](experiments.md#addressing-experiments): a full verstr, a
   unique prefix, `@N`, or `latest`.
+
+A `list_runs` row carries the latest value of each metric. To read a metric's
+whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
+name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
 As on the write side, `app_name=None` resolves from the current repo.
 

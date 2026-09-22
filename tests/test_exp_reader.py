@@ -541,3 +541,19 @@ def test_a_sole_app_with_experiments_needs_no_app_name(app_layout, monkeypatch):
     monkeypatch.delenv("VMN_APP_NAME", raising=False)
 
     assert [r["verstr"] for r in list_runs()] == ["0.0.1"]
+
+
+# ---------------------------------------------------------------------------
+# call shape
+# ---------------------------------------------------------------------------
+
+
+def test_list_runs_refuses_a_positional_second_argument(app_layout):
+    """`list_runs(app, "metrics.loss < 1")` used to silently mean storage=query.
+
+    A query passed positionally landed in *storage*, which is duck-typed, so the
+    call failed somewhere deep inside snapshot reading — or worse, returned an
+    empty list. Every filter is keyword-only so the mistake cannot compile.
+    """
+    with pytest.raises(TypeError):
+        list_runs(app_layout.app_name, "metrics.loss < 1")

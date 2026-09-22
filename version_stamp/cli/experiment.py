@@ -326,7 +326,15 @@ def handle_experiment(vmn_ctx):
             "dirty_deps",
             "deps_synced_with_conf",
         }
-        status = _get_repo_status(vcs, expected_status, optional_status)
+        # An untracked repo or app is the normal cold-start case here, not a
+        # failure: the branch below initializes both. Reporting them as errors
+        # first made a successful first run read like a crash.
+        status = _get_repo_status(
+            vcs,
+            expected_status,
+            optional_status,
+            suppress_errors={"repo_tracked", "app_tracked"},
+        )
 
         if status.error:
             auto_initialized = False
@@ -348,7 +356,11 @@ def handle_experiment(vmn_ctx):
             if "app_tracked" not in status.state and not be.is_path_tracked(
                 vcs.app_dir_path
             ):
-                VMN_LOGGER.info(f"Auto-initializing app '{vcs.name}'...")
+                # Name the app and the baseline: a typo'd app name becomes a
+                # permanent git tag, so creating one must never be silent.
+                VMN_LOGGER.info(
+                    f"Auto-initializing new vmn app '{vcs.name}' at 0.0.0..."
+                )
                 err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
                 if err:
                     return 1
