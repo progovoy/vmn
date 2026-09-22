@@ -357,6 +357,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
 - [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)
 - [Web UI](https://github.com/progovoy/vmn/blob/master/docs/ui.md)
+- [vmn vs MLflow](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-mlflow.md)
 - [vmn vs semantic-release](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-semantic-release.md)
 - [vmn vs release-please](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-release-please.md)
 - [vmn vs setuptools-scm](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-setuptools-scm.md)
