@@ -25,9 +25,21 @@ setuptools.setup(
         "ui": ["fastapi>=0.110", "uvicorn>=0.29"],
         "s3": ["boto3"],
         "changelog": ["git-cliff==2.5.0; python_version >= '3.8'"],
+        # The experiment SDK needs nothing third-party; the extra exists so the
+        # documented `pip install vmn[exp]` resolves instead of warning about an
+        # unknown extra and silently installing plain vmn.
+        "exp": [],
         # GPU metrics need pynvml too, which stays out of every extra: it is
         # useless without a driver and would break installs on CPU-only hosts.
         "sysmetrics": ["psutil>=5.9"],
+        # Autolog patches the framework the user already has, so vmn never needs
+        # to install one. These extras are for pinning, opt-in one at a time —
+        # deliberately NOT folded into `exp`, which would turn logging three
+        # numbers into a multi-gigabyte download.
+        "sklearn": ["scikit-learn"],
+        "xgboost": ["xgboost"],
+        "torch": ["torch", "lightning"],
+        "keras": ["keras"],
     },
     package_dir={"version_stamp": "version_stamp"},
     packages=[

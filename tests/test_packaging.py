@@ -65,3 +65,54 @@ def test_no_stale_packages_in_setup():
         f"Packages in setup.py that don't exist on disk: "
         f"{sorted(stale)}. Remove them from setup.py."
     )
+
+
+def _read_setup_extras():
+    """Read the extras_require keys from setup.py without importing it."""
+    import ast
+
+    tree = ast.parse((ROOT / "setup.py").read_text())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "setup"):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "extras_require":
+                return {k.value for k in kw.value.keys}
+    return set()
+
+
+def test_documented_extras_exist():
+    """Every extra the docs tell a user to install must actually be declared.
+
+    `pip install vmn[typo]` does not fail — it warns and installs plain vmn — so
+    a drifted extra name is a silent no-op for whoever followed the README.
+    """
+    declared = _read_setup_extras()
+    for extra in ("ui", "exp", "s3", "changelog", "sysmetrics"):
+        assert extra in declared, f"setup.py is missing the '{extra}' extra"
+
+
+def test_heavy_frameworks_are_not_pulled_in_by_the_exp_extra():
+    """`pip install vmn[exp]` must stay small.
+
+    autolog patches whatever framework the user already has, so vmn never needs
+    to install one. Putting torch or tensorflow in `exp` would turn logging three
+    numbers into a multi-gigabyte download.
+    """
+    import ast
+
+    tree = ast.parse((ROOT / "setup.py").read_text())
+    extras = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "setup":
+            for kw in node.keywords:
+                if kw.arg == "extras_require":
+                    extras = {
+                        k.value: [e.value for e in v.elts]
+                        for k, v in zip(kw.value.keys, kw.value.values)
+                    }
+    heavy = ("torch", "tensorflow", "keras", "lightning")
+    for req in extras.get("exp", []):
+        assert not req.lower().startswith(heavy), f"'{req}' does not belong in [exp]"
