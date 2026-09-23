@@ -143,6 +143,7 @@ class WorkspaceIndex:
         limit=None,
         status=None,
         query=None,
+        order=None,
     ):
         rows = self._experiment_rows(app_name)
         run_states = self._run_states(app_name, [r["verstr"] for r in rows])
@@ -157,6 +158,7 @@ class WorkspaceIndex:
             last=last,
             offset=offset,
             limit=limit,
+            order=order,
         )
 
     def list_versions(self, app_name):

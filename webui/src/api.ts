@@ -56,6 +56,8 @@ export interface PageOpts {
   offset?: number;
   limit?: number;
   last?: number;
+  /** Overrides the direction the metric's goal implies (``sort`` must be set). */
+  order?: "asc" | "desc";
 }
 
 /** One page of rows plus the server's total. Tolerates a server that still
@@ -71,6 +73,7 @@ async function fetchPage(
   if (opts.status) p.set("status", opts.status);
   if (opts.query) p.set("q", opts.query);
   if (opts.last) p.set("last", String(opts.last));
+  if (opts.order) p.set("order", opts.order);
   const body = await get<ExperimentRow[] | { rows: ExperimentRow[]; total: number }>(
     `/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`
   );

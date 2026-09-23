@@ -153,6 +153,11 @@ def filter_by_status(rows, status=None):
     return [r for r in rows if r["status"] in wanted]
 
 
+def primary_metric(schema):
+    """The metric the schema marks ``primary: true``, or None."""
+    return next((k for k, v in (schema or {}).items() if v.get("primary")), None)
+
+
 def sort_by_metric(rows, schema, sort=None):
     """Order rows like ``vmn exp list``: by *sort*, else by the primary metric.
 
@@ -165,9 +170,7 @@ def sort_by_metric(rows, schema, sort=None):
     for row in rows:
         keys.update(row["metrics"])
 
-    metric = sort or next(
-        (k for k, v in (schema or {}).items() if v.get("primary")), None
-    )
+    metric = sort or primary_metric(schema)
     if not metric or metric not in keys:
         return rows
 
