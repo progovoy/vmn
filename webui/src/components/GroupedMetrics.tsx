@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, paramValue } from "../util";
-import { maxOf, minOf } from "../util/stats";
+import { finiteNumbers, maxOf, minOf } from "../util/stats";
 
 function mean(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -49,9 +49,7 @@ function computeGroups(
 
     const stats: GroupStats["stats"] = {};
     for (const k of metricKeys) {
-      const vals = bucket
-        .map((r) => r.metrics[k])
-        .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+      const vals = finiteNumbers(bucket.map((r) => r.metrics[k]));
       if (vals.length === 0) continue;
       stats[k] = {
         mean: mean(vals),

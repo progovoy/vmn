@@ -5,7 +5,7 @@ import {
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, seriesColor } from "../util";
 import { downsampleLTTB } from "../util/downsample";
-import { maxOf, minOf } from "../util/stats";
+import { isFiniteNumber, maxOf, minOf } from "../util/stats";
 
 /** One small chart per metric — each on its own scale, so a loss (~0.1) and
  *  an accuracy (~0.9) don't get squashed onto a shared axis. Same visual
@@ -43,8 +43,7 @@ export default function ParamPlots({ rows, metricCols, schema }: {
           const color = seriesColor(plotCols, m);
           const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | null | undefined }));
           const chartData = downsampleLTTB(
-            data.filter((d): d is { x: number; v: number } =>
-              typeof d.v === "number" && Number.isFinite(d.v))
+            data.filter((d): d is { x: number; v: number } => isFiniteNumber(d.v))
                 .map(d => ({ x: d.x, y: d.v })),
             200
           ).map(d => ({ x: d.x, v: d.y }));

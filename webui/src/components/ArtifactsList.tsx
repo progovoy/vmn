@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from "react";
+import { authHeaders } from "../http";
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -9,8 +10,8 @@ function fmtSize(bytes: number): string {
 /** Fetch with the Authorization header and hand the blob to the browser.
  *  A plain `<a download>` can't send the header, so with a token set it would
  *  always get a 401. */
-async function downloadWithToken(url: string, name: string, token: string) {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+async function downloadWithToken(url: string, name: string, headers: Record<string, string>) {
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const href = URL.createObjectURL(await res.blob());
   const a = document.createElement("a");
@@ -30,11 +31,11 @@ export default function ArtifactsList({ artifacts, downloadUrl }: {
   if (artifacts.length === 0) return null;
 
   const onClick = (e: MouseEvent<HTMLAnchorElement>, name: string) => {
-    const token = sessionStorage.getItem("vmn_token");
-    if (!token) return; // no auth: the plain link works as is
+    const headers = authHeaders();
+    if (!headers.Authorization) return; // no auth: the plain link works as is
     e.preventDefault();
     setError(null);
-    downloadWithToken(downloadUrl(name), name, token).catch((err) =>
+    downloadWithToken(downloadUrl(name), name, headers).catch((err) =>
       setError(`${name}: ${String((err as Error).message ?? err)}`)
     );
   };

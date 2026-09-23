@@ -2,37 +2,8 @@ import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentPage,
   ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow, Workspace,
 } from "./types";
-import { currentSignal } from "./requestScope";
+import { authHeaders, BASE, get } from "./http";
 import { PAGE_SIZE } from "./paging";
-
-const BASE = "/api/v1";
-
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = sessionStorage.getItem("vmn_token");
-  const headers: Record<string, string> = { ...extra };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-}
-
-async function get<T>(path: string, signal = currentSignal()): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeaders(), signal });
-  if (res.status === 401) {
-    const entered = window.prompt("vmn ui token:");
-    if (entered) {
-      sessionStorage.setItem("vmn_token", entered);
-      return get<T>(path, signal);
-    }
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    // The status rides along: a 400 is the caller's input (a bad experiment
-    // query, say) and is shown next to the input, not as a page error.
-    throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
-      status: res.status,
-    });
-  }
-  return res.json();
-}
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -113,9 +84,11 @@ export const api = {
     fetchPage(ws, app, { last: n, limit: n }).then(({ rows }) =>
       [...rows].sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
     ),
-  experiment: (ws: string, app: string, verstr: string) =>
+  /** *maxPoints* asks the server to thin each metric's series to that many points. */
+  experiment: (ws: string, app: string, verstr: string, maxPoints?: number) =>
     get<ExperimentDetail>(
-      `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}`
+      `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}` +
+        (maxPoints ? `?max_points=${maxPoints}` : "")
     ),
   experimentsDiff: (ws: string, app: string, v: string, to: string) =>
     get<DiffResult>(

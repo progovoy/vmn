@@ -1,4 +1,5 @@
 import type { ExperimentRow } from "../types";
+import { rowParams } from "../util";
 
 /** Fixed column widths (px). The virtualized rows are absolutely positioned,
  *  which takes each <tr> out of the table's layout — so header and rows only
@@ -27,13 +28,6 @@ export function columnLayout(nMetrics: number, nParams: number): ColumnLayout {
     W.note, W.when,
   ];
   return { widths, total: fixed + experiment };
-}
-
-/** The params a row carries: the verbatim `params` of an experiment, or the
- *  `user_meta` of a snapshot row that has none. */
-export function rowParams(r: ExperimentRow): Record<string, unknown> {
-  if (r.params && Object.keys(r.params).length > 0) return r.params;
-  return r.user_meta ?? {};
 }
 
 /** A stable identity for the set of param names across rows, so a poll that

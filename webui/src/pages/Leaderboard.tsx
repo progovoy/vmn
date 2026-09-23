@@ -4,12 +4,13 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
 import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
-import { maxOf, minOf } from "../util/stats";
+import { finiteNumbers, maxOf, minOf } from "../util/stats";
 import { keepIfUnchanged } from "../util/stableRows";
 import { combineQueries, searchClause } from "../util/searchQuery";
-import { columnLayout, paramKey, rowParams } from "./leaderboardColumns";
+import { columnLayout, paramKey } from "./leaderboardColumns";
+import { refreshLoaded } from "./leaderboardRefresh";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, pollIntervalMs, relTime } from "../util";
+import { fmtVal, metricGoal, pollIntervalMs, relTime, rowParams } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import ParamPlots from "../components/ParamPlots";
 import MetricBarChart from "../components/MetricBarChart";
@@ -72,10 +73,11 @@ export default function Leaderboard() {
     const args = [ws, app, sort ?? undefined, status] as const;
     const request = withSignal(ctrl.signal, () =>
       loadedRef.current > PAGE_SIZE || order
-        ? api.experimentsPaged(ws, app, {
-            sort: sort ?? undefined, status, query: q, order,
-            offset: 0, limit: Math.max(loadedRef.current, PAGE_SIZE),
-          }).then(({ rows: page, total: n }) => Object.assign(page, { total: n }))
+        ? refreshLoaded(
+            (opts) => api.experimentsPaged(ws, app, opts),
+            { sort: sort ?? undefined, status, query: q, order },
+            loadedRef.current,
+          ).then(({ rows: page, total: n }) => Object.assign(page, { total: n }))
         : q
           ? api.experiments(...args, q)
           : api.experiments(...args)
@@ -180,9 +182,7 @@ export default function Leaderboard() {
     }> = {};
     metricCols.forEach((m) => {
       const goal = metricGoal(schema, m);
-      const vals = (rows ?? [])
-        .map((r) => r.metrics[m])
-        .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+      const vals = finiteNumbers((rows ?? []).map((r) => r.metrics[m]));
       const min = minOf(vals);
       const max = maxOf(vals);
       meta[m] = {

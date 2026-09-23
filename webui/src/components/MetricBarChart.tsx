@@ -4,6 +4,7 @@ import {
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
+import { isFiniteNumber } from "../util/stats";
 
 /** One bar per run stops being readable (and renderable) long before 50k runs. */
 export const MAX_BARS = 50;
@@ -21,7 +22,7 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
     const all = rows
       .map((r) => ({ label: `@${r.idx}`, value: r.metrics[metric], verstr: r.verstr }))
       .filter((d): d is { label: string; value: number; verstr: string } =>
-        typeof d.value === "number" && Number.isFinite(d.value));
+        isFiniteNumber(d.value));
     const best = [...all].sort((a, b) => (goal === "min" ? a.value - b.value : b.value - a.value));
     return { data: best.slice(0, MAX_BARS), total: all.length };
   }, [rows, metric, goal]);
