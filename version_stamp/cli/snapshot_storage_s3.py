@@ -39,6 +39,7 @@ from version_stamp.core.logging import VMN_LOGGER
 _LIST_WORKERS = 16
 _MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 _TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
+_APPEND_ATTEMPTS = 20
 
 
 def _error_code(exc):
@@ -67,7 +68,6 @@ class S3SnapshotStorage(SnapshotStorage):
             client_kwargs["endpoint_url"] = endpoint_url
         self._s3 = boto3.client("s3", **client_kwargs)
         self._record_prefixes = {}
-        self._next_log_seq = {}
 
     # -- key helpers --------------------------------------------------------
 
@@ -331,22 +331,33 @@ class S3SnapshotStorage(SnapshotStorage):
                 self._s3.delete_object(Bucket=self.bucket, Key=f"{prefix}/{name}")
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
-        """One new object per entry: never a read-modify-write of the log."""
-        key = (app_name, verstr, writer_id)
-        if key not in self._next_log_seq:
-            objs = self.log_objects(app_name, verstr, writer_id)
-            self._next_log_seq[key] = (
-                max(log_writer_and_seq(n)[1] for n, _ in objs) + 1 if objs else 0
-            )
-        seq = self._next_log_seq[key]
-        self.save_file(
-            app_name,
-            verstr,
-            log_object_name(writer_id, seq),
-            json.dumps(entry, default=str) + "\n",
-        )
-        self._next_log_seq[key] = seq + 1
-        return True
+        """Append to this writer's single log object.
+
+        S3 has no append, so this reads and rewrites the object — under an
+        ETag precondition, so an entry another process appended in between
+        makes this write retry instead of silently overwriting it.
+        """
+        key = f"{self._record_prefix(app_name, verstr)}/{log_object_name(writer_id)}"
+        line = (json.dumps(entry, default=str) + "\n").encode("utf-8")
+        for _ in range(_APPEND_ATTEMPTS):
+            body, condition = self._get_with_condition(key)
+            try:
+                self._put(key, body + line, **condition)
+                return True
+            except Exception as e:
+                if _error_code(e) not in _TAKEN_CODES:
+                    raise
+        raise RuntimeError(f"Could not append to {key}: too many concurrent writers")
+
+    def _get_with_condition(self, key):
+        """``(body, put precondition)`` that fails if *key* changes meanwhile."""
+        try:
+            resp = self._s3.get_object(Bucket=self.bucket, Key=key)
+        except Exception as e:
+            if _error_code(e) not in _MISSING_CODES and "NoSuchKey" not in str(e):
+                raise
+            return b"", {"IfNoneMatch": "*"}
+        return resp["Body"].read(), {"IfMatch": resp["ETag"]}
 
     def load_logs_by_writer(self, app_name, verstr):
         prefix = f"{self._record_prefix(app_name, verstr)}/"
