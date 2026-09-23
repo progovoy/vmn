@@ -7,6 +7,8 @@ import shutil
 import tempfile
 
 METADATA_FILE = "metadata.yml"
+# The derived experiment-index cache, beside the records it summarizes.
+INDEX_CACHE_FILE = ".index.sqlite"
 LEGACY_LOG_FILE = "log.yml"
 # (patches key, file name, binary?)
 PATCH_FILES = (

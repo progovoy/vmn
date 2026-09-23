@@ -52,8 +52,33 @@ class SnapshotStorage(ABC):
         return True
 
     def list_files(self, app_name):
-        """``{verstr: {filename: (size, mtime)}}`` for cheap staleness checks."""
+        """``{verstr: {filename: (size, mtime[, etag])}}`` for cheap staleness
+        checks; S3 adds the ETag, since LastModified only has 1s resolution."""
         return {}
+
+    # -- experiment index hooks ----------------------------------------------
+
+    def direct_files(self):
+        """The backend whose files *are* the records' files, or None.
+
+        The experiment index reads such a backend incrementally (the new bytes
+        of a grown log). A backend whose reads merge several sources returns
+        None, and the index re-reads a changed record through it instead.
+        """
+        return None
+
+    def read_file_from(self, app_name, verstr, filename, offset):
+        """*filename*'s bytes from *offset* on, or None when it is missing."""
+        data = self.load_file(app_name, verstr, filename)
+        return None if data is None else data[offset:]
+
+    def index_cache_path(self, app_name):
+        """Where a persistent experiment index for *app_name* may live, or None."""
+        return None
+
+    def cache_identity(self):
+        """A hashable name for this backend's data, for process-wide caches."""
+        return None
 
     @abstractmethod
     def update_note(self, app_name, verstr, note):

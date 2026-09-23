@@ -9,6 +9,7 @@ import yaml
 
 from version_stamp.cli.snapshot_storage import SnapshotStorage
 from version_stamp.cli.snapshot_storage_files import (
+    INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
     atomic_write,
@@ -163,6 +164,27 @@ class LocalSnapshotStorage(SnapshotStorage):
                 if f.is_file() and not f.name.startswith(".")
             }
         return files
+
+    def direct_files(self):
+        return self
+
+    def read_file_from(self, app_name, verstr, filename, offset):
+        path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
+        try:
+            with open(path, "rb") as f:
+                f.seek(offset)
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def cache_identity(self):
+        return ("local", os.path.realpath(self.vmn_root_path), self._subdir)
+
+    def index_cache_path(self, app_name):
+        """Inside the base dir, which ignores itself; None before any record."""
+        if not os.path.isdir(self._snapshot_base_dir(app_name)):
+            return None
+        return os.path.join(self._ensure_base_dir(app_name), INDEX_CACHE_FILE)
 
     def update_note(self, app_name, verstr, note):
         meta_path = os.path.join(self._snapshot_dir(app_name, verstr), METADATA_FILE)

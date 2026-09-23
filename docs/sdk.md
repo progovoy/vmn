@@ -450,6 +450,15 @@ A `list_runs` row carries the latest value of each metric. To read a metric's
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
+`list_runs` (and `vmn exp list`) read through an incremental index: the folded
+rows persist in `.vmn/<app>/experiments/.index.sqlite`, next to the records
+(the directory's own `.gitignore` keeps it out of `git status`). A call lists
+the record files once and re-reads only what changed since the last one — the
+new lines of a grown log, a rewritten `run_state.yml` — so listing thousands of
+runs stays cheap while they train. It is a disposable cache: delete it any time,
+and if it cannot be opened (read-only disk, corrupt file) the rows are read
+directly. Status is still derived on every call.
+
 As on the write side, `app_name=None` resolves from the current repo.
 
 ---

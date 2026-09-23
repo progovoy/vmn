@@ -108,6 +108,17 @@ class CachedSnapshotStorage(SnapshotStorage):
             files.setdefault(verstr, {}).update(local_files)
         return files
 
+    def direct_files(self):
+        # With a remote, a record's log is the per-writer merge of two copies.
+        return self._local if self._remote is None else None
+
+    def index_cache_path(self, app_name):
+        return self._local.index_cache_path(app_name)
+
+    def cache_identity(self):
+        remote = self._remote.cache_identity() if self._remote else None
+        return ("cached", self._local.cache_identity(), remote)
+
     def update_note(self, app_name, verstr, note):
         ok = self._local.update_note(app_name, verstr, note)
         if self._remote:

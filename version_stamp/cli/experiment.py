@@ -33,7 +33,7 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
-from version_stamp.core import experiment_writer
+from version_stamp.core import experiment_index, experiment_writer
 from version_stamp.core.experiment_from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
@@ -525,12 +525,13 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _status_tree(storage, app_name, metas, only=None):
+def _status_tree(storage, app_name, metas, only=None, run_states=None):
     """Annotated nesting/status rows for *metas*, by verstr.
 
     The tree is built over every meta, so depth and ``tree_status`` stay right
     for any subset. Run states are read only for *only* (a verstr collection)
     and their subtrees; the rest carry no status, which a rollup ignores.
+    *run_states* (``{verstr: state}``) supplies them without a read.
     """
     rows = [{"verstr": m["verstr"], "parent": m.get("parent")} for m in metas]
     wanted = None
@@ -541,7 +542,10 @@ def _status_tree(storage, app_name, metas, only=None):
             wanted.update(subtree_verstrs(verstr, children_of))
     for row in rows:
         if wanted is None or row["verstr"] in wanted:
-            state = load_run_state(storage, app_name, row["verstr"])
+            if run_states is not None:
+                state = run_states.get(row["verstr"])
+            else:
+                state = load_run_state(storage, app_name, row["verstr"])
             row["status"] = derive_status(state)
     return {row["verstr"]: row for row in annotate_tree(rows)}
 
@@ -555,19 +559,13 @@ def _status_token(node):
     return status
 
 
-def _list_rows(storage, app_name, metas, last):
+def _list_rows(index_rows, last):
     """Rows for ``list``: ``idx`` is the storage index ``@N`` resolves, fixed
     before ``--last``/sort/``--top`` touch the order."""
-    indexed = list(enumerate(metas, 1))
-    if last:
-        indexed = indexed[-last:]
-    rows = []
-    for idx, meta in indexed:
-        log = load_log(storage, app_name, meta["verstr"])
-        rows.append(
-            {"idx": idx, "meta": meta, "log": log, "metrics": latest_metrics(log)}
-        )
-    return rows
+    shown = index_rows[-last:] if last else index_rows
+    return [
+        {"idx": row["idx"], "meta": row, "metrics": row["metrics"]} for row in shown
+    ]
 
 
 def _metric_columns(schema, rows):
@@ -581,10 +579,7 @@ def _metric_columns(schema, rows):
 
 def _format_list_row(row, node, columns):
     meta, metrics = row["meta"], row["metrics"]
-    note = meta.get("note") or ""
-    if not note:
-        create = next((e for e in row["log"] if e.get("type") == "create"), None)
-        note = (create or {}).get("note") or ""
+    note = meta.get("note") or meta.get("create_note") or ""
     metric_str = "  ".join(
         f"{k}={metrics[k]:.4g}" if isinstance(metrics[k], float) else f"{k}={metrics[k]}"
         for k in columns
@@ -601,13 +596,17 @@ def _format_list_row(row, node, columns):
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    metas = storage.list_snapshots(app_name)
-    if not metas:
+    # Through the experiment index: after the first listing, only the logs and
+    # run states that changed since are read again.
+    index_rows, run_states = experiment_index.indexed_rows(
+        storage, app_name, with_create_note=True
+    )
+    if not index_rows:
         print(f"No experiments found for {app_name}")
         return 0
 
     schema = _get_metrics_schema(vcs) if vcs else {}
-    rows = _list_rows(storage, app_name, metas, getattr(args, "last", None))
+    rows = _list_rows(index_rows, getattr(args, "last", None))
     if args.sort and not any(args.sort in row["metrics"] for row in rows):
         VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
     rows = sort_by_metric(rows, schema, sort=args.sort)
@@ -615,7 +614,11 @@ def experiment_list(vcs, params, storage, args):
         rows = rows[: args.top]
 
     tree = _status_tree(
-        storage, app_name, metas, only=[row["meta"]["verstr"] for row in rows]
+        storage,
+        app_name,
+        index_rows,
+        only=[row["meta"]["verstr"] for row in rows],
+        run_states=run_states,
     )
     columns = _metric_columns(schema, rows)
     for row in rows:

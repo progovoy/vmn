@@ -2,60 +2,31 @@
 """Derived, disposable SQLite cache for vmn ui reads.
 
 The source of truth stays in git tags and ``.vmn/`` files — this index only
-memoizes their parsed form, keyed by cheap staleness fingerprints (directory
-mtimes for experiments, the tag list for versions). Deleting the database
-loses nothing. It lives under the server's data dir, never inside the repo,
+memoizes their parsed form: experiments through the incremental
+:class:`~version_stamp.core.experiment_index.ExperimentIndex` (only the files
+that changed are read again), versions keyed by the tag list. Deleting the
+database loses nothing. It lives under the server's data dir, never inside the repo,
 so it can't dirty a workspace's git status.
 """
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import subprocess
 import threading
 
-from version_stamp.core.experiment_status import RUN_STATE_FILE
+from version_stamp.core.experiment_index import ExperimentIndex
 from version_stamp.core.version_math import app_name_to_tag_name
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
 
-# Module-level aliases: the expensive fetches the cache guards.
+# Module-level aliases: the direct reads, used when the index is unavailable.
 _fetch_experiment_rows = exp_reader.fetch_experiment_rows
 _fetch_run_states = exp_reader.fetch_run_states
 _fetch_version_rows = ver_reader.list_versions
 
-
-def _is_stable_file(name):
-    """Files the leaderboard rows are derived from: metadata and the logs
-    (``log.yml`` plus the per-writer ``log.<writer>.jsonl``)."""
-    return name == "metadata.yml" or name.startswith("log.")
-
-
-def _experiments_fingerprint(root_path, app_name, wanted):
-    """Cheap staleness signal: mtimes of the experiment files *wanted* names.
-
-    Only the files that feed the payload are stat'ed — snapshot patches and
-    tarballs are named, ignored, and never touched.
-    """
-    base = os.path.join(root_path, ".vmn", app_name.replace("/", os.sep), "experiments")
-    h = hashlib.sha256()
-    try:
-        for entry in sorted(os.scandir(base), key=lambda e: e.name):
-            if not entry.is_dir():
-                continue
-            try:
-                names = sorted(f.name for f in os.scandir(entry.path) if wanted(f.name))
-            except OSError:
-                continue
-            for name in names:
-                try:
-                    st = os.stat(os.path.join(entry.path, name))
-                except OSError:
-                    continue
-                h.update(f"{entry.name}/{name}:{st.st_mtime_ns}\n".encode())
-    except OSError:
-        return "empty"
-    return h.hexdigest()
+_LOGGER = logging.getLogger(__name__)
 
 
 def _versions_fingerprint(root_path, app_name):
@@ -87,6 +58,8 @@ class WorkspaceIndex:
             " scope TEXT PRIMARY KEY, fingerprint TEXT, payload TEXT)"
         )
         self._conn.commit()
+        self._experiments = {}  # app -> ExperimentIndex over this workspace
+        self._run_states_of = {}  # app -> run states from its latest refresh
 
     def _get(self, scope, fingerprint):
         with self._lock:
@@ -106,33 +79,44 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
+    def _experiment_index(self, app_name):
+        with self._lock:
+            index = self._experiments.get(app_name)
+            if index is None:
+                index = self._experiments[app_name] = ExperimentIndex(
+                    exp_reader.experiment_storage(self.root_path),
+                    app_name,
+                    cache_path=self._db_path,
+                )
+            return index
+
     def _experiment_rows(self, app_name):
-        """The expensive half: metadata + logs, invalidated only by those."""
-        fp = _experiments_fingerprint(self.root_path, app_name, _is_stable_file)
-        # Bump this whenever the row *shape* changes: the fingerprint only sees
-        # files, so a shape change with untouched files would otherwise serve
-        # stale rows forever. v4 dropped the raw run state (it has its own
-        # entry); v5 added the verbatim `params` dict.
-        scope = f"exp:rows:v5:{app_name}"
-        rows = self._get(scope, fp)
-        if rows is None:
+        """Leaderboard rows, refreshing the incremental experiment index.
+
+        A metric appended anywhere costs that log's new bytes and a heartbeat
+        that one run state — never a re-read of every experiment.
+        """
+        try:
+            index = self._experiment_index(app_name).refresh()
+            rows, states = index.rows(), index.run_states()
+        except Exception:
+            _LOGGER.debug("Experiment index failed; reading directly", exc_info=True)
             rows = _fetch_experiment_rows(self.root_path, app_name)
-            self._put(scope, fp, rows)
+            states = _fetch_run_states(
+                root_path=self.root_path,
+                app_name=app_name,
+                verstrs=[r["verstr"] for r in rows],
+            )
+        self._run_states_of[app_name] = states
         return rows
 
     def _run_states(self, app_name, verstrs):
-        """The volatile half: a heartbeat invalidates only this entry."""
-        fp = _experiments_fingerprint(
-            self.root_path, app_name, lambda name: name == RUN_STATE_FILE
-        )
-        scope = f"exp:runstates:v1:{app_name}"
-        states = self._get(scope, fp)
+        """The run states read by the refresh behind ``_experiment_rows``."""
+        states = self._run_states_of.get(app_name)
         if states is None:
-            states = _fetch_run_states(
-                root_path=self.root_path, app_name=app_name, verstrs=verstrs
-            )
-            self._put(scope, fp, states)
-        return states
+            self._experiment_rows(app_name)
+            states = self._run_states_of[app_name]
+        return {verstr: states.get(verstr) for verstr in verstrs}
 
     def list_experiments(
         self,
