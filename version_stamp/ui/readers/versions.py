@@ -12,7 +12,6 @@ from version_stamp.core.version_math import (
     deserialize_tag_name,
 )
 
-
 _FIELD_SEP = "\x00"
 _RECORD_SEP = "\x1e"
 # One ``git for-each-ref`` pass yields every tag's name, type, date and message,
