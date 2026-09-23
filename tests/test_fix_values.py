@@ -141,9 +141,10 @@ def test_fold_skips_non_finite_params():
     assert latest_metrics(log) == {}
 
 
-def test_fold_skips_boolean_params():
+def test_fold_keeps_boolean_params_as_numbers():
+    # Documented behaviour pinned by test_ui_experiment_status: bools fold as 1.0/0.0.
     log = [{"type": "params", "params": {"verbose": True, "lr": 0.1}}]
-    assert latest_metrics(log) == {"lr": 0.1}
+    assert latest_metrics(log) == {"verbose": 1.0, "lr": 0.1}
 
 
 def test_fold_still_folds_numeric_string_params():

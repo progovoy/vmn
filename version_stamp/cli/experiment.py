@@ -34,6 +34,9 @@ from version_stamp.cli.snapshot import (
     get_snapshot_storage,
 )
 from version_stamp.core import experiment_writer
+from version_stamp.core.experiment_from_snapshot import (
+    create_from_snapshot as _experiment_create_from_snapshot,
+)
 from version_stamp.core.experiment_log import (
     effective_params,
     entry_params,
@@ -414,77 +417,6 @@ def experiment_create(vcs, params, storage, args):
 
     print(verstr)
     return 0
-
-
-def _experiment_create_from_snapshot(
-    storage,
-    app_name,
-    snapshot_meta_path,
-    note=None,
-    extra_create_data=None,
-    parent=None,
-):
-    """Create experiment from an exported snapshot directory (no git required).
-
-    snapshot_meta_path: path to vmn_metadata.yml or a directory containing it.
-    Returns (verstr, error_code). error_code is None on success.
-    """
-    if os.path.isdir(snapshot_meta_path):
-        snapshot_meta_path = os.path.join(snapshot_meta_path, "vmn_metadata.yml")
-    if not os.path.isfile(snapshot_meta_path):
-        VMN_LOGGER.error("Snapshot metadata not found: " + snapshot_meta_path)
-        return None, 1
-
-    with open(snapshot_meta_path) as f:
-        snap_meta = yaml.safe_load(f)
-
-    if not isinstance(snap_meta, dict) or "verstr" not in snap_meta:
-        VMN_LOGGER.error(
-            "Invalid snapshot metadata (missing verstr): " + snapshot_meta_path
-        )
-        return None, 1
-
-    code_verstr = snap_meta["verstr"]
-    app = app_name or snap_meta.get("app_name")
-    if not app:
-        VMN_LOGGER.error(
-            "App name not found in snapshot metadata and not provided via CLI"
-        )
-        return None, 1
-
-    def _record(verstr):
-        metadata = {
-            "verstr": verstr,
-            "base_version": snap_meta.get("base_version"),
-            "base_commit": snap_meta.get("base_commit"),
-            "branch": snap_meta.get("branch"),
-            "remote": snap_meta.get("remote"),
-            "timestamp": _now_iso(),
-            "note": note,
-            "app_name": app,
-            "code_verstr": code_verstr,
-            "from_snapshot": True,
-            "dirty_states": snap_meta.get("dirty_states", []),
-            "has_working_tree_patch": False,
-            "has_local_commits_patch": False,
-            "has_untracked_files": False,
-            "has_dep_patches": False,
-        }
-        if snap_meta.get("changesets"):
-            metadata["changesets"] = snap_meta["changesets"]
-        _attach_parent(metadata, parent)
-        return metadata, {}
-
-    # Allocation creates the record: the name is claimed atomically, so two
-    # hosts sharing a bucket or directory never end up with the same run.
-    verstr = _allocate_run_verstr(storage, app, code_verstr, make_record=_record)
-
-    entry = _create_log_entry("create", note=note)
-    if extra_create_data:
-        entry.update(extra_create_data)
-
-    _append_to_log(storage, app, verstr, entry)
-    return verstr, None
 
 
 def _experiment_create_core(

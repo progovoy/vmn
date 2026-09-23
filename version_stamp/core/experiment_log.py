@@ -47,13 +47,11 @@ def effective_params(log):
 
 
 def _foldable_param(value):
-    """A param as a metric value: finite, numeric and not a bool — else None.
+    """A param as a metric value: a finite number (bools fold as 1.0/0.0) — else None.
 
-    ``missing=nan`` (xgboost's default) or ``verbose=True`` are settings, not
-    measurements; folding them in made every such run a NaN/bool "metric".
+    ``missing=nan`` (xgboost's default) is a setting, not a measurement;
+    folding it in made every such run carry a NaN "metric".
     """
-    if isinstance(value, bool):
-        return None
     try:
         number = float(value)
     except (ValueError, TypeError):

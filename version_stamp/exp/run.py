@@ -31,13 +31,13 @@ from version_stamp.cli.constants import INIT_FILENAME
 # distribution needs these to move into core next.
 from version_stamp.cli.experiment import (
     _experiment_create_core,
-    _experiment_create_from_snapshot,
     _get_experiment_storage,
     _resolve_parent,
 )
 from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.constants import VMN_BE_TYPE_GIT
+from version_stamp.core.experiment_from_snapshot import create_from_snapshot
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_writer import (
     append_to_log,
@@ -239,7 +239,7 @@ def _create_from_snapshot(
     if lock_root:
         os.makedirs(os.path.join(lock_root, ".vmn"), exist_ok=True)
     with get_repo_lock(lock_root) if lock_root else contextlib.nullcontext():
-        verstr, err = _experiment_create_from_snapshot(
+        verstr, err = create_from_snapshot(
             storage,
             app_name,
             meta_path,
