@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, paramValue } from "../util";
-import { maxOf, minOf } from "../util/stats";
+import { finiteOrNull, maxOf, minOf } from "../util/stats";
 
 interface Props {
   rows: ExperimentRow[];
@@ -14,8 +14,7 @@ interface Props {
 }
 
 function numericValue(row: ExperimentRow, col: string, paramCols: string[]): number | null {
-  const v = paramCols.includes(col) ? paramValue(row, col) : row.metrics[col];
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+  return finiteOrNull(paramCols.includes(col) ? paramValue(row, col) : row.metrics[col]);
 }
 
 function MetricScatter({ rows, metricCols, paramCols, schema }: Props) {

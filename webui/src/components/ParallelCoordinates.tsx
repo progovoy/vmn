@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { paramValue, runColor } from "../util";
+import { finiteOrNull } from "../util/stats";
 
 interface Props {
   rows: ExperimentRow[];
@@ -19,8 +20,7 @@ const CANVAS_THRESHOLD = 500;
 const MIN_BRUSH_PX = 3;
 
 function numVal(row: ExperimentRow, dim: string, mCols: string[]): number | null {
-  const v = mCols.includes(dim) ? row.metrics[dim] : paramValue(row, dim);
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+  return finiteOrNull(mCols.includes(dim) ? row.metrics[dim] : paramValue(row, dim));
 }
 
 function extents(rows: ExperimentRow[], dims: string[], mCols: string[]) {

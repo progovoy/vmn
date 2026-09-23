@@ -78,14 +78,21 @@ export function seriesColor(names: string[], name: string): string {
   return runColor([...names].sort().indexOf(name));
 }
 
-/** A run's param value: the verbatim `params` dict is the source of truth;
- *  `user_meta` (snapshot `--meta`) is only a fallback for older rows. */
-export function paramValue(
-  row: { params?: Record<string, unknown> | null; user_meta?: Record<string, unknown> | null },
-  key: string,
-): unknown {
-  if (row.params && key in row.params) return row.params[key];
-  return row.user_meta?.[key];
+type ParamSource = {
+  params?: Record<string, unknown> | null;
+  user_meta?: Record<string, unknown> | null;
+};
+
+/** The params a row carries: the verbatim `params` of an experiment, or the
+ *  `user_meta` (snapshot `--meta`) of a row that has none. */
+export function rowParams(row: ParamSource): Record<string, unknown> {
+  if (row.params && Object.keys(row.params).length > 0) return row.params;
+  return row.user_meta ?? {};
+}
+
+/** One param of a row — the same source the table and every chart use. */
+export function paramValue(row: ParamSource, key: string): unknown {
+  return rowParams(row)[key];
 }
 
 /** Loss/error-like metric names improve downward (Keras mode="auto"). */

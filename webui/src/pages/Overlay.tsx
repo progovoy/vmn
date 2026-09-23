@@ -40,7 +40,7 @@ export default function Overlay() {
 
   useEffect(() => {
     if (runs.length === 0) return;
-    Promise.all(runs.map((v) => api.experiment(ws, app, v)))
+    Promise.all(runs.map((v) => api.experiment(ws, app, v, OVERLAY_POINTS)))
       .then(setDetails)
       .catch((e) => setError(String(e)));
   }, [ws, app, runs]);
