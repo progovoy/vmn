@@ -211,21 +211,37 @@ class CachedSnapshotStorage(SnapshotStorage):
         return self._local.append_log_entry(app_name, verstr, writer_id, entry)
 
     def load_logs_by_writer(self, app_name, verstr):
-        logs = dict(self._local.load_logs_by_writer(app_name, verstr))
-        remote_logs = self._remote_or({}, "load_logs_by_writer", app_name, verstr)
-        for writer, entries in remote_logs.items():
-            # A writer's log only ever grows, so the longer copy is the newer.
-            if len(entries) > len(logs.get(writer, [])):
-                logs[writer] = entries
-        return logs
+        local_logs = self._local.load_logs_by_writer(app_name, verstr)
+        return self._with_newer_remote_writers(app_name, verstr, local_logs)
 
     def load_merged_log(self, app_name, verstr):
         local_logs = self._local.load_logs_by_writer(app_name, verstr)
         if not any(local_logs.values()):
-            if self._remote:
-                return self._remote.load_merged_log(app_name, verstr)
-            return []
-        return flatten_logs(self.load_logs_by_writer(app_name, verstr))
+            return self._remote.load_merged_log(app_name, verstr) if self._remote else []
+        return flatten_logs(
+            self._with_newer_remote_writers(app_name, verstr, local_logs)
+        )
+
+    def _with_newer_remote_writers(self, app_name, verstr, local_logs):
+        """*local_logs* plus each writer whose remote copy is the bigger one.
+
+        A writer's log only ever grows, so sizes alone say which copy is newer:
+        writers the remote merely mirrors are never downloaded.
+        """
+        logs = dict(local_logs)
+        if not self._remote:
+            return logs
+        local_sizes = self._local.log_sizes(app_name, verstr)
+        remote_sizes = self._remote_or({}, "log_sizes", app_name, verstr)
+        newer = [w for w, n in remote_sizes.items() if n > local_sizes.get(w, 0)]
+        if newer:
+            remote_logs = self._remote_or(
+                {}, "load_logs_by_writer", app_name, verstr, newer
+            )
+            for writer, entries in remote_logs.items():
+                if len(entries) > len(logs.get(writer, [])):
+                    logs[writer] = entries
+        return logs
 
     def _remote_log_state(self, app_name, verstr, writer_id):
         objects = list(self._remote.log_objects(app_name, verstr, writer_id))
@@ -238,25 +254,31 @@ class CachedSnapshotStorage(SnapshotStorage):
         if not self._remote:
             return
         base = log_object_name(writer_id)
-        data = self._local.load_file(app_name, verstr, base)
-        end = data.rfind(b"\n") + 1 if data else 0
-        if not end:
+        local_size = self._local.log_sizes(app_name, verstr).get(writer_id, 0)
+        if not local_size:
             return
         key = (app_name, verstr, writer_id)
         if key not in self._synced:
             self._synced[key] = self._remote_log_state(app_name, verstr, writer_id)
         offset, seq = self._synced[key]
-        if offset == end:
-            return
-        if offset > end:
+        if offset > local_size:
             # The remote holds more than this host ever wrote: start over.
-            self._remote.save_file(app_name, verstr, base, data[:end])
-            self._remote.delete_log_segments(app_name, verstr, writer_id)
-            self._synced[key] = (end, 1)
+            data = self._complete_lines(app_name, verstr, base, 0)
+            if data:
+                self._remote.save_file(app_name, verstr, base, data)
+                self._remote.delete_log_segments(app_name, verstr, writer_id)
+                self._synced[key] = (len(data), 1)
             return
-        name = log_object_name(writer_id, seq)
-        self._remote.save_file(app_name, verstr, name, data[offset:end])
-        self._synced[key] = (end, seq + 1)
+        chunk = self._complete_lines(app_name, verstr, base, offset)
+        if chunk:
+            name = log_object_name(writer_id, seq)
+            self._remote.save_file(app_name, verstr, name, chunk)
+            self._synced[key] = (offset + len(chunk), seq + 1)
+
+    def _complete_lines(self, app_name, verstr, name, offset):
+        """The complete lines of local *name* from *offset* on (b"" if none)."""
+        data = self._local.read_file_from(app_name, verstr, name, offset) or b""
+        return data[: data.rfind(b"\n") + 1]
 
 
 def get_snapshot_storage(

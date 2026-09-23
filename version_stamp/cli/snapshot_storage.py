@@ -156,6 +156,14 @@ class SnapshotStorage(ABC):
         loaded = yaml_safe_load(data)
         return loaded if isinstance(loaded, list) else []
 
+    def log_sizes(self, app_name, verstr):
+        """``{writer: bytes}`` of the record's logs (``""`` = legacy ``log.yml``).
+
+        A writer's log only ever grows, so comparing sizes tells which copy of
+        it is newer without reading either. Empty when the backend can't tell.
+        """
+        return {}
+
     def log_objects(self, app_name, verstr, writer_id):
         """``[(object name, size)]`` of a writer's remote log objects, in order."""
         return []

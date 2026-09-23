@@ -5,9 +5,10 @@ Keys: ``<prefix>/<app key>/<safe verstr>/<file>``. The app key is the tag form
 (``root/svc`` → ``root-svc``), which is injective because ``-`` is illegal in
 app names; reads fall back to the legacy ``root_svc`` form, which was not.
 
-Logs are append-only objects: a writer's first write is ``log.<w>.jsonl`` and
-every later one a new segment ``log.<w>@<seq>.jsonl`` — S3 cannot append, and
-re-uploading a growing log on every sync is quadratic.
+A writer's log is ``log.<w>.jsonl`` plus segments ``log.<w>@<seq>.jsonl``: a
+local-first host ships each sync's new lines as a new segment (re-uploading a
+growing log every sync is quadratic), while a direct append here rewrites
+``log.<w>.jsonl`` under an ETag precondition so a concurrent append retries.
 """
 import hashlib
 import json
@@ -27,6 +28,7 @@ from version_stamp.cli.snapshot_storage_files import (
     group_log_names,
     is_log_file,
     log_object_name,
+    log_sizes_of,
     log_writer_and_seq,
     parse_jsonl,
     safe_dep_name,
@@ -45,6 +47,15 @@ _APPEND_ATTEMPTS = 20
 
 def _error_code(exc):
     return ((getattr(exc, "response", None) or {}).get("Error") or {}).get("Code")
+
+
+def _is_missing(exc):
+    """Whether *exc* says the object does not exist (not an access/transport error)."""
+    return _error_code(exc) in _MISSING_CODES or "NoSuchKey" in str(exc)
+
+
+def _wanted(writer, writers):
+    return writers is None or writer in writers
 
 
 def app_keys(app_name):
@@ -124,7 +135,7 @@ class S3SnapshotStorage(SnapshotStorage):
             self._s3.head_object(Bucket=self.bucket, Key=key)
             return True
         except Exception as e:
-            if _error_code(e) not in _MISSING_CODES:
+            if not _is_missing(e):
                 VMN_LOGGER.warning(f"S3 error checking {key}: {e}")
             return False
 
@@ -132,7 +143,7 @@ class S3SnapshotStorage(SnapshotStorage):
         try:
             return self._s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
         except Exception as e:
-            if _error_code(e) not in _MISSING_CODES and "NoSuchKey" not in str(e):
+            if not _is_missing(e):
                 VMN_LOGGER.debug(f"S3 error reading {key}", exc_info=True)
             return None
 
@@ -300,7 +311,7 @@ class S3SnapshotStorage(SnapshotStorage):
         except Exception as e:
             if _error_code(e) in ("416", "InvalidRange"):
                 return b""  # nothing past offset
-            if _error_code(e) not in _MISSING_CODES and "NoSuchKey" not in str(e):
+            if not _is_missing(e):
                 VMN_LOGGER.debug(f"S3 error reading {key}", exc_info=True)
             return None
 
@@ -395,21 +406,30 @@ class S3SnapshotStorage(SnapshotStorage):
         try:
             resp = self._s3.get_object(Bucket=self.bucket, Key=key)
         except Exception as e:
-            if _error_code(e) not in _MISSING_CODES and "NoSuchKey" not in str(e):
+            if not _is_missing(e):
                 raise
             return b"", {"IfNoneMatch": "*"}
         return resp["Body"].read(), {"IfMatch": resp["ETag"]}
 
-    def load_logs_by_writer(self, app_name, verstr):
+    def log_sizes(self, app_name, verstr):
+        prefix = f"{self._record_prefix(app_name, verstr)}/"
+        return log_sizes_of(
+            (o["Key"][len(prefix) :], o["Size"]) for o in self._objects(prefix + "log")
+        )
+
+    def load_logs_by_writer(self, app_name, verstr, writers=None):
+        """``{writer: entries}``; only *writers* (``""`` = log.yml) when given."""
         prefix = f"{self._record_prefix(app_name, verstr)}/"
         logs = {}
-        legacy = self._get(prefix + LEGACY_LOG_FILE)
+        legacy = self._get(prefix + LEGACY_LOG_FILE) if _wanted("", writers) else None
         if legacy:
             loaded = core_utils.yaml_safe_load(legacy)
             if isinstance(loaded, list):
                 logs[""] = loaded
         names = [o["Key"][len(prefix) :] for o in self._objects(prefix + "log.")]
         for writer, group in group_log_names(names).items():
+            if not _wanted(writer, writers):
+                continue
             entries = logs.setdefault(writer, [])
             for name in group:
                 data = self._get(prefix + name)

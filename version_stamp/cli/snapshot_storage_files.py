@@ -59,6 +59,20 @@ def valid_artifact_name(name):
     return valid_path_component(name)
 
 
+def log_sizes_of(files):
+    """``{writer: total bytes}`` over ``(name, size)`` pairs of a record's files."""
+    sizes = {}
+    for name, size in files:
+        if name == LEGACY_LOG_FILE:
+            writer = ""
+        elif is_log_file(name):
+            writer = log_writer_and_seq(name)[0]
+        else:
+            continue
+        sizes[writer] = sizes.get(writer, 0) + size
+    return sizes
+
+
 def flatten_logs(logs_by_writer):
     """The legacy ``log.yml`` entries (writer ``""``) first, then writers by name,
     stably sorted by timestamp."""

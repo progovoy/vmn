@@ -17,6 +17,7 @@ from version_stamp.cli.snapshot_storage_files import (
     flatten_logs,
     group_log_names,
     log_object_name,
+    log_sizes_of,
     parse_jsonl,
     read_patches_from_dir,
     safe_dep_name,
@@ -265,6 +266,16 @@ class LocalSnapshotStorage(SnapshotStorage):
                     with open(os.path.join(snap_dir, name), encoding="utf-8") as f:
                         entries.extend(parse_jsonl(f.read(), writer))
         return logs
+
+    def log_sizes(self, app_name, verstr):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        if not os.path.isdir(snap_dir):
+            return {}
+        return log_sizes_of(
+            (entry.name, entry.stat().st_size)
+            for entry in os.scandir(snap_dir)
+            if entry.is_file()
+        )
 
     def load_merged_log(self, app_name, verstr):
         return flatten_logs(self.load_logs_by_writer(app_name, verstr))
