@@ -21,6 +21,7 @@ from filelock import FileLock
 
 from version_stamp.core.constants import LOCK_FILE_ENV, LOCK_FILENAME
 from version_stamp.core.experiment_status import RUN_STATE_FILE
+from version_stamp.core.experiment_values import sanitize_entry
 from version_stamp.core.utils import now_iso, sha256_file
 
 # Storage conf keys that an app's conf.yml may supply, and the CLI defaults that
@@ -97,8 +98,15 @@ def create_log_entry(entry_type, **kwargs):
 
 
 def append_to_log(storage, app_name, verstr, entry):
-    """Append an entry to the experiment log using per-writer JSONL files."""
-    storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
+    """Append an entry to the experiment log using per-writer JSONL files.
+
+    Metric values are coerced to floats first (numpy/torch scalars, numeric
+    strings); non-numeric ones are dropped, and an entry left with nothing to
+    record is skipped. See :mod:`version_stamp.core.experiment_values`.
+    """
+    entry = sanitize_entry(entry)
+    if entry is not None:
+        storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
 
 
 def save_log(storage, app_name, verstr, log):

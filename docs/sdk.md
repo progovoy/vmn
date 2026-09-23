@@ -116,6 +116,18 @@ Every call appends to the run's log; nothing is ever rewritten.
 Metrics land in the store as they are logged, so `vmn exp show` and the web UI
 see the curve **while training is still running**.
 
+Metric values are stored as floats, whatever you pass:
+
+- numpy scalars, 0-d arrays and 0-d torch tensors are unwrapped (no need for
+  `.item()`), and numeric strings such as `"0.5"` are parsed;
+- `nan` and `inf` are kept — a diverged loss is a real result — and sort last
+  on a leaderboard;
+- booleans, vectors and other non-numeric values are dropped with a warning,
+  and an entry left with nothing numeric is not written.
+
+Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
+Python numbers so `params.max_depth = 3` matches.
+
 ---
 
 ## Autologging
@@ -362,13 +374,16 @@ metrics.acc >= 0.9 and (kind = "inner" or depth = 0)
 |---|---|
 | `=` `==` `!=` | equality. Types must match: a number never equals a string, `true` never equals `1` |
 | `<` `<=` `>` `>=` | ordering, for two numbers or two strings. Mixed types simply don't match |
-| `~` / `contains` / `!~` | case-insensitive substring; the right-hand side must be a string |
+| `~` / `contains` / `!~` | case-insensitive substring; the right-hand side must be a string. Against a list field (`command`, `children`) it matches any element — `command ~ "train.py"` — and against `user_meta` any value |
 | `in (…)` / `not in (…)` | membership in a literal list |
 | `and` `or` `not`, `(…)` | the usual, `not` binding tightest |
 
 Literals are numbers, quoted strings (either quote), `true`, `false`, `null`.
-Numbers are plain integers or decimals — write `0.001`, not `1e-3`. Keywords and operators are case-insensitive (`AND`, `Contains`); **field names
+Numbers are integers, decimals or scientific notation (`1e-4`, `2.5E+3`), so
+`params.lr = 1e-4` works as written. Keywords and operators are case-insensitive (`AND`, `Contains`); **field names
 are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
+`not` and parentheses nest at most 100 levels deep (deeper is a `QueryError`);
+`and`/`or` chains can be any length.
 
 **Fields**
 
@@ -381,8 +396,9 @@ are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
 - `params.<name>` — a param, as it was recorded.
 
 `metrics` and `params` read different dicts, and the difference matters:
-**`metrics` holds numeric values only** (params that parse as numbers are folded
-in, since sorting, leaderboards and charts need numbers), while **`params` holds
+**`metrics` holds numeric values only** (params that parse as finite, non-boolean
+numbers are folded in, since sorting, leaderboards and charts need numbers — so
+`missing=nan` or `verbose=True` never become metrics), while **`params` holds
 every param verbatim**. So `params.model = "xgb"` and `params.cache = true` work
 and `metrics.model` does not, while a numeric param resolves under both
 `params.lr` and `metrics.lr`.

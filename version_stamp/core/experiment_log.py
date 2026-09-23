@@ -13,6 +13,7 @@ storage backend (:func:`load_log`, :func:`list_artifacts`). No clock, no vcs, no
 CLI arguments — and, like the rest of ``core``, no imports from ``cli``, ``ui``
 or ``exp``.
 """
+import math
 import os
 
 from version_stamp.core.logging import VMN_LOGGER
@@ -45,6 +46,21 @@ def effective_params(log):
 # ---------------------------------------------------------------------------
 
 
+def _foldable_param(value):
+    """A param as a metric value: finite, numeric and not a bool — else None.
+
+    ``missing=nan`` (xgboost's default) or ``verbose=True`` are settings, not
+    measurements; folding them in made every such run a NaN/bool "metric".
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (ValueError, TypeError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def latest_metrics(log):
     """Scan log entries and return the latest value for each metric."""
     metrics = {}
@@ -53,10 +69,9 @@ def latest_metrics(log):
             metrics.update(entry["values"])
         else:
             for k, v in entry_params(entry).items():
-                try:
-                    metrics[k] = float(v)
-                except (ValueError, TypeError):
-                    pass
+                number = _foldable_param(v)
+                if number is not None:
+                    metrics[k] = number
     return metrics
 
 
@@ -144,8 +159,9 @@ def sort_by_metric(rows, schema, sort=None):
     """Order rows like ``vmn exp list``: by *sort*, else by the primary metric.
 
     A metric's direction comes from its own schema entry; a metric absent from
-    the schema sorts ascending. Rows without the metric sort last. Rows are
-    returned unchanged when the metric is not present anywhere.
+    the schema sorts ascending. Rows whose value is missing, None, non-finite or
+    non-numeric sort last in either direction, in their original order. Rows
+    are returned unchanged when the metric is not present anywhere.
     """
     keys = set()
     for row in rows:
@@ -158,10 +174,18 @@ def sort_by_metric(rows, schema, sort=None):
         return rows
 
     descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
-    return sorted(
-        rows,
-        key=lambda r: (r["metrics"].get(metric) is None, r["metrics"].get(metric, 0)),
-        reverse=descending,
+    ranked = [r for r in rows if _sortable(r["metrics"].get(metric))]
+    unranked = [r for r in rows if not _sortable(r["metrics"].get(metric))]
+    ranked.sort(key=lambda r: r["metrics"][metric], reverse=descending)
+    return ranked + unranked
+
+
+def _sortable(value):
+    """Whether *value* can take a place in a metric ranking (NaN cannot)."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
     )
 
 
