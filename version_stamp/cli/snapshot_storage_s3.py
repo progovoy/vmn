@@ -63,11 +63,13 @@ class S3SnapshotStorage(SnapshotStorage):
             )
         self.bucket = bucket
         self.prefix = prefix
+        self.endpoint_url = endpoint_url
         client_kwargs = {}
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
         self._s3 = boto3.client("s3", **client_kwargs)
         self._record_prefixes = {}
+        self._app_prefixes = {}
 
     # -- key helpers --------------------------------------------------------
 
@@ -95,11 +97,24 @@ class S3SnapshotStorage(SnapshotStorage):
         keys = app_keys(app_name)
         if len(keys) == 1:
             return self._key_prefix(app_name)
+        cached = self._app_prefixes.get(app_name)
+        if cached:
+            return cached
         for key in keys:
             prefix = self._key_prefix(app_name, app_key=key)
-            if self._common_prefixes(prefix + "/"):
+            if self._has_objects(prefix + "/"):
+                # Data never moves between encodings, so a hit stays valid.
+                self._app_prefixes[app_name] = prefix
                 return prefix
         return self._key_prefix(app_name)
+
+    def _has_objects(self, prefix):
+        try:
+            resp = self._s3.list_objects_v2(Bucket=self.bucket, Prefix=prefix, MaxKeys=1)
+        except Exception:
+            VMN_LOGGER.debug(f"S3 error probing {prefix}", exc_info=True)
+            return False
+        return resp.get("KeyCount", 0) > 0
 
     # -- client helpers -----------------------------------------------------
 
@@ -240,9 +255,12 @@ class S3SnapshotStorage(SnapshotStorage):
             rest = obj["Key"][len(prefix) :]
             verstr, _, name = rest.partition("/")
             if name and "/" not in name:
+                # LastModified has 1s resolution: the ETag tells apart two
+                # same-size writes within one second (a heartbeat, say).
                 files.setdefault(unsafe_verstr(verstr), {})[name] = (
                     obj["Size"],
                     obj["LastModified"].timestamp(),
+                    obj.get("ETag"),
                 )
         return files
 
@@ -265,6 +283,29 @@ class S3SnapshotStorage(SnapshotStorage):
 
     def load_file(self, app_name, verstr, filename):
         return self._get(f"{self._record_prefix(app_name, verstr)}/{filename}")
+
+    def direct_files(self):
+        return self
+
+    def read_file_from(self, app_name, verstr, filename, offset):
+        """A ranged GET: a grown log costs its new bytes, not the whole object."""
+        if not offset:
+            return self.load_file(app_name, verstr, filename)
+        key = f"{self._record_prefix(app_name, verstr)}/{filename}"
+        try:
+            resp = self._s3.get_object(
+                Bucket=self.bucket, Key=key, Range=f"bytes={offset}-"
+            )
+            return resp["Body"].read()
+        except Exception as e:
+            if _error_code(e) in ("416", "InvalidRange"):
+                return b""  # nothing past offset
+            if _error_code(e) not in _MISSING_CODES and "NoSuchKey" not in str(e):
+                VMN_LOGGER.debug(f"S3 error reading {key}", exc_info=True)
+            return None
+
+    def cache_identity(self):
+        return ("s3", self.endpoint_url, self.bucket, self.prefix)
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)

@@ -123,8 +123,16 @@ recovery command.
 
 By default the server keeps a small SQLite cache under `<data-dir>/index/` to
 make leaderboards and the stamp tree instant over large repos. It is derived
-from the source files and rebuilt on staleness (tag list / experiment-dir
-mtimes) — delete it any time. `--no-index` reads directly.
+from the source files — delete it any time — and `--no-index` reads directly.
+
+Experiments are indexed incrementally. Each leaderboard request lists the
+experiment files once (sizes and mtimes) and re-reads only what moved: a new
+run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten
+`run_state.yml` (a heartbeat). So a live run appending metrics, or a hundred
+runs heartbeating, costs those files, not a re-read of every experiment. S3
+workspaces get the same index in memory, keyed by bucket and prefix, so a poll
+is one LIST plus the objects that changed (ranged GETs for grown logs). The
+stamp tree is cached by the app's tag list.
 
 ## Run status in the dashboard
 

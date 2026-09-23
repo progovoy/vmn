@@ -12,8 +12,10 @@ Rows carry exactly what the dashboard shows for a run: its metadata, the latest
 value of every metric, the derived status fields and its place in the run tree.
 
 Status is *derived* on every call — a run whose heartbeat went stale reports
-``stuck`` the next time it is read, never the ``running`` it last claimed. So
-nothing here is cached; callers that need caching cache the files, not the rows.
+``stuck`` the next time it is read, never the ``running`` it last claimed. What
+is cached is the folded files: :func:`list_runs` reads through the experiment
+index (:mod:`version_stamp.core.experiment_index`, persisted as
+``.index.sqlite`` beside the records), which re-reads only what changed.
 
 Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
 on ``version_stamp.ui``, so the experiment feature can be lifted out later. The
@@ -25,6 +27,7 @@ import os
 import yaml
 
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.core import experiment_index
 from version_stamp.core.experiment_log import (
     experiment_row,
     filter_by_status,
@@ -112,15 +115,13 @@ def _metrics_schema(root_path, app_name):
 def _all_rows(app_name, storage):
     """Every run of an app, status-annotated, in storage order (oldest first).
 
-    Reads every run's log and run state, which is what listing needs; asking
-    about a single run goes through :func:`_subtree_row` instead.
+    Rows come from the experiment index, which re-reads only what changed
+    since the last call; asking about a single run goes through
+    :func:`_subtree_row` instead.
     """
-    rows = []
-    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
-        verstr = meta["verstr"]
-        row = experiment_row(idx, meta, _load_log(storage, app_name, verstr))
-        row.update(status_fields(load_run_state(storage, app_name, verstr)))
-        rows.append(row)
+    rows, run_states = experiment_index.indexed_rows(storage, app_name)
+    for row in rows:
+        row.update(status_fields(run_states.get(row["verstr"])))
     return annotate_tree(rows)
 
 

@@ -8,6 +8,7 @@ own with — so the web leaderboard and the CLI always agree.
 import os
 
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.core import experiment_index
 from version_stamp.core.experiment_log import (
     effective_params,
     experiment_row,
@@ -272,12 +273,15 @@ def list_experiments_from_storage(
     status=None,
     query=None,
 ):
-    """List experiments using a storage backend directly (for S3/remote workspaces)."""
+    """List experiments using a storage backend directly (for S3/remote workspaces).
+
+    Rows come from the process-wide experiment index for the backend, so a
+    poll costs one listing plus whatever changed — not a GET per experiment.
+    """
     schema = {}  # No app conf available for S3 workspaces
+    rows, run_states = experiment_index.indexed_rows(storage, app_name)
     return sort_rows(
-        apply_filters(
-            rows_with_status(app_name=app_name, storage=storage), status, query
-        ),
+        apply_filters(annotate_status(rows, run_states), status, query),
         schema,
         sort=sort,
         last=last,
