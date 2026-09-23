@@ -92,14 +92,41 @@ class LocalSnapshotStorage(SnapshotStorage):
             if name != own and (name == code or name.startswith(code + "."))
         ]
 
+    def _link_sources(self, app_name, verstr, metadata):
+        """``[(sibling dir, trusted)]`` to hard-link identical patches from.
+
+        A sibling with the same ``diff_hash`` has the same patches (trusted: no
+        bytes need comparing); one with a different hash has none to share;
+        one that predates the hash is compared byte for byte.
+        """
+        want = (metadata or {}).get("diff_hash")
+        sources = []
+        for path in self._same_code_dirs(app_name, verstr, metadata):
+            theirs = self._sibling_diff_hash(path)
+            if want and theirs:
+                if theirs == want:
+                    return [(path, True)]
+                continue
+            sources.append((path, False))
+        return sources
+
+    def _sibling_diff_hash(self, snap_dir):
+        try:
+            with open(os.path.join(snap_dir, METADATA_FILE), "rb") as f:
+                return (parse_record_metadata(f.read()) or {}).get("diff_hash")
+        except OSError:
+            return None
+
     def _write_record(self, app_name, verstr, snap_dir, metadata, patches):
-        siblings = self._same_code_dirs(app_name, verstr, metadata)
+        siblings = self._link_sources(app_name, verstr, metadata)
         write_patches_to_dir(snap_dir, patches, link_from=siblings)
         for dep_path, dep_patches in patches.get("deps", {}).items():
             safe_dep = safe_dep_name(dep_path)
             dep_dir = os.path.join(snap_dir, "deps", safe_dep)
             Path(dep_dir).mkdir(parents=True, exist_ok=True)
-            dep_sources = [os.path.join(s, "deps", safe_dep) for s in siblings]
+            dep_sources = [
+                (os.path.join(s, "deps", safe_dep), trusted) for s, trusted in siblings
+            ]
             write_patches_to_dir(dep_dir, dep_patches, link_from=dep_sources)
         # Last: metadata.yml is what makes the record visible.
         atomic_write(

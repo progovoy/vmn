@@ -118,11 +118,25 @@ def _link_or_copy(src, dst):
         shutil.copy2(src, dst)
 
 
+def _same_size(path, data):
+    try:
+        return os.path.getsize(path) == len(data)
+    except OSError:
+        return False
+
+
+def _identical(path, data, trusted):
+    """Whether *path* holds *data*. A *trusted* source (same ``diff_hash``)
+    already has the same content, so its size is proof enough."""
+    return _same_size(path, data) if trusted else _same_bytes(path, data)
+
+
 def write_patches_to_dir(directory, patches, link_from=()):
     """Write the patch files *patches* carries and drop the ones it lacks.
 
-    A byte-identical file in one of the *link_from* directories is hard-linked
-    rather than written again, so runs of the same code share their patches.
+    An identical file in one of the *link_from* ``(directory, trusted)``
+    sources is hard-linked rather than written again, so runs of the same code
+    share their patches.
     """
     for key, filename, binary in PATCH_FILES:
         path = os.path.join(directory, filename)
@@ -135,8 +149,8 @@ def write_patches_to_dir(directory, patches, link_from=()):
         source = next(
             (
                 os.path.join(src, filename)
-                for src in link_from
-                if _same_bytes(os.path.join(src, filename), data)
+                for src, trusted in link_from
+                if _identical(os.path.join(src, filename), data, trusted)
             ),
             None,
         )
