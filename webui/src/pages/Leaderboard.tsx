@@ -5,6 +5,8 @@ import { api, appName as toAppName } from "../api";
 import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
 import { maxOf, minOf } from "../util/stats";
+import { keepIfUnchanged } from "../util/stableRows";
+import { combineQueries, searchClause } from "../util/searchQuery";
 import { columnLayout, paramKey, rowParams } from "./leaderboardColumns";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, pollIntervalMs, relTime } from "../util";
@@ -38,7 +40,9 @@ export default function Leaderboard() {
   const [filteredRows, setFilteredRows] = useState<ExperimentRow[] | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [brushed, setBrushed] = useState<Set<string> | null>(null);
   const navigate = useNavigate();
 
   // Every request gets a sequence number: only the newest may land, so a slow
@@ -48,28 +52,39 @@ export default function Leaderboard() {
   // How many rows the user has paged in — a poll refreshes all of them.
   const loadedRef = useRef(0);
 
+  // The search box searches every run, so it travels with the query.
+  const serverQuery = combineQueries(query, searchClause(search));
+  // Once a column is picked, the server orders by it — best first by the
+  // metric's goal, or worst first — so paging walks the same order.
+  const order = useMemo((): "asc" | "desc" | undefined => {
+    if (!sort) return undefined;
+    const bestAsc = metricGoal(schema, sort) === "min";
+    return bestAsc !== reversed ? "asc" : "desc";
+  }, [sort, reversed, schema]);
+
   const load = useCallback((): Promise<ExperimentRow[] | undefined> => {
     inFlight.current?.abort();
     const ctrl = new AbortController();
     inFlight.current = ctrl;
     const seq = ++seqRef.current;
     const status = statusFilter || undefined;
+    const q = serverQuery || undefined;
     const args = [ws, app, sort ?? undefined, status] as const;
     const request = withSignal(ctrl.signal, () =>
-      loadedRef.current > PAGE_SIZE
+      loadedRef.current > PAGE_SIZE || order
         ? api.experimentsPaged(ws, app, {
-            sort: sort ?? undefined, status, query: query || undefined,
-            offset: 0, limit: loadedRef.current,
+            sort: sort ?? undefined, status, query: q, order,
+            offset: 0, limit: Math.max(loadedRef.current, PAGE_SIZE),
           }).then(({ rows: page, total: n }) => Object.assign(page, { total: n }))
-        : query
-          ? api.experiments(...args, query)
+        : q
+          ? api.experiments(...args, q)
           : api.experiments(...args)
     );
     return request
       .then((next) => {
         if (seq !== seqRef.current) return undefined;
         loadedRef.current = next.length;
-        setRows(next);
+        setRows((prev) => keepIfUnchanged(prev, next));
         setTotal(next.total ?? next.length);
         setQueryError(null);
         return next;
@@ -82,7 +97,7 @@ export default function Leaderboard() {
         else setError(String(e));
         return undefined;
       });
-  }, [ws, app, sort, statusFilter, query]);
+  }, [ws, app, sort, statusFilter, serverQuery, order]);
   useEffect(() => {
     loadedRef.current = 0; // new filters start again from the first page
     load();
@@ -94,7 +109,7 @@ export default function Leaderboard() {
     const seq = seqRef.current;
     api.experimentsPaged(ws, app, {
       sort: sort ?? undefined, status: statusFilter || undefined,
-      query: query || undefined, offset: rows.length, limit: PAGE_SIZE,
+      query: serverQuery || undefined, order, offset: rows.length, limit: PAGE_SIZE,
     }).then(({ rows: more, total: n }) => {
       if (seq !== seqRef.current) return; // the filters moved on meanwhile
       setRows((cur) => {
@@ -124,9 +139,26 @@ export default function Leaderboard() {
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app]);
 
-  const displayed = useMemo(
-    () => (reversed ? [...(filteredRows ?? rows ?? [])].reverse() : filteredRows ?? rows ?? []),
-    [filteredRows, rows, reversed]
+  // The server already ordered the page, whichever direction was asked for.
+  const displayed = useMemo(() => filteredRows ?? rows ?? [], [filteredRows, rows]);
+
+  // A brush in the parallel view narrows the table; the chart keeps every row
+  // so its brush indices stay meaningful.
+  const onBrush = useCallback(
+    (indices: number[] | null) =>
+      setBrushed(
+        indices
+          ? new Set(indices.map((i) => displayed[i]?.verstr).filter((v): v is string => !!v))
+          : null
+      ),
+    [displayed]
+  );
+  const tableRows = useMemo(
+    () =>
+      brushed && chartView === "parallel"
+        ? displayed.filter((r) => brushed.has(r.verstr))
+        : displayed,
+    [displayed, brushed, chartView]
   );
 
   const primary = useMemo(
@@ -215,7 +247,7 @@ export default function Leaderboard() {
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
-    count: displayed.length,
+    count: tableRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 48,
     overscan: 20,
@@ -229,7 +261,7 @@ export default function Leaderboard() {
       <PageHead title={appName} what="experiment leaderboard" />
       <p className="page-sub">
         {(() => {
-          const shown = filteredRows?.length ?? rows.length;
+          const shown = tableRows.length;
           const all = Math.max(total, rows.length);
           return shown !== all ? `${shown} of ${all} runs` : `${all} runs`;
         })()}
@@ -325,6 +357,7 @@ export default function Leaderboard() {
             onFilter={setFilteredRows}
             onStatusChange={setStatusFilter}
             onQueryChange={setQuery}
+            onSearchChange={setSearch}
             queryError={queryError}
           />
 
@@ -338,7 +371,7 @@ export default function Leaderboard() {
           {chartView === "trend" && <ParamPlots rows={displayed} metricCols={metricCols} schema={schema} />}
           {chartView === "bar" && <MetricBarChart rows={displayed} metricCols={metricCols} schema={schema} />}
           {chartView === "scatter" && <MetricScatter rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
-          {chartView === "parallel" && <ParallelCoordinates rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
+          {chartView === "parallel" && <ParallelCoordinates rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} onBrush={onBrush} />}
           {chartView === "grouped" && <GroupedMetrics rows={displayed} metricCols={metricCols} paramCols={paramCols} schema={schema} />}
 
           <div className="card flush">
@@ -376,7 +409,7 @@ export default function Leaderboard() {
                 </thead>
                 <tbody style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
                   {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const r = displayed[virtualRow.index];
+                    const r = tableRows[virtualRow.index];
                     return (
                       <tr
                         key={r.verstr}

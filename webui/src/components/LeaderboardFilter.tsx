@@ -12,7 +12,7 @@ const STATUS_ORDER: RunState[] = [
 const QUERY_EXAMPLE = 'metrics.loss < 0.5 and status = "succeeded"';
 
 export default function LeaderboardFilter({
-  rows, onFilter, onStatusChange, onQueryChange, queryError,
+  rows, onFilter, onStatusChange, onQueryChange, onSearchChange, queryError,
 }: {
   rows: ExperimentRow[];
   onFilter: (filtered: ExperimentRow[]) => void;
@@ -20,6 +20,8 @@ export default function LeaderboardFilter({
   onStatusChange?: (csv: string) => void;
   /** The typed query as the `?q=` the list endpoint takes, debounced. */
   onQueryChange?: (query: string) => void;
+  /** The search box text, debounced, for the server to search every run. */
+  onSearchChange?: (text: string) => void;
   /** What the server said about the query it refused; shown beside the box. */
   queryError?: string | null;
 }) {
@@ -49,6 +51,10 @@ export default function LeaderboardFilter({
   useEffect(() => {
     onQueryChange?.(debouncedQuery.trim());
   }, [debouncedQuery, onQueryChange]);
+
+  useEffect(() => {
+    onSearchChange?.(debouncedSearch.trim());
+  }, [debouncedSearch, onSearchChange]);
 
   useEffect(() => {
     let filtered = rows;

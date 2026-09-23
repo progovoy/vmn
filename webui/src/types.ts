@@ -106,14 +106,15 @@ export interface LogEntry {
 
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
-  /** The full log. Newer servers send `log_tail` + `log_total` instead; the
-   *  Run page owns that migration, so this stays as older servers send it. */
-  log: LogEntry[];
-  /** The newest entries of the log (newer servers). */
+  /** The newest log entries — the whole log only when requested with
+   *  `include_log=1`, or from an older server that always sent all of it.
+   *  Page older entries through `/log?offset&limit` instead. */
+  log?: LogEntry[];
+  /** The newest entries of the log (at most 200). */
   log_tail?: LogEntry[];
-  /** How many entries the whole log holds (newer servers). */
+  /** How many entries the whole log holds. */
   log_total?: number;
-  /** Points per metric before server-side downsampling (newer servers). */
+  /** Points per metric before server-side downsampling. */
   series_total?: Record<string, number>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;

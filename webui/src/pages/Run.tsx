@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
-import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
+import type { ExperimentDetail, MetricsSchema } from "../types";
 import {
   fmtDuration, fmtVal, metricGoal, pollIntervalMs, relTime,
 } from "../util";
@@ -11,15 +11,6 @@ import ArtifactsList from "../components/ArtifactsList";
 import StatusPill from "../components/StatusPill";
 import RunLog from "../components/RunLog";
 import TrainingCurves from "../components/TrainingCurves";
-
-/** The detail payload: newer servers send the log's tail + total and
- *  downsampled series (with the full point counts); older ones the full log. */
-type RunDetail = Omit<ExperimentDetail, "log"> & {
-  log?: LogEntry[];
-  log_tail?: LogEntry[];
-  log_total?: number;
-  series_total?: Record<string, number>;
-};
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
@@ -121,14 +112,14 @@ export default function Run() {
   const { ws, app, verstr } = useParams() as {
     ws: string; app: string; verstr: string;
   };
-  const [detail, setDetail] = useState<RunDetail | null>(null);
+  const [detail, setDetail] = useState<ExperimentDetail | null>(null);
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
 
   const load = useCallback(
     () => api.experiment(ws, app, verstr)
-      .then((d) => setDetail(d as unknown as RunDetail))
+      .then(setDetail)
       .catch((e) => setError(String(e))),
     [ws, app, verstr]
   );
