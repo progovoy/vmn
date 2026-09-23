@@ -76,6 +76,7 @@ start_run(
     heartbeat_interval_sec=None,
     storage=None,
     system_metrics=False,
+    sync_interval_sec=30,
 )
 ```
 
@@ -85,19 +86,42 @@ start_run(
 | `note` | free-text note recorded on the run |
 | `params` | the run's inputs, like `-f params.yml`'s `params:` key |
 | `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) — a full verstr, a unique prefix, `@N`, or `latest` |
-| `nested` | parent to the innermost open in-process run (see [Nesting](#nesting)) |
+| `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
 | `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn[sysmetrics]"` |
+| `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, from the heartbeat thread — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 
 Creating the run snapshots the working tree (dirty or clean) and assigns the
 verstr, available as `run.id`. As with the CLI, the first run in a fresh repo
-cold-starts vmn tracking and stamps a `0.0.0` baseline.
+cold-starts vmn tracking and stamps a `0.0.0` baseline. Several workers may
+cold-start one fresh checkout at the same moment: they serialize on the repo
+lock, and each builds its view of the repo only once it holds the lock, so the
+ones that wait see the initialization the first one did.
 
 That create/cold-start phase is the only part that touches the repository, so it
 is the only part that takes the per-repo vmn lock (`.vmn/vmn.lock`). The lock is
 released before your training code runs — a run that trains for hours does not
 block other `vmn` commands, and a subprocess you launch can use vmn freely.
+
+### Runs without a git checkout (containers)
+
+A training image built from [`vmn snapshot export`](experiments.md) has no `.git`.
+Set `VMN_SNAPSHOT_METADATA` to the exported `vmn_metadata.yml` (or its directory)
+and `VMN_EXPERIMENT_DIR` to where runs should be recorded, and `start_run()`
+records against that snapshot — the same git-free mode the CLI's `--from-snapshot`
+uses:
+
+```python
+# VMN_SNAPSHOT_METADATA=/app/vmn_metadata.yml  VMN_EXPERIMENT_DIR=/mnt/runs
+with start_run() as run:            # app name comes from the metadata
+    run.log_metric("loss", 0.25)
+```
+
+`app_name` may still be passed (or set via `VMN_APP_NAME`); otherwise the app the
+snapshot names is used. Pass `storage=` instead of `VMN_EXPERIMENT_DIR` for an
+S3-backed store. With neither, `start_run()` raises a `ValueError` naming
+`VMN_EXPERIMENT_DIR`.
 
 ---
 
@@ -276,11 +300,19 @@ workload — so it carries its own daemon thread. That is what makes
 that is OOM-killed or loses its node goes stale and is reported `stuck`, instead
 of sitting at `running` forever with nobody left to write down that it died.
 
+**A flaky store never becomes your error.** `finish()` does not raise for a
+storage failure (a remote that returns 503 at the end of a ten-hour run is logged
+as a warning, not thrown at the workload), and it always closes the run — the
+run leaves the open-run registry and the environment is handed back regardless.
+An exception from your own code inside the `with` block is re-raised unchanged;
+a storage error while recording it is logged, never substituted for it.
+
 ---
 
 ## Nesting
 
-`nested=True` parents the new run to the innermost in-process run still open:
+`nested=True` parents the new run to the calling context's run — the innermost
+run opened by this thread that is still open (else the process's only open run):
 
 ```python
 with start_run("my_app", note="lr sweep") as sweep:
@@ -307,6 +339,32 @@ with start_run("my_app", note="lr sweep"):
 Either way you get the same outer/inner structure — including `kind` and the
 `tree_status` rollup — that a [CLI sweep](experiments.md#outer--inner-jobs-sweeps)
 produces.
+
+### Threads, forks and `current_run()`
+
+`from version_stamp.exp.run import current_run` returns the run the calling code
+should record into, or `None`:
+
+1. the run the calling context (thread) opened, if it is still open;
+2. else the process's only open run;
+3. else `None` — several runs are open and none belongs to this context.
+
+That is what keeps concurrent runs in one process apart:
+
+- **Thread-pool sweeps** (Optuna `n_jobs>1`, a `ThreadPoolExecutor`): trials that
+  each call `start_run()` in their own thread are independent siblings. The
+  exported `VMN_EXPERIMENT_ID` names whichever run opened last, but a run another
+  thread of this process has open is never taken as a parent — only the value the
+  process was *launched* with (an enclosing `vmn exp run`) is. Once every run has
+  finished, in whatever order, the environment is exactly what it was before the
+  first one opened. To nest a trial under an outer run opened by another thread,
+  pass `parent=outer.id`.
+- **Forks** (`multiprocessing` with `fork`, DataLoader workers): a child inherits
+  the parent's `Run` objects but not the runs. `current_run()` is `None` there, and
+  the child's interpreter exit never finalizes the parent's still-running run.
+  Every `Run` records its owning process as `run.pid`. A child that calls
+  `start_run()` itself becomes an inner run of the parent via the inherited
+  `VMN_EXPERIMENT_ID`, exactly like a subprocess.
 
 ---
 
