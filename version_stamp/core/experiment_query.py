@@ -20,9 +20,16 @@ Grammar::
                | "~" | "!~" | "contains"
     field      = name | ( "metrics" | "params" ) "." name
     literal    = number | string | "true" | "false" | "null"
+    number     = [ "-" ] digits [ "." digits ] [ ( "e" | "E" ) [ "+" | "-" ] digits ]
 
 Hand-written lexer plus recursive descent: no third-party dependency, and no
-``eval`` anywhere near text that arrives in an HTTP query parameter.
+``eval`` anywhere near text that arrives in an HTTP query parameter. ``not`` and
+parentheses nest at most ``MAX_NESTING`` levels (deeper is a ``QueryError``);
+``and``/``or`` chains of any length are flat.
+
+``~``/``contains``/``!~`` match a case-insensitive substring; against a
+list-valued field (``command``, ``children``) they match any element, and
+against a dict-valued one (``user_meta``) any value.
 
 Semantics, deliberately two-valued (no SQL ``UNKNOWN``): a missing or ``None``
 field fails every ordering and substring comparison rather than poisoning the
@@ -81,13 +88,31 @@ def _lex_string(text, pos):
     return ("lit", text[pos + 1 : end], pos), end + 1
 
 
+def _digits_end(text, pos):
+    while pos < len(text) and text[pos].isdigit():
+        pos += 1
+    return pos
+
+
+def _lex_exponent(text, pos, start):
+    """End of an ``e[+-]digits`` exponent at *pos* (just past the ``e``)."""
+    if pos < len(text) and text[pos] in "+-":
+        pos += 1
+    end = _digits_end(text, pos)
+    if end == pos:
+        _fail(f"invalid number '{text[start:pos]}'", start)
+    return end
+
+
 def _lex_number(text, pos):
     end = pos + 1
     while end < len(text) and (text[end].isdigit() or text[end] == "."):
         end += 1
+    if end < len(text) and text[end] in "eE":
+        end = _lex_exponent(text, end + 1, pos)
     raw = text[pos:end]
     try:
-        value = float(raw) if "." in raw else int(raw)
+        value = float(raw) if any(c in raw for c in ".eE") else int(raw)
     except ValueError:
         _fail(f"invalid number '{raw}'", pos)
     return ("lit", value, pos), end
@@ -169,6 +194,11 @@ def _ordered(left, right, compare):
 
 
 def _contains(left, right):
+    """Case-insensitive substring match; lists and dicts match any element."""
+    if isinstance(left, dict):
+        left = list(left.values())
+    if isinstance(left, (list, tuple)):
+        return any(_contains(item, right) for item in left if isinstance(item, str))
     return isinstance(left, str) and right.lower() in left.lower()
 
 
@@ -191,10 +221,17 @@ _COMPARISONS = {
 # ---------------------------------------------------------------------------
 
 
+# How deep ``not`` and parentheses may nest. Far beyond anything a person
+# writes, and far below the interpreter's recursion limit — a hostile ``?q=``
+# gets a 400, not a RecursionError.
+MAX_NESTING = 100
+
+
 class _Parser:
     def __init__(self, text):
         self.tokens = tokenize(text)
         self.pos = 0
+        self.depth = 0
 
     def peek(self):
         return self.tokens[self.pos]
@@ -222,29 +259,44 @@ class _Parser:
             _fail(f"unexpected '{self.peek()[1]}'", self.peek()[2])
         return predicate
 
+    # A chain of and/or terms is one flat predicate, not a nested closure per
+    # term, so a 20k-term query evaluates without deep recursion.
     def parse_or(self):
-        left = self.parse_and()
+        terms = [self.parse_and()]
         while self.accept("kw", "or"):
-            right = self.parse_and()
-            left = (lambda a, b: lambda row: a(row) or b(row))(left, right)
-        return left
+            terms.append(self.parse_and())
+        if len(terms) == 1:
+            return terms[0]
+        return lambda row: any(term(row) for term in terms)
 
     def parse_and(self):
-        left = self.parse_not()
+        terms = [self.parse_not()]
         while self.accept("kw", "and"):
-            right = self.parse_not()
-            left = (lambda a, b: lambda row: a(row) and b(row))(left, right)
-        return left
+            terms.append(self.parse_not())
+        if len(terms) == 1:
+            return terms[0]
+        return lambda row: all(term(row) for term in terms)
 
     def parse_not(self):
+        token = self.peek()
+        if (token[0] == "kw" and token[1] == "not") or token[0] == "(":
+            self.depth += 1
+            if self.depth > MAX_NESTING:
+                _fail(f"query nests deeper than {MAX_NESTING} levels", token[2])
+            try:
+                return self._parse_nested()
+            finally:
+                self.depth -= 1
+        return self.parse_comparison()
+
+    def _parse_nested(self):
         if self.accept("kw", "not"):
             inner = self.parse_not()
             return lambda row: not inner(row)
-        if self.accept("(", "("):
-            inner = self.parse_or()
-            self.expect(")", ")", "')'")
-            return inner
-        return self.parse_comparison()
+        self.expect("(", "(", "'('")
+        inner = self.parse_or()
+        self.expect(")", ")", "')'")
+        return inner
 
     def parse_comparison(self):
         token = self.peek()
