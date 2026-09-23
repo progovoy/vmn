@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
-import type { DiffResult, ExperimentRow, MetricsSchema } from "../types";
+import type { DiffResult, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
+import RunPicker from "../components/RunPicker";
 
 function DiffView({ text }: { text: string }) {
   if (!text.trim())
@@ -28,31 +29,6 @@ function DiffView({ text }: { text: string }) {
   );
 }
 
-function RunSelect({ value, options, onChange }: {
-  value: string;
-  options: ExperimentRow[];
-  onChange: (v: string) => void;
-}) {
-  const known = options.some((o) => o.verstr === value);
-  return (
-    <div className="select-wrap" style={{ display: "inline-block" }}>
-      <select
-        className="mono"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ width: "auto", fontFamily: "var(--mono)", fontSize: 12.5 }}
-      >
-        {!known && <option value={value}>{value}</option>}
-        {options.map((o) => (
-          <option key={o.verstr} value={o.verstr}>
-            @{o.idx}  {o.verstr}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 export default function Compare() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const appName = toAppName(app);
@@ -60,7 +36,6 @@ export default function Compare() {
   const v = params.get("v") ?? "@1";
   const to = params.get("to") ?? "latest";
   const [result, setResult] = useState<DiffResult | null>(null);
-  const [rows, setRows] = useState<ExperimentRow[]>([]);
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,7 +47,6 @@ export default function Compare() {
   }, [ws, app, v, to]);
 
   useEffect(() => {
-    api.experiments(ws, app).then(setRows).catch(() => setRows([]));
     api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
   }, [ws, app]);
 
@@ -92,15 +66,17 @@ export default function Compare() {
       </p>
 
       <div className="toolbar" style={{ marginBottom: 18 }}>
-        <RunSelect
+        <RunPicker
+          ws={ws}
+          app={app}
           value={result.from_verstr}
-          options={rows}
           onChange={(nv) => setParams({ v: nv, to: result.to_verstr })}
         />
         <span style={{ color: "var(--text-3)", fontSize: 16 }}>→</span>
-        <RunSelect
+        <RunPicker
+          ws={ws}
+          app={app}
           value={result.to_verstr}
-          options={rows}
           onChange={(nt) => setParams({ v: result.from_verstr, to: nt })}
         />
       </div>

@@ -1,7 +1,9 @@
 import type {
-  AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentRow,
-  Job, Meta, MetricsSchema, SnapshotRow, VersionRow, Workspace,
+  AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentPage,
+  ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow, Workspace,
 } from "./types";
+import { currentSignal } from "./requestScope";
+import { PAGE_SIZE } from "./paging";
 
 const BASE = "/api/v1";
 
@@ -12,13 +14,13 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return headers;
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+async function get<T>(path: string, signal = currentSignal()): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders(), signal });
   if (res.status === 401) {
     const entered = window.prompt("vmn ui token:");
     if (entered) {
       sessionStorage.setItem("vmn_token", entered);
-      return get<T>(path);
+      return get<T>(path, signal);
     }
   }
   if (!res.ok) {
@@ -45,6 +47,36 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+export { PAGE_SIZE };
+
+export interface PageOpts {
+  sort?: string;
+  status?: string;
+  query?: string;
+  offset?: number;
+  limit?: number;
+  last?: number;
+}
+
+/** One page of rows plus the server's total. Tolerates a server that still
+ *  answers a plain list. */
+async function fetchPage(
+  ws: string, app: string, opts: PageOpts = {}
+): Promise<{ rows: ExperimentRow[]; total: number }> {
+  const p = new URLSearchParams({
+    offset: String(opts.offset ?? 0),
+    limit: String(opts.limit ?? PAGE_SIZE),
+  });
+  if (opts.sort) p.set("sort", opts.sort);
+  if (opts.status) p.set("status", opts.status);
+  if (opts.query) p.set("q", opts.query);
+  if (opts.last) p.set("last", String(opts.last));
+  const body = await get<ExperimentRow[] | { rows: ExperimentRow[]; total: number }>(
+    `/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`
+  );
+  return Array.isArray(body) ? { rows: body, total: body.length } : body;
+}
+
 /** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
 export const appTag = (name: string) => name.replaceAll("/", "-");
 /** Inverse of appTag: the real app name behind a URL tag. */
@@ -64,28 +96,20 @@ export const api = {
     get<AppConfig>(
       `/workspaces/${ws}/apps/${appTag(app)}/config${v ? `?v=${encodeURIComponent(v)}` : ""}`
     ),
+  /** The first page of the leaderboard — bounded, never the whole app. */
   experiments: (
     ws: string, app: string, sort?: string, status?: string, query?: string
-  ) => {
-    const p = new URLSearchParams();
-    if (sort) p.set("sort", sort);
-    if (status) p.set("status", status);
-    if (query) p.set("q", query);
-    const qs = p.toString();
-    return get<ExperimentRow[]>(
-      `/workspaces/${ws}/apps/${appTag(app)}/experiments${qs ? `?${qs}` : ""}`
-    );
-  },
-  experimentsPaged: (ws: string, app: string, opts?: { sort?: string; offset?: number; limit?: number }) => {
-    const p: Record<string, string> = {
-      offset: String(opts?.offset ?? 0),
-      limit: String(opts?.limit ?? 200),
-    };
-    if (opts?.sort) p.sort = opts.sort;
-    return get<{ rows: ExperimentRow[]; total: number }>(
-      `/workspaces/${ws}/apps/${appTag(app)}/experiments?${new URLSearchParams(p)}`
-    );
-  },
+  ) =>
+    fetchPage(ws, app, { sort, status, query, offset: 0, limit: PAGE_SIZE })
+      .then(({ rows, total }) => Object.assign(rows, { total }) as ExperimentPage),
+  experimentsPaged: (ws: string, app: string, opts?: PageOpts) =>
+    fetchPage(ws, app, opts),
+  /** The newest *n* runs, newest first: `last` picks them by storage order on
+   *  the server, whatever the leaderboard's sort. */
+  recentExperiments: (ws: string, app: string, n = 20) =>
+    fetchPage(ws, app, { last: n, limit: n }).then(({ rows }) =>
+      [...rows].sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
+    ),
   experiment: (ws: string, app: string, verstr: string) =>
     get<ExperimentDetail>(
       `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}`

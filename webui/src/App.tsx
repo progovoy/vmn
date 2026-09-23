@@ -5,6 +5,7 @@ import {
 import { api, appName as toAppName } from "./api";
 import type { AppRow, Workspace } from "./types";
 import CommandPalette from "./components/CommandPalette";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { CopyPath, wsLocation } from "./components/ui";
 
 function NavIcon({ name }: { name: string }) {
@@ -185,7 +186,10 @@ export default function App() {
 
         <div className="content">
           <div className="content-inner" key={location.pathname}>
-            <Outlet />
+            {/* Keyed with the route above, so navigating away resets it. */}
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </div>
       </div>

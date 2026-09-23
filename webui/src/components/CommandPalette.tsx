@@ -35,8 +35,9 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
 
   useEffect(() => {
     if (!ws || !app) return;
-    api.experiments(ws, app).then((rows) => setRuns(rows.slice(-20).reverse()))
-      .catch(() => setRuns([]));
+    // The newest 20 by storage order — not a slice of the leaderboard, whose
+    // default order is the primary metric (its tail is the *worst* runs).
+    api.recentExperiments(ws, app, 20).then(setRuns).catch(() => setRuns([]));
   }, [ws, app]);
 
   const items = useMemo<Item[]>(() => {
