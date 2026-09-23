@@ -112,6 +112,9 @@ class CachedSnapshotStorage(SnapshotStorage):
         # With a remote, a record's log is the per-writer merge of two copies.
         return self._local if self._remote is None else None
 
+    def is_remote(self):
+        return self._remote is not None
+
     def index_cache_path(self, app_name):
         return self._local.index_cache_path(app_name)
 

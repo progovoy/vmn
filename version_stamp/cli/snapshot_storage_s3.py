@@ -315,6 +315,9 @@ class S3SnapshotStorage(SnapshotStorage):
                 VMN_LOGGER.debug(f"S3 error reading {key}", exc_info=True)
             return None
 
+    def is_remote(self):
+        return True
+
     def cache_identity(self):
         return ("s3", self.endpoint_url, self.bucket, self.prefix)
 

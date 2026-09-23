@@ -78,6 +78,10 @@ class SnapshotStorage(ABC):
         data = self.load_file(app_name, verstr, filename)
         return None if data is None else data[offset:]
 
+    def is_remote(self):
+        """Whether reads go over the network (so concurrent reads pay off)."""
+        return False
+
     def index_cache_path(self, app_name):
         """Where a persistent experiment index for *app_name* may live, or None."""
         return None
