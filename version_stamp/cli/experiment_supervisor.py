@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 
+from version_stamp.core.best_effort import BestEffort
 from version_stamp.core.logging import VMN_LOGGER
 
 # Signals a scheduler, a terminal or an operator uses to stop a job.
@@ -74,31 +75,12 @@ class MetricsTailer:
         return records
 
 
-class BestEffort:
-    """Run a supervision step that must never raise.
-
-    The first failure of each step is a warning — the user should learn their
-    heartbeat or sync is failing — and repeats go to debug, so a flapping
-    backend cannot flood the child's output.
-    """
-
-    def __init__(self):
-        self._warned = set()
-        self._lock = threading.Lock()
-
-    def __call__(self, what, fn, *args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as exc:
-            with self._lock:
-                first = what not in self._warned
-                self._warned.add(what)
-            if first:
-                VMN_LOGGER.warning(
-                    f"Experiment run: {what} failed ({exc}); supervision continues"
-                )
-            VMN_LOGGER.debug(f"Experiment run: {what} failed", exc_info=True)
-            return None
+def supervision_guard():
+    """The guard every supervision step runs under: warn once, then debug."""
+    return BestEffort(
+        VMN_LOGGER,
+        lambda what, exc: f"Experiment run: {what} failed ({exc}); supervision continues",
+    )
 
 
 class BackgroundSync:

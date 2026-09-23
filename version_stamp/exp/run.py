@@ -36,6 +36,7 @@ from version_stamp.cli.experiment import (
 )
 from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core import logging as vmn_logging
+from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.constants import VMN_BE_TYPE_GIT
 from version_stamp.core.experiment_from_snapshot import create_from_snapshot
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
@@ -383,6 +384,13 @@ class Run:
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
+        # Recording the run's outcome warns once per step; heartbeat chores and
+        # syncs are routine enough to stay at debug.
+        self._record_guard = BestEffort(
+            _LOGGER,
+            lambda what, exc: f"vmn: could not record the {what} of run {self.id}: {exc}",
+        )
+        self._chore_guard = quiet(_LOGGER)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -405,7 +413,7 @@ class Run:
         try:
             self._heartbeat.stop()
             duration = round(time.monotonic() - self._monotonic_start, 3)
-            self._best_effort(
+            self._record_guard(
                 "final state",
                 self._publish,
                 state="finished",
@@ -413,7 +421,7 @@ class Run:
                 finished_at=now_iso(),
                 duration_sec=duration,
             )
-            self._best_effort(
+            self._record_guard(
                 "run entry",
                 self._append,
                 create_log_entry(
@@ -436,7 +444,7 @@ class Run:
         if exc is None:
             self.finish()
             return False
-        self._best_effort(
+        self._record_guard(
             "error entry",
             self._append,
             create_log_entry("error", exception=type(exc).__name__, message=str(exc)),
@@ -480,12 +488,7 @@ class Run:
         # Independent chores: a failed heartbeat write must not skip the sync
         # that would get the log off this box, nor the other way round.
         for chore in (self._publish_heartbeat, self._sampler.tick, self._maybe_sync):
-            try:
-                chore()
-            except Exception:
-                _LOGGER.debug(
-                    "Heartbeat chore %s failed", chore.__name__, exc_info=True
-                )
+            self._chore_guard(f"heartbeat chore {chore.__name__}", chore)
 
     def _publish_heartbeat(self):
         self._publish(heartbeat=now_iso())
@@ -499,19 +502,13 @@ class Run:
         self._sync()
 
     def _sync(self):
-        try:
-            self._storage.sync_log_to_remote(self.app_name, self.id, get_writer_id())
-        except Exception:
-            _LOGGER.debug("Experiment log sync failed", exc_info=True)
-
-    def _best_effort(self, what, func, *args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except Exception as exc:
-            _LOGGER.warning(
-                "vmn: could not record the %s of run %s: %s", what, self.id, exc
-            )
-            _LOGGER.debug("Recording the %s failed", what, exc_info=True)
+        self._chore_guard(
+            "experiment log sync",
+            self._storage.sync_log_to_remote,
+            self.app_name,
+            self.id,
+            get_writer_id(),
+        )
 
 
 def _finalize_open_runs():

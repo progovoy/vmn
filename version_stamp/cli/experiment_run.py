@@ -15,11 +15,11 @@ import time
 
 from version_stamp.cli.experiment_supervisor import (
     BackgroundSync,
-    BestEffort,
     MetricsTailer,
     SignalForwarder,
     shell_exit_code,
     signal_name,
+    supervision_guard,
 )
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_writer import (
@@ -39,11 +39,39 @@ _FINAL_SYNC_TIMEOUT_SEC = 60
 _FINAL_STATE_ATTEMPTS = 3
 
 
-def _parse_metric_line(line):
-    # cli.experiment imports this module; resolve its parser at call time.
-    from version_stamp.cli.experiment import _parse_metric_line as parse
+def _parse_metrics(metrics_list):
+    """Parse ['loss=0.34', 'acc=0.91'] to {'loss': 0.34, 'acc': 0.91}."""
+    result = {}
+    for item in metrics_list:
+        if "=" not in item:
+            VMN_LOGGER.error(f"Invalid --metrics format: {item}. Expected key=value")
+            continue
+        key, val = item.split("=", 1)
+        try:
+            result[key.strip()] = float(val.strip())
+        except ValueError:
+            result[key.strip()] = val.strip()
+    return result
 
-    return parse(line)
+
+def _parse_metric_line(line):
+    """Parse one metrics-file line into ``(step_or_None, values)``.
+
+    Grammar: ``[step=N] key=value [key=value ...]``. Returns None for lines
+    with no metric values.
+    """
+    tokens = line.split()
+    step = None
+    if tokens and tokens[0].startswith("step="):
+        try:
+            step = int(tokens[0][len("step=") :])
+            tokens = tokens[1:]
+        except ValueError:
+            pass  # "step" used as a metric name; leave tokens intact
+    values = _parse_metrics(tokens)
+    if not values:
+        return None
+    return step, values
 
 
 class _MetricsTailer(MetricsTailer):
@@ -168,7 +196,7 @@ class _Supervision:
         self.app_name = app_name
         self.verstr = verstr
         self.args = args
-        self.guard = BestEffort()
+        self.guard = supervision_guard()
         self.sync = BackgroundSync(self._sync_once)
         self.forwarder = SignalForwarder(_kill_grace_sec(args))
         self.writer_id = get_writer_id()

@@ -9,15 +9,13 @@ from typing import List, Optional
 
 import yaml
 
-from version_stamp.cli.experiment_prune import _parse_duration  # noqa: F401
 from version_stamp.cli.experiment_prune import experiment_prune as _experiment_prune
 
 # `vmn exp run` lives in its own module; these names stay importable from here.
 from version_stamp.cli.experiment_run import (  # noqa: F401
-    _METRICS_TAIL_INTERVAL,
-    _ingest_metric_records,
     _MetricsTailer,
-    _safe_unlink,
+    _parse_metric_line,
+    _parse_metrics,
     experiment_run,
 )
 from version_stamp.cli.snapshot import (
@@ -181,41 +179,6 @@ def _resolve_parent(storage, app_name, args):
 # ---------------------------------------------------------------------------
 # Log entry helpers
 # ---------------------------------------------------------------------------
-
-
-def _parse_metrics(metrics_list):
-    """Parse ['loss=0.34', 'acc=0.91'] to {'loss': 0.34, 'acc': 0.91}."""
-    result = {}
-    for item in metrics_list:
-        if "=" not in item:
-            VMN_LOGGER.error(f"Invalid --metrics format: {item}. Expected key=value")
-            continue
-        key, val = item.split("=", 1)
-        try:
-            result[key.strip()] = float(val.strip())
-        except ValueError:
-            result[key.strip()] = val.strip()
-    return result
-
-
-def _parse_metric_line(line):
-    """Parse one metrics-file line into ``(step_or_None, values)``.
-
-    Grammar: ``[step=N] key=value [key=value ...]``. Returns None for lines
-    with no metric values.
-    """
-    tokens = line.split()
-    step = None
-    if tokens and tokens[0].startswith("step="):
-        try:
-            step = int(tokens[0][len("step=") :])
-            tokens = tokens[1:]
-        except ValueError:
-            pass  # "step" used as a metric name; leave tokens intact
-    values = _parse_metrics(tokens)
-    if not values:
-        return None
-    return step, values
 
 
 def _parse_notes_file(path):
