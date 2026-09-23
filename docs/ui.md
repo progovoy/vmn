@@ -190,3 +190,36 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   matches and the `total` in the response counts matches, not all runs.
 - An invalid query is a **400** carrying the parser's message and character
   offset (`unknown field 'statuz' at offset 0`).
+
+### Paging, sorting and order
+
+`GET .../apps/{app}/experiments` takes `offset` and `limit` (capped at 1000
+rows per response) and answers `{"rows": [...], "total": N}` when `limit` is
+given — the dashboard always pages. `sort` is a metric name or `timestamp`
+(newest first); `order=asc|desc` overrides the direction the metric's schema
+goal implies. Runs without the metric stay last in either direction.
+
+```sh
+curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?sort=loss&order=asc&limit=50"
+```
+
+### Run detail is bounded
+
+`GET .../experiments/{verstr}` costs the same however long the run logged:
+
+| Field | Meaning |
+|---|---|
+| `log_tail` | the newest 200 log entries |
+| `log_total` | how many entries the log holds |
+| `log` | same as `log_tail`; pass `include_log=1` to get the whole log |
+| `series` | each metric thinned independently to at most `max_points` points (default 2000, max 20000) with min/max buckets, so spikes survive; first and last point always kept |
+| `series_total` | `{metric: points before thinning}` |
+| `patches` | which patch kinds the snapshot holds, read from its metadata flags |
+
+Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
+which answers `{"entries": [...], "total": N}` oldest first.
+
+Artifacts download from `GET .../experiments/{verstr}/artifacts/{name}` for
+local and S3 workspaces alike; with a token set the request needs the
+`Authorization` header like every other API call.
