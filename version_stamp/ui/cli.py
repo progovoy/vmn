@@ -102,6 +102,8 @@ def handle_ui(args):
         token=token,
         read_only=args.read_only,
         use_index=not args.no_index,
+        bind_host=args.host,
+        allowed_hosts=getattr(args, "allowed_host", None),
     )
 
     url = f"http://{args.host}:{args.port}"

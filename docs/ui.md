@@ -70,6 +70,30 @@ vmn ui --host 0.0.0.0 --port 8265 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
   terminate TLS or manage accounts.
 - **`--read-only`**: disables all mutation endpoints (stamp/restore/goto/…),
   returning 403. Good for a shared read-only dashboard.
+- **Host allowlist**: without a token, `/api` answers only requests whose `Host`
+  is `localhost`, `127.0.0.1`, `[::1]`, the `--host` you bound (unless it is a
+  wildcard like `0.0.0.0`) or an `--allowed-host` (repeatable; `*` allows any).
+  Anything else gets 403. This stops a DNS-rebinding page from reaching a
+  token-less server on your machine. With `--token` set, Host is not checked.
+- **Cross-site writes**: a POST/PUT/PATCH/DELETE whose `Origin` (or `Referer`,
+  when there is no Origin) names a different site than the request's `Host` is
+  refused with 403, unless that site is an `--allowed-host`. Mutating requests
+  must also send `Content-Type: application/json` (415 otherwise), so a page on
+  another site cannot trigger `vmn release` with a plain form or `no-cors` fetch.
+  Clients that send neither header (curl, scripts) are unaffected.
+- **Paths**: app names and versions in URLs are validated (400 on `..` segments
+  and the like), and the SPA fallback only serves files inside the bundled
+  `static/` directory.
+- **Jobs**: each action has stdin closed and is failed after 30 minutes, which
+  frees its workspace. The server remembers the last 200 jobs and the last 1 MB
+  of each job's log.
+
+Behind a proxy that rewrites `Host`, or when users reach the server by a name
+other than `--host`, list that name:
+
+```sh
+vmn ui --host 0.0.0.0 --allowed-host vmn.example.com --token "$VMN_UI_TOKEN"
+```
 
 Example nginx:
 
