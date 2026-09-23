@@ -19,6 +19,7 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from version_stamp.core.utils import valid_path_component
 from version_stamp.core.version_math import tag_name_to_app_name
 
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
@@ -129,16 +130,8 @@ def safe_app_name(app_tag):
 
 
 def safe_segment(value):
-    """A verstr or artifact name that stays one path component."""
-    if value is None:
-        return True
-    return not (
-        value in ("", ".")
-        or ".." in value
-        or "/" in value
-        or "\\" in value
-        or "\0" in value
-    )
+    """A verstr or artifact name that stays one path component (None: absent)."""
+    return value is None or valid_path_component(value)
 
 
 def within(base, candidate):

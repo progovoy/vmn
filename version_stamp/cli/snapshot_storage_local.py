@@ -13,6 +13,7 @@ from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
     METADATA_FILE,
     atomic_write,
+    checked_app_path,
     flatten_logs,
     group_log_names,
     log_object_name,
@@ -25,6 +26,7 @@ from version_stamp.cli.snapshot_storage_files import (
 )
 from version_stamp.core import utils as core_utils
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.utils import parse_record_metadata
 
 
 class LocalSnapshotStorage(SnapshotStorage):
@@ -33,9 +35,8 @@ class LocalSnapshotStorage(SnapshotStorage):
         self._subdir = subdir
 
     def _snapshot_base_dir(self, app_name):
-        return os.path.join(
-            self.vmn_root_path, ".vmn", app_name.replace("/", os.sep), self._subdir
-        )
+        app_dir = checked_app_path(app_name).replace("/", os.sep)
+        return os.path.join(self.vmn_root_path, ".vmn", app_dir, self._subdir)
 
     def _snapshot_dir(self, app_name, verstr):
         return os.path.join(self._snapshot_base_dir(app_name), safe_verstr(verstr))
@@ -56,7 +57,10 @@ class LocalSnapshotStorage(SnapshotStorage):
         )
 
     def exists(self, app_name, verstr):
-        return self._has_record(app_name, verstr)
+        try:
+            return self._has_record(app_name, verstr)
+        except ValueError:
+            return False  # not a record name, so certainly no record
 
     def save(self, app_name, verstr, metadata, patches):
         self._ensure_base_dir(app_name)
@@ -146,9 +150,9 @@ class LocalSnapshotStorage(SnapshotStorage):
         results = []
         for entry in self._record_dirs(app_name):
             meta_path = os.path.join(entry.path, METADATA_FILE)
-            meta = self._load_metadata(meta_path)
-            if not isinstance(meta, dict) or "verstr" not in meta:
-                # Legacy create_snapshots verinfo files share this tree.
+            with open(meta_path, "rb") as f:
+                meta = parse_record_metadata(f.read())
+            if meta is None:
                 VMN_LOGGER.debug(f"Skipping non-snapshot metadata: {meta_path}")
                 continue
             results.append(meta)

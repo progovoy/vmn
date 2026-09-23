@@ -22,6 +22,7 @@ from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
     METADATA_FILE,
     PATCH_FILES,
+    checked_app_path,
     flatten_logs,
     group_log_names,
     is_log_file,
@@ -74,7 +75,7 @@ class S3SnapshotStorage(SnapshotStorage):
     # -- key helpers --------------------------------------------------------
 
     def _key_prefix(self, app_name, verstr=None, app_key=None):
-        base = f"{self.prefix}/{app_key or app_keys(app_name)[0]}"
+        base = f"{self.prefix}/{app_key or app_keys(checked_app_path(app_name))[0]}"
         return f"{base}/{safe_verstr(verstr)}" if verstr else base
 
     def _record_prefix(self, app_name, verstr):
@@ -192,7 +193,11 @@ class S3SnapshotStorage(SnapshotStorage):
         return True
 
     def exists(self, app_name, verstr):
-        return self._head(f"{self._record_prefix(app_name, verstr)}/{METADATA_FILE}")
+        try:
+            prefix = self._record_prefix(app_name, verstr)
+        except ValueError:
+            return False  # not a record name, so certainly no record
+        return self._head(f"{prefix}/{METADATA_FILE}")
 
     def _get_patches(self, prefix):
         patches = {}
@@ -231,14 +236,9 @@ class S3SnapshotStorage(SnapshotStorage):
         ]
 
     def _load_listed_metadata(self, meta_key):
-        raw = self._get(meta_key)
-        try:
-            meta = core_utils.yaml_safe_load(raw) if raw else None
-        except yaml.YAMLError:
-            meta = None
-        if not isinstance(meta, dict) or "verstr" not in meta:
+        meta = core_utils.parse_record_metadata(self._get(meta_key))
+        if meta is None:
             VMN_LOGGER.debug(f"Skipping non-snapshot metadata: {meta_key}")
-            return None
         return meta
 
     def list_snapshots(self, app_name):

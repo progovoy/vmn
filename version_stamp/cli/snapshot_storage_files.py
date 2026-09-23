@@ -14,6 +14,7 @@ from version_stamp.core.experiment_logfiles import (  # noqa: F401  (re-exported
     log_writer_and_seq,
     parse_jsonl,
 )
+from version_stamp.core.utils import valid_app_path, valid_path_component
 
 METADATA_FILE = "metadata.yml"
 # The derived experiment-index cache, beside the records it summarizes.
@@ -29,7 +30,17 @@ VOLATILE_FILES = ("run_state.yml",)
 
 
 def safe_verstr(verstr):
+    """*verstr* as a record directory/key name; ValueError if it would walk."""
+    if not valid_path_component(verstr):
+        raise ValueError(f"Invalid record name: {verstr!r}")
     return verstr.replace("+", "_plus_")
+
+
+def checked_app_path(app_name):
+    """*app_name* unchanged; ValueError if it is not a relative app path."""
+    if not valid_app_path(app_name):
+        raise ValueError(f"Invalid app name: {app_name!r}")
+    return app_name
 
 
 def unsafe_verstr(name):
@@ -45,9 +56,7 @@ def is_volatile_file(name):
 
 
 def valid_artifact_name(name):
-    return bool(name) and name not in (".", "..") and not any(
-        sep in name for sep in ("/", "\\", os.sep)
-    )
+    return valid_path_component(name)
 
 
 def flatten_logs(logs_by_writer):

@@ -14,6 +14,8 @@ read per file; a change there refolds through its ``load_logs_by_writer``.
 from version_stamp.core.experiment_fold import apply_entries, new_fold
 from version_stamp.core.experiment_logfiles import (
     LEGACY_LOG_FILE as LEGACY_LOG,
+)
+from version_stamp.core.experiment_logfiles import (
     group_log_names,
     is_log_file,
     log_writer_and_seq,

@@ -25,7 +25,7 @@ from version_stamp.core.experiment_index_logs import log_signatures, update_logs
 from version_stamp.core.experiment_index_store import IndexStore
 from version_stamp.core.experiment_log import experiment_row, load_log
 from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
-from version_stamp.core.utils import yaml_safe_load
+from version_stamp.core.utils import parse_record_metadata
 
 METADATA_FILE = "metadata.yml"
 
@@ -120,13 +120,9 @@ class ExperimentIndex:
         return dirty
 
     def _load_meta(self, key):
-        raw = self._storage.load_file(self.app_name, key, METADATA_FILE)
-        try:
-            meta = yaml_safe_load(raw) if raw else None
-        except Exception:
-            meta = None
         # The same rule list_snapshots applies: legacy verinfo files share the tree.
-        return meta if isinstance(meta, dict) and "verstr" in meta else None
+        raw = self._storage.load_file(self.app_name, key, METADATA_FILE)
+        return parse_record_metadata(raw)
 
     def _sorted_keys(self):
         keys = [k for k, r in self._records.items() if r["meta"] is not None]
