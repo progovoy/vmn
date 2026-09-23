@@ -30,6 +30,7 @@ from version_stamp.core.experiment_tree import (
     children_by_parent,
     subtree_verstrs,
 )
+from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.versions import version_counts
 
@@ -310,27 +311,24 @@ def get_experiment_from_storage(storage, app_name, verstr_ref):
 
 
 def list_apps_from_storage(storage):
-    """List apps from a storage backend (S3). Limited: no version counts or conf."""
+    """List apps from a storage backend (S3). Limited: no version counts or conf.
+
+    App keys are the tag form (``root/svc`` → ``root-svc``, bijective because
+    ``-`` is illegal in app names), so ``my_app`` is never shown as ``my/app``.
+    """
     apps = set()
     if hasattr(storage, "_s3") and hasattr(storage, "prefix"):
         try:
-            paginator = storage._s3.get_paginator("list_objects_v2")
-            for page in paginator.paginate(
-                Bucket=storage.bucket, Prefix=storage.prefix + "/", Delimiter="/"
-            ):
-                for cp in page.get("CommonPrefixes", []):
-                    app_name = (
-                        cp["Prefix"][len(storage.prefix) + 1 :]
-                        .rstrip("/")
-                        .replace("_", "/")
-                    )
-                    apps.add(app_name)
+            for cp in storage._common_prefixes(storage.prefix + "/"):
+                app_key = cp[len(storage.prefix) + 1 :].rstrip("/")
+                apps.add(tag_name_to_app_name(app_key))
         except Exception:
             pass
     rows = []
     for name in sorted(apps):
         try:
-            exp_count = len(storage.list_snapshots(name))
+            # Names only: counting must not fetch every run's metadata.
+            exp_count = len(storage.list_verstrs(name))
         except Exception:
             exp_count = 0
         rows.append({"name": name, "experiments": exp_count, "versions": 0})

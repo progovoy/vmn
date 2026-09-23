@@ -149,32 +149,66 @@ def attach_parent(metadata, parent):
         metadata["parent"] = parent
 
 
-def allocate_run_verstr(storage, app_name, code_verstr):
-    """Return the verstr for a new experiment run.
+_MAX_RUN_CANDIDATES = 100000
 
-    When VMN_WRITER_ID is set (K8s mode), uses pod-unique suffix for zero
-    contention.  Otherwise, uses the existing .rN scan-and-increment.
+
+def _taken_verstrs(storage, app_name):
+    """Names already used — names only, never a parse of every metadata.yml."""
+    if hasattr(storage, "list_verstrs"):
+        return set(storage.list_verstrs(app_name))
+    return {m.get("verstr", "") for m in storage.list_snapshots(app_name)}
+
+
+def _run_verstr_candidates(code_verstr, taken):
+    """Free-looking names for a new run, in allocation order.
+
+    With VMN_WRITER_ID (K8s mode) the name carries the pod-unique suffix;
+    otherwise it is the ``.rN`` after the highest existing run of this code.
     """
     writer_id = os.environ.get(WRITER_ID_ENV)
     if writer_id:
-        candidate = code_verstr + "." + writer_id
-        if not storage.exists(app_name, candidate):
-            return candidate
-        for i in range(2, 100000):
-            c = candidate + "." + str(i)
-            if not storage.exists(app_name, c):
-                return c
-        raise RuntimeError("Could not allocate experiment verstr")
-    # Single-user mode: existing scan-and-increment
-    runs = []
-    for meta in storage.list_snapshots(app_name):
-        v = meta.get("verstr", "")
-        if v == code_verstr:
-            runs.append(1)
-        elif v.startswith(code_verstr + ".r"):
+        base = code_verstr + "." + writer_id
+        names = (
+            base if i == 1 else f"{base}.{i}" for i in range(1, _MAX_RUN_CANDIDATES)
+        )
+    else:
+        runs = [1] if code_verstr in taken else []
+        for v in taken:
             suffix = v[len(code_verstr) + 2 :]
-            if suffix.isdigit():
+            if v.startswith(code_verstr + ".r") and suffix.isdigit():
                 runs.append(int(suffix))
-    if not runs:
-        return code_verstr
-    return code_verstr + ".r" + str(max(runs) + 1)
+        first = max(runs) + 1 if runs else 1
+        names = (
+            code_verstr if n == 1 else f"{code_verstr}.r{n}"
+            for n in range(first, first + _MAX_RUN_CANDIDATES)
+        )
+    return (name for name in names if name not in taken)
+
+
+def _claim(storage, app_name, verstr, metadata, patches):
+    if hasattr(storage, "create_exclusive"):
+        return storage.create_exclusive(app_name, verstr, metadata, patches)
+    if storage.exists(app_name, verstr):
+        return False
+    storage.save(app_name, verstr, metadata, patches)
+    return True
+
+
+def allocate_run_verstr(storage, app_name, code_verstr, make_record=None):
+    """Return the verstr for a new experiment run.
+
+    With *make_record* — ``verstr -> (metadata, patches)`` — the name is also
+    claimed: the record is created atomically under it, and a name another
+    host claimed first (a shared bucket or directory) is skipped. Without it
+    the first free-looking name is returned unclaimed.
+    """
+    taken = _taken_verstrs(storage, app_name)
+    for candidate in _run_verstr_candidates(code_verstr, taken):
+        if make_record is None:
+            if not storage.exists(app_name, candidate):
+                return candidate
+            continue
+        metadata, patches = make_record(candidate)
+        if _claim(storage, app_name, candidate, metadata, patches):
+            return candidate
+    raise RuntimeError("Could not allocate experiment verstr")

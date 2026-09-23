@@ -12,8 +12,7 @@ node, and nothing was left behind to say so.
 """
 import datetime
 
-import yaml
-
+from version_stamp.core import utils as core_utils
 from version_stamp.core.logging import VMN_LOGGER
 
 CREATED = "created"  # experiment exists, no run was ever started
@@ -39,7 +38,7 @@ def load_run_state(storage, app_name, verstr):
     """
     try:
         raw = storage.load_file(app_name, verstr, RUN_STATE_FILE)
-        state = yaml.safe_load(raw) if raw else None
+        state = core_utils.yaml_safe_load(raw) if raw else None
     except Exception:
         VMN_LOGGER.debug("Failed to load run state", exc_info=True)
         return None
