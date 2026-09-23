@@ -28,8 +28,8 @@ def main():
         return
 
     # Safe to call at import time: naming a framework that is not installed is a
-    # silent no-op.
-    autolog(frameworks=["sklearn"])
+    # silent no-op. Saving the model is opt-in (log_models=True).
+    autolog(frameworks=["sklearn"], log_models=True)
 
     with start_run(APP_NAME, note="autologged logistic regression") as run:
         LogisticRegression(C=2.0, max_iter=200).fit(X, Y)

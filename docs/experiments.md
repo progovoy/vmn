@@ -246,9 +246,12 @@ S3 sync all work on it unchanged, and nesting still produces outer/inner jobs.
 Full guide, including the read-side API: [docs/sdk.md](sdk.md).
 
 Two things only the SDK gives you: [autologging](sdk.md#autologging) — one
-`autolog()` call records scikit-learn hyperparameters, scores and fitted models
-with no logging in your training code — and the [query
+`autolog()` call records scikit-learn, xgboost, Keras and Lightning
+hyperparameters and scores (and, with `log_models=True`, the fitted models) with
+no logging in your training code — and the [query
 language](sdk.md#the-query-language) for filtering runs on metrics and params.
+`--system-metrics` records the `sys_*` metrics [listed in the SDK
+guide](sdk.md#starting-a-run) for the child's process tree.
 
 ---
 

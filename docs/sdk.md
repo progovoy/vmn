@@ -92,6 +92,22 @@ start_run(
 | `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn[sysmetrics]"` |
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, from the heartbeat thread — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 
+The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn exp
+run`, which measures the child's process tree instead):
+
+| Metric | Meaning |
+|---|---|
+| `sys_cpu_percent` | CPU of the process tree, summed (so >100 on several cores). Samples are at least 0.1 s apart — psutil reads a near-zero interval as 0% — and a worker born since the last sample is counted from its own CPU time |
+| `sys_rss_mb` | memory of the tree: the root's RSS plus each child's *unique* memory (USS), so forked workers sharing the parent's pages are not counted N times |
+| `sys_gpu_mem_mb` | GPU memory held by the tree's own processes (NVML per-process accounting); omitted when NVML lists none of them — e.g. inside a container, where NVML reports host pids |
+| `sys_gpu_node_mem_mb` | used memory on the visible GPUs, all processes included |
+| `sys_gpu_node_util_percent` | mean utilization over the visible GPUs, all processes included |
+
+"Visible" follows `CUDA_VISIBLE_DEVICES` (indices or UUIDs), not every device
+on the node. Each NVML query is guarded on its own, so one a device does not
+support (utilization under MIG, say) drops that value only. Several runs open
+in one process all sample that same process.
+
 Creating the run snapshots the working tree (dirty or clean) and assigns the
 verstr, available as `run.id`. As with the CLI, the first run in a fresh repo
 cold-starts vmn tracking and stamps a `0.0.0` baseline. Several workers may
@@ -163,10 +179,22 @@ fitted model — with no logging calls in your training code:
 ```python
 from version_stamp.exp import autolog, autolog_disable, start_run
 
-autolog()                                          # every supported framework that is importable
-autolog(frameworks=["sklearn"], log_models=True)   # or name them, and pick whether to pickle models
+autolog()                                          # every supported framework
+autolog(frameworks=["sklearn"], log_models=True)   # or name them, and opt in to saving models
+autolog(training_score=False)                      # calling again reconfigures
 autolog_disable()                                  # restore the originals
 ```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `frameworks` | all supported | which frameworks to patch |
+| `log_models` | `False` | also save each trained model as an artifact — opt-in, because it writes, hashes and copies a file per fit on the training thread |
+| `training_score` | `"auto"` | record `<framework>_score`, the estimator's `score()` on its *training* data: `True`, `False`, or `"auto"` = only for inputs of at most 10,000 rows (the re-predict can cost as much as the fit) |
+
+`autolog()` never imports a framework itself. One the script has already
+imported is patched on the spot; any other is patched the moment the script
+first imports it — so a scikit-learn-only script does not pay for loading
+TensorFlow or torch just because they are installed.
 
 Supported framework names, each covered by integration tests that train a real
 model from the real library:
@@ -216,7 +244,7 @@ is not something `fit()` gets to do behind your back. So the usage is always
 `autolog()` first, then a run:
 
 ```python
-autolog()
+autolog(log_models=True)
 
 with start_run("my_app", note="rbf baseline") as run:
     SVC(kernel="rbf", C=2.0).fit(X, y)
@@ -226,19 +254,21 @@ with start_run("my_app", note="rbf baseline") as run:
 
 | Recorded | As |
 |---|---|
-| the estimator class name | `params.sklearn_estimator` |
-| every key of `estimator.get_params()` | `params.sklearn_<name>` — scalars verbatim, anything else as its `repr()` |
-| `estimator.score(X, y)` after the fit, when it returns a number | `metrics.sklearn_score` |
-| the pickled fitted estimator, when `log_models=True` (the default) | an artifact named `sklearn_<Class>.pkl` |
+| the estimator class name | `params.sklearn_estimator` (a meta-estimator's own `estimator` param is kept as `params.sklearn_param_estimator`) |
+| every key of `estimator.get_params()` | `params.sklearn_<name>` — scalars verbatim (numpy scalars as the Python number they hold), anything else as its `repr()` with memory addresses stripped |
+| `estimator.score(X, y)` on the **training** data, per `training_score` | `metrics.sklearn_score` — a training-set score flatters overfit models; prefer the CV score below |
+| a search estimator's `best_score_` (`GridSearchCV`, `RandomizedSearchCV`, ...) | `metrics.sklearn_best_cv_score` |
+| a search estimator's `best_params_` | `params.sklearn_best_<name>` |
+| the pickled fitted estimator, when `log_models=True` | an artifact named `sklearn_<Class>.pkl`; the n-th model of the same class in one run is `sklearn_<Class>_<n>.pkl` |
 
 What each framework can actually give up differs, so what lands differs too:
 
 | | Keras | Lightning |
 |---|---|---|
 | params | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` — read back off the compiled model | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (so call `save_hyperparameters()`) |
-| metrics | one point per epoch from the returned `History`, `metrics.keras_loss` and one per compiled metric | the final `trainer.callback_metrics`, e.g. `metrics.lightning_train_loss` |
-| step series | yes — `History` carries every epoch, so no callback of vmn's is attached to your model | no; log inside `training_step` and Lightning's own loggers keep the curve |
-| `log_models=True` | `keras_<Class>.keras`, the native archive | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`, restorable with `load_from_checkpoint` |
+| metrics | one point per epoch, `metrics.keras_loss` and one per compiled metric | the final `trainer.callback_metrics`, e.g. `metrics.lightning_train_loss` |
+| step series | yes — a callback vmn appends to your `callbacks` records each epoch as it ends, with the epoch's real time and its true number (`fit(initial_epoch=3)` continues at step 3), so a run that crashes at epoch 4 keeps epochs 0–3 | no; log inside `training_step` and Lightning's own loggers keep the curve |
+| `log_models=True` | `keras_<Class>.keras`, the native archive | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`, restorable with `load_from_checkpoint`. **Skipped under multi-process training** (`trainer.world_size > 1`) with a warning: `save_checkpoint` ends in a barrier every rank must reach, and only the rank with an open run would call it |
 
 Neither is pickled: a Keras model and a Lightning module full of tensors both
 have a first-class save format, and pickle is not it.
@@ -261,12 +291,21 @@ Three guarantees worth relying on:
   outermost one records. So fitting a pipeline gives you
   `params.sklearn_estimator = "Pipeline"` and one model artifact, not the last
   sub-estimator's name and one pickle per step.
+- **Each fit records into its own run.** A `fit()` records into the run opened
+  by the same thread; a thread with no run of its own uses the process's only
+  open run. So a thread-pool sweep (Optuna `n_jobs>1`) records each trial into
+  its own run. A framework's worker threads (joblib's threading backend,
+  `IsolationForest(n_jobs=4)`) run while the outer fit is recording and never
+  record themselves, and forked worker processes never write into the parent's
+  run. One consequence: while a fit is recording, a fit in *another* thread that
+  opened no run of its own is not recorded — open a run in that thread.
 - **Autologging never breaks training.** Every recording step is guarded; a
   failure inside it becomes a debug log line. Your `fit()` call, its return value
   and any exception it raises pass through untouched.
 - **Patching is idempotent and reversible.** Each wrapper remembers the function
-  it replaced, so a second `autolog()` recognizes its own work and leaves it
-  alone, and `autolog_disable()` puts the exact originals back.
+  it replaced, so a second `autolog()` recognizes its own work instead of
+  wrapping twice (it only applies the new options), and `autolog_disable()` puts
+  the exact originals back and drops any pending import hooks.
 
 Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`, in
 `version_stamp/exp/autolog.py`. An adapter answers the five questions the shared
@@ -280,7 +319,9 @@ answer:
 | `params(call)` | its hyperparameters, unprefixed — `subject.get_params()` by default |
 | `metrics(call)` | its final metrics — `subject.score(X, y)` by default |
 | `series(call)` | `{name: [per-step values]}`, logged one `log_metrics` per step — empty by default |
-| `save(call, subject, base)` | write the model to `base + ext` and return the path — a pickle by default |
+| `save(call, subject, base)` | write the model to `base + ext` and return the path (or `None` to skip) — a pickle by default |
+| `instrument(call, run)` | the call to make instead, e.g. with a callback added — the call unchanged by default |
+| `fitted_params(call)` | params that only exist after training — a search's `best_params_` as `best_<name>` by default |
 
 `call` is the intercepted training call: `(instance, args, kwargs, result)`, with
 `result` still `None` while params are captured before training starts. The
