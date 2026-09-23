@@ -16,6 +16,14 @@ or ``exp``.
 import math
 import os
 
+from version_stamp.core.experiment_fold import (  # noqa: F401  (re-exported)
+    _foldable_param,
+    entry_params,
+    fold_last_metric_at,
+    fold_log,
+    fold_row,
+    fold_values,
+)
 from version_stamp.core.logging import VMN_LOGGER
 
 # ---------------------------------------------------------------------------
@@ -23,22 +31,9 @@ from version_stamp.core.logging import VMN_LOGGER
 # ---------------------------------------------------------------------------
 
 
-def entry_params(entry):
-    """Params carried by a log entry.
-
-    `create` records params up front, `run.log_params()` mid-run.
-    """
-    if entry.get("type") in ("create", "params"):
-        return entry.get("params") or {}
-    return {}
-
-
 def effective_params(log):
     """Effective params: the `create` entry's, folded with later `params` ones."""
-    params = {}
-    for entry in log:
-        params.update(entry_params(entry))
-    return params
+    return fold_values(fold_log(log), "params")
 
 
 # ---------------------------------------------------------------------------
@@ -46,31 +41,9 @@ def effective_params(log):
 # ---------------------------------------------------------------------------
 
 
-def _foldable_param(value):
-    """A param as a metric value: a finite number (bools fold as 1.0/0.0) — else None.
-
-    ``missing=nan`` (xgboost's default) is a setting, not a measurement;
-    folding it in made every such run carry a NaN "metric".
-    """
-    try:
-        number = float(value)
-    except (ValueError, TypeError):
-        return None
-    return number if math.isfinite(number) else None
-
-
 def latest_metrics(log):
-    """Scan log entries and return the latest value for each metric."""
-    metrics = {}
-    for entry in log:
-        if entry.get("type") == "metrics" and "values" in entry:
-            metrics.update(entry["values"])
-        else:
-            for k, v in entry_params(entry).items():
-                number = _foldable_param(v)
-                if number is not None:
-                    metrics[k] = number
-    return metrics
+    """The latest value of each metric, numeric params folded in (see :func:`fold_log`)."""
+    return fold_values(fold_log(log), "metrics")
 
 
 def metric_series(log):
@@ -92,10 +65,7 @@ def metric_series(log):
 
 def last_metric_at(log):
     """Timestamp of the newest ``metrics`` entry (the log is time-ordered)."""
-    for entry in reversed(log):
-        if entry.get("type") == "metrics":
-            return entry.get("timestamp")
-    return None
+    return fold_last_metric_at(fold_log(log))
 
 
 def metric_sort_descending(schema, key):
@@ -122,26 +92,10 @@ def metric_sort_descending(schema, key):
 def experiment_row(idx, meta, log):
     """One leaderboard row: an experiment's metadata, params and folded metrics.
 
-    *idx* is the 1-based storage index — what ``vmn exp show <app> -v @N``
-    resolves — and is assigned before any sort so it sticks to the row.
-
-    ``params`` carries every param verbatim; ``metrics`` stays numeric-only (with
-    the numeric params folded in), because sorting and charting depend on that.
+    The fold rules live in :mod:`version_stamp.core.experiment_fold`, which the
+    experiment index folds incrementally with — so both agree by construction.
     """
-    return {
-        "idx": idx,
-        "verstr": meta["verstr"],
-        "code_verstr": meta.get("code_verstr", meta["verstr"]),
-        "timestamp": meta.get("timestamp"),
-        "note": meta.get("note"),
-        "branch": meta.get("branch"),
-        "base_version": meta.get("base_version"),
-        "user_meta": meta.get("user_meta"),
-        "params": effective_params(log),
-        "metrics": latest_metrics(log),
-        "parent": meta.get("parent"),
-        "last_metric_at": last_metric_at(log),
-    }
+    return fold_row(idx, meta, fold_log(log))
 
 
 def filter_by_status(rows, status=None):

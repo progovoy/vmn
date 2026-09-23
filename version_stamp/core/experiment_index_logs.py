@@ -11,37 +11,22 @@ file that grew *before* a later segment — refolds the record from scratch.
 A backend whose reads merge several sources (``direct`` is None) cannot be
 read per file; a change there refolds through its ``load_logs_by_writer``.
 """
-import json
-
 from version_stamp.core.experiment_fold import apply_entries, new_fold
+from version_stamp.core.experiment_logfiles import (
+    LEGACY_LOG_FILE as LEGACY_LOG,
+    group_log_names,
+    is_log_file,
+    log_writer_and_seq,
+    parse_json_line,
+)
 from version_stamp.core.utils import yaml_safe_load
-
-LEGACY_LOG = "log.yml"
-
-
-def log_file_parts(name):
-    """``("w", seq)`` for a JSONL log file name, ``("", -1)`` for ``log.yml``,
-    None for anything else."""
-    if name == LEGACY_LOG:
-        return "", -1
-    if not (name.startswith("log.") and name.endswith(".jsonl")):
-        return None
-    writer, _, seq = name[len("log.") : -len(".jsonl")].partition("@")
-    return writer, int(seq) if seq.isdigit() else 0
 
 
 def log_signatures(names):
     """The log files among ``{name: (size, mtime)}``, signatures as lists."""
-    return {n: list(sig) for n, sig in names.items() if log_file_parts(n) is not None}
-
-
-def _by_writer(names):
-    groups = {}
-    for name in names:
-        writer, seq = log_file_parts(name)
-        if seq >= 0:
-            groups.setdefault(writer, []).append((seq, name))
-    return {w: [n for _, n in sorted(items)] for w, items in groups.items()}
+    return {
+        n: list(sig) for n, sig in names.items() if n == LEGACY_LOG or is_log_file(n)
+    }
 
 
 def _parse_complete(data):
@@ -50,28 +35,17 @@ def _parse_complete(data):
     end = data.rfind(b"\n") + 1
     entries = []
     for line in data[:end].decode("utf-8", errors="replace").splitlines():
-        entry = _parse_line(line)
+        entry = parse_json_line(line)
         if entry is not None:
             entries.append(entry)
     tail = data[end:]
     if not tail.strip():
         return entries, len(data)
-    entry = _parse_line(tail.decode("utf-8", errors="replace"))
+    entry = parse_json_line(tail.decode("utf-8", errors="replace"))
     if entry is None:
         return entries, end
     entries.append(entry)
     return entries, len(data)
-
-
-def _parse_line(line):
-    line = line.strip()
-    if not line:
-        return None
-    try:
-        entry = json.loads(line)
-    except ValueError:
-        return None
-    return entry if isinstance(entry, dict) else None
 
 
 def _appends_only(old, new):
@@ -80,7 +54,7 @@ def _appends_only(old, new):
         return False
     if any(name not in new for name in old):
         return False
-    for names in _by_writer(new).values():
+    for names in group_log_names(new).values():
         grown = False
         for name in names:
             before = old.get(name)
@@ -95,7 +69,7 @@ def _appends_only(old, new):
 
 def _read_tail(fold, counts, direct, where, name, state):
     """Fold the bytes of *name* past ``state["consumed"]``; False if it vanished."""
-    writer, _ = log_file_parts(name)
+    writer, _ = log_writer_and_seq(name)
     data = direct.read_file_from(*where, name, state["consumed"])
     if data is None:
         return False
@@ -114,7 +88,7 @@ def _refold_direct(record, storage, direct, where, sigs):
         if isinstance(legacy, list):
             apply_entries(fold, "", 0, legacy)
         logs[LEGACY_LOG] = {"sig": sigs[LEGACY_LOG], "consumed": 0}
-    for names in _by_writer(sigs).values():
+    for names in group_log_names(sigs).values():
         for name in names:
             logs[name] = {"sig": sigs[name], "consumed": 0}
             if not _read_tail(fold, counts, direct, where, name, logs[name]):
@@ -148,7 +122,7 @@ def update_logs(record, storage, direct, app_name, key, sigs):
     if _appends_only(old, sigs):
         fold, counts = record["fold"], record["counts"]
         ok = True
-        for names in _by_writer(sigs).values():
+        for names in group_log_names(sigs).values():
             for name in names:
                 state = old.get(name)
                 if state is not None and state["sig"] == sigs[name]:

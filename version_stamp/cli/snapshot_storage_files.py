@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """File-level helpers shared by the snapshot storage backends: record file
-names, log object naming, JSONL parsing, atomic writes and patch files."""
-import json
+names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles)."""
 import os
 import shutil
 import tempfile
 
+# Log file naming and parsing live in core, shared with the experiment index.
+from version_stamp.core.experiment_logfiles import (  # noqa: F401  (re-exported)
+    LEGACY_LOG_FILE,
+    group_log_names,
+    is_log_file,
+    log_object_name,
+    log_writer_and_seq,
+    parse_jsonl,
+)
+
 METADATA_FILE = "metadata.yml"
 # The derived experiment-index cache, beside the records it summarizes.
 INDEX_CACHE_FILE = ".index.sqlite"
-LEGACY_LOG_FILE = "log.yml"
 # (patches key, file name, binary?)
 PATCH_FILES = (
     ("working_tree", "working_tree.patch", False),
@@ -32,54 +40,14 @@ def safe_dep_name(dep_path):
     return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
-def is_log_file(name):
-    return name.startswith("log.") and name.endswith(".jsonl")
-
-
 def is_volatile_file(name):
     return name in VOLATILE_FILES or is_log_file(name)
-
-
-def log_writer_and_seq(name):
-    """``log.w.jsonl`` → ``("w", 0)``; segment ``log.w@000003.jsonl`` → ``("w", 3)``."""
-    stem = name[len("log.") : -len(".jsonl")]
-    writer, _, seq = stem.partition("@")
-    return writer, int(seq) if seq.isdigit() else 0
-
-
-def log_object_name(writer, seq=0):
-    return f"log.{writer}.jsonl" if not seq else f"log.{writer}@{seq:06d}.jsonl"
-
-
-def group_log_names(names):
-    """``{writer: [names in seq order]}`` for the log files among *names*."""
-    groups = {}
-    for name in names:
-        if is_log_file(name):
-            writer, seq = log_writer_and_seq(name)
-            groups.setdefault(writer, []).append((seq, name))
-    return {w: [n for _, n in sorted(items)] for w, items in groups.items()}
 
 
 def valid_artifact_name(name):
     return bool(name) and name not in (".", "..") and not any(
         sep in name for sep in ("/", "\\", os.sep)
     )
-
-
-def parse_jsonl(text, writer):
-    entries = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        entry["_writer"] = writer
-        entries.append(entry)
-    return entries
 
 
 def flatten_logs(logs_by_writer):
