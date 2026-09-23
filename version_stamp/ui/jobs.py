@@ -12,12 +12,39 @@ import subprocess
 import sys
 import threading
 import uuid
+from collections import OrderedDict
 
 # Substrings a successful job's log can carry to mean "ran fine, but there
 # was nothing to do" - distinct from actually producing the thing the action
 # promised (e.g. `vmn snapshot create` on a clean tree exits 0 and does not
 # create a snapshot).
 _NOOP_LOG_MARKERS = ("No local changes to snapshot (working tree is clean)",)
+
+# A job that waits on a credential prompt or a lock must not pin its workspace
+# forever: it fails after this long and frees the slot.
+DEFAULT_JOB_TIMEOUT_SEC = 30 * 60
+# The job table lives in memory for the server's lifetime; keep it bounded.
+MAX_JOBS = 200
+MAX_JOB_LOG_BYTES = 1_000_000
+_TRUNCATED_MARKER = "[... earlier output truncated ...]\n"
+
+
+def _tail(text):
+    """The last MAX_JOB_LOG_BYTES of *text* - the end is where errors are."""
+    raw = text.encode("utf-8", errors="replace")
+    if len(raw) <= MAX_JOB_LOG_BYTES:
+        return text
+    return _TRUNCATED_MARKER + raw[-MAX_JOB_LOG_BYTES:].decode(
+        "utf-8", errors="ignore"
+    )
+
+
+def _as_text(output):
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output
 
 
 def _metric_args(metrics):
@@ -153,17 +180,33 @@ class Job:
 
 
 class JobRunner:
-    """In-memory job table with one concurrent mutation per workspace."""
+    """In-memory job table with one concurrent mutation per workspace.
 
-    def __init__(self):
-        self._jobs = {}
+    Bounded on every axis a long-lived server cares about: a job's runtime
+    (``timeout_sec``), the number of jobs remembered (``max_jobs``, oldest
+    finished first) and the size of each job's captured log.
+    """
+
+    def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS):
+        self._jobs = OrderedDict()
         self._lock = threading.Lock()
         self._active_workspaces = set()
+        self._timeout_sec = timeout_sec
+        self._max_jobs = max_jobs
 
     def get(self, job_id):
         with self._lock:
             job = self._jobs.get(job_id)
             return job.to_dict() if job else None
+
+    def _evict_finished(self):
+        """Forget the oldest finished jobs beyond the cap; running ones stay."""
+        excess = len(self._jobs) - self._max_jobs
+        for job_id in [j.id for j in self._jobs.values() if j.status != "running"]:
+            if excess <= 0:
+                break
+            del self._jobs[job_id]
+            excess -= 1
 
     def submit(self, workspace_name, cwd, command):
         """Start a job. Returns (job_dict, error_message_or_None)."""
@@ -172,6 +215,7 @@ class JobRunner:
                 return None, "Another action is already running in this workspace"
             job = Job(uuid.uuid4().hex, command, cwd)
             self._jobs[job.id] = job
+            self._evict_finished()
             self._active_workspaces.add(workspace_name)
 
         thread = threading.Thread(
@@ -193,12 +237,20 @@ class JobRunner:
                 cwd=job.cwd,
                 capture_output=True,
                 text=True,
+                # The server's stdin is not the job's: a prompt must fail, not hang.
+                stdin=subprocess.DEVNULL,
+                timeout=self._timeout_sec,
             )
-            job.log = (proc.stdout or "") + (proc.stderr or "")
+            job.log = _tail((proc.stdout or "") + (proc.stderr or ""))
             job.exit_code = proc.returncode
             job.status = "succeeded" if proc.returncode == 0 else "failed"
             if job.status == "succeeded":
                 job.noop = any(m in job.log for m in _NOOP_LOG_MARKERS)
+        except subprocess.TimeoutExpired as e:
+            output = _as_text(e.stdout) + _as_text(e.stderr)
+            job.log = _tail(output + f"\nJob timed out after {self._timeout_sec}s")
+            job.exit_code = -1
+            job.status = "failed"
         except Exception as e:  # pragma: no cover - defensive
             job.log = str(e)
             job.exit_code = -1

@@ -4,16 +4,16 @@
 Reads go straight to the vmn library (lock-free); the SPA is served from
 ``static/`` when present. App names in URLs use vmn's dashed tag form
 (``root_app/svc`` → ``root_app-svc``), which is bijective because ``-`` is
-illegal in app names.
+illegal in app names. Request hardening lives in :mod:`version_stamp.ui.security`.
 """
 import os
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core.experiment_query import QueryError
-from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
 from version_stamp.ui.readers import diffs as diff_reader
@@ -21,18 +21,37 @@ from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import tree as tree_reader
 from version_stamp.ui.readers import versions as ver_reader
+from version_stamp.ui.responses import SafeJSONResponse
+from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment, within
 from version_stamp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
+# Responses below this size are not worth a gzip round.
+GZIP_MIN_BYTES = 1000
 
 
-def create_app(manager, token=None, read_only=False, use_index=True):
+def create_app(
+    manager,
+    token=None,
+    read_only=False,
+    use_index=True,
+    bind_host=None,
+    allowed_hosts=None,
+):
     from version_stamp.ui.jobs import JobRunner, build_command
 
-    app = FastAPI(title="vmn ui", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(
+        title="vmn ui",
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        default_response_class=SafeJSONResponse,
+    )
     app.state.manager = manager
     app.state.read_only = read_only
     jobs = JobRunner()
+    guard = RequestGuard.build(
+        bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(token)
+    )
 
     indexes = {}
 
@@ -57,6 +76,32 @@ def create_app(manager, token=None, read_only=False, use_index=True):
                 if auth != f"Bearer {token}":
                     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
             return await call_next(request)
+
+    # Registered after the token check, so it runs first: a rebound or
+    # cross-site request is refused before anything else looks at it.
+    @app.middleware("http")
+    async def _request_guard(request: Request, call_next):
+        refused = guard.reject_reason(
+            request.method, request.url.path, request.headers
+        )
+        if refused:
+            status, detail = refused
+            return JSONResponse({"detail": detail}, status_code=status)
+        return await call_next(request)
+
+    app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
+
+    def _app_name(app_tag):
+        """The app name a URL names, refusing anything that walks out of .vmn/."""
+        name = safe_app_name(app_tag)
+        if name is None:
+            raise HTTPException(400, f"Invalid app name '{app_tag}'")
+        return name
+
+    def _segment(value, what="version"):
+        if not safe_segment(value):
+            raise HTTPException(400, f"Invalid {what} '{value}'")
+        return value
 
     def _workspace(name):
         ws = manager.get(name)
@@ -121,6 +166,8 @@ def create_app(manager, token=None, read_only=False, use_index=True):
             manager.remove(ws_name)
         except WorkspaceError as e:
             raise HTTPException(404, str(e))
+        # A later workspace of the same name may point elsewhere.
+        indexes.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
     def list_apps(ws_name: str):
@@ -142,7 +189,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         q: str = None,
     ):
         ws = _experiment_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
         filters = dict(
             sort=sort, last=last, offset=offset, limit=limit, status=status, query=q
         )
@@ -166,7 +213,8 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     )
     def get_experiment(ws_name: str, app_tag: str, verstr: str):
         ws = _experiment_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
+        _segment(verstr)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             detail, err = exp_reader.get_experiment_from_storage(
@@ -184,7 +232,9 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     )
     def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
         ws = _experiment_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
+        _segment(verstr)
+        _segment(filename, "artifact name")
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             art_dir = s3_storage.list_artifact_files(app_name, verstr)
@@ -194,7 +244,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         if not art_dir:
             raise HTTPException(404, "No artifacts")
         filepath = os.path.join(art_dir, filename)
-        if not os.path.abspath(filepath).startswith(os.path.abspath(art_dir)):
+        if not within(art_dir, filepath):
             raise HTTPException(400, "Invalid filename")
         if not os.path.isfile(filepath):
             raise HTTPException(404, f"Artifact {filename} not found")
@@ -206,12 +256,12 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             return {}  # No app conf available for S3 workspaces
-        return exp_reader.metrics_schema(ws.path, tag_name_to_app_name(app_tag))
+        return exp_reader.metrics_schema(ws.path, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
         index = _index_for(ws)
         if index:
             return index.list_versions(app_name)
@@ -225,7 +275,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
         if read_only:
             raise HTTPException(403, "Server is read-only")
         ws = _git_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
         command, err = build_command(action, app_name, body)
         if err:
             raise HTTPException(400, err)
@@ -244,7 +294,9 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff")
     def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
         ws = _experiment_workspace(ws_name)
-        app_name = tag_name_to_app_name(app_tag)
+        app_name = _app_name(app_tag)
+        _segment(v)
+        _segment(to)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             result, err = diff_reader.experiment_diff_from_storage(
@@ -259,7 +311,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/snapshots")
     def list_snapshots(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        return snap_reader.list_snapshots(ws.path, tag_name_to_app_name(app_tag))
+        return snap_reader.list_snapshots(ws.path, _app_name(app_tag))
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/snapshots/{verstr}"
@@ -267,7 +319,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     def get_snapshot(ws_name: str, app_tag: str, verstr: str):
         ws = _git_workspace(ws_name)
         detail, err = snap_reader.get_snapshot(
-            ws.path, tag_name_to_app_name(app_tag), verstr
+            ws.path, _app_name(app_tag), _segment(verstr)
         )
         if err:
             raise HTTPException(404, err)
@@ -276,12 +328,12 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree")
     def version_tree(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        return tree_reader.version_dag(ws.path, tag_name_to_app_name(app_tag))
+        return tree_reader.version_dag(ws.path, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree/root")
     def root_tree(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        return tree_reader.root_topology(ws.path, tag_name_to_app_name(app_tag))
+        return tree_reader.root_topology(ws.path, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
     def version_changelog(
@@ -292,7 +344,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     ):
         ws = _git_workspace(ws_name)
         result, err = changelog_reader.version_changelog(
-            ws.path, tag_name_to_app_name(app_tag), to_verstr=v, from_verstr=frm
+            ws.path, _app_name(app_tag), to_verstr=v, from_verstr=frm
         )
         if err:
             raise HTTPException(404, err)
@@ -302,7 +354,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     def app_config(ws_name: str, app_tag: str, v: str = None):
         ws = _git_workspace(ws_name)
         payload, err = config_reader.app_conf_payload(
-            ws.path, tag_name_to_app_name(app_tag), verstr=v
+            ws.path, _app_name(app_tag), verstr=v
         )
         if err:
             raise HTTPException(404, err)
@@ -312,7 +364,7 @@ def create_app(manager, token=None, read_only=False, use_index=True):
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
         ws = _git_workspace(ws_name)
         graph, err = tree_reader.dep_graph(
-            ws.path, tag_name_to_app_name(app_tag), verstr=v, to_verstr=to
+            ws.path, _app_name(app_tag), verstr=v, to_verstr=to
         )
         if err:
             raise HTTPException(404, err)
@@ -340,7 +392,9 @@ def _mount_static(app):
     # the SPA shell and let the router resolve it.
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):
+        # ``full_path`` is decoded but not normalized: ``//etc/passwd`` and
+        # ``..%2f`` walks must resolve inside the bundle or fall back to the shell.
         candidate = os.path.join(static_dir, full_path)
-        if full_path and os.path.isfile(candidate):
+        if full_path and within(static_dir, candidate) and os.path.isfile(candidate):
             return FileResponse(candidate)
         return FileResponse(os.path.join(static_dir, "index.html"))

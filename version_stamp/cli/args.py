@@ -695,6 +695,14 @@ def add_arg_ui(subprasers):
     pui.add_argument("--host", default="127.0.0.1", help="Bind address")
     pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
     pui.add_argument(
+        "--allowed-host",
+        action="append",
+        default=None,
+        help="Extra hostname clients may reach the server by (repeatable). "
+        "Without --token, requests for any other Host are refused, which "
+        "blocks DNS rebinding; pages on these hosts may also send mutations",
+    )
+    pui.add_argument(
         "--token",
         default=None,
         help="Bearer token required for API access (or VMN_UI_TOKEN env)",
