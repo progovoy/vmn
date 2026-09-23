@@ -229,5 +229,6 @@ Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`
 which answers `{"entries": [...], "total": N}` oldest first.
 
 Artifacts download from `GET .../experiments/{verstr}/artifacts/{name}` for
-local and S3 workspaces alike; with a token set the request needs the
+local and S3 workspaces alike (an S3 object is streamed straight through, never
+staged on the server's disk); with a token set the request needs the
 `Authorization` header like every other API call.

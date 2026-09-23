@@ -112,6 +112,10 @@ class CachedSnapshotStorage(SnapshotStorage):
         # With a remote, a record's log is the per-writer merge of two copies.
         return self._local if self._remote is None else None
 
+    def record_files(self, app_name, verstr):
+        """One record's file signatures, or None when reads merge a remote too."""
+        return None if self._remote else self._local.record_files(app_name, verstr)
+
     def index_cache_path(self, app_name):
         return self._local.index_cache_path(app_name)
 

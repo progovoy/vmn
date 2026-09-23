@@ -40,6 +40,7 @@ _LIST_WORKERS = 16
 _MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 _TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 _APPEND_ATTEMPTS = 20
+_ARTIFACT_CHUNK = 1 << 20
 
 
 def _error_code(exc):
@@ -352,6 +353,33 @@ class S3SnapshotStorage(SnapshotStorage):
         self._s3.download_file(self.bucket, key, tmp)
         os.replace(tmp, path)
         return path
+
+    def open_artifact(self, app_name, verstr, name):
+        """``(chunks, size)`` streaming artifact *name* from S3, or None.
+
+        Nothing is buffered to disk, so a multi-GB checkpoint starts arriving
+        at once and leaves no cache behind.
+        """
+        if not valid_artifact_name(name):
+            return None
+        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        try:
+            resp = self._s3.get_object(Bucket=self.bucket, Key=key)
+        except Exception as e:
+            if _error_code(e) in _MISSING_CODES or "NoSuchKey" in str(e):
+                return None
+            raise
+        return resp["Body"].iter_chunks(_ARTIFACT_CHUNK), resp["ContentLength"]
+
+    def record_files(self, app_name, verstr):
+        """``{filename: (size, mtime, etag)}`` for one record's files — one LIST."""
+        prefix = f"{self._record_prefix(app_name, verstr)}/"
+        files = {}
+        for obj in self._objects(prefix):
+            name = obj["Key"][len(prefix) :]
+            if "/" not in name:
+                files[name] = (obj["Size"], obj["LastModified"].timestamp(), obj.get("ETag"))
+        return files
 
     # -- logs ---------------------------------------------------------------
 

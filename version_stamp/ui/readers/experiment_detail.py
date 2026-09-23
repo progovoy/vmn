@@ -5,9 +5,11 @@ A run page polls this while the run is live, so its cost must not grow with the
 log or with the workspace: the log is returned as a tail (the rest is paged via
 :func:`log_page`), every metric series is thinned to a chart's worth of points,
 patch presence comes from the metadata flags instead of the tarball, and the
-run tree is answered from parent edges that are cached across polls.
+run tree is answered from parent edges that are cached across polls. The parsed
+log of an unchanged run is reused across polls and log pages.
 """
 import threading
+from collections import OrderedDict
 
 from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core.experiment_log import (
@@ -18,16 +20,8 @@ from version_stamp.core.experiment_log import (
     metric_series,
 )
 from version_stamp.core.experiment_log import load_log as _load_log
-from version_stamp.core.experiment_status import (
-    derive_status,
-    load_run_state,
-    status_fields,
-)
-from version_stamp.core.experiment_tree import (
-    annotate_tree,
-    children_by_parent,
-    subtree_verstrs,
-)
+from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_tree import subtree_status
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, downsample_series
 from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
 
@@ -71,19 +65,51 @@ class ParentEdges:
         return edges
 
 
-def _tree_nodes(verstr, parent_of):
-    """``(subtree, nodes)``: the run's subtree plus its ancestor chain as tree
-    nodes — everything its children/depth/tree_status depend on."""
-    children_of = children_by_parent(
-        [{"verstr": v, "parent": p} for v, p in parent_of.items()]
-    )
-    subtree = subtree_verstrs(verstr, children_of)
-    nodes = {v: parent_of.get(v) for v in subtree}
-    cursor = parent_of.get(verstr)
-    while cursor and cursor not in nodes:
-        nodes[cursor] = parent_of.get(cursor)
-        cursor = nodes[cursor]
-    return set(subtree), [{"verstr": v, "parent": p} for v, p in nodes.items()]
+class ParsedLogs:
+    """Parsed log + full series per record, reused while its log files are
+    unchanged. Bounded LRU; a backend without cheap ``record_files`` (reads
+    that merge a remote) is simply never cached."""
+
+    def __init__(self, size=32):
+        self._size = size
+        self._entries = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, storage, app_name, verstr, read_log):
+        """``(log, series)`` for the record, reading it only when it changed."""
+        sig = _log_signature(storage, app_name, verstr)
+        key = (_identity(storage), app_name, verstr)
+        with self._lock:
+            hit = self._entries.get(key)
+            if sig is not None and hit and hit[0] == sig:
+                self._entries.move_to_end(key)
+                return hit[1], hit[2]
+        log = read_log(storage, app_name, verstr)
+        series = metric_series(log)
+        if sig is not None:
+            with self._lock:
+                self._entries[key] = (sig, log, series)
+                self._entries.move_to_end(key)
+                while len(self._entries) > self._size:
+                    self._entries.popitem(last=False)
+        return log, series
+
+
+def _identity(storage):
+    identity_of = getattr(storage, "cache_identity", None)
+    return (identity_of() if identity_of else None) or id(storage)
+
+
+def _log_signature(storage, app_name, verstr):
+    """The record's log files' ``(size, mtime...)``, or None when unknown."""
+    record_files = getattr(storage, "record_files", None)
+    files = record_files(app_name, verstr) if record_files else None
+    if files is None:
+        return None
+    return tuple(sorted((n, tuple(sig)) for n, sig in files.items() if n.startswith("log.")))
+
+
+_PARSED = ParsedLogs()
 
 
 def status_detail(
@@ -96,20 +122,11 @@ def status_detail(
     """
     parent_of = dict(edges(storage, app_name))
     parent_of.setdefault(verstr, metadata.get("parent"))
-    subtree, nodes = _tree_nodes(verstr, parent_of)
-
-    run_state = None
-    for node in nodes:
-        if node["verstr"] not in subtree:
-            continue
-        state = read_run_state(storage, app_name, node["verstr"])
-        node["status"] = derive_status(state)
-        if node["verstr"] == verstr:
-            run_state = state
-
-    row = next((r for r in annotate_tree(nodes) if r["verstr"] == verstr), {})
+    run_state, tree = subtree_status(
+        verstr, parent_of, lambda v: read_run_state(storage, app_name, v)
+    )
     detail = status_fields(run_state)
-    detail.update({k: row.get(k) for k in ("children", "kind", "depth", "tree_status")})
+    detail.update(tree)
     detail["parent"] = metadata.get("parent")
     detail["last_metric_at"] = last_metric_at(log)
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
@@ -146,9 +163,9 @@ def experiment_detail(
     if err:
         return None, err
 
-    log = read_log(storage, app_name, verstr)
+    log, full_series = _PARSED.get(storage, app_name, verstr, read_log)
     tail = log[-LOG_TAIL:]
-    series, series_total = downsample_series(metric_series(log), max_points)
+    series, series_total = downsample_series(full_series, max_points)
     return {
         "metadata": metadata,
         "log": log if include_log else tail,
@@ -172,11 +189,11 @@ def experiment_detail(
     }, None
 
 
-def log_page(storage, app_name, verstr_ref, offset=0, limit=LOG_TAIL):
+def log_page(storage, app_name, verstr_ref, offset=0, limit=LOG_TAIL, read_log=_load_log):
     """``({"entries", "total"}, error)`` — a slice of the log, oldest first."""
     verstr, _, err = _resolve(storage, app_name, verstr_ref)
     if err:
         return None, err
-    log = _load_log(storage, app_name, verstr)
+    log, _ = _PARSED.get(storage, app_name, verstr, read_log)
     offset = max(int(offset), 0)
     return {"entries": log[offset : offset + max(int(limit), 0)], "total": len(log)}, None

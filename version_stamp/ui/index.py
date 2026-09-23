@@ -16,7 +16,7 @@ import sqlite3
 import subprocess
 import threading
 
-from version_stamp.core.experiment_index import ExperimentIndex
+from version_stamp.core import experiment_index
 from version_stamp.core.version_math import app_name_to_tag_name
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
@@ -58,8 +58,7 @@ class WorkspaceIndex:
             " scope TEXT PRIMARY KEY, fingerprint TEXT, payload TEXT)"
         )
         self._conn.commit()
-        self._experiments = {}  # app -> ExperimentIndex over this workspace
-        self._run_states_of = {}  # app -> run states from its latest refresh
+        self._storage = exp_reader.experiment_storage(root_path)
 
     def _get(self, scope, fingerprint):
         with self._lock:
@@ -79,26 +78,18 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def _experiment_index(self, app_name):
-        with self._lock:
-            index = self._experiments.get(app_name)
-            if index is None:
-                index = self._experiments[app_name] = ExperimentIndex(
-                    exp_reader.experiment_storage(self.root_path),
-                    app_name,
-                    cache_path=self._db_path,
-                )
-            return index
-
-    def _experiment_rows(self, app_name):
-        """Leaderboard rows, refreshing the incremental experiment index.
+    def experiment_rows(self, app_name):
+        """``(rows, run_states)``, refreshing the incremental experiment index.
 
         A metric appended anywhere costs that log's new bytes and a heartbeat
-        that one run state — never a re-read of every experiment.
+        that one run state — never a re-read of every experiment. The index is
+        the process-wide one for this checkout, persisted in this db.
         """
         try:
-            index = self._experiment_index(app_name).refresh()
-            rows, states = index.rows(), index.run_states()
+            index = experiment_index.shared_index(
+                self._storage, app_name, cache_path=self._db_path
+            ).refresh()
+            return index.rows(), index.run_states()
         except Exception:
             _LOGGER.debug("Experiment index failed; reading directly", exc_info=True)
             rows = _fetch_experiment_rows(self.root_path, app_name)
@@ -107,43 +98,17 @@ class WorkspaceIndex:
                 app_name=app_name,
                 verstrs=[r["verstr"] for r in rows],
             )
-        self._run_states_of[app_name] = states
-        return rows
+            return rows, states
 
-    def _run_states(self, app_name, verstrs):
-        """The run states read by the refresh behind ``_experiment_rows``."""
-        states = self._run_states_of.get(app_name)
-        if states is None:
-            self._experiment_rows(app_name)
-            states = self._run_states_of[app_name]
-        return {verstr: states.get(verstr) for verstr in verstrs}
+    def parent_edges(self, storage, app_name):
+        """``{verstr: parent}`` from the index rows — a run-detail edges provider."""
+        rows, _ = self.experiment_rows(app_name)
+        return {row["verstr"]: row.get("parent") for row in rows}
 
-    def list_experiments(
-        self,
-        app_name,
-        sort=None,
-        last=None,
-        offset=0,
-        limit=None,
-        status=None,
-        query=None,
-        order=None,
-    ):
-        rows = self._experiment_rows(app_name)
-        run_states = self._run_states(app_name, [r["verstr"] for r in rows])
-        # Status is derived from the current time, so never from the cache.
-        rows = exp_reader.annotate_status(rows, run_states)
+    def list_experiments(self, app_name, **filters):
+        rows, run_states = self.experiment_rows(app_name)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
-        # ``query`` is a per-request filter over derived rows: never cached.
-        return exp_reader.sort_rows(
-            exp_reader.apply_filters(rows, status, query),
-            schema,
-            sort=sort,
-            last=last,
-            offset=offset,
-            limit=limit,
-            order=order,
-        )
+        return exp_reader.leaderboard(rows, run_states, schema, **filters)
 
     def list_versions(self, app_name):
         fp = _versions_fingerprint(self.root_path, app_name)

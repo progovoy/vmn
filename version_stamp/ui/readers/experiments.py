@@ -9,12 +9,7 @@ import os
 
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core import experiment_index
-from version_stamp.core.experiment_log import (
-    experiment_row,
-    filter_by_status,
-    primary_metric,
-    sort_by_metric,
-)
+from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import load_run_state, status_fields
@@ -74,37 +69,29 @@ def list_apps(root_path):
 
 
 def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
-    """Leaderboard rows in storage order (oldest first). The expensive read:
-    every experiment's metadata + log.
-
-    Rows are *stable*: they change only when metadata or a log file changes, so
-    a cache of them survives the run-state heartbeats. The volatile half lives
-    in :func:`fetch_run_states` and the time-derived status in
-    :func:`annotate_status`.
-
-    Accepts either ``root_path`` (local checkout) or a pre-built ``storage``
-    backend (S3 / remote workspaces).
-    """
-    if storage is None:
-        storage = experiment_storage(root_path)
-    rows = []
-    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
-        log = _load_log(storage, app_name, meta["verstr"])
-        rows.append(experiment_row(idx, meta, log))
+    """Leaderboard rows in storage order (oldest first), read directly: every
+    experiment's metadata + log. Accepts a ``root_path`` (local checkout) or a
+    pre-built ``storage`` backend (S3 / remote workspaces)."""
+    storage = storage or experiment_storage(root_path)
+    rows, _ = experiment_index.direct_rows(
+        storage, app_name, read_log=_load_log, read_run_state=None
+    )
     return rows
 
 
 def fetch_run_states(root_path=None, app_name=None, storage=None, verstrs=None):
-    """``{verstr: raw run state}`` — the cheap, volatile half of a read.
-
-    One tiny file per experiment, rewritten by every heartbeat, which is why it
-    is fetched (and cached) apart from the rows.
-    """
-    if storage is None:
-        storage = experiment_storage(root_path)
+    """``{verstr: raw run state}`` — the cheap, volatile half of a read."""
+    storage = storage or experiment_storage(root_path)
     if verstrs is None:
-        verstrs = [meta["verstr"] for meta in storage.list_snapshots(app_name)]
+        verstrs = storage.list_verstrs(app_name)
     return {verstr: load_run_state(storage, app_name, verstr) for verstr in verstrs}
+
+
+def direct_rows_and_states(storage, app_name):
+    """``(rows, run_states)`` straight from storage, through this module's loaders."""
+    return experiment_index.direct_rows(
+        storage, app_name, read_log=_load_log, read_run_state=load_run_state
+    )
 
 
 def annotate_status(rows, run_states=None, now=None):
@@ -125,11 +112,8 @@ def annotate_status(rows, run_states=None, now=None):
 
 def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
     """Leaderboard rows plus their derived status, straight from storage."""
-    if storage is None:
-        storage = experiment_storage(root_path)
-    rows = fetch_experiment_rows(app_name=app_name, storage=storage)
-    run_states = fetch_run_states(
-        app_name=app_name, storage=storage, verstrs=[r["verstr"] for r in rows]
+    rows, run_states = direct_rows_and_states(
+        storage or experiment_storage(root_path), app_name
     )
     return annotate_status(rows, run_states, now=now)
 
@@ -146,33 +130,7 @@ def apply_filters(rows, status=None, query=None):
 
 
 ORDERS = ("asc", "desc")
-TIMESTAMP_SORT = "timestamp"
-
-
-def _by_timestamp(rows, newest_first):
-    """Creation order; rows without a timestamp go last either way."""
-    stamped = [r for r in rows if r.get("timestamp")]
-    stamped.sort(key=lambda r: r["timestamp"], reverse=newest_first)
-    return stamped + [r for r in rows if not r.get("timestamp")]
-
-
-def _with_order(schema, metric, order):
-    """*schema* with *metric*'s goal forced by an explicit *order*."""
-    if order not in ORDERS:
-        return schema
-    entry = dict((schema or {}).get(metric) or {})
-    entry["goal"] = "max" if order == "desc" else "min"
-    return {**(schema or {}), metric: entry}
-
-
-def _ordered(rows, schema, sort, order):
-    """*rows* by timestamp, by metric (direction overridable), or storage order."""
-    if sort == TIMESTAMP_SORT:
-        return _by_timestamp(rows, newest_first=order != "asc")
-    metric = sort or primary_metric(schema)
-    if metric and any(metric in r["metrics"] for r in rows):
-        return sort_by_metric(rows, _with_order(schema, metric, order), sort=metric)
-    return rows[::-1] if order == "desc" else rows
+_DESCENDING = {"asc": False, "desc": True}
 
 
 def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None, order=None):
@@ -186,7 +144,9 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None, order=No
     """
     if last:
         rows = rows[-int(last) :]
-    rows = _ordered(list(rows), schema, sort, order)
+    rows = sort_by_metric(
+        list(rows), schema, sort=sort, descending=_DESCENDING.get(order)
+    )
 
     if limit is not None:
         total = len(rows)
@@ -195,9 +155,10 @@ def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None, order=No
     return rows
 
 
-def list_experiments(
-    root_path,
-    app_name,
+def leaderboard(
+    rows,
+    run_states,
+    schema,
     sort=None,
     last=None,
     offset=0,
@@ -206,16 +167,26 @@ def list_experiments(
     query=None,
     order=None,
 ):
-    """Leaderboard rows, ordered exactly like ``vmn exp list``."""
+    """The one list pipeline: derive status, filter, then order and page.
+
+    Status is derived from the current time and ``query`` is per request, so
+    neither is ever cached — callers pass freshly fetched rows.
+    """
     return sort_rows(
-        apply_filters(rows_with_status(root_path, app_name), status, query),
-        metrics_schema(root_path, app_name),
+        apply_filters(annotate_status(rows, run_states), status, query),
+        schema,
         sort=sort,
         last=last,
         offset=offset,
         limit=limit,
         order=order,
     )
+
+
+def list_experiments(root_path, app_name, **filters):
+    """Leaderboard rows, ordered exactly like ``vmn exp list``, read directly."""
+    rows, run_states = direct_rows_and_states(experiment_storage(root_path), app_name)
+    return leaderboard(rows, run_states, metrics_schema(root_path, app_name), **filters)
 
 
 def get_experiment(root_path, app_name, verstr_ref, **detail_opts):
@@ -232,33 +203,15 @@ def get_experiment(root_path, app_name, verstr_ref, **detail_opts):
 # ---- Storage-backend functions (S3 / remote workspaces) ----
 
 
-def list_experiments_from_storage(
-    storage,
-    app_name,
-    sort=None,
-    last=None,
-    offset=0,
-    limit=None,
-    status=None,
-    query=None,
-    order=None,
-):
+def list_experiments_from_storage(storage, app_name, **filters):
     """List experiments using a storage backend directly (for S3/remote workspaces).
 
     Rows come from the process-wide experiment index for the backend, so a
     poll costs one listing plus whatever changed — not a GET per experiment.
+    There is no app conf for such a workspace, hence no metrics schema.
     """
-    schema = {}  # No app conf available for S3 workspaces
     rows, run_states = experiment_index.indexed_rows(storage, app_name)
-    return sort_rows(
-        apply_filters(annotate_status(rows, run_states), status, query),
-        schema,
-        sort=sort,
-        last=last,
-        offset=offset,
-        limit=limit,
-        order=order,
-    )
+    return leaderboard(rows, run_states, {}, **filters)
 
 
 def get_experiment_from_storage(storage, app_name, verstr_ref, **detail_opts):

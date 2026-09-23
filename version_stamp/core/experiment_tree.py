@@ -7,7 +7,8 @@ An experiment records the verstr of the run that launched it in its metadata as
 children, how deep a run sits, and what an outer job's *effective* status is
 once its whole subtree is taken into account.
 
-Pure: rows in, new rows out, no storage and no clock.
+Pure: rows in, new rows out, no storage. :func:`subtree_status` reads run
+states only through the reader its caller passes in.
 """
 from version_stamp.core.experiment_status import (
     CREATED,
@@ -15,6 +16,7 @@ from version_stamp.core.experiment_status import (
     RUNNING,
     STUCK,
     SUCCEEDED,
+    derive_status,
 )
 
 OUTER = "outer"  # has children
@@ -107,3 +109,38 @@ def annotate_tree(rows):
             _subtree_statuses(verstr, children_of, by_verstr)
         )
     return rows
+
+
+TREE_FIELDS = ("children", "kind", "depth", "tree_status")
+
+
+def subtree_status(verstr, parent_of, read_state):
+    """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
+
+    *parent_of* is ``{verstr: parent}`` for the app's runs; *read_state(verstr)*
+    returns a raw run state and is called once per subtree member. Ancestors
+    are placed in the tree (for ``depth``) but never read.
+    """
+    children_of = children_by_parent(
+        [{"verstr": v, "parent": p} for v, p in parent_of.items()]
+    )
+    ordered = subtree_verstrs(verstr, children_of)
+    subtree = set(ordered)
+    nodes = {v: parent_of.get(v) for v in ordered}
+    cursor = parent_of.get(verstr)
+    while cursor and cursor not in nodes:
+        nodes[cursor] = parent_of.get(cursor)
+        cursor = nodes[cursor]
+
+    rows, run_state = [], None
+    for node, parent in nodes.items():
+        row = {"verstr": node, "parent": parent}
+        if node in subtree:
+            state = read_state(node)
+            row["status"] = derive_status(state)
+            if node == verstr:
+                run_state = state
+        rows.append(row)
+
+    tree = next(r for r in annotate_tree(rows) if r["verstr"] == verstr)
+    return run_state, {k: tree[k] for k in TREE_FIELDS}

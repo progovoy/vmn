@@ -235,6 +235,18 @@ class LocalSnapshotStorage(SnapshotStorage):
             return art_dir
         return None
 
+    def record_files(self, app_name, verstr):
+        """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""
+        try:
+            entries = list(os.scandir(self._snapshot_dir(app_name, verstr)))
+        except FileNotFoundError:
+            return {}
+        return {
+            e.name: (e.stat().st_size, e.stat().st_mtime_ns)
+            for e in entries
+            if e.is_file() and not e.name.startswith(".")
+        }
+
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if self._refuse_orphan_write(app_name, verstr, "a log entry"):
             return False
