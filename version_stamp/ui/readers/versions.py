@@ -13,16 +13,45 @@ from version_stamp.core.version_math import (
 )
 
 
-def _tag_yaml(tag_ref):
-    """Parse an annotated tag's YAML message; None for lightweight/foreign tags."""
-    tag_obj = tag_ref.tag
-    if tag_obj is None:
-        return None
+_FIELD_SEP = "\x00"
+_RECORD_SEP = "\x1e"
+# One ``git for-each-ref`` pass yields every tag's name, type, date and message,
+# instead of resolving each tag (and re-reading packed-refs) one at a time.
+_TAG_FORMAT = (
+    "%(refname:strip=2)%00%(objecttype)%00%(taggerdate:unix)%00%(contents)%1e"
+)
+
+
+def _message_yaml(message):
+    """Parse an annotated tag's YAML message; None for foreign/invalid ones."""
     try:
-        data = yaml.safe_load(tag_obj.message)
+        data = yaml.safe_load(message)
     except yaml.YAMLError:
         return None
     return data if isinstance(data, dict) else None
+
+
+def _app_tags(repo, prefix):
+    """``[(name, stamp_yaml_or_None, tagger_epoch_or_None)]`` oldest first.
+
+    Lightweight tags carry no message and no tagger date, so both are None.
+    """
+    out = repo.git.for_each_ref(
+        "--sort=taggerdate", f"--format={_TAG_FORMAT}", f"refs/tags/{prefix}_*"
+    )
+    tags = []
+    for record in out.split(_RECORD_SEP):
+        record = record.lstrip("\n")
+        if not record:
+            continue
+        name, obj_type, tagger_date, message = record.split(_FIELD_SEP, 3)
+        if obj_type != "tag":
+            tags.append((name, None, None))
+            continue
+        tags.append(
+            (name, _message_yaml(message), int(tagger_date) if tagger_date else None)
+        )
+    return tags
 
 
 def version_counts(root_path):
@@ -55,12 +84,9 @@ def list_versions(root_path, app_name):
     repo = git.Repo(root_path, search_parent_directories=True)
     try:
         prefix = app_name_to_tag_name(app_name)
-        names = repo.git.tag("--sort", "taggerdate", "--list", f"{prefix}_*").split(
-            "\n"
-        )
 
         rows = []
-        for name in filter(None, names):
+        for name, data, timestamp in _app_tags(repo, prefix):
             try:
                 props = deserialize_tag_name(name)
             except Exception:
@@ -68,9 +94,7 @@ def list_versions(root_path, app_name):
             if props.app_name != app_name:
                 continue
 
-            tag_ref = repo.tags[name]
-            data = _tag_yaml(tag_ref) or {}
-            stamping = data.get("stamping", {}) or {}
+            stamping = (data or {}).get("stamping", {}) or {}
 
             if "root" in props.types:
                 root_app = stamping.get("root_app", {}) or {}
@@ -83,7 +107,7 @@ def list_versions(root_path, app_name):
                         "services": root_app.get("services", {}),
                         "latest_service": root_app.get("latest_service"),
                         "external_services": root_app.get("external_services", {}),
-                        "timestamp": tag_ref.tag.tagged_date if tag_ref.tag else None,
+                        "timestamp": timestamp,
                     }
                 )
                 continue
@@ -101,7 +125,7 @@ def list_versions(root_path, app_name):
                     "branch": app.get("stamped_on_branch"),
                     "commit": (changesets.get(".") or {}).get("hash"),
                     "changesets": changesets,
-                    "timestamp": tag_ref.tag.tagged_date if tag_ref.tag else None,
+                    "timestamp": timestamp,
                 }
             )
         return rows

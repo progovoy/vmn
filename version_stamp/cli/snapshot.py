@@ -803,9 +803,11 @@ def _generate_patches(backend, lightweight=False):
         if content_hash:
             patches["untracked_hash"] = content_hash
         if not lightweight:
-            untracked_tar = _collect_untracked_tarball(backend.repo_path)
+            untracked_tar, skipped = _collect_untracked_tarball(backend.repo_path)
             if untracked_tar:
                 patches["untracked_files"] = untracked_tar
+            if skipped:
+                patches["untracked_skipped"] = skipped
     except Exception:
         VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
 
@@ -924,57 +926,101 @@ def _fmt_size(nbytes):
     return f"{nbytes:.1f}TB"
 
 
-def _collect_untracked_tarball(repo_path):
-    """Collect untracked non-ignored files into an in-memory tar.gz."""
+_DEFAULT_MAX_FILE_MB = 50
+_DEFAULT_MAX_TOTAL_MB = 200
+
+
+def _mb_from_env(name, default_mb):
+    raw = os.environ.get(name)
+    try:
+        mb = float(raw) if raw else default_mb
+    except ValueError:
+        VMN_LOGGER.warning(f"Ignoring invalid {name}={raw!r}")
+        mb = default_mb
+    return int(mb * 1024 * 1024)
+
+
+def _untracked_caps():
+    """``(per_file, total)`` byte caps on what the untracked tarball may hold."""
+    return (
+        _mb_from_env("VMN_SNAPSHOT_MAX_FILE_MB", _DEFAULT_MAX_FILE_MB),
+        _mb_from_env("VMN_SNAPSHOT_MAX_TOTAL_MB", _DEFAULT_MAX_TOTAL_MB),
+    )
+
+
+def _untracked_candidates(repo_path):
+    """``[(rel_path, abs_path, size)]`` of untracked, non-ignored regular files."""
     result = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
         cwd=repo_path,
     )
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
+    if result.returncode != 0:
+        return []
 
     candidates = []
     for rel_path in result.stdout.strip().split("\n"):
-        if not rel_path:
-            continue
-        if rel_path.startswith(".vmn/") or rel_path == ".vmn":
+        if not rel_path or rel_path.startswith(".vmn/") or rel_path == ".vmn":
             continue
         abs_path = os.path.join(repo_path, rel_path)
         if os.path.isfile(abs_path):
-            candidates.append((rel_path, abs_path))
+            candidates.append((rel_path, abs_path, os.path.getsize(abs_path)))
+    return candidates
 
-    if not candidates:
-        return None
 
-    total = len(candidates)
-    buf = io.BytesIO()
-    file_count = 0
-    collected_bytes = 0
-    with tarfile.open(mode="w:gz", fileobj=buf) as tar:
-        for rel_path, abs_path in candidates:
-            tar.add(abs_path, arcname=rel_path)
-            file_count += 1
-            collected_bytes += os.path.getsize(abs_path)
-            if file_count % 50 == 0:
-                VMN_LOGGER.info(
-                    "Collecting untracked files: %d/%d (%s)",
-                    file_count,
-                    total,
-                    _fmt_size(collected_bytes),
-                )
-
-    if file_count > 0:
-        VMN_LOGGER.info(
-            "Collected %d untracked files (%s)",
-            file_count,
-            _fmt_size(collected_bytes),
+def _within_caps(candidates):
+    """Split candidates into (kept, skipped_rel_paths) under the size caps."""
+    max_file, max_total = _untracked_caps()
+    kept, skipped, budget = [], [], max_total
+    for rel_path, abs_path, size in candidates:
+        if size > max_file or size > budget:
+            skipped.append(rel_path)
+            continue
+        kept.append((rel_path, abs_path, size))
+        budget -= size
+    if skipped:
+        VMN_LOGGER.warning(
+            "Not capturing %d untracked file(s) over the snapshot size caps "
+            "(%s per file, %s total; see VMN_SNAPSHOT_MAX_FILE_MB / "
+            "VMN_SNAPSHOT_MAX_TOTAL_MB): %s",
+            len(skipped),
+            _fmt_size(max_file),
+            _fmt_size(max_total),
+            ", ".join(skipped),
         )
+    return kept, skipped
 
-    if file_count == 0:
-        return None
-    return buf.getvalue()
+
+def _collect_untracked_tarball(repo_path):
+    """Collect untracked non-ignored files into a tar.gz, within the size caps.
+
+    Returns ``(tarball_bytes_or_None, skipped_rel_paths)``. The archive is built
+    in a temporary file so only the finished tarball is ever held in memory.
+    """
+    kept, skipped = _within_caps(_untracked_candidates(repo_path))
+    if not kept:
+        return None, skipped
+
+    total = len(kept)
+    collected_bytes = 0
+    with tempfile.TemporaryFile() as buf:
+        with tarfile.open(mode="w:gz", fileobj=buf) as tar:
+            for file_count, (rel_path, abs_path, size) in enumerate(kept, 1):
+                tar.add(abs_path, arcname=rel_path)
+                collected_bytes += size
+                if file_count % 50 == 0:
+                    VMN_LOGGER.info(
+                        "Collecting untracked files: %d/%d (%s)",
+                        file_count,
+                        total,
+                        _fmt_size(collected_bytes),
+                    )
+        VMN_LOGGER.info(
+            "Collected %d untracked files (%s)", total, _fmt_size(collected_bytes)
+        )
+        buf.seek(0)
+        return buf.read(), skipped
 
 
 def _extract_untracked_tarball(dest, tarball_bytes):
@@ -991,7 +1037,54 @@ def _list_tarball_members(tarball_bytes):
         return sorted(m.name for m in tar.getmembers())
 
 
-def _compute_verstr(base_version, commit_hash, patches):
+def _compute_verstr(base_version, commit_hash, patches, hash_len=7):
+    return _format_dev_verstr(
+        base_version, commit_hash, _compute_diff_hash(patches), hash_len
+    )
+
+
+def _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len=7):
+    diff_part = diff_hash[:hash_len] if diff_hash else "0000000"
+    return f"{base_version}-dev.{commit_hash[:7]}.{diff_part}"
+
+
+# Diff-hash prefix lengths tried, shortest first, when a verstr is taken by a
+# snapshot with different content (a 7-hex prefix is only 28 bits).
+_DIFF_HASH_LENGTHS = (7, 12, 16, 24, 32, 64)
+
+
+def _stored_diff_hash(storage, app_name, verstr):
+    """``(exists, diff_hash)`` of the snapshot stored at *verstr*."""
+    raw = storage.load_file(app_name, verstr, "metadata.yml")
+    if raw is None:
+        return False, None
+    try:
+        meta = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        meta = None
+    return True, meta.get("diff_hash") if isinstance(meta, dict) else None
+
+
+def _unique_snapshot_verstr(storage, app_name, base_version, commit_hash, diff_hash):
+    """The shortest dev verstr that is free or already holds this exact content.
+
+    A snapshot never overwrites a different one: on a prefix collision (or a
+    legacy record that carries no ``diff_hash`` to compare) the diff hash is
+    extended instead.
+    """
+    verstr = _format_dev_verstr(base_version, commit_hash, diff_hash)
+    if not diff_hash:
+        return verstr
+    for hash_len in _DIFF_HASH_LENGTHS:
+        verstr = _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len)
+        exists, stored = _stored_diff_hash(storage, app_name, verstr)
+        if not exists or stored == diff_hash:
+            return verstr
+    return verstr
+
+
+def _compute_diff_hash(patches):
+    """Full sha256 hex over a snapshot's content, or None for a clean tree."""
     h = hashlib.sha256()
     has_content = False
     for key in ("working_tree", "local_commits"):
@@ -1012,8 +1105,7 @@ def _compute_verstr(base_version, commit_hash, patches):
             h.update(dp["untracked_hash"])
             has_content = True
 
-    diff_hash = h.hexdigest()[:7] if has_content else "0000000"
-    return f"{base_version}-dev.{commit_hash[:7]}.{diff_hash}"
+    return h.hexdigest() if has_content else None
 
 
 def _apply_snapshot_patches(vcs, params, metadata, patches):
@@ -1216,6 +1308,14 @@ def gather_create_data(vcs, allow_clean=False):
     return base_version, commit_hash, patches, dirty_states, ver_info, None
 
 
+def _skipped_untracked(patches):
+    """Untracked paths left out by the size caps, deps prefixed by their path."""
+    skipped = list(patches.get("untracked_skipped", []))
+    for dep_path, dp in sorted(patches.get("deps", {}).items()):
+        skipped.extend(f"{dep_path}/{p}" for p in dp.get("untracked_skipped", []))
+    return skipped
+
+
 def _build_snapshot_metadata(
     vcs,
     verstr,
@@ -1248,6 +1348,12 @@ def _build_snapshot_metadata(
         "has_untracked_files": "untracked_files" in patches,
         "has_dep_patches": bool(patches.get("deps")),
     }
+    diff_hash = _compute_diff_hash(patches)
+    if diff_hash:
+        metadata["diff_hash"] = diff_hash
+    skipped = _skipped_untracked(patches)
+    if skipped:
+        metadata["untracked_skipped"] = skipped
     if user_meta:
         metadata["user_meta"] = user_meta
 
@@ -1270,7 +1376,10 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
     if err is not None:
         return err
 
-    verstr = _compute_verstr(base_version, commit_hash, patches)
+    storage = _get_storage(vcs, params)
+    verstr = _unique_snapshot_verstr(
+        storage, vcs.name, base_version, commit_hash, _compute_diff_hash(patches)
+    )
     metadata = _build_snapshot_metadata(
         vcs,
         verstr,
@@ -1282,7 +1391,7 @@ def snapshot_create(vcs, params, note=None, user_meta=None):
         note=note,
         user_meta=user_meta,
     )
-    _get_storage(vcs, params).save(vcs.name, verstr, metadata, patches)
+    storage.save(vcs.name, verstr, metadata, patches)
 
     VMN_LOGGER.info(f"Created snapshot: {verstr}")
     print(verstr)
@@ -1306,7 +1415,10 @@ def _save_safety_snapshot(vcs, params, target_verstr):
     if err is not None:
         return None  # clean tree (err==0) or a real error — nothing to save
 
-    verstr = _compute_verstr(base_version, commit_hash, patches)
+    storage = _get_storage(vcs, params)
+    verstr = _unique_snapshot_verstr(
+        storage, vcs.name, base_version, commit_hash, _compute_diff_hash(patches)
+    )
     if verstr == target_verstr:
         return None
 
@@ -1320,7 +1432,7 @@ def _save_safety_snapshot(vcs, params, target_verstr):
         ver_info,
         note="auto-saved before restore",
     )
-    _get_storage(vcs, params).save(vcs.name, verstr, metadata, patches)
+    storage.save(vcs.name, verstr, metadata, patches)
     return verstr
 
 
@@ -1665,58 +1777,99 @@ def _write_snapshot_to_dir(directory, metadata, patches):
             f.write(patches["untracked_files"])
 
 
+# Seconds a git subprocess may take while materializing a snapshot: local
+# operations are quick, network ones must not hang an export or a ui diff.
+_LOCAL_GIT_TIMEOUT_SEC = 120
+_NETWORK_GIT_TIMEOUT_SEC = 300
+
+
+def _git(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC):
+    """Run git; a CompletedProcess, or None when it timed out."""
+    try:
+        return subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        VMN_LOGGER.error(f"git {' '.join(args[:2])} timed out after {timeout}s")
+        return None
+
+
+def _git_ok(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC, what=None):
+    result = _git(args, cwd=cwd, timeout=timeout)
+    if result is not None and result.returncode == 0:
+        return True
+    if what and result is not None:
+        VMN_LOGGER.error(f"{what} failed: {result.stderr}")
+    return False
+
+
+def _commit_exists(repo_path, commit_hash):
+    """Whether *commit_hash* is in the local repository at *repo_path*."""
+    if not repo_path or not commit_hash or not os.path.isdir(repo_path):
+        return False
+    return _git_ok(["cat-file", "-e", f"{commit_hash}^{{commit}}"], cwd=repo_path)
+
+
+def _clone_local_at(dest, repo_path, commit_hash):
+    """Check *commit_hash* out of a local repository — no network involved.
+
+    ``--shared`` borrows the source's object store, so even a commit no ref
+    points at (a detached or rebased-away base) checks out.
+    """
+    if not _git_ok(
+        ["clone", "--shared", "--no-checkout", "--quiet", repo_path, dest],
+        what="git clone (local)",
+    ):
+        return 1
+    if not _git_ok(
+        ["checkout", "--quiet", commit_hash],
+        cwd=dest,
+        what=f"git checkout {commit_hash[:7]}",
+    ):
+        return 1
+    return 0
+
+
+def _clone_at(dest, local_repo, remote, commit_hash):
+    """Materialize *commit_hash* from the local repo when it has it, else remote."""
+    if _commit_exists(local_repo, commit_hash):
+        return _clone_local_at(dest, local_repo, commit_hash)
+    return _shallow_clone_at(dest, remote, commit_hash)
+
+
 def _shallow_clone_at(dest, remote, commit_hash):
     """Create a shallow clone at a specific commit."""
     # Try shallow fetch first (works with servers that support it)
     os.makedirs(dest, exist_ok=True)
-    result = subprocess.run(
-        ["git", "init"],
-        capture_output=True,
-        text=True,
-        cwd=dest,
-    )
-    if result.returncode != 0:
-        VMN_LOGGER.error(f"git init failed in {dest}: {result.stderr}")
+    if not _git_ok(["init"], cwd=dest, what=f"git init in {dest}"):
         return 1
 
-    result = subprocess.run(
-        ["git", "fetch", "--depth", "1", remote, commit_hash],
-        capture_output=True,
-        text=True,
+    if _git_ok(
+        ["fetch", "--depth", "1", remote, commit_hash],
         cwd=dest,
-    )
-    if result.returncode == 0:
-        result = subprocess.run(
-            ["git", "checkout", "FETCH_HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=dest,
-        )
-        if result.returncode == 0:
-            return 0
+        timeout=_NETWORK_GIT_TIMEOUT_SEC,
+    ) and _git_ok(["checkout", "FETCH_HEAD"], cwd=dest):
+        return 0
 
     # Fallback: full clone + checkout (for local repos / servers without SHA1 fetch)
     VMN_LOGGER.warning(
         f"Shallow fetch failed for {commit_hash[:7]}, falling back to full clone"
     )
     shutil.rmtree(dest, ignore_errors=True)
-    result = subprocess.run(
-        ["git", "clone", "--no-checkout", remote, dest],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        VMN_LOGGER.error(f"git clone failed: {result.stderr}")
+    if not _git_ok(
+        ["clone", "--no-checkout", remote, dest],
+        timeout=_NETWORK_GIT_TIMEOUT_SEC,
+        what="git clone",
+    ):
         return 1
 
-    result = subprocess.run(
-        ["git", "checkout", commit_hash],
-        capture_output=True,
-        text=True,
-        cwd=dest,
-    )
-    if result.returncode != 0:
-        VMN_LOGGER.error(f"git checkout {commit_hash[:7]} failed: {result.stderr}")
+    if not _git_ok(
+        ["checkout", commit_hash], cwd=dest, what=f"git checkout {commit_hash[:7]}"
+    ):
         return 1
 
     return 0
@@ -1791,6 +1944,13 @@ def _resolve_remote(remote, vcs):
     return remote
 
 
+def _predates_untracked_capture(metadata):
+    """A stored dev snapshot from before untracked files were captured."""
+    return "has_untracked_files" not in metadata and "-dev." in str(
+        metadata.get("verstr", "")
+    )
+
+
 def _materialize_workdir(vcs, metadata, patches, output_path):
     """Materialize a patch snapshot into a complete working directory."""
     base_commit = metadata.get("base_commit")
@@ -1800,26 +1960,26 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         VMN_LOGGER.error("Snapshot metadata missing base_commit")
         return 1
 
-    if not remote:
-        # Local-first: a snapshot taken without a git remote is still
-        # exportable — clone the base commit from the local repository itself.
-        if vcs and getattr(vcs, "vmn_root_path", None):
-            remote = vcs.vmn_root_path
-        else:
-            VMN_LOGGER.error("Snapshot metadata missing remote URL")
-            return 1
+    local_repo = getattr(vcs, "vmn_root_path", None) if vcs else None
+    if not remote and not local_repo:
+        VMN_LOGGER.error("Snapshot metadata missing remote URL")
+        return 1
 
-    remote = _resolve_remote(remote, vcs)
-
-    err = _shallow_clone_at(output_path, remote, base_commit)
+    # Local-first: the recorded remote is only consulted when the local
+    # repository does not have the base commit (offline / air-gapped safe).
+    err = _clone_at(
+        output_path, local_repo, _resolve_remote(remote, vcs) or local_repo, base_commit
+    )
     if err:
         return err
 
     _apply_patches_to_workdir(output_path, patches)
 
-    # Fallback for old snapshots without stored untracked files:
-    # copy from live working tree if HEAD matches base_commit
-    if not patches.get("untracked_files") and vcs and hasattr(vcs, "vmn_root_path"):
+    # Snapshots taken before untracked files were captured carry no
+    # ``has_untracked_files`` flag: for those only, fall back to the live
+    # working tree's untracked files when HEAD matches the base commit. Every
+    # other record says exactly what it holds, so nothing else is copied in.
+    if _predates_untracked_capture(metadata) and local_repo:
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
@@ -1856,9 +2016,10 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
             continue
 
         dep_remote = _resolve_remote(dep_remote, vcs)
+        dep_local = os.path.join(local_repo, dep_path) if local_repo else None
 
         dep_dest = os.path.join(output_path, dep_path)
-        err = _shallow_clone_at(dep_dest, dep_remote, dep_hash)
+        err = _clone_at(dep_dest, dep_local, dep_remote, dep_hash)
         if err:
             VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
             continue

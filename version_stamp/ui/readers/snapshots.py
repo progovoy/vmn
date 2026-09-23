@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 """Snapshot browsing for the vmn ui API (the ``snapshots/`` storage subdir)."""
+import yaml
+
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+
+# Patch kind -> the metadata flag recording whether the snapshot holds it.
+_PATCH_FLAGS = {
+    "working_tree": "has_working_tree_patch",
+    "local_commits": "has_local_commits_patch",
+    "untracked_files": "has_untracked_files",
+}
 
 
 def snapshot_storage(root_path):
@@ -23,18 +32,38 @@ def list_snapshots(root_path, app_name):
     ]
 
 
+def _load_metadata(storage, app_name, verstr):
+    raw = storage.load_file(app_name, verstr, "metadata.yml")
+    if raw is None:
+        return None
+    try:
+        meta = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def _patch_presence(storage, app_name, verstr, metadata):
+    """Which patch kinds a snapshot holds — from its metadata flags.
+
+    Only a legacy record that predates the flags pays for loading the patches
+    (the untracked tarball can be hundreds of MB).
+    """
+    if all(flag in metadata for flag in _PATCH_FLAGS.values()):
+        return {kind: bool(metadata[flag]) for kind, flag in _PATCH_FLAGS.items()}
+    _, patches = storage.load(app_name, verstr)
+    return {kind: bool((patches or {}).get(kind)) for kind in _PATCH_FLAGS}
+
+
 def get_snapshot(root_path, app_name, verstr_ref):
     storage = snapshot_storage(root_path)
     verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="snapshot")
     if err:
         return None, err
-    metadata, patches = storage.load(app_name, verstr)
+    metadata = _load_metadata(storage, app_name, verstr)
     if metadata is None:
         return None, f"Snapshot {verstr} not found"
     return {
         "metadata": metadata,
-        "patches": {
-            k: bool(patches.get(k))
-            for k in ("working_tree", "local_commits", "untracked_files")
-        },
+        "patches": _patch_presence(storage, app_name, verstr, metadata),
     }, None

@@ -75,6 +75,13 @@ the metrics get in, and they produce the same run on disk. You can mix them —
 e.g. `exp run` a benchmark, then `exp add` a hand-measured number afterward, or
 `exp show` a run your Python script opened.
 
+Untracked (non-ignored) files are captured too, within size caps so a stray
+checkpoint or dataset never balloons every run: files over 50 MB are skipped,
+and at most 200 MB is collected per snapshot. Override with
+`VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`. Skipped paths are
+logged and recorded in the run's metadata as `untracked_skipped`, so a restore
+can tell you what it could not bring back.
+
 ---
 
 ## Without a script: config sweeps & performance tests
