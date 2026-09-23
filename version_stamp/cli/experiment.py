@@ -452,34 +452,37 @@ def _experiment_create_from_snapshot(
         )
         return None, 1
 
-    verstr = _allocate_run_verstr(storage, app, code_verstr)
+    def _record(verstr):
+        metadata = {
+            "verstr": verstr,
+            "base_version": snap_meta.get("base_version"),
+            "base_commit": snap_meta.get("base_commit"),
+            "branch": snap_meta.get("branch"),
+            "remote": snap_meta.get("remote"),
+            "timestamp": _now_iso(),
+            "note": note,
+            "app_name": app,
+            "code_verstr": code_verstr,
+            "from_snapshot": True,
+            "dirty_states": snap_meta.get("dirty_states", []),
+            "has_working_tree_patch": False,
+            "has_local_commits_patch": False,
+            "has_untracked_files": False,
+            "has_dep_patches": False,
+        }
+        if snap_meta.get("changesets"):
+            metadata["changesets"] = snap_meta["changesets"]
+        _attach_parent(metadata, parent)
+        return metadata, {}
 
-    metadata = {
-        "verstr": verstr,
-        "base_version": snap_meta.get("base_version"),
-        "base_commit": snap_meta.get("base_commit"),
-        "branch": snap_meta.get("branch"),
-        "remote": snap_meta.get("remote"),
-        "timestamp": _now_iso(),
-        "note": note,
-        "app_name": app,
-        "code_verstr": code_verstr,
-        "from_snapshot": True,
-        "dirty_states": snap_meta.get("dirty_states", []),
-        "has_working_tree_patch": False,
-        "has_local_commits_patch": False,
-        "has_untracked_files": False,
-        "has_dep_patches": False,
-    }
-    if snap_meta.get("changesets"):
-        metadata["changesets"] = snap_meta["changesets"]
-    _attach_parent(metadata, parent)
+    # Allocation creates the record: the name is claimed atomically, so two
+    # hosts sharing a bucket or directory never end up with the same run.
+    verstr = _allocate_run_verstr(storage, app, code_verstr, make_record=_record)
 
     entry = _create_log_entry("create", note=note)
     if extra_create_data:
         entry.update(extra_create_data)
 
-    storage.save(app, verstr, metadata, {})
     _append_to_log(storage, app, verstr, entry)
     return verstr, None
 
@@ -515,26 +518,29 @@ def _experiment_create_core(
         return None, err
 
     code_verstr = _compute_verstr(base_version, commit_hash, patches)
-    verstr = _allocate_run_verstr(storage, vcs.name, code_verstr)
 
-    metadata = _build_snapshot_metadata(
-        vcs,
-        verstr,
-        base_version,
-        commit_hash,
-        dirty_states,
-        patches,
-        ver_info,
-        note=note,
-    )
-    metadata["code_verstr"] = code_verstr
-    _attach_parent(metadata, parent)
+    def _record(verstr):
+        metadata = _build_snapshot_metadata(
+            vcs,
+            verstr,
+            base_version,
+            commit_hash,
+            dirty_states,
+            patches,
+            ver_info,
+            note=note,
+        )
+        metadata["code_verstr"] = code_verstr
+        _attach_parent(metadata, parent)
+        return metadata, patches
+
+    # Allocation creates the record (see _experiment_create_from_snapshot).
+    verstr = _allocate_run_verstr(storage, vcs.name, code_verstr, make_record=_record)
 
     entry = _create_log_entry("create", note=note)
     if extra_create_data:
         entry.update(extra_create_data)
 
-    storage.save(vcs.name, verstr, metadata, patches)
     _append_to_log(storage, vcs.name, verstr, entry)
     return verstr, None
 

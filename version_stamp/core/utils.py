@@ -3,8 +3,19 @@ import datetime
 import hashlib
 import os
 
+import yaml
+
 from version_stamp.core.constants import BRANCH_CONF_DIR, JINJA_TAG_RE
 from version_stamp.core.logging import VMN_LOGGER
+
+# libyaml's loader is ~10x faster than the pure-Python one, and experiment
+# listings parse one metadata.yml (and one run_state.yml) per run.
+_FAST_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def yaml_safe_load(stream_or_text):
+    """``yaml.safe_load`` semantics, on the C loader when libyaml is present."""
+    return yaml.load(stream_or_text, Loader=_FAST_SAFE_LOADER)
 
 
 def now_iso():

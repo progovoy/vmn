@@ -666,6 +666,31 @@ vmn exp run my_app --backend s3 --bucket my-experiments \
 These can also be set once under `experiment.storage` in `.vmn/{app}/conf.yml`
 so you don't repeat them on every command; CLI flags override the config.
 
+### How records are stored
+
+- **One directory (or key prefix) per run**: `metadata.yml`, the patches,
+  `run_state.yml`, `artifacts/` and one append-only `log.<writer>.jsonl` per
+  writer. `metadata.yml` is written last, so a half-created run is never listed.
+  Every storage directory carries its own `.gitignore` (`*`), so experiments of
+  nested apps (`root_app/service`) never show up in `git status` either.
+- **Atomic allocation**: a new run claims its verstr atomically (a plain
+  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3). Two
+  hosts running the same commit against a shared bucket or directory get
+  `…` and `….r2`, never one run with both hosts' data merged in.
+- **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, where `<app>` is the tag form
+  (`root_app/service` → `root_app-service`). Records written by older versions
+  under the `root_app_service` form are still read.
+- **Incremental log sync**: a host keeps its log locally and ships only what it
+  appended since the last sync, as segments `log.<writer>@<n>.jsonl` next to
+  the first upload `log.<writer>.jsonl`. Readers merge them per writer.
+- **Local-first caching**: immutable files fetched from S3 (metadata, patches)
+  are cached locally; `run_state.yml` and logs never are, so another host's run
+  shows its live status.
+- **Deduplicated patches**: runs of the same code (`….r2`, `….r3`, …) hard-link
+  byte-identical patch files instead of storing a copy each.
+- **Artifacts** are uploaded to S3 streamed (multipart for large files) and are
+  listed and downloadable from S3-backed workspaces.
+
 ---
 
 ## Web UI

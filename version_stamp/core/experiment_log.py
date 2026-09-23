@@ -200,7 +200,13 @@ def load_log(storage, app_name, verstr):
 
 
 def list_artifacts(storage, app_name, verstr):
-    """``[{"name", "size"}]`` for an experiment's artifact files, name-ordered."""
+    """``[{"name", "size"}]`` for an experiment's artifact files, name-ordered.
+
+    The backend answers, so S3 records list theirs too; a duck-typed storage
+    without ``list_artifacts`` falls back to its local artifacts directory.
+    """
+    if hasattr(storage, "list_artifacts"):
+        return storage.list_artifacts(app_name, verstr)
     art_dir = storage.list_artifact_files(app_name, verstr)
     if not art_dir or not os.path.isdir(art_dir):
         return []
