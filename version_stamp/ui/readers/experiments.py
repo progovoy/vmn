@@ -7,31 +7,20 @@ own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
-from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core.experiment_log import (
-    effective_params,
     experiment_row,
     filter_by_status,
-    last_metric_at,
-    latest_metrics,
-    list_artifacts,
-    metric_series,
+    primary_metric,
     sort_by_metric,
 )
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_status import (
-    derive_status,
-    load_run_state,
-    status_fields,
-)
-from version_stamp.core.experiment_tree import (
-    annotate_tree,
-    children_by_parent,
-    subtree_verstrs,
-)
+from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
+from version_stamp.ui.readers.experiment_detail import experiment_detail
 from version_stamp.ui.readers.versions import version_counts
 
 
@@ -69,7 +58,8 @@ def list_apps(root_path):
     ver_counts = version_counts(root_path)
     for name in sorted(apps):
         try:
-            exp_count = len(storage.list_snapshots(name))
+            # Names only: counting must not parse every run's metadata.
+            exp_count = len(storage.list_verstrs(name))
         except Exception:
             exp_count = 0
         rows.append(
@@ -154,16 +144,48 @@ def apply_filters(rows, status=None, query=None):
     return filter_rows(filter_by_status(rows, status), query)
 
 
-def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None):
+ORDERS = ("asc", "desc")
+TIMESTAMP_SORT = "timestamp"
+
+
+def _by_timestamp(rows, newest_first):
+    """Creation order; rows without a timestamp go last either way."""
+    stamped = [r for r in rows if r.get("timestamp")]
+    stamped.sort(key=lambda r: r["timestamp"], reverse=newest_first)
+    return stamped + [r for r in rows if not r.get("timestamp")]
+
+
+def _with_order(schema, metric, order):
+    """*schema* with *metric*'s goal forced by an explicit *order*."""
+    if order not in ORDERS:
+        return schema
+    entry = dict((schema or {}).get(metric) or {})
+    entry["goal"] = "max" if order == "desc" else "min"
+    return {**(schema or {}), metric: entry}
+
+
+def _ordered(rows, schema, sort, order):
+    """*rows* by timestamp, by metric (direction overridable), or storage order."""
+    if sort == TIMESTAMP_SORT:
+        return _by_timestamp(rows, newest_first=order != "asc")
+    metric = sort or primary_metric(schema)
+    if metric and any(metric in r["metrics"] for r in rows):
+        return sort_by_metric(rows, _with_order(schema, metric, order), sort=metric)
+    return rows[::-1] if order == "desc" else rows
+
+
+def sort_rows(rows, schema, sort=None, last=None, offset=0, limit=None, order=None):
     """Pure ordering over fetched rows — semantics identical to ``vmn exp list``.
 
-    When *limit* is given, returns ``{"rows": [...], "total": N}`` for
-    paginated responses.  Without *limit*, returns a plain list (backward
-    compatible).
+    *sort* is a metric name or ``"timestamp"`` (newest first by default);
+    *order* (``asc``/``desc``) overrides the direction — rows missing the metric
+    stay last either way. When *limit* is given, returns
+    ``{"rows": [...], "total": N}`` for paginated responses. Without *limit*,
+    returns a plain list (backward compatible).
     """
     if last:
         rows = rows[-int(last) :]
-    rows = sort_by_metric(list(rows), schema, sort=sort)
+    rows = _ordered(list(rows), schema, sort, order)
 
     if limit is not None:
         total = len(rows)
@@ -181,6 +203,7 @@ def list_experiments(
     limit=None,
     status=None,
     query=None,
+    order=None,
 ):
     """Leaderboard rows, ordered exactly like ``vmn exp list``."""
     return sort_rows(
@@ -190,73 +213,19 @@ def list_experiments(
         last=last,
         offset=offset,
         limit=limit,
+        order=order,
     )
 
 
-_DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
-    "parent",
-    "children",
-    "kind",
-    "depth",
-    "tree_status",
-    "last_metric_at",
-)
+def get_experiment(root_path, app_name, verstr_ref, **detail_opts):
+    """Full experiment detail; the ref supports @N / prefix / 'latest'.
 
-
-def _status_detail(storage, app_name, verstr, metadata, log):
-    """One experiment's status payload, including its place in the run tree.
-
-    Costs one metadata listing plus one run-state read per subtree member — the
-    whole workspace is never re-read, and no log is touched: *metadata* and
-    *log* come from the caller, which already loaded both.
+    *detail_opts* go to :func:`~version_stamp.ui.readers.experiment_detail.experiment_detail`
+    (``edges``, ``max_points``, ``include_log``).
     """
-    nodes = [
-        {"verstr": meta["verstr"], "parent": meta.get("parent")}
-        for meta in storage.list_snapshots(app_name)
-    ]
-    subtree = set(subtree_verstrs(verstr, children_by_parent(nodes)))
-    run_state = None
-    for node in nodes:
-        if node["verstr"] not in subtree:
-            continue
-        state = load_run_state(storage, app_name, node["verstr"])
-        node["status"] = derive_status(state)
-        if node["verstr"] == verstr:
-            run_state = state
-
-    row = next((r for r in annotate_tree(nodes) if r["verstr"] == verstr), {})
-    detail = status_fields(run_state)
-    detail.update({k: row.get(k) for k in ("children", "kind", "depth", "tree_status")})
-    detail["parent"] = metadata.get("parent")
-    detail["last_metric_at"] = last_metric_at(log)
-    return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
-
-
-def get_experiment(root_path, app_name, verstr_ref):
-    """Full experiment detail; the ref supports @N / prefix / 'latest'."""
-    storage = experiment_storage(root_path)
-    verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
-    if err:
-        return None, err
-
-    metadata, patches = storage.load(app_name, verstr)
-    if metadata is None:
-        return None, f"Experiment {verstr} not found"
-
-    log = _load_log(storage, app_name, verstr)
-    return {
-        "metadata": metadata,
-        "log": log,
-        "params": effective_params(log),
-        "metrics": latest_metrics(log),
-        "series": metric_series(log),
-        "artifacts": list_artifacts(storage, app_name, verstr),
-        "status": _status_detail(storage, app_name, verstr, metadata, log),
-        "patches": {
-            k: bool(patches.get(k))
-            for k in ("working_tree", "local_commits", "untracked_files")
-        },
-    }, None
+    return get_experiment_from_storage(
+        experiment_storage(root_path), app_name, verstr_ref, **detail_opts
+    )
 
 
 # ---- Storage-backend functions (S3 / remote workspaces) ----
@@ -271,6 +240,7 @@ def list_experiments_from_storage(
     limit=None,
     status=None,
     query=None,
+    order=None,
 ):
     """List experiments using a storage backend directly (for S3/remote workspaces)."""
     schema = {}  # No app conf available for S3 workspaces
@@ -283,31 +253,20 @@ def list_experiments_from_storage(
         last=last,
         offset=offset,
         limit=limit,
+        order=order,
     )
 
 
-def get_experiment_from_storage(storage, app_name, verstr_ref):
+def get_experiment_from_storage(storage, app_name, verstr_ref, **detail_opts):
     """Get experiment detail from storage backend directly."""
-    verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
-    if err:
-        return None, err
-    metadata, patches = storage.load(app_name, verstr)
-    if metadata is None:
-        return None, "Experiment " + verstr + " not found"
-    log = _load_log(storage, app_name, verstr)
-    return {
-        "metadata": metadata,
-        "log": log,
-        "params": effective_params(log),
-        "metrics": latest_metrics(log),
-        "series": metric_series(log),
-        "artifacts": list_artifacts(storage, app_name, verstr),
-        "status": _status_detail(storage, app_name, verstr, metadata, log),
-        "patches": {
-            k: bool(patches.get(k)) if patches else False
-            for k in ("working_tree", "local_commits", "untracked_files")
-        },
-    }, None
+    return experiment_detail(
+        storage,
+        app_name,
+        verstr_ref,
+        read_log=_load_log,
+        read_run_state=load_run_state,
+        **detail_opts,
+    )
 
 
 def list_apps_from_storage(storage):

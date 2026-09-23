@@ -17,6 +17,7 @@ from version_stamp.core.experiment_query import QueryError
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
 from version_stamp.ui.readers import diffs as diff_reader
+from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import tree as tree_reader
@@ -28,6 +29,10 @@ from version_stamp.ui.workspaces import WorkspaceError
 API_PREFIX = "/api/v1"
 # Responses below this size are not worth a gzip round.
 GZIP_MIN_BYTES = 1000
+# One page of leaderboard rows or log entries, whatever a client asks for.
+MAX_PAGE = 1000
+# A chart's worth of points per metric, however much a client asks for.
+MAX_SERIES_POINTS = 20_000
 
 
 def create_app(
@@ -54,6 +59,9 @@ def create_app(
     )
 
     indexes = {}
+    # Parent edges never change once written, so each workspace keeps its own
+    # across polls and a run page never re-reads every run's metadata.
+    edge_caches = {}
 
     def _index_for(ws):
         """Per-workspace read cache under the server data dir (never in the repo)."""
@@ -66,6 +74,11 @@ def create_app(
                 ws.path, db_dir=os.path.join(manager.data_dir, "index")
             )
         return indexes[ws.name]
+
+    def _edges_for(ws):
+        if ws.name not in edge_caches:
+            edge_caches[ws.name] = detail_reader.ParentEdges()
+        return edge_caches[ws.name]
 
     if token:
 
@@ -131,6 +144,15 @@ def create_app(
             )
         return None  # None means: use the default path-based reader
 
+    def _any_exp_storage(ws):
+        """The workspace's experiment storage, local checkout or S3."""
+        return _exp_storage_for(ws) or exp_reader.experiment_storage(ws.path)
+
+    def _page(offset, limit):
+        """``(offset, limit)`` clamped to what one response may carry."""
+        limit = None if limit is None else max(0, min(int(limit), MAX_PAGE))
+        return max(0, int(offset or 0)), limit
+
     @app.get(f"{API_PREFIX}/meta")
     def meta():
         from version_stamp import version as version_mod
@@ -168,6 +190,7 @@ def create_app(
             raise HTTPException(404, str(e))
         # A later workspace of the same name may point elsewhere.
         indexes.pop(ws_name, None)
+        edge_caches.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
     def list_apps(ws_name: str):
@@ -187,11 +210,21 @@ def create_app(
         limit: int = None,
         status: str = None,
         q: str = None,
+        order: str = None,
     ):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
+        if order is not None and order not in exp_reader.ORDERS:
+            raise HTTPException(400, f"order must be one of {', '.join(exp_reader.ORDERS)}")
+        offset, limit = _page(offset, limit)
         filters = dict(
-            sort=sort, last=last, offset=offset, limit=limit, status=status, query=q
+            sort=sort,
+            last=last,
+            offset=offset,
+            limit=limit,
+            status=status,
+            query=q,
+            order=order,
         )
         # A query that will not compile is the caller's typo: answer 400 with the
         # compiler's message (it carries the offset), not a 500 or an empty list.
@@ -211,20 +244,49 @@ def create_app(
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
     )
-    def get_experiment(ws_name: str, app_tag: str, verstr: str):
+    def get_experiment(
+        ws_name: str,
+        app_tag: str,
+        verstr: str,
+        max_points: int = detail_reader.DEFAULT_MAX_POINTS,
+        include_log: bool = False,
+    ):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         _segment(verstr)
-        s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            detail, err = exp_reader.get_experiment_from_storage(
-                s3_storage, app_name, verstr
-            )
-        else:
-            detail, err = exp_reader.get_experiment(ws.path, app_name, verstr)
+        detail, err = exp_reader.get_experiment_from_storage(
+            _any_exp_storage(ws),
+            app_name,
+            verstr,
+            edges=_edges_for(ws),
+            max_points=max(2, min(max_points, MAX_SERIES_POINTS)),
+            include_log=include_log,
+        )
         if err:
             raise HTTPException(404, err)
         return detail
+
+    @app.get(
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+        "/experiments/{verstr}/log"
+    )
+    def experiment_log(
+        ws_name: str,
+        app_tag: str,
+        verstr: str,
+        offset: int = 0,
+        limit: int = detail_reader.LOG_TAIL,
+    ):
+        ws = _experiment_workspace(ws_name)
+        app_name = _app_name(app_tag)
+        _segment(verstr)
+        offset, limit = _page(offset, limit)
+        page, err = detail_reader.log_page(
+            _any_exp_storage(ws), app_name, verstr, offset=offset, limit=limit
+        )
+        if err:
+            raise HTTPException(404, err)
+        return page
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
@@ -235,20 +297,12 @@ def create_app(
         app_name = _app_name(app_tag)
         _segment(verstr)
         _segment(filename, "artifact name")
-        s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            art_dir = s3_storage.list_artifact_files(app_name, verstr)
-        else:
-            storage = exp_reader.experiment_storage(ws.path)
-            art_dir = storage.list_artifact_files(app_name, verstr)
-        if not art_dir:
-            raise HTTPException(404, "No artifacts")
-        filepath = os.path.join(art_dir, filename)
-        if not within(art_dir, filepath):
-            raise HTTPException(400, "Invalid filename")
-        if not os.path.isfile(filepath):
+        # The backend resolves the file: a local path, or an S3 object fetched
+        # into a cache. Either way it refuses names that leave the run's dir.
+        path = _any_exp_storage(ws).artifact_local_path(app_name, verstr, filename)
+        if not path or not os.path.isfile(path):
             raise HTTPException(404, f"Artifact {filename} not found")
-        return FileResponse(filepath, filename=filename)
+        return FileResponse(path, filename=filename)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):
