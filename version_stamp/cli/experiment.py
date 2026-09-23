@@ -141,8 +141,11 @@ def _get_experiment_storage(vcs, params):
         "VMN_EXPERIMENT_DIR"
     )
     vmn_root = experiment_dir or (vcs.vmn_root_path if vcs else None)
+    backend = params.get("backend", "local")
+    if backend == "local" and not vmn_root and params.get("bucket"):
+        backend = "s3"  # a pod with a bucket and no scratch dir records to S3 directly
     return get_snapshot_storage(
-        params.get("backend", "local"),
+        backend,
         vmn_root_path=vmn_root,
         bucket=params.get("bucket"),
         prefix=params.get("prefix", "vmn-experiments"),

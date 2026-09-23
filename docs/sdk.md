@@ -135,9 +135,16 @@ with start_run() as run:            # app name comes from the metadata
 ```
 
 `app_name` may still be passed (or set via `VMN_APP_NAME`); otherwise the app the
-snapshot names is used. Pass `storage=` instead of `VMN_EXPERIMENT_DIR` for an
-S3-backed store. With neither, `start_run()` raises a `ValueError` naming
-`VMN_EXPERIMENT_DIR`.
+snapshot names is used.
+
+To record to S3 from a pod, set `VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`,
+default `vmn-experiments`, and `VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like).
+With `VMN_EXPERIMENT_DIR` too, entries are appended to that local scratch dir and the
+new lines are synced to the bucket every `sync_interval_sec`; with the bucket alone
+the run writes straight to S3. The job creates its own record — no prefix needs to
+exist beforehand — and `vmn ui --s3-bucket <bucket>` reads it. `storage=` still
+overrides all of this. With neither a dir nor a bucket, `start_run()` raises a
+`ValueError` naming `VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_BUCKET`.
 
 ---
 

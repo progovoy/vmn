@@ -47,6 +47,7 @@ from version_stamp.core.experiment_writer import (
     get_repo_lock,
     get_writer_id,
     merge_conf_into_params,
+    merge_env_into_params,
     save_artifact,
     save_run_state,
 )
@@ -216,14 +217,16 @@ def _snapshot_app_names(meta_path):
 
 
 def _snapshot_mode_storage():
-    """Where a git-less run records: ``VMN_EXPERIMENT_DIR``, as the CLI does."""
+    """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
+    and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
     params = {"backend": "local", "prefix": "vmn-experiments"}
+    merge_env_into_params(params)
     try:
         return _get_experiment_storage(None, params)
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "
-            "set VMN_EXPERIMENT_DIR (or pass storage=)."
+            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_BUCKET (or pass storage=)."
         )
 
 

@@ -182,6 +182,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `VMN_EXP_KILL_GRACE_SEC`: Fallback for `vmn exp run --kill-grace-sec` (seconds a forwarded signal waits before SIGKILL)
 - `VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`: caps on untracked files captured into a snapshot/experiment tarball (defaults 50 / 200; skipped paths are recorded as `untracked_skipped`)
 - `VMN_EXPERIMENT_DIR` / `VMN_SNAPSHOT_METADATA`: git-free experiment mode (container images built from `vmn snapshot export`) for both the CLI and `start_run()`
+- `VMN_EXPERIMENT_BUCKET` / `VMN_EXPERIMENT_PREFIX` / `VMN_EXPERIMENT_ENDPOINT_URL`: fallbacks for the experiment `--bucket`/`--prefix`/`--endpoint-url` (flags > env > conf.yml), honoured by the CLI and `start_run()`; with a bucket and no local dir, runs record straight to S3
 - Set *by* vmn for the `vmn exp run` child process: `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`. `VMN_EXPERIMENT_ID` also drives auto-parenting — any experiment created while it is set becomes an inner job of that run.
 
 ## Docs Layout

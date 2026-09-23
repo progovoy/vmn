@@ -623,6 +623,9 @@ Every command that takes an experiment reference supports these forms:
 | `VMN_WRITER_ID` | Unique writer ID (or use `--writer-id` flag) |
 | `VMN_EXPERIMENT_DIR` | Shared mount path (or use `--experiment-dir` flag) |
 | `VMN_SNAPSHOT_METADATA` | Path to `vmn_metadata.yml` (or use `--from-snapshot`) |
+| `VMN_EXPERIMENT_BUCKET` | S3 bucket runs are recorded to (or use `--bucket`); the job creates its own records |
+| `VMN_EXPERIMENT_PREFIX` | Key prefix inside the bucket (default `vmn-experiments`, matching `vmn ui --s3-bucket`) |
+| `VMN_EXPERIMENT_ENDPOINT_URL` | Custom S3 endpoint, e.g. MinIO (or use `--endpoint-url`) |
 
 ### Variables Set BY vmn (for your training script)
 

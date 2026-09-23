@@ -39,6 +39,7 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_GIT,
     VMN_BE_TYPE_LOCAL_FILE,
 )
+from version_stamp.core.experiment_writer import merge_env_into_params
 from version_stamp.core.logging import (
     VMN_LOGGER,
     _runtime_ctx,
@@ -76,6 +77,7 @@ def _run_experiment_from_snapshot(args):
         "endpoint_url": getattr(args, "endpoint_url", None),
         "experiment_dir": getattr(args, "experiment_dir", None),
     }
+    merge_env_into_params(params)
 
     storage = _get_experiment_storage(None, params)
     action = args.action

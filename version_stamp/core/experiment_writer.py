@@ -38,6 +38,13 @@ _DEFAULT_PARAM_VALUES = ("local", "vmn-experiments")
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
 
+# Storage params a pod can set without a conf.yml (see merge_env_into_params).
+STORAGE_ENV = {
+    "bucket": "VMN_EXPERIMENT_BUCKET",
+    "prefix": "VMN_EXPERIMENT_PREFIX",
+    "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
+}
+
 
 def get_repo_lock(vmn_root_path):
     """The per-repo vmn lock that serializes mutations of a checkout.
@@ -73,14 +80,30 @@ def get_writer_id(conf_writer_id=None):
     return _WRITER_ID
 
 
+def _is_unset(params, key):
+    return not params.get(key) or params[key] in _DEFAULT_PARAM_VALUES
+
+
+def merge_env_into_params(params):
+    """Fill unset storage params from ``VMN_EXPERIMENT_*`` (flags override env).
+
+    A pod has no conf.yml and often no checkout; the environment is how it is
+    pointed at a bucket.
+    """
+    for key, var in STORAGE_ENV.items():
+        if _is_unset(params, key) and os.environ.get(var):
+            params[key] = os.environ[var]
+
+
 def merge_conf_into_params(vcs, params):
-    """Merge experiment config from conf.yml into params (CLI overrides conf)."""
+    """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
+    merge_env_into_params(params)
     exp_conf = getattr(vcs, "experiment", None) or {}
     storage_conf = (
         exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
     )
     for key in _STORAGE_CONF_KEYS:
-        if not params.get(key) or params[key] in _DEFAULT_PARAM_VALUES:
+        if _is_unset(params, key):
             conf_val = storage_conf.get(key)
             if conf_val:
                 params[key] = conf_val
