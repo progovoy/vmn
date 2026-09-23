@@ -5,6 +5,7 @@ import {
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, seriesColor } from "../util";
 import { downsampleLTTB } from "../util/downsample";
+import { maxOf, minOf } from "../util/stats";
 
 /** One small chart per metric — each on its own scale, so a loss (~0.1) and
  *  an accuracy (~0.9) don't get squashed onto a shared axis. Same visual
@@ -14,7 +15,11 @@ export default function ParamPlots({ rows, metricCols, schema }: {
 }) {
   const plotCols = useMemo(
     () => metricCols.filter(
-      (m) => rows.filter((r) => typeof r.metrics[m] === "number").length > 1
+      (m) => {
+        let n = 0;
+        for (const r of rows) if (typeof r.metrics[m] === "number" && ++n > 1) return true;
+        return false;
+      }
     ),
     [rows, metricCols]
   );
@@ -36,16 +41,16 @@ export default function ParamPlots({ rows, metricCols, schema }: {
         {plotCols.map((m) => {
           const goal = metricGoal(schema, m);
           const color = seriesColor(plotCols, m);
-          const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | undefined }));
+          const data = points.map((r) => ({ x: r.idx, v: r.metrics[m] as number | null | undefined }));
           const chartData = downsampleLTTB(
-            data.filter((d): d is { x: number; v: number } => typeof d.v === "number")
+            data.filter((d): d is { x: number; v: number } =>
+              typeof d.v === "number" && Number.isFinite(d.v))
                 .map(d => ({ x: d.x, y: d.v })),
             200
           ).map(d => ({ x: d.x, v: d.y }));
-          const vals = data.map((d) => d.v).filter((v): v is number => typeof v === "number");
-          const best = vals.length
-            ? (goal === "min" ? Math.min(...vals) : Math.max(...vals))
-            : null;
+          const vals = data.map((d) => d.v);
+          const extreme = goal === "min" ? minOf(vals) : maxOf(vals);
+          const best = Number.isNaN(extreme) ? null : extreme;
           return (
             <div key={m}>
               <div style={{

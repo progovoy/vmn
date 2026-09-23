@@ -1,25 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
+import { paramValue, runColor } from "../util";
 
 interface Props {
   rows: ExperimentRow[];
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
+  /** Row indices inside the brush, or null when the brush is cleared. */
   onBrush?: (indices: number[] | null) => void;
 }
 interface DimExtent { min: number; max: number }
+interface Brush { dim: number; range: [number, number] }
 
 const PAD = 20, CHART_H = 300, LABEL_H = 24, SVG_H = CHART_H + LABEL_H;
 const CANVAS_THRESHOLD = 500;
-const PALETTE = [
-  "var(--minor)", "var(--hotfix)", "var(--patch)",
-  "var(--pre)", "var(--major)", "var(--series-4)",
-];
+/** A drag shorter than this is a click: it clears the brush. */
+const MIN_BRUSH_PX = 3;
 
 function numVal(row: ExperimentRow, dim: string, mCols: string[]): number | null {
-  const v = mCols.includes(dim) ? row.metrics[dim] : row.user_meta?.[dim];
-  return typeof v === "number" ? v : null;
+  const v = mCols.includes(dim) ? row.metrics[dim] : paramValue(row, dim);
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
 function extents(rows: ExperimentRow[], dims: string[], mCols: string[]) {
@@ -50,22 +51,47 @@ function buildPath(row: ExperimentRow, dims: string[], mCols: string[],
 }
 
 function inBrush(row: ExperimentRow, dims: string[], mCols: string[],
-  ext: Record<string, DimExtent>, plotH: number, bDim: number, bRange: [number, number]): boolean {
-  const v = numVal(row, dims[bDim], mCols);
+  ext: Record<string, DimExtent>, plotH: number, brush: Brush): boolean {
+  const v = numVal(row, dims[brush.dim], mCols);
   if (v === null) return false;
-  const y = yScale(v, ext[dims[bDim]], plotH);
-  const lo = Math.min(bRange[0], bRange[1]), hi = Math.max(bRange[0], bRange[1]);
+  const y = yScale(v, ext[dims[brush.dim]], plotH);
+  const lo = Math.min(...brush.range), hi = Math.max(...brush.range);
   return y >= lo && y <= hi;
 }
 
-function SvgRenderer({ rows, dims, mCols, ext, xs, plotH, w, bDim, bRange, bRef,
-  onStart, onMove, onEnd }: {
+interface Geometry {
   rows: ExperimentRow[]; dims: string[]; mCols: string[];
   ext: Record<string, DimExtent>; xs: number[]; plotH: number; w: number;
-  bDim: number | null; bRange: [number, number] | null;
-  bRef: React.RefObject<number | null>;
+}
+interface BrushHandlers {
+  brush: Brush | null;
   onStart: (d: number, y: number) => void; onMove: (y: number) => void; onEnd: () => void;
-}) {
+}
+
+/** The per-axis hit areas plus the visible brush rectangle. */
+function BrushAreas({ dims, xs, plotH, brush, onStart, onMove, onEnd }:
+  Pick<Geometry, "dims" | "xs" | "plotH"> & BrushHandlers) {
+  return (
+    <>
+      {dims.map((d, i) => (
+        <g key={d}>
+          {brush?.dim === i && (
+            <rect x={xs[i] - 6} y={Math.min(...brush.range)} width={12}
+              height={Math.abs(brush.range[1] - brush.range[0])} fill="var(--accent)" opacity={0.25} rx={2} />
+          )}
+          <rect data-testid="brush-area" x={xs[i] - 12} y={PAD} width={24} height={plotH}
+            fill="transparent" style={{ cursor: "crosshair" }}
+            onMouseDown={(e) => onStart(i, e.clientY)}
+            onMouseMove={(e) => onMove(e.clientY)}
+            onMouseUp={onEnd} />
+        </g>
+      ))}
+    </>
+  );
+}
+
+function SvgRenderer(props: Geometry & BrushHandlers & { selected: Set<number> | null }) {
+  const { rows, dims, mCols, ext, xs, plotH, w, selected } = props;
   return (
     <svg width={w} height={SVG_H} style={{ display: "block" }}>
       {dims.map((d, i) => (
@@ -73,39 +99,30 @@ function SvgRenderer({ rows, dims, mCols, ext, xs, plotH, w, bDim, bRange, bRef,
           <line data-testid="axis" x1={xs[i]} y1={PAD} x2={xs[i]} y2={PAD + plotH}
             stroke="var(--line)" strokeWidth={1} />
           <text x={xs[i]} y={SVG_H - 4} textAnchor="middle" fontSize={10} fill="var(--text-2)">{d}</text>
-          {bDim === i && bRange && (
-            <rect x={xs[i] - 6} y={Math.min(bRange[0], bRange[1])} width={12}
-              height={Math.abs(bRange[1] - bRange[0])} fill="var(--accent)" opacity={0.25} rx={2} />
-          )}
-          <rect data-testid="brush-area" x={xs[i] - 12} y={PAD} width={24} height={plotH}
-            fill="transparent" style={{ cursor: "crosshair" }}
-            onMouseDown={(e) => onStart(i, e.clientY)}
-            onMouseMove={(e) => { if (bRef.current !== null) onMove(e.clientY); }}
-            onMouseUp={onEnd} />
         </g>
       ))}
       {rows.map((r, ri) => {
         const p = buildPath(r, dims, mCols, ext, xs, plotH);
         if (!p) return null;
-        const dim = bDim !== null && bRange !== null && !inBrush(r, dims, mCols, ext, plotH, bDim, bRange);
+        const dim = selected !== null && !selected.has(ri);
         return <path key={ri} data-testid="row-line" d={p} fill="none"
-          stroke={PALETTE[ri % PALETTE.length]} strokeWidth={1.5} opacity={dim ? 0.1 : 0.8} />;
+          stroke={runColor(ri % 6)} strokeWidth={1.5} opacity={dim ? 0.1 : 0.8} />;
       })}
+      <BrushAreas {...props} />
     </svg>
   );
 }
 
-function CanvasRenderer({ rows, dims, mCols, ext, xs, plotH, w }: {
-  rows: ExperimentRow[]; dims: string[]; mCols: string[];
-  ext: Record<string, DimExtent>; xs: number[]; plotH: number; w: number;
-}) {
+function CanvasRenderer(props: Geometry & BrushHandlers & { selected: Set<number> | null }) {
+  const { rows, dims, mCols, ext, xs, plotH, w, selected } = props;
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const ctx = ref.current?.getContext("2d"); if (!ctx) return;
     ctx.clearRect(0, 0, w, CHART_H);
     for (let ri = 0; ri < rows.length; ri++) {
-      ctx.save(); ctx.strokeStyle = PALETTE[ri % PALETTE.length];
-      ctx.globalAlpha = 0.4; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.save(); ctx.strokeStyle = runColor(ri % 6);
+      ctx.globalAlpha = selected !== null && !selected.has(ri) ? 0.04 : 0.4;
+      ctx.lineWidth = 1; ctx.beginPath();
       let on = false;
       for (let di = 0; di < dims.length; di++) {
         const v = numVal(rows[ri], dims[di], mCols);
@@ -119,11 +136,16 @@ function CanvasRenderer({ rows, dims, mCols, ext, xs, plotH, w }: {
       ctx.beginPath(); ctx.strokeStyle = "gray"; ctx.lineWidth = 1; ctx.globalAlpha = 0.5;
       ctx.moveTo(xs[i], PAD); ctx.lineTo(xs[i], PAD + plotH); ctx.stroke();
     }
-  }, [rows, dims, mCols, ext, xs, plotH, w]);
+  }, [rows, dims, mCols, ext, xs, plotH, w, selected]);
 
   return (
     <div>
-      <canvas ref={ref} width={w} height={CHART_H} style={{ display: "block" }} />
+      <div style={{ position: "relative", width: w, height: CHART_H }}>
+        <canvas ref={ref} width={w} height={CHART_H} style={{ display: "block" }} />
+        <svg width={w} height={CHART_H} style={{ position: "absolute", inset: 0 }}>
+          <BrushAreas {...props} />
+        </svg>
+      </div>
       <svg width={w} height={LABEL_H} style={{ display: "block" }}>
         {dims.map((d, i) => (
           <text key={d} data-testid="axis" x={xs[i]} y={16}
@@ -144,10 +166,9 @@ export default function ParallelCoordinates({ rows, metricCols, paramCols, schem
     return dims.map((_, i) => 40 + i * ((w - 80) / (dims.length - 1)));
   }, [dims, w]);
 
-  const [bDim, setBDim] = useState<number | null>(null);
-  const [bRange, setBRange] = useState<[number, number] | null>(null);
-  const bDimRef = useRef<number | null>(null);
-  const bRangeRef = useRef<[number, number] | null>(null);
+  // The brush persists after mouseup — it is a filter, not a transient hover.
+  const [brush, setBrush] = useState<Brush | null>(null);
+  const dragRef = useRef<Brush | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const toY = useCallback((cy: number) => {
@@ -155,37 +176,60 @@ export default function ParallelCoordinates({ rows, metricCols, paramCols, schem
     return r ? cy - r.top : cy;
   }, []);
 
-  const onStart = useCallback((di: number, cy: number) => {
+  const onStart = useCallback((dim: number, cy: number) => {
     const y = toY(cy);
-    bDimRef.current = di; bRangeRef.current = [y, y];
-    setBDim(di); setBRange([y, y]);
+    dragRef.current = { dim, range: [y, y] };
+    setBrush(dragRef.current);
   }, [toY]);
 
   const onMove = useCallback((cy: number) => {
-    const y = toY(cy);
-    if (bRangeRef.current) { const n: [number, number] = [bRangeRef.current[0], y]; bRangeRef.current = n; setBRange(n); }
+    const d = dragRef.current;
+    if (!d) return;
+    dragRef.current = { dim: d.dim, range: [d.range[0], toY(cy)] };
+    setBrush(dragRef.current);
   }, [toY]);
 
+  const selected = useMemo(() => {
+    if (!brush || Math.abs(brush.range[1] - brush.range[0]) < MIN_BRUSH_PX) return null;
+    const idx = new Set<number>();
+    for (let i = 0; i < rows.length; i++) if (inBrush(rows[i], dims, metricCols, ext, plotH, brush)) idx.add(i);
+    return idx;
+  }, [brush, rows, dims, metricCols, ext, plotH]);
+
+  const clear = useCallback(() => {
+    dragRef.current = null;
+    setBrush(null);
+    onBrush?.(null);
+  }, [onBrush]);
+
   const onEnd = useCallback(() => {
-    const d = bDimRef.current, r = bRangeRef.current;
-    if (d !== null && r !== null && onBrush) {
-      const idx: number[] = [];
-      for (let i = 0; i < rows.length; i++) if (inBrush(rows[i], dims, metricCols, ext, plotH, d, r)) idx.push(i);
-      onBrush(idx);
-    }
-    bDimRef.current = null; bRangeRef.current = null;
-    setBDim(null); setBRange(null);
-  }, [rows, dims, metricCols, ext, plotH, onBrush]);
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    if (Math.abs(d.range[1] - d.range[0]) < MIN_BRUSH_PX) { clear(); return; }
+    const idx: number[] = [];
+    for (let i = 0; i < rows.length; i++) if (inBrush(rows[i], dims, metricCols, ext, plotH, d)) idx.push(i);
+    onBrush?.(idx);
+  }, [rows, dims, metricCols, ext, plotH, onBrush, clear]);
 
   if (dims.length === 0) return null;
 
+  const geometry = { rows, dims, mCols: metricCols, ext, xs, plotH, w };
+  const handlers = { brush, onStart, onMove, onEnd, selected };
   return (
     <div className="card" ref={wrapRef}>
-      <div className="eyebrow">parallel coordinates</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="eyebrow">parallel coordinates</div>
+        {selected && (
+          <span style={{ fontSize: 12, color: "var(--text-2)" }}>
+            {selected.size} of {rows.length} selected ·{" "}
+            <button className="link" onClick={clear}>clear</button>
+          </span>
+        )}
+      </div>
       {rows.length > CANVAS_THRESHOLD
-        ? <CanvasRenderer rows={rows} dims={dims} mCols={metricCols} ext={ext} xs={xs} plotH={plotH} w={w} />
-        : <SvgRenderer rows={rows} dims={dims} mCols={metricCols} ext={ext} xs={xs} plotH={plotH} w={w}
-            bDim={bDim} bRange={bRange} bRef={bDimRef} onStart={onStart} onMove={onMove} onEnd={onEnd} />
+        ? <CanvasRenderer {...geometry} {...handlers} />
+        : <SvgRenderer {...geometry} {...handlers} />
       }
     </div>
   );

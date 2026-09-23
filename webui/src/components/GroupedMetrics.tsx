@@ -3,7 +3,8 @@ import {
   Bar, BarChart, CartesianGrid, ErrorBar, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal } from "../util";
+import { fmtVal, metricGoal, paramValue } from "../util";
+import { maxOf, minOf } from "../util/stats";
 
 function mean(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -31,7 +32,8 @@ function computeGroups(
     if (groupKey === "branch") {
       val = r.branch ?? "(none)";
     } else {
-      val = r.user_meta?.[groupKey] != null ? String(r.user_meta[groupKey]) : "(none)";
+      const p = paramValue(r, groupKey);
+      val = p != null ? String(p) : "(none)";
     }
     const arr = buckets.get(val);
     if (arr) arr.push(r);
@@ -49,13 +51,13 @@ function computeGroups(
     for (const k of metricKeys) {
       const vals = bucket
         .map((r) => r.metrics[k])
-        .filter((v): v is number => typeof v === "number");
+        .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
       if (vals.length === 0) continue;
       stats[k] = {
         mean: mean(vals),
         std: std(vals),
-        min: Math.min(...vals),
-        max: Math.max(...vals),
+        min: minOf(vals),
+        max: maxOf(vals),
       };
     }
 

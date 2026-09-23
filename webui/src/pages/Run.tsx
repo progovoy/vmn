@@ -1,20 +1,25 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
 import { api, appName as toAppName } from "../api";
 import type { ExperimentDetail, LogEntry, MetricsSchema } from "../types";
 import {
-  fmtDuration, fmtVal, metricGoal, pollIntervalMs, relTime, seriesColor,
+  fmtDuration, fmtVal, metricGoal, pollIntervalMs, relTime,
 } from "../util";
-import { downsampleLTTB } from "../util/downsample";
 import { JobCard, Skeleton, useJob } from "../components/ui";
-import SmoothingSlider from "../components/SmoothingSlider";
-import { ema } from "../hooks/useSmoothing";
 import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
 import StatusPill from "../components/StatusPill";
+import RunLog from "../components/RunLog";
+import TrainingCurves from "../components/TrainingCurves";
+
+/** The detail payload: newer servers send the log's tail + total and
+ *  downsampled series (with the full point counts); older ones the full log. */
+type RunDetail = Omit<ExperimentDetail, "log"> & {
+  log?: LogEntry[];
+  log_tail?: LogEntry[];
+  log_total?: number;
+  series_total?: Record<string, number>;
+};
 
 /** Inline `vmn experiment add -v <verstr> --metrics …` — append more metric
  *  points to this run. Latest value wins in the summary; every point is kept
@@ -93,63 +98,38 @@ function AppendMetrics({ ws, app, appName, verstr, onAdded }: {
   );
 }
 
-function fmtWallTick(ms: number): string {
-  const d = new Date(ms);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
-}
-
-function fmtRelTick(secs: number): string {
-  if (secs < 60) return `${Math.round(secs)}s`;
-  if (secs < 3600) return `${Math.round(secs / 60)}m`;
-  return `${Math.round(secs / 3600)}h`;
-}
-
-const DOT_COLOR: Record<string, string> = {
-  create: "var(--accent)",
-  run: "var(--good)",
-  metrics: "var(--text-3)",
-  note: "var(--pre)",
-  artifact: "var(--hotfix)",
-};
-
-function describeEntry(e: LogEntry): string {
-  switch (e.type) {
-    case "create":
-      return `created${e.note ? `: ${e.note}` : ""}`;
-    case "metrics": {
-      const values = (e.values ?? {}) as Record<string, unknown>;
-      const step = e.step !== undefined ? `step ${e.step} — ` : "";
-      return `${step}${Object.entries(values)
-        .map(([k, v]) => `${k}=${fmtVal(v as number)}`)
-        .join(", ")}`;
-    }
-    case "note":
-      return `note: ${e.text}`;
-    case "artifact":
-      return `artifact: ${e.path} (${e.size} bytes)`;
-    case "run":
-      return `ran \`${(e.command as string[]).join(" ")}\` — exit ${e.exit_code} in ${e.duration_sec}s`;
-    default:
-      return e.type;
-  }
+/** Params card: the verbatim `params` (strings and booleans included), with
+ *  snapshot `user_meta` only as a fallback for records that have no params. */
+function ParamsCard({ params }: { params: Record<string, unknown> | null | undefined }) {
+  if (!params || Object.keys(params).length === 0) return null;
+  return (
+    <div className="card">
+      <div className="eyebrow">parameters</div>
+      <div className="kv">
+        {Object.entries(params).map(([k, v]) => (
+          <Fragment key={k}>
+            <div className="k">{k}</div>
+            <div className="mono">{typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}</div>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function Run() {
   const { ws, app, verstr } = useParams() as {
     ws: string; app: string; verstr: string;
   };
-  const [detail, setDetail] = useState<ExperimentDetail | null>(null);
+  const [detail, setDetail] = useState<RunDetail | null>(null);
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
-  const [alpha, setAlpha] = useState(0);
-  const [xMode, setXMode] = useState<"step" | "wall" | "relative">("step");
 
   const load = useCallback(
-    () => api.experiment(ws, app, verstr).then(setDetail).catch((e) => setError(String(e))),
+    () => api.experiment(ws, app, verstr)
+      .then((d) => setDetail(d as unknown as RunDetail))
+      .catch((e) => setError(String(e))),
     [ws, app, verstr]
   );
   useEffect(() => {
@@ -161,73 +141,6 @@ export default function Run() {
   const running = detail?.status?.status === "running";
   const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
   usePolling(load, pollMs, live || running);
-
-  const hasTimestamps = useMemo(() => {
-    if (!detail) return false;
-    return Object.values(detail.series).every((pts) =>
-      pts.every((p) => p.ts != null)
-    );
-  }, [detail]);
-
-  const chartData = useMemo(() => {
-    if (!detail) return { points: [], metrics: [] as string[] };
-    const metrics = Object.keys(detail.series).filter(
-      (m) => detail.series[m].length > 1
-    );
-
-    let firstTs = Infinity;
-    if (xMode !== "step") {
-      metrics.forEach((m) =>
-        detail.series[m].forEach((p) => {
-          if (p.ts) {
-            const t = new Date(p.ts).getTime();
-            if (t < firstTs) firstTs = t;
-          }
-        })
-      );
-    }
-
-    const byX = new Map<number, Record<string, number>>();
-    metrics.forEach((m) =>
-      detail.series[m].forEach((p, i) => {
-        let x: number;
-        if (xMode === "wall" && p.ts) {
-          x = new Date(p.ts).getTime();
-        } else if (xMode === "relative" && p.ts) {
-          x = (new Date(p.ts).getTime() - firstTs) / 1000;
-        } else {
-          x = p.step ?? i;
-        }
-        const row = byX.get(x) ?? { x };
-        row[m] = p.value;
-        byX.set(x, row as Record<string, number>);
-      })
-    );
-    let arr = [...byX.values()].sort((a, b) => a.x - b.x);
-    if (arr.length > 1000) {
-      const primaryMetric = metrics[0];
-      if (primaryMetric) {
-        const downsampled = downsampleLTTB(
-          arr.map(d => ({ x: d.x, y: (d[primaryMetric] as number) ?? 0 })),
-          500
-        );
-        const keepSteps = new Set(downsampled.map(d => d.x));
-        arr = arr.filter(d => keepSteps.has(d.x));
-      }
-    }
-    return { points: arr, metrics };
-  }, [detail, xMode]);
-
-  const smoothedPoints = useMemo(() => {
-    if (alpha === 0 || chartData.points.length === 0) return chartData.points;
-    const smoothed = chartData.points.map((p) => ({ ...p }));
-    for (const m of chartData.metrics) {
-      const raw = chartData.points.map((p) => p[m] as number);
-      const sm = ema(raw, alpha);
-      sm.forEach((v, i) => { (smoothed[i] as Record<string, number>)[`${m}__smooth`] = v; });
-    }
-    return smoothed;
-  }, [chartData, alpha]);
 
   if (error) return <div className="error">{error}</div>;
   if (!detail) return <Skeleton />;
@@ -242,7 +155,10 @@ export default function Run() {
       .filter(([, v]) => v)
       .map(([k]) => k.replaceAll("_", " "))
       .join(", ") || "clean tree";
-  const runSecs = detail.log
+  const logTail = detail.log_tail ?? detail.log ?? [];
+  const logTotal = detail.log_total ?? logTail.length;
+  // `run` entries are written last, so the log tail carries them.
+  const runSecs = logTail
     .filter((e) => e.type === "run")
     .reduce((s, e) => s + (Number(e.duration_sec) || 0), 0);
 
@@ -356,22 +272,13 @@ export default function Run() {
             )}
           </div>
         </div>
-        {(() => {
-          const um = meta.user_meta as Record<string, unknown> | null | undefined;
-          return um && Object.keys(um).length > 0 ? (
-            <div className="card">
-              <div className="eyebrow">parameters</div>
-              <div className="kv">
-                {Object.entries(um).map(([k, v]) => (
-                  <Fragment key={k}>
-                    <div className="k">{k}</div>
-                    <div className="mono">{String(v)}</div>
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          ) : null;
-        })()}
+        <ParamsCard
+          params={
+            detail.params && Object.keys(detail.params).length > 0
+              ? detail.params
+              : (meta.user_meta as Record<string, unknown> | null | undefined)
+          }
+        />
         <div className="card">
           <div className="eyebrow">final metrics</div>
           {Object.keys(detail.metrics).length === 0 ? (
@@ -410,126 +317,14 @@ export default function Run() {
         </div>
       </div>
 
-      {chartData.metrics.length > 0 && (
-        <div className="card">
-          <div
-            style={{
-              display: "flex", alignItems: "center",
-              justifyContent: "space-between", marginBottom: 14,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
-              <div style={{ display: "flex", gap: 2, fontSize: 11 }}>
-                {(["step", "wall", "relative"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    className={xMode === mode ? "primary" : ""}
-                    style={{ padding: "2px 8px", fontSize: 11, borderRadius: 4 }}
-                    disabled={mode !== "step" && !hasTimestamps}
-                    onClick={() => setXMode(mode)}
-                  >
-                    {mode === "step" ? "Step" : mode === "wall" ? "Wall" : "Relative"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12 }}>
-              {chartData.metrics.map((m) => (
-                <span
-                  key={m}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    color: "var(--text-2)",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 14, height: 3, borderRadius: 2,
-                      background: seriesColor(chartData.metrics, m),
-                    }}
-                  />
-                  {m}
-                </span>
-              ))}
-              <SmoothingSlider value={alpha} onChange={setAlpha} />
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={smoothedPoints}>
-              <CartesianGrid stroke="var(--line)" vertical={false} />
-              <XAxis
-                dataKey="x"
-                stroke="#85847a"
-                tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
-                tickFormatter={
-                  xMode === "wall" ? fmtWallTick
-                    : xMode === "relative" ? fmtRelTick
-                    : undefined
-                }
-              />
-              <YAxis
-                stroke="#85847a"
-                width={60}
-                tick={{ fontSize: 10.5, fontFamily: "var(--mono)" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--panel-2)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 8,
-                  color: "var(--text)",
-                }}
-              />
-              {chartData.metrics.map((m) => (
-                <Fragment key={m}>
-                  {alpha > 0 && (
-                    <Line
-                      key={`${m}-raw`}
-                      type="monotone"
-                      dataKey={m}
-                      stroke={seriesColor(chartData.metrics, m)}
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                      strokeDasharray="4 2"
-                      dot={false}
-                      isAnimationActive={false}
-                      name={`${m} (raw)`}
-                    />
-                  )}
-                  <Line
-                    key={alpha > 0 ? `${m}-smooth` : m}
-                    type="monotone"
-                    dataKey={alpha > 0 ? `${m}__smooth` : m}
-                    stroke={seriesColor(chartData.metrics, m)}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    name={alpha > 0 ? `${m} (smooth)` : m}
-                  />
-                </Fragment>
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <TrainingCurves
+        series={detail.series}
+        seriesTotal={detail.series_total}
+        startedAt={st?.started_at}
+      />
 
       <div className="card-grid-wide">
-        <div className="card">
-          <div className="eyebrow">log</div>
-          <ul className="timeline">
-            {detail.log.map((e, i) => (
-              <li
-                key={i}
-                style={{ "--dot": DOT_COLOR[e.type] ?? "var(--text-3)" } as React.CSSProperties}
-              >
-                <span className="ts">{relTime(e.timestamp)}</span>
-                {e._writer && <span className="badge" style={{ fontSize: 10, marginLeft: 6 }}>{e._writer}</span>}
-                <span className="what">{describeEntry(e)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <RunLog ws={ws} app={app} verstr={meta.verstr as string} tail={logTail} total={logTotal} />
         <div className="card">
           <div className="eyebrow">reproduce</div>
           <div className="cli-hint">
