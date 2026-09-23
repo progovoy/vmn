@@ -158,27 +158,43 @@ def primary_metric(schema):
     return next((k for k, v in (schema or {}).items() if v.get("primary")), None)
 
 
-def sort_by_metric(rows, schema, sort=None):
+TIMESTAMP_SORT = "timestamp"
+
+
+def sort_by_metric(rows, schema, sort=None, descending=None):
     """Order rows like ``vmn exp list``: by *sort*, else by the primary metric.
 
     A metric's direction comes from its own schema entry; a metric absent from
-    the schema sorts ascending. Rows whose value is missing, None, non-finite or
-    non-numeric sort last in either direction, in their original order. Rows
-    are returned unchanged when the metric is not present anywhere.
+    the schema sorts ascending. *descending* forces the direction. Rows whose
+    value is missing, None, non-finite or non-numeric sort last in either
+    direction, in their original order. ``sort="timestamp"`` orders by creation
+    time, newest first unless *descending* is False. When the metric is not
+    present anywhere, rows keep storage order (reversed if *descending*).
     """
+    if sort == TIMESTAMP_SORT:
+        return _by_timestamp(rows, newest_first=descending is not False)
+
     keys = set()
     for row in rows:
         keys.update(row["metrics"])
 
     metric = sort or primary_metric(schema)
     if not metric or metric not in keys:
-        return rows
+        return rows[::-1] if descending else rows
 
-    descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
+    if descending is None:
+        descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
     ranked = [r for r in rows if _sortable(r["metrics"].get(metric))]
     unranked = [r for r in rows if not _sortable(r["metrics"].get(metric))]
     ranked.sort(key=lambda r: r["metrics"][metric], reverse=descending)
     return ranked + unranked
+
+
+def _by_timestamp(rows, newest_first):
+    """Creation order; rows without a timestamp go last either way."""
+    stamped = [r for r in rows if r.get("timestamp")]
+    stamped.sort(key=lambda r: r["timestamp"], reverse=newest_first)
+    return stamped + [r for r in rows if not r.get("timestamp")]
 
 
 def _sortable(value):

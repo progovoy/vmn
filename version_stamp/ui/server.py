@@ -10,9 +10,10 @@ import os
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
+from version_stamp.core import experiment_index
 from version_stamp.core.experiment_query import QueryError
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
@@ -62,6 +63,9 @@ def create_app(
     # Parent edges never change once written, so each workspace keeps its own
     # across polls and a run page never re-reads every run's metadata.
     edge_caches = {}
+    # One client per S3 workspace: building one resolves credentials, and its
+    # prefix probes are worth keeping across requests.
+    s3_storages = {}
 
     def _index_for(ws):
         """Per-workspace read cache under the server data dir (never in the repo)."""
@@ -76,8 +80,15 @@ def create_app(
         return indexes[ws.name]
 
     def _edges_for(ws):
+        """Run-tree edges: from the experiment index when there is one."""
         if ws.name not in edge_caches:
-            edge_caches[ws.name] = detail_reader.ParentEdges()
+            index = _index_for(ws) if ws.kind == "git" else None
+            if index:
+                edge_caches[ws.name] = index.parent_edges
+            elif ws.kind == "s3" and use_index:
+                edge_caches[ws.name] = _indexed_edges
+            else:
+                edge_caches[ws.name] = detail_reader.ParentEdges()
         return edge_caches[ws.name]
 
     if token:
@@ -104,6 +115,11 @@ def create_app(
 
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
 
+    @app.exception_handler(ValueError)
+    async def _bad_path(request: Request, exc: ValueError):
+        # Storage refuses names that are not a single path component.
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
     def _app_name(app_tag):
         """The app name a URL names, refusing anything that walks out of .vmn/."""
         name = safe_app_name(app_tag)
@@ -115,6 +131,9 @@ def create_app(
         if not safe_segment(value):
             raise HTTPException(400, f"Invalid {what} '{value}'")
         return value
+
+    def _optional_segment(value, what="version"):
+        return None if value is None else _segment(value, what)
 
     def _workspace(name):
         ws = manager.get(name)
@@ -133,16 +152,18 @@ def create_app(
         return _workspace(name)
 
     def _exp_storage_for(ws):
-        """Return the right experiment storage backend for a workspace."""
-        if ws.kind == "s3":
-            return get_snapshot_storage(
+        """The workspace's S3 experiment storage (memoized), or None for git."""
+        if ws.kind != "s3":
+            return None  # None means: use the default path-based reader
+        if ws.name not in s3_storages:
+            s3_storages[ws.name] = get_snapshot_storage(
                 "s3",
                 bucket=ws.bucket,
                 prefix=ws.prefix or "vmn-experiments",
                 endpoint_url=ws.endpoint_url,
                 subdir="experiments",
             )
-        return None  # None means: use the default path-based reader
+        return s3_storages[ws.name]
 
     def _any_exp_storage(ws):
         """The workspace's experiment storage, local checkout or S3."""
@@ -191,6 +212,7 @@ def create_app(
         # A later workspace of the same name may point elsewhere.
         indexes.pop(ws_name, None)
         edge_caches.pop(ws_name, None)
+        s3_storages.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
     def list_apps(ws_name: str):
@@ -226,20 +248,28 @@ def create_app(
             query=q,
             order=order,
         )
+        rows, run_states, schema = _rows_states_schema(ws, app_name)
         # A query that will not compile is the caller's typo: answer 400 with the
         # compiler's message (it carries the offset), not a 500 or an empty list.
         try:
-            s3_storage = _exp_storage_for(ws)
-            if s3_storage:
-                return exp_reader.list_experiments_from_storage(
-                    s3_storage, app_name, **filters
-                )
-            index = _index_for(ws)
-            if index:
-                return index.list_experiments(app_name, **filters)
-            return exp_reader.list_experiments(ws.path, app_name, **filters)
+            return exp_reader.leaderboard(rows, run_states, schema, **filters)
         except QueryError as e:
             raise HTTPException(400, str(e))
+
+    def _rows_states_schema(ws, app_name):
+        """Leaderboard inputs: indexed when possible, straight from storage if not."""
+        s3_storage = _exp_storage_for(ws)
+        if s3_storage:
+            rows, states = experiment_index.indexed_rows(s3_storage, app_name)
+            return rows, states, {}  # no app conf for an S3 workspace
+        index = _index_for(ws)
+        if index:
+            rows, states = index.experiment_rows(app_name)
+        else:
+            rows, states = exp_reader.direct_rows_and_states(
+                exp_reader.experiment_storage(ws.path), app_name
+            )
+        return rows, states, exp_reader.metrics_schema(ws.path, app_name)
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
@@ -282,7 +312,12 @@ def create_app(
         _segment(verstr)
         offset, limit = _page(offset, limit)
         page, err = detail_reader.log_page(
-            _any_exp_storage(ws), app_name, verstr, offset=offset, limit=limit
+            _any_exp_storage(ws),
+            app_name,
+            verstr,
+            offset=offset,
+            limit=limit,
+            read_log=exp_reader._load_log,
         )
         if err:
             raise HTTPException(404, err)
@@ -297,9 +332,24 @@ def create_app(
         app_name = _app_name(app_tag)
         _segment(verstr)
         _segment(filename, "artifact name")
-        # The backend resolves the file: a local path, or an S3 object fetched
-        # into a cache. Either way it refuses names that leave the run's dir.
-        path = _any_exp_storage(ws).artifact_local_path(app_name, verstr, filename)
+        # The backend resolves the file — a local path, or an S3 object streamed
+        # straight through — and refuses names that leave the run's dir.
+        storage = _any_exp_storage(ws)
+        opened = getattr(storage, "open_artifact", None)
+        if opened:
+            found = opened(app_name, verstr, filename)
+            if found is None:
+                raise HTTPException(404, f"Artifact {filename} not found")
+            chunks, size = found
+            return StreamingResponse(
+                chunks,
+                media_type="application/octet-stream",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Length": str(size),
+                },
+            )
+        path = storage.artifact_local_path(app_name, verstr, filename)
         if not path or not os.path.isfile(path):
             raise HTTPException(404, f"Artifact {filename} not found")
         return FileResponse(path, filename=filename)
@@ -398,7 +448,10 @@ def create_app(
     ):
         ws = _git_workspace(ws_name)
         result, err = changelog_reader.version_changelog(
-            ws.path, _app_name(app_tag), to_verstr=v, from_verstr=frm
+            ws.path,
+            _app_name(app_tag),
+            to_verstr=_optional_segment(v),
+            from_verstr=_optional_segment(frm),
         )
         if err:
             raise HTTPException(404, err)
@@ -408,7 +461,7 @@ def create_app(
     def app_config(ws_name: str, app_tag: str, v: str = None):
         ws = _git_workspace(ws_name)
         payload, err = config_reader.app_conf_payload(
-            ws.path, _app_name(app_tag), verstr=v
+            ws.path, _app_name(app_tag), verstr=_optional_segment(v)
         )
         if err:
             raise HTTPException(404, err)
@@ -418,7 +471,10 @@ def create_app(
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
         ws = _git_workspace(ws_name)
         graph, err = tree_reader.dep_graph(
-            ws.path, _app_name(app_tag), verstr=v, to_verstr=to
+            ws.path,
+            _app_name(app_tag),
+            verstr=_optional_segment(v),
+            to_verstr=_optional_segment(to),
         )
         if err:
             raise HTTPException(404, err)
@@ -426,6 +482,12 @@ def create_app(
 
     _mount_static(app)
     return app
+
+
+def _indexed_edges(storage, app_name):
+    """``{verstr: parent}`` from the process-wide experiment index of *storage*."""
+    rows, _ = experiment_index.indexed_rows(storage, app_name)
+    return {row["verstr"]: row.get("parent") for row in rows}
 
 
 def _mount_static(app):

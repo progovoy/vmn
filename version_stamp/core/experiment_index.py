@@ -174,14 +174,16 @@ _SHARED = {}
 _SHARED_LOCK = threading.Lock()
 
 
-def shared_index(storage, app_name):
+def shared_index(storage, app_name, cache_path=None):
     """The process-wide index for *storage*'s *app_name* data.
 
     Keyed by the backend's ``cache_identity()`` so equivalent storage objects
-    share one warm index; persisted at its ``index_cache_path`` when it has one.
+    share one warm index. Persisted at *cache_path* when given (the ui keeps its
+    own under the server data dir), else at the backend's ``index_cache_path``.
     """
-    path_of = getattr(storage, "index_cache_path", None)
-    cache_path = path_of(app_name) if path_of else None
+    if cache_path is None:
+        path_of = getattr(storage, "index_cache_path", None)
+        cache_path = path_of(app_name) if path_of else None
     identity_of = getattr(storage, "cache_identity", None)
     identity = identity_of() if identity_of else None
     if identity is None:
@@ -194,24 +196,36 @@ def shared_index(storage, app_name):
         return index
 
 
-def direct_rows(storage, app_name, with_create_note=False):
-    """``(rows, run_states)`` by reading every record — the index's reference."""
+def direct_rows(
+    storage,
+    app_name,
+    with_create_note=False,
+    read_log=load_log,
+    read_run_state=load_run_state,
+):
+    """``(rows, run_states)`` by reading every record — the index's reference.
+
+    *read_log* / *read_run_state* are the caller's loaders; a None
+    *read_run_state* skips the run states (``{}``).
+    """
     rows = []
     for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
-        log = load_log(storage, app_name, meta["verstr"])
+        log = read_log(storage, app_name, meta["verstr"])
         row = experiment_row(idx, meta, log)
         if with_create_note:
             create = next((e for e in log if e.get("type") == "create"), None)
             row["create_note"] = (create or {}).get("note")
         rows.append(row)
-    states = {r["verstr"]: load_run_state(storage, app_name, r["verstr"]) for r in rows}
+    if read_run_state is None:
+        return rows, {}
+    states = {r["verstr"]: read_run_state(storage, app_name, r["verstr"]) for r in rows}
     return rows, states
 
 
-def indexed_rows(storage, app_name, with_create_note=False):
+def indexed_rows(storage, app_name, with_create_note=False, cache_path=None):
     """``(rows, run_states)`` through the shared index; directly if it fails."""
     try:
-        index = shared_index(storage, app_name).refresh()
+        index = shared_index(storage, app_name, cache_path).refresh()
         return index.rows(with_create_note), index.run_states()
     except Exception:
         _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)

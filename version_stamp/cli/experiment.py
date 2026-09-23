@@ -52,11 +52,7 @@ from version_stamp.core.experiment_status import (
     load_run_state,
     status_fields,
 )
-from version_stamp.core.experiment_tree import (
-    annotate_tree,
-    children_by_parent,
-    subtree_verstrs,
-)
+from version_stamp.core.experiment_tree import annotate_tree, subtree_status
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
@@ -525,28 +521,20 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _status_tree(storage, app_name, metas, only=None, run_states=None):
+def _status_tree(metas, run_states):
     """Annotated nesting/status rows for *metas*, by verstr.
 
     The tree is built over every meta, so depth and ``tree_status`` stay right
-    for any subset. Run states are read only for *only* (a verstr collection)
-    and their subtrees; the rest carry no status, which a rollup ignores.
-    *run_states* (``{verstr: state}``) supplies them without a read.
+    for any subset shown; *run_states* (``{verstr: state}``) are already read.
     """
-    rows = [{"verstr": m["verstr"], "parent": m.get("parent")} for m in metas]
-    wanted = None
-    if only is not None:
-        children_of = children_by_parent(rows)
-        wanted = set()
-        for verstr in only:
-            wanted.update(subtree_verstrs(verstr, children_of))
-    for row in rows:
-        if wanted is None or row["verstr"] in wanted:
-            if run_states is not None:
-                state = run_states.get(row["verstr"])
-            else:
-                state = load_run_state(storage, app_name, row["verstr"])
-            row["status"] = derive_status(state)
+    rows = [
+        {
+            "verstr": m["verstr"],
+            "parent": m.get("parent"),
+            "status": derive_status(run_states.get(m["verstr"])),
+        }
+        for m in metas
+    ]
     return {row["verstr"]: row for row in annotate_tree(rows)}
 
 
@@ -613,13 +601,7 @@ def experiment_list(vcs, params, storage, args):
     if args.top:
         rows = rows[: args.top]
 
-    tree = _status_tree(
-        storage,
-        app_name,
-        index_rows,
-        only=[row["meta"]["verstr"] for row in rows],
-        run_states=run_states,
-    )
+    tree = _status_tree(index_rows, run_states)
     columns = _metric_columns(schema, rows)
     for row in rows:
         print(_format_list_row(row, tree[row["meta"]["verstr"]], columns))
@@ -631,35 +613,18 @@ def experiment_list(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _subtree_metas(verstr, metas):
-    """``verstr``'s row plus every experiment reachable from it via ``parent``.
-
-    Metadata-only, so the caller can read run state for just these — a run tree
-    is a handful of rows even when the app has thousands of experiments.
-    """
-    children_of = {}
-    for meta in metas:
-        parent = meta.get("parent")
-        if parent and parent != meta["verstr"]:
-            children_of.setdefault(parent, []).append(meta)
-    by_verstr = {m["verstr"]: m for m in metas}
-
-    subtree = []
-    seen = set()
-    queue = [by_verstr[verstr]] if verstr in by_verstr else []
-    while queue:
-        meta = queue.pop(0)
-        if meta["verstr"] in seen:
-            continue
-        seen.add(meta["verstr"])
-        subtree.append(meta)
-        queue.extend(children_of.get(meta["verstr"], []))
-    return subtree
-
-
 def _print_status_block(storage, app_name, verstr, metadata):
-    """Derived run status, runner identity and the experiment's nesting."""
-    fields = status_fields(load_run_state(storage, app_name, verstr))
+    """Derived run status, runner identity and the experiment's nesting.
+
+    Run state is read for the run's subtree only — a handful of rows even when
+    the app has thousands of experiments.
+    """
+    parent_of = {m["verstr"]: m.get("parent") for m in storage.list_snapshots(app_name)}
+    parent_of.setdefault(verstr, metadata.get("parent"))
+    run_state, tree = subtree_status(
+        verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
+    )
+    fields = status_fields(run_state)
     print(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
         print(f"  Exit code: {fields['exit_code']}")
@@ -673,13 +638,11 @@ def _print_status_block(storage, app_name, verstr, metadata):
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")
 
-    subtree = _subtree_metas(verstr, storage.list_snapshots(app_name))
-    if len(subtree) <= 1:
+    if not tree["children"]:
         return  # no children: nothing to roll up
-    node = _status_tree(storage, app_name, subtree)[verstr]
-    print(f"  Children:  {', '.join(node['children'])}")
-    if node["tree_status"] and node["tree_status"] != fields["status"]:
-        print(f"  Subtree:   {node['tree_status']}")
+    print(f"  Children:  {', '.join(tree['children'])}")
+    if tree["tree_status"] and tree["tree_status"] != fields["status"]:
+        print(f"  Subtree:   {tree['tree_status']}")
 
 
 @measure_runtime_decorator

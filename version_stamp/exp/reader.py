@@ -37,16 +37,8 @@ from version_stamp.core.experiment_log import (
 )
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_status import (
-    derive_status,
-    load_run_state,
-    status_fields,
-)
-from version_stamp.core.experiment_tree import (
-    annotate_tree,
-    children_by_parent,
-    subtree_verstrs,
-)
+from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_tree import annotate_tree, subtree_status
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.exp import _resolve_app_name
 
@@ -126,12 +118,11 @@ def _all_rows(app_name, storage, use_index=False):
             row.update(status_fields(run_states.get(row["verstr"])))
         return annotate_tree(rows)
 
-    rows = []
-    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
-        verstr = meta["verstr"]
-        row = experiment_row(idx, meta, _load_log(storage, app_name, verstr))
-        row.update(status_fields(load_run_state(storage, app_name, verstr)))
-        rows.append(row)
+    rows, run_states = experiment_index.direct_rows(
+        storage, app_name, read_log=_load_log, read_run_state=load_run_state
+    )
+    for row in rows:
+        row.update(status_fields(run_states.get(row["verstr"])))
     return annotate_tree(rows)
 
 
@@ -184,29 +175,24 @@ def _subtree_row(app_name, storage, verstr):
     states are then read for the subtree alone, which is all ``tree_status`` can
     depend on. No log is read here — the caller loads the one it needs.
     """
-    nodes, target = [], None
-    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
-        node = {"idx": idx, "meta": meta, "verstr": meta["verstr"]}
-        node["parent"] = meta.get("parent")
-        nodes.append(node)
-        if node["verstr"] == verstr:
-            target = node
+    metas = storage.list_snapshots(app_name)
+    target = next(
+        (
+            {"idx": idx, "meta": meta}
+            for idx, meta in enumerate(metas, 1)
+            if meta["verstr"] == verstr
+        ),
+        None,
+    )
     if target is None:
         return None, None
 
-    subtree = set(subtree_verstrs(verstr, children_by_parent(nodes)))
-    run_state = None
-    for node in nodes:
-        if node["verstr"] not in subtree:
-            continue
-        state = load_run_state(storage, app_name, node["verstr"])
-        node["status"] = derive_status(state)
-        if node["verstr"] == verstr:
-            run_state = state
-
-    tree = next(r for r in annotate_tree(nodes) if r["verstr"] == verstr)
+    parent_of = {meta["verstr"]: meta.get("parent") for meta in metas}
+    run_state, tree = subtree_status(
+        verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
+    )
     status = status_fields(run_state)
-    status.update({k: tree[k] for k in ("children", "kind", "depth", "tree_status")})
+    status.update(tree)
     return target, status
 
 
