@@ -3,7 +3,6 @@
 import datetime
 import os
 import shutil
-import socket
 import sys
 from dataclasses import dataclass
 from types import ModuleType
@@ -11,6 +10,14 @@ from typing import List, Optional
 
 import yaml
 
+# `vmn exp run` lives in its own module; these names stay importable from here.
+from version_stamp.cli.experiment_run import (  # noqa: F401
+    _METRICS_TAIL_INTERVAL,
+    _ingest_metric_records,
+    _MetricsTailer,
+    _safe_unlink,
+    experiment_run,
+)
 from version_stamp.cli.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
@@ -34,7 +41,6 @@ from version_stamp.core.experiment_log import (
     metric_sort_descending,
 )
 from version_stamp.core.experiment_status import (
-    DEFAULT_HEARTBEAT_INTERVAL_SEC,
     STUCK,
     derive_status,
     load_run_state,
@@ -200,44 +206,6 @@ def _parse_metric_line(line):
     if not values:
         return None
     return step, values
-
-
-class _MetricsTailer:
-    """Incrementally consume complete lines appended to the metrics file.
-
-    Each ``poll()`` returns the newly completed lines as parsed
-    ``(step, values)`` tuples; a trailing partial line stays buffered until
-    its newline arrives.
-    """
-
-    def __init__(self, path):
-        self._path = path
-        self._offset = 0
-
-    def poll(self):
-        try:
-            with open(self._path) as f:
-                f.seek(self._offset)
-                chunk = f.read()
-        except OSError:
-            return []
-        if not chunk:
-            return []
-
-        complete, sep, _partial = chunk.rpartition("\n")
-        if not sep:
-            return []  # no complete line yet
-        self._offset += len(complete) + 1
-
-        records = []
-        for line in complete.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            parsed = _parse_metric_line(line)
-            if parsed:
-                records.append(parsed)
-        return records
 
 
 def _parse_notes_file(path):
@@ -562,209 +530,6 @@ def _experiment_create_core(
     storage.save(vcs.name, verstr, metadata, patches)
     _append_to_log(storage, vcs.name, verstr, entry)
     return verstr, None
-
-
-# ---------------------------------------------------------------------------
-# run
-# ---------------------------------------------------------------------------
-
-
-@measure_runtime_decorator
-def experiment_run(vcs, params, storage, args, repo_lock=None):
-    """Create an experiment, run a command, and record its outcome + metrics.
-
-    The child inherits stdio (output streams live) and these env vars:
-    VMN_EXPERIMENT_ID, VMN_APP_NAME, VMN_METRICS_FILE. Any ``key=value`` lines the
-    child appends to VMN_METRICS_FILE are recorded as a metrics entry. Returns the
-    child's exit code.
-
-    ``repo_lock`` is the per-repo lock the CLI entry point acquired. Creating the
-    experiment may auto-initialize the repo and stamp a baseline, so it runs under
-    the lock; supervising the child must not, or a run that trains for hours locks
-    the repo for hours and a nested ``vmn`` deadlocks.
-    """
-    import subprocess
-    import tempfile
-    import time
-
-    # Imported here, not at module scope: version_stamp.exp's package __init__
-    # imports this module, so a top-level import would be circular.
-    from version_stamp.exp import sysmetrics
-
-    run_cmd = getattr(args, "run_cmd", None)
-    if not run_cmd:
-        VMN_LOGGER.error(
-            "No command to run. Usage: vmn exp run <app> -- <command> [args...]"
-        )
-        return 1
-
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    sync_interval = getattr(args, "sync_interval", 30)
-    heartbeat_interval = (
-        getattr(args, "heartbeat_interval", None) or DEFAULT_HEARTBEAT_INTERVAL_SEC
-    )
-
-    extra = {}
-    if getattr(args, "file", None):
-        notes_data = _parse_notes_file(args.file)
-        for key in ("params", "hypothesis", "tags"):
-            if key in notes_data:
-                extra[key] = notes_data[key]
-
-    app_name = _app_name(vcs, args)
-    parent, err = _resolve_parent(storage, app_name, args)
-    if err is not None:
-        return err
-
-    verstr, err = _experiment_create_core(
-        vcs,
-        storage,
-        note=args.note,
-        from_snapshot=from_snapshot,
-        extra_create_data=extra or None,
-        parent=parent,
-    )
-    if err is not None:
-        return err
-
-    # The mutating phase is over: everything below writes only inside this run's
-    # own experiment directory. Hand the repo back to other vmn commands - the
-    # child's included.
-    if repo_lock is not None:
-        repo_lock.release()
-
-    cwd = vcs.vmn_root_path if vcs else os.environ.get("VMN_WORKING_DIR", os.getcwd())
-
-    fd, metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
-    os.close(fd)
-    env = dict(os.environ)
-    env["VMN_EXPERIMENT_ID"] = verstr
-    env["VMN_APP_NAME"] = app_name or ""
-    env["VMN_METRICS_FILE"] = metrics_path
-
-    VMN_LOGGER.info("Experiment " + verstr + ": running " + " ".join(run_cmd))
-    tailer = _MetricsTailer(metrics_path)
-    start = time.monotonic()
-    try:
-        proc = subprocess.Popen(run_cmd, env=env, cwd=cwd)
-    except FileNotFoundError:
-        VMN_LOGGER.error("Command not found: " + run_cmd[0])
-        _safe_unlink(metrics_path)
-        return 1
-
-    started_at = _now_iso()
-    run_state = {
-        "state": "running",
-        "command": list(run_cmd),
-        "pid": proc.pid,
-        "host": socket.gethostname(),
-        "started_at": started_at,
-        "heartbeat": started_at,
-        "heartbeat_interval_sec": heartbeat_interval,
-        "exit_code": None,
-        "finished_at": None,
-        "duration_sec": None,
-    }
-    _save_run_state(storage, app_name, verstr, run_state)
-
-    writer_id = _get_writer_id()
-
-    def _try_sync():
-        try:
-            storage.sync_log_to_remote(app_name, verstr, writer_id)
-        except Exception:
-            VMN_LOGGER.debug("S3 sync failed", exc_info=True)
-
-    # The child is the workload, so it is the child's tree that gets measured.
-    sampler = sysmetrics.Sampler(
-        lambda values: _ingest_metric_records(
-            storage, app_name, verstr, [(None, values)]
-        ),
-        getattr(args, "system_metrics", False),
-        pid=proc.pid,
-    )
-
-    last_sync = time.monotonic()
-    last_heartbeat = time.monotonic()
-    while proc.poll() is None:
-        _ingest_metric_records(storage, app_name, verstr, tailer.poll())
-        if sync_interval and time.monotonic() - last_sync > sync_interval:
-            _try_sync()
-            last_sync = time.monotonic()
-        if time.monotonic() - last_heartbeat >= heartbeat_interval:
-            _save_run_state(storage, app_name, verstr, run_state, heartbeat=_now_iso())
-            sampler.tick()
-            last_heartbeat = time.monotonic()
-        time.sleep(_METRICS_TAIL_INTERVAL)
-    exit_code = proc.returncode
-    duration = round(time.monotonic() - start, 3)
-
-    _save_run_state(
-        storage,
-        app_name,
-        verstr,
-        run_state,
-        state="finished",
-        exit_code=exit_code,
-        finished_at=_now_iso(),
-        duration_sec=duration,
-    )
-
-    _ingest_metric_records(storage, app_name, verstr, tailer.poll())
-    _safe_unlink(metrics_path)
-
-    _append_to_log(
-        storage,
-        app_name,
-        verstr,
-        _create_log_entry(
-            "run",
-            command=run_cmd,
-            exit_code=exit_code,
-            duration_sec=duration,
-        ),
-    )
-
-    _try_sync()
-
-    VMN_LOGGER.info(
-        "Experiment "
-        + verstr
-        + ": exited "
-        + str(exit_code)
-        + " in "
-        + str(duration)
-        + "s"
-    )
-    print(verstr)
-    return exit_code
-
-
-_METRICS_TAIL_INTERVAL = 0.5  # seconds between metrics-file polls during a run
-
-
-def _ingest_metric_records(storage, app_name, verstr, records):
-    """Append one metrics log entry per parsed (step, values) record.
-
-    Strictly append-only, into this writer's own JSONL file. Reading the merged
-    log and rewriting ``log.yml`` instead would copy every entry already held in
-    a per-writer file into the shared one — duplicating them once per flush —
-    and would clobber anything another writer appended meanwhile.
-    """
-    for step, values in records:
-        entry = _create_log_entry("metrics", values=values)
-        if step is not None:
-            entry["step"] = step
-        _append_to_log(storage, app_name, verstr, entry)
-
-
-def _safe_unlink(path):
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
 
 
 # ---------------------------------------------------------------------------
