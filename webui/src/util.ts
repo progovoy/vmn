@@ -65,9 +65,27 @@ const SERIES_VARS = [
   "var(--pre)", "var(--major)", "var(--series-4)",
 ];
 
+/** Colour for the i-th series: the six design-system slots first, then
+ *  golden-angle HSL hues so any number of runs stay distinguishable. */
+export function runColor(i: number): string {
+  if (i < SERIES_VARS.length) return SERIES_VARS[Math.max(0, i)];
+  const hue = Math.round(((i - SERIES_VARS.length) * 137.508) % 360);
+  const light = 55 + ((i - SERIES_VARS.length) % 3) * 8;
+  return `hsl(${hue}, 65%, ${light}%)`;
+}
+
 export function seriesColor(names: string[], name: string): string {
-  const idx = [...names].sort().indexOf(name);
-  return SERIES_VARS[Math.min(idx, SERIES_VARS.length - 1)];
+  return runColor([...names].sort().indexOf(name));
+}
+
+/** A run's param value: the verbatim `params` dict is the source of truth;
+ *  `user_meta` (snapshot `--meta`) is only a fallback for older rows. */
+export function paramValue(
+  row: { params?: Record<string, unknown> | null; user_meta?: Record<string, unknown> | null },
+  key: string,
+): unknown {
+  if (row.params && key in row.params) return row.params[key];
+  return row.user_meta?.[key];
 }
 
 /** Loss/error-like metric names improve downward (Keras mode="auto"). */

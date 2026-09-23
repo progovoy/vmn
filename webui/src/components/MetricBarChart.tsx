@@ -5,6 +5,9 @@ import {
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 
+/** One bar per run stops being readable (and renderable) long before 50k runs. */
+export const MAX_BARS = 50;
+
 export default function MetricBarChart({ rows, metricCols, schema }: {
   rows: ExperimentRow[];
   metricCols: string[];
@@ -14,22 +17,17 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
 
   const goal = metricGoal(schema, metric);
 
-  const data = useMemo(() =>
-    rows
-      .map((r) => ({
-        label: `@${r.idx}`,
-        value: typeof r.metrics[metric] === "number" ? r.metrics[metric] as number : null,
-        verstr: r.verstr,
-      }))
-      .filter((d) => d.value !== null),
-    [rows, metric]
-  );
+  const { data, total } = useMemo(() => {
+    const all = rows
+      .map((r) => ({ label: `@${r.idx}`, value: r.metrics[metric], verstr: r.verstr }))
+      .filter((d): d is { label: string; value: number; verstr: string } =>
+        typeof d.value === "number" && Number.isFinite(d.value));
+    const best = [...all].sort((a, b) => (goal === "min" ? a.value - b.value : b.value - a.value));
+    return { data: best.slice(0, MAX_BARS), total: all.length };
+  }, [rows, metric, goal]);
 
-  const best = useMemo(() => {
-    const vals = data.map((d) => d.value).filter((v): v is number => v !== null);
-    if (vals.length === 0) return null;
-    return goal === "min" ? Math.min(...vals) : Math.max(...vals);
-  }, [data, goal]);
+  // `data` is sorted best-first, so the best value is its head.
+  const best = data.length ? data[0].value : null;
 
   return (
     <div className="card">
@@ -46,6 +44,11 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
           ))}
         </select>
       </div>
+      {total > data.length && (
+        <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 6 }}>
+          showing the top {MAX_BARS} of {total} runs by {metric}
+        </div>
+      )}
       <div style={{ width: "100%", overflowX: "auto" }}>
         <BarChart width={480} height={Math.max(180, data.length * 28)} data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
           <CartesianGrid stroke="var(--line)" horizontal={false} />

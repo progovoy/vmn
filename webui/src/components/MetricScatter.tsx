@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal } from "../util";
+import { fmtVal, metricGoal, paramValue } from "../util";
+import { maxOf, minOf } from "../util/stats";
 
 interface Props {
   rows: ExperimentRow[];
@@ -13,15 +14,11 @@ interface Props {
 }
 
 function numericValue(row: ExperimentRow, col: string, paramCols: string[]): number | null {
-  if (paramCols.includes(col)) {
-    const v = row.user_meta?.[col];
-    return typeof v === "number" ? v : null;
-  }
-  const v = row.metrics[col];
-  return typeof v === "number" ? v : null;
+  const v = paramCols.includes(col) ? paramValue(row, col) : row.metrics[col];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-export default function MetricScatter({ rows, metricCols, paramCols, schema }: Props) {
+function MetricScatter({ rows, metricCols, paramCols, schema }: Props) {
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
 
   const defaultX = metricCols[0] ?? paramCols[0] ?? "";
@@ -47,7 +44,7 @@ export default function MetricScatter({ rows, metricCols, paramCols, schema }: P
   const bestY = useMemo(() => {
     if (data.length === 0) return null;
     const vals = data.map((d) => d.y);
-    return yGoal === "min" ? Math.min(...vals) : Math.max(...vals);
+    return yGoal === "min" ? minOf(vals) : maxOf(vals);
   }, [data, yGoal]);
 
   const large = data.length > 2000;
@@ -128,3 +125,7 @@ export default function MetricScatter({ rows, metricCols, paramCols, schema }: P
     </div>
   );
 }
+
+/** Memoized: the leaderboard re-polls, and identical rows must not re-render
+ *  thousands of SVG symbols. */
+export default memo(MetricScatter);
