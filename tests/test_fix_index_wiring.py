@@ -50,7 +50,7 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
     first = _create(app_layout, "--metrics", "loss=0.4")
     _create(app_layout, "--metrics", "loss=0.2")
 
-    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=True)
     assert [r["metrics"]["loss"] for r in rows] == [0.4, 0.2]
 
     base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
@@ -63,9 +63,21 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
 
     log_reads.clear()
     _append(app_layout, first, "2099-01-01T00:00:00Z", loss=0.01)
-    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=True)
     assert rows[0]["metrics"]["loss"] == 0.01
     assert log_reads == []  # the grown log was read from its old end, not reloaded
+
+
+def test_list_runs_reads_directly_unless_asked_to_use_the_index(app_layout):
+    from version_stamp.exp.reader import list_runs
+
+    _bootstrap(app_layout)
+    _create(app_layout, "--metrics", "loss=0.4")
+
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+    assert [r["metrics"]["loss"] for r in rows] == [0.4]
+    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
+    assert not os.path.exists(os.path.join(base, ".index.sqlite"))
 
 
 def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkeypatch):
@@ -79,7 +91,7 @@ def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkey
         raise RuntimeError("no index today")
 
     monkeypatch.setattr(experiment_index, "shared_index", broken)
-    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=True)
     assert [r["metrics"]["loss"] for r in rows] == [0.4]
 
 

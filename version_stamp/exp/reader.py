@@ -112,16 +112,26 @@ def _metrics_schema(root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _all_rows(app_name, storage):
+def _all_rows(app_name, storage, use_index=False):
     """Every run of an app, status-annotated, in storage order (oldest first).
 
-    Rows come from the experiment index, which re-reads only what changed
-    since the last call; asking about a single run goes through
+    Directly, this reads every run's log and run state. With *use_index* the
+    rows come from the experiment index, which re-reads only what changed
+    since the last call. Asking about a single run goes through
     :func:`_subtree_row` instead.
     """
-    rows, run_states = experiment_index.indexed_rows(storage, app_name)
-    for row in rows:
-        row.update(status_fields(run_states.get(row["verstr"])))
+    if use_index:
+        rows, run_states = experiment_index.indexed_rows(storage, app_name)
+        for row in rows:
+            row.update(status_fields(run_states.get(row["verstr"])))
+        return annotate_tree(rows)
+
+    rows = []
+    for idx, meta in enumerate(storage.list_snapshots(app_name), 1):
+        verstr = meta["verstr"]
+        row = experiment_row(idx, meta, _load_log(storage, app_name, verstr))
+        row.update(status_fields(load_run_state(storage, app_name, verstr)))
+        rows.append(row)
     return annotate_tree(rows)
 
 
@@ -131,7 +141,14 @@ def _all_rows(app_name, storage):
 
 
 def list_runs(
-    app_name=None, *, storage=None, sort=None, last=None, status=None, query=None
+    app_name=None,
+    *,
+    storage=None,
+    sort=None,
+    last=None,
+    status=None,
+    query=None,
+    use_index=False,
 ):
     """Runs of an app, oldest first unless *sort* or a primary metric reorders.
 
@@ -147,9 +164,14 @@ def list_runs(
             ANDed with *status* and applied before *last* and *sort*. Raises
             :class:`~version_stamp.core.experiment_query.QueryError` when it will
             not compile — a caller wants the error, not a silent empty list.
+        use_index: read through the incremental experiment index cached at
+            ``<experiments dir>/.index.sqlite`` — what ``vmn exp list`` and the
+            ui use — so repeated calls re-read only what changed. Status is
+            still derived per call. Off by default: a plain call reads storage.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    rows = filter_rows(filter_by_status(_all_rows(app_name, storage), status), query)
+    rows = _all_rows(app_name, storage, use_index=use_index)
+    rows = filter_rows(filter_by_status(rows, status), query)
     if last:
         rows = rows[-int(last) :]
     return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)

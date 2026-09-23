@@ -450,7 +450,8 @@ A `list_runs` row carries the latest value of each metric. To read a metric's
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
-`list_runs` (and `vmn exp list`) read through an incremental index: the folded
+`vmn exp list`, the ui and `list_runs(..., use_index=True)` read through an
+incremental index (a plain `list_runs()` reads storage directly): the folded
 rows persist in `.vmn/<app>/experiments/.index.sqlite`, next to the records
 (the directory's own `.gitignore` keeps it out of `git status`). A call lists
 the record files once and re-reads only what changed since the last one — the
