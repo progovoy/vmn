@@ -664,6 +664,13 @@ def _add_experiment_parser(subprasers, name):
         "A run whose heartbeat goes stale is reported as stuck.",
     )
     pexp.add_argument(
+        "--kill-grace-sec",
+        type=float,
+        default=None,
+        help="Seconds a child gets to exit after a forwarded SIGTERM/SIGINT/SIGHUP "
+        "before it is killed during 'run' (default: VMN_EXP_KILL_GRACE_SEC or 30).",
+    )
+    pexp.add_argument(
         "--system-metrics",
         action="store_true",
         default=False,

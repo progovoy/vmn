@@ -155,7 +155,12 @@ vmn exp run my_app --note "batch=64" -- ./perf_test.sh
 ```
 
 Everything after the first `--` is the command. `vmn exp run` returns the
-command's own exit code, so CI can tell a failed run from a passing one.
+command's own exit code, so CI can tell a failed run from a passing one — or
+`128 + N` when signal N ended it, the way a shell reports it.
+
+The command runs in the directory you invoked `vmn` from (or
+`$VMN_WORKING_DIR` when set), not the repo root, so
+`cd src && vmn exp run my_app -- python train.py` finds `src/train.py`.
 
 ### The metrics-file protocol
 
@@ -289,6 +294,35 @@ time, so a run whose machine vanished does not need anybody to update a record:
 node, and left nothing behind to say so. Several missed beats are tolerated
 before vmn calls a run stuck — the staleness window is
 `max(3 × heartbeat_interval_sec, 60s)`.
+
+### Preemption and signals
+
+A scheduler stopping the job (Slurm `scancel`, Kubernetes eviction, a spot
+reclaim) sends `SIGTERM` to `vmn exp run`. vmn forwards it to the command, gives
+the command `--kill-grace-sec` (default 30, or `$VMN_EXP_KILL_GRACE_SEC`) to exit
+cleanly, kills it if it is still alive after that, and then **always** records
+the final state — so a preempted run reads `failed`, never `stuck`, and the
+command never outlives its supervisor. `SIGINT` and `SIGHUP` are handled the
+same way, except that they are not re-sent when your terminal already delivered
+them to the command (a Ctrl-C in the foreground reaches both). A second signal
+kills the command at once.
+
+The final `run_state.yml` says what happened:
+
+```yaml
+state: finished
+exit_code: 143          # 128 + 15: the command died of SIGTERM
+signal: SIGTERM         # present when a signal ended the command
+received_signal: SIGTERM  # present when vmn itself was signalled
+```
+
+A command that traps `SIGTERM` and exits 0 (say, after checkpointing) keeps its
+own exit code; `received_signal` still records that it was asked to stop.
+
+Only a `SIGKILL` of `vmn` itself leaves a run claiming `running` — the stale
+heartbeat then reports it `stuck`. A failing heartbeat write, a metrics line
+that cannot be stored or a remote sync that errors or hangs never ends
+supervision: vmn warns once and keeps watching the command.
 
 > **Honest limitation:** a process that is *hung but alive* keeps heartbeating,
 > so it still reads as `running`. To catch that, watch `last_metric_at` (exposed
@@ -429,6 +463,8 @@ vmn exp run my_app --parent latest -- python train.py --lr 0.1
 | Flag | Default | Description |
 |---|---|---|
 | `--heartbeat-interval <sec>` | `30` | How often the run refreshes its heartbeat |
+| `--kill-grace-sec <sec>` | `30` (`$VMN_EXP_KILL_GRACE_SEC`) | How long a [signalled](#preemption-and-signals) command may take to exit before it is killed |
+| `--sync-interval <sec>` | `30` | How often the log syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
 
 ### `add`
