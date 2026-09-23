@@ -19,17 +19,20 @@ like the rest of ``core`` this imports nothing from ``cli``, ``ui`` or ``exp``.
 """
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.core.experiment_fold import fold_row, new_fold
 from version_stamp.core.experiment_index_logs import log_signatures, update_logs
 from version_stamp.core.experiment_index_store import IndexStore
 from version_stamp.core.experiment_log import experiment_row, load_log
 from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
-from version_stamp.core.utils import yaml_safe_load
+from version_stamp.core.utils import parse_record_metadata
 
 METADATA_FILE = "metadata.yml"
 
 _LOGGER = logging.getLogger(__name__)
+# Records a remote backend re-reads at once (each costs a few round trips).
+_REMOTE_WORKERS = 16
 
 
 def _new_record():
@@ -76,16 +79,18 @@ class ExperimentIndex:
             direct = direct_files() if direct_files else None
             listing = self._storage.list_files(self.app_name)
 
-            changed = {}
-            for key, names in listing.items():
-                if METADATA_FILE not in names:
-                    continue  # claimed but unfinished, or a deleted record's leftovers
-                record = self._records.get(key)
-                if record is None:
-                    record = _new_record()
-                if self._update(key, names, record, direct):
+            # Unfinished claims and deleted records' leftovers have no metadata.
+            work = [
+                (key, names, self._records.get(key))
+                for key, names in listing.items()
+                if METADATA_FILE in names
+            ]
+            changed, reorder = {}, self._order is None
+            for key, record, dirty, moved in self._refresh_records(work, direct):
+                if dirty:
                     self._records[key] = changed[key] = record
                     self._rows.pop(key, None)
+                reorder = reorder or moved
             removed = [
                 key
                 for key in self._records
@@ -94,19 +99,38 @@ class ExperimentIndex:
             for key in removed:
                 del self._records[key]
                 self._rows.pop(key, None)
-            if changed or removed or self._order is None:
+            # Only a new, removed or re-described record can move in the order.
+            if reorder or removed:
                 self._order = self._sorted_keys()
             self._store.save(self.app_name, changed, removed)
         return self
 
+    def _refresh_records(self, work, direct):
+        """``(key, record, dirty, moved)`` per ``(key, names, record)`` in *work*.
+
+        A remote backend's records are re-read concurrently: each costs a few
+        round trips, and a cold index on S3 would otherwise pay them serially.
+        """
+        is_remote = getattr(self._storage, "is_remote", None)
+        if len(work) > 1 and is_remote and is_remote():
+            with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
+                return list(pool.map(lambda w: self._refresh_one(*w, direct), work))
+        return [self._refresh_one(*w, direct) for w in work]
+
+    def _refresh_one(self, key, names, record, direct):
+        fresh = record is None
+        record = _new_record() if fresh else record
+        dirty, meta_changed = self._update(key, names, record, direct)
+        return key, record, dirty, fresh or meta_changed
+
     def _update(self, key, names, record, direct):
-        """Refresh one record in place; True when anything in it changed."""
-        dirty = False
+        """Refresh one record in place; ``(changed at all, metadata changed)``."""
+        dirty = meta_changed = False
         meta_sig = _sig(names[METADATA_FILE])
         if record["meta_sig"] != meta_sig:
             record["meta"] = self._load_meta(key)
             record["meta_sig"] = meta_sig
-            dirty = True
+            dirty = meta_changed = True
         sigs = log_signatures(names)
         if update_logs(record, self._storage, direct, self.app_name, key, sigs):
             dirty = True
@@ -117,16 +141,12 @@ class ExperimentIndex:
             )
             record["rs_sig"] = rs_sig
             dirty = True
-        return dirty
+        return dirty, meta_changed
 
     def _load_meta(self, key):
-        raw = self._storage.load_file(self.app_name, key, METADATA_FILE)
-        try:
-            meta = yaml_safe_load(raw) if raw else None
-        except Exception:
-            meta = None
         # The same rule list_snapshots applies: legacy verinfo files share the tree.
-        return meta if isinstance(meta, dict) and "verstr" in meta else None
+        raw = self._storage.load_file(self.app_name, key, METADATA_FILE)
+        return parse_record_metadata(raw)
 
     def _sorted_keys(self):
         keys = [k for k, r in self._records.items() if r["meta"] is not None]

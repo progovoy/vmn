@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Snapshot browsing for the vmn ui API (the ``snapshots/`` storage subdir)."""
-import yaml
 
 from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
 
@@ -33,14 +32,7 @@ def list_snapshots(root_path, app_name):
 
 
 def _load_metadata(storage, app_name, verstr):
-    raw = storage.load_file(app_name, verstr, "metadata.yml")
-    if raw is None:
-        return None
-    try:
-        meta = yaml.safe_load(raw)
-    except yaml.YAMLError:
-        return None
-    return meta if isinstance(meta, dict) else None
+    return storage.load_metadata(app_name, verstr)
 
 
 def _patch_presence(storage, app_name, verstr, metadata):

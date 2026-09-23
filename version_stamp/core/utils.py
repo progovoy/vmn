@@ -18,6 +18,40 @@ def yaml_safe_load(stream_or_text):
     return yaml.load(stream_or_text, Loader=_FAST_SAFE_LOADER)
 
 
+def parse_record_metadata(raw):
+    """A snapshot/experiment record's ``metadata.yml`` dict, or None.
+
+    None for a missing or unparsable file and for legacy ``create_snapshots``
+    verinfo files, which share the tree but carry no ``verstr``.
+    """
+    if not raw:
+        return None
+    try:
+        meta = yaml_safe_load(raw)
+    except yaml.YAMLError:
+        return None
+    return meta if isinstance(meta, dict) and "verstr" in meta else None
+
+
+_UNSAFE_IN_COMPONENT = ("/", "\\", os.sep, "\0", "..")
+
+
+def valid_path_component(name):
+    """Whether *name* (a verstr, artifact name, ...) stays one path component."""
+    return (
+        bool(name)
+        and name != "."
+        and not any(bad in name for bad in _UNSAFE_IN_COMPONENT)
+    )
+
+
+def valid_app_path(app_name):
+    """Whether *app_name* is a relative path of real components (``root/svc``)."""
+    return bool(app_name) and all(
+        valid_path_component(part) for part in app_name.split("/")
+    )
+
+
 def now_iso():
     """UTC now as the ``...Z`` ISO string every vmn record is timestamped with."""
     return (

@@ -694,9 +694,7 @@ def _describe_log_entry(entry):
 
 def _load_metadata(storage, app_name, verstr):
     """An experiment's metadata alone — no patches or untracked tarball."""
-    raw = storage.load_file(app_name, verstr, "metadata.yml")
-    meta = yaml.safe_load(raw) if raw else None
-    return meta if isinstance(meta, dict) else None
+    return storage.load_metadata(app_name, verstr)
 
 
 def _load_experiment_bundle(storage, vcs, verstr, app_name=None, light=False):

@@ -13,9 +13,11 @@ from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
     METADATA_FILE,
     atomic_write,
+    checked_app_path,
     flatten_logs,
     group_log_names,
     log_object_name,
+    log_sizes_of,
     parse_jsonl,
     read_patches_from_dir,
     safe_dep_name,
@@ -25,6 +27,7 @@ from version_stamp.cli.snapshot_storage_files import (
 )
 from version_stamp.core import utils as core_utils
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.utils import parse_record_metadata
 
 
 class LocalSnapshotStorage(SnapshotStorage):
@@ -33,9 +36,8 @@ class LocalSnapshotStorage(SnapshotStorage):
         self._subdir = subdir
 
     def _snapshot_base_dir(self, app_name):
-        return os.path.join(
-            self.vmn_root_path, ".vmn", app_name.replace("/", os.sep), self._subdir
-        )
+        app_dir = checked_app_path(app_name).replace("/", os.sep)
+        return os.path.join(self.vmn_root_path, ".vmn", app_dir, self._subdir)
 
     def _snapshot_dir(self, app_name, verstr):
         return os.path.join(self._snapshot_base_dir(app_name), safe_verstr(verstr))
@@ -56,7 +58,10 @@ class LocalSnapshotStorage(SnapshotStorage):
         )
 
     def exists(self, app_name, verstr):
-        return self._has_record(app_name, verstr)
+        try:
+            return self._has_record(app_name, verstr)
+        except ValueError:
+            return False  # not a record name, so certainly no record
 
     def save(self, app_name, verstr, metadata, patches):
         self._ensure_base_dir(app_name)
@@ -87,14 +92,41 @@ class LocalSnapshotStorage(SnapshotStorage):
             if name != own and (name == code or name.startswith(code + "."))
         ]
 
+    def _link_sources(self, app_name, verstr, metadata):
+        """``[(sibling dir, trusted)]`` to hard-link identical patches from.
+
+        A sibling with the same ``diff_hash`` has the same patches (trusted: no
+        bytes need comparing); one with a different hash has none to share;
+        one that predates the hash is compared byte for byte.
+        """
+        want = (metadata or {}).get("diff_hash")
+        sources = []
+        for path in self._same_code_dirs(app_name, verstr, metadata):
+            theirs = self._sibling_diff_hash(path)
+            if want and theirs:
+                if theirs == want:
+                    return [(path, True)]
+                continue
+            sources.append((path, False))
+        return sources
+
+    def _sibling_diff_hash(self, snap_dir):
+        try:
+            with open(os.path.join(snap_dir, METADATA_FILE), "rb") as f:
+                return (parse_record_metadata(f.read()) or {}).get("diff_hash")
+        except OSError:
+            return None
+
     def _write_record(self, app_name, verstr, snap_dir, metadata, patches):
-        siblings = self._same_code_dirs(app_name, verstr, metadata)
+        siblings = self._link_sources(app_name, verstr, metadata)
         write_patches_to_dir(snap_dir, patches, link_from=siblings)
         for dep_path, dep_patches in patches.get("deps", {}).items():
             safe_dep = safe_dep_name(dep_path)
             dep_dir = os.path.join(snap_dir, "deps", safe_dep)
             Path(dep_dir).mkdir(parents=True, exist_ok=True)
-            dep_sources = [os.path.join(s, "deps", safe_dep) for s in siblings]
+            dep_sources = [
+                (os.path.join(s, "deps", safe_dep), trusted) for s, trusted in siblings
+            ]
             write_patches_to_dir(dep_dir, dep_patches, link_from=dep_sources)
         # Last: metadata.yml is what makes the record visible.
         atomic_write(
@@ -146,9 +178,9 @@ class LocalSnapshotStorage(SnapshotStorage):
         results = []
         for entry in self._record_dirs(app_name):
             meta_path = os.path.join(entry.path, METADATA_FILE)
-            meta = self._load_metadata(meta_path)
-            if not isinstance(meta, dict) or "verstr" not in meta:
-                # Legacy create_snapshots verinfo files share this tree.
+            with open(meta_path, "rb") as f:
+                meta = parse_record_metadata(f.read())
+            if meta is None:
                 VMN_LOGGER.debug(f"Skipping non-snapshot metadata: {meta_path}")
                 continue
             results.append(meta)
@@ -273,6 +305,16 @@ class LocalSnapshotStorage(SnapshotStorage):
                     with open(os.path.join(snap_dir, name), encoding="utf-8") as f:
                         entries.extend(parse_jsonl(f.read(), writer))
         return logs
+
+    def log_sizes(self, app_name, verstr):
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        if not os.path.isdir(snap_dir):
+            return {}
+        return log_sizes_of(
+            (entry.name, entry.stat().st_size)
+            for entry in os.scandir(snap_dir)
+            if entry.is_file()
+        )
 
     def load_merged_log(self, app_name, verstr):
         return flatten_logs(self.load_logs_by_writer(app_name, verstr))

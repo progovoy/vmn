@@ -18,8 +18,10 @@ import yaml
 
 from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
+    METADATA_FILE,
     valid_artifact_name,
 )
+from version_stamp.core.utils import parse_record_metadata, yaml_safe_load
 
 
 class SnapshotStorage(ABC):
@@ -38,6 +40,10 @@ class SnapshotStorage(ABC):
     def list_verstrs(self, app_name):
         """Names only. Backends override this to avoid parsing any metadata."""
         return [m["verstr"] for m in self.list_snapshots(app_name)]
+
+    def load_metadata(self, app_name, verstr):
+        """A record's metadata alone — no patches or tarball — or None."""
+        return parse_record_metadata(self.load_file(app_name, verstr, METADATA_FILE))
 
     def exists(self, app_name, verstr):
         """Check if a snapshot exists without loading its full content."""
@@ -71,6 +77,10 @@ class SnapshotStorage(ABC):
         """*filename*'s bytes from *offset* on, or None when it is missing."""
         data = self.load_file(app_name, verstr, filename)
         return None if data is None else data[offset:]
+
+    def is_remote(self):
+        """Whether reads go over the network (so concurrent reads pay off)."""
+        return False
 
     def index_cache_path(self, app_name):
         """Where a persistent experiment index for *app_name* may live, or None."""
@@ -131,7 +141,7 @@ class SnapshotStorage(ABC):
         """Append a single log entry to the writer's per-writer log file.
         Default implementation falls back to read-modify-write on log.yml."""
         data = self.load_file(app_name, verstr, LEGACY_LOG_FILE)
-        log = yaml.safe_load(data) if data else []
+        log = yaml_safe_load(data) if data else []
         log.append(entry)
         self.save_file(
             app_name, verstr, LEGACY_LOG_FILE, yaml.dump(log, sort_keys=False)
@@ -147,8 +157,16 @@ class SnapshotStorage(ABC):
         data = self.load_file(app_name, verstr, LEGACY_LOG_FILE)
         if data is None:
             return []
-        loaded = yaml.safe_load(data)
+        loaded = yaml_safe_load(data)
         return loaded if isinstance(loaded, list) else []
+
+    def log_sizes(self, app_name, verstr):
+        """``{writer: bytes}`` of the record's logs (``""`` = legacy ``log.yml``).
+
+        A writer's log only ever grows, so comparing sizes tells which copy of
+        it is newer without reading either. Empty when the backend can't tell.
+        """
+        return {}
 
     def log_objects(self, app_name, verstr, writer_id):
         """``[(object name, size)]`` of a writer's remote log objects, in order."""

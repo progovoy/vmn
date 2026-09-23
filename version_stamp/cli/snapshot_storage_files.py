@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """File-level helpers shared by the snapshot storage backends: record file
-names, log object naming, JSONL parsing, atomic writes and patch files."""
-import json
+names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles)."""
 import os
 import shutil
 import tempfile
 
+# Log file naming and parsing live in core, shared with the experiment index.
+from version_stamp.core.experiment_logfiles import (  # noqa: F401  (re-exported)
+    LEGACY_LOG_FILE,
+    group_log_names,
+    is_log_file,
+    log_object_name,
+    log_writer_and_seq,
+    parse_jsonl,
+)
+from version_stamp.core.utils import valid_app_path, valid_path_component
+
 METADATA_FILE = "metadata.yml"
 # The derived experiment-index cache, beside the records it summarizes.
 INDEX_CACHE_FILE = ".index.sqlite"
-LEGACY_LOG_FILE = "log.yml"
 # (patches key, file name, binary?)
 PATCH_FILES = (
     ("working_tree", "working_tree.patch", False),
@@ -21,7 +30,17 @@ VOLATILE_FILES = ("run_state.yml",)
 
 
 def safe_verstr(verstr):
+    """*verstr* as a record directory/key name; ValueError if it would walk."""
+    if not valid_path_component(verstr):
+        raise ValueError(f"Invalid record name: {verstr!r}")
     return verstr.replace("+", "_plus_")
+
+
+def checked_app_path(app_name):
+    """*app_name* unchanged; ValueError if it is not a relative app path."""
+    if not valid_app_path(app_name):
+        raise ValueError(f"Invalid app name: {app_name!r}")
+    return app_name
 
 
 def unsafe_verstr(name):
@@ -32,54 +51,26 @@ def safe_dep_name(dep_path):
     return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
-def is_log_file(name):
-    return name.startswith("log.") and name.endswith(".jsonl")
-
-
 def is_volatile_file(name):
     return name in VOLATILE_FILES or is_log_file(name)
 
 
-def log_writer_and_seq(name):
-    """``log.w.jsonl`` → ``("w", 0)``; segment ``log.w@000003.jsonl`` → ``("w", 3)``."""
-    stem = name[len("log.") : -len(".jsonl")]
-    writer, _, seq = stem.partition("@")
-    return writer, int(seq) if seq.isdigit() else 0
-
-
-def log_object_name(writer, seq=0):
-    return f"log.{writer}.jsonl" if not seq else f"log.{writer}@{seq:06d}.jsonl"
-
-
-def group_log_names(names):
-    """``{writer: [names in seq order]}`` for the log files among *names*."""
-    groups = {}
-    for name in names:
-        if is_log_file(name):
-            writer, seq = log_writer_and_seq(name)
-            groups.setdefault(writer, []).append((seq, name))
-    return {w: [n for _, n in sorted(items)] for w, items in groups.items()}
-
-
 def valid_artifact_name(name):
-    return bool(name) and name not in (".", "..") and not any(
-        sep in name for sep in ("/", "\\", os.sep)
-    )
+    return valid_path_component(name)
 
 
-def parse_jsonl(text, writer):
-    entries = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
+def log_sizes_of(files):
+    """``{writer: total bytes}`` over ``(name, size)`` pairs of a record's files."""
+    sizes = {}
+    for name, size in files:
+        if name == LEGACY_LOG_FILE:
+            writer = ""
+        elif is_log_file(name):
+            writer = log_writer_and_seq(name)[0]
+        else:
             continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        entry["_writer"] = writer
-        entries.append(entry)
-    return entries
+        sizes[writer] = sizes.get(writer, 0) + size
+    return sizes
 
 
 def flatten_logs(logs_by_writer):
@@ -127,11 +118,25 @@ def _link_or_copy(src, dst):
         shutil.copy2(src, dst)
 
 
+def _same_size(path, data):
+    try:
+        return os.path.getsize(path) == len(data)
+    except OSError:
+        return False
+
+
+def _identical(path, data, trusted):
+    """Whether *path* holds *data*. A *trusted* source (same ``diff_hash``)
+    already has the same content, so its size is proof enough."""
+    return _same_size(path, data) if trusted else _same_bytes(path, data)
+
+
 def write_patches_to_dir(directory, patches, link_from=()):
     """Write the patch files *patches* carries and drop the ones it lacks.
 
-    A byte-identical file in one of the *link_from* directories is hard-linked
-    rather than written again, so runs of the same code share their patches.
+    An identical file in one of the *link_from* ``(directory, trusted)``
+    sources is hard-linked rather than written again, so runs of the same code
+    share their patches.
     """
     for key, filename, binary in PATCH_FILES:
         path = os.path.join(directory, filename)
@@ -144,8 +149,8 @@ def write_patches_to_dir(directory, patches, link_from=()):
         source = next(
             (
                 os.path.join(src, filename)
-                for src in link_from
-                if _same_bytes(os.path.join(src, filename), data)
+                for src, trusted in link_from
+                if _identical(os.path.join(src, filename), data, trusted)
             ),
             None,
         )
