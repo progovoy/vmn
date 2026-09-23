@@ -83,9 +83,13 @@ export interface ExperimentRow extends Partial<RunStatus> {
   user_meta: Record<string, unknown> | null;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
-  /** The numeric fold: metrics plus any param that parses as a number. */
-  metrics: Record<string, number | string>;
+  /** The numeric fold: metrics plus any param that parses as a number.
+   *  `null` is a non-finite value (NaN/inf) the server could not send. */
+  metrics: Record<string, number | string | null>;
 }
+
+/** A page of leaderboard rows, with the server's count of every match. */
+export type ExperimentPage = ExperimentRow[] & { total: number };
 
 export interface SeriesPoint {
   step: number | null;
@@ -102,10 +106,18 @@ export interface LogEntry {
 
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
+  /** The full log. Newer servers send `log_tail` + `log_total` instead; the
+   *  Run page owns that migration, so this stays as older servers send it. */
   log: LogEntry[];
+  /** The newest entries of the log (newer servers). */
+  log_tail?: LogEntry[];
+  /** How many entries the whole log holds (newer servers). */
+  log_total?: number;
+  /** Points per metric before server-side downsampling (newer servers). */
+  series_total?: Record<string, number>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
-  metrics: Record<string, number | string>;
+  metrics: Record<string, number | string | null>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   artifacts?: { name: string; size: number }[];

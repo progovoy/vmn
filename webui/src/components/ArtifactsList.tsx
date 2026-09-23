@@ -1,18 +1,48 @@
+import { useState, type MouseEvent } from "react";
+
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Fetch with the Authorization header and hand the blob to the browser.
+ *  A plain `<a download>` can't send the header, so with a token set it would
+ *  always get a 401. */
+async function downloadWithToken(url: string, name: string, token: string) {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const href = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
 export default function ArtifactsList({ artifacts, downloadUrl }: {
   artifacts: { name: string; size: number }[];
   downloadUrl: (filename: string) => string;
 }) {
+  const [error, setError] = useState<string | null>(null);
   if (artifacts.length === 0) return null;
+
+  const onClick = (e: MouseEvent<HTMLAnchorElement>, name: string) => {
+    const token = sessionStorage.getItem("vmn_token");
+    if (!token) return; // no auth: the plain link works as is
+    e.preventDefault();
+    setError(null);
+    downloadWithToken(downloadUrl(name), name, token).catch((err) =>
+      setError(`${name}: ${String((err as Error).message ?? err)}`)
+    );
+  };
 
   return (
     <div className="card">
       <div className="eyebrow">artifacts</div>
+      {error && <div className="error">{error}</div>}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {artifacts.map((a) => (
           <li
@@ -25,6 +55,7 @@ export default function ArtifactsList({ artifacts, downloadUrl }: {
             <a
               href={downloadUrl(a.name)}
               download
+              onClick={(e) => onClick(e, a.name)}
               style={{ color: "var(--accent)" }}
             >
               {a.name}

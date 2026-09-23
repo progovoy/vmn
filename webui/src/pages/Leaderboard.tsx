@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName } from "../api";
+import { PAGE_SIZE } from "../paging";
+import { isAbortError, withSignal } from "../requestScope";
+import { maxOf, minOf } from "../util/stats";
+import { columnLayout, paramKey, rowParams } from "./leaderboardColumns";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, pollIntervalMs, relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
@@ -20,6 +24,7 @@ export default function Leaderboard() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const appName = toAppName(app);
   const [rows, setRows] = useState<ExperimentRow[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [schema, setSchema] = useState<MetricsSchema | null>(null);
   const [sort, setSort] = useState<string | null>(null);
   const [reversed, setReversed] = useState(false);
@@ -36,24 +41,71 @@ export default function Leaderboard() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const load = useCallback(() => {
-    const args = [ws, app, sort ?? undefined, statusFilter || undefined] as const;
-    const request = query
-      ? api.experiments(...args, query)
-      : api.experiments(...args);
+  // Every request gets a sequence number: only the newest may land, so a slow
+  // response to an old filter can never overwrite the rows of the current one.
+  const seqRef = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
+  // How many rows the user has paged in — a poll refreshes all of them.
+  const loadedRef = useRef(0);
+
+  const load = useCallback((): Promise<ExperimentRow[] | undefined> => {
+    inFlight.current?.abort();
+    const ctrl = new AbortController();
+    inFlight.current = ctrl;
+    const seq = ++seqRef.current;
+    const status = statusFilter || undefined;
+    const args = [ws, app, sort ?? undefined, status] as const;
+    const request = withSignal(ctrl.signal, () =>
+      loadedRef.current > PAGE_SIZE
+        ? api.experimentsPaged(ws, app, {
+            sort: sort ?? undefined, status, query: query || undefined,
+            offset: 0, limit: loadedRef.current,
+          }).then(({ rows: page, total: n }) => Object.assign(page, { total: n }))
+        : query
+          ? api.experiments(...args, query)
+          : api.experiments(...args)
+    );
     return request
       .then((next) => {
+        if (seq !== seqRef.current) return undefined;
+        loadedRef.current = next.length;
         setRows(next);
+        setTotal(next.total ?? next.length);
         setQueryError(null);
+        return next;
       })
       .catch((e) => {
+        if (seq !== seqRef.current || isAbortError(e)) return undefined;
         // A 400 is the query the user is still typing: say so beside the box
         // and leave the rows they were reading alone.
         if ((e as { status?: number }).status === 400) setQueryError(String(e.message));
         else setError(String(e));
+        return undefined;
       });
   }, [ws, app, sort, statusFilter, query]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadedRef.current = 0; // new filters start again from the first page
+    load();
+  }, [load]);
+  useEffect(() => () => inFlight.current?.abort(), []);
+
+  const loadMore = () => {
+    if (!rows) return;
+    const seq = seqRef.current;
+    api.experimentsPaged(ws, app, {
+      sort: sort ?? undefined, status: statusFilter || undefined,
+      query: query || undefined, offset: rows.length, limit: PAGE_SIZE,
+    }).then(({ rows: more, total: n }) => {
+      if (seq !== seqRef.current) return; // the filters moved on meanwhile
+      setRows((cur) => {
+        const known = new Set((cur ?? []).map((r) => r.verstr));
+        const merged = [...(cur ?? []), ...more.filter((r) => !known.has(r.verstr))];
+        loadedRef.current = merged.length;
+        return merged;
+      });
+      setTotal(n);
+    }).catch((e) => { if (!isAbortError(e)) setError(String(e)); });
+  };
   // Keep refreshing on our own while a run is still in flight, at the cadence
   // its heartbeat can actually move the status at.
   const anyRunning = useMemo(
@@ -64,7 +116,8 @@ export default function Leaderboard() {
     const beats = (rows ?? [])
       .map((r) => r.heartbeat_interval_sec)
       .filter((v): v is number => typeof v === "number");
-    return beats.length ? Math.min(...beats) : null;
+    const fastest = minOf(beats);
+    return Number.isNaN(fastest) ? null : fastest;
   }, [rows]);
   usePolling(load, pollIntervalMs(heartbeatSec), live || anyRunning);
   useEffect(() => {
@@ -97,9 +150,9 @@ export default function Leaderboard() {
       const goal = metricGoal(schema, m);
       const vals = (rows ?? [])
         .map((r) => r.metrics[m])
-        .filter((v): v is number => typeof v === "number");
-      const min = vals.length ? Math.min(...vals) : NaN;
-      const max = vals.length ? Math.max(...vals) : NaN;
+        .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+      const min = minOf(vals);
+      const max = maxOf(vals);
       meta[m] = {
         goal,
         best: vals.length ? (goal === "min" ? min : max) : null,
@@ -110,21 +163,35 @@ export default function Leaderboard() {
     return meta;
   }, [rows, metricCols, schema, primary]);
 
-  const paramCols = useMemo(() => {
-    const keys = new Set<string>();
-    rows?.forEach((r) => {
-      if (r.user_meta) Object.keys(r.user_meta).forEach((k) => keys.add(k));
-    });
-    return [...keys].sort();
-  }, [rows]);
+  // Keyed on the *set* of names, so a poll returning the same params keeps
+  // the same array (and the user's column choices).
+  const paramNames = paramKey(rows);
+  const paramCols = useMemo(
+    () => (paramNames ? paramNames.split("\u0000") : []),
+    [paramNames]
+  );
 
-  const [visibleParams, setVisibleParams] = useState<string[]>([]);
-  useEffect(() => { setVisibleParams(paramCols); }, [paramCols]);
+  // Hidden columns, not visible ones: a param that appears later shows up,
+  // and one the user switched off stays off across polls.
+  const [hiddenParams, setHiddenParams] = useState<string[]>([]);
+  const visibleParams = useMemo(
+    () => paramCols.filter((c) => !hiddenParams.includes(c)),
+    [paramCols, hiddenParams]
+  );
 
   const toggleParam = (col: string) =>
-    setVisibleParams((cur) =>
+    setHiddenParams((cur) =>
       cur.includes(col) ? cur.filter((c) => c !== col) : [...cur, col]
     );
+
+  const layout = useMemo(
+    () => columnLayout(metricCols.length, visibleParams.length),
+    [metricCols.length, visibleParams.length]
+  );
+  const colWidth = (i: number) => `${layout.widths[i]}px`;
+  const metricBase = 4;
+  const paramBase = metricBase + metricCols.length;
+  const noteIdx = paramBase + visibleParams.length;
 
   const clickSort = (m: string) => {
     if (sort === m) setReversed((r) => !r);
@@ -161,9 +228,11 @@ export default function Leaderboard() {
     <>
       <PageHead title={appName} what="experiment leaderboard" />
       <p className="page-sub">
-        {filteredRows && filteredRows.length !== rows.length
-          ? `${filteredRows.length} of ${rows.length} runs`
-          : `${rows.length} runs`}
+        {(() => {
+          const shown = filteredRows?.length ?? rows.length;
+          const all = Math.max(total, rows.length);
+          return shown !== all ? `${shown} of ${all} runs` : `${all} runs`;
+        })()}
         {sortLabel && (
           <>
             {" · sorted by "}<b>{sortLabel}</b>
@@ -181,9 +250,10 @@ export default function Leaderboard() {
           onCreated={() => {
             const known = new Set(rows.map((r) => r.verstr));
             openCreate(false);
-            api.experiments(ws, app, sort ?? undefined).then((next) => {
-              setRows(next);
-              setFlash(next.find((r) => !known.has(r.verstr))?.verstr ?? null);
+            // The same request as any refresh: the active sort, status and
+            // query filters all still apply.
+            load().then((next) => {
+              if (next) setFlash(next.find((r) => !known.has(r.verstr))?.verstr ?? null);
             });
           }}
         />
@@ -273,16 +343,17 @@ export default function Leaderboard() {
 
           <div className="card flush">
             <div className="tbl-scroll" ref={parentRef} style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
-              <table style={{ minWidth: 760 }}>
+              <table style={{ tableLayout: "fixed", width: layout.total }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 34, paddingLeft: 16 }}></th>
-                    <th style={{ width: 40 }}>#</th>
-                    <th style={{ width: 110 }}>status</th>
-                    <th>experiment</th>
-                    {metricCols.map((m) => (
+                    <th style={{ width: colWidth(0), paddingLeft: 16 }}></th>
+                    <th style={{ width: colWidth(1) }}>#</th>
+                    <th style={{ width: colWidth(2) }}>status</th>
+                    <th style={{ width: colWidth(3) }}>experiment</th>
+                    {metricCols.map((m, i) => (
                       <th
                         key={m}
+                        style={{ width: colWidth(metricBase + i) }}
                         className={`sortable${sort === m ? " sorted" : ""}`}
                         onClick={() => clickSort(m)}
                         title={`sort by ${m} (best first)`}
@@ -296,11 +367,11 @@ export default function Leaderboard() {
                         {sort === m ? (reversed ? " ▴" : " ▾") : ""}
                       </th>
                     ))}
-                    {visibleParams.map((p) => (
-                      <th key={`p-${p}`} style={{ color: "var(--text-3)" }}>{p}</th>
+                    {visibleParams.map((p, i) => (
+                      <th key={`p-${p}`} style={{ width: colWidth(paramBase + i), color: "var(--text-3)" }}>{p}</th>
                     ))}
-                    <th>note</th>
-                    <th className="num" style={{ paddingRight: 16 }}>when</th>
+                    <th style={{ width: colWidth(noteIdx) }}>note</th>
+                    <th className="num" style={{ width: colWidth(noteIdx + 1), paddingRight: 16 }}>when</th>
                   </tr>
                 </thead>
                 <tbody style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
@@ -313,9 +384,11 @@ export default function Leaderboard() {
                           position: "absolute",
                           top: 0,
                           left: 0,
-                          width: "100%",
+                          width: layout.total,
                           height: virtualRow.size,
                           transform: `translateY(${virtualRow.start}px)`,
+                          display: "table",
+                          tableLayout: "fixed",
                         }}
                         className={[
                           "row",
@@ -329,7 +402,7 @@ export default function Leaderboard() {
                         }
                       >
                         <td
-                          style={{ paddingLeft: 16 }}
+                          style={{ width: colWidth(0), paddingLeft: 16 }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -338,8 +411,8 @@ export default function Leaderboard() {
                             onChange={() => toggle(r.verstr)}
                           />
                         </td>
-                        <td className="idx-cell">@{r.idx}</td>
-                        <td className="status-cell">
+                        <td className="idx-cell" style={{ width: colWidth(1) }}>@{r.idx}</td>
+                        <td className="status-cell" style={{ width: colWidth(2) }}>
                           {r.status && (
                             <StatusPill
                               status={r.status}
@@ -349,7 +422,7 @@ export default function Leaderboard() {
                             />
                           )}
                         </td>
-                        <td>
+                        <td style={{ width: colWidth(3), overflow: "hidden" }}>
                           <div className="nest" style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
                             {(r.depth ?? 0) > 0 && (
                               <span className="nest-mark" title="inner run">⤷</span>
@@ -370,7 +443,7 @@ export default function Leaderboard() {
                             {r.branch}
                           </div>
                         </td>
-                        {metricCols.map((m) => {
+                        {metricCols.map((m, i) => {
                           const v = r.metrics[m];
                           const col = colMeta[m];
                           const isBest =
@@ -383,7 +456,7 @@ export default function Leaderboard() {
                             if (col.goal === "min") frac = 1 - frac;
                           }
                           return (
-                            <td key={m} className={isBar ? "bar-cell" : ""}>
+                            <td key={m} className={isBar ? "bar-cell" : ""} style={{ width: colWidth(metricBase + i) }}>
                               {isBar && (
                                 <span
                                   className="bar"
@@ -396,13 +469,23 @@ export default function Leaderboard() {
                             </td>
                           );
                         })}
-                        {visibleParams.map((p) => (
-                          <td key={`p-${p}`} className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>
-                            {r.user_meta?.[p] != null ? String(r.user_meta[p]) : "—"}
-                          </td>
-                        ))}
-                        <td className="note-cell">{r.note}</td>
-                        <td className="when-cell" title={r.timestamp ?? ""}>
+                        {visibleParams.map((p, i) => {
+                          const pv = rowParams(r)[p];
+                          return (
+                            <td
+                              key={`p-${p}`}
+                              className="mono"
+                              style={{
+                                width: colWidth(paramBase + i), color: "var(--text-2)", fontSize: 12,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}
+                            >
+                              {pv != null ? String(pv) : "—"}
+                            </td>
+                          );
+                        })}
+                        <td className="note-cell" style={{ width: colWidth(noteIdx), overflow: "hidden" }}>{r.note}</td>
+                        <td className="when-cell" style={{ width: colWidth(noteIdx + 1) }} title={r.timestamp ?? ""}>
                           {relTime(r.timestamp)}
                         </td>
                       </tr>
@@ -412,6 +495,13 @@ export default function Leaderboard() {
               </table>
             </div>
           </div>
+          {rows.length < total && (
+            <div style={{ display: "flex", justifyContent: "center", margin: "10px 0" }}>
+              <button onClick={loadMore}>
+                Load more ({total - rows.length} remaining)
+              </button>
+            </div>
+          )}
           <div className="cli-card">
             vmn exp list {appName}
             {sortLabel ? ` --sort ${sortLabel}` : ""}

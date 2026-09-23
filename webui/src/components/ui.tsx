@@ -73,12 +73,24 @@ export function useJob(onDone?: (job: Job) => void) {
       const j = await api.action(ws, app, action, body);
       setJob(j);
       window.clearInterval(pollRef.current);
+      let pending = false;
+      const stop = () => window.clearInterval(pollRef.current);
       pollRef.current = window.setInterval(async () => {
-        const cur = await api.job(j.id);
-        setJob(cur);
-        if (cur.status !== "running") {
-          window.clearInterval(pollRef.current);
-          onDone?.(cur);
+        if (pending) return; // a slow answer must not stack polls up
+        pending = true;
+        try {
+          const cur = await api.job(j.id);
+          setJob(cur);
+          if (cur.status !== "running") {
+            stop();
+            onDone?.(cur);
+          }
+        } catch (e) {
+          // A server restart forgets its in-memory jobs (404): stop asking.
+          stop();
+          setError(String((e as Error).message ?? e));
+        } finally {
+          pending = false;
         }
       }, 500);
     } catch (e) {
