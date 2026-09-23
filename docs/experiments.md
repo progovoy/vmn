@@ -453,6 +453,15 @@ vmn exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
 vmn exp list my_app --last 10              # most recent 10
 ```
 
+The `[N]` in front of each row is the run's storage index — the same number
+`-v @N` resolves — so it never changes with `--sort`, `--top` or `--last`:
+`vmn exp list my_app --sort loss` showing `[7]` first means `vmn exp show my_app
+-v @7` opens that run.
+
+`list`, `show`, `compare`, `diff` and `export` (and `vmn snapshot
+list|show|diff|export`) are read-only and take no repo lock, so they never wait
+for — or hold up — a `create`/`run` in the same checkout.
+
 Richer filtering — `metrics.loss < 0.5 and status = "succeeded"` — is available
 from the SDK reader and the REST API via [the query
 language](sdk.md#the-query-language), not yet as a flag here.
@@ -461,17 +470,20 @@ language](sdk.md#the-query-language), not yet as a flag here.
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, latest metrics, and the whole log timeline.
+lines, latest metrics, and the log timeline — the newest 50 entries, with a
+line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
 ```sh
 vmn exp show my_app          # latest
 vmn exp show my_app -v @1
+vmn exp show my_app -v @1 --full-log
 ```
 
 ### `compare`
 
 Side-by-side metric table across N experiments (no code diff — use `diff` for
-that). Needs at least two.
+that). Needs at least two. It reads only each run's metadata and log, never its
+patches or untracked-file tarball, so comparing many runs stays cheap.
 
 ```sh
 vmn exp compare my_app --last 3
@@ -512,12 +524,33 @@ vmn exp export my_app --latest -o best.tar.gz
 
 ### `prune`
 
-Delete old experiments by count or age.
+Delete old experiments by count or age. Each deleted verstr is printed.
 
 ```sh
-vmn exp prune my_app --keep 10          # keep the 10 most recent
-vmn exp prune my_app --older-than 30d   # remove anything older than 30 days (Nd/Nw/Nh)
+vmn exp prune my_app --keep 10              # keep the 10 most recent
+vmn exp prune my_app --older-than 30d       # remove anything older than 30 days (Nd/Nw/Nh)
+vmn exp prune my_app --keep 10 --dry-run    # print what would go, delete nothing
+vmn exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
 ```
+
+Two guards take runs back out of the selection:
+
+- a run whose status is `running` is never deleted (it is reported as skipped);
+  `--force` deletes it anyway. A `stuck` run is deletable.
+- a run with a kept descendant is kept, so no surviving inner run is left
+  pointing at a parent that no longer exists.
+
+With a remote bucket configured, prune deletes both the local and the remote
+(S3) copy — which may hold your teammates' runs too. `--local-only` removes only
+the local copies.
+
+| Flag | Description |
+|---|---|
+| `--keep N` | Keep the N most recent experiments |
+| `--older-than <dur>` | Delete experiments older than `Nd`/`Nw`/`Nh` |
+| `--dry-run` | Print what would be deleted, delete nothing |
+| `--force` | Also delete runs that are still `running` |
+| `--local-only` | Keep the remote (S3) copies |
 
 ---
 

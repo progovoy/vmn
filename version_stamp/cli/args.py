@@ -631,6 +631,31 @@ def _add_experiment_parser(subprasers, name):
         help="Prune experiments older than duration (e.g., 30d)",
     )
     pexp.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        default=False,
+        help="prune: print what would be deleted, delete nothing",
+    )
+    pexp.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="prune: also delete runs that are still running",
+    )
+    pexp.add_argument(
+        "--local-only",
+        action="store_true",
+        default=False,
+        help="prune: delete local copies only, keep the remote (S3) ones",
+    )
+    pexp.add_argument(
+        "--full-log",
+        action="store_true",
+        default=False,
+        help="show: print every log entry (default: the last 50)",
+    )
+    pexp.add_argument(
         "--from-snapshot",
         default=None,
         help="Path to vmn_metadata.yml or directory containing it. "

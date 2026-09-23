@@ -102,6 +102,19 @@ def _run_experiment_from_snapshot(args):
     return 1
 
 
+_READ_ONLY_ACTIONS = {
+    "experiment": {"list", "show", "compare", "diff", "export"},
+    "exp": {"list", "show", "compare", "diff", "export"},
+    "snapshot": {"list", "show", "diff", "export"},
+}
+
+
+def _takes_repo_lock(args):
+    """False for the read-only experiment/snapshot actions, which are lock-free."""
+    read_only = _READ_ONLY_ACTIONS.get(args.command, ())
+    return getattr(args, "action", None) not in read_only
+
+
 def _reject_readonly_version_creation(args, root_path):
     marker = os.path.join(root_path, ".vmn", WORKTREE_READONLY_MARKER)
     if args.command not in _VERSION_CREATING_COMMANDS or not os.path.exists(marker):
@@ -270,8 +283,11 @@ def vmn_run(command_line=None):
     try:
         lock = get_repo_lock(root_path)
 
-        # start of non-parallel code section
-        lock.acquire()
+        # start of non-parallel code section. Read-only experiment/snapshot
+        # actions never mutate the checkout, so they must not queue behind
+        # (or block) a create that is allocating a verstr.
+        if _takes_repo_lock(args):
+            lock.acquire()
 
         if args.command == "show":
             init_stamp_logger(
