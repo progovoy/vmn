@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
-import datetime
 import os
 import shutil
 import sys
@@ -9,6 +8,9 @@ from types import ModuleType
 from typing import List, Optional
 
 import yaml
+
+from version_stamp.cli.experiment_prune import _parse_duration  # noqa: F401
+from version_stamp.cli.experiment_prune import experiment_prune as _experiment_prune
 
 # `vmn exp run` lives in its own module; these names stay importable from here.
 from version_stamp.cli.experiment_run import (  # noqa: F401
@@ -39,6 +41,7 @@ from version_stamp.core.experiment_log import (
     load_log,
     metric_series,
     metric_sort_descending,
+    sort_by_metric,
 )
 from version_stamp.core.experiment_status import (
     STUCK,
@@ -46,7 +49,11 @@ from version_stamp.core.experiment_status import (
     load_run_state,
     status_fields,
 )
-from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_tree import (
+    annotate_tree,
+    children_by_parent,
+    subtree_verstrs,
+)
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
@@ -243,21 +250,20 @@ def _resolve_experiment_version(storage, vcs, args, default_latest=False):
     return _resolve_verstr(storage, app_name, ref, latest=latest, kind="experiment")
 
 
-def _parse_duration(duration_str):
-    """Parse '30d', '2w', '24h' to timedelta."""
-    s = duration_str.strip().lower()
-    if s.endswith("d"):
-        return datetime.timedelta(days=int(s[:-1]))
-    if s.endswith("w"):
-        return datetime.timedelta(weeks=int(s[:-1]))
-    if s.endswith("h"):
-        return datetime.timedelta(hours=int(s[:-1]))
-    raise ValueError(f"Invalid duration: {duration_str}. Use Nd, Nw, or Nh.")
-
-
 # ---------------------------------------------------------------------------
 # Main dispatcher
 # ---------------------------------------------------------------------------
+
+
+def _export_conf_writer_id(writer_id):
+    """Make a conf ``experiment.storage.writer_id`` act like ``--writer-id``.
+
+    ``$VMN_WRITER_ID`` (and ``--writer-id``, which sets it) still wins.
+    """
+    if not writer_id or os.environ.get(experiment_writer.WRITER_ID_ENV):
+        return
+    os.environ[experiment_writer.WRITER_ID_ENV] = writer_id
+    experiment_writer._WRITER_ID = None  # re-read on the next log append
 
 
 @measure_runtime_decorator
@@ -278,6 +284,7 @@ def handle_experiment(vmn_ctx):
     params["writer_id"] = getattr(args, "writer_id", None)
 
     _merge_conf_into_params(vcs, params)
+    _export_conf_writer_id(params.get("writer_id"))
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
@@ -580,16 +587,24 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _status_tree(storage, app_name, metas):
-    """Annotated nesting/status rows for the given experiments, by verstr."""
-    rows = [
-        {
-            "verstr": meta["verstr"],
-            "parent": meta.get("parent"),
-            "status": derive_status(load_run_state(storage, app_name, meta["verstr"])),
-        }
-        for meta in metas
-    ]
+def _status_tree(storage, app_name, metas, only=None):
+    """Annotated nesting/status rows for *metas*, by verstr.
+
+    The tree is built over every meta, so depth and ``tree_status`` stay right
+    for any subset. Run states are read only for *only* (a verstr collection)
+    and their subtrees; the rest carry no status, which a rollup ignores.
+    """
+    rows = [{"verstr": m["verstr"], "parent": m.get("parent")} for m in metas]
+    wanted = None
+    if only is not None:
+        children_of = children_by_parent(rows)
+        wanted = set()
+        for verstr in only:
+            wanted.update(subtree_verstrs(verstr, children_of))
+    for row in rows:
+        if wanted is None or row["verstr"] in wanted:
+            state = load_run_state(storage, app_name, row["verstr"])
+            row["status"] = derive_status(state)
     return {row["verstr"]: row for row in annotate_tree(rows)}
 
 
@@ -602,88 +617,71 @@ def _status_token(node):
     return status
 
 
+def _list_rows(storage, app_name, metas, last):
+    """Rows for ``list``: ``idx`` is the storage index ``@N`` resolves, fixed
+    before ``--last``/sort/``--top`` touch the order."""
+    indexed = list(enumerate(metas, 1))
+    if last:
+        indexed = indexed[-last:]
+    rows = []
+    for idx, meta in indexed:
+        log = load_log(storage, app_name, meta["verstr"])
+        rows.append(
+            {"idx": idx, "meta": meta, "log": log, "metrics": latest_metrics(log)}
+        )
+    return rows
+
+
+def _metric_columns(schema, rows):
+    """Schema-declared metrics first, then the rest alphabetically."""
+    keys = set()
+    for row in rows:
+        keys.update(row["metrics"])
+    columns = list(schema or {})
+    return columns + sorted(k for k in keys if k not in columns)
+
+
+def _format_list_row(row, node, columns):
+    meta, metrics = row["meta"], row["metrics"]
+    note = meta.get("note") or ""
+    if not note:
+        create = next((e for e in row["log"] if e.get("type") == "create"), None)
+        note = (create or {}).get("note") or ""
+    metric_str = "  ".join(
+        f"{k}={metrics[k]:.4g}" if isinstance(metrics[k], float) else f"{k}={metrics[k]}"
+        for k in columns
+        if k in metrics
+    )
+    note_str = f" - {note}" if note else ""
+    return (
+        f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}  "
+        f"{_status_token(node)}  ({_relative_timestamp(meta['timestamp'])})  "
+        f"{metric_str}{note_str}"
+    )
+
+
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    experiments = storage.list_snapshots(app_name)
-    if not experiments:
+    metas = storage.list_snapshots(app_name)
+    if not metas:
         print(f"No experiments found for {app_name}")
         return 0
 
-    last = getattr(args, "last", None)
-    if last:
-        experiments = experiments[-last:]
-
     schema = _get_metrics_schema(vcs) if vcs else {}
-
-    rows = []
-    all_metric_keys = set()
-    for meta in experiments:
-        log = load_log(storage, app_name, meta["verstr"])
-        metrics = latest_metrics(log)
-        all_metric_keys.update(metrics.keys())
-        rows.append((meta, metrics, log))
-
-    # Determine column order from schema, then auto-discovered
-    if schema:
-        col_order = list(schema.keys())
-        for k in sorted(all_metric_keys):
-            if k not in col_order:
-                col_order.append(k)
-    else:
-        col_order = sorted(all_metric_keys)
-
-    # Sort
-    sort_key = args.sort
-    if sort_key and sort_key not in all_metric_keys:
-        VMN_LOGGER.warning(f"Sort key '{sort_key}' not found in any experiment")
-    if sort_key and sort_key in all_metric_keys:
-        sort_desc = False
-        if schema and sort_key in schema:
-            sort_desc = metric_sort_descending(schema, sort_key)
-        rows.sort(
-            key=lambda r: (r[1].get(sort_key) is None, r[1].get(sort_key, 0)),
-            reverse=sort_desc,
-        )
-    elif not sort_key and schema:
-        primary = next((k for k, v in schema.items() if v.get("primary")), None)
-        if primary and primary in all_metric_keys:
-            sort_desc = metric_sort_descending(schema, primary)
-            rows.sort(
-                key=lambda r: (r[1].get(primary) is None, r[1].get(primary, 0)),
-                reverse=sort_desc,
-            )
-
+    rows = _list_rows(storage, app_name, metas, getattr(args, "last", None))
+    if args.sort and not any(args.sort in row["metrics"] for row in rows):
+        VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
+    rows = sort_by_metric(rows, schema, sort=args.sort)
     if args.top:
         rows = rows[: args.top]
 
-    tree = _status_tree(storage, app_name, [meta for meta, _, _ in rows])
-
-    # Print table
-    for idx, (meta, metrics, log) in enumerate(rows, 1):
-        node = tree[meta["verstr"]]
-        ts = _relative_timestamp(meta["timestamp"])
-        note = meta.get("note") or ""
-        create_entry = next((e for e in log if e.get("type") == "create"), None)
-        if not note and create_entry:
-            note = create_entry.get("note") or ""
-
-        metric_parts = []
-        for k in col_order:
-            if k in metrics:
-                v = metrics[k]
-                metric_parts.append(
-                    f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
-                )
-
-        metric_str = "  ".join(metric_parts)
-        note_str = f" - {note}" if note else ""
-        indent = "  " * node["depth"]
-        print(
-            f"{indent}[{idx}] {meta['verstr']}  {_status_token(node)}  "
-            f"({ts})  {metric_str}{note_str}"
-        )
-
+    tree = _status_tree(
+        storage, app_name, metas, only=[row["meta"]["verstr"] for row in rows]
+    )
+    columns = _metric_columns(schema, rows)
+    for row in rows:
+        print(_format_list_row(row, tree[row["meta"]["verstr"]], columns))
     return 0
 
 
@@ -759,10 +757,9 @@ def experiment_show(vcs, params, storage, args):
     log = load_log(storage, app_name, verstr)
 
     print(f"Experiment: {verstr}")
-    print(f"  Branch:    {metadata.get('branch', '?')}")
-    print(
-        f"  Base:      {metadata.get('base_version', '?')} ({metadata.get('base_commit', '?')[:7]})"
-    )
+    print(f"  Branch:    {metadata.get('branch') or '?'}")
+    base_commit = (metadata.get("base_commit") or "?")[:7]
+    print(f"  Base:      {metadata.get('base_version') or '?'} ({base_commit})")
     print(f"  Created:   {metadata.get('timestamp', '?')}")
     if metadata.get("note"):
         print(f"  Note:      {metadata['note']}")
@@ -783,36 +780,41 @@ def experiment_show(vcs, params, storage, args):
         for k, v in sorted(metrics.items()):
             print(f"    {k}: {v:.4g}" if isinstance(v, float) else f"    {k}: {v}")
 
-    # Log entries
     if log:
-        print(f"\n  Log ({len(log)} entries):")
-        for entry in log:
-            ts = _relative_timestamp(entry.get("timestamp", ""))
-            etype = entry.get("type", "?")
-            if etype == "metrics":
-                vals = entry.get("values", {})
-                val_str = ", ".join(f"{k}={v}" for k, v in vals.items())
-                print(f"    [{ts}] metrics: {val_str}")
-            elif etype == "params":
-                vals = entry.get("params", {})
-                val_str = ", ".join(f"{k}={v}" for k, v in vals.items())
-                print(f"    [{ts}] params: {val_str}")
-            elif etype == "error":
-                exc = entry.get("exception", "?")
-                print(f"    [{ts}] error: {exc}: {entry.get('message', '')}")
-            elif etype == "note":
-                print(f"    [{ts}] note: {entry.get('text', '')}")
-            elif etype == "artifact":
-                print(
-                    f"    [{ts}] artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
-                )
-            elif etype == "create":
-                note = entry.get("note") or ""
-                print(f"    [{ts}] created{': ' + note if note else ''}")
-            else:
-                print(f"    [{ts}] {etype}")
-
+        _print_log(log, getattr(args, "full_log", False))
     return 0
+
+
+SHOW_LOG_TAIL = 50
+
+
+def _print_log(log, full):
+    """The log, newest ``SHOW_LOG_TAIL`` entries unless *full*."""
+    print(f"\n  Log ({len(log)} entries):")
+    shown = log if full else log[-SHOW_LOG_TAIL:]
+    hidden = len(log) - len(shown)
+    if hidden:
+        print(f"    ({hidden} earlier entries hidden, use --full-log)")
+    for entry in shown:
+        ts = _relative_timestamp(entry.get("timestamp", ""))
+        print(f"    [{ts}] {_describe_log_entry(entry)}")
+
+
+def _describe_log_entry(entry):
+    etype = entry.get("type", "?")
+    if etype in ("metrics", "params"):
+        vals = entry.get("values" if etype == "metrics" else "params") or {}
+        return f"{etype}: " + ", ".join(f"{k}={v}" for k, v in vals.items())
+    if etype == "error":
+        return f"error: {entry.get('exception', '?')}: {entry.get('message', '')}"
+    if etype == "note":
+        return f"note: {entry.get('text', '')}"
+    if etype == "artifact":
+        return f"artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
+    if etype == "create":
+        note = entry.get("note") or ""
+        return f"created{': ' + note if note else ''}"
+    return etype
 
 
 # ---------------------------------------------------------------------------
@@ -820,22 +822,38 @@ def experiment_show(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _load_experiment_bundle(storage, vcs, verstr, app_name=None):
-    """Load (meta, patches, log) for an experiment, or None (logging) on error."""
+def _load_metadata(storage, app_name, verstr):
+    """An experiment's metadata alone — no patches or untracked tarball."""
+    raw = storage.load_file(app_name, verstr, "metadata.yml")
+    meta = yaml.safe_load(raw) if raw else None
+    return meta if isinstance(meta, dict) else None
+
+
+def _load_experiment_bundle(storage, vcs, verstr, app_name=None, light=False):
+    """Load (meta, patches, log) for an experiment, or None (logging) on error.
+
+    *light* skips the patches (``None`` in their slot): what compare needs.
+    """
     app_name = app_name or (_app_name(vcs))
-    meta, patches = storage.load(app_name, verstr)
+    if light:
+        meta, patches = _load_metadata(storage, app_name, verstr), None
+    else:
+        meta, patches = storage.load(app_name, verstr)
     if meta is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return None
     return meta, patches, load_log(storage, app_name, verstr)
 
 
-def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None, app_name=None):
+def _resolve_experiment_bundles(
+    storage, vcs, versions, count, cap=None, app_name=None, light=False
+):
     """Resolve (meta, patches, log) bundles for compare/diff.
 
     Uses the given ``-v`` versions (each resolved), or the ``count`` most recent
     when none are given; ``cap`` limits how many are taken. Returns the list, or
-    None (logging) on error — at least two experiments are required.
+    None (logging) on error — at least two experiments are required. *light*
+    loads no patches.
     """
     app_name = app_name or (_app_name(vcs))
 
@@ -867,7 +885,9 @@ def _resolve_experiment_bundles(storage, vcs, versions, count, cap=None, app_nam
 
     bundles = []
     for verstr in verstrs:
-        bundle = _load_experiment_bundle(storage, vcs, verstr, app_name=app_name)
+        bundle = _load_experiment_bundle(
+            storage, vcs, verstr, app_name=app_name, light=light
+        )
         if bundle is None:
             return None
         bundles.append(bundle)
@@ -881,7 +901,7 @@ def experiment_compare(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
 
     experiments = _resolve_experiment_bundles(
-        storage, vcs, versions, count=last or 2, app_name=app_name
+        storage, vcs, versions, count=last or 2, app_name=app_name, light=True
     )
     if experiments is None:
         return 1
@@ -1063,55 +1083,4 @@ def experiment_export(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_prune(vcs, params, storage, args):
-    app_name = _app_name(vcs, args)
-    experiments = storage.list_snapshots(app_name)
-    if not experiments:
-        print("No experiments to prune")
-        return 0
-
-    keep = getattr(args, "keep", None)
-    older_than = getattr(args, "older_than", None)
-
-    to_delete = []
-    if keep is not None:
-        if keep == 0:
-            to_delete = list(experiments)
-        elif len(experiments) <= keep:
-            print(
-                f"Only {len(experiments)} experiments, nothing to prune (--keep {keep})"
-            )
-            return 0
-        else:
-            to_delete = experiments[:-keep]
-    elif older_than is not None:
-        try:
-            delta = _parse_duration(older_than)
-        except ValueError as e:
-            VMN_LOGGER.error(str(e))
-            return 1
-        cutoff = datetime.datetime.now(datetime.timezone.utc) - delta
-        for meta in experiments:
-            try:
-                ts = datetime.datetime.fromisoformat(
-                    meta["timestamp"].replace("Z", "+00:00")
-                )
-                if ts < cutoff:
-                    to_delete.append(meta)
-            except Exception:
-                pass
-    else:
-        VMN_LOGGER.error("Specify --keep N or --older-than Xd")
-        return 1
-
-    if not to_delete:
-        print("Nothing to prune")
-        return 0
-
-    deleted = 0
-    for meta in to_delete:
-        storage.delete(app_name, meta["verstr"])
-        deleted += 1
-
-    kept = len(experiments) - deleted
-    print(f"Pruned {deleted} experiments, kept {kept}")
-    return 0
+    return _experiment_prune(vcs, params, storage, args, _app_name(vcs, args))

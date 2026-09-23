@@ -168,6 +168,8 @@ experiment:
 ```
 
 > `writer_id` defaults to `hostname` automatically — no config needed in most cases.
+> A configured `writer_id` behaves exactly like `--writer-id` (it is exported as
+> `VMN_WRITER_ID`); an explicit `--writer-id` or `$VMN_WRITER_ID` still wins.
 
 ### Each Developer's Workflow
 
