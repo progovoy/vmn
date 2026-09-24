@@ -30,9 +30,9 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
-from version_stamp.cli.experiment_resolve import (
-    index_snapshot,
+from version_stamp.core.experiment_refs import (
     parent_edges,
+    placement_snapshot,
     recent_verstrs,
     resolve_experiment,
     storage_index,
@@ -625,7 +625,7 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
 @measure_runtime_decorator
 def experiment_show(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    snapshot = index_snapshot(storage, app_name)
+    snapshot = placement_snapshot(storage, app_name)
     verstr, err = _resolve_experiment_version(
         storage, vcs, args, default_latest=True, snapshot=snapshot
     )

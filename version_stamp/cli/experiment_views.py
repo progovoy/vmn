@@ -17,7 +17,7 @@ PATCH_TYPES = ("working_tree", "local_commits")
 
 
 def annotated_rows(rows, run_states):
-    """*rows* with status and tree fields, in their order; the tree spans all of them."""
+    """*rows* with status and tree fields; the tree spans all of them."""
     return annotate_tree(
         [dict(row, **status_fields(run_states.get(row["verstr"]))) for row in rows]
     )

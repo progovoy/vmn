@@ -26,9 +26,9 @@ import os
 
 import yaml
 
-from version_stamp.cli.experiment_resolve import index_snapshot, resolve_experiment
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core import experiment_index
+from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
 from version_stamp.core.experiment_log import (
     experiment_row,
     filter_by_status,
@@ -169,51 +169,25 @@ def list_runs(
     return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)
 
 
-def _indexed_target(app_name, storage, verstr, snapshot):
-    """``(target, parent_of)`` from the index: the run's own metadata is the
-    only record read."""
+def _subtree_row(app_name, storage, verstr, snapshot):
+    """The row for one run, costing the run's subtree rather than the workspace.
+
+    The placement *snapshot* gives the parent/child edges and the row's index;
+    the run's own metadata is the only record read, and run states are read for
+    the subtree alone, which is all ``tree_status`` can depend on. No log is
+    read here — the caller loads the one it needs.
+    """
     row = snapshot.row(verstr)
     meta = storage.load_metadata(app_name, verstr) if row else None
     if meta is None:
         return None, None
-    return {"idx": row["idx"], "meta": meta}, dict(snapshot.edges)
-
-
-def _listed_target(app_name, storage, verstr):
-    """``(target, parent_of)`` from a metadata-only listing of every run."""
-    metas = storage.list_snapshots(app_name)
-    target = next(
-        (
-            {"idx": idx, "meta": meta}
-            for idx, meta in enumerate(metas, 1)
-            if meta["verstr"] == verstr
-        ),
-        None,
-    )
-    return target, {meta["verstr"]: meta.get("parent") for meta in metas}
-
-
-def _subtree_row(app_name, storage, verstr, snapshot=None):
-    """The row for one run, costing the run's subtree rather than the workspace.
-
-    The index snapshot (else a metadata-only listing) gives the parent/child
-    edges and the row's index; run states are then read for the subtree alone,
-    which is all ``tree_status`` can depend on. No log is read here — the
-    caller loads the one it needs.
-    """
-    if snapshot is not None:
-        target, parent_of = _indexed_target(app_name, storage, verstr, snapshot)
-    else:
-        target, parent_of = _listed_target(app_name, storage, verstr)
-    if target is None:
-        return None, None
 
     run_state, tree = subtree_status(
-        verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
+        verstr, dict(snapshot.edges), lambda v: load_run_state(storage, app_name, v)
     )
     status = status_fields(run_state)
     status.update(tree)
-    return target, status
+    return {"idx": row["idx"], "meta": meta}, status
 
 
 def get_run(app_name=None, ref="latest", *, storage=None):
@@ -223,7 +197,7 @@ def get_run(app_name=None, ref="latest", *, storage=None):
     or ``latest``. Raises ValueError when it resolves to nothing.
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    snapshot = index_snapshot(storage, app_name)
+    snapshot = placement_snapshot(storage, app_name)
     verstr, err = resolve_experiment(
         storage, app_name, ref or "latest", snapshot=snapshot
     )
