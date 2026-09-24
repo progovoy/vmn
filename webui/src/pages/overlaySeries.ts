@@ -1,9 +1,8 @@
 /** Loading (and re-polling) the overlay's runs: one batch request for every
  *  run's series, plus their status rows. */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import { usePolling } from "../hooks/usePolling";
-import { useAppQueryClient } from "../queryClient";
 import { withSignal } from "../requestScope";
 import type { RunStatus, SeriesPoint } from "../types";
 import { pollIntervalMs } from "../util";
@@ -59,7 +58,7 @@ function pollInterval(runs: OverlayRunData[]): number | null {
 }
 
 export function useOverlaySeries(ws: string, app: string, runs: string[]) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const query = useQuery<OverlayData>({
     queryKey: ["overlay", ws, app, runs],
     queryFn: ({ signal }) => withSignal(signal, () => loadBatch(ws, app, runs)),

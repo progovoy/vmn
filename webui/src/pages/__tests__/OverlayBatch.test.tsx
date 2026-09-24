@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("uplot", async () => await import("../../components/__tests__/fakeUPlot"));
 vi.mock("../../api", () => ({
@@ -32,7 +33,7 @@ function batch(runs: string[], extra: Record<string, unknown> = {}) {
 }
 
 function renderOverlay(runs: string[]) {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={[`/ws/w/app/my-app/overlay?runs=${runs.join(",")}`]}>
       <Routes><Route path="/ws/:ws/app/:app/overlay" element={<Overlay />} /></Routes>
     </MemoryRouter>,

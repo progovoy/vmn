@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../api", () => ({
   api: { experiments: vi.fn(), metricsSchema: vi.fn() },
@@ -65,7 +66,7 @@ function row(idx: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
 }
 
 function renderLeaderboard() {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={["/ws/test/app/my-app"]}>
       <Routes>
         <Route path="/ws/:ws/app/:app" element={<Leaderboard />} />

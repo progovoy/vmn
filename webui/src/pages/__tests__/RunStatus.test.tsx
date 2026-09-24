@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../api", () => ({
   api: { experiment: vi.fn(), metricsSchema: vi.fn() },
@@ -57,7 +58,7 @@ function makeDetail(st?: RunStatus): ExperimentDetail {
 }
 
 function renderRun() {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={["/ws/test/app/my-app/run/0.0.2-rc.1"]}>
       <Routes>
         <Route path="/ws/:ws/app/:app/run/:verstr" element={<Run />} />

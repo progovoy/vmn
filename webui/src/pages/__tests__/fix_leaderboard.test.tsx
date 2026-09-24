@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 import { currentSignal } from "../../requestScope";
 
 beforeAll(() => {
@@ -69,7 +70,7 @@ const page = (rows: ExperimentRow[], total?: number): Rows =>
   Object.assign([...rows], { total: total ?? rows.length });
 
 function renderLeaderboard(path = "/ws/test/app/my-app") {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/ws/:ws/app/:app" element={<Leaderboard />} />

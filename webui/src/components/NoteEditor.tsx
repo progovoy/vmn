@@ -1,5 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { useAppQueryClient } from "../queryClient";
 import { rowsPrefix, runKey, type RowsData } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { useJob } from "./ui";
@@ -10,7 +10,7 @@ import { useJob } from "./ui";
 export default function NoteEditor({ ws, app, verstr, note }: {
   ws: string; app: string; verstr: string; note: string | null;
 }) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [pending, setPending] = useState<string | null>(null);

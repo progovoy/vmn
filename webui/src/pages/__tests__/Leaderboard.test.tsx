@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 // Mock the API module before any imports that use it
 vi.mock("../../api", () => ({
@@ -45,7 +46,7 @@ function makeRows(n: number): ExperimentRow[] {
 }
 
 function renderLeaderboard() {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={["/ws/test/app/my-app"]}>
       <Routes>
         <Route path="/ws/:ws/app/:app" element={<Leaderboard />} />

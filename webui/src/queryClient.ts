@@ -2,8 +2,7 @@
  *
  *  Pages paint whatever the cache holds for their key at once and revalidate
  *  in the background; identical requests in flight share one fetch. */
-import { useContext, useState } from "react";
-import { notifyManager, QueryClient, QueryClientContext } from "@tanstack/react-query";
+import { notifyManager, QueryClient } from "@tanstack/react-query";
 
 // Deliver cache notifications on a microtask rather than a macrotask: a
 // response lands in the same turn it resolved in, so a page reacts to it (a
@@ -26,12 +25,4 @@ export function createQueryClient(): QueryClient {
       },
     },
   });
-}
-
-/** The app's client, or — rendered outside a provider (a page under test) —
- *  one private to this component, so a page never needs the provider to work. */
-export function useAppQueryClient(): QueryClient {
-  const provided = useContext(QueryClientContext);
-  const [own] = useState(() => (provided ? null : createQueryClient()));
-  return provided ?? own!;
 }

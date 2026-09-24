@@ -1,8 +1,8 @@
 /** Query keys and cached reads shared across pages. */
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { withSignal } from "./requestScope";
-import { SHARED_STALE_MS, useAppQueryClient } from "./queryClient";
+import { SHARED_STALE_MS } from "./queryClient";
 import type {
   AppRow, ExperimentDetail, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, Workspace,
 } from "./types";
@@ -35,21 +35,21 @@ export const runKey = (ws: string, app: string, verstr: string) =>
 const shared = { staleTime: SHARED_STALE_MS };
 
 export function useWorkspaces() {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   return useQuery<Workspace[]>(
     { queryKey: WORKSPACES_KEY, queryFn: () => api.workspaces(), ...shared }, client,
   );
 }
 
 export function useMeta() {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   return useQuery<Meta>(
     { queryKey: ["meta"], queryFn: () => api.meta(), staleTime: Infinity }, client,
   );
 }
 
 export function useApps(ws: string | undefined) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   return useQuery<AppRow[]>(
     { queryKey: ["apps", ws], queryFn: () => api.apps(ws!), enabled: Boolean(ws), ...shared },
     client,
@@ -58,7 +58,7 @@ export function useApps(ws: string | undefined) {
 
 /** The app's metric goals: null while loading, `{}` if it can't be read. */
 export function useMetricsSchema(ws: string, app: string): MetricsSchema | null {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const q = useQuery<MetricsSchema>(
     { queryKey: ["metrics-schema", ws, app], queryFn: () => api.metricsSchema(ws, app), ...shared },
     client,
@@ -69,7 +69,7 @@ export function useMetricsSchema(ws: string, app: string): MetricsSchema | null 
 /** The app's filter vocabulary, or null — loading, or a server without the
  *  facets endpoint; callers fall back to what the loaded rows show. */
 export function useFacets(ws: string, app: string): ExperimentFacets | null {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const q = useQuery<ExperimentFacets>(
     { queryKey: ["facets", ws, app], queryFn: () => api.facets(ws, app), ...shared },
     client,
