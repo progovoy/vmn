@@ -13,6 +13,7 @@ take runs back out of the list:
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+from version_stamp.core.experiment_index import shared_index
 from version_stamp.core.experiment_status import (
     RUNNING,
     STUCK,
@@ -69,17 +70,25 @@ def _map(storage, fn, items):
         return list(pool.map(fn, items))
 
 
-def _live_runs(storage, app_name, candidates):
-    """``{verstr: status}`` of the *candidates* that may still be running."""
+def _live_runs(storage, app_name, candidates, states=None):
+    """``{verstr: status}`` of the *candidates* that may still be running.
+
+    *states* are the index's run states when there is one; else each
+    candidate's run state is read from storage.
+    """
     verstrs = [m["verstr"] for m in candidates]
-    states = _map(storage, lambda v: load_run_state(storage, app_name, v), verstrs)
-    statuses = zip(verstrs, map(derive_status, states))
+    if states is None:
+        read = lambda v: load_run_state(storage, app_name, v)  # noqa: E731
+        run_states = _map(storage, read, verstrs)
+    else:
+        run_states = [states.get(v) for v in verstrs]
+    statuses = zip(verstrs, map(derive_status, run_states))
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _apply_guards(storage, app_name, metas, candidates, force):
+def _apply_guards(storage, app_name, metas, candidates, force, states=None):
     """Split *candidates* into (delete, {skipped live verstr: status})."""
-    live = {} if force else _live_runs(storage, app_name, candidates)
+    live = {} if force else _live_runs(storage, app_name, candidates, states)
 
     doomed = {m["verstr"] for m in candidates} - set(live)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
@@ -98,16 +107,35 @@ def _skip_message(verstr, status):
     return f"Skipping {verstr}: still running (use --force to delete it)"
 
 
-
 def _local_view(storage):
     """The local half of a local+remote storage (``--local-only``)."""
     return getattr(storage, "_local", None) or storage
 
 
+def _metas_and_states(storage, app_name):
+    """``(metas oldest first, run states or None)`` — through the experiment
+    index when the storage can be indexed, so selecting among 10k runs does not
+    read every record's metadata and run state; directly otherwise."""
+    if hasattr(storage, "list_files"):
+        try:
+            snapshot = shared_index(storage, app_name).refresh().snapshot()
+        except Exception:
+            VMN_LOGGER.debug("Experiment index unavailable; reading directly",
+                             exc_info=True)
+        else:
+            metas = [
+                {"verstr": r["verstr"], "timestamp": r.get("timestamp"),
+                 "parent": r.get("parent")}
+                for r in snapshot.rows
+            ]
+            return metas, snapshot.run_states
+    return storage.list_snapshots(app_name), None
+
+
 def experiment_prune(vcs, params, storage, args, app_name):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
-    metas = storage.list_snapshots(app_name)
+    metas, states = _metas_and_states(storage, app_name)
     if not metas:
         print("No experiments to prune")
         return 0
@@ -127,7 +155,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
         return 1
 
     to_delete, live = _apply_guards(
-        storage, app_name, metas, candidates, getattr(args, "force", False)
+        storage, app_name, metas, candidates, getattr(args, "force", False), states
     )
     for verstr in sorted(live):
         print(_skip_message(verstr, live[verstr]))
