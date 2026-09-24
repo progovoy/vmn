@@ -187,15 +187,39 @@ class LocalSnapshotStorage(SnapshotStorage):
         results.sort(key=lambda m: m.get("timestamp", ""))
         return results
 
-    def list_files(self, app_name):
-        files = {}
-        for entry in self._record_dirs(app_name):
-            files[unsafe_verstr(entry.name)] = {
-                f.name: (f.stat().st_size, f.stat().st_mtime_ns)
-                for f in os.scandir(entry.path)
-                if f.is_file() and not f.name.startswith(".")
+    def list_record_names(self, app_name):
+        """Record keys from one directory listing — no per-record stat."""
+        base = self._snapshot_base_dir(app_name)
+        if not os.path.isdir(base):
+            return set()
+        return {
+            unsafe_verstr(entry.name)
+            for entry in os.scandir(base)
+            if entry.is_dir() and not entry.name.startswith(".")
+        }
+
+    def list_files(self, app_name, keys=None):
+        """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
+        (a key without a record is left out)."""
+        if keys is None:
+            return {
+                unsafe_verstr(entry.name): self._files_in(entry.path)
+                for entry in self._record_dirs(app_name)
             }
+        files = {}
+        for key in keys:
+            names = self.record_files(app_name, key)
+            if METADATA_FILE in names:
+                files[key] = names
         return files
+
+    @staticmethod
+    def _files_in(path):
+        return {
+            f.name: (f.stat().st_size, f.stat().st_mtime_ns)
+            for f in os.scandir(path)
+            if f.is_file() and not f.name.startswith(".")
+        }
 
     def direct_files(self):
         return self
@@ -270,14 +294,9 @@ class LocalSnapshotStorage(SnapshotStorage):
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""
         try:
-            entries = list(os.scandir(self._snapshot_dir(app_name, verstr)))
+            return self._files_in(self._snapshot_dir(app_name, verstr))
         except FileNotFoundError:
             return {}
-        return {
-            e.name: (e.stat().st_size, e.stat().st_mtime_ns)
-            for e in entries
-            if e.is_file() and not e.name.startswith(".")
-        }
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if self._refuse_orphan_write(app_name, verstr, "a log entry"):
