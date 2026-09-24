@@ -76,9 +76,11 @@ def test_a_record_that_changed_is_scanned_again(storage):
 
 
 def test_a_listing_too_close_to_the_directory_mtime_is_not_trusted(storage):
-    # A coarse-mtime filesystem can give a later change the same timestamp.
+    # A coarse-mtime filesystem (whole seconds) can give a later change the
+    # same timestamp.
     path = _dir(storage, 0)
-    before = os.stat(path).st_mtime_ns
+    before = time.time_ns() // 10**9 * 10**9
+    _set_mtime(path, before)
     storage.list_files(APP)
     storage.save_file(APP, "0.0.1-dev.abc.r0", "run_state.yml", "state: running\n")
     _set_mtime(path, before)
@@ -103,3 +105,15 @@ def test_a_removed_record_leaves_the_listing(storage):
     storage.delete(APP, "0.0.1-dev.abc.r2")
 
     assert sorted(storage.list_files(APP)) == ["0.0.1-dev.abc.r0", "0.0.1-dev.abc.r1"]
+
+
+def test_a_fine_grained_mtime_is_trusted_at_once(storage, scans):
+    # Sub-second mtimes: a later change always moves the signature, so a
+    # just-written record need not settle before its listing is reused.
+    for i in range(3):
+        _set_mtime(_dir(storage, i), time.time_ns() - 10**6 - 12345)
+    first = storage.list_files(APP)
+    scans.clear()
+
+    assert storage.list_files(APP) == first
+    assert len(scans) == 1  # the base directory only
