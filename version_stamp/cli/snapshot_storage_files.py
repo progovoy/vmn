@@ -64,11 +64,6 @@ def valid_artifact_path(name):
     return all(valid_path_component(part) for part in name.split("/"))
 
 
-def valid_artifact_name(name):
-    """Whether *name* is a single-component (un-nested) artifact name."""
-    return valid_path_component(name)
-
-
 def artifact_name_for(src_path, name=None):
     """The stored name of an artifact: *name*, else *src_path*'s basename.
     ValueError for a name that would leave the run's artifacts."""
