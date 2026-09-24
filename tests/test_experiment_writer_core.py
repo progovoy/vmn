@@ -352,33 +352,27 @@ def test_experiment_writer_does_not_import_upward():
 
 
 def test_exp_run_takes_only_the_documented_names_from_the_cli():
-    """``exp/run.py`` gets its record-shaping helpers from core, not from cli.
+    """The SDK gets its record-shaping helpers from core, not from cli.
 
-    What is left is the irreducible remainder: creating a record needs the git
-    snapshot capture and the storage factory, which still live in
-    ``version_stamp/cli/snapshot.py``. Pin the list so it can only shrink.
+    What is left is the irreducible remainder: creating a record needs the
+    storage factory and parent resolution, which still live in
+    ``version_stamp/cli/experiment.py``. Checked across the whole ``exp``
+    package (run creation lives in ``exp/create.py``). Pin the list so it can
+    only shrink.
     """
     import ast
     import pathlib
 
-    tree = ast.parse(
-        (
-            pathlib.Path(__file__).resolve().parent.parent
-            / "version_stamp"
-            / "exp"
-            / "run.py"
-        ).read_text()
-    )
-
+    exp_dir = pathlib.Path(__file__).resolve().parent.parent / "version_stamp" / "exp"
     from_cli = {
         alias.name
-        for node in ast.walk(tree)
+        for path in exp_dir.glob("*.py")
+        for node in ast.walk(ast.parse(path.read_text()))
         if isinstance(node, ast.ImportFrom)
         and (node.module or "").startswith("version_stamp.cli.experiment")
         for alias in node.names
     }
     assert from_cli == {
-        "_experiment_create_core",
         "_get_experiment_storage",
         "_resolve_parent",
     }

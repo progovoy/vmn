@@ -35,6 +35,7 @@ _RUN_STATE_KEYS = {
     "started_at",
     "heartbeat",
     "heartbeat_interval_sec",
+    "heartbeat_seq",
     "exit_code",
     "finished_at",
     "duration_sec",
