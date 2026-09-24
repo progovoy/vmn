@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import type { HttpError } from "../http";
@@ -28,19 +28,13 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
   const key = rowsKey(ws, app, filter);
   /** Verstrs on screen right now — the table keeps it current. */
   const visibleRef = useRef<() => string[]>(() => []);
-  // Only the newest request may land: a new one aborts whatever is in flight.
-  const inFlight = useRef<AbortController | null>(null);
-  useEffect(() => () => inFlight.current?.abort(), []);
 
   const query = useQuery<RowsData, HttpError>({
     queryKey: key,
-    queryFn: async ({ signal }) => {
-      inFlight.current?.abort();
-      const ctrl = new AbortController();
-      inFlight.current = ctrl;
-      signal.addEventListener("abort", () => ctrl.abort());
-      const scoped = <T,>(fn: () => Promise<T>) => withSignal(ctrl.signal, fn);
-      const out = await refreshRows({
+    // react-query aborts *signal* once this fetch is superseded or unwatched.
+    queryFn: ({ signal }) => {
+      const scoped = <T,>(fn: () => Promise<T>) => withSignal(signal, fn);
+      return refreshRows({
         getRows: () => client.getQueryData<RowsData>(key)?.rows,
         fetchFirst: () => scoped(() => firstPage(ws, app, filter)),
         fetchWhere: (q, limit) =>
@@ -49,8 +43,6 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
           })),
         extraVerstrs: visibleRef.current(),
       });
-      if (ctrl.signal.aborted) throw new DOMException("superseded", "AbortError");
-      return out;
     },
     // While a new filter loads, keep the previous rows on screen (a hook
     // instance only ever serves one app: the page is keyed by it).

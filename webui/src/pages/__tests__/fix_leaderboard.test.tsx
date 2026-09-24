@@ -133,15 +133,20 @@ describe("Leaderboard request ordering", () => {
     const signals: (AbortSignal | undefined)[] = [];
     mockedApi.experiments.mockImplementation(() => {
       signals.push(currentSignal());
-      return Promise.resolve(page([row(1, { status: "running" })]));
+      // The first load answers; every later request stays in flight.
+      return signals.length === 1
+        ? Promise.resolve(page([row(1, { status: "running" })]))
+        : new Promise<Rows>(() => {});
     });
     renderLeaderboard();
     await waitFor(() => screen.getByRole("button", { name: "failed" }));
     fireEvent.click(screen.getByRole("button", { name: "failed" }));
     await waitFor(() => expect(signals.length).toBe(2));
-    expect(signals[0]).toBeDefined();
-    expect(signals[0]!.aborted).toBe(true);
-    expect(signals[1]!.aborted).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "running" }));
+    await waitFor(() => expect(signals.length).toBe(3));
+    expect(signals[1]).toBeDefined();
+    expect(signals[1]!.aborted).toBe(true);
+    expect(signals[2]!.aborted).toBe(false);
   });
 });
 

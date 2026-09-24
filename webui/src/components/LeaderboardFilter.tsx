@@ -26,35 +26,13 @@ export interface FilterValues {
 const parseStatuses = (csv = "") =>
   STATUS_ORDER.filter((s) => csv.split(",").includes(s));
 
-function useClientFilter(
-  rows: ExperimentRow[], search: string, branch: string,
-  onFilter?: (filtered: ExperimentRow[]) => void,
-) {
-  useEffect(() => {
-    if (!onFilter) return;
-    let filtered = rows;
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter((r) =>
-        (r.note ?? "").toLowerCase().includes(q) ||
-        r.verstr.toLowerCase().includes(q) ||
-        (r.branch ?? "").toLowerCase().includes(q)
-      );
-    }
-    if (branch) filtered = filtered.filter((r) => r.branch === branch);
-    onFilter(filtered);
-  }, [rows, search, branch, onFilter]);
-}
-
 /** The leaderboard's filter bar. Every filter is reported for the server to
- *  apply (the leaderboard passes no *onFilter*); *onFilter* filters the given
- *  rows locally instead, for callers that hold every row. */
+ *  apply; *rows* only feed the branch list when no facets are given. */
 export default function LeaderboardFilter({
-  rows = [], onFilter, onStatusChange, onQueryChange, onSearchChange, onBranchChange,
+  rows = [], onStatusChange, onQueryChange, onSearchChange, onBranchChange,
   queryError, branches: knownBranches, facets = NO_FACETS, initial, archived, onArchivedChange,
 }: {
   rows?: ExperimentRow[];
-  onFilter?: (filtered: ExperimentRow[]) => void;
   /** Picked statuses as the `?status=` CSV the list endpoint takes. */
   onStatusChange?: (csv: string) => void;
   /** The typed query as the `?q=` the list endpoint takes, debounced. */
@@ -109,8 +87,6 @@ export default function LeaderboardFilter({
   useEffect(() => {
     onBranchChange?.(branch);
   }, [branch, onBranchChange]);
-
-  useClientFilter(rows, debouncedSearch, branch, onFilter);
 
   const clear = () => {
     setSearch("");
