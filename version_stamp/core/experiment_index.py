@@ -17,18 +17,21 @@ anything visible, run states included) that never takes the index lock or
 touches storage. Its rows are exactly ``experiment_row``'s; status is derived
 from its run states on every read, since it depends on the clock.
 
+A cold build's many new local records load in worker processes
+(:mod:`experiment_index_workers`), when the direct files expose
+``plain_record_dir``.
+
 Storage is duck-typed (``list_files``, ``load_file``, and optionally
 ``list_record_names``/``list_files(keys=)``/``direct_files``/``read_file_from``/
-``index_cache_path``/``cache_identity``); like the rest of ``core`` this
-imports nothing from ``cli``, ``ui`` or ``exp``.
+``plain_record_dir``/``index_cache_path``/``cache_identity``); like the rest of
+``core`` this imports nothing from ``cli``, ``ui`` or ``exp``.
 """
 import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.core.experiment_fold import new_fold
-from version_stamp.core.experiment_index_logs import log_signatures, update_logs
+from version_stamp.core.experiment_index_record import refresh_record, update_record
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot, RowCache
 from version_stamp.core.experiment_index_store import IndexStore
 from version_stamp.core.experiment_index_sweep import (
@@ -36,30 +39,14 @@ from version_stamp.core.experiment_index_sweep import (
     METADATA_FILE,
     Sweep,
 )
+from version_stamp.core.experiment_index_workers import load_new_records
 from version_stamp.core.experiment_log import experiment_row, load_log
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
-from version_stamp.core.utils import parse_record_metadata
+from version_stamp.core.experiment_status import load_run_state
 
 _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).
 _REMOTE_WORKERS = 16
 _monotonic = time.monotonic
-
-
-def _new_record():
-    return {
-        "meta_sig": None,
-        "meta": None,
-        "logs": {},
-        "counts": {},
-        "fold": new_fold(),
-        "rs_sig": None,
-        "run_state": None,
-    }
-
-
-def _sig(value):
-    return list(value) if value is not None else None
 
 
 def _timestamp(meta):
@@ -169,9 +156,16 @@ class ExperimentIndex:
         """``(key, record, dirty, moved, state moved)`` per ``(key, names,
         record)`` in *work*.
 
-        A remote backend's records are re-read concurrently: each costs a few
+        A cold build's many new local records load in worker processes; a
+        remote backend's records are re-read concurrently: each costs a few
         round trips, and a cold index on S3 would otherwise pay them serially.
         """
+        done = load_new_records(self._storage, direct, self.app_name, work)
+        todo = [w for w in work if w[0] not in done]
+        done.update(zip((w[0] for w in todo), self._refresh_all(todo, direct)))
+        return [(key, *done[key]) for key, _, _ in work]
+
+    def _refresh_all(self, work, direct):
         is_remote = getattr(self._storage, "is_remote", None)
         if len(work) > 1 and is_remote and is_remote():
             with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
@@ -179,39 +173,12 @@ class ExperimentIndex:
         return [self._refresh_one(*w, direct) for w in work]
 
     def _refresh_one(self, key, names, record, direct):
-        fresh = record is None
-        record = _new_record() if fresh else record
-        dirty, meta_changed, state_changed = self._update(key, names, record, direct)
-        return key, record, dirty, fresh or meta_changed, state_changed
+        return refresh_record(key, names, record, lambda *a: self._update(*a, direct))
 
     def _update(self, key, names, record, direct):
         """Refresh one record in place; ``(folded content changed, metadata
         changed, run state changed)``."""
-        dirty = meta_changed = False
-        meta_sig = _sig(names[METADATA_FILE])
-        if record["meta_sig"] != meta_sig:
-            record["meta"] = self._load_meta(key)
-            record["meta_sig"] = meta_sig
-            dirty = meta_changed = True
-        sigs = log_signatures(names)
-        if update_logs(record, self._storage, direct, self.app_name, key, sigs):
-            dirty = True
-        return dirty, meta_changed, self._update_run_state(key, names, record)
-
-    def _update_run_state(self, key, names, record):
-        rs_sig = _sig(names.get(RUN_STATE_FILE))
-        if record["rs_sig"] == rs_sig:
-            return False
-        record["run_state"] = (
-            load_run_state(self._storage, self.app_name, key) if rs_sig else None
-        )
-        record["rs_sig"] = rs_sig
-        return True
-
-    def _load_meta(self, key):
-        # The same rule list_snapshots applies: legacy verinfo files share the tree.
-        raw = self._storage.load_file(self.app_name, key, METADATA_FILE)
-        return parse_record_metadata(raw)
+        return update_record(self._storage, direct, self.app_name, key, names, record)
 
     def _sorted_keys(self):
         keys = [k for k, r in self._records.items() if r["meta"] is not None]
