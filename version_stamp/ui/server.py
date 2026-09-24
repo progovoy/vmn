@@ -26,7 +26,7 @@ from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import versions as ver_reader
-from version_stamp.ui.refresher import Refresher
+from version_stamp.ui.refresher import InlineRefresher, Refresher
 from version_stamp.ui.responses import (
     GZIP_LEVEL,
     GZIP_MIN_BYTES,
@@ -73,7 +73,7 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(token)
     )
 
-    refresher = Refresher() if background_refresh else None
+    refresher = Refresher() if background_refresh else InlineRefresher()
     app.state.refresher = refresher
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
     leaderboards = LeaderboardCache()
@@ -278,7 +278,11 @@ def create_app(
             limit=limit,
             read_log=exp_reader._load_log,
             # Inline, a snapshot costs a full refresh: more than resolving directly.
-            resolve=_detail_options(ws, app_name).get("resolve") if refresher else None,
+            resolve=(
+                _detail_options(ws, app_name).get("resolve")
+                if refresher.background
+                else None
+            ),
         )
         if err:
             raise HTTPException(404, err)

@@ -18,28 +18,25 @@ import threading
 from version_stamp.core import experiment_index
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
+from version_stamp.ui.refresher import InlineRefresher
 from version_stamp.ui.tree_cache import versions_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
-
-# With a background refresher: names + live records each refresh, a full
-# listing this often (see experiment_index_sweep).
-FULL_SWEEP_SEC = 30
+_INLINE = InlineRefresher()
 
 
-def app_snapshot(storage, app_name, cache_path, refresher=None):
+def app_snapshot(storage, app_name, cache_path, refresher=_INLINE):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
-    With a :class:`~version_stamp.ui.refresher.Refresher` the index is kept
-    fresh in the background (fast tier) and this returns at once; without
-    one it is refreshed inline, so a request sees every write before it.
-    Falls back to a direct read when the index fails.
+    A :class:`~version_stamp.ui.refresher.Refresher` keeps the index fresh in
+    the background and this returns at once; the default
+    :class:`~version_stamp.ui.refresher.InlineRefresher` refreshes it first,
+    so a request sees every write before it. Falls back to a direct read when
+    the index fails.
     """
-    if refresher is None:
-        return experiment_index.indexed_snapshot(storage, app_name, cache_path)
     try:
         index = experiment_index.shared_index(
-            storage, app_name, cache_path, full_sweep_sec=FULL_SWEEP_SEC
+            storage, app_name, cache_path, full_sweep_sec=refresher.full_sweep_sec
         )
         return refresher.snapshot(index)
     except Exception:
@@ -92,7 +89,7 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def snapshot(self, app_name, refresher=None):
+    def snapshot(self, app_name, refresher=_INLINE):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
         return app_snapshot(self._storage, app_name, self._db_path, refresher)
 

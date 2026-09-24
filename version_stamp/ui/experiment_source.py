@@ -20,6 +20,7 @@ from version_stamp.ui import index as ui_index
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
+from version_stamp.ui.refresher import InlineRefresher
 from version_stamp.ui.schema_cache import MetricsSchemaCache
 
 
@@ -64,7 +65,7 @@ class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None):
         self._db_dir = os.path.join(data_dir, "index")
         self._use_index = use_index
-        self.refresher = refresher
+        self.refresher = refresher or InlineRefresher()
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._edges = {}  # workspace name -> ParentEdges, for unindexed reads
         self._resolvers = LRU(8)
@@ -113,7 +114,7 @@ class ExperimentSource:
             "edges": lambda storage, app_name: snap.edges,
             "resolve": self._resolvers.per_snapshot(snap, lambda: _latest_memoized(snap)),
         }
-        if self.refresher is not None:
+        if self.refresher.background:
             # A refreshed-inline snapshot leaves the subtree's states to be
             # read from storage; a background one's are at most ~1s old.
             options["read_run_state"] = _state_reader(snap.run_states)
