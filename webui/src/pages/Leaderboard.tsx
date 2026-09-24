@@ -15,6 +15,7 @@ import { usePolling } from "../hooks/usePolling";
 import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
+import { useChartRows } from "../hooks/useChartRows";
 import LeaderboardCharts from "./LeaderboardCharts";
 import LeaderboardTable, { TIMESTAMP_SORT } from "./LeaderboardTable";
 
@@ -71,14 +72,17 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const base = `/ws/${ws}/app/${app}`;
   const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets);
 
+  const all = useMemo(() => rows ?? [], [rows]);
+  const chart = useChartRows(
+    ws, app, filter, view.chart, cols.metricCols, cols.paramCols, all, data.total,
+  );
   // A brush in the parallel view narrows the table; the chart keeps every row
   // so its brush indices stay meaningful.
-  const all = useMemo(() => rows ?? [], [rows]);
   const onBrush = useCallback(
     (indices: number[] | null) => setBrushed(indices
-      ? new Set(indices.map((i) => all[i]?.verstr).filter((v): v is string => !!v))
+      ? new Set(indices.map((i) => chart.rows[i]?.verstr).filter((v): v is string => !!v))
       : null),
-    [all],
+    [chart.rows],
   );
   const tableRows = useMemo(
     () => (rows && brushed && view.chart === "parallel" ? rows.filter((r) => brushed.has(r.verstr)) : rows),
@@ -188,7 +192,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           />
 
           <LeaderboardCharts
-            view={view.chart} onView={view.setChart} rows={all}
+            view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
             metricCols={cols.metricCols} paramCols={cols.paramCols} schema={schema} onBrush={onBrush}
           />
 
