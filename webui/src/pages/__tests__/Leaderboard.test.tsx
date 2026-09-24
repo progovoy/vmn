@@ -1,15 +1,6 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-
-// Polyfill ResizeObserver for jsdom (recharts needs it)
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 // Mock the API module before any imports that use it
 vi.mock("../../api", () => ({
@@ -20,7 +11,7 @@ vi.mock("../../api", () => ({
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
 
-// Mock ParamPlots to avoid recharts rendering complexities
+// Mock ParamPlots to keep chart rendering out of these table tests
 vi.mock("../../components/ParamPlots", () => ({
   default: () => <div data-testid="param-plots" />,
 }));

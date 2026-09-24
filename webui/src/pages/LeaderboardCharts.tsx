@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
 
-// Charts pull in recharts; loading them lazily keeps them off the table's
+// Chart code is heavy (uPlot among it); loading them lazily keeps them off the table's
 // critical path — the rows paint while the chart code is still arriving.
 const ParamPlots = lazy(() => import("../components/ParamPlots"));
 const MetricBarChart = lazy(() => import("../components/MetricBarChart"));
