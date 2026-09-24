@@ -444,7 +444,12 @@ def test_experiment_prune_keep_zero(app_layout, capfd):
 
 
 def test_experiment_create_auto_init_dirty_tree(app_layout, capfd):
-    """Experiment create should auto-init repo and app even when the working tree is dirty."""
+    """Experiment create should auto-init repo and app even when the working tree is dirty.
+
+    ``test_app`` already exists here, so ``new_dirty_app`` is a genuinely
+    different app name -- --new-app opts in to creating it, same as any other
+    second app (see test_fix_exp_new_app_guard.py for the typo-guard itself).
+    """
     _run_vmn_init()
     _init_app(app_layout.app_name)
     err, _, _ = _stamp_app(app_layout.app_name, "patch")
@@ -453,7 +458,7 @@ def test_experiment_create_auto_init_dirty_tree(app_layout, capfd):
     _make_dirty(app_layout, "auto_init_dirty.txt", "dirty content")
 
     capfd.readouterr()
-    err = _experiment("new_dirty_app", note="dirty tree auto init")
+    err = _experiment("new_dirty_app", note="dirty tree auto init", extra_args=["--new-app"])
     assert (
         err == 0
     ), "experiment create should succeed on uninitialized app with dirty tree"
