@@ -28,6 +28,19 @@ from version_stamp.core.utils import parse_record_metadata
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
+# Storages holding lines not yet shipped. Only those are kept alive for the
+# exit flush; one with nothing pending is freed like any other object.
+_PENDING = set()
+
+
+def close_all():
+    """Ship every storage's buffered lines (run at interpreter exit)."""
+    for storage in list(_PENDING):
+        storage.close()
+
+
+atexit.register(close_all)
+
 
 class BufferedRemoteStorage(CachedSnapshotStorage):
     _local_is_replica = False
@@ -45,7 +58,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         super().__init__(LocalSnapshotStorage(self._buffer_root, subdir=subdir), remote)
         self._flush_interval_sec = flush_interval_sec
         self._flushed_at = {}
-        atexit.register(self.close)
+        self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
 
     def load(self, app_name, verstr):
         return self._remote.load(app_name, verstr)
@@ -83,14 +96,22 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         return self._ship_if_due(app_name, verstr, writer_id)
 
     def _ship_if_due(self, app_name, verstr, writer_id):
-        last = self._flushed_at.get((app_name, verstr, writer_id))
+        key = (app_name, verstr, writer_id)
+        last = self._flushed_at.get(key)
         if last is None or time.monotonic() - last >= self._flush_interval_sec:
             self.sync_log_to_remote(app_name, verstr, writer_id)
+        else:
+            self._unshipped.add(key)
+            _PENDING.add(self)
         return True
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
-        self._flushed_at[(app_name, verstr, writer_id)] = time.monotonic()
+        key = (app_name, verstr, writer_id)
+        self._flushed_at[key] = time.monotonic()
         super().sync_log_to_remote(app_name, verstr, writer_id)
+        self._unshipped.discard(key)
+        if not self._unshipped:
+            _PENDING.discard(self)
 
     def _initial_sync_state(self, app_name, verstr, writer_id):
         # The buffer starts empty: ship all of it, after what the remote holds
@@ -113,5 +134,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
                 VMN_LOGGER.debug("Final log flush failed", exc_info=True)
         # A later append starts a fresh buffer, shipped from its first byte.
         self._flushed_at.clear()
+        self._unshipped.clear()
+        _PENDING.discard(self)
         self._synced.clear()
         shutil.rmtree(self._buffer_root, ignore_errors=True)

@@ -4,6 +4,7 @@ import pytest
 import yaml
 from s3_helpers import entry, meta, mocked_bucket, raw_keys, record_calls, s3_storage
 
+from version_stamp.cli import snapshot_storage_buffered
 from version_stamp.cli.experiment import _get_experiment_storage
 from version_stamp.core.experiment_logfiles import compacted_log_name
 
@@ -16,6 +17,9 @@ def _bucket(monkeypatch):
     monkeypatch.delenv("VMN_EXPERIMENT_DIR", raising=False)
     with mocked_bucket(monkeypatch):
         yield
+        # Ship what each test's pods still buffer while the bucket is mocked,
+        # never at interpreter exit against a real endpoint.
+        snapshot_storage_buffered.close_all()
 
 
 def _pod():
@@ -105,3 +109,24 @@ def test_reads_do_not_create_a_buffer_dir():
     storage = _get_experiment_storage(None, dict(PARAMS))
     storage.list_snapshots("app")
     assert not os.path.exists(storage._local.vmn_root_path)
+
+
+def test_a_storage_with_nothing_pending_is_not_kept_alive():
+    import gc
+    import weakref
+
+    pod = _pod()
+    pod.append_log_entry("app", V, "w", entry(0))  # the first append ships at once
+    ref = weakref.ref(pod)
+    del pod
+    gc.collect()
+    assert ref() is None
+
+
+def test_pending_lines_are_shipped_at_exit_even_if_the_storage_was_dropped():
+    pod = _pod()
+    for i in range(3):
+        pod.append_log_entry("app", V, "w", entry(i))
+    del pod
+    snapshot_storage_buffered.close_all()
+    assert _values() == [0, 1, 2]
