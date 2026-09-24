@@ -1,11 +1,19 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-/** Shows a render error instead of unmounting the whole app to a blank page. */
+/** Shows a render error instead of unmounting the whole app to a blank page.
+ *  A new *resetKey* (the route, say) clears it, so navigating away recovers
+ *  without remounting everything below. */
 export default class ErrorBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; resetKey?: unknown },
   { error: Error | null }
 > {
   state = { error: null as Error | null };
+
+  componentDidUpdate(prev: { resetKey?: unknown }) {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
+  }
 
   static getDerivedStateFromError(error: Error) {
     return { error };

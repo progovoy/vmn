@@ -555,3 +555,20 @@ button.link:hover { border: none; text-decoration: underline; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+/* ---- column picker ---- */
+.col-picker {
+  position: absolute; top: 100%; right: 0; z-index: 10;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; min-width: 180px; max-height: 360px; overflow: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.col-picker input[type="text"] { width: 100%; margin-bottom: 6px; }
+.col-picker-title {
+  font-size: 11px; color: var(--text-3); text-transform: uppercase;
+  letter-spacing: .04em; margin: 6px 0 2px;
+}
+.col-picker-item {
+  display: flex; align-items: center; gap: 6px; padding: 3px 0;
+  cursor: pointer; font-size: 13px;
+}

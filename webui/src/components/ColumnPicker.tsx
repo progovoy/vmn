@@ -1,13 +1,51 @@
 import { useState } from "react";
 
-export default function ColumnPicker({ columns, visible, onToggle }: {
+function Section({ title, columns, visible, onToggle }: {
+  title?: string;
   columns: string[];
   visible: string[];
   onToggle: (col: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   if (columns.length === 0) return null;
+  return (
+    <div className="col-picker-section">
+      {title && <div className="col-picker-title">{title}</div>}
+      {columns.map((col) => (
+        <label key={col} className="col-picker-item">
+          <input
+            type="checkbox"
+            checked={visible.includes(col)}
+            onChange={() => onToggle(col)}
+            aria-label={col}
+          />
+          {col}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** Show/hide leaderboard columns: params (*columns*) and, when given, metric
+ *  columns in a section of their own — filterable once there are many. */
+export default function ColumnPicker({
+  columns, visible, onToggle, metricColumns = [], visibleMetrics = [], onToggleMetric,
+}: {
+  columns: string[];
+  visible: string[];
+  onToggle: (col: string) => void;
+  metricColumns?: string[];
+  visibleMetrics?: string[];
+  onToggleMetric?: (col: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  if (columns.length + metricColumns.length === 0) return null;
+
+  const needle = filter.trim().toLowerCase();
+  const match = (cols: string[]) =>
+    needle ? cols.filter((c) => c.toLowerCase().includes(needle)) : cols;
+  const hasMetrics = metricColumns.length > 0 && onToggleMetric;
 
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
@@ -15,31 +53,29 @@ export default function ColumnPicker({ columns, visible, onToggle }: {
         ⋮
       </button>
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            right: 0,
-            zIndex: 10,
-            background: "var(--panel-2)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-            padding: "8px 12px",
-            minWidth: 140,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-          }}
-        >
-          {columns.map((col) => (
-            <label key={col} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", cursor: "pointer", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={visible.includes(col)}
-                onChange={() => onToggle(col)}
-                aria-label={col}
-              />
-              {col}
-            </label>
-          ))}
+        <div className="col-picker">
+          <input
+            type="text"
+            aria-label="Filter columns"
+            placeholder="Filter columns…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            autoFocus
+          />
+          {hasMetrics && (
+            <Section
+              title="metrics"
+              columns={match(metricColumns)}
+              visible={visibleMetrics}
+              onToggle={onToggleMetric}
+            />
+          )}
+          <Section
+            title={hasMetrics ? "params" : undefined}
+            columns={match(columns)}
+            visible={visible}
+            onToggle={onToggle}
+          />
         </div>
       )}
     </div>
