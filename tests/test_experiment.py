@@ -860,6 +860,36 @@ def test_exp_compare_no_args_uses_latest_two(app_layout, capfd):
     assert verstrs[0][-12:] not in out
 
 
+def test_exp_compare_refreshes_index_once_for_all_refs(app_layout, capfd, monkeypatch):
+    """compare resolving N `-v @i` refs shares one index refresh, not one per ref.
+
+    Each resolution used to call the shared index's refresh independently, so
+    comparing N refs cost roughly N times a single lookup's refresh.
+    """
+    from version_stamp.core import experiment_index
+
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "patch")
+    _make_n_experiments(app_layout, capfd, 5)
+
+    refresh_calls = []
+    orig_refresh_locked = experiment_index.ExperimentIndex._refresh_locked
+
+    def counting_refresh_locked(self):
+        refresh_calls.append(1)
+        return orig_refresh_locked(self)
+
+    monkeypatch.setattr(
+        experiment_index.ExperimentIndex, "_refresh_locked", counting_refresh_locked
+    )
+
+    capfd.readouterr()
+    refs = [f"@{i}" for i in range(1, 6)]
+    assert _experiment(app_layout.app_name, action="compare", version=refs) == 0
+    assert len(refresh_calls) == 1
+
+
 def test_exp_ambiguous_prefix_lists_candidates(app_layout, capfd):
     """An ambiguous experiment prefix reports the matching candidates."""
     _run_vmn_init()

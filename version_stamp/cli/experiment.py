@@ -787,9 +787,10 @@ def _resolve_experiment_bundles(
 
     if versions:
         verstrs = []
+        snapshot = placement_snapshot(storage, app_name)
         for v in versions[:cap] if cap else versions:
             resolved, err = _resolve_experiment_version(
-                storage, vcs, _VersionStub(version=[v])
+                storage, vcs, _VersionStub(version=[v]), snapshot=snapshot
             )
             if err:
                 VMN_LOGGER.error(err)
