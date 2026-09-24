@@ -52,10 +52,10 @@ class LRU:
                 self._entries.popitem(last=False)
         return value
 
-    def per_snapshot(self, snapshot, compute):
-        """``compute()`` once per *snapshot* object (keyed by identity)."""
+    def per_snapshot(self, snapshot, compute, key=()):
+        """``compute()`` once per *snapshot* object (keyed by identity) and *key*."""
         return self.get(
-            id(snapshot),
+            (id(snapshot),) + tuple(key),
             lambda: (snapshot, compute()),
             valid=lambda hit: hit[0] is snapshot,
         )[1]
