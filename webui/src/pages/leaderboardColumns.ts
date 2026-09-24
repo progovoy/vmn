@@ -56,12 +56,17 @@ export function anyTags(rows: readonly ExperimentRow[] | undefined): boolean {
 }
 
 /** Metric columns: the schema's order first, then any other metric the rows
- *  carry, alphabetically. */
+ *  carry, alphabetically. A key that is also a param (numeric params fold
+ *  into `metrics` too — see CLAUDE.md) is left there instead: it's a
+ *  hyperparameter, not something being optimized, so it stays a param
+ *  column rather than showing up a second time as a metric. */
 export function metricColumns(rows: readonly ExperimentRow[], schema: MetricsSchema | null): string[] {
   const inData = new Set<string>();
   rows.forEach((r) => Object.keys(r.metrics).forEach((k) => inData.add(k)));
-  const fromSchema = Object.keys(schema ?? {}).filter((k) => inData.has(k));
-  const extras = [...inData].filter((k) => !(schema ?? {})[k]).sort();
+  const inParams = new Set<string>();
+  rows.forEach((r) => Object.keys(rowParams(r)).forEach((k) => inParams.add(k)));
+  const fromSchema = Object.keys(schema ?? {}).filter((k) => inData.has(k) && !inParams.has(k));
+  const extras = [...inData].filter((k) => !(schema ?? {})[k] && !inParams.has(k)).sort();
   return [...fromSchema, ...extras];
 }
 
