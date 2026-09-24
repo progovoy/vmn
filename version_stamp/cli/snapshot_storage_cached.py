@@ -105,6 +105,16 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 seen.add(name)
         return names
 
+    def list_run_verstrs(self, app_name, code_verstr):
+        names = set(self._local.list_verstrs(app_name))
+        if not self._remote:
+            return names
+        if hasattr(self._remote, "list_run_verstrs"):
+            names.update(self._remote.list_run_verstrs(app_name, code_verstr))
+        else:
+            names.update(self._remote_listing([], "list_verstrs", app_name))
+        return names
+
     def list_record_names(self, app_name):
         """``{name: local dir signature, or None for a remote-only record}``."""
         names = dict.fromkeys(self._remote_record_names(app_name))
