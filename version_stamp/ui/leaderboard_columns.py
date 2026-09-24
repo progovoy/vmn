@@ -9,7 +9,7 @@ from version_stamp.core.experiment_log import _sortable
 
 COLUMNS_LIMIT = 20000
 MAX_COLUMNS_LIMIT = 50000
-_FIELDS = ("timestamp", "status")
+_FIELDS = ("timestamp", "status", "branch")
 
 
 def clamp_columns_limit(limit):
@@ -46,7 +46,7 @@ def column_getter(key):
     if key in _FIELDS:
         return lambda row: row.get(key)
     raise ValueError(
-        f"Unknown column '{key}' (use metrics.<k>, params.<k>, timestamp, status or name)"
+        f"Unknown column '{key}' (use metrics.<k>, params.<k>, timestamp, status, branch or name)"
     )
 
 
