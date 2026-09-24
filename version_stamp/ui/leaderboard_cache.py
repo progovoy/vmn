@@ -21,11 +21,11 @@ import threading
 from version_stamp.core import experiment_status
 from version_stamp.core.experiment_status import status_fields
 from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.ui.http_params import MAX_PAGE
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.experiments import apply_filters, facets, sort_rows
 
 BUCKET_SEC = 2
-MAX_PAGE = 1000
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
 

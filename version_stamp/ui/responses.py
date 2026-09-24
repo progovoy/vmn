@@ -129,10 +129,9 @@ def json_response(payload, etag=None, request=None, status_code=200):
         etag = hashlib.blake2b(body, digest_size=16).hexdigest()
     if etag is not None:
         headers["ETag"] = _quoted(etag)
-        if request is not None and _matches(
-            request.headers.get("if-none-match"), headers["ETag"]
-        ):
-            return Response(status_code=304, headers=headers)
+        unchanged = request is not None and not_modified(request, etag)
+        if unchanged:
+            return unchanged
     if _accepts_gzip(request) and len(body) >= GZIP_MIN_BYTES:
         body = gzip.compress(body, compresslevel=GZIP_LEVEL)
         headers["Content-Encoding"] = "gzip"

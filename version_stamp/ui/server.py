@@ -21,7 +21,7 @@ from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import versions as ver_reader
 from version_stamp.ui import routes_leaderboard, routes_series, routes_tree
 from version_stamp.ui.experiment_source import ExperimentSource
-from version_stamp.ui.http_params import attachment, key_list
+from version_stamp.ui.http_params import attachment, clamp_page, key_list
 from version_stamp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
 from version_stamp.ui.responses import (
     GZIP_LEVEL,
@@ -37,8 +37,6 @@ from version_stamp.ui.static_files import mount_static
 from version_stamp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
-# One page of leaderboard rows or log entries, whatever a client asks for.
-MAX_PAGE = 1000
 # A chart's worth of points per metric, however much a client asks for.
 MAX_SERIES_POINTS = 20_000
 # The app list walks .vmn/ and lists every app's runs: a few seconds stale is fine.
@@ -77,7 +75,7 @@ def create_app(
     refresher = Refresher() if background_refresh else None
     app.state.refresher = refresher
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
-    leaderboards = LeaderboardCache(max_page=MAX_PAGE)
+    leaderboards = LeaderboardCache()
     app_lists = TTLCache(APPS_TTL_SEC)
     # One client per S3 workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
@@ -162,11 +160,6 @@ def create_app(
         """The workspace's experiment storage, local checkout or S3."""
         return _exp_storage_for(ws) or exp_reader.experiment_storage(ws.path)
 
-    def _page(offset, limit):
-        """``(offset, limit)`` clamped to what one response may carry."""
-        limit = None if limit is None else max(0, min(int(limit), MAX_PAGE))
-        return max(0, int(offset or 0)), limit
-
     @app.get(f"{API_PREFIX}/meta")
     def meta():
         from version_stamp import version as version_mod
@@ -212,8 +205,10 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
-            return app_lists.get(ws_name, lambda: exp_reader.list_apps_from_storage(s3_storage))
-        return app_lists.get(ws_name, lambda: exp_reader.list_apps(ws.path))
+            compute = lambda: exp_reader.list_apps_from_storage(s3_storage)  # noqa: E731
+        else:
+            compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
+        return app_lists.get(ws_name, compute)
 
     def _leaderboard_inputs(ws_name, app_tag):
         """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
@@ -273,7 +268,7 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         _segment(verstr)
-        offset, limit = _page(offset, limit)
+        offset, limit = clamp_page(offset, limit)
         page, err = detail_reader.log_page(
             _any_exp_storage(ws),
             app_name,

@@ -132,8 +132,9 @@ def _resolve(storage, app_name, verstr_ref, resolve=None):
     *resolve* (``ref -> (verstr, error)``, e.g. an index snapshot's) is tried
     first; storage answers what it cannot, such as a run it has not seen yet.
     """
-    verstr, err = resolve(verstr_ref) if resolve else (None, True)
-    if err:
+    if resolve:
+        verstr, err = resolve(verstr_ref)
+    if not resolve or err:
         verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
     if err:
         return None, None, err

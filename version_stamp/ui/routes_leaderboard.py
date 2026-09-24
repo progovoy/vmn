@@ -10,13 +10,9 @@ repeating it gets an empty ``304`` without the payload ever being built.
 from fastapi import HTTPException, Request
 
 from version_stamp.core.experiment_query import QueryError
+from version_stamp.ui.http_params import clamp_page
 from version_stamp.ui.readers.experiments import ORDERS
 from version_stamp.ui.responses import json_response, not_modified
-
-
-def _clamped(offset, limit, max_page):
-    limit = None if limit is None else max(0, min(int(limit), max_page))
-    return max(0, int(offset or 0)), limit
 
 
 def register(app, api_prefix, inputs, cache):
@@ -40,7 +36,7 @@ def register(app, api_prefix, inputs, cache):
         snapshot, schema = inputs(ws_name, app_tag)
         if order is not None and order not in ORDERS:
             raise HTTPException(400, f"order must be one of {', '.join(ORDERS)}")
-        offset, limit = _clamped(offset, limit, cache.max_page)
+        offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(
             sort=sort, last=last, offset=offset, limit=limit,
             status=status, query=q, order=order,

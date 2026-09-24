@@ -54,15 +54,14 @@ class ExperimentSource:
         self._resolvers = LRU(8)
         self._lock = threading.Lock()
 
-    def _workspace_index(self, ws):
+    def workspace_index(self, ws):
+        """The git workspace's read cache, or None with ``--no-index``."""
+        if not self._use_index:
+            return None
         with self._lock:
             if ws.name not in self._indexes:
                 self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, db_dir=self._db_dir)
             return self._indexes[ws.name]
-
-    def workspace_index(self, ws):
-        """The git workspace's read cache, or None with ``--no-index``."""
-        return self._workspace_index(ws) if self._use_index else None
 
     def snapshot(self, ws, app_name, s3_storage=None):
         """The app's current snapshot; None for an unindexed git workspace."""

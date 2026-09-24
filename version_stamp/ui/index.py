@@ -53,11 +53,15 @@ def app_snapshot(storage, app_name, cache_path, refresher=None):
         return experiment_index.direct_snapshot(storage, app_name)
 
 
+def _db_path(db_dir, source, prefix=""):
+    slug = hashlib.sha256(source.encode()).hexdigest()[:16]
+    return os.path.join(db_dir, f"{prefix}{slug}.sqlite")
+
+
 def s3_cache_path(db_dir, ws):
     """Where an S3 workspace's index persists, one database per bucket+prefix."""
-    source = repr((ws.endpoint_url, ws.bucket, ws.prefix))
     os.makedirs(db_dir, exist_ok=True)
-    return os.path.join(db_dir, f"s3-{hashlib.sha256(source.encode()).hexdigest()[:16]}.sqlite")
+    return _db_path(db_dir, repr((ws.endpoint_url, ws.bucket, ws.prefix)), "s3-")
 
 
 def _versions_fingerprint(root_path, app_name):
@@ -80,8 +84,7 @@ class WorkspaceIndex:
     def __init__(self, root_path, db_dir):
         self.root_path = root_path
         os.makedirs(db_dir, exist_ok=True)
-        slug = hashlib.sha256(os.path.abspath(root_path).encode()).hexdigest()[:16]
-        self._db_path = os.path.join(db_dir, f"{slug}.sqlite")
+        self._db_path = _db_path(db_dir, os.path.abspath(root_path))
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.execute(
