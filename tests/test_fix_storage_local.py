@@ -199,6 +199,46 @@ def test_different_patches_are_not_linked(st):
     assert st.load("app", "c")[1]["working_tree"] == "one\n"
 
 
+def test_clean_tree_run_skips_sibling_scan_when_no_diff_hash(st, monkeypatch):
+    """A clean-tree run has no patch content in any key, so ``write_patches_to_dir``
+    never consults a dedup source for it (see ``_compute_diff_hash``: no content
+    implies no ``diff_hash``, and vice versa). Creating it must therefore skip the
+    same-code sibling scan entirely, not read every sibling's metadata.yml to
+    conclude there is nothing to link."""
+    for i in range(1, 501):
+        st.save("app", f"c.r{i}", _meta(f"c.r{i}", code_verstr="c"), {})
+
+    base = st._snapshot_base_dir("app")
+    real_listdir = os.listdir
+
+    def spy(path):
+        if path == base:
+            raise AssertionError("must not scan siblings for a clean-tree record")
+        return real_listdir(path)
+
+    monkeypatch.setattr(os, "listdir", spy)
+    st.save("app", "c.r0", _meta("c.r0", code_verstr="c"), {})
+    assert st.load("app", "c.r0")[1] == {}
+
+
+def test_run_with_a_real_diff_still_scans_siblings_for_dedup(st, monkeypatch):
+    """The fix above must stay narrow: a run that does carry patch content
+    still looks for a same-code sibling to hard-link from."""
+    st.save("app", "c", _meta("c", code_verstr="c"), {"working_tree": "x\n"})
+    base = st._snapshot_base_dir("app")
+    calls = []
+    real_listdir = os.listdir
+
+    def spy(path):
+        if path == base:
+            calls.append(path)
+        return real_listdir(path)
+
+    monkeypatch.setattr(os, "listdir", spy)
+    st.save("app", "c.r2", _meta("c.r2", code_verstr="c"), {"working_tree": "x\n"})
+    assert calls, "a genuine diff should still look for a sibling to link"
+
+
 def test_resave_drops_patch_files_the_new_state_lacks(st):
     st.save("app", "v1", _meta("v1"), {"working_tree": "w\n", "untracked_files": b"t"})
     st.save("app", "v1", _meta("v1"), {"working_tree": "w2\n"})

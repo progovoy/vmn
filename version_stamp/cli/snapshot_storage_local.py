@@ -12,6 +12,7 @@ from version_stamp.cli.snapshot_storage_files import (
     INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
+    PATCH_FILES,
     apply_metadata_updates,
     artifact_file_path,
     artifact_name_for,
@@ -33,6 +34,14 @@ from version_stamp.core import utils as core_utils
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.record_files import read_file, read_file_from
 from version_stamp.core.utils import parse_record_metadata
+
+
+def _has_patch_content(patches):
+    """Whether *patches* (or one of its ``deps``) carries a file worth
+    linking — a clean-tree record has none, in itself or in any dep."""
+    if any(patches.get(key) for key, _, _ in PATCH_FILES):
+        return True
+    return any(_has_patch_content(dp) for dp in patches.get("deps", {}).values())
 
 
 def _append_bytes(path, text):
@@ -109,13 +118,17 @@ class LocalSnapshotStorage(SnapshotStorage):
             if name != own and (name == code or name.startswith(code + "."))
         ]
 
-    def _link_sources(self, app_name, verstr, metadata):
+    def _link_sources(self, app_name, verstr, metadata, patches):
         """``[(sibling dir, trusted)]`` to hard-link identical patches from.
 
         A sibling with the same ``diff_hash`` has the same patches (trusted: no
         bytes need comparing); one with a different hash has none to share;
-        one that predates the hash is compared byte for byte.
+        one that predates the hash is compared byte for byte. A record with no
+        patch content of its own (a clean tree) has nothing to link regardless,
+        so it skips the sibling scan entirely.
         """
+        if not _has_patch_content(patches):
+            return []
         want = (metadata or {}).get("diff_hash")
         sources = []
         for path in self._same_code_dirs(app_name, verstr, metadata):
@@ -135,7 +148,7 @@ class LocalSnapshotStorage(SnapshotStorage):
             return None
 
     def _write_record(self, app_name, verstr, snap_dir, metadata, patches):
-        siblings = self._link_sources(app_name, verstr, metadata)
+        siblings = self._link_sources(app_name, verstr, metadata, patches)
         write_patches_to_dir(snap_dir, patches, link_from=siblings)
         for dep_path, dep_patches in patches.get("deps", {}).items():
             safe_dep = safe_dep_name(dep_path)
