@@ -94,6 +94,8 @@ def test_list_files_can_be_limited_to_some_records(st):
 def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
     finished = [_make(st, i, FINISHED) for i in range(3)]
     live = _make(st, 5, "state: running\nheartbeat: '2026-01-01T00:00:00Z'\n")
+    # A created record with no run_state.yml settles like a finished one: it
+    # is not going to grow one on its own, so it is not "live" either.
     never_run = _make(st, 6)
     index = ExperimentIndex(st, APP, full_sweep_sec=300)
     index.refresh()
@@ -101,7 +103,7 @@ def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
 
     clock.now += 1
     index.refresh()
-    assert listed[1:] == [{live, never_run}]
+    assert listed[1:] == [{live}]
     assert len(index.rows()) == 5
     assert set(index.run_states()) == set(finished) | {live, never_run}
 
