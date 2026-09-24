@@ -730,7 +730,8 @@ experiment:
 ```
 
 - `goal: min` → best-first ascending. `goal: max` → best-first descending.
-  Metrics with no declared goal default to higher-is-better.
+  A metric with no declared goal in the schema sorts as a plain ascending
+  value sort — declare a `goal` to get goal-aware (best-first) ordering.
 - `primary: true` marks the metric used to sort `list` when `--sort` is omitted.
 - Schema columns also fix the column order in `list`/`compare`; any extra
   metrics you logged appear after them, alphabetically.
