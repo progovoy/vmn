@@ -183,19 +183,6 @@ class GitTagsMixin:
         return tnames[-1]
 
     @measure_runtime_decorator
-    def get_commit_object_from_branch_name(self, bname):
-        # TODO:: Unfortunately, need to spend o(N) here
-        for branch in self._be.branches:
-            if bname != branch.name:
-                continue
-
-            return branch.commit
-
-        raise RuntimeError(
-            f"Somehow did not find a branch commit object for branch: {bname}"
-        )
-
-    @measure_runtime_decorator
     def get_tag_object_from_tag_name(self, tname):
         try:
             o = self._be.tag(f"refs/tags/{tname}")

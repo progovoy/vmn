@@ -10,6 +10,7 @@ from moto import mock_aws
 
 from version_stamp.cli.snapshot import LocalSnapshotStorage, S3SnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
+from version_stamp.ui.index import app_snapshot
 from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import experiments as exp_reader
 
@@ -50,8 +51,8 @@ def _save_exp_with_log(storage, app, verstr, metrics=None, ts="2025-01-01T00:00:
 # -- J. UI reader functions --------------------------------------------------
 
 
-def test_list_experiments_from_storage(tmp_path):
-    """list_experiments_from_storage returns rows with correct metrics."""
+def test_storage_workspace_snapshot_rows(tmp_path):
+    """A storage-backed workspace's index snapshot has rows with correct metrics."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
     _save_exp_with_log(
@@ -69,7 +70,7 @@ def test_list_experiments_from_storage(tmp_path):
         ts="2025-01-02T00:00:00Z",
     )
 
-    rows = exp_reader.list_experiments_from_storage(storage, "myapp")
+    rows = app_snapshot(storage, "myapp", str(tmp_path / "idx.sqlite")).rows
 
     assert len(rows) == 2
     assert rows[0]["verstr"] == "1.0.0-dev.aaa.bbb"
@@ -143,8 +144,8 @@ def test_list_apps_from_storage():
         assert row["versions"] == 0
 
 
-def test_fetch_experiment_rows_with_storage(tmp_path):
-    """fetch_experiment_rows accepts a storage= parameter directly."""
+def test_direct_rows_with_storage(tmp_path):
+    """The unindexed read folds a storage backend's records into rows."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
     _save_exp_with_log(
@@ -155,7 +156,7 @@ def test_fetch_experiment_rows_with_storage(tmp_path):
         ts="2025-01-01T00:00:00Z",
     )
 
-    rows = exp_reader.fetch_experiment_rows(app_name="myapp", storage=storage)
+    rows, _ = exp_reader.direct_rows_and_states(storage, "myapp")
 
     assert len(rows) == 1
     row = rows[0]
@@ -167,7 +168,7 @@ def test_fetch_experiment_rows_with_storage(tmp_path):
     assert "base_version" in row
 
 
-def test_fetch_experiment_rows_with_jsonl_logs(tmp_path):
+def test_direct_rows_with_jsonl_logs(tmp_path):
     """Rows include merged metrics from per-writer JSONL log files."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
@@ -195,7 +196,7 @@ def test_fetch_experiment_rows_with_jsonl_logs(tmp_path):
         },
     )
 
-    rows = exp_reader.fetch_experiment_rows(app_name="myapp", storage=storage)
+    rows, _ = exp_reader.direct_rows_and_states(storage, "myapp")
 
     assert len(rows) == 1
     # Latest values win: worker-1 wrote loss=0.5 and acc=0.9 after worker-0

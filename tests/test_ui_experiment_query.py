@@ -258,27 +258,29 @@ def test_indexed_and_direct_paths_agree(app_layout):
     assert _verstrs(indexed) == _verstrs(direct) == ["0.0.3", "0.0.4"]
 
 
-def test_storage_backed_reader_filters_too(app_layout):
-    """The S3 path shares the filter — it takes ``query`` like the others."""
+def _storage_page(app_layout, tmp_path, query):
+    """The S3 workspace list pipeline: index snapshot, then the leaderboard memo."""
     from helpers import _storage
 
-    from version_stamp.ui.readers import experiments as exp_reader
+    from version_stamp.ui.index import app_snapshot
+    from version_stamp.ui.leaderboard_cache import LeaderboardCache
 
-    _seed(app_layout)
-    rows = exp_reader.list_experiments_from_storage(
-        _storage(app_layout), app_layout.app_name, query="metrics.loss < 0.5"
+    snapshot = app_snapshot(
+        _storage(app_layout), app_layout.app_name, str(tmp_path / "idx.sqlite")
     )
+    return LeaderboardCache().page(snapshot, {}, query=query)
+
+
+def test_storage_backed_reader_filters_too(app_layout, tmp_path):
+    """The S3 path shares the filter — it takes ``query`` like the others."""
+    _seed(app_layout)
+    rows = _storage_page(app_layout, tmp_path, "metrics.loss < 0.5")
     assert sorted(r["verstr"] for r in rows) == ["0.0.2", "0.0.3", "0.0.4"]
 
 
-def test_storage_backed_reader_raises_on_a_bad_query(app_layout):
-    from helpers import _storage
-
+def test_storage_backed_reader_raises_on_a_bad_query(app_layout, tmp_path):
     from version_stamp.core.experiment_query import QueryError
-    from version_stamp.ui.readers import experiments as exp_reader
 
     _seed(app_layout)
     with pytest.raises(QueryError):
-        exp_reader.list_experiments_from_storage(
-            _storage(app_layout), app_layout.app_name, query="metrics.loss <"
-        )
+        _storage_page(app_layout, tmp_path, "metrics.loss <")

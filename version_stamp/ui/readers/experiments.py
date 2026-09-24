@@ -14,7 +14,6 @@ from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import (
     load_run_state,
-    observed_at_by_verstr,
     status_fields,
 )
 from version_stamp.core.experiment_tree import annotate_tree
@@ -72,25 +71,6 @@ def list_apps(root_path):
     return rows
 
 
-def fetch_experiment_rows(root_path=None, app_name=None, storage=None):
-    """Leaderboard rows in storage order (oldest first), read directly: every
-    experiment's metadata + log. Accepts a ``root_path`` (local checkout) or a
-    pre-built ``storage`` backend (S3 / remote workspaces)."""
-    storage = storage or experiment_storage(root_path)
-    rows, _ = experiment_index.direct_rows(
-        storage, app_name, read_log=_load_log, read_run_state=None
-    )
-    return rows
-
-
-def fetch_run_states(root_path=None, app_name=None, storage=None, verstrs=None):
-    """``{verstr: raw run state}`` — the cheap, volatile half of a read."""
-    storage = storage or experiment_storage(root_path)
-    if verstrs is None:
-        verstrs = storage.list_verstrs(app_name)
-    return {verstr: load_run_state(storage, app_name, verstr) for verstr in verstrs}
-
-
 def direct_rows_and_states(storage, app_name):
     """``(rows, run_states)`` straight from storage, through this module's loaders."""
     return experiment_index.direct_rows(
@@ -117,14 +97,6 @@ def annotate_status(rows, run_states=None, now=None, observed_at=None):
             status_fields(run_states.get(verstr), now=now, observed_at=observed_at.get(verstr))
         )
     return annotate_tree(rows)
-
-
-def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
-    """Leaderboard rows plus their derived status, straight from storage."""
-    storage = storage or experiment_storage(root_path)
-    rows, run_states = direct_rows_and_states(storage, app_name)
-    observed = observed_at_by_verstr(storage, app_name, run_states)
-    return annotate_status(rows, run_states, now=now, observed_at=observed)
 
 
 def apply_filters(rows, status=None, query=None):
@@ -209,40 +181,6 @@ def facets(rows):
         "param_keys": sorted(param_keys),
         "total": len(rows),
     }
-
-
-def list_experiments(root_path, app_name, **filters):
-    """Leaderboard rows, ordered exactly like ``vmn exp list``, read directly."""
-    storage = experiment_storage(root_path)
-    rows, run_states = direct_rows_and_states(storage, app_name)
-    observed = observed_at_by_verstr(storage, app_name, run_states)
-    schema = metrics_schema(root_path, app_name)
-    return leaderboard(rows, run_states, schema, observed_at=observed, **filters)
-
-
-def get_experiment(root_path, app_name, verstr_ref, **detail_opts):
-    """Full experiment detail; the ref supports @N / prefix / 'latest'.
-
-    *detail_opts* go to :func:`~version_stamp.ui.readers.experiment_detail.experiment_detail`
-    (``edges``, ``max_points``, ``include_log``).
-    """
-    return get_experiment_from_storage(
-        experiment_storage(root_path), app_name, verstr_ref, **detail_opts
-    )
-
-
-# ---- Storage-backend functions (S3 / remote workspaces) ----
-
-
-def list_experiments_from_storage(storage, app_name, **filters):
-    """List experiments using a storage backend directly (for S3/remote workspaces).
-
-    Rows come from the process-wide experiment index for the backend, so a
-    poll costs one listing plus whatever changed — not a GET per experiment.
-    There is no app conf for such a workspace, hence no metrics schema.
-    """
-    rows, run_states, observed = experiment_index.indexed_status_rows(storage, app_name)
-    return leaderboard(rows, run_states, {}, observed_at=observed, **filters)
 
 
 def get_experiment_from_storage(

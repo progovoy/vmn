@@ -133,25 +133,25 @@ def test_workspace_index_folds_an_append_without_reloading_logs(app_layout, log_
     _bootstrap(app_layout)
     first = _create(app_layout, "--metrics", "loss=0.4")
     index = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"))
-    assert index.list_experiments(app_layout.app_name)[0]["metrics"]["loss"] == 0.4
+    assert index.snapshot(app_layout.app_name).rows[0]["metrics"]["loss"] == 0.4
 
     log_reads.clear()
     _append(app_layout, first, "2099-01-01T00:00:00Z", loss=0.03)
-    assert index.list_experiments(app_layout.app_name)[0]["metrics"]["loss"] == 0.03
+    assert index.snapshot(app_layout.app_name).rows[0]["metrics"]["loss"] == 0.03
     assert log_reads == []
 
     # A new server process over the same data dir starts warm.
     restarted = WorkspaceIndex(app_layout.repo_path, db_dir=str(tmp_path / "idx"))
-    assert restarted.list_experiments(app_layout.app_name)[0]["metrics"]["loss"] == 0.03
+    assert restarted.snapshot(app_layout.app_name).rows[0]["metrics"]["loss"] == 0.03
     assert log_reads == []
 
 
-def test_s3_workspace_listing_is_cached_across_requests(monkeypatch):
+def test_s3_workspace_listing_is_cached_across_requests(monkeypatch, tmp_path):
     moto = pytest.importorskip("moto")
     import boto3
 
     from version_stamp.cli.snapshot import S3SnapshotStorage
-    from version_stamp.ui.readers.experiments import list_experiments_from_storage
+    from version_stamp.ui.index import app_snapshot
 
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
@@ -173,7 +173,7 @@ def test_s3_workspace_listing_is_cached_across_requests(monkeypatch):
             storage._s3.meta.events.register(
                 "before-call.s3", lambda event_name, **kw: calls.update([event_name])
             )
-            rows = list_experiments_from_storage(storage, "app")
+            rows = list(app_snapshot(storage, "app", str(tmp_path / "s3.sqlite")).rows)
             return rows, calls
 
         cold, _ = request()

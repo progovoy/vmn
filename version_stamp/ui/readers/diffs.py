@@ -7,11 +7,11 @@ from memory (keyed by the records' diff hashes, so a changed record is diffed
 again), lets at most two diffs run at once, and the text is capped.
 """
 import threading
-from collections import OrderedDict
 from types import SimpleNamespace
 
 from version_stamp.cli.snapshot import _resolve_verstr, render_tree_diff
 from version_stamp.core.experiment_log import latest_metrics, load_log
+from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.experiments import experiment_storage
 from version_stamp.ui.readers.snapshots import _load_metadata
 
@@ -27,34 +27,26 @@ class DiffCache:
     """Small LRU of diff results plus a gate on concurrent computations."""
 
     def __init__(self, size=32, concurrency=2, wait_sec=10.0):
-        self._size = size
-        self._entries = OrderedDict()
-        self._lock = threading.Lock()
+        self._entries = LRU(size)
         self.slots = threading.BoundedSemaphore(concurrency)
         self.wait_sec = wait_sec
 
     def clear(self):
-        with self._lock:
-            self._entries.clear()
+        self._entries.clear()
 
     def run(self, key, compute):
         """``compute()``'s ``(result, err)``, cached when it succeeded."""
-        with self._lock:
-            if key in self._entries:
-                self._entries.move_to_end(key)
-                return self._entries[key]
+        return self._entries.get(
+            key, lambda: self._gated(compute), store=lambda answer: answer[1] is None
+        )
+
+    def _gated(self, compute):
         if not self.slots.acquire(timeout=self.wait_sec):
             raise DiffBusy()
         try:
-            answer = compute()
+            return compute()
         finally:
             self.slots.release()
-        if answer[1] is None:
-            with self._lock:
-                self._entries[key] = answer
-                while len(self._entries) > self._size:
-                    self._entries.popitem(last=False)
-        return answer
 
 
 DIFF_CACHE = DiffCache()

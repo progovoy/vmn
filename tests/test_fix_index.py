@@ -5,7 +5,7 @@ import pytest
 
 from version_stamp.cli.snapshot import LocalSnapshotStorage, get_snapshot_storage
 from version_stamp.core.experiment_index import ExperimentIndex
-from version_stamp.ui.readers.experiments import fetch_experiment_rows, fetch_run_states
+from version_stamp.ui.readers.experiments import direct_rows_and_states
 
 APP = "app"
 
@@ -52,8 +52,7 @@ def _seed(storage, n=4):
 
 
 def _direct(storage):
-    rows = fetch_experiment_rows(app_name=APP, storage=storage)
-    return rows, fetch_run_states(app_name=APP, storage=storage)
+    return direct_rows_and_states(storage, APP)
 
 
 @pytest.fixture

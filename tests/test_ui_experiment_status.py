@@ -119,6 +119,17 @@ def _index(app_layout):
     )
 
 
+def _indexed_list(idx, app_layout):
+    """The leaderboard over the workspace index's current snapshot."""
+    from version_stamp.ui.readers import experiments as exp_reader
+
+    snap = idx.snapshot(app_layout.app_name)
+    rows = [dict(row) for row in snap.rows]  # status is written onto the rows
+    return exp_reader.leaderboard(
+        rows, snap.run_states, {}, observed_at=snap.run_state_observed_at
+    )
+
+
 def _seed_all_statuses(app_layout):
     _write_experiment(app_layout, "0.0.1", run_state=None)
     _write_experiment(app_layout, "0.0.2", run_state=_running_state())
@@ -300,23 +311,23 @@ def test_last_metric_at_tracks_newest_metrics_entry(app_layout):
 
 def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
     """A cached row must not freeze `running`: status is derived per request."""
+    import version_stamp.core.experiment_index as index_mod
     import version_stamp.core.experiment_status as status_mod
-    import version_stamp.ui.index as index_mod
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     idx = _index(app_layout)
-    assert idx.list_experiments(app_layout.app_name)[0]["status"] == "running"
+    assert _indexed_list(idx, app_layout)[0]["status"] == "running"
 
     def _boom(*a, **kw):
         raise AssertionError("cache miss: status must be derived, not re-fetched")
 
     later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
-    monkeypatch.setattr(index_mod, "_fetch_experiment_rows", _boom)
+    monkeypatch.setattr(index_mod, "direct_rows", _boom)
     monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
 
     # Same files, same fingerprint, cache still warm — an hour later the run's
     # heartbeat is stale, so the served status must be stuck.
-    assert idx.list_experiments(app_layout.app_name)[0]["status"] == "stuck"
+    assert _indexed_list(idx, app_layout)[0]["status"] == "stuck"
 
 
 def test_appending_to_a_writer_log_invalidates_the_cache(app_layout):
@@ -327,11 +338,11 @@ def test_appending_to_a_writer_log_invalidates_the_cache(app_layout):
         metrics=[("2026-09-21T12:00:00Z", {"loss": 0.5})],
     )
     idx = _index(app_layout)
-    warm = idx.list_experiments(app_layout.app_name)
+    warm = _indexed_list(idx, app_layout)
     assert warm[0]["metrics"]["loss"] == 0.5
 
     _append_metrics(app_layout, "0.0.1", "2026-09-21T12:09:00Z", {"loss": 0.1})
-    rows = idx.list_experiments(app_layout.app_name)
+    rows = _indexed_list(idx, app_layout)
     assert rows[0]["metrics"]["loss"] == 0.1
     assert rows[0]["last_metric_at"] == "2026-09-21T12:09:00Z"
 
@@ -342,7 +353,7 @@ def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
     A rewritten ``run_state.yml`` must serve a new status without re-reading
     every experiment's metadata and logs.
     """
-    import version_stamp.ui.index as index_mod
+    import version_stamp.core.experiment_index as index_mod
 
     _write_experiment(
         app_layout,
@@ -351,12 +362,12 @@ def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
         metrics=[("2026-09-21T12:00:00Z", {"loss": 0.5})],
     )
     idx = _index(app_layout)
-    assert idx.list_experiments(app_layout.app_name)[0]["status"] == "running"
+    assert _indexed_list(idx, app_layout)[0]["status"] == "running"
 
     def _boom(*a, **kw):
         raise AssertionError("a heartbeat invalidated the expensive row cache")
 
-    monkeypatch.setattr(index_mod, "_fetch_experiment_rows", _boom)
+    monkeypatch.setattr(index_mod, "direct_rows", _boom)
 
     path = os.path.join(_exp_dir(app_layout, "0.0.1"), "run_state.yml")
     with open(path, "w") as f:
@@ -364,7 +375,7 @@ def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
     later = os.stat(path).st_mtime + 5
     os.utime(path, (later, later))
 
-    row = idx.list_experiments(app_layout.app_name)[0]
+    row = _indexed_list(idx, app_layout)[0]
     assert row["status"] == "failed"  # read from the fresh run state
     assert row["metrics"]["loss"] == 0.5  # served from the untouched heavy cache
 
@@ -462,10 +473,14 @@ def test_existing_list_row_keys_are_unchanged(app_layout):
 
 
 def test_indexed_and_direct_rows_agree(app_layout):
-    from version_stamp.ui.readers import experiments as exp_reader
-
     _seed_all_statuses(app_layout)
-    direct = exp_reader.list_experiments(app_layout.repo_path, app_layout.app_name)
-    indexed = _index(app_layout).list_experiments(app_layout.app_name)
+    from version_stamp.ui.server import create_app
+    from version_stamp.ui.workspaces import WorkspaceManager
+
+    manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
+    manager.attach_path("main", app_layout.repo_path)
+    url = f"{API}/{app_layout.app_name}/experiments"
+    direct = TestClient(create_app(manager, use_index=False)).get(url).json()
+    indexed = TestClient(create_app(manager)).get(url).json()
     assert [r["status"] for r in indexed] == [r["status"] for r in direct]
     assert [r["verstr"] for r in indexed] == [r["verstr"] for r in direct]
