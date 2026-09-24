@@ -14,3 +14,11 @@ if (typeof globalThis.localStorage?.clear !== "function") {
   };
   Object.defineProperty(globalThis, "localStorage", { value: memory, configurable: true });
 }
+
+// jsdom has no ResizeObserver; charts and the stamp tree observe their size.
+// A test that drives resize callbacks installs its own stub over this one.
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
