@@ -625,3 +625,13 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 .exact-secs { color: var(--text-3); font-size: 11.5px; font-family: var(--mono); }
 .run-note { color: var(--text-2); margin: 0 0 20px; display: flex; gap: 10px; align-items: baseline; }
 .run-note input { flex: 1; }
+
+/* ---- N-run compare table (pages/CompareRuns.tsx) ---- */
+.compare-runs table { width: max-content; min-width: 100%; }
+.compare-runs .compare-key { position: sticky; left: 0; background: var(--surface-1); min-width: 160px; }
+.compare-run-head { min-width: 140px; vertical-align: top; }
+.compare-run-title { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.compare-section th { text-transform: uppercase; font-size: 11px; color: var(--text-3); text-align: left; }
+.compare-runs tr.differs td.compare-key { font-weight: 600; }
+.compare-pairs { flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+/* ---- end N-run compare table ---- */
