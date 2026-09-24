@@ -710,6 +710,7 @@ def handle_show(vmn_ctx):
     vmn_ctx.params["display_unique_id"] = vmn_ctx.args.display_unique_id
     vmn_ctx.params["display_type"] = vmn_ctx.args.display_type
     vmn_ctx.params["dev"] = vmn_ctx.args.dev
+    vmn_ctx.params["base"] = vmn_ctx.args.base
 
     if vmn_ctx.args.dev and vmn_ctx.args.from_file:
         VMN_LOGGER.error("--dev cannot be used with --from-file")
