@@ -70,13 +70,16 @@ def entry_tags(entry):
 
 def _sort_key(entry, writer, position):
     ts = entry.get("timestamp", "")
-    return [ts if isinstance(ts, str) else "", writer, position]
+    return (ts if isinstance(ts, str) else "", writer, position)
 
 
 def _keep_latest(values, name, value, key):
+    """Keep ``(value, *key)`` as one flat tuple — cheaper, with ~30 fields per
+    run, than a value/key pair of two nested containers (see :func:`_sort_key`
+    for *key*'s shape); the comparison takes the key back off its tail."""
     current = values.get(name)
-    if current is None or key >= current[1]:
-        values[name] = [value, key]
+    if current is None or key >= current[1:]:
+        values[name] = (value,) + key
 
 
 def _apply_tags(fold, entry, key):
@@ -101,10 +104,10 @@ def _apply(fold, entry, key):
         for name, value in (entry.get("values") or {}).items():
             _keep_latest(fold["metrics"], name, value, key)
         if fold["last_metric"] is None or key >= fold["last_metric"][1]:
-            fold["last_metric"] = [entry.get("timestamp"), key]
+            fold["last_metric"] = (entry.get("timestamp"), key)
     elif etype == "create":
         if fold["create_note"] is None or key < fold["create_note"][1]:
-            fold["create_note"] = [entry.get("note"), key]
+            fold["create_note"] = (entry.get("note"), key)
 
 
 def apply_entries(fold, writer, first_position, entries):
@@ -124,21 +127,22 @@ def fold_log(log, fold=None, start=0):
     fold = new_fold() if fold is None else fold
     for position, entry in enumerate(log, start):
         if isinstance(entry, dict):
-            _apply(fold, entry, [position])
+            _apply(fold, entry, (position,))
     return fold
 
 
 def fold_values(fold, field):
     """``{name: value}`` of a fold's ``params`` or ``metrics``."""
-    return {name: value for name, (value, _) in fold[field].items()}
+    # Each entry is (value, *provenance) — see _keep_latest; only the value matters here.
+    return {name: wrapped[0] for name, wrapped in fold[field].items()}
 
 
 def fold_tags(fold):
     """``{name: value}`` of the tags a fold holds (removed ones left out)."""
     return {
-        name: value
-        for name, (value, _) in fold.get("tags", {}).items()
-        if value is not None
+        name: wrapped[0]  # (value, *provenance) — see _keep_latest.
+        for name, wrapped in fold.get("tags", {}).items()
+        if wrapped[0] is not None
     }
 
 
