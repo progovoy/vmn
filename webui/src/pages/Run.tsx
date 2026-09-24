@@ -14,7 +14,7 @@ import NoteEditor from "../components/NoteEditor";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import TrainingCurves from "../components/TrainingCurves";
-import { MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
+import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
 function RunBody({ ws, app, appName, detail }: {
@@ -89,6 +89,7 @@ export default function Run() {
       <TagEditor key={`tags-${summary.verstr}`} ws={ws} app={app} verstr={summary.verstr} tags={summary.tags} />
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
+      {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}
 
       <div className="card-grid-2" style={{ marginBottom: 16 }}>
         {detail ? <MetadataCard detail={detail} /> : <Skeleton />}

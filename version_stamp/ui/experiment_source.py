@@ -93,6 +93,7 @@ class ExperimentSource:
         options = {
             "edges": lambda storage, app_name: snap.edges,
             "resolve": self._resolvers.per_snapshot(snap, lambda: _latest_memoized(snap)),
+            "read_child_row": lambda verstr: snap.row(verstr),
         }
         if self.refresher.background:
             # A refreshed-inline snapshot leaves the subtree's states to be
