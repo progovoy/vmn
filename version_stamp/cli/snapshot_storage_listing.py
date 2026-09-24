@@ -50,19 +50,22 @@ class RecordListings:
     def __init__(self):
         self._settled = {}  # dir path -> ((mtime_ns, inode), [file names])
 
-    def list_all(self, base, keep):
-        """``{entry name: files_in(entry)}`` for the directories in *base*
-        whose files satisfy *keep*."""
+    def list_all(self, base, keep, scan=files_in):
+        """``{entry name: scan(entry)}`` for the directories in *base* whose
+        files satisfy *keep*. The stat-only shortcut applies to the default
+        *scan* alone: a storage listing its files its own way is always asked."""
         listed, settled = {}, {}
         for entry in os.scandir(base):
             if entry.is_dir():
-                files = self._files_of(entry, settled)
+                files = self._files_of(entry, settled, scan)
                 if keep(files):
                     listed[entry.name] = files
         self._settled = settled  # removed records drop out
         return listed
 
-    def _files_of(self, entry, settled):
+    def _files_of(self, entry, settled, scan):
+        if scan is not files_in:
+            return scan(entry.path)
         st = entry.stat()  # before the scan: a change racing it moves the sig
         sig = (st.st_mtime_ns, st.st_ino)
         known = self._settled.get(entry.path)

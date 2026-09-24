@@ -236,7 +236,9 @@ class LocalSnapshotStorage(SnapshotStorage):
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
             return {}
-        listed = self._listings.list_all(base, lambda files: METADATA_FILE in files)
+        listed = self._listings.list_all(
+            base, lambda files: METADATA_FILE in files, scan=self._files_in
+        )
         return {unsafe_verstr(name): files for name, files in listed.items()}
 
     _files_in = staticmethod(files_in)
