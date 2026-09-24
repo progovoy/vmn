@@ -11,8 +11,7 @@ file that grew *before* a later segment — refolds the record from scratch.
 Local-first storage with a remote reads per file too: its listing takes each
 writer's files from one copy (local or remote) and its ``read_file_from``
 reads that same copy, so only new local bytes and new remote segments are read.
-A backend whose reads merge several sources some other way (``direct`` is
-None) cannot be read per file; a change there refolds through its
+A file that vanishes mid-read refolds the record through the storage's
 ``load_logs_by_writer``.
 """
 from version_stamp.core.experiment_fold import apply_entries, new_fold
@@ -22,8 +21,8 @@ from version_stamp.core.experiment_logfiles import (
 from version_stamp.core.experiment_logfiles import (
     group_log_names,
     log_writer_and_seq,
-    parse_json_line,
 )
+from version_stamp.core.jsonl_tail import read_complete_lines
 from version_stamp.core.utils import yaml_safe_load
 
 
@@ -36,25 +35,6 @@ def log_signatures(names):
     if LEGACY_LOG in names:
         visible.add(LEGACY_LOG)
     return {n: list(sig) for n, sig in names.items() if n in visible}
-
-
-def _parse_complete(data):
-    """``(entries, bytes consumed)`` — an unterminated line that is not yet
-    valid JSON is left for the next read (its writer is mid-append)."""
-    end = data.rfind(b"\n") + 1
-    entries = []
-    for line in data[:end].decode("utf-8", errors="replace").splitlines():
-        entry = parse_json_line(line)
-        if entry is not None:
-            entries.append(entry)
-    tail = data[end:]
-    if not tail.strip():
-        return entries, len(data)
-    entry = parse_json_line(tail.decode("utf-8", errors="replace"))
-    if entry is None:
-        return entries, end
-    entries.append(entry)
-    return entries, len(data)
 
 
 def _appends_only(old, new):
@@ -79,10 +59,10 @@ def _appends_only(old, new):
 def _read_tail(fold, counts, direct, where, name, state):
     """Fold the bytes of *name* past ``state["consumed"]``; False if it vanished."""
     writer, _ = log_writer_and_seq(name)
-    data = direct.read_file_from(*where, name, state["consumed"])
-    if data is None:
+    read = read_complete_lines(direct, *where, name, state["consumed"])
+    if read is None:
         return False
-    entries, used = _parse_complete(data)
+    entries, used = read
     apply_entries(fold, writer, counts.get(writer, 0), entries)
     counts[writer] = counts.get(writer, 0) + len(entries)
     state["consumed"] += used
@@ -108,8 +88,7 @@ def _refold_direct(record, storage, direct, where, sigs):
 
 def _refold_merged(record, storage, where, sigs):
     fold = new_fold()
-    loader = getattr(storage, "load_logs_by_writer", None)
-    logs_by_writer = loader(*where) if loader else {"": storage.load_merged_log(*where)}
+    logs_by_writer = storage.load_logs_by_writer(*where)
     for writer in sorted(logs_by_writer):
         apply_entries(fold, writer, 0, logs_by_writer[writer] or [])
     record.update(
@@ -125,9 +104,6 @@ def update_logs(record, storage, direct, app_name, key, sigs):
     if {name: state["sig"] for name, state in old.items()} == sigs:
         return False
     where = (app_name, key)
-    if direct is None:
-        _refold_merged(record, storage, where, sigs)
-        return True
     if _appends_only(old, sigs):
         fold, counts = record["fold"], record["counts"]
         ok = True

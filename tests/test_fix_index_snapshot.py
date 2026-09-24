@@ -11,8 +11,9 @@ from version_stamp.cli.snapshot import LocalSnapshotStorage, _resolve_verstr
 from version_stamp.core import experiment_index
 from version_stamp.core.experiment_index import (
     ExperimentIndex,
-    indexed_rows,
+    direct_rows,
     indexed_snapshot,
+    indexed_status_rows,
 )
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
 
@@ -197,13 +198,40 @@ def test_the_first_load_waits_for_a_running_refresh(st, tmp_path):
     assert len(got[0].rows) == 3
 
 
-def test_indexed_snapshot_matches_indexed_rows(st, tmp_path):
+def test_indexed_snapshot_matches_a_direct_read(st, tmp_path):
     _seed(st)
     cache = str(tmp_path / "shared.sqlite")
     snap = indexed_snapshot(st, APP, cache_path=cache)
-    rows, states = indexed_rows(st, APP, cache_path=cache)
+    rows, states = direct_rows(st, APP)
     assert list(snap.rows) == rows
     assert snap.run_states == states
+
+
+def test_indexed_status_rows_are_copies_of_the_snapshot(st, tmp_path):
+    _seed(st)
+    cache = str(tmp_path / "shared.sqlite")
+    snap = indexed_snapshot(st, APP, cache_path=cache)
+    rows, states, observed = indexed_status_rows(
+        st, APP, with_create_note=True, cache_path=cache
+    )
+    assert rows == direct_rows(st, APP, with_create_note=True)[0]
+    assert states == snap.run_states
+    assert observed == snap.run_state_observed_at
+    rows[0]["verstr"] = "changed"
+    assert snap.rows[0]["verstr"] != "changed"
+
+
+def test_indexed_snapshot_waits_for_a_refresh_when_asked(st, tmp_path):
+    _seed(st)
+    cache = str(tmp_path / "shared.sqlite")
+    index = experiment_index.shared_index(st, APP, cache)
+    index.refresh()
+    _make(st, "def.r9", 9)
+    with index._lock:
+        # Another thread's refresh holds the lock: a stale-read returns the
+        # current snapshot at once; a waiting read would block.
+        assert len(indexed_snapshot(st, APP, cache_path=cache).rows) == 3
+    assert len(indexed_snapshot(st, APP, cache_path=cache, wait=True).rows) == 4
 
 
 def test_indexed_snapshot_falls_back_to_a_direct_read(st, monkeypatch):
@@ -214,5 +242,7 @@ def test_indexed_snapshot_falls_back_to_a_direct_read(st, monkeypatch):
 
     monkeypatch.setattr(experiment_index, "shared_index", broken)
     snap = indexed_snapshot(st, APP)
-    assert [r["verstr"] for r in snap.rows] == [r["verstr"] for r in indexed_rows(st, APP)[0]]
+    assert [r["verstr"] for r in snap.rows] == [r["verstr"] for r in direct_rows(st, APP)[0]]
+    assert indexed_snapshot(st, APP, fallback=None) is None
+    assert indexed_status_rows(st, APP)[0] == direct_rows(st, APP)[0]
     assert snap.resolve("@1") == (a, None)

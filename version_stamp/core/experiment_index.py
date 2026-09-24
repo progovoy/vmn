@@ -119,7 +119,7 @@ class ExperimentIndex:
         if self._records is None:
             self._records = self._store.load(self.app_name)
         direct_files = getattr(self._storage, "direct_files", None)
-        direct = direct_files() if direct_files else None
+        direct = direct_files() if direct_files else self._storage
         listing, present = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.
@@ -204,17 +204,19 @@ class ExperimentIndex:
         note, which ``vmn exp list`` shows for a run without a metadata note.
         """
         snap = self._snapshot
-        if snap is None:
-            return []
-        if with_create_note:
-            notes = snap.create_notes
-            return [dict(row, create_note=notes[row["verstr"]]) for row in snap.rows]
-        return [dict(row) for row in snap.rows]
+        return _row_copies(snap, with_create_note) if snap is not None else []
 
     def run_states(self):
         """``{verstr: raw run state or None}`` for the rows' experiments."""
         snap = self._snapshot
         return dict(snap.run_states) if snap is not None else {}
+
+
+def _row_copies(snap, with_create_note):
+    if with_create_note:
+        notes = snap.create_notes
+        return [dict(row, create_note=notes[row["verstr"]]) for row in snap.rows]
+    return [dict(row) for row in snap.rows]
 
 
 # ---------------------------------------------------------------------------
@@ -281,20 +283,6 @@ def direct_rows(
     return rows, states
 
 
-def indexed_snapshot(
-    storage, app_name, cache_path=None, max_age_sec=0, full_sweep_sec=None
-):
-    """The shared index's :class:`IndexSnapshot`, refreshed when older than
-    *max_age_sec*; one built by a direct read if the index fails.
-    *full_sweep_sec* is passed on to :func:`shared_index`."""
-    try:
-        index = shared_index(storage, app_name, cache_path, full_sweep_sec)
-        return index.refresh_if_stale(max_age_sec)
-    except Exception:
-        _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
-        return direct_snapshot(storage, app_name)
-
-
 def direct_snapshot(storage, app_name):
     """An :class:`IndexSnapshot` (generation 0) built by reading every record."""
     rows, states = direct_rows(storage, app_name, with_create_note=True)
@@ -303,24 +291,38 @@ def direct_snapshot(storage, app_name):
     return IndexSnapshot.build(app_name, 0, rows, states, notes, observed)
 
 
-def indexed_rows(storage, app_name, with_create_note=False, cache_path=None):
-    """``(rows, run_states)`` through the shared index; directly if it fails."""
+def indexed_snapshot(
+    storage,
+    app_name,
+    cache_path=None,
+    max_age_sec=0,
+    full_sweep_sec=None,
+    wait=False,
+    fallback=direct_snapshot,
+):
+    """The shared index's :class:`IndexSnapshot`, refreshed when older than
+    *max_age_sec* — or, with *wait*, refreshed now even if another thread's
+    refresh has to finish first. *full_sweep_sec* is passed on to
+    :func:`shared_index`. If the index fails, ``fallback(storage, app_name)``
+    answers instead; a None *fallback* returns None."""
     try:
-        index = shared_index(storage, app_name, cache_path).refresh()
-        return index.rows(with_create_note), index.run_states()
+        index = shared_index(storage, app_name, cache_path, full_sweep_sec)
+        if wait:
+            return index.refresh().snapshot()
+        return index.refresh_if_stale(max_age_sec)
     except Exception:
-        _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
-        return direct_rows(storage, app_name, with_create_note)
+        _LOGGER.debug("Experiment index unavailable", exc_info=True)
+        return fallback(storage, app_name) if fallback else None
 
 
 def indexed_status_rows(storage, app_name, with_create_note=False, cache_path=None):
-    """:func:`indexed_rows` plus ``{verstr: run_state.yml store write time}``
-    — the ``observed_at`` a status derivation takes."""
-    try:
-        index = shared_index(storage, app_name, cache_path).refresh()
-        observed = dict(index.snapshot().run_state_observed_at)
-        return index.rows(with_create_note), index.run_states(), observed
-    except Exception:
-        _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
-        rows, states = direct_rows(storage, app_name, with_create_note)
-        return rows, states, observed_at_by_verstr(storage, app_name, states)
+    """``(rows, run_states, observed_at)`` from an up-to-date snapshot — fresh
+    row copies (see :meth:`ExperimentIndex.rows`), the run states and
+    ``{verstr: run_state.yml store write time}``, the ``observed_at`` a status
+    derivation takes."""
+    snap = indexed_snapshot(storage, app_name, cache_path, wait=True)
+    return (
+        _row_copies(snap, with_create_note),
+        dict(snap.run_states),
+        dict(snap.run_state_observed_at),
+    )

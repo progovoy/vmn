@@ -24,12 +24,8 @@ from version_stamp.core.experiment_fold import (
     fold_values,
 )
 from version_stamp.core.experiment_log import load_log, metric_series
-from version_stamp.core.experiment_logfiles import (
-    LEGACY_LOG_FILE,
-    group_log_names,
-    parse_json_line,
-    parse_jsonl,
-)
+from version_stamp.core.experiment_logfiles import LEGACY_LOG_FILE, group_log_names
+from version_stamp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from version_stamp.ui.readers.series import SeriesThinner
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
@@ -128,15 +124,21 @@ def _log_files(storage, app_name, verstr):
     return {n: tuple(sig) for n, sig in files.items() if n.startswith("log.")}
 
 
-def _read_complete_lines(local, app_name, verstr, name, offset):
+def _read_complete_lines(local, app_name, verstr, name, offset, writer):
     """``(entries, new offset)`` from *offset* up to the last newline."""
-    data = local.read_file_from(app_name, verstr, name, offset)
-    if data is None:
+    try:
+        read = read_complete_lines(
+            local, app_name, verstr, name, offset, take_unterminated=False,
+            errors="strict",
+        )
+    except UnterminatedEntry:
+        raise _Pending() from None
+    if read is None:
         raise _Pending()  # vanished since listed: parse again
-    cut = data.rfind(b"\n") + 1
-    if parse_json_line(data[cut:].decode("utf-8", "replace")) is not None:
-        raise _Pending()
-    return data[:cut].decode("utf-8"), offset + cut
+    entries, used = read
+    for entry in entries:
+        entry["_writer"] = writer
+    return entries, offset + used
 
 
 def _read_growth(local, app_name, verstr, files, offsets):
@@ -147,10 +149,10 @@ def _read_growth(local, app_name, verstr, files, offsets):
     new_offsets, by_writer = dict(offsets), {}
     for writer, names in group_log_names(grown).items():
         for name in names:
-            text, new_offsets[name] = _read_complete_lines(
-                local, app_name, verstr, name, offsets.get(name, 0)
+            entries, new_offsets[name] = _read_complete_lines(
+                local, app_name, verstr, name, offsets.get(name, 0), writer
             )
-            by_writer.setdefault(writer, []).extend(parse_jsonl(text, writer))
+            by_writer.setdefault(writer, []).extend(entries)
     return by_writer, new_offsets
 
 

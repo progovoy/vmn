@@ -90,14 +90,14 @@ def test_a_poll_parses_only_the_new_entries(storage, monkeypatch):
     cache.get(storage, APP, V, load_log)
 
     parsed = []
-    real = parsed_logs.parse_jsonl
+    real = parsed_logs.read_complete_lines
 
-    def counting(text, writer):
-        entries = real(text, writer)
-        parsed.extend(entries)
-        return entries
+    def counting(*args, **kwargs):
+        read = real(*args, **kwargs)
+        parsed.extend(read[0] if read else [])
+        return read
 
-    monkeypatch.setattr(parsed_logs, "parse_jsonl", counting)
+    monkeypatch.setattr(parsed_logs, "read_complete_lines", counting)
     _append(storage, 2000, 2003)
     snap = cache.get(storage, APP, V, load_log)
     assert len(parsed) == 3
