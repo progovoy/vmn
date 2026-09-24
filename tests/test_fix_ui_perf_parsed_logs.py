@@ -21,7 +21,7 @@ V = "1.0.0-dev.a"
 
 
 def _ts(i):
-    return f"2026-01-01T00:{i // 60 % 60:02d}:{i % 60:02d}.{i:06d}Z"
+    return f"2026-01-01T{i // 3600:02d}:{i // 60 % 60:02d}:{i % 60:02d}.{i:06d}Z"
 
 
 def _metric(i, **values):
@@ -196,3 +196,27 @@ def test_a_custom_reader_is_honoured(storage):
     snap = cache.get(storage, APP, V, lambda *a: list(custom))
     assert snap.log() == custom
     assert snap.series() == metric_series(custom)
+
+
+def test_a_grown_runs_series_are_thinned_incrementally(storage, monkeypatch):
+    from version_stamp.ui.readers import series as series_mod
+
+    cache = ParsedLogs()
+    _append(storage, 1, 5_000)
+    cache.get(storage, APP, V, load_log).thinned(["loss"], 200)
+
+    seen = []
+    real = series_mod._summarize
+
+    def counting(bucket):
+        seen.append(len(bucket))
+        return real(bucket)
+
+    monkeypatch.setattr(series_mod, "_summarize", counting)
+    _append(storage, 5_000, 5_005)
+    snap = cache.get(storage, APP, V, load_log)
+    series, totals = snap.thinned(["loss", "nope"], 200)
+    assert sum(seen) < 1_000
+    assert totals == {"loss": 5_004}
+    monkeypatch.undo()
+    assert series == {"loss": series_mod.downsample(snap.series()["loss"], 200)}

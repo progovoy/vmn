@@ -18,11 +18,7 @@ from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_status import load_run_state, status_fields
 from version_stamp.core.experiment_tree import children_by_parent, subtree_status
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
-from version_stamp.ui.readers.series import (
-    DEFAULT_MAX_POINTS,
-    downsample_series,
-    points_per_metric,
-)
+from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
 
 LOG_TAIL = 200
@@ -205,7 +201,7 @@ def thinned_series(snapshot, keys, max_points, budget=None):
     memo_key = (tuple(names), per_metric)
     hit = snapshot.memo.get(memo_key)
     if hit is None:
-        hit = downsample_series(snapshot.series(names), per_metric)
+        hit = snapshot.thinned(names, per_metric)
         if len(snapshot.memo) >= _THINNED_PER_SNAPSHOT:
             snapshot.memo.clear()
         snapshot.memo[memo_key] = hit

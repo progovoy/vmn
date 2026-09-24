@@ -26,22 +26,25 @@ from version_stamp.core.experiment_logfiles import (
     parse_json_line,
     parse_jsonl,
 )
+from version_stamp.ui.readers.series import SeriesThinner
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_MAX_ENTRIES = 128
+MAX_THINNERS = 256
 
 
 class LogSnapshot:
     """One poll's view of a parsed log: the first ``total`` entries."""
 
-    def __init__(self, entries, total, series, counts, fold):
-        self._entries = entries
-        self.total = total
-        self._series = series
-        self._counts = dict(counts)
-        self.params = fold_values(fold, "params")
-        self.metrics = fold_values(fold, "metrics")
-        self.last_metric_at = fold_last_metric_at(fold)
+    def __init__(self, parsed):
+        self._parsed = parsed
+        self._entries = parsed.entries
+        self.total = len(parsed.entries)
+        self._series = parsed.series
+        self._counts = dict(parsed.counts)
+        self.params = fold_values(parsed.fold, "params")
+        self.metrics = fold_values(parsed.fold, "metrics")
+        self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.memo = {}  # derived views (thinned series) of this exact snapshot
 
     def log(self):
@@ -62,6 +65,18 @@ class LogSnapshot:
         names = self._counts if keys is None else [k for k in keys if k in self._counts]
         return {k: self._series[k][: self._counts[k]] for k in names}
 
+    def thinned(self, keys, max_points):
+        """``(series, series_total)`` of *keys* it has, each thinned to
+        *max_points* — extending the record's thinners, so a grown series
+        costs its new points."""
+        names = [k for k in keys if k in self._counts]
+        with self._parsed.thin_lock:
+            series = {
+                k: self._parsed.thinner(k, max_points).thin(self._series[k], self._counts[k])
+                for k in names
+            }
+        return series, {k: self._counts[k] for k in names}
+
 
 class _Parsed:
     """A record's growing parse: entries, per-metric series and the fold."""
@@ -72,6 +87,13 @@ class _Parsed:
         self.offsets = None  # {log file: bytes consumed} when incremental
         self.sig = None
         self.snapshot = None
+        self.thinners = {}  # (metric, max_points) -> SeriesThinner
+        self.thin_lock = threading.Lock()
+
+    def thinner(self, key, max_points):
+        if len(self.thinners) > MAX_THINNERS:
+            self.thinners.clear()
+        return self.thinners.setdefault((key, max_points), SeriesThinner(max_points))
 
     def extend(self, new_entries):
         fold_log(new_entries, self.fold, start=len(self.entries))
@@ -79,9 +101,7 @@ class _Parsed:
         for key, points in metric_series(new_entries).items():
             self.series.setdefault(key, []).extend(points)
             self.counts[key] = len(self.series[key])
-        self.snapshot = LogSnapshot(
-            self.entries, len(self.entries), self.series, self.counts, self.fold
-        )
+        self.snapshot = LogSnapshot(self)
         return self
 
 
