@@ -90,7 +90,8 @@ def _apply_tags(fold, entry, key):
 
 def _apply(fold, entry, key):
     etype = entry.get("type")
-    _apply_tags(fold, entry, key)
+    if etype in ("tags", "create"):
+        _apply_tags(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)

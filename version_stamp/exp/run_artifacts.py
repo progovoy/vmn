@@ -13,7 +13,11 @@ import tempfile
 
 import yaml
 
-from version_stamp.cli.snapshot_storage_files import valid_artifact_path
+from version_stamp.cli.snapshot_storage_files import (
+    artifact_file_path,
+    list_artifact_tree,
+    valid_artifact_path,
+)
 
 _DICT_WRITERS = {
     ".json": lambda obj, f: json.dump(obj, f, indent=2, default=str),
@@ -30,14 +34,13 @@ def checked_artifact_name(name):
 
 def _tree_names(local_dir, prefix):
     """``[(file path, artifact name)]`` of every file under *local_dir*."""
-    found = []
-    for dirpath, _, filenames in os.walk(local_dir):
-        rel = os.path.relpath(dirpath, local_dir)
-        parts = [] if rel == "." else rel.split(os.sep)
-        for filename in filenames:
-            name = "/".join(([prefix] if prefix else []) + parts + [filename])
-            found.append((os.path.join(dirpath, filename), checked_artifact_name(name)))
-    return sorted(found, key=lambda pair: pair[1])
+    return [
+        (
+            artifact_file_path(local_dir, a["name"]),
+            checked_artifact_name(f"{prefix}/{a['name']}" if prefix else a["name"]),
+        )
+        for a in list_artifact_tree(local_dir)
+    ]
 
 
 def _write_text(path, write):
