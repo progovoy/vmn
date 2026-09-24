@@ -31,7 +31,7 @@ describe("MetricBarChart at scale", () => {
     const rows = Array.from({ length: 120 }, (_, i) => row(i + 1, { acc: i / 120 }));
     const { container } = render(<MetricBarChart rows={rows} metricCols={["acc"]} schema={null} />);
     expect(screen.getByText(/top 50 of 120/)).toBeInTheDocument();
-    expect(container.querySelectorAll(".recharts-bar-rectangle").length).toBeLessThanOrEqual(50);
+    expect(container.querySelectorAll("[data-testid='bar']").length).toBe(50);
   });
 
   it("ignores null (non-finite) metric values", () => {
