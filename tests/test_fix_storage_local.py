@@ -92,6 +92,28 @@ def test_save_file_is_atomic_via_replace(st, monkeypatch):
     assert st.load_file("app", "v1", "run_state.yml") == b"state: running\n"
 
 
+@pytest.mark.parametrize("umask", [0o022, 0o077])
+def test_atomic_write_leaves_a_normal_umask_shaped_file(tmp_path, umask):
+    """A shared NFS storage dir relies on atomic_write producing the same
+    permissions a plain open()/write() would under the caller's umask, not
+    mkstemp's hardcoded 0600."""
+    from version_stamp.cli.snapshot_storage_files import atomic_write
+
+    old_umask = os.umask(umask)
+    try:
+        expected_path = tmp_path / "expected.txt"
+        open(str(expected_path), "w").close()
+        expected_mode = os.stat(expected_path).st_mode & 0o777
+
+        target_path = tmp_path / "f.txt"
+        atomic_write(str(target_path), "data")
+        actual_mode = os.stat(target_path).st_mode & 0o777
+    finally:
+        os.umask(old_umask)
+
+    assert actual_mode == expected_mode
+
+
 def test_writes_to_a_deleted_experiment_do_not_resurrect_it(st):
     st.save("app", "v1", _meta("v1"), {})
     st.delete("app", "v1")
