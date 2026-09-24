@@ -32,7 +32,8 @@ describe("MetricBarChart", () => {
     const { container } = render(
       <MetricBarChart rows={ROWS} metricCols={["loss", "acc"]} schema={SCHEMA} />
     );
-    expect(container.querySelector(".recharts-wrapper")).toBeInTheDocument();
+    expect(container.querySelector("[data-testid='bar-chart']")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-testid='bar']")).toHaveLength(3);
   });
 
   it("shows metric options in the dropdown", () => {
@@ -47,6 +48,7 @@ describe("MetricBarChart", () => {
     const { container } = render(
       <MetricBarChart rows={[]} metricCols={["loss"]} schema={SCHEMA} />
     );
-    expect(container.querySelector(".recharts-wrapper")).toBeInTheDocument();
+    expect(container.querySelector("[data-testid='bar-chart']")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-testid='bar']")).toHaveLength(0);
   });
 });

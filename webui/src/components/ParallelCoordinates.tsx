@@ -1,236 +1,184 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { paramValue, runColor } from "../util";
-import { finiteOrNull } from "../util/stats";
+import { metricGoal } from "../util";
+import {
+  buildAxes, buildMatrix, colorScale, selectRows, targetTs, yFromT, type Axis, type Brushes,
+} from "../util/parallelData";
+import ParallelCanvas, { type PlotGeometry } from "./ParallelCanvas";
+import { useAxisBrush } from "./useAxisBrush";
 
 interface Props {
   rows: ExperimentRow[];
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
-  /** Row indices inside the brush, or null when the brush is cleared. */
+  /** Row indices inside every brush, or null when no brush is active. */
   onBrush?: (indices: number[] | null) => void;
 }
-interface DimExtent { min: number; max: number }
-interface Brush { dim: number; range: [number, number] }
 
-const PAD = 20, CHART_H = 300, LABEL_H = 24, SVG_H = CHART_H + LABEL_H;
+const PAD = 20, CHART_H = 300, LABEL_H = 24, PLOT_H = CHART_H - 2 * PAD;
 const CANVAS_THRESHOLD = 500;
-/** A drag shorter than this is a click: it clears the brush. */
-const MIN_BRUSH_PX = 3;
+/** Colour steps: few distinct strokes lets the canvas batch one path per colour. */
+const COLOR_STEPS = 31;
+const NO_TARGET = "var(--text-3)";
 
-function numVal(row: ExperimentRow, dim: string, mCols: string[]): number | null {
-  return finiteOrNull(mCols.includes(dim) ? row.metrics[dim] : paramValue(row, dim));
-}
-
-function extents(rows: ExperimentRow[], dims: string[], mCols: string[]) {
-  const out: Record<string, DimExtent> = {};
-  for (const d of dims) {
-    let lo = Infinity, hi = -Infinity;
-    for (const r of rows) { const v = numVal(r, d, mCols); if (v !== null) { if (v < lo) lo = v; if (v > hi) hi = v; } }
-    out[d] = { min: lo === Infinity ? 0 : lo, max: hi === -Infinity ? 1 : hi };
-  }
-  return out;
-}
-
-function yScale(val: number, ext: DimExtent, plotH: number): number {
-  const t = ext.max === ext.min ? 0.5 : (val - ext.min) / (ext.max - ext.min);
-  return PAD + plotH - t * plotH;
-}
-
-function buildPath(row: ExperimentRow, dims: string[], mCols: string[],
-  ext: Record<string, DimExtent>, xs: number[], plotH: number): string {
-  const s: string[] = []; let on = false;
-  for (let i = 0; i < dims.length; i++) {
-    const v = numVal(row, dims[i], mCols);
-    if (v === null) { on = false; continue; }
-    s.push(`${on ? "L" : "M"}${xs[i]},${yScale(v, ext[dims[i]], plotH)}`);
+function rowPath(m: Float64Array, nDims: number, r: number, xs: number[]): string {
+  const s: string[] = [];
+  let on = false;
+  for (let d = 0; d < nDims; d++) {
+    const t = m[r * nDims + d];
+    if (Number.isNaN(t)) { on = false; continue; }
+    s.push(`${on ? "L" : "M"}${xs[d]},${yFromT(t, PAD, PLOT_H)}`);
     on = true;
   }
   return s.join("");
 }
 
-function inBrush(row: ExperimentRow, dims: string[], mCols: string[],
-  ext: Record<string, DimExtent>, plotH: number, brush: Brush): boolean {
-  const v = numVal(row, dims[brush.dim], mCols);
-  if (v === null) return false;
-  const y = yScale(v, ext[dims[brush.dim]], plotH);
-  const lo = Math.min(...brush.range), hi = Math.max(...brush.range);
-  return y >= lo && y <= hi;
-}
-
-interface Geometry {
-  rows: ExperimentRow[]; dims: string[]; mCols: string[];
-  ext: Record<string, DimExtent>; xs: number[]; plotH: number; w: number;
-}
-interface BrushHandlers {
-  brush: Brush | null;
-  onStart: (d: number, y: number) => void; onMove: (y: number) => void; onEnd: () => void;
-}
-
-/** The per-axis hit areas plus the visible brush rectangle. */
-function BrushAreas({ dims, xs, plotH, brush, onStart, onMove, onEnd }:
-  Pick<Geometry, "dims" | "xs" | "plotH"> & BrushHandlers) {
+function CategoryTicks({ axes, xs }: { axes: Axis[]; xs: number[] }) {
   return (
     <>
-      {dims.map((d, i) => (
-        <g key={d}>
-          {brush?.dim === i && (
-            <rect x={xs[i] - 6} y={Math.min(...brush.range)} width={12}
-              height={Math.abs(brush.range[1] - brush.range[0])} fill="var(--accent)" opacity={0.25} rx={2} />
-          )}
-          <rect data-testid="brush-area" x={xs[i] - 12} y={PAD} width={24} height={plotH}
-            fill="transparent" style={{ cursor: "crosshair" }}
-            onMouseDown={(e) => onStart(i, e.clientY)}
-            onMouseMove={(e) => onMove(e.clientY)}
-            onMouseUp={onEnd} />
-        </g>
-      ))}
+      {axes.map((a, i) => a.kind === "cat" && a.categories.map((c, ci) => (
+        <text key={`${a.name}:${c}`} x={xs[i] + 5} fontSize={9} fill="var(--text-3)"
+          y={yFromT(a.categories.length === 1 ? 0.5 : ci / (a.categories.length - 1), PAD, PLOT_H) + 3}>
+          {c}
+        </text>
+      )))}
     </>
   );
 }
 
-function SvgRenderer(props: Geometry & BrushHandlers & { selected: Set<number> | null }) {
-  const { rows, dims, mCols, ext, xs, plotH, w, selected } = props;
+function BrushAreas({ xs, brushes, onStart }: {
+  xs: number[]; brushes: Brushes; onStart: (dim: number, clientY: number) => void;
+}) {
   return (
-    <svg width={w} height={SVG_H} style={{ display: "block" }}>
-      {dims.map((d, i) => (
-        <g key={d}>
-          <line data-testid="axis" x1={xs[i]} y1={PAD} x2={xs[i]} y2={PAD + plotH}
-            stroke="var(--line)" strokeWidth={1} />
-          <text x={xs[i]} y={SVG_H - 4} textAnchor="middle" fontSize={10} fill="var(--text-2)">{d}</text>
+    <>
+      {xs.map((x, i) => {
+        const b = brushes.get(i);
+        const y0 = b ? yFromT(Math.max(...b), PAD, PLOT_H) : 0;
+        return (
+          <g key={i}>
+            {b && (
+              <rect x={x - 6} y={y0} width={12} rx={2} fill="var(--accent)" opacity={0.25}
+                height={yFromT(Math.min(...b), PAD, PLOT_H) - y0} />
+            )}
+            <rect data-testid="brush-area" x={x - 12} y={PAD} width={24} height={PLOT_H}
+              fill="transparent" style={{ cursor: "crosshair" }}
+              onMouseDown={(e) => { e.preventDefault(); onStart(i, e.clientY); }} />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+type RenderProps = PlotGeometry & { axes: Axis[]; brushes: Brushes; onStart: (d: number, y: number) => void };
+
+function SvgPlot(p: RenderProps) {
+  const { matrix, nDims, xs, w, strokes, selected, axes } = p;
+  return (
+    <svg width={w} height={CHART_H + LABEL_H} style={{ display: "block" }}>
+      {axes.map((a, i) => (
+        <g key={a.name}>
+          <line data-testid="axis" x1={xs[i]} y1={PAD} x2={xs[i]} y2={PAD + PLOT_H} stroke="var(--line-2)" />
+          <text x={xs[i]} y={CHART_H + LABEL_H - 4} textAnchor="middle" fontSize={10} fill="var(--text-2)">{a.name}</text>
         </g>
       ))}
-      {rows.map((r, ri) => {
-        const p = buildPath(r, dims, mCols, ext, xs, plotH);
-        if (!p) return null;
-        const dim = selected !== null && !selected.has(ri);
-        return <path key={ri} data-testid="row-line" d={p} fill="none"
-          stroke={runColor(ri % 6)} strokeWidth={1.5} opacity={dim ? 0.1 : 0.8} />;
+      {strokes.map((stroke, r) => {
+        const d = rowPath(matrix, nDims, r, xs);
+        return d ? <path key={r} data-testid="row-line" d={d} fill="none" stroke={stroke} strokeWidth={1.5}
+          opacity={selected && !selected.has(r) ? 0.08 : 0.85} /> : null;
       })}
-      <BrushAreas {...props} />
+      <CategoryTicks axes={axes} xs={xs} />
+      <BrushAreas {...p} />
     </svg>
   );
 }
 
-function CanvasRenderer(props: Geometry & BrushHandlers & { selected: Set<number> | null }) {
-  const { rows, dims, mCols, ext, xs, plotH, w, selected } = props;
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = ref.current?.getContext("2d"); if (!ctx) return;
-    ctx.clearRect(0, 0, w, CHART_H);
-    for (let ri = 0; ri < rows.length; ri++) {
-      ctx.save(); ctx.strokeStyle = runColor(ri % 6);
-      ctx.globalAlpha = selected !== null && !selected.has(ri) ? 0.04 : 0.4;
-      ctx.lineWidth = 1; ctx.beginPath();
-      let on = false;
-      for (let di = 0; di < dims.length; di++) {
-        const v = numVal(rows[ri], dims[di], mCols);
-        if (v === null) { on = false; continue; }
-        const x = xs[di], y = yScale(v, ext[dims[di]], plotH);
-        if (!on) { ctx.moveTo(x, y); on = true; } else ctx.lineTo(x, y);
-      }
-      ctx.stroke(); ctx.restore();
-    }
-    for (let i = 0; i < dims.length; i++) {
-      ctx.beginPath(); ctx.strokeStyle = "gray"; ctx.lineWidth = 1; ctx.globalAlpha = 0.5;
-      ctx.moveTo(xs[i], PAD); ctx.lineTo(xs[i], PAD + plotH); ctx.stroke();
-    }
-  }, [rows, dims, mCols, ext, xs, plotH, w, selected]);
-
+function CanvasPlot(p: RenderProps) {
   return (
     <div>
-      <div style={{ position: "relative", width: w, height: CHART_H }}>
-        <canvas ref={ref} width={w} height={CHART_H} style={{ display: "block" }} />
-        <svg width={w} height={CHART_H} style={{ position: "absolute", inset: 0 }}>
-          <BrushAreas {...props} />
+      <div style={{ position: "relative", width: p.w, height: CHART_H }}>
+        <ParallelCanvas {...p} />
+        <svg width={p.w} height={CHART_H} style={{ position: "absolute", inset: 0 }}>
+          <CategoryTicks axes={p.axes} xs={p.xs} />
+          <BrushAreas {...p} />
         </svg>
       </div>
-      <svg width={w} height={LABEL_H} style={{ display: "block" }}>
-        {dims.map((d, i) => (
-          <text key={d} data-testid="axis" x={xs[i]} y={16}
-            textAnchor="middle" fontSize={10} fill="var(--text-2)">{d}</text>
+      <svg width={p.w} height={LABEL_H} style={{ display: "block" }}>
+        {p.axes.map((a, i) => (
+          <text key={a.name} data-testid="axis" x={p.xs[i]} y={16} textAnchor="middle" fontSize={10}
+            fill="var(--text-2)">{a.name}</text>
         ))}
       </svg>
     </div>
   );
 }
 
-export default function ParallelCoordinates({ rows, metricCols, paramCols, schema: _schema, onBrush }: Props) {
+const defaultTarget = (metricCols: string[], schema: MetricsSchema | null) =>
+  metricCols.find((m) => schema?.[m]?.primary) ?? metricCols[0] ?? null;
+
+function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush }: Props) {
   const dims = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
-  const ext = useMemo(() => extents(rows, dims, metricCols), [rows, dims, metricCols]);
+  const axes = useMemo(() => buildAxes(rows, dims, metricCols), [rows, dims, metricCols]);
+  const matrix = useMemo(() => buildMatrix(rows, dims, metricCols, axes), [rows, dims, metricCols, axes]);
   const w = Math.max(dims.length * 100, 300);
-  const plotH = CHART_H - PAD - PAD;
-  const xs = useMemo(() => {
-    if (dims.length <= 1) return [w / 2];
-    return dims.map((_, i) => 40 + i * ((w - 80) / (dims.length - 1)));
-  }, [dims, w]);
+  const xs = useMemo(() => (dims.length <= 1 ? [w / 2]
+    : dims.map((_, i) => 40 + i * ((w - 80) / (dims.length - 1)))), [dims, w]);
 
-  // The brush persists after mouseup — it is a filter, not a transient hover.
-  const [brush, setBrush] = useState<Brush | null>(null);
-  const dragRef = useRef<Brush | null>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const target = chosen !== null && metricCols.includes(chosen) ? chosen : defaultTarget(metricCols, schema);
+  const strokes = useMemo(() => {
+    if (!target) return rows.map(() => NO_TARGET);
+    return targetTs(rows, target, metricGoal(schema, target)).map((t) =>
+      t === null ? NO_TARGET : colorScale(Math.round(t * COLOR_STEPS) / COLOR_STEPS));
+  }, [rows, target, schema]);
 
-  const toY = useCallback((cy: number) => {
-    const r = wrapRef.current?.getBoundingClientRect();
-    return r ? cy - r.top : cy;
+  const plotRef = useRef<HTMLDivElement>(null);
+  const toY = useCallback((cy: number) => cy - (plotRef.current?.getBoundingClientRect().top ?? 0), []);
+  const latest = useRef({ matrix, nDims: dims.length, onBrush });
+  latest.current = { matrix, nDims: dims.length, onBrush };
+  const commit = useCallback((b: Brushes) => {
+    const { matrix: m, nDims, onBrush: emit } = latest.current;
+    emit?.(selectRows(m, nDims, b));
   }, []);
+  const { brushes, onStart, clear } = useAxisBrush(toY, PAD, PLOT_H, commit);
 
-  const onStart = useCallback((dim: number, cy: number) => {
-    const y = toY(cy);
-    dragRef.current = { dim, range: [y, y] };
-    setBrush(dragRef.current);
-  }, [toY]);
+  const selectedList = useMemo(() => selectRows(matrix, dims.length, brushes), [matrix, dims.length, brushes]);
+  const selected = useMemo(() => (selectedList ? new Set(selectedList) : null), [selectedList]);
 
-  const onMove = useCallback((cy: number) => {
-    const d = dragRef.current;
-    if (!d) return;
-    dragRef.current = { dim: d.dim, range: [d.range[0], toY(cy)] };
-    setBrush(dragRef.current);
-  }, [toY]);
-
-  const selected = useMemo(() => {
-    if (!brush || Math.abs(brush.range[1] - brush.range[0]) < MIN_BRUSH_PX) return null;
-    const idx = new Set<number>();
-    for (let i = 0; i < rows.length; i++) if (inBrush(rows[i], dims, metricCols, ext, plotH, brush)) idx.add(i);
-    return idx;
-  }, [brush, rows, dims, metricCols, ext, plotH]);
-
-  const clear = useCallback(() => {
-    dragRef.current = null;
-    setBrush(null);
-    onBrush?.(null);
-  }, [onBrush]);
-
-  const onEnd = useCallback(() => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d) return;
-    if (Math.abs(d.range[1] - d.range[0]) < MIN_BRUSH_PX) { clear(); return; }
-    const idx: number[] = [];
-    for (let i = 0; i < rows.length; i++) if (inBrush(rows[i], dims, metricCols, ext, plotH, d)) idx.push(i);
-    onBrush?.(idx);
-  }, [rows, dims, metricCols, ext, plotH, onBrush, clear]);
+  const clearAll = useCallback(() => { clear(); onBrush?.(null); }, [clear, onBrush]);
 
   if (dims.length === 0) return null;
 
-  const geometry = { rows, dims, mCols: metricCols, ext, xs, plotH, w };
-  const handlers = { brush, onStart, onMove, onEnd, selected };
+  const plot: RenderProps = {
+    matrix, nDims: dims.length, xs, top: PAD, plotH: PLOT_H, w, h: CHART_H,
+    strokes, selected, axes, brushes, onStart,
+  };
   return (
-    <div className="card" ref={wrapRef}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div className="card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div className="eyebrow">parallel coordinates</div>
-        {selected && (
+        {target && (
+          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+            color by
+            <select aria-label="color by" value={target} onChange={(e) => setChosen(e.target.value)}>
+              {metricCols.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </label>
+        )}
+        {selectedList && (
           <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-            {selected.size} of {rows.length} selected ·{" "}
-            <button className="link" onClick={clear}>clear</button>
+            {selectedList.length} of {rows.length} selected ·{" "}
+            <button className="link" onClick={clearAll}>clear</button>
           </span>
         )}
       </div>
-      {rows.length > CANVAS_THRESHOLD
-        ? <CanvasRenderer {...geometry} {...handlers} />
-        : <SvgRenderer {...geometry} {...handlers} />
-      }
+      <div ref={plotRef} style={{ overflowX: "auto" }}>
+        {rows.length > CANVAS_THRESHOLD ? <CanvasPlot {...plot} /> : <SvgPlot {...plot} />}
+      </div>
     </div>
   );
 }
+
+/** Memoized: the leaderboard re-polls, and identical rows must not redraw. */
+export default memo(ParallelCoordinates);

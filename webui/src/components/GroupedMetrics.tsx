@@ -1,10 +1,8 @@
-import { useMemo, useState } from "react";
-import {
-  Bar, BarChart, CartesianGrid, ErrorBar, Tooltip, XAxis, YAxis,
-} from "recharts";
+import { memo, useMemo, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, paramValue } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
+import GroupBars, { type GroupBar } from "./GroupBars";
 
 function mean(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -65,7 +63,7 @@ function computeGroups(
   return result;
 }
 
-export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
+function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
   rows: ExperimentRow[];
   metricCols: string[];
   paramCols: string[];
@@ -84,16 +82,13 @@ export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: 
     [rows, groupKey],
   );
 
-  const chartData = useMemo(
-    () =>
-      groups.map((g) => {
-        const s = g.stats[chartMetric];
-        return {
-          group: g.group,
-          mean: s?.mean ?? 0,
-          errorY: s?.std ?? 0,
-        };
-      }),
+  const bars = useMemo<GroupBar[]>(
+    () => groups.map((g) => ({
+      group: g.group,
+      count: g.count,
+      mean: g.stats[chartMetric]?.mean ?? 0,
+      std: g.stats[chartMetric]?.std ?? 0,
+    })),
     [groups, chartMetric],
   );
 
@@ -136,43 +131,11 @@ export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: 
         </label>
       </div>
 
-      <div style={{ width: "100%", overflowX: "auto", marginBottom: 16 }}>
-        <BarChart
-          width={Math.max(320, groups.length * 80)}
-          height={220}
-          data={chartData}
-          margin={{ left: 10, right: 20, top: 10, bottom: 5 }}
-        >
-          <CartesianGrid stroke="var(--line)" vertical={false} />
-          <XAxis
-            dataKey="group"
-            stroke="#85847a"
-            tick={{ fontSize: 11, fontFamily: "var(--mono)" }}
-          />
-          <YAxis
-            stroke="#85847a"
-            tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
-          />
-          <Tooltip
-            formatter={(v: number) => fmtVal(v)}
-            contentStyle={{
-              background: "var(--panel-2)",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              color: "var(--text)",
-              fontSize: 12,
-            }}
-          />
-          <Bar
-            dataKey="mean"
-            fill={metricGoal(schema, chartMetric) === "min" ? "var(--hotfix)" : "var(--minor)"}
-            fillOpacity={0.7}
-            isAnimationActive={false}
-            radius={[4, 4, 0, 0]}
-          >
-            <ErrorBar dataKey="errorY" stroke="var(--text-2)" strokeWidth={1.5} />
-          </Bar>
-        </BarChart>
+      <div style={{ marginBottom: 16 }}>
+        <GroupBars
+          bars={bars}
+          color={metricGoal(schema, chartMetric) === "min" ? "var(--hotfix)" : "var(--minor)"}
+        />
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -208,3 +171,5 @@ export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: 
     </div>
   );
 }
+
+export default memo(GroupedMetrics);

@@ -1,130 +1,96 @@
 import { memo, useMemo, useState } from "react";
-import {
-  CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YAxis,
-} from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, paramValue } from "../util";
-import { finiteOrNull, maxOf, minOf } from "../util/stats";
+import { fmtVal, metricGoal } from "../util";
+import { chartTheme } from "../util/cssColor";
+import { Y_AXIS_SIZE } from "../util/curveOptions";
+import { nearestPoint, scatterGroups } from "../util/scatterData";
+import { DENSE_POINTS, scatterData, scatterOptions } from "../util/scatterOptions";
+import { TOOLTIP_STYLE } from "./chartStyles";
+import { useRunSelect } from "./chartHooks";
+import UPlotChart, { type CursorInfo } from "./UPlotChart";
 
 interface Props {
   rows: ExperimentRow[];
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
+  /** Called with a clicked point's run; defaults to opening the run page. */
+  onSelect?: (verstr: string) => void;
 }
 
-function numericValue(row: ExperimentRow, col: string, paramCols: string[]): number | null {
-  return finiteOrNull(paramCols.includes(col) ? paramValue(row, col) : row.metrics[col]);
+const HEIGHT = 320;
+/** How near (as a fraction of each axis span) the cursor must be to a point. */
+const HIT_RADIUS = 0.03;
+const COLORS = ["var(--accent)", "var(--good)"];
+
+function AxisSelect({ label, value, cols, onChange }: {
+  label: string; value: string; cols: string[]; onChange: (v: string) => void;
+}) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+      {label}
+      <select role="combobox" value={value} onChange={(e) => onChange(e.target.value)} style={{ minWidth: 80 }}>
+        {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+    </label>
+  );
 }
 
-function MetricScatter({ rows, metricCols, paramCols, schema }: Props) {
+/** Canvas scatter (uPlot) of any metric or numeric param against another;
+ *  the best point by the y metric's goal is highlighted. Hover shows the
+ *  nearest run, click opens it. */
+function MetricScatter({ rows, metricCols, paramCols, schema, onSelect }: Props) {
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
-
-  const defaultX = metricCols[0] ?? paramCols[0] ?? "";
-  const defaultY = metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "";
-
-  const [xCol, setXCol] = useState(defaultX);
-  const [yCol, setYCol] = useState(defaultY);
-
+  const [xCol, setXCol] = useState(metricCols[0] ?? paramCols[0] ?? "");
+  const [yCol, setYCol] = useState(metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
   const yGoal = metricGoal(schema, yCol);
+  const select = useRunSelect(onSelect);
 
-  const data = useMemo(() =>
-    rows
-      .map((r) => {
-        const x = numericValue(r, xCol, paramCols);
-        const y = numericValue(r, yCol, paramCols);
-        if (x === null || y === null) return null;
-        return { x, y, verstr: r.verstr };
-      })
-      .filter((d): d is { x: number; y: number; verstr: string } => d !== null),
-    [rows, xCol, yCol, paramCols]
+  const groups = useMemo(() => {
+    const { rest, best } = scatterGroups(rows, xCol, yCol, paramCols, yGoal);
+    return [rest, best]; // in COLORS order
+  }, [rows, xCol, yCol, paramCols, yGoal]);
+  const dense = groups.reduce((n, g) => n + g.xs.length, 0) > DENSE_POINTS;
+  // Fresh rows (a poll) swap data in place; only the point-size tier rebuilds.
+  const options = useMemo(
+    () => scatterOptions(COLORS, { height: HEIGHT, theme: chartTheme(), dense }), [dense],
   );
+  const data = useMemo(() => scatterData(groups), [groups]);
 
-  const bestY = useMemo(() => {
-    if (data.length === 0) return null;
-    const vals = data.map((d) => d.y);
-    return yGoal === "min" ? minOf(vals) : maxOf(vals);
-  }, [data, yGoal]);
-
-  const large = data.length > 2000;
-
-  const bestData = useMemo(
-    () => data.filter((d) => d.y === bestY),
-    [data, bestY]
-  );
-  const restData = useMemo(
-    () => data.filter((d) => d.y !== bestY),
-    [data, bestY]
+  const [cursor, setCursor] = useState<CursorInfo | null>(null);
+  const hovered = useMemo(
+    () => (cursor ? nearestPoint(groups, cursor.x, cursor.y, HIT_RADIUS) : null),
+    [cursor, groups],
   );
 
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <div className="eyebrow" style={{ marginBottom: 0 }}>scatter plot</div>
-        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-          X
-          <select
-            role="combobox"
-            value={xCol}
-            onChange={(e) => setXCol(e.target.value)}
-            style={{ minWidth: 80 }}
-          >
-            {allCols.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-          Y
-          <select
-            role="combobox"
-            value={yCol}
-            onChange={(e) => setYCol(e.target.value)}
-            style={{ minWidth: 80 }}
-          >
-            {allCols.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
+        <AxisSelect label="X" value={xCol} cols={allCols} onChange={setXCol} />
+        <AxisSelect label="Y" value={yCol} cols={allCols} onChange={setYCol} />
       </div>
-      <div style={{ width: "100%", overflowX: "auto" }}>
-        <ScatterChart width={480} height={320} margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
-          <CartesianGrid stroke="var(--line)" />
-          <XAxis
-            type="number" dataKey="x" name={xCol} stroke="#85847a"
-            tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
-          />
-          <YAxis
-            type="number" dataKey="y" name={yCol} stroke="#85847a"
-            tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
-          />
-          {!large && (
-            <Tooltip
-              formatter={(v: number) => fmtVal(v)}
-              contentStyle={{
-                background: "var(--panel-2)",
-                border: "1px solid var(--line)",
-                borderRadius: 8,
-                color: "var(--text)",
-                fontSize: 12,
-              }}
-            />
-          )}
-          <Scatter
-            data={restData}
-            fill="var(--accent)"
-            isAnimationActive={false}
-            shape={large ? <circle r={2} /> : undefined}
-          />
-          <Scatter
-            data={bestData}
-            fill="var(--good)"
-            isAnimationActive={false}
-            shape={large ? <circle r={3} /> : undefined}
-          />
-        </ScatterChart>
+      <div
+        data-testid="scatter-chart"
+        style={{ position: "relative", width: "100%", cursor: hovered ? "pointer" : undefined }}
+        onClick={() => hovered && select(hovered.verstr)}
+      >
+        <UPlotChart options={options} data={data} onCursor={setCursor} />
+        {cursor && hovered && (
+          <div
+            data-testid="scatter-tooltip"
+            style={{ ...TOOLTIP_STYLE, top: cursor.top + 12, left: cursor.left + Y_AXIS_SIZE + 12 }}
+          >
+            <div className="mono">@{hovered.idx} <span style={{ color: "var(--text-3)" }}>{hovered.verstr}</span></div>
+            <div>{xCol}: <span className="mono">{fmtVal(hovered.x)}</span></div>
+            <div>{yCol}: <span className="mono">{fmtVal(hovered.y)}</span></div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/** Memoized: the leaderboard re-polls, and identical rows must not re-render
- *  thousands of SVG symbols. */
+/** Memoized: the leaderboard re-polls, and identical rows must not redraw
+ *  thousands of points. */
 export default memo(MetricScatter);
