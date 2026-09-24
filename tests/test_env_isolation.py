@@ -8,7 +8,7 @@ environment, the second asserts it was cleaned.
 """
 import os
 
-from version_stamp.cli import experiment
+from version_stamp.core import experiment_writer
 
 PROBE = "VMN_LEAK_PROBE"
 
@@ -16,9 +16,9 @@ PROBE = "VMN_LEAK_PROBE"
 def test_a_dirties_vmn_env_and_the_writer_id_cache():
     assert PROBE not in os.environ
     os.environ[PROBE] = "leaked"
-    experiment._WRITER_ID = "my-pod"
+    experiment_writer._WRITER_ID = "my-pod"
 
 
 def test_b_sees_a_clean_environment():
     assert PROBE not in os.environ
-    assert experiment._WRITER_ID is None
+    assert experiment_writer._WRITER_ID is None

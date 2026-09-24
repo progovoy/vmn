@@ -2,9 +2,7 @@
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
 import os
 import shutil
-import sys
 from dataclasses import dataclass
-from types import ModuleType
 from typing import List, Optional
 
 import yaml
@@ -42,12 +40,9 @@ from version_stamp.core.experiment_from_snapshot import (
 )
 from version_stamp.core.experiment_log import (
     effective_params,
-    entry_params,
     filter_archived,
     latest_metrics,
     load_log,
-    metric_series,
-    metric_sort_descending,
     sort_by_metric,
 )
 from version_stamp.core.experiment_query import QueryError, filter_rows
@@ -72,61 +67,10 @@ from version_stamp.core.experiment_writer import (
     attach_parent,
     compute_artifact_info,
     create_log_entry,
-    get_repo_lock,  # noqa: F401  (re-exported: cli.entry imports it from here)
-    get_writer_id,
     merge_conf_into_params,
     save_artifact,
-    save_log,
-    save_run_state,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import now_iso
-
-# The log-folding helpers moved to core.experiment_log and the record-shaping
-# write primitives to core.experiment_writer, so the ui readers and the
-# version_stamp.exp SDK can share them without importing the CLI. These aliases
-# keep the old private names importable for existing callers.
-_create_entry_params = effective_params
-_entry_params = entry_params
-_get_latest_metrics = latest_metrics
-_load_log = load_log
-_metric_sort_descending = metric_sort_descending
-get_metric_series = metric_series
-
-_allocate_run_verstr = allocate_run_verstr
-_append_to_log = append_to_log
-_attach_parent = attach_parent
-_compute_artifact_info = compute_artifact_info
-_create_log_entry = create_log_entry
-_get_writer_id = get_writer_id
-_merge_conf_into_params = merge_conf_into_params
-_now_iso = now_iso
-_save_artifact = save_artifact
-_save_log = save_log
-_save_run_state = save_run_state
-
-
-class _WriterIdCacheAlias(ModuleType):
-    """Keep ``<this module>._WRITER_ID`` wired to the cache in core.
-
-    The writer-id cache moved to ``core.experiment_writer``, but resetting it by
-    assigning to this module's global is how the test suite (and anything else
-    that has to re-read ``$VMN_WRITER_ID``) has always done it. A data
-    descriptor on the module's type forwards both reads and writes there, so the
-    legacy global stays the one true handle on the cache instead of becoming a
-    dead copy of it.
-    """
-
-    @property
-    def _WRITER_ID(self):
-        return experiment_writer._WRITER_ID
-
-    @_WRITER_ID.setter
-    def _WRITER_ID(self, value):
-        experiment_writer._WRITER_ID = value
-
-
-sys.modules[__name__].__class__ = _WriterIdCacheAlias
 
 
 @dataclass
@@ -267,7 +211,7 @@ def handle_experiment(vmn_ctx):
     params["experiment_dir"] = getattr(args, "experiment_dir", None)
     params["writer_id"] = getattr(args, "writer_id", None)
 
-    _merge_conf_into_params(vcs, params)
+    merge_conf_into_params(vcs, params)
     _export_conf_writer_id(params.get("writer_id"))
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
@@ -394,11 +338,11 @@ def experiment_create(vcs, params, storage, args):
         return err
 
     if getattr(args, "metrics", None):
-        _append_to_log(
+        append_to_log(
             storage,
             app_name,
             verstr,
-            _create_log_entry("metrics", values=_parse_metrics(args.metrics)),
+            create_log_entry("metrics", values=_parse_metrics(args.metrics)),
         )
 
     print(verstr)
@@ -456,18 +400,18 @@ def _experiment_create_core(
             note=note,
         )
         metadata["code_verstr"] = code_verstr
-        _attach_parent(metadata, parent)
+        attach_parent(metadata, parent)
         attach_name(metadata, name)
         return metadata, patches
 
     # Allocation creates the record (see _experiment_create_from_snapshot).
-    verstr = _allocate_run_verstr(storage, vcs.name, code_verstr, make_record=_record)
+    verstr = allocate_run_verstr(storage, vcs.name, code_verstr, make_record=_record)
 
-    entry = _create_log_entry("create", note=note)
+    entry = create_log_entry("create", note=note)
     if extra_create_data:
         entry.update(extra_create_data)
 
-    _append_to_log(storage, vcs.name, verstr, entry)
+    append_to_log(storage, vcs.name, verstr, entry)
     return verstr, None
 
 
@@ -486,29 +430,29 @@ def experiment_add(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
 
     if args.metrics:
-        entry = _create_log_entry("metrics", values=_parse_metrics(args.metrics))
-        _append_to_log(storage, app_name, verstr, entry)
+        entry = create_log_entry("metrics", values=_parse_metrics(args.metrics))
+        append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added metrics to {verstr}")
 
     if args.note:
-        entry = _create_log_entry("note", text=args.note)
-        _append_to_log(storage, app_name, verstr, entry)
+        entry = create_log_entry("note", text=args.note)
+        append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added note to {verstr}")
 
     if args.attach:
         if not os.path.isfile(args.attach):
             VMN_LOGGER.error(f"Artifact file not found: {args.attach}")
             return 1
-        info = _compute_artifact_info(args.attach)
-        _save_artifact(storage, app_name, verstr, args.attach)
-        entry = _create_log_entry("artifact", **info)
-        _append_to_log(storage, app_name, verstr, entry)
+        info = compute_artifact_info(args.attach)
+        save_artifact(storage, app_name, verstr, args.attach)
+        entry = create_log_entry("artifact", **info)
+        append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Attached {info['path']} to {verstr}")
 
     if args.file:
         notes_data = _parse_notes_file(args.file)
-        entry = _create_log_entry("structured", **notes_data)
-        _append_to_log(storage, app_name, verstr, entry)
+        entry = create_log_entry("structured", **notes_data)
+        append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
 
     return 0

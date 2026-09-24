@@ -207,16 +207,16 @@ def test_show_skips_tree_reads_for_a_lone_experiment(app_layout, capfd, monkeypa
 
 
 def test_experiment_is_never_its_own_parent():
-    from version_stamp.cli.experiment import _attach_parent
+    from version_stamp.core.experiment_writer import attach_parent
 
     meta = {"verstr": "v1"}
-    _attach_parent(meta, "v1")
+    attach_parent(meta, "v1")
     assert "parent" not in meta
 
-    _attach_parent(meta, None)
+    attach_parent(meta, None)
     assert "parent" not in meta
 
-    _attach_parent(meta, "v0")
+    attach_parent(meta, "v0")
     assert meta["parent"] == "v0"
 
 

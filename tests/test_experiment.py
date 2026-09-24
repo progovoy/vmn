@@ -1150,9 +1150,9 @@ def test_exp_run_step_series(app_layout, capfd):
     assert metrics_entries[0]["values"] == {"loss": 0.9}
     assert metrics_entries[2]["values"] == {"loss": 0.2, "acc": 0.8}
 
-    from version_stamp.cli.experiment import get_metric_series
+    from version_stamp.core.experiment_log import metric_series
 
-    series = get_metric_series(log)
+    series = metric_series(log)
     assert [(p["step"], p["value"]) for p in series["loss"]] == [
         (1, 0.9),
         (2, 0.5),
@@ -1200,7 +1200,7 @@ def test_exp_run_scalar_metric_lines(app_layout, capfd):
 
 def test_get_metric_series_unit():
     """get_metric_series folds a log into per-metric point lists."""
-    from version_stamp.cli.experiment import get_metric_series
+    from version_stamp.core.experiment_log import metric_series
 
     log = [
         {"timestamp": "t0", "type": "create", "note": "x"},
@@ -1214,7 +1214,7 @@ def test_get_metric_series_unit():
         {"timestamp": "t3", "type": "metrics", "values": {"final_score": 0.95}},
         {"timestamp": "t4", "type": "note", "text": "irrelevant"},
     ]
-    series = get_metric_series(log)
+    series = metric_series(log)
     assert series["loss"] == [
         {"step": 1, "ts": "t1", "value": 0.9},
         {"step": 2, "ts": "t2", "value": 0.4},

@@ -585,7 +585,7 @@ def vmn_env_guard():
     ``app_layout``, which sets ``VMN_WORKING_DIR``) and restored after they are
     all torn down, so it cleans up after them instead of fighting them.
     """
-    from version_stamp.cli import experiment
+    from version_stamp.core import experiment_writer
 
     saved = {k: v for k, v in os.environ.items() if k.startswith("VMN_")}
 
@@ -596,7 +596,7 @@ def vmn_env_guard():
             del os.environ[key]
     os.environ.update(saved)
     # The other half of the same leak: a cached writer id outlives its env var.
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 @pytest.fixture(scope="function")
