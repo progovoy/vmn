@@ -18,21 +18,24 @@ export function useContainerWidth<T extends HTMLElement>(fallback: number) {
   return [ref, width] as const;
 }
 
-/** What clicking a run's mark does: *onSelect* when given, else open the
- *  run page. Outside a router (a bare component test) it does nothing. */
-export function useRunSelect(onSelect?: (verstr: string) => void) {
+/** The run behind a recharts mark's click payload. */
+function clickedVerstr(entry: unknown): string | null {
+  const payload = (entry as { payload?: { verstr?: unknown } } | null)?.payload;
+  return typeof payload?.verstr === "string" ? payload.verstr : null;
+}
+
+/** Click handler for a recharts mark: *onSelect* with its run when given,
+ *  else open the run page. Outside a router (a bare component test) it only
+ *  calls *onSelect*. */
+export function useRunClick(onSelect?: (verstr: string) => void) {
   const { ws, app } = useParams();
   const navigator = useContext(UNSAFE_NavigationContext)?.navigator;
-  return useCallback((verstr: string) => {
+  return useCallback((entry: unknown) => {
+    const verstr = clickedVerstr(entry);
+    if (!verstr) return;
     if (onSelect) onSelect(verstr);
     else if (navigator && ws && app) {
       navigator.push(`/ws/${ws}/app/${app}/run/${encodeURIComponent(verstr)}`);
     }
   }, [onSelect, navigator, ws, app]);
-}
-
-/** The run behind a recharts mark's click payload. */
-export function clickedVerstr(entry: unknown): string | null {
-  const payload = (entry as { payload?: { verstr?: unknown } } | null)?.payload;
-  return typeof payload?.verstr === "string" ? payload.verstr : null;
 }

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { yFromT } from "../util/parallelData";
-import { resolveCssColor } from "../util/parallelColors";
+import { resolveCssColor } from "../util/cssColor";
 
 export interface PlotGeometry {
   matrix: Float64Array;

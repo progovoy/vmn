@@ -5,7 +5,7 @@ import {
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, paramValue } from "../util";
 import { finiteOrNull, maxOf, minOf } from "../util/stats";
-import { clickedVerstr, useContainerWidth, useRunSelect } from "./chartHooks";
+import { useContainerWidth, useRunClick } from "./chartHooks";
 
 interface Props {
   rows: ExperimentRow[];
@@ -22,11 +22,7 @@ function numericValue(row: ExperimentRow, col: string, paramCols: string[]): num
 
 function MetricScatter({ rows, metricCols, paramCols, schema, onSelect }: Props) {
   const [wrapRef, width] = useContainerWidth<HTMLDivElement>(480);
-  const select = useRunSelect(onSelect);
-  const onPointClick = (entry: unknown) => {
-    const v = clickedVerstr(entry);
-    if (v) select(v);
-  };
+  const onPointClick = useRunClick(onSelect);
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
 
   const defaultX = metricCols[0] ?? paramCols[0] ?? "";

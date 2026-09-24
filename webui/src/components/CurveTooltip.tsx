@@ -1,10 +1,7 @@
 import { fmtVal } from "../util";
-import type { CurveSeries } from "../util/curveOptions";
+import { Y_AXIS_SIZE, type CurveSeries } from "../util/curveOptions";
 import type { TooltipRow } from "../util/seriesArrays";
 import type { CursorInfo } from "./UPlotChart";
-
-/** Width of the y axis uPlot draws left of the plot area (see curveOptions). */
-const Y_AXIS_PX = 56;
 
 export default function CurveTooltip({ rows, series, cursor, width, formatX }: {
   rows: TooltipRow[];
@@ -14,7 +11,7 @@ export default function CurveTooltip({ rows, series, cursor, width, formatX }: {
   formatX: (x: number) => string;
 }) {
   const byKey = new Map(series.map((s) => [s.key, s]));
-  const left = cursor.left + Y_AXIS_PX;
+  const left = cursor.left + Y_AXIS_SIZE;
   // Past the middle the box opens to the left of the cursor, never off-card.
   const flip = width > 0 && left > width / 2;
   return (

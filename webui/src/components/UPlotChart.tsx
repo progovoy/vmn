@@ -44,6 +44,7 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor }: Props) {
   dataRef.current = data;
   const cursorRef = useRef(onCursor);
   cursorRef.current = onCursor;
+  const shownRef = useRef<boolean[]>([]);
   // Bumped once a plot exists so the hidden/focus effects re-apply to it.
   const [generation, setGeneration] = useState(0);
 
@@ -61,11 +62,12 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor }: Props) {
       };
       plot = new UPlot({ ...options, width: el.clientWidth || 600, hooks }, dataRef.current, el);
       plotRef.current = plot;
+      shownRef.current = [];
       setGeneration((g) => g + 1);
       if (typeof ResizeObserver !== "undefined") {
         ro = new ResizeObserver(([entry]) => {
           const width = Math.floor(entry.contentRect.width);
-          if (width > 0) plot?.setSize({ width, height: options.height });
+          if (width > 0 && width !== plot?.width) plot?.setSize({ width, height: options.height });
         });
         ro.observe(el);
       }
@@ -82,10 +84,14 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor }: Props) {
     plotRef.current?.setData(data);
   }, [data]);
 
+  // Only the curves whose visibility changed: each setSeries resets scales.
   useEffect(() => {
     const u = plotRef.current;
     if (!u || !hidden) return;
-    hidden.forEach((off, i) => u.setSeries(i + 1, { show: !off }));
+    hidden.forEach((off, i) => {
+      if (shownRef.current[i] !== !off) u.setSeries(i + 1, { show: !off });
+    });
+    shownRef.current = hidden.map((off) => !off);
   }, [hidden, generation]);
 
   useEffect(() => {

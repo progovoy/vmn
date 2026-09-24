@@ -38,11 +38,9 @@ export function toXY(
 export function emaXY(ys: Float64Array, alpha: number): Float64Array {
   if (alpha === 0) return ys;
   const out = new Float64Array(ys.length);
-  let prev = ys[0];
-  for (let i = 0; i < ys.length; i++) {
-    prev = i === 0 ? ys[0] : alpha * prev + (1 - alpha) * ys[i];
-    out[i] = prev;
-  }
+  if (ys.length === 0) return out;
+  out[0] = ys[0];
+  for (let i = 1; i < ys.length; i++) out[i] = alpha * out[i - 1] + (1 - alpha) * ys[i];
   return out;
 }
 

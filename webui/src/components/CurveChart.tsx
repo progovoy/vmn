@@ -1,20 +1,17 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { XMode } from "../util/chartData";
 import { chartTheme } from "../util/cssColor";
 import {
-  curveData, curveOptions, fmtRelTick, fmtWallTick, type CurveSeries,
+  curveData, curveOptions, X_TICK, type CurveSeries,
 } from "../util/curveOptions";
 import { tooltipRows } from "../util/seriesArrays";
 import CurveTooltip from "./CurveTooltip";
 import UPlotChart, { type CursorInfo } from "./UPlotChart";
 
-export { fmtRelTick, fmtWallTick };
-
 /** Tooltip rows shown at most — with 100 runs, the ones nearest the cursor. */
 const DEFAULT_TOOLTIP_LIMIT = 8;
 
-const defaultFormatX = (mode: XMode) => (x: number) =>
-  mode === "wall" ? fmtWallTick(x) : mode === "relative" ? fmtRelTick(x) : `step ${x}`;
+const stepLabel = (x: number) => `step ${x}`;
 
 /** Canvas line chart (uPlot) of independent curves, each with its own x
  *  values. The plot is rebuilt only when the set of curves or the axis kind
@@ -45,9 +42,9 @@ function CurveChart({
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);
+  const focus = focusIdx >= 0 ? focusIdx : null;
 
   const [cursor, setCursor] = useState<CursorInfo | null>(null);
-  const onCursor = useCallback((c: CursorInfo | null) => setCursor(c), []);
   const visible = useMemo(
     () => series.filter((s) => !s.faded && !hidden?.has(s.key)), [series, hidden],
   );
@@ -63,8 +60,8 @@ function CurveChart({
         options={options}
         data={data}
         hidden={hiddenFlags}
-        focus={focusIdx >= 0 ? focusIdx : null}
-        onCursor={onCursor}
+        focus={focus}
+        onCursor={setCursor}
       />
       {cursor && rows.length > 0 && (
         <CurveTooltip
@@ -72,7 +69,7 @@ function CurveChart({
           series={visible}
           cursor={cursor}
           width={wrapRef.current?.clientWidth ?? 0}
-          formatX={formatX ?? defaultFormatX(xMode)}
+          formatX={formatX ?? X_TICK[xMode] ?? stepLabel}
         />
       )}
     </div>

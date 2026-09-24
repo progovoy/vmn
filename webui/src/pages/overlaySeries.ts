@@ -77,8 +77,12 @@ export function useOverlaySeries(ws: string, app: string, runs: string[]) {
     if (runs.length === 0) return;
     let next: OverlayData | null = null;
     if (batchAvailable.current) {
-      next = await loadBatch(ws, app, runs).catch(() => null);
-      if (!next) batchAvailable.current = false;
+      next = await loadBatch(ws, app, runs).catch((e) => {
+        // Only a server without the endpoint turns batching off for good; any
+        // other failure falls back for this load and retries the batch next poll.
+        if (e?.status === 404 || e?.status === 405) batchAvailable.current = false;
+        return null;
+      });
     }
     try {
       next ??= await loadEach(ws, app, runs);

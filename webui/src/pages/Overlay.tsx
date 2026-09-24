@@ -42,6 +42,7 @@ export default function Overlay() {
   const [focused, setFocused] = useState<string | null>(null);
 
   const loaded = useMemo(() => data?.runs ?? [], [data]);
+  const loadedKeys = useMemo(() => loaded.map((r) => r.key), [loaded]);
   const metrics = useMemo(() => sharedMetrics(loaded), [loaded]);
   const hasTimestamps = useMemo(
     () => loaded.length > 0 && loaded.every((r) => allTimestamped(r.series)), [loaded],
@@ -94,7 +95,7 @@ export default function Overlay() {
         <LogToggle value={logY} onChange={setLogY} />
         <SmoothingSlider value={alpha} onChange={setAlpha} />
         <OverlayLegend
-          runs={loaded.map((r) => r.key)} colorOf={colorOf} hidden={hidden}
+          runs={loadedKeys} colorOf={colorOf} hidden={hidden}
           onToggle={toggle} onHover={setFocused}
         />
       </div>

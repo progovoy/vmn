@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   axisT, buildAxes, buildMatrix, colorScale, selectRows, targetTs, tFromY, yFromT,
 } from "../parallelData";
-import { resolveCssColor } from "../parallelColors";
+import { resolveCssColor } from "../cssColor";
 import type { ExperimentRow } from "../../types";
 
 function row(i: number, metrics: Record<string, number | null>, params: Record<string, unknown> = {}): ExperimentRow {

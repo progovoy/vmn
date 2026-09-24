@@ -41,14 +41,25 @@ export function buildAxes(rows: ExperimentRow[], dims: string[], metricCols: str
   return dims.map((d) => buildAxis(rows, d, metricCols));
 }
 
+/** Category -> position lookups, built once per axis (not an O(n) indexOf per cell). */
+const indexCache = new WeakMap<string[], Map<string, number>>();
+function categoryIndex(categories: string[]): Map<string, number> {
+  let idx = indexCache.get(categories);
+  if (!idx) {
+    idx = new Map(categories.map((c, i) => [c, i]));
+    indexCache.set(categories, idx);
+  }
+  return idx;
+}
+
 export function axisT(axis: Axis, v: unknown): number | null {
   if (axis.kind === "num") {
     if (!isFiniteNumber(v)) return null;
     return axis.max === axis.min ? 0.5 : (v - axis.min) / (axis.max - axis.min);
   }
   if (isMissing(v)) return null;
-  const i = axis.categories.indexOf(String(v));
-  if (i < 0) return null;
+  const i = categoryIndex(axis.categories).get(String(v));
+  if (i === undefined) return null;
   return axis.categories.length === 1 ? 0.5 : i / (axis.categories.length - 1);
 }
 
@@ -57,9 +68,14 @@ export function buildMatrix(
   rows: ExperimentRow[], dims: string[], metricCols: string[], axes: Axis[],
 ): Float64Array {
   const m = new Float64Array(rows.length * dims.length);
-  rows.forEach((r, ri) => dims.forEach((d, di) => {
-    m[ri * dims.length + di] = axisT(axes[di], rawValue(r, d, metricCols)) ?? NaN;
-  }));
+  const metric = new Set(metricCols);
+  dims.forEach((d, di) => {
+    const isMetric = metric.has(d);
+    rows.forEach((r, ri) => {
+      const v = isMetric ? r.metrics[d] : paramValue(r, d);
+      m[ri * dims.length + di] = axisT(axes[di], v) ?? NaN;
+    });
+  });
   return m;
 }
 

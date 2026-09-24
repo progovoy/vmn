@@ -40,7 +40,10 @@ export function curveData(series: CurveSeries[]): uPlot.AlignedData {
   return [null, ...series.map((s) => [s.xs, s.ys])] as unknown as uPlot.AlignedData;
 }
 
-const X_TICK: Partial<Record<XMode, (v: number) => string>> = {
+/** Width of the y axis, left of the plot area (the tooltip offsets by it). */
+export const Y_AXIS_SIZE = 56;
+
+export const X_TICK: Partial<Record<XMode, (v: number) => string>> = {
   wall: fmtWallTick,
   relative: fmtRelTick,
 };
@@ -80,7 +83,7 @@ export function curveOptions(
         show: !hideX,
         ...(xTick ? { values: (_u: unknown, splits: number[]) => splits.map(xTick) } : {}),
       } as Partial<uPlot.Axis>, false),
-      axis({ size: 56 }),
+      axis({ size: Y_AXIS_SIZE }),
     ],
     series: [
       {},

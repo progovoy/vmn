@@ -5,7 +5,7 @@ import {
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
-import { clickedVerstr, useContainerWidth, useRunSelect } from "./chartHooks";
+import { useContainerWidth, useRunClick } from "./chartHooks";
 
 /** One bar per run stops being readable (and renderable) long before 50k runs. */
 export const MAX_BARS = 50;
@@ -19,7 +19,7 @@ function MetricBarChart({ rows, metricCols, schema, onSelect }: {
 }) {
   const [metric, setMetric] = useState(metricCols[0] ?? "");
   const [wrapRef, width] = useContainerWidth<HTMLDivElement>(480);
-  const select = useRunSelect(onSelect);
+  const onBarClick = useRunClick(onSelect);
 
   const goal = metricGoal(schema, metric);
 
@@ -75,10 +75,7 @@ function MetricBarChart({ rows, metricCols, schema, onSelect }: {
             isAnimationActive={false}
             radius={[0, 4, 4, 0]}
             cursor="pointer"
-            onClick={(entry: unknown) => {
-              const v = clickedVerstr(entry);
-              if (v) select(v);
-            }}
+            onClick={onBarClick}
           >
             {data.map((d, i) => (
               <Cell
