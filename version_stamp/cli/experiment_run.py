@@ -150,6 +150,7 @@ def _create_experiment(vcs, storage, args):
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
         parent=parent,
+        name=getattr(args, "run_name", None),
     )
     return app_name, verstr, err
 

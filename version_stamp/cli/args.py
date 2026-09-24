@@ -575,10 +575,38 @@ def _add_experiment_parser(subprasers, name):
             "restore",
             "export",
             "prune",
+            "tag",
+            "archive",
+            "unarchive",
         ],
         help="Experiment action (default: create)",
     )
     pexp.add_argument("name", help="The application's name")
+    pexp.add_argument(
+        "refs",
+        nargs="*",
+        default=None,
+        help="tag/archive/unarchive: run refs (verstr, prefix, @N, latest); "
+        "tag also takes key=value pairs",
+    )
+    pexp.add_argument(
+        "--name",
+        dest="run_name",
+        default=None,
+        help="create/run: a human-readable name for the run",
+    )
+    pexp.add_argument(
+        "--remove",
+        action="append",
+        default=None,
+        help="tag: remove this tag key (repeatable)",
+    )
+    pexp.add_argument(
+        "--archived",
+        action="store_true",
+        default=False,
+        help="list: include archived runs",
+    )
     pexp.add_argument(
         "-v",
         "--version",

@@ -9,6 +9,11 @@ from typing import List, Optional
 
 import yaml
 
+from version_stamp.cli.experiment_manage import (
+    MANAGE_ACTIONS,
+    experiment_manage,
+    refuse_stray_refs,
+)
 from version_stamp.cli.experiment_prune import experiment_prune as _experiment_prune
 
 # `vmn exp run` lives in its own module; these names stay importable from here.
@@ -45,6 +50,7 @@ from version_stamp.core.experiment_from_snapshot import (
 from version_stamp.core.experiment_log import (
     effective_params,
     entry_params,
+    filter_archived,
     latest_metrics,
     load_log,
     metric_series,
@@ -61,6 +67,7 @@ from version_stamp.core.experiment_tree import subtree_status
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
+    attach_name,
     attach_parent,
     compute_artifact_info,
     create_log_entry,
@@ -323,6 +330,10 @@ def handle_experiment(vmn_ctx):
 
     storage = _get_experiment_storage(vcs, params)
 
+    if action in MANAGE_ACTIONS:
+        return experiment_manage(_app_name(vcs, args), storage, args)
+    if refuse_stray_refs(args):
+        return 1
     if action == "create":
         return experiment_create(vcs, params, storage, args)
     elif action == "run":
@@ -376,6 +387,7 @@ def experiment_create(vcs, params, storage, args):
         from_snapshot=from_snapshot,
         extra_create_data=extra or None,
         parent=parent,
+        name=getattr(args, "run_name", None),
     )
     if err is not None:
         return err
@@ -393,7 +405,13 @@ def experiment_create(vcs, params, storage, args):
 
 
 def _experiment_create_core(
-    vcs, storage, note=None, from_snapshot=None, extra_create_data=None, parent=None
+    vcs,
+    storage,
+    note=None,
+    from_snapshot=None,
+    extra_create_data=None,
+    parent=None,
+    name=None,
 ):
     """Create the experiment record (snapshot + initial log entry).
 
@@ -409,6 +427,7 @@ def _experiment_create_core(
             note=note,
             extra_create_data=extra_create_data,
             parent=parent,
+            name=name,
         )
 
     (
@@ -437,6 +456,7 @@ def _experiment_create_core(
         )
         metadata["code_verstr"] = code_verstr
         _attach_parent(metadata, parent)
+        attach_name(metadata, name)
         return metadata, patches
 
     # Allocation creates the record (see _experiment_create_from_snapshot).
@@ -534,8 +554,10 @@ def _format_list_row(row, node, columns):
         if k in metrics
     )
     note_str = f" - {note}" if note else ""
+    name_str = f" '{meta['name']}'" if meta.get("name") else ""
+    archived_str = " [archived]" if meta.get("archived") else ""
     return (
-        f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}  "
+        f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}{name_str}{archived_str}  "
         f"{_status_token(node)}  ({_relative_timestamp(meta['timestamp'])})  "
         f"{metric_str}{note_str}"
     )
@@ -559,6 +581,7 @@ def experiment_list(vcs, params, storage, args):
     tree_rows = annotated_rows(index_rows, run_states)
     try:
         matching = filter_rows(tree_rows, getattr(args, "query", None))
+        matching = filter_archived(matching, getattr(args, "archived", False))
     except QueryError as e:
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
