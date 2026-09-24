@@ -213,3 +213,73 @@ def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None
     status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
     status.update(tree)
     return status
+
+
+FLEET_MAX_CHILDREN_DETAIL = 50
+
+
+def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None, read_child_row=None):
+    """Fleet status for an outer run: per-child status counts and progress.
+
+    Returns None when *verstr* has no children. *expected* is the declared
+    pod count (from the parent's ``expected_pods`` param); defaults to the
+    number of children. *read_child_row(verstr)* returns an indexed row
+    dict for a child (used for per-child progress), or None.
+    """
+    children = children_of.get(verstr, [])
+    if not children:
+        return None
+
+    child_details = []
+    counts = {}
+    for child in children:
+        state = read_state(child)
+        obs = observed_at(child) if observed_at else None
+        status = derive_status(state, observed_at=obs)
+        counts[status] = counts.get(status, 0) + 1
+
+        if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:
+            progress = None
+            progress_total = None
+            if read_child_row:
+                row = read_child_row(child)
+                if row:
+                    metrics = row.get("metrics") or {}
+                    params = row.get("params") or {}
+                    progress = (
+                        metrics.get("progress") if isinstance(metrics.get("progress"), (int, float)) else
+                        params.get("progress") if isinstance(params.get("progress"), (int, float)) else
+                        None
+                    )
+                    progress_total = (
+                        metrics.get("progress_total") if isinstance(metrics.get("progress_total"), (int, float)) else
+                        params.get("progress_total") if isinstance(params.get("progress_total"), (int, float)) else
+                        None
+                    )
+            child_details.append({
+                "verstr": child,
+                "status": status,
+                "progress": progress,
+                "progress_total": progress_total,
+            })
+
+    if expected is None:
+        expected = len(children)
+    else:
+        expected = max(expected, 0)
+
+    known = sum(counts.values())
+    waiting = max(0, expected - known)
+
+    return {
+        "expected": expected,
+        "counts": {
+            RUNNING: counts.get(RUNNING, 0),
+            SUCCEEDED: counts.get(SUCCEEDED, 0),
+            FAILED: counts.get(FAILED, 0),
+            STUCK: counts.get(STUCK, 0),
+            CREATED: counts.get(CREATED, 0),
+            "waiting": waiting,
+        },
+        "children": child_details,
+    }

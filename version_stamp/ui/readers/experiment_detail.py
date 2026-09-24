@@ -20,7 +20,7 @@ from version_stamp.core.experiment_status import (
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import children_by_parent, run_status
+from version_stamp.core.experiment_tree import children_by_parent, fleet_summary, run_status
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
@@ -35,6 +35,7 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "depth",
     "tree_status",
     "last_metric_at",
+    "fleet",
 )
 
 
@@ -66,6 +67,7 @@ def status_detail(
     edges,
     read_run_state=load_run_state,
     read_observed_at=run_state_observed_at,
+    read_child_row=None,
 ):
     """Status payload with the run's place in the tree.
 
@@ -80,17 +82,36 @@ def status_detail(
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
         parent_of = ChainMap({verstr: metadata.get("parent")}, edges_of)
+    children_of = _children_of(edges_of)
+    read_state_fn = lambda v: read_run_state(storage, app_name, v)
+    observed_at_fn = lambda v: read_observed_at(storage, app_name, v)
     detail = run_status(
         verstr,
         parent_of,
-        lambda v: read_run_state(storage, app_name, v),
-        observed_at=lambda v: read_observed_at(storage, app_name, v),
-        children_of=_children_of(edges_of),
+        read_state_fn,
+        observed_at=observed_at_fn,
+        children_of=children_of,
     )
     detail["parent"] = metadata.get("parent")
     detail["last_metric_at"] = (
         log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
     )
+
+    fleet = None
+    if detail.get("kind") == "outer":
+        expected = None
+        if isinstance(log, LogSnapshot):
+            ep = log.params.get("expected_pods")
+            if isinstance(ep, (int, float)):
+                expected = int(ep)
+        detail["fleet"] = fleet_summary(
+            verstr, children_of, read_state_fn,
+            observed_at=observed_at_fn, expected=expected,
+            read_child_row=read_child_row,
+        )
+    else:
+        detail["fleet"] = None
+
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
@@ -125,6 +146,7 @@ def experiment_detail(
     include_series=True,
     resolve=None,
     read_observed_at=run_state_observed_at,
+    read_child_row=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -163,6 +185,7 @@ def experiment_detail(
             edges or _placement_edges,
             read_run_state=read_run_state,
             read_observed_at=read_observed_at,
+            read_child_row=read_child_row,
         ),
         "patches": _patch_presence(storage, app_name, verstr, metadata),
     }, None
