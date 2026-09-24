@@ -72,9 +72,17 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     # -- logs -------------------------------------------------------------------
 
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        if not super().append_log_entry(app_name, verstr, writer_id, entry):
+            return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
     def append_log_entries(self, app_name, verstr, writer_id, entries):
         if not super().append_log_entries(app_name, verstr, writer_id, entries):
             return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
+    def _ship_if_due(self, app_name, verstr, writer_id):
         last = self._flushed_at.get((app_name, verstr, writer_id))
         if last is None or time.monotonic() - last >= self._flush_interval_sec:
             self.sync_log_to_remote(app_name, verstr, writer_id)
