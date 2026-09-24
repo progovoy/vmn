@@ -457,10 +457,14 @@ identical state starts a new `.rN` run instead of overwriting.
 vmn exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
 vmn exp create my_app -f params.yml --attach initial_weights.pt
 vmn exp create my_app --parent @2 --metrics acc=0.91
+vmn exp create my_app --name baseline-v1
 ```
 
 An experiment created with no run has status `created`. `--parent <ref>` attaches
 it as an [inner job](#outer--inner-jobs-sweeps) of another experiment.
+`--name <text>` (also on `run`) gives the run a human-readable name, stored as
+`name` in `metadata.yml`: `vmn exp list` shows it quoted after the verstr, rows
+carry it as `name`, and queries match it (`name ~ "baseline"`).
 
 ### `run`
 
@@ -510,7 +514,11 @@ vmn exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
 vmn exp list my_app --last 10              # most recent 10
 vmn exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
 vmn exp list my_app --json                 # machine-readable
+vmn exp list my_app --archived             # include archived runs
 ```
+
+[Archived](#archive--unarchive) runs are left out unless `--archived` is given;
+then they are marked `[archived]`.
 
 The `[N]` in front of each row is the run's storage index — the same number
 `-v @N` resolves — so it never changes with `--sort`, `--top`, `--last` or `--query`:
@@ -531,7 +539,8 @@ exits 1 with the offending offset.
 JSON array instead of the table — one object per run with the keys of an SDK
 [`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`, `code_verstr`,
 `timestamp`, `note`, `create_note`, `branch`, `base_version`, `user_meta`,
-`params`, `metrics`, `parent`, `last_metric_at`, the status fields (`status`,
+`params`, `metrics`, `parent`, `last_metric_at`, `name`, `tags`, `archived`,
+the status fields (`status`,
 `exit_code`, `started_at`, `finished_at`, `heartbeat`, `duration_sec`, `pid`,
 `host`, ...) and the tree fields (`children`, `kind`, `depth`, `tree_status`).
 Keys are sorted and non-finite metrics are `null`, so the output is strict JSON.
@@ -633,6 +642,42 @@ the local copies.
 | `--force` | Also delete runs that are still `running` |
 | `--local-only` | Keep the remote (S3) copies |
 
+Archived runs are pruned like any other finished run.
+
+### `tag`
+
+Set or remove tags on a run — mutable `key=value` labels, also on a finished
+run. The first positional without `=` (or `-v`/`--latest`) is the run; every
+`key=value` sets a tag (the value may contain `=`), and `--remove <key>`
+(repeatable) drops one.
+
+```sh
+vmn exp tag my_app @3 stage=prod owner=ann
+vmn exp tag my_app @3 --remove owner
+vmn exp tag my_app stage=candidate --latest
+```
+
+Each call appends a `tags` entry to the log; readers fold them per key, last
+write wins. Rows carry the result as `tags` and the query language reads
+`tags.<key>` (`vmn exp list my_app --query 'tags.stage = "prod"'`). Positionals
+go before the flags: argparse binds them before the first option.
+
+### `archive` / `unarchive`
+
+Hide runs from listings without deleting anything:
+
+```sh
+vmn exp archive my_app @1 @2 0.0.3-dev.abc1234.def5678
+vmn exp unarchive my_app @2
+```
+
+Archiving writes `archived: true` into the run's `metadata.yml` (atomically on
+disk, under the ETag on S3); unarchiving removes it. `vmn exp list` and the SDK's
+`list_runs` hide archived runs by default (`--archived` / `include_archived=True`
+shows them), as does the web UI unless asked with `archived=1`; the query language
+matches `archived = true`. From Python: `version_stamp.exp.manage.archive_run` /
+`unarchive_run` (see [sdk.md](sdk.md#changing-stored-runs-archive-unarchive-tags)).
+
 ---
 
 ## Structured notes & params
@@ -727,7 +772,12 @@ so you don't repeat them on every command; CLI flags override the config.
 - **Deduplicated patches**: runs of the same code (`….r2`, `….r3`, …) hard-link
   byte-identical patch files instead of storing a copy each.
 - **Artifacts** are uploaded to S3 streamed (multipart for large files) and are
-  listed and downloadable from S3-backed workspaces.
+  listed and downloadable from S3-backed workspaces. Names may be nested
+  relative paths (`artifacts/model/sub/c.txt` is listed as `model/sub/c.txt`);
+  absolute paths, `..`, `.`, empty components, backslashes and NUL are refused.
+- **Batched appends**: `append_log_entries` writes a batch of entries as one
+  write of whole lines (one PUT on S3); the SDK flushes its buffered log that
+  way, so readers never see a partial line.
 
 ---
 
