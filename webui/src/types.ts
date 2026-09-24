@@ -86,6 +86,19 @@ export interface ExperimentRow extends Partial<RunStatus> {
   /** The numeric fold: metrics plus any param that parses as a number.
    *  `null` is a non-finite value (NaN/inf) the server could not send. */
   metrics: Record<string, number | string | null>;
+  /** Human-readable run name; the verstr stands in when null/absent. */
+  name?: string | null;
+  tags?: Record<string, string>;
+  archived?: boolean;
+}
+
+/** Chosen columns over a whole filtered set (`/experiments-columns`):
+ *  `columns[key][i]` belongs to `verstrs[i]`. */
+export interface ExperimentColumns {
+  verstrs: string[];
+  idx: number[];
+  columns: Record<string, (number | string | boolean | null)[]>;
+  total: number;
 }
 
 /** Every branch / metric key / param key across an app's runs. */
@@ -129,6 +142,7 @@ export interface ExperimentDetail {
   metrics: Record<string, number | string | null>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
+  /** Names may be nested paths (`plots/loss.png`). */
   artifacts?: { name: string; size: number }[];
   status?: RunStatus;
 }

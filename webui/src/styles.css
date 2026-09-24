@@ -43,7 +43,46 @@
   --series-4: #008300;
   --series-5: var(--pre);
   --series-6: var(--major);
+
+  --scroll-thumb: #2f2f2b;
+  --focus-ring: var(--accent);
+  color-scheme: dark;
 }
+
+/* Light palette: the OS preference unless the toggle pins dark, or pinned
+   light by the toggle (useTheme sets html[data-theme]). Charts resolve these
+   variables at build time and rebuild on a theme change. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f6f2; --panel: #ffffff; --panel-2: #f1f0eb; --panel-3: #e8e7e1;
+    --line: #e0ded6; --line-2: #cbc9bf;
+    --text: #1b1b18; --text-2: #4b4a43; --text-3: #6f6e65;
+    --accent: #2563d6;
+    --good: #1c8560; --bad: #c43f42; --major: #c43f42; --minor: #2563d6;
+    --patch: #1c8560; --hotfix: #9c660b; --pre: #6a58d3;
+    --series-4: #007000;
+    --scroll-thumb: #cbc9bf;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f7f6f2; --panel: #ffffff; --panel-2: #f1f0eb; --panel-3: #e8e7e1;
+  --line: #e0ded6; --line-2: #cbc9bf;
+  --text: #1b1b18; --text-2: #4b4a43; --text-3: #6f6e65;
+  --accent: #2563d6;
+  --good: #1c8560; --bad: #c43f42; --major: #c43f42; --minor: #2563d6;
+  --patch: #1c8560; --hotfix: #9c660b; --pre: #6a58d3;
+  --series-4: #007000;
+  --scroll-thumb: #cbc9bf;
+  color-scheme: light;
+}
+
+/* Keyboard focus is always visible; pointer clicks don't draw a ring. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+tr[tabindex]:focus-visible { outline-offset: -2px; }
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
@@ -70,7 +109,7 @@ input, select, button, textarea { font-family: inherit; }
 .yaml-value { color: var(--text); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
-  background: #2f2f2b; border-radius: 6px; border: 2px solid var(--bg);
+  background: var(--scroll-thumb); border-radius: 6px; border: 2px solid var(--bg);
 }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -201,6 +240,10 @@ tr.flash { animation: flashbg 1.8s ease-out; }
 .search-pill .key {
   font-family: var(--mono); background: var(--panel-2);
   border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px;
+}
+.theme-toggle {
+  padding: 3px 9px; font-size: 13px; line-height: 1.2; color: var(--text-2);
+  background: none; border-color: var(--line-2);
 }
 .host-chip { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
 
@@ -625,3 +668,45 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 .exact-secs { color: var(--text-3); font-size: 11.5px; font-family: var(--mono); }
 .run-note { color: var(--text-2); margin: 0 0 20px; display: flex; gap: 10px; align-items: baseline; }
 .run-note input { flex: 1; }
+
+/* ---- saved views (components/SavedViews.tsx) ---- */
+.saved-views { position: relative; display: inline-block; }
+.saved-views-menu { min-width: 240px; }
+.saved-views-list { list-style: none; padding: 0; margin: 0 0 6px; }
+.saved-views-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.saved-views-item .link { text-align: left; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-views-del { padding: 0 6px; font-size: 13px; line-height: 18px; }
+.saved-views-empty { color: var(--text-3); font-size: 12px; padding: 4px 0; }
+.saved-views-save { display: flex; gap: 6px; }
+.saved-views-save input[type="text"] { margin-bottom: 0; flex: 1; }
+/* ---- end saved views ---- */
+/* ---- N-run compare table (pages/CompareRuns.tsx) ---- */
+.compare-runs table { width: max-content; min-width: 100%; }
+.compare-runs .compare-key { position: sticky; left: 0; background: var(--surface-1); min-width: 160px; }
+.compare-run-head { min-width: 140px; vertical-align: top; }
+.compare-run-title { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.compare-section th { text-transform: uppercase; font-size: 11px; color: var(--text-3); text-align: left; }
+.compare-runs tr.differs td.compare-key { font-weight: 600; }
+.compare-pairs { flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+/* ---- end N-run compare table ---- */
+/* ---- artifact tree + preview (Run page) ---- */
+.artifact-tree { list-style: none; padding: 0; margin: 0; }
+.artifact-tree .artifact-tree { padding-left: 16px; }
+.artifact-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.artifact-row a { color: var(--accent); }
+.artifact-actions { display: flex; gap: 12px; align-items: center; }
+.artifact-size { color: var(--text-3); font-size: 12px; }
+.artifact-folder { padding: 6px 0; color: var(--text-2); font-family: var(--mono); }
+.artifact-preview { padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
+.artifact-img { max-width: 100%; max-height: 480px; display: block; background: var(--panel-2); }
+.artifact-text {
+  max-height: 420px; overflow: auto; margin: 0; padding: 10px;
+  background: var(--panel-2); font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+}
+.artifact-table { max-height: 420px; overflow: auto; }
+.artifact-table td, .artifact-table th { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.artifact-note, .artifact-loading { color: var(--text-3); font-size: 12px; margin-top: 6px; }
+/* ---- end artifact tree + preview ---- */

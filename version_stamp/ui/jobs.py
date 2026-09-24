@@ -14,6 +14,8 @@ import threading
 import uuid
 from collections import OrderedDict
 
+from version_stamp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
+
 # Substrings a successful job's log can carry to mean "ran fine, but there
 # was nothing to do" - distinct from actually producing the thing the action
 # promised (e.g. `vmn snapshot create` on a clean tree exits 0 and does not
@@ -154,6 +156,12 @@ def build_command(action, app_name, body):
             "--note",
             note,
         ], None
+
+    if action == "exp_tag":
+        return exp_tag_command(app_name, body)
+
+    if action in ("exp_archive", "exp_unarchive"):
+        return exp_archive_command(action.split("_", 1)[1], app_name, body)
 
     return None, f"Unknown action '{action}'"
 

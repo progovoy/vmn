@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { chartTheme } from "../util/cssColor";
+import { useThemeVersion } from "../hooks/useTheme";
 import { Y_AXIS_SIZE } from "../util/curveOptions";
 import { nearestPoint, scatterGroups } from "../util/scatterData";
 import { DENSE_POINTS, scatterData, scatterOptions } from "../util/scatterOptions";
@@ -52,8 +53,9 @@ function MetricScatter({ rows, metricCols, paramCols, schema, onSelect }: Props)
   }, [rows, xCol, yCol, paramCols, yGoal]);
   const dense = groups.reduce((n, g) => n + g.xs.length, 0) > DENSE_POINTS;
   // Fresh rows (a poll) swap data in place; only the point-size tier rebuilds.
+  const themeVersion = useThemeVersion();
   const options = useMemo(
-    () => scatterOptions(COLORS, { height: HEIGHT, theme: chartTheme(), dense }), [dense],
+    () => scatterOptions(COLORS, { height: HEIGHT, theme: chartTheme(), dense }), [dense, themeVersion],
   );
   const data = useMemo(() => scatterData(groups), [groups]);
 

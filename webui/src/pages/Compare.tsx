@@ -75,6 +75,13 @@ export default function Compare() {
           value={result.to_verstr}
           onChange={(nt) => setParams({ v: result.from_verstr, to: nt })}
         />
+        <span className="spacer" />
+        <Link
+          to={`/ws/${ws}/app/${app}/compare-runs?sel=${encodeURIComponent(result.from_verstr)}` +
+            `&sel=${encodeURIComponent(result.to_verstr)}`}
+        >
+          compare as table →
+        </Link>
       </div>
 
       <div className="card">
