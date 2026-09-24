@@ -122,13 +122,27 @@ def flatten_logs(logs_by_writer):
     return entries
 
 
+def _current_umask():
+    """The process umask, read via the umask-swap idiom (there's no getter)."""
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
 def atomic_write(path, data):
-    """Write *data* so readers see the old file or the new one, never half."""
+    """Write *data* so readers see the old file or the new one, never half.
+
+    ``mkstemp`` always creates its temp file at mode 0600, unlike a plain
+    ``open()``. Chmod it to what ``open()`` would have produced under the
+    process umask before the rename, so files stay readable by teammates on
+    shared storage (e.g. an NFS-mounted experiment/snapshot dir).
+    """
     directory, name = os.path.split(path)
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data.encode("utf-8") if isinstance(data, str) else data)
+        os.chmod(tmp, 0o666 & ~_current_umask())
         os.replace(tmp, path)
     except BaseException:
         try:
