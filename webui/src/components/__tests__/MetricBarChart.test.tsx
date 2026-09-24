@@ -1,15 +1,7 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import MetricBarChart from "../MetricBarChart";
 import type { ExperimentRow, MetricsSchema } from "../../types";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 const ROWS: ExperimentRow[] = [
   { idx: 1, verstr: "1.0.0-dev.a", code_verstr: "1.0.0-dev.a", timestamp: null, note: "run 1", branch: "main", base_version: "1.0.0", user_meta: null, metrics: { loss: 0.5, acc: 0.8 } },

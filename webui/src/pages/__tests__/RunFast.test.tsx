@@ -1,15 +1,7 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 vi.mock("../../api", () => ({
   api: { experiment: vi.fn(), metricsSchema: vi.fn(), action: vi.fn(), job: vi.fn() },

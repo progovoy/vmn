@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("uplot", async () => await import("./fakeUPlot"));
@@ -6,14 +6,6 @@ vi.mock("uplot", async () => await import("./fakeUPlot"));
 import { enableCanvas, instances, resetInstances } from "./fakeUPlot";
 import MetricScatter from "../MetricScatter";
 import type { ExperimentRow, MetricsSchema } from "../../types";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 const originalMatchMedia = window.matchMedia;
 const originalGetContext = HTMLCanvasElement.prototype.getContext;

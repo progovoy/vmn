@@ -56,7 +56,7 @@ export default function Compare() {
       <Link className="back-link" to={`/ws/${ws}/app/${app}`}>
         ← experiments
       </Link>
-      <PageHead title="Compare runs" mono={false} />
+      <PageHead title="Code diff" mono={false} />
       <p className="page-sub">
         metric delta and the real source diff between two experiments
       </p>

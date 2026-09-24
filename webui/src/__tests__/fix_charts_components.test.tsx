@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("uplot", async () => await import("../components/__tests__/fakeUPlot"));
@@ -9,14 +9,6 @@ import MetricScatter from "../components/MetricScatter";
 import GroupedMetrics from "../components/GroupedMetrics";
 import ParallelCoordinates from "../components/ParallelCoordinates";
 import type { ExperimentRow } from "../types";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 function row(i: number, metrics: Record<string, number | null>, params: Record<string, unknown> = {}): ExperimentRow {
   return {

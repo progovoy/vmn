@@ -1,15 +1,7 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import GroupedMetrics from "../GroupedMetrics";
 import type { ExperimentRow, MetricsSchema } from "../../types";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 function row(
   idx: number,

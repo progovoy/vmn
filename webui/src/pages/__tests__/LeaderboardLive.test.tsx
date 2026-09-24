@@ -1,13 +1,5 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-
-beforeAll(() => {
-  globalThis.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
 
 vi.mock("../../api", () => ({
   api: {

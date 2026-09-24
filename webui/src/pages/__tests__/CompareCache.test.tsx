@@ -38,9 +38,9 @@ describe("Compare cache", () => {
   it("paints a revisited diff at once", async () => {
     const client = createQueryClient();
     const first = renderCompare(client);
-    await screen.findByText("Compare runs");
+    await screen.findByText("Code diff");
     first.unmount();
     renderCompare(client);
-    expect(screen.getByText("Compare runs")).toBeInTheDocument();
+    expect(screen.getByText("Code diff")).toBeInTheDocument();
   });
 });

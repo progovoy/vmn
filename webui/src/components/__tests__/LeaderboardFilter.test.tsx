@@ -14,56 +14,54 @@ describe("LeaderboardFilter", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it("renders search input and branch dropdown", () => {
-    render(<LeaderboardFilter rows={ROWS} onFilter={() => {}} />);
+    render(<LeaderboardFilter rows={ROWS} />);
     expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toBeInTheDocument();
   });
 
-  it("text search filters by note", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={ROWS} onFilter={onFilter} />);
-    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: "batch" } });
+  it("reports the debounced, trimmed search text", () => {
+    const onSearchChange = vi.fn();
+    render(<LeaderboardFilter rows={ROWS} onSearchChange={onSearchChange} />);
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: "  batch " } });
+    expect(onSearchChange).not.toHaveBeenCalledWith("batch");
     act(() => { vi.advanceTimersByTime(200); });
-    expect(onFilter).toHaveBeenCalled();
-    const filtered = onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].note).toBe("batch size 64");
+    expect(onSearchChange).toHaveBeenLastCalledWith("batch");
   });
 
-  it("text search filters by verstr", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={ROWS} onFilter={onFilter} />);
-    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: "bbb" } });
-    act(() => { vi.advanceTimersByTime(200); });
-    const filtered = onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].verstr).toContain("bbb");
-  });
-
-  it("branch dropdown filters by branch", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={ROWS} onFilter={onFilter} />);
+  it("reports the picked branch", () => {
+    const onBranchChange = vi.fn();
+    render(<LeaderboardFilter rows={ROWS} onBranchChange={onBranchChange} />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "feat/optim" } });
-    const filtered = onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].branch).toBe("feat/optim");
+    expect(onBranchChange).toHaveBeenLastCalledWith("feat/optim");
+    expect(screen.getByRole("combobox")).toHaveValue("feat/optim");
   });
 
   it("shows unique branches in dropdown", () => {
-    render(<LeaderboardFilter rows={ROWS} onFilter={() => {}} />);
+    render(<LeaderboardFilter rows={ROWS} />);
     const options = screen.getByRole("combobox").querySelectorAll("option");
     expect(options.length).toBe(3);
   });
 
   it("clear button resets all filters", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={ROWS} onFilter={onFilter} />);
+    const onSearchChange = vi.fn();
+    const onBranchChange = vi.fn();
+    render(
+      <LeaderboardFilter
+        rows={ROWS}
+        onSearchChange={onSearchChange}
+        onBranchChange={onBranchChange}
+      />
+    );
     fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: "batch" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "main" } });
     act(() => { vi.advanceTimersByTime(200); });
     fireEvent.click(screen.getByTitle(/clear/i));
     act(() => { vi.advanceTimersByTime(200); });
-    const lastCall = onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
-    expect(lastCall).toHaveLength(3);
+    expect(screen.getByPlaceholderText(/search/i)).toHaveValue("");
+    expect(screen.getByRole("combobox")).toHaveValue("");
+    expect(onSearchChange).toHaveBeenLastCalledWith("");
+    expect(onBranchChange).toHaveBeenLastCalledWith("");
+    expect(screen.queryByTitle(/clear/i)).toBeNull();
   });
 });
 
@@ -77,13 +75,10 @@ describe("LeaderboardFilter status toggles", () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  const last = (onFilter: ReturnType<typeof vi.fn>) =>
-    onFilter.mock.calls[onFilter.mock.calls.length - 1][0] as ExperimentRow[];
-
   const ALL_STATUSES = ["running", "stuck", "failed", "succeeded", "created"];
 
   it("offers every status regardless of what the rows carry", () => {
-    render(<LeaderboardFilter rows={ROWS} onFilter={() => {}} />);
+    render(<LeaderboardFilter rows={ROWS} />);
     ALL_STATUSES.forEach((s) =>
       expect(screen.getByRole("button", { name: s })).toBeInTheDocument()
     );
@@ -93,11 +88,11 @@ describe("LeaderboardFilter status toggles", () => {
     // The list endpoint answers a ?status= filter, so the rows coming back
     // only carry the picked status — the toggles must not shrink with them.
     const { rerender } = render(
-      <LeaderboardFilter rows={STATUS_ROWS} onFilter={() => {}} />
+      <LeaderboardFilter rows={STATUS_ROWS} />
     );
     fireEvent.click(screen.getByRole("button", { name: "running" }));
     rerender(
-      <LeaderboardFilter rows={[STATUS_ROWS[0]]} onFilter={() => {}} />
+      <LeaderboardFilter rows={[STATUS_ROWS[0]]} />
     );
     ALL_STATUSES.forEach((s) =>
       expect(screen.getByRole("button", { name: s })).toBeInTheDocument()
@@ -106,19 +101,12 @@ describe("LeaderboardFilter status toggles", () => {
       .toHaveAttribute("aria-pressed", "false");
   });
 
-  it("leaves row filtering to the server", () => {
-    const onFilter = vi.fn();
-    render(<LeaderboardFilter rows={STATUS_ROWS} onFilter={onFilter} />);
-    fireEvent.click(screen.getByRole("button", { name: "running" }));
-    expect(last(onFilter)).toHaveLength(3);
-  });
-
   it("marks a picked status as pressed and reports the CSV in display order", () => {
     const onStatusChange = vi.fn();
     render(
       <LeaderboardFilter
         rows={STATUS_ROWS}
-        onFilter={() => {}}
+       
         onStatusChange={onStatusChange}
       />
     );
@@ -134,7 +122,7 @@ describe("LeaderboardFilter status toggles", () => {
     render(
       <LeaderboardFilter
         rows={STATUS_ROWS}
-        onFilter={() => {}}
+       
         onStatusChange={onStatusChange}
       />
     );
@@ -148,7 +136,7 @@ describe("LeaderboardFilter status toggles", () => {
     render(
       <LeaderboardFilter
         rows={STATUS_ROWS}
-        onFilter={() => {}}
+       
         onStatusChange={onStatusChange}
       />
     );

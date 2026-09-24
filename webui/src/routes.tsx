@@ -33,7 +33,7 @@ export const routes: RouteObject[] = [
       { path: "ws/:ws", element: <AppsPage />, handle: { page: "apps" } },
       { path: "ws/:ws/app/:app", element: <Leaderboard />, handle: { page: "experiments" } },
       { path: "ws/:ws/app/:app/run/:verstr", element: page(Run), handle: { page: "run" } },
-      { path: "ws/:ws/app/:app/compare", element: page(Compare), handle: { page: "compare" } },
+      { path: "ws/:ws/app/:app/compare", element: page(Compare), handle: { page: "code diff" } },
       { path: "ws/:ws/app/:app/compare-runs", element: page(CompareRuns), handle: { page: "compare runs" } },
       { path: "ws/:ws/app/:app/overlay", element: page(Overlay), handle: { page: "overlay" } },
       { path: "ws/:ws/app/:app/snapshots", element: page(Snapshots), handle: { page: "snapshots" } },

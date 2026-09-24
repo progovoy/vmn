@@ -49,7 +49,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Route context comes from the router itself (see handle.page in main.tsx).
+  // Route context comes from the router itself (see handle.page in routes.tsx).
   const matches = useMatches();
   const deepest = matches[matches.length - 1];
   const { ws, app: appTag } = (deepest?.params ?? {}) as {
