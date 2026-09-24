@@ -1,5 +1,7 @@
 """Direct-to-S3 experiments (a bucket, no local dir) buffer the log locally and
 ship new lines as segments: an append never reads and rewrites the log."""
+import functools
+
 import pytest
 import yaml
 from s3_helpers import entry, meta, mocked_bucket, raw_keys, record_calls, s3_storage
@@ -7,6 +9,9 @@ from s3_helpers import entry, meta, mocked_bucket, raw_keys, record_calls, s3_st
 from version_stamp.cli import snapshot_storage_buffered
 from version_stamp.cli.experiment import _get_experiment_storage
 from version_stamp.core.experiment_logfiles import compacted_log_name
+from version_stamp.core.experiment_writer import append_entries_to_log
+from version_stamp.exp import log_buffer
+from version_stamp.exp.log_buffer import LogBuffer
 
 V = "v"
 PARAMS = {"bucket": "vmn-bucket", "prefix": "exps"}
@@ -121,6 +126,37 @@ def test_a_storage_with_nothing_pending_is_not_kept_alive():
     del pod
     gc.collect()
     assert ref() is None
+
+
+def test_a_failed_ship_does_not_duplicate_log_lines(monkeypatch):
+    """The store durably appends locally, then ships. A shipping failure (a
+    network blip) must not be treated as a failed write: the SDK's LogBuffer
+    retries a failed write by resubmitting the whole batch, and resubmitting
+    entries that were already durably written would write them twice."""
+    monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
+    pod = _pod()
+    real_ship = pod._ship
+    state = {"failed": False}
+
+    def flaky_ship(app_name, verstr, writer_id, seq, chunk):
+        if not state["failed"]:
+            state["failed"] = True
+            raise RuntimeError("network blip")
+        return real_ship(app_name, verstr, writer_id, seq, chunk)
+
+    monkeypatch.setattr(pod, "_ship", flaky_ship)
+
+    buf = LogBuffer(functools.partial(append_entries_to_log, pod, "app", V))
+    for i in range(3):
+        buf.append(entry(i))
+
+    buf.flush()  # the local write succeeds; shipping fails but must not raise
+    local_steps = [e["values"]["i"] for e in pod._local.load_merged_log("app", V)]
+
+    pod.close()  # the storage's own retry mechanism ships what is still buffered
+
+    assert local_steps == [0, 1, 2]
+    assert _values() == [0, 1, 2]
 
 
 def test_pending_lines_are_shipped_at_exit_even_if_the_storage_was_dropped():

@@ -170,6 +170,32 @@ def test_buffered_entries_survive_sigterm(storage, tmp_path):
     assert _logged_steps(storage) == list(range(25))
 
 
+class _AlwaysFailingStorage(CachedSnapshotStorage):
+    """A store whose log writes always fail, like a disk that stays full."""
+
+    def __init__(self, root):
+        super().__init__(LocalSnapshotStorage(root, subdir="experiments"))
+        self.attempts = 0
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        self.attempts += 1
+        raise OSError("disk full")
+
+
+def test_log_metric_never_raises_when_the_store_keeps_failing(tmp_path):
+    storage = _AlwaysFailingStorage(str(tmp_path))
+    storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    run = _open_run(storage, heartbeat=3600)
+
+    # Past MAX_PENDING_ENTRIES, append() used to flush synchronously on this
+    # (the caller's) thread and let the store's failure raise into it.
+    for step in range(log_buffer.MAX_PENDING_ENTRIES + 50):
+        run.log_metric("loss", 1.0, step=step)
+
+    run.finish()  # must not raise either
+    assert storage.attempts > 0
+
+
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork")
 def test_a_forked_child_writes_straight_through(storage, monkeypatch):
     monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
