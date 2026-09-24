@@ -1,14 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api, appTag } from "../api";
 import type { AppRow, ExperimentRow, Workspace } from "../types";
-import { relTime } from "../util";
+import { relTime, runHref } from "../util";
+import { useDebounce } from "../hooks/useDebounce";
+import { useAppQueryClient } from "../queryClient";
+import { runSearchQuery } from "../util/searchQuery";
 
 interface Item {
   kind: "page" | "action" | "run" | "app" | "workspace";
   label: string;
   hint?: string;
   to: string;
+}
+
+const RUNS = 20;
+/** The newest runs stay fresh this long, so reopening ⌘K costs no request. */
+const RECENT_STALE_MS = 30_000;
+
+/** The runs the palette offers: the newest until something is typed, then a
+ *  server search over every run — never just a filter of the newest 20. */
+function usePaletteRuns(ws: string | undefined, app: string | undefined, needle: string) {
+  const client = useAppQueryClient();
+  const scoped = Boolean(ws && app);
+  const recent = useQuery<ExperimentRow[]>({
+    queryKey: ["recent-runs", ws, app],
+    queryFn: () => api.recentExperiments(ws!, app!, RUNS),
+    enabled: scoped,
+    staleTime: RECENT_STALE_MS,
+  }, client);
+  const typed = useDebounce(needle, 250);
+  const search = useQuery<ExperimentRow[]>({
+    queryKey: ["run-search", ws, app, typed],
+    queryFn: () =>
+      api.experimentsPaged(ws!, app!, { query: runSearchQuery(typed), limit: RUNS }).then((p) => p.rows),
+    enabled: scoped && Boolean(typed),
+    staleTime: RECENT_STALE_MS,
+    placeholderData: keepPreviousData,
+  }, client);
+  if (needle && typed && search.data) return { runs: search.data, searched: true };
+  return { runs: recent.data ?? [], searched: false };
 }
 
 const PAGES: [string, string][] = [
@@ -27,18 +59,13 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
 }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
-  const [runs, setRuns] = useState<ExperimentRow[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => inputRef.current?.focus(), []);
 
-  useEffect(() => {
-    if (!ws || !app) return;
-    // The newest 20 by storage order — not a slice of the leaderboard, whose
-    // default order is the primary metric (its tail is the *worst* runs).
-    api.recentExperiments(ws, app, 20).then(setRuns).catch(() => setRuns([]));
-  }, [ws, app]);
+  const needle = q.trim().toLowerCase();
+  const { runs, searched } = usePaletteRuns(ws, app, q.trim());
 
   const items = useMemo<Item[]>(() => {
     const base = ws && app ? `/ws/${ws}/app/${appTag(app)}` : null;
@@ -57,7 +84,7 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
         kind: "run",
         label: r.verstr,
         hint: r.note || relTime(r.timestamp),
-        to: `${base}/run/${encodeURIComponent(r.verstr)}`,
+        to: runHref(base, r.verstr),
       })
     );
     if (ws) {
@@ -78,13 +105,14 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
     return out;
   }, [ws, app, apps, workspaces, runs]);
 
+  // Server search results already matched; everything else filters here.
   const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((i) =>
+      (searched && i.kind === "run") ||
       `${i.kind} ${i.label} ${i.hint ?? ""}`.toLowerCase().includes(needle)
     );
-  }, [items, q]);
+  }, [items, needle, searched]);
 
   useEffect(() => setActive(0), [q]);
 

@@ -88,6 +88,14 @@ export interface ExperimentRow extends Partial<RunStatus> {
   metrics: Record<string, number | string | null>;
 }
 
+/** Every branch / metric key / param key across an app's runs. */
+export interface ExperimentFacets {
+  branches: string[];
+  metric_keys: string[];
+  param_keys: string[];
+  total: number;
+}
+
 /** A page of leaderboard rows, with the server's count of every match. */
 export type ExperimentPage = ExperimentRow[] & { total: number };
 

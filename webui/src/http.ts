@@ -4,6 +4,9 @@ import { currentSignal } from "./requestScope";
 
 export const BASE = "/api/v1";
 
+/** What `get` throws: the message plus the HTTP status. */
+export type HttpError = Error & { status?: number };
+
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = sessionStorage.getItem("vmn_token");
   const headers: Record<string, string> = { ...extra };

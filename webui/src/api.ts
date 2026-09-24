@@ -1,6 +1,7 @@
 import type {
-  AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentPage,
-  ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow, Workspace,
+  AppConfig, AppRow, Changelog, DiffResult, ExperimentDetail, ExperimentFacets,
+  ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow,
+  Workspace,
 } from "./types";
 import { authHeaders, BASE, get } from "./http";
 import { PAGE_SIZE } from "./paging";
@@ -63,6 +64,9 @@ export const api = {
     get<MetricsSchema>(
       `/workspaces/${ws}/apps/${appTag(app)}/metrics-schema`
     ),
+  /** App-wide filter vocabulary: every branch, metric and param key. */
+  facets: (ws: string, app: string) =>
+    get<ExperimentFacets>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-facets`),
   addWorkspace: (name: string, opts: { remote?: string; path?: string }) =>
     post<Workspace>("/workspaces", { name, ...opts }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),

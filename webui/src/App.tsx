@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link, NavLink, Outlet, useLocation, useMatches, useNavigate,
 } from "react-router-dom";
-import { api, appName as toAppName } from "./api";
-import type { AppRow, Workspace } from "./types";
+import { appName as toAppName } from "./api";
+import { useAppQueryClient } from "./queryClient";
+import { useApps, useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { CopyPath, wsLocation } from "./components/ui";
@@ -43,9 +44,6 @@ function NavIcon({ name }: { name: string }) {
 }
 
 export default function App() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [apps, setApps] = useState<AppRow[]>([]);
-  const [vmnVersion, setVmnVersion] = useState("");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,22 +57,19 @@ export default function App() {
   const pageLabel = (deepest?.handle as { page?: string } | undefined)?.page;
   const appName = appTag ? toAppName(appTag) : undefined;
   const appBase = ws && appTag ? `/ws/${ws}/app/${appTag}` : null;
+  const workspaces = useWorkspaces().data ?? [];
+  const apps = useApps(ws).data ?? [];
+  const vmnVersion = useMeta().data?.version ?? "";
   const currentWs = workspaces.find((w) => w.name === ws);
 
-  // Refetch on entering/leaving home — the add-workspace form lives there.
+  // Revalidate on entering/leaving home — the add-workspace form lives there.
+  const client = useAppQueryClient();
   const atHome = location.pathname === "/";
+  const firstVisit = useRef(true);
   useEffect(() => {
-    api.workspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
-  }, [atHome]);
-
-  useEffect(() => {
-    api.meta().then((m) => setVmnVersion(m.version)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!ws) return setApps([]);
-    api.apps(ws).then(setApps).catch(() => setApps([]));
-  }, [ws]);
+    if (firstVisit.current) { firstVisit.current = false; return; }
+    client.invalidateQueries({ queryKey: WORKSPACES_KEY });
+  }, [atHome, client]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -185,9 +180,10 @@ export default function App() {
         </header>
 
         <div className="content">
-          <div className="content-inner" key={location.pathname}>
-            {/* Keyed with the route above, so navigating away resets it. */}
-            <ErrorBoundary>
+          <div className="content-inner">
+            {/* Pages stay mounted across param changes (their caches paint
+                at once); only a render error is reset by navigating. */}
+            <ErrorBoundary resetKey={location.pathname}>
               <Outlet />
             </ErrorBoundary>
           </div>

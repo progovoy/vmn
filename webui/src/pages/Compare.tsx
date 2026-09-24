@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { api, appName as toAppName } from "../api";
-import type { DiffResult, MetricsSchema } from "../types";
+import { useAppQueryClient } from "../queryClient";
+import { useMetricsSchema } from "../queries";
+import type { DiffResult } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import RunPicker from "../components/RunPicker";
@@ -35,22 +37,16 @@ export default function Compare() {
   const [params, setParams] = useSearchParams();
   const v = params.get("v") ?? "@1";
   const to = params.get("to") ?? "latest";
-  const [result, setResult] = useState<DiffResult | null>(null);
-  const [schema, setSchema] = useState<MetricsSchema | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const client = useAppQueryClient();
+  // Cached per pair: a revisit paints at once and revalidates behind it.
+  const diff = useQuery<DiffResult>({
+    queryKey: ["experiments-diff", ws, app, v, to],
+    queryFn: () => api.experimentsDiff(ws, app, v, to),
+  }, client);
+  const schema = useMetricsSchema(ws, app);
+  const result = diff.data ?? null;
 
-  useEffect(() => {
-    setError(null);
-    api.experimentsDiff(ws, app, v, to)
-      .then(setResult)
-      .catch((e) => setError(String(e)));
-  }, [ws, app, v, to]);
-
-  useEffect(() => {
-    api.metricsSchema(ws, app).then(setSchema).catch(() => setSchema({}));
-  }, [ws, app]);
-
-  if (error) return <div className="error">{error}</div>;
+  if (diff.error) return <div className="error">{String(diff.error)}</div>;
   if (!result) return <Skeleton />;
 
   const delta = Object.entries(result.metrics_delta);
