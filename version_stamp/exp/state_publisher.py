@@ -13,8 +13,8 @@ import functools
 import yaml
 
 from version_stamp.cli.snapshot import CachedSnapshotStorage
+from version_stamp.core.background import Coalescing
 from version_stamp.core.experiment_status import RUN_STATE_FILE
-from version_stamp.exp.background import Coalescing
 
 
 def split_storage(storage):

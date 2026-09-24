@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One background worker that only ever does the newest pending job.
 
-The SDK's slow remote writes — the run state's remote copy, the log sync — must
-never run on the heartbeat thread: a hung S3 PUT there is a heartbeat that did
+Slow remote writes — the SDK's run-state copy and log sync, ``vmn exp run``'s
+log sync — must never run on the heartbeat thread: a hung S3 PUT there is a heartbeat that did
 not happen. Both are "catch the remote up" jobs, where a job overtaken by a
 newer one is not worth doing, so pending jobs coalesce into the newest and run
 one at a time, in order.

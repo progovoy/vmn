@@ -21,6 +21,7 @@ import sys
 import time
 
 from version_stamp.core import logging as vmn_logging
+from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_values import sanitize_entry
@@ -40,7 +41,6 @@ from version_stamp.exp import (
     signals,
     sysmetrics,
 )
-from version_stamp.exp.background import Coalescing
 from version_stamp.exp.context import (  # noqa: F401  (re-exported API)
     _OPEN_RUNS,
     EXPERIMENT_ID_ENV,
