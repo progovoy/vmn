@@ -79,14 +79,10 @@ export default function Run() {
     <>
       <Link className="back-link" to={`/ws/${ws}/app/${app}`}>← experiments</Link>
       <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
-        {summary.name ? (
-          <>
-            <h1 style={{ fontSize: 20 }}>{summary.name}</h1>
-            <span className="mono run-verstr">{summary.verstr}</span>
-          </>
-        ) : (
-          <h1 className="mono" style={{ fontSize: 20 }}>{summary.verstr}</h1>
-        )}
+        <h1 className={summary.name ? undefined : "mono"} style={{ fontSize: 20 }}>
+          {summary.name || summary.verstr}
+        </h1>
+        {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
         {summary.branch && <span className="badge">{summary.branch}</span>}
         <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
       </div>

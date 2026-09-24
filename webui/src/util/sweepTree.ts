@@ -15,6 +15,13 @@ export function isCollapsed(
   return collapsedByDefault(r) && !expanded.has(r.verstr);
 }
 
+/** Whether an outer run is shut; null for a run without inner runs. */
+export function foldState(
+  r: ExperimentRow, expanded: ReadonlySet<string>, collapsed: ReadonlySet<string>,
+): boolean | null {
+  return r.children?.length ? isCollapsed(r, expanded, collapsed) : null;
+}
+
 /** *rows* minus every run with a collapsed ancestor among the loaded rows. */
 export function visibleRows(
   rows: ExperimentRow[], expanded: ReadonlySet<string>, collapsed: ReadonlySet<string>,

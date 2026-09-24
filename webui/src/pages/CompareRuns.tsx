@@ -3,10 +3,10 @@ import { useQueries } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { useAppQueryClient } from "../queryClient";
 import { runQuery, useMetricsSchema } from "../queries";
-import { useUrlState } from "../hooks/useUrlState";
+import { setAllParams, useUrlState } from "../hooks/useUrlState";
 import { PageHead } from "../components/ui";
 import CompareRunsTable from "./CompareRunsTable";
-import { MAX_COMPARE_RUNS, parseSelection, runLabel, withoutRun } from "./compareRunsData";
+import { MAX_COMPARE_RUNS, parseSelection, runLabel } from "./compareRunsData";
 import type { ExperimentDetail } from "../types";
 
 const diffHref = (base: string, v: string, to: string) =>
@@ -41,11 +41,7 @@ export default function CompareRuns() {
   const failed = results.flatMap((r, i) => (r.error ? [verstrs[i]] : []));
 
   const onRemove = (verstr: string) =>
-    update((p) => {
-      const kept = withoutRun(p, verstr).getAll("sel");
-      p.delete("sel");
-      kept.forEach((v) => p.append("sel", v));
-    });
+    update((p) => setAllParams(p, "sel", p.getAll("sel").filter((v) => v !== verstr)));
 
   return (
     <>

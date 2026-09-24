@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
+import { tagLabel } from "../util/tags";
 import type { ColMeta } from "./leaderboardColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
@@ -91,7 +92,7 @@ export function TagChips({ tags }: { tags: Record<string, string> | undefined })
   return (
     <>
       {Object.entries(tags).map(([k, v]) => (
-        <span key={k} className="tag-chip" title={`tags.${k} = ${v}`}>{v ? `${k}: ${v}` : k}</span>
+        <span key={k} className="tag-chip" title={`tags.${k} = ${v}`}>{tagLabel(k, v)}</span>
       ))}
     </>
   );

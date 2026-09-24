@@ -23,7 +23,8 @@ export function useChartRows(
     // `total` rides along so a new run on a poll refreshes the chart.
     queryKey: ["experiments-columns", ws, app, filter, keys, total],
     queryFn: () => api.experimentsColumns(ws, app, keys, { ...filter, limit: CHART_ROW_LIMIT }),
-    enabled: keys.length > 0,
+    // With every run already loaded there is nothing more to fetch.
+    enabled: keys.length > 0 && loaded.length < total,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   }, client);

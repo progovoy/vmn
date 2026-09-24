@@ -51,7 +51,7 @@ export function useLeaderboardColumns(
     [rows, visibleMetrics, schema, primary],
   ));
   const showBest = list.length > 1;
-  const hasTags = anyTags(rows);
+  const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && !hidden.has(TAGS_COLUMN);
 
   const layout = useMemo((): RowLayout => {

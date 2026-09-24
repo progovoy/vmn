@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "../api";
 import type { RowsFilter } from "../queries";
 import type { ExperimentRow } from "../types";
@@ -22,9 +22,14 @@ export function useBoardSelection(
   sel: Selection, onArchived: () => void,
 ) {
   const anchor = useRef<string | null>(null);
+  // Read at click time, so `toggle` keeps one identity and memoized rows
+  // are not re-rendered by it.
+  const latest = useRef({ rows, sel });
+  latest.current = { rows, sel };
   const [archiveError, setArchiveError] = useState<string | null>(null);
 
-  const toggle = (verstr: string, range: boolean) => {
+  const toggle = useCallback((verstr: string, range: boolean) => {
+    const { rows, sel } = latest.current;
     const from = anchor.current ? rows.findIndex((r) => r.verstr === anchor.current) : -1;
     const to = rows.findIndex((r) => r.verstr === verstr);
     anchor.current = verstr;
@@ -35,14 +40,14 @@ export function useBoardSelection(
     const [lo, hi] = from < to ? [from, to] : [to, from];
     const span = rows.slice(lo, hi + 1).map((r) => r.verstr);
     sel.setSelected([...new Set([...sel.selected, ...span])]);
-  };
+  }, []);
 
   /** Every run the filter matches (up to the cap); the loaded rows on a
    *  server without the columns endpoint. */
   const selectAll = async () => {
     try {
       const cols = await api.experimentsColumns(ws, app, [], { ...filter, limit: SELECT_ALL_CAP });
-      sel.setSelected(cols.verstrs.slice(0, SELECT_ALL_CAP));
+      sel.setSelected(cols.verstrs);
     } catch {
       sel.setSelected(rows.slice(0, SELECT_ALL_CAP).map((r) => r.verstr));
     }

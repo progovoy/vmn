@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useUrlState } from "./useUrlState";
+import { setAllParams, useUrlState } from "./useUrlState";
 
 export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
@@ -48,19 +48,14 @@ export function useLeaderboardView() {
     (name: string, value: string) =>
       update((p) => {
         const cur = p.getAll(name);
-        p.delete(name);
-        const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
-        next.forEach((v) => p.append(name, v));
+        setAllParams(p, name, cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]);
       }),
     [update],
   );
 
   const setAll = useCallback(
     (name: string, values: readonly string[]) =>
-      update((p) => {
-        p.delete(name);
-        values.forEach((v) => p.append(name, v));
-      }),
+      update((p) => setAllParams(p, name, values)),
     [update],
   );
 
@@ -69,11 +64,7 @@ export function useLeaderboardView() {
   const toggleCollapsed = useCallback(
     (verstr: string, collapsedByDefault: boolean) =>
       update((p) => {
-        const drop = (name: string) => {
-          const rest = p.getAll(name).filter((v) => v !== verstr);
-          p.delete(name);
-          rest.forEach((v) => p.append(name, v));
-        };
+        const drop = (name: string) => setAllParams(p, name, p.getAll(name).filter((v) => v !== verstr));
         const shut = p.getAll("collapse").includes(verstr) ||
           (collapsedByDefault && !p.getAll("expand").includes(verstr));
         drop("collapse");

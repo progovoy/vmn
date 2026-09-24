@@ -2,9 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
-
-/** Most runs the compare table takes side by side. */
-const MAX_COMPARE = 50;
+import { MAX_COMPARE_RUNS } from "./compareRunsData";
 
 const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 const selParams = (verstrs: string[]) => verstrs.map((v) => `sel=${encodeURIComponent(v)}`).join("&");
@@ -51,7 +49,7 @@ export default function LeaderboardSelectionBar({
           Compare 2 selected →
         </button>
       )}
-      {n >= 2 && n <= MAX_COMPARE && (
+      {n >= 2 && n <= MAX_COMPARE_RUNS && (
         <button onClick={() => go(`compare-runs?${selParams(selected)}`)}>
           Compare {n} in a table →
         </button>

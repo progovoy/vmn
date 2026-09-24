@@ -1,6 +1,12 @@
 import { useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 
+/** Replace every value of the repeated param *name* in *p*. */
+export function setAllParams(p: URLSearchParams, name: string, values: readonly string[]) {
+  p.delete(name);
+  values.forEach((v) => p.append(name, v));
+}
+
 /** View state kept in the query string, so a view is shareable and Back
  *  restores it. Every update *merges* into the current params (replacing the
  *  history entry), several updates in one tick compose, and an update that

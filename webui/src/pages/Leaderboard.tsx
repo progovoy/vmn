@@ -15,7 +15,7 @@ import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useChartRows } from "../hooks/useChartRows";
 import { useBoardSelection } from "../hooks/useBoardSelection";
-import { collapsedByDefault, isCollapsed, visibleRows } from "../util/sweepTree";
+import { collapsedByDefault, foldState, visibleRows } from "../util/sweepTree";
 import LeaderboardCharts from "./LeaderboardCharts";
 import LeaderboardTable, { TIMESTAMP_SORT } from "./LeaderboardTable";
 import LeaderboardToolbar from "./LeaderboardToolbar";
@@ -94,7 +94,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     return visibleRows(brushedRows, expanded, collapsed);
   }, [rows, brushed, view.chart, expanded, collapsed]);
   const collapsedOf = useCallback(
-    (r: ExperimentRow) => (r.children?.length ? isCollapsed(r, expanded, collapsed) : null),
+    (r: ExperimentRow) => foldState(r, expanded, collapsed),
     [expanded, collapsed],
   );
   const { toggleCollapsed } = view;

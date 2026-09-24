@@ -19,6 +19,9 @@ export function parseTag(text: string): { key: string; value: string } | null {
   return { key, value };
 }
 
+/** How a tag reads on a chip: `key: value`, or just the key. */
+export const tagLabel = (key: string, value: string) => (value ? `${key}: ${value}` : key);
+
 export function applyTagEdit(tags: Tags | undefined, set: Tags, remove: string[]): Tags {
   const next: Tags = { ...(tags ?? {}), ...set };
   remove.forEach((k) => delete next[k]);

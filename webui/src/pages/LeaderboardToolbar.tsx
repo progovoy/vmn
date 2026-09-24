@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import LiveToggle from "../components/LiveToggle";
 import SavedViews from "../components/SavedViews";
-import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
+import { TAGS_COLUMN, type useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { useBoardSelection } from "../hooks/useBoardSelection";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
@@ -53,7 +53,7 @@ export default function LeaderboardToolbar({
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
         onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
-        onToggleOther={(c) => view.toggleHidden(`c:${c}`)}
+        onToggleOther={() => view.toggleHidden(TAGS_COLUMN)}
       />
     </div>
   );

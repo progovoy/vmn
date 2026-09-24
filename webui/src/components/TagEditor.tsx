@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppQueryClient } from "../queryClient";
 import { rowsPrefix, runKey, type RowsData } from "../queries";
 import type { ExperimentDetail } from "../types";
-import { applyTagEdit, parseTag, type Tags } from "../util/tags";
+import { applyTagEdit, parseTag, tagLabel, type Tags } from "../util/tags";
 import { useJob } from "./ui";
 
 interface Edit { set: Tags; remove: string[] }
@@ -67,7 +67,7 @@ export default function TagEditor({ ws, app, verstr, tags }: {
     <div className="tag-editor">
       {Object.entries(shown).map(([k, v]) => (
         <span key={k} className="tag-chip">
-          {v ? `${k}: ${v}` : k}
+          {tagLabel(k, v)}
           <button
             className="tag-remove" aria-label={`Remove tag ${k}`} disabled={busy}
             onClick={() => submit({ set: {}, remove: [k] })}
