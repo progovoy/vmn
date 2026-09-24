@@ -656,6 +656,17 @@ def _add_experiment_parser(subprasers, name):
         help="show: print every log entry (default: the last 50)",
     )
     pexp.add_argument(
+        "--query",
+        default=None,
+        help='list: keep runs matching a query (e.g. \'metrics.loss < 0.5\')',
+    )
+    pexp.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="list/show: print machine-readable JSON",
+    )
+    pexp.add_argument(
         "--from-snapshot",
         default=None,
         help="Path to vmn_metadata.yml or directory containing it. "

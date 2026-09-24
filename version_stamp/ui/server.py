@@ -216,7 +216,7 @@ def create_app(
         app_name = _app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
         snapshot = source.list_snapshot(ws, app_name, s3_storage)
-        schema = {} if s3_storage else exp_reader.metrics_schema(ws.path, app_name)
+        schema = {} if s3_storage else source.metrics_schema(ws, app_name)
         return snapshot, schema
 
     def _detail_options(ws, app_name):
@@ -320,7 +320,7 @@ def create_app(
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
             return {}  # No app conf available for S3 workspaces
-        return exp_reader.metrics_schema(ws.path, _app_name(app_tag))
+        return source.metrics_schema(ws, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):

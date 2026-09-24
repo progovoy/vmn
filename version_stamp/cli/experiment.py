@@ -24,13 +24,20 @@ from version_stamp.cli.snapshot import (
     _diff_real_tree,
     _diff_with_external_tool,
     _relative_timestamp,
-    _resolve_verstr,
     _restore_with_safety_net,
     _strip_git_dirs,
     gather_create_data,
     get_git_difftool,
     get_snapshot_storage,
 )
+from version_stamp.core.experiment_refs import (
+    parent_edges,
+    placement_snapshot,
+    recent_verstrs,
+    resolve_experiment,
+    storage_index,
+)
+from version_stamp.cli.experiment_views import annotated_rows, dumps, show_payload
 from version_stamp.core import experiment_index, experiment_writer
 from version_stamp.core.experiment_from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
@@ -44,13 +51,13 @@ from version_stamp.core.experiment_log import (
     metric_sort_descending,
     sort_by_metric,
 )
+from version_stamp.core.experiment_query import QueryError, filter_rows
 from version_stamp.core.experiment_status import (
     STUCK,
-    derive_status,
     load_run_state,
     status_fields,
 )
-from version_stamp.core.experiment_tree import annotate_tree, subtree_status
+from version_stamp.core.experiment_tree import subtree_status
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
@@ -166,7 +173,7 @@ def _resolve_parent(storage, app_name, args):
     if not ref:
         return None, None
 
-    verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
+    verstr, err = resolve_experiment(storage, app_name, ref)
     if not err:
         return verstr, None
     if explicit:
@@ -200,12 +207,15 @@ def _get_metrics_schema(vcs):
     return {}
 
 
-def _resolve_experiment_version(storage, vcs, args, default_latest=False):
+def _resolve_experiment_version(
+    storage, vcs, args, default_latest=False, snapshot=None
+):
     """Resolve a version for experiment actions. Returns (verstr, error_msg).
 
     Delegates to the shared resolver (handles ``--latest``, ``@N``, prefixes and
     candidate listing). When ``default_latest`` is set and no version is given,
-    resolves to the most recent experiment.
+    resolves to the most recent experiment. *snapshot* is an index snapshot
+    the caller already holds.
     """
     versions = getattr(args, "version", None)
     latest = getattr(args, "latest", False)
@@ -213,7 +223,7 @@ def _resolve_experiment_version(storage, vcs, args, default_latest=False):
     if ref is None and not latest and default_latest:
         latest = True
     app_name = _app_name(vcs, args)
-    return _resolve_verstr(storage, app_name, ref, latest=latest, kind="experiment")
+    return resolve_experiment(storage, app_name, ref, latest=latest, snapshot=snapshot)
 
 
 # ---------------------------------------------------------------------------
@@ -488,23 +498,6 @@ def experiment_add(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _status_tree(metas, run_states):
-    """Annotated nesting/status rows for *metas*, by verstr.
-
-    The tree is built over every meta, so depth and ``tree_status`` stay right
-    for any subset shown; *run_states* (``{verstr: state}``) are already read.
-    """
-    rows = [
-        {
-            "verstr": m["verstr"],
-            "parent": m.get("parent"),
-            "status": derive_status(run_states.get(m["verstr"])),
-        }
-        for m in metas
-    ]
-    return {row["verstr"]: row for row in annotate_tree(rows)}
-
-
 def _status_token(node):
     """A run's own status, plus its subtree's when the two disagree."""
     status = node["status"]
@@ -556,19 +549,33 @@ def experiment_list(vcs, params, storage, args):
     index_rows, run_states = experiment_index.indexed_rows(
         storage, app_name, with_create_note=True
     )
-    if not index_rows:
+    as_json = getattr(args, "json", False)
+    if not index_rows and not as_json:
         print(f"No experiments found for {app_name}")
         return 0
 
+    # Status and tree fields span every run, so depth, tree_status and the
+    # query see the whole tree whatever subset is shown.
+    tree_rows = annotated_rows(index_rows, run_states)
+    try:
+        matching = filter_rows(tree_rows, getattr(args, "query", None))
+    except QueryError as e:
+        VMN_LOGGER.error(f"Invalid --query: {e}")
+        return 1
+
     schema = _get_metrics_schema(vcs) if vcs else {}
-    rows = _list_rows(index_rows, getattr(args, "last", None))
+    rows = _list_rows(matching, getattr(args, "last", None))
     if args.sort and not any(args.sort in row["metrics"] for row in rows):
         VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
     rows = sort_by_metric(rows, schema, sort=args.sort)
     if args.top:
         rows = rows[: args.top]
 
-    tree = _status_tree(index_rows, run_states)
+    if as_json:
+        print(dumps([row["meta"] for row in rows]))
+        return 0
+
+    tree = {row["verstr"]: row for row in tree_rows}
     columns = _metric_columns(schema, rows)
     for row in rows:
         print(_format_list_row(row, tree[row["meta"]["verstr"]], columns))
@@ -580,17 +587,20 @@ def experiment_list(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _print_status_block(storage, app_name, verstr, metadata):
-    """Derived run status, runner identity and the experiment's nesting.
-
-    Run state is read for the run's subtree only — a handful of rows even when
-    the app has thousands of experiments.
-    """
-    parent_of = {m["verstr"]: m.get("parent") for m in storage.list_snapshots(app_name)}
+def _subtree(storage, app_name, verstr, metadata, snapshot=None):
+    """``(run_state, tree fields)`` of *verstr*: the parent edges come from the
+    experiment index, and run state is read for the run's subtree only — a
+    handful of rows even when the app has thousands of experiments."""
+    parent_of = parent_edges(storage, app_name, snapshot)
     parent_of.setdefault(verstr, metadata.get("parent"))
-    run_state, tree = subtree_status(
+    return subtree_status(
         verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
     )
+
+
+def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
+    """Derived run status, runner identity and the experiment's nesting."""
+    run_state, tree = _subtree(storage, app_name, verstr, metadata, snapshot)
     fields = status_fields(run_state)
     print(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
@@ -614,18 +624,25 @@ def _print_status_block(storage, app_name, verstr, metadata):
 
 @measure_runtime_decorator
 def experiment_show(vcs, params, storage, args):
-    verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
+    app_name = _app_name(vcs, args)
+    snapshot = placement_snapshot(storage, app_name)
+    verstr, err = _resolve_experiment_version(
+        storage, vcs, args, default_latest=True, snapshot=snapshot
+    )
     if err:
         VMN_LOGGER.error(err)
         return 1
 
-    app_name = _app_name(vcs, args)
     metadata, patches = storage.load(app_name, verstr)
     if metadata is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
     log = load_log(storage, app_name, verstr)
+    if getattr(args, "json", False):
+        return _print_show_json(
+            storage, app_name, verstr, metadata, patches, log, args, snapshot
+        )
 
     print(f"Experiment: {verstr}")
     print(f"  Branch:    {metadata.get('branch') or '?'}")
@@ -636,7 +653,7 @@ def experiment_show(vcs, params, storage, args):
         print(f"  Note:      {metadata['note']}")
     if metadata.get("has_dep_patches"):
         print("  Deps:      patches captured")
-    _print_status_block(storage, app_name, verstr, metadata)
+    _print_status_block(storage, app_name, verstr, metadata, snapshot)
 
     # Patch stats
     for ptype in ("working_tree", "local_commits"):
@@ -657,6 +674,14 @@ def experiment_show(vcs, params, storage, args):
 
 
 SHOW_LOG_TAIL = 50
+
+
+def _print_show_json(storage, app_name, verstr, metadata, patches, log, args, snapshot):
+    run_state, tree = _subtree(storage, app_name, verstr, metadata, snapshot)
+    idx = storage_index(storage, app_name, verstr, snapshot)
+    tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
+    print(dumps(show_payload(idx, metadata, patches, log, run_state, tree, tail)))
+    return 0
 
 
 def _print_log(log, full):
@@ -746,11 +771,10 @@ def _resolve_experiment_bundles(
         if count < 2:
             VMN_LOGGER.error(f"Need at least 2 experiments, got {count}")
             return None
-        snaps = storage.list_snapshots(app_name)
-        if len(snaps) < 2:
+        verstrs = recent_verstrs(storage, app_name, count)
+        if len(verstrs) < 2:
             VMN_LOGGER.error("Need at least 2 experiments")
             return None
-        verstrs = [m["verstr"] for m in snaps[-count:]]
 
     bundles = []
     for verstr in verstrs:
