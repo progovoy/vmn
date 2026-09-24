@@ -120,6 +120,24 @@ def create_log_entry(entry_type, **kwargs):
     return entry
 
 
+def create_tags_entry(tags=None, remove=None):
+    """A ``tags`` log entry: set *tags* (values stored as strings), drop *remove*.
+
+    Tags are mutable: readers fold these entries per key, last write wins, and
+    a removal is a write like any other.
+    """
+    tags, remove = dict(tags or {}), list(remove or [])
+    for key in list(tags) + remove:
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"Tag keys must be non-empty strings, got {key!r}")
+    if not tags and not remove:
+        raise ValueError("Nothing to tag: give tags to set or keys to remove")
+    entry = create_log_entry("tags", set={k: str(v) for k, v in tags.items()})
+    if remove:
+        entry["remove"] = remove
+    return entry
+
+
 def append_to_log(storage, app_name, verstr, entry):
     """Append an entry to the experiment log using per-writer JSONL files.
 
@@ -130,6 +148,20 @@ def append_to_log(storage, app_name, verstr, entry):
     entry = sanitize_entry(entry)
     if entry is not None:
         storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
+
+
+def append_entries_to_log(storage, app_name, verstr, entries):
+    """Append already-sanitized *entries* in one write where the backend can.
+
+    A duck-typed backend without ``append_log_entries`` gets them one by one.
+    """
+    writer = get_writer_id()
+    batch = getattr(storage, "append_log_entries", None)
+    if batch is not None:
+        return batch(app_name, verstr, writer, entries)
+    for entry in entries:
+        storage.append_log_entry(app_name, verstr, writer, entry)
+    return True
 
 
 def save_log(storage, app_name, verstr, log):
@@ -164,9 +196,13 @@ def compute_artifact_info(path):
     }
 
 
-def save_artifact(storage, app_name, verstr, src_path):
-    """Copy an artifact file into the experiment directory."""
-    storage.save_artifact_file(app_name, verstr, src_path)
+def save_artifact(storage, app_name, verstr, src_path, name=None):
+    """Copy an artifact file into the experiment directory, as *name* (a
+    relative ``a/b/c`` path) when given, else under its basename."""
+    if name is None:
+        storage.save_artifact_file(app_name, verstr, src_path)
+    else:
+        storage.save_artifact_file(app_name, verstr, src_path, name=name)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +214,12 @@ def attach_parent(metadata, parent):
     """Record the experiment that launched this one — never the run itself."""
     if parent and parent != metadata["verstr"]:
         metadata["parent"] = parent
+
+
+def attach_name(metadata, name):
+    """Record the run's human-readable name, when it was given one."""
+    if name:
+        metadata["name"] = str(name)
 
 
 _MAX_RUN_CANDIDATES = 100000

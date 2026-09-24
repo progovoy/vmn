@@ -18,7 +18,9 @@ from version_stamp.cli.snapshot_storage import SnapshotStorage
 from version_stamp.cli.snapshot_storage_files import (
     METADATA_FILE,
     PATCH_FILES,
-    valid_artifact_name,
+    artifact_file_path,
+    artifact_name_for,
+    valid_artifact_path,
 )
 from version_stamp.cli.snapshot_storage_s3_base import (  # noqa: F401  (re-exported)
     S3Base,
@@ -107,11 +109,9 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
 
     # -- artifacts ----------------------------------------------------------
 
-    def save_artifact_file(self, app_name, verstr, src_path):
-        key = (
-            f"{self._record_prefix(app_name, verstr)}/artifacts/"
-            f"{os.path.basename(src_path)}"
-        )
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
+        name = artifact_name_for(src_path, name)
+        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
         # Multipart and streamed: checkpoints can be many GB.
         self._s3.upload_file(src_path, self.bucket, key)
         return True
@@ -124,12 +124,12 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         found = [
             {"name": o["Key"][len(prefix) :], "size": o["Size"]}
             for o in self._objects(prefix)
-            if "/" not in o["Key"][len(prefix) :]
+            if valid_artifact_path(o["Key"][len(prefix) :])
         ]
         return sorted(found, key=lambda a: a["name"])
 
     def artifact_local_path(self, app_name, verstr, name):
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
         try:
@@ -138,10 +138,10 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
             return None
         digest = hashlib.sha256(f"{self.bucket}/{key}".encode()).hexdigest()[:32]
         cache_dir = os.path.join(tempfile.gettempdir(), "vmn-artifact-cache", digest)
-        path = os.path.join(cache_dir, name)
+        path = artifact_file_path(cache_dir, name)
         if os.path.isfile(path) and os.path.getsize(path) == size:
             return path
-        os.makedirs(cache_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".part"
         self._s3.download_file(self.bucket, key, tmp)
         os.replace(tmp, path)
@@ -153,7 +153,7 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         Nothing is buffered to disk, so a multi-GB checkpoint starts arriving
         at once and leaves no cache behind.
         """
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
         try:

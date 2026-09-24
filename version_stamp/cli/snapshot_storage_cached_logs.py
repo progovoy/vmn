@@ -99,11 +99,16 @@ class CachedLogs:
 
     # -- whole-log reads -----------------------------------------------------
 
+    # Local only: sync_log_to_remote ships the new bytes periodically.
     def append_log_entry(self, app_name, verstr, writer_id, entry):
-        # Local only: sync_log_to_remote ships the new bytes periodically.
         if not self._ensure_local_record(app_name, verstr):
             return False
         return self._local.append_log_entry(app_name, verstr, writer_id, entry)
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        if not self._ensure_local_record(app_name, verstr):
+            return False
+        return self._local.append_log_entries(app_name, verstr, writer_id, entries)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:

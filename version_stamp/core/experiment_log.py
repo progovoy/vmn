@@ -107,6 +107,13 @@ def filter_by_status(rows, status=None):
     return [r for r in rows if r["status"] in wanted]
 
 
+def filter_archived(rows, include_archived=False):
+    """Hide archived rows unless *include_archived* — what every listing does."""
+    if include_archived:
+        return rows
+    return [r for r in rows if not r.get("archived")]
+
+
 def primary_metric(schema):
     """The metric the schema marks ``primary: true``, or None."""
     return next((k for k, v in (schema or {}).items() if v.get("primary")), None)

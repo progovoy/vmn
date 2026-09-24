@@ -80,6 +80,8 @@ start_run(
     snapshot=True,
     run_id=None,
     all_ranks=False,
+    name=None,
+    tags=None,
 )
 ```
 
@@ -97,6 +99,8 @@ start_run(
 | `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
 | `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
+| `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
+| `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 
 The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn exp
 run`, which measures the child's process tree instead):
@@ -176,10 +180,36 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
 | `run.log_note(text)` | a note entry |
-| `run.log_artifact(path)` | a file produced by the run |
+| `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
+| `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |
+| `run.log_text(text, name)` | a text file |
+| `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
+| `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
+| `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
 
-Metrics land in the store as they are logged, so `vmn exp show` and the web UI
-see the curve **while training is still running**.
+Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
+components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
+checks every name before uploading any). Each helper stores a real file, so the
+log entry (`path` = the name, `size`, `sha256`) and the backends are exactly those
+of `log_artifact`, and `vmn ui` downloads nested ones at
+`.../artifacts/<a/b/c.txt>`.
+
+**Writes are batched.** Log calls queue in memory and reach the store as one
+write of whole lines per flush: at most every ~1 s (a daemon thread), whenever
+1000 entries are pending, on every heartbeat (before the remote sync), and on
+`finish()`, SIGTERM and interpreter exit — before the final run state is
+published, so a reader that sees a run finished sees everything it logged.
+A reader never sees half a line. This is what lets a loop log ~50k points a
+second (vs ~2-5k when every call opened and appended to the file); the price is
+that another process sees a metric up to ~1 s after it was logged. A forked
+child writing through an inherited `Run`, or a write after `finish()`, goes
+straight to the store. Storage backends take the batch through
+`append_log_entries(app, verstr, writer, entries)` (one `O_APPEND` write and
+one record-signature bump locally, one PUT on S3; the base class loops over
+`append_log_entry`).
+
+Metrics land in the store within about a second of being logged, so `vmn exp
+show` and the web UI see the curve **while training is still running**.
 
 Metric values are stored as floats, whatever you pass:
 
@@ -192,6 +222,43 @@ Metric values are stored as floats, whatever you pass:
 
 Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
 Python numbers so `params.max_depth = 3` matches.
+
+### Tags
+
+Tags are mutable `str -> str` labels (values are stored as strings). Each
+`set_tag`/`set_tags`/`remove_tag` appends a `tags` log entry
+(`{"type": "tags", "set": {...}, "remove": [...]}`); readers fold them per key,
+last write wins, and a removal is a write like any other, so a removed tag can
+be set again. They work on a finished run too — tag the winner after the sweep:
+
+```python
+run.set_tags({"stage": "candidate", "owner": "ann"})
+run.finish()
+run.set_tag("verdict", "keep")      # still recorded
+```
+
+Rows carry them as `tags` (`{key: value}`), and the query language reads
+`tags.<key>` (`tags.stage = "prod"`). A `tags:` mapping (or list of labels) in a
+`-f` notes file seeds them at creation.
+
+### Changing stored runs: archive, unarchive, tags
+
+```python
+from version_stamp.exp import manage
+
+manage.archive_run("my_app", "@3")          # hidden from list_runs by default
+manage.unarchive_run("my_app", "@3")
+manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
+```
+
+`archive_run(app_name=None, ref="latest", *, storage=None)`,
+`unarchive_run(...)` and `set_tags(app_name=None, ref="latest", tags=None, *,
+remove=None, storage=None)` take any [addressing form](experiments.md#addressing-experiments),
+return the verstr they changed and raise `ValueError` for a ref that names no
+run. Archiving writes `archived: true` into `metadata.yml` (atomically on disk,
+under the ETag on S3 — the same path as `vmn snapshot note`); unarchiving
+removes it. Nothing is deleted, and nothing but listings treats an archived run
+differently — `vmn exp prune` counts and deletes it like any finished run.
 
 ---
 
@@ -506,7 +573,8 @@ best = get_run("my_app", ref="latest")
 ```
 
 - `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None,
-  query=None)` — `sort` picks the metric to order by (the configured [primary
+  query=None, use_index=False, include_archived=False)` — archived runs are
+  left out unless `include_archived=True`; `sort` picks the metric to order by (the configured [primary
   metric](experiments.md#metrics-schema-sorting--goals) when omitted), `last`
   caps the result count, `status` filters to one derived status, and `query` is
   [the query language](#the-query-language). A bad query raises `QueryError`.
@@ -516,7 +584,8 @@ best = get_run("my_app", ref="latest")
   [addressing form](experiments.md#addressing-experiments): a full verstr, a
   unique prefix, `@N`, or `latest`.
 
-A `list_runs` row carries the latest value of each metric. To read a metric's
+A `list_runs` row carries the latest value of each metric, the run's `name`
+(or `None`), its current `tags` and `archived` (a bool). To read a metric's
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
@@ -577,6 +646,11 @@ are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
   so a typo tells you instead of returning nothing.
 - `metrics.<name>` — a numeric metric.
 - `params.<name>` — a param, as it was recorded.
+- `tags.<key>` — a tag, always a string (`tags.stage = "prod"`); a removed or
+  never-set tag is missing. Keys the query can name are letters, digits and `_`.
+- `name` (`name ~ "sweep"`, `name = null` for unnamed runs) and `archived`
+  (`archived = true` — only meaningful with `include_archived=True`, since the
+  default listing drops archived rows first).
 
 `metrics` and `params` read different dicts, and the difference matters:
 **`metrics` holds numeric values only** (params that parse as finite, non-boolean

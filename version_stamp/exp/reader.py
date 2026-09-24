@@ -31,6 +31,7 @@ from version_stamp.core import experiment_index
 from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
 from version_stamp.core.experiment_log import (
     experiment_row,
+    filter_archived,
     filter_by_status,
     list_artifacts,
     metric_series,
@@ -141,6 +142,7 @@ def list_runs(
     status=None,
     query=None,
     use_index=False,
+    include_archived=False,
 ):
     """Runs of an app, oldest first unless *sort* or a primary metric reorders.
 
@@ -160,9 +162,12 @@ def list_runs(
             ``<experiments dir>/.index.sqlite`` — what ``vmn exp list`` and the
             ui use — so repeated calls re-read only what changed. Status is
             still derived per call. Off by default: a plain call reads storage.
+        include_archived: also return archived runs (hidden by default; see
+            :mod:`version_stamp.exp.manage`).
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     rows = _all_rows(app_name, storage, use_index=use_index)
+    rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query)
     if last:
         rows = rows[-int(last) :]

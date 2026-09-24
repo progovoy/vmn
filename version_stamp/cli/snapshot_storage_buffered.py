@@ -64,17 +64,25 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._local.save(app_name, verstr, metadata, {})
         return True
 
-    def save_artifact_file(self, app_name, verstr, src_path):
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
         # Straight up: a multi-GB checkpoint must not be copied to /tmp first.
         if not self._ensure_local_record(app_name, verstr):
             return False
-        return self._remote.save_artifact_file(app_name, verstr, src_path)
+        return self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
 
     # -- logs -------------------------------------------------------------------
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if not super().append_log_entry(app_name, verstr, writer_id, entry):
             return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        if not super().append_log_entries(app_name, verstr, writer_id, entries):
+            return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
+    def _ship_if_due(self, app_name, verstr, writer_id):
         last = self._flushed_at.get((app_name, verstr, writer_id))
         if last is None or time.monotonic() - last >= self._flush_interval_sec:
             self.sync_log_to_remote(app_name, verstr, writer_id)

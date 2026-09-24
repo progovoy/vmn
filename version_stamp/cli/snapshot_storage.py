@@ -19,7 +19,10 @@ import yaml
 from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
     METADATA_FILE,
-    valid_artifact_name,
+    apply_metadata_updates,
+    artifact_file_path,
+    list_artifact_tree,
+    valid_artifact_path,
 )
 from version_stamp.core.utils import parse_record_metadata, yaml_safe_load
 
@@ -94,6 +97,16 @@ class SnapshotStorage(ABC):
     def update_note(self, app_name, verstr, note):
         ...
 
+    def update_metadata(self, app_name, verstr, updates):
+        """Merge *updates* into the record's metadata (a None value drops the
+        field); False when there is no record. Backends override this with an
+        atomic (local) or conditional (S3) rewrite."""
+        metadata = self.load_metadata(app_name, verstr)
+        if metadata is None:
+            return False
+        data = yaml.dump(apply_metadata_updates(metadata, updates), sort_keys=True)
+        return self.save_file(app_name, verstr, METADATA_FILE, data) is not False
+
     @abstractmethod
     def delete(self, app_name, verstr):
         ...
@@ -109,8 +122,9 @@ class SnapshotStorage(ABC):
         ...
 
     @abstractmethod
-    def save_artifact_file(self, app_name, verstr, src_path):
-        """Copy an artifact file into the snapshot's artifacts subdirectory."""
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
+        """Copy an artifact file into the snapshot's artifacts subdirectory,
+        as *name* (a relative ``a/b/c`` path) or under its basename."""
         ...
 
     @abstractmethod
@@ -119,22 +133,19 @@ class SnapshotStorage(ABC):
         ...
 
     def list_artifacts(self, app_name, verstr):
-        """``[{"name", "size"}]`` for the record's artifacts, name-ordered."""
+        """``[{"name", "size"}]`` for the record's artifacts, name-ordered;
+        nested artifacts are named by their relative ``a/b/c`` path."""
         art_dir = self.list_artifact_files(app_name, verstr)
         if not art_dir or not os.path.isdir(art_dir):
             return []
-        return [
-            {"name": name, "size": os.path.getsize(os.path.join(art_dir, name))}
-            for name in sorted(os.listdir(art_dir))
-            if os.path.isfile(os.path.join(art_dir, name))
-        ]
+        return list_artifact_tree(art_dir)
 
     def artifact_local_path(self, app_name, verstr, name):
         """A local path to artifact *name*, or None (unknown or unsafe name)."""
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         art_dir = self.list_artifact_files(app_name, verstr)
-        path = os.path.join(art_dir, name) if art_dir else None
+        path = artifact_file_path(art_dir, name) if art_dir else None
         return path if path and os.path.isfile(path) else None
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
@@ -146,6 +157,16 @@ class SnapshotStorage(ABC):
         self.save_file(
             app_name, verstr, LEGACY_LOG_FILE, yaml.dump(log, sort_keys=False)
         )
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        """Append several entries in order. Backends override this with one
+        write per batch; this default appends them one by one."""
+        ok = True
+        for entry in entries:
+            ok = self.append_log_entry(app_name, verstr, writer_id, entry) is not False
+            if not ok:
+                break
+        return ok
 
     def load_logs_by_writer(self, app_name, verstr):
         """``{writer: [entries]}``; the legacy ``log.yml`` is writer ``""``."""

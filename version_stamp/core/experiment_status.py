@@ -99,10 +99,17 @@ def run_state_observed_at(storage, app_name, verstr):
     except Exception:
         VMN_LOGGER.debug("Failed to read the run state mtime", exc_info=True)
         return None
-    if mtime is None:
+    return observed_at_from_mtime(mtime)
+
+
+def observed_at_from_mtime(mtime):
+    """A storage file signature's mtime as an aware UTC datetime, or None.
+
+    Local stores report st_mtime_ns, S3 float seconds: no epoch in seconds
+    reaches 1e11 before the year 5000.
+    """
+    if not isinstance(mtime, (int, float)) or isinstance(mtime, bool):
         return None
-    # Local stores report st_mtime_ns, S3 float seconds: no epoch in seconds
-    # reaches 1e11 before the year 5000.
     seconds = mtime / 1e9 if mtime > 1e11 else mtime
     return datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
 

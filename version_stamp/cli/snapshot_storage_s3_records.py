@@ -13,6 +13,7 @@ import yaml
 from version_stamp.cli.snapshot_storage_files import (
     METADATA_FILE,
     PATCH_FILES,
+    apply_metadata_updates,
     safe_dep_name,
 )
 from version_stamp.cli.snapshot_storage_s3_base import (
@@ -100,6 +101,9 @@ class S3Records:
             )
 
     def update_note(self, app_name, verstr, note):
+        return self.update_metadata(app_name, verstr, {"note": note})
+
+    def update_metadata(self, app_name, verstr, updates):
         """Rewrite only ``metadata.yml``, under its ETag: a concurrent edit
         makes this retry on the new content instead of being overwritten."""
         prefix = self._record_prefix(app_name, verstr)
@@ -107,12 +111,11 @@ class S3Records:
             raw, etag = self._get_with_etag(f"{prefix}/{METADATA_FILE}")
             if raw is None:
                 return False
-            metadata = core_utils.yaml_safe_load(raw)
-            metadata["note"] = note
+            metadata = apply_metadata_updates(core_utils.yaml_safe_load(raw), updates)
             try:
                 self._put_metadata(prefix, metadata, IfMatch=etag)
                 return True
             except Exception as e:
                 if not is_taken(e):
                     raise
-        raise RuntimeError(f"Could not update the note of {verstr}: too many writers")
+        raise RuntimeError(f"Could not update the metadata of {verstr}: too many writers")

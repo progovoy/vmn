@@ -345,7 +345,7 @@ at once (a third waits, then gets `429`), and the text is capped at 2 MB —
 `truncated: true` says it was cut. A record with no base commit (a git-free
 experiment) answers `diff: null` with the reason in `diff_unavailable`.
 
-Artifacts download from `GET .../experiments/{verstr}/artifacts/{name}` for
+Artifacts download from `GET .../experiments/{verstr}/artifacts/{name}` (`{name}` may be a nested `a/b/c.txt` path; `..`, `.`, empty parts and backslashes are a 400) for
 local and S3 workspaces alike (an S3 object is streamed straight through, never
 staged on the server's disk); with a token set the request needs the
 `Authorization` header like every other API call. Downloads are sent as stored

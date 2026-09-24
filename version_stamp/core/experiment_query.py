@@ -18,7 +18,7 @@ Grammar::
                | field [ "not" ] "in" "(" literal { "," literal } ")"
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
                | "~" | "!~" | "contains"
-    field      = name | ( "metrics" | "params" ) "." name
+    field      = name | ( "metrics" | "params" | "tags" ) "." name
     literal    = number | string | "true" | "false" | "null"
     number     = [ "-" ] digits [ "." digits ] [ ( "e" | "E" ) [ "+" | "-" ] digits ]
 
@@ -41,7 +41,10 @@ comparison is false, never a ``TypeError``.
 ``metrics.x`` and ``params.x`` read different dicts: ``params`` carries the
 values the run was given verbatim, so ``params.model = "xgb"`` and
 ``params.cache = true`` match strings and booleans, while ``metrics`` is the
-numeric fold the leaderboard sorts and charts.
+numeric fold the leaderboard sorts and charts. ``tags.x`` reads the run's
+current tags, which are always strings (``tags.stage = "prod"``); a removed
+or never-set tag is missing. ``name ~ "sweep"`` matches the run name and
+``archived = true`` the archived runs.
 """
 
 import functools
@@ -52,7 +55,7 @@ import functools
 ROW_FIELDS = frozenset(
     """
     idx verstr code_verstr timestamp note branch base_version user_meta parent
-    last_metric_at status exit_code started_at finished_at heartbeat
+    name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status
     """.split()
@@ -60,8 +63,9 @@ ROW_FIELDS = frozenset(
 
 # Each dotted prefix reads its own dict on the row. ``params`` holds values
 # verbatim (so ``params.model = "xgb"`` and ``params.cache = true`` work);
-# ``metrics`` holds the numeric fold, which is what sorting and charts use.
-DICT_PREFIXES = ("metrics", "params")
+# ``metrics`` holds the numeric fold, which is what sorting and charts use;
+# ``tags`` holds the run's current tags, always strings.
+DICT_PREFIXES = ("metrics", "params", "tags")
 
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")

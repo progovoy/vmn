@@ -41,7 +41,31 @@ def _foldable_param(value):
 
 def new_fold():
     """The fold of an empty log."""
-    return {"params": {}, "metrics": {}, "last_metric": None, "create_note": None}
+    return {
+        "params": {},
+        "metrics": {},
+        "tags": {},
+        "last_metric": None,
+        "create_note": None,
+    }
+
+
+def entry_tags(entry):
+    """``(set, removed)`` tag changes carried by a log entry.
+
+    A ``tags`` entry sets and removes; a ``create`` entry may seed tags from a
+    notes file, as a mapping or a list of bare labels.
+    """
+    etype = entry.get("type")
+    if etype == "tags":
+        return entry.get("set") or {}, entry.get("remove") or []
+    if etype == "create":
+        seeded = entry.get("tags")
+        if isinstance(seeded, dict):
+            return {str(k): str(v) for k, v in seeded.items()}, []
+        if isinstance(seeded, list):
+            return {str(k): "" for k in seeded}, []
+    return {}, []
 
 
 def _sort_key(entry, writer, position):
@@ -55,8 +79,19 @@ def _keep_latest(values, name, value, key):
         values[name] = [value, key]
 
 
+def _apply_tags(fold, entry, key):
+    tags = fold.setdefault("tags", {})
+    changed, removed = entry_tags(entry)
+    for name, value in changed.items():
+        _keep_latest(tags, name, value, key)
+    for name in removed:
+        _keep_latest(tags, name, None, key)  # a tombstone: removal is a write too
+
+
 def _apply(fold, entry, key):
     etype = entry.get("type")
+    if etype in ("tags", "create"):
+        _apply_tags(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
@@ -98,6 +133,15 @@ def fold_values(fold, field):
     return {name: value for name, (value, _) in fold[field].items()}
 
 
+def fold_tags(fold):
+    """``{name: value}`` of the tags a fold holds (removed ones left out)."""
+    return {
+        name: value
+        for name, (value, _) in fold.get("tags", {}).items()
+        if value is not None
+    }
+
+
 def fold_last_metric_at(fold):
     return fold["last_metric"][0] if fold["last_metric"] else None
 
@@ -121,6 +165,9 @@ def fold_row(idx, meta, fold, with_create_note=False):
         "branch": meta.get("branch"),
         "base_version": meta.get("base_version"),
         "user_meta": meta.get("user_meta"),
+        "name": meta.get("name"),
+        "archived": bool(meta.get("archived", False)),
+        "tags": fold_tags(fold),
         "params": fold_values(fold, "params"),
         "metrics": fold_values(fold, "metrics"),
         "parent": meta.get("parent"),

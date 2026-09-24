@@ -71,7 +71,10 @@ class S3Logs:
         raise RuntimeError(f"Could not store a log segment of {writer_id}")
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
-        """Append to this writer's single log object.
+        return self.append_log_entries(app_name, verstr, writer_id, [entry])
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        """Append *entries* to this writer's single log object, in one PUT.
 
         S3 has no append, so this reads and rewrites the object — under an
         ETag precondition, so an entry another process appended in between
@@ -79,18 +82,20 @@ class S3Logs:
         whose log is already segmented (or compacted) gets a new segment
         instead: a rewritten base would sit behind them unread.
         """
-        line = (json.dumps(entry, default=str) + "\n").encode("utf-8")
+        if not entries:
+            return True
+        lines = "".join(json.dumps(e, default=str) + "\n" for e in entries).encode()
         objects = self.log_objects(app_name, verstr, writer_id)
         if objects and objects[-1][0] != log_object_name(writer_id):
             seq = log_writer_and_seq(objects[-1][0])[1] + 1
-            self.put_log_segment(app_name, verstr, writer_id, seq, line)
+            self.put_log_segment(app_name, verstr, writer_id, seq, lines)
             return True
         key = f"{self._record_prefix(app_name, verstr)}/{log_object_name(writer_id)}"
         for _ in range(_APPEND_ATTEMPTS):
             body, etag = self._get_with_etag(key)
             condition = {"IfMatch": etag} if etag else {"IfNoneMatch": "*"}
             try:
-                self._put(key, (body or b"") + line, **condition)
+                self._put(key, (body or b"") + lines, **condition)
                 return True
             except Exception as e:
                 if not is_taken(e):
