@@ -30,6 +30,31 @@ export function fmtRelTick(secs: number): string {
   return `${Math.round(secs / 3600)}h`;
 }
 
+/** Decimals needed to write *step* exactly (0.25 -> 2, 50 -> 0). */
+function stepDecimals(step: number): number {
+  for (let d = 0; d < 15; d++) {
+    const scaled = step * 10 ** d;
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-6) return d;
+  }
+  return 15;
+}
+
+/** Tick labels precise enough for *step*, so adjacent ticks never collide
+ *  (uPlot's default keeps 3 decimals: 0.00495 and 0.005 both read "0.005"). */
+export function fmtNumTicks(splits: number[], step: number): string[] {
+  if (!(step > 0) || !Number.isFinite(step)) return splits.map(String);
+  const maxAbs = Math.max(...splits.map(Math.abs));
+  if (step < 1e-6 || maxAbs >= 1e6) {
+    const digits = Math.max(0, Math.floor(Math.log10(maxAbs)) - Math.floor(Math.log10(step)));
+    return splits.map((v) => (v === 0 ? "0" : v.toExponential(digits)));
+  }
+  const decimals = stepDecimals(step);
+  return splits.map((v) => (Math.abs(v) < step / 2 ? 0 : v).toFixed(decimals));
+}
+
+const numAxisValues = (_u: unknown, splits: number[], _axis: number, _space: number, step: number) =>
+  fmtNumTicks(splits, step);
+
 /** *s* alone, or its raw curve (faded) under an EMA-smoothed copy. */
 export function withSmoothing(s: CurveSeries, alpha: number): CurveSeries[] {
   if (alpha === 0) return [s];
@@ -67,8 +92,9 @@ export function themedAxis(
     grid: { show: grid, stroke: theme.grid, width: 1 },
     ticks: { stroke: theme.grid, width: 1 },
     font: `10.5px ${resolveCssColor("var(--mono, monospace)", read)}`,
+    values: numAxisValues,
     ...extra,
-  };
+  } as uPlot.Axis;
 }
 
 export function curveOptions(
