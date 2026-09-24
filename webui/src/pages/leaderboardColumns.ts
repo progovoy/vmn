@@ -71,8 +71,11 @@ export function columnStyles(layout: ColumnLayout): CSSProperties[] {
 
 /** A stable identity for the set of param names across rows, so a poll that
  *  returns the same names doesn't look like a new column set. */
-export function paramKey(rows: readonly ExperimentRow[] | null | undefined): string {
-  const keys = new Set<string>();
+export function paramKey(
+  rows: readonly ExperimentRow[] | null | undefined,
+  facetKeys?: readonly string[],
+): string {
+  const keys = new Set<string>(facetKeys ?? []);
   rows?.forEach((r) => Object.keys(rowParams(r)).forEach((k) => keys.add(k)));
   return [...keys].sort().join("\u0000");
 }
@@ -83,12 +86,17 @@ export function anyTags(rows: readonly ExperimentRow[] | undefined): boolean {
 }
 
 /** Metric columns: the schema's order first, then any other metric the rows
- *  carry, alphabetically. A key that is also a param (numeric params fold
- *  into `metrics` too — see CLAUDE.md) is left there instead: it's a
- *  hyperparameter, not something being optimized, so it stays a param
- *  column rather than showing up a second time as a metric. */
-export function metricColumns(rows: readonly ExperimentRow[], schema: MetricsSchema | null): string[] {
-  const inData = new Set<string>();
+ *  (or, when given, the app-wide facets) carry, alphabetically. A key that
+ *  is also a param (numeric params fold into `metrics` too — see
+ *  CLAUDE.md) is left there instead: it's a hyperparameter, not something
+ *  being optimized, so it stays a param column rather than showing up a
+ *  second time as a metric. */
+export function metricColumns(
+  rows: readonly ExperimentRow[],
+  schema: MetricsSchema | null,
+  facetKeys?: readonly string[],
+): string[] {
+  const inData = new Set<string>(facetKeys ?? []);
   rows.forEach((r) => Object.keys(r.metrics).forEach((k) => inData.add(k)));
   const inParams = new Set<string>();
   rows.forEach((r) => Object.keys(rowParams(r)).forEach((k) => inParams.add(k)));
