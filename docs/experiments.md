@@ -271,6 +271,7 @@ pid: 12345
 host: somebox
 started_at: 2026-09-21T12:00:00Z
 heartbeat: 2026-09-21T12:03:00Z   # refreshed while the child is alive
+heartbeat_seq: 6        # +1 on every beat
 heartbeat_interval_sec: 30
 exit_code: null         # an int once finished
 finished_at: null
@@ -304,6 +305,16 @@ time, so a run whose machine vanished does not need anybody to update a record:
 node, and left nothing behind to say so. Several missed beats are tolerated
 before vmn calls a run stuck — the staleness window is
 `max(3 × heartbeat_interval_sec, 60s)`.
+
+The writer's `heartbeat` timestamp comes from the writer's clock, which may be
+off from the reader's. `derive_status(state, observed_at=...)` in
+`version_stamp.core.experiment_status` therefore accepts the *storage's* mtime of
+`run_state.yml` (`run_state_observed_at(storage, app, verstr)`: the file mtime
+locally, `LastModified` on S3) and, when given, measures the heartbeat's age on
+that clock instead — a writer whose clock is behind never reads `stuck` while it
+beats, and one whose clock is ahead does not read `running` long after it died.
+Without it, the timestamp rule above applies. `heartbeat_seq` increases by one on
+every beat, for readers that poll and want a clock-free "it moved" signal.
 
 ### Preemption and signals
 

@@ -3,8 +3,10 @@
 
 ``vmn exp run`` writes a small run-state file at start, refreshes its
 ``heartbeat`` while the child is alive, and finalizes it with an exit code.
-Everything here is a pure function of that file plus the current time, so the
-CLI, the ui readers and the frontend all agree on what a run's status is.
+Everything here is a pure function of that file plus the current time (and,
+when the reader has it, the storage's mtime of the file, which makes the rule
+immune to writer/reader clock skew), so the CLI, the ui readers and the
+frontend all agree on what a run's status is.
 
 Status is *derived*, never stored: a run whose heartbeat went stale without a
 terminal exit code is ``stuck`` — the runner died, was OOM-killed or lost its
@@ -83,8 +85,50 @@ def stale_after_sec(run_state):
     return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, MIN_STALE_SEC)
 
 
-def derive_status(run_state, now=None):
-    """Status of one run: created / running / stuck / succeeded / failed."""
+def run_state_observed_at(storage, app_name, verstr):
+    """When the *storage* last saw ``run_state.yml`` written, or None.
+
+    That mtime is stamped by the store (the filesystem, S3's LastModified), not
+    by the writer, so it is immune to the writer's clock being off. None when
+    the storage keeps no per-file signatures, or the record has no run state.
+    """
+    record_files = getattr(storage, "record_files", None)
+    try:
+        files = record_files(app_name, verstr) if record_files else None
+        mtime = (files or {}).get(RUN_STATE_FILE, (None, None))[1]
+    except Exception:
+        VMN_LOGGER.debug("Failed to read the run state mtime", exc_info=True)
+        return None
+    if mtime is None:
+        return None
+    # Local stores report st_mtime_ns, S3 float seconds: no epoch in seconds
+    # reaches 1e11 before the year 5000.
+    seconds = mtime / 1e9 if mtime > 1e11 else mtime
+    return datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
+
+
+def _heartbeat_age_sec(run_state, now, observed_at):
+    """Seconds since the run last proved it was alive, or None if unknown.
+
+    Measured on the store's clock when *observed_at* is known — that tolerates
+    any skew between the writer's and the reader's clocks — else on the
+    writer's heartbeat timestamp. Before the first beat lands, the start time
+    stands in for it.
+    """
+    if observed_at is not None:
+        return (now - observed_at).total_seconds()
+    age = _age_sec(run_state.get("heartbeat"), now)
+    if age is None and run_state.get("heartbeat") is None:
+        age = _age_sec(run_state.get("started_at"), now)
+    return age
+
+
+def derive_status(run_state, now=None, observed_at=None):
+    """Status of one run: created / running / stuck / succeeded / failed.
+
+    *observed_at* is the storage mtime of ``run_state.yml``
+    (:func:`run_state_observed_at`); pass it when you have it.
+    """
     if not run_state:
         return CREATED
 
@@ -95,17 +139,13 @@ def derive_status(run_state, now=None):
         return CREATED
 
     # No exit code: only the heartbeat can tell a live run from a dead one.
-    # Before the first beat lands, the start time stands in for it.
-    now = _now(now)
-    age = _age_sec(run_state.get("heartbeat"), now)
-    if age is None and run_state.get("heartbeat") is None:
-        age = _age_sec(run_state.get("started_at"), now)
+    age = _heartbeat_age_sec(run_state, _now(now), observed_at)
     if age is None:
         return STUCK
     return RUNNING if age <= stale_after_sec(run_state) else STUCK
 
 
-def status_fields(run_state, now=None):
+def status_fields(run_state, now=None, observed_at=None):
     """The full status payload for one run, ready to serialize.
 
     ``duration_sec`` is the recorded duration once the run finished, and the
@@ -113,7 +153,7 @@ def status_fields(run_state, now=None):
     """
     now = _now(now)
     run_state = run_state or {}
-    status = derive_status(run_state, now=now)
+    status = derive_status(run_state, now=now, observed_at=observed_at)
 
     duration = run_state.get("duration_sec")
     if duration is None and run_state.get("started_at"):
@@ -122,7 +162,10 @@ def status_fields(run_state, now=None):
         if started is not None:
             duration = round((end - started).total_seconds(), 3)
 
-    stale_sec = _age_sec(run_state.get("heartbeat"), now)
+    if observed_at is not None:
+        stale_sec = (now - observed_at).total_seconds()
+    else:
+        stale_sec = _age_sec(run_state.get("heartbeat"), now)
     return {
         "status": status,
         "exit_code": run_state.get("exit_code"),

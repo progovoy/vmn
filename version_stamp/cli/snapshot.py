@@ -21,6 +21,7 @@ from version_stamp.cli.snapshot_storage_cached import (  # noqa: F401
     CachedSnapshotStorage,
     get_snapshot_storage,
 )
+from version_stamp.cli.snapshot_storage_files import atomic_write
 from version_stamp.cli.snapshot_storage_files import (  # noqa: F401
     read_patches_from_dir as _read_patches_from_dir,
 )
@@ -135,9 +136,9 @@ def _generate_patches(backend, lightweight=False):
 
     Args:
         backend: Git backend instance.
-        lightweight: When True, hash untracked file metadata (path+size+mtime)
-            instead of reading file contents. Much faster for large untracked
-            files, suitable for ``show --dev`` where only a stable hash is needed.
+        lightweight: When True, skip the untracked tarball and keep only the
+            untracked content hash. Much faster for large untracked files,
+            suitable for ``show --dev`` where only a stable hash is needed.
     """
     patches = {}
 
@@ -167,15 +168,22 @@ def _generate_patches(backend, lightweight=False):
         if content_hash:
             patches["untracked_hash"] = content_hash
         if not lightweight:
-            untracked_tar, skipped = _collect_untracked_tarball(backend.repo_path)
-            if untracked_tar:
-                patches["untracked_files"] = untracked_tar
-            if skipped:
-                patches["untracked_skipped"] = skipped
+            patches.update(untracked_payload(backend.repo_path))
     except Exception:
         VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
 
     return patches
+
+
+def untracked_payload(repo_path):
+    """The stored untracked part of a snapshot: the tarball and what it skipped."""
+    payload = {}
+    untracked_tar, skipped = _collect_untracked_tarball(repo_path)
+    if untracked_tar:
+        payload["untracked_files"] = untracked_tar
+    if skipped:
+        payload["untracked_skipped"] = skipped
+    return payload
 
 
 def _generate_dep_patches(vcs, lightweight=False):
@@ -226,8 +234,8 @@ def _store_untracked_cache(repo_path, cache):
     if not os.path.isdir(vmn_dir):
         return
     try:
-        with open(os.path.join(vmn_dir, _UNTRACKED_CACHE_FILE), "w") as f:
-            json.dump(cache, f)
+        # Atomic: concurrent sweep workers capture outside the repo lock.
+        atomic_write(os.path.join(vmn_dir, _UNTRACKED_CACHE_FILE), json.dumps(cache))
     except OSError:
         VMN_LOGGER.debug("Failed to persist untracked hash cache", exc_info=True)
 
@@ -602,7 +610,7 @@ def _build_user_meta(meta_args, meta_file):
     return result or None
 
 
-def gather_create_data(vcs, allow_clean=False):
+def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
     """Gather common data needed by snapshot/experiment create.
 
     Returns (base_version, commit_hash, patches, dirty_states, ver_info, error_code).
@@ -611,6 +619,11 @@ def gather_create_data(vcs, allow_clean=False):
     When ``allow_clean`` is True a clean working tree is not an error: it yields
     empty patches (verstr gets a zeroed diff hash) so experiments can be recorded
     against committed code. Snapshots keep the clean-tree no-op.
+
+    ``lightweight`` skips the untracked tarball (see :func:`untracked_payload`):
+    the patches still carry everything the diff hash is computed from.
+    ``status`` is a repo status the caller already computed with the same
+    expected/optional sets, to spare a second one.
     """
     from version_stamp.cli.commands import _get_repo_status
     from version_stamp.cli.output import get_dirty_states
@@ -625,7 +638,8 @@ def gather_create_data(vcs, allow_clean=False):
         "dirty_deps",
         "deps_synced_with_conf",
     }
-    status = _get_repo_status(vcs, expected_status, optional_status)
+    if status is None:
+        status = _get_repo_status(vcs, expected_status, optional_status)
     if status.error:
         name = vcs.name or "<app_name>"
         VMN_LOGGER.error(
@@ -655,8 +669,8 @@ def gather_create_data(vcs, allow_clean=False):
     be = vcs.backend
     commit_hash = be.changeset()
 
-    patches = _generate_patches(be)
-    dep_patches = _generate_dep_patches(vcs)
+    patches = _generate_patches(be, lightweight=lightweight)
+    dep_patches = _generate_dep_patches(vcs, lightweight=lightweight)
     if dep_patches:
         patches["deps"] = dep_patches
 
