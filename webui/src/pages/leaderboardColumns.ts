@@ -13,6 +13,16 @@ const W = {
 };
 const MIN_TABLE_WIDTH = 760;
 
+/** Index of the "experiment" column — the run identifier that stays pinned
+ *  to the left edge while scrolling horizontally (see columnStyles). */
+export const EXPERIMENT_COL_INDEX = 3;
+
+/** Solid theme background for every sticky header/pinned-column cell, so
+ *  scrolled-under content never shows through. Shared with LeaderboardTable's
+ *  header styling, and the same variable the compare-runs table's
+ *  `.compare-key` sticky column already uses. */
+export const STICKY_BG = "var(--surface-1)";
+
 export interface ColumnLayout {
   widths: number[];
   total: number;
@@ -37,9 +47,26 @@ export function columnLayout(nMetrics: number, nParams: number, tags = false): C
 
 /** One shared style object per column: every cell of a column gets the same
  *  object, so a re-render allocates nothing per cell and React skips the
- *  style diff entirely. */
+ *  style diff entirely.
+ *
+ *  The experiment column additionally pins itself to the left edge of the
+ *  scroll container, so the run identifier stays visible while scrolling
+ *  sideways across metric/param columns — mirrors the sticky-left pattern
+ *  the compare-runs table uses for `.compare-key`. */
 export function columnStyles(layout: ColumnLayout): CSSProperties[] {
-  return layout.widths.map((w) => ({ width: `${w}px` }));
+  const stickyLeft = layout.widths
+    .slice(0, EXPERIMENT_COL_INDEX)
+    .reduce((sum, w) => sum + w, 0);
+  return layout.widths.map((w, i) => {
+    if (i !== EXPERIMENT_COL_INDEX) return { width: `${w}px` };
+    return {
+      width: `${w}px`,
+      position: "sticky",
+      left: stickyLeft,
+      zIndex: 1,
+      background: STICKY_BG,
+    };
+  });
 }
 
 /** A stable identity for the set of param names across rows, so a poll that
