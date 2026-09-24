@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, ErrorBar, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -65,7 +65,7 @@ function computeGroups(
   return result;
 }
 
-export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
+function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
   rows: ExperimentRow[];
   metricCols: string[];
   paramCols: string[];
@@ -146,11 +146,11 @@ export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: 
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis
             dataKey="group"
-            stroke="#85847a"
+            stroke="var(--text-3)"
             tick={{ fontSize: 11, fontFamily: "var(--mono)" }}
           />
           <YAxis
-            stroke="#85847a"
+            stroke="var(--text-3)"
             tick={{ fontSize: 10, fontFamily: "var(--mono)" }}
           />
           <Tooltip
@@ -208,3 +208,5 @@ export default function GroupedMetrics({ rows, metricCols, paramCols, schema }: 
     </div>
   );
 }
+
+export default memo(GroupedMetrics);

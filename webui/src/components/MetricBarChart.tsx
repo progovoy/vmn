@@ -1,20 +1,25 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
+import { clickedVerstr, useContainerWidth, useRunSelect } from "./chartHooks";
 
 /** One bar per run stops being readable (and renderable) long before 50k runs. */
 export const MAX_BARS = 50;
 
-export default function MetricBarChart({ rows, metricCols, schema }: {
+function MetricBarChart({ rows, metricCols, schema, onSelect }: {
   rows: ExperimentRow[];
   metricCols: string[];
   schema: MetricsSchema | null;
+  /** Called with a clicked bar's run; defaults to opening the run page. */
+  onSelect?: (verstr: string) => void;
 }) {
   const [metric, setMetric] = useState(metricCols[0] ?? "");
+  const [wrapRef, width] = useContainerWidth<HTMLDivElement>(480);
+  const select = useRunSelect(onSelect);
 
   const goal = metricGoal(schema, metric);
 
@@ -50,11 +55,11 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
           showing the top {MAX_BARS} of {total} runs by {metric}
         </div>
       )}
-      <div style={{ width: "100%", overflowX: "auto" }}>
-        <BarChart width={480} height={Math.max(180, data.length * 28)} data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
+      <div ref={wrapRef} style={{ width: "100%" }}>
+        <BarChart width={width} height={Math.max(180, data.length * 28)} data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
           <CartesianGrid stroke="var(--line)" horizontal={false} />
-          <XAxis type="number" stroke="#85847a" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
-          <YAxis type="category" dataKey="label" width={50} stroke="#85847a" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+          <XAxis type="number" stroke="var(--text-3)" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
+          <YAxis type="category" dataKey="label" width={50} stroke="var(--text-3)" tick={{ fontSize: 10, fontFamily: "var(--mono)" }} />
           <Tooltip
             formatter={(v: number) => fmtVal(v)}
             contentStyle={{
@@ -65,7 +70,16 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
               fontSize: 12,
             }}
           />
-          <Bar dataKey="value" isAnimationActive={false} radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="value"
+            isAnimationActive={false}
+            radius={[0, 4, 4, 0]}
+            cursor="pointer"
+            onClick={(entry: unknown) => {
+              const v = clickedVerstr(entry);
+              if (v) select(v);
+            }}
+          >
             {data.map((d, i) => (
               <Cell
                 key={i}
@@ -79,3 +93,5 @@ export default function MetricBarChart({ rows, metricCols, schema }: {
     </div>
   );
 }
+
+export default memo(MetricBarChart);

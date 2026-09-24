@@ -1,25 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api";
-import type { ExperimentDetail } from "../types";
 import { runColor } from "../util";
-import {
-  allTimestamped, capSeries, overlayRows, runOrigin, type OverlayRun, type XMode,
-} from "../util/chartData";
-import SmoothingSlider from "../components/SmoothingSlider";
+import { allTimestamped, type XMode } from "../util/chartData";
+import type { CurveSeries } from "../util/curveOptions";
+import { emaXY, toXY } from "../util/seriesArrays";
+import { LogToggle, XModeToggle } from "../components/ChartControls";
 import CurveChart from "../components/CurveChart";
+import LazyMount from "../components/LazyMount";
+import OverlayLegend from "../components/OverlayLegend";
+import SmoothingSlider from "../components/SmoothingSlider";
 import { Skeleton } from "../components/ui";
+import { useOverlaySeries, type OverlayRunData } from "./overlaySeries";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
 export const MAX_OVERLAY_RUNS = 20;
-/** Per-metric point budget per run once several runs share a chart. */
-const OVERLAY_POINTS = 1000;
+const CHART_H = 260;
 
-/** Metrics that have series data in every fetched experiment. */
-function sharedMetrics(details: ExperimentDetail[]): string[] {
-  if (details.length === 0) return [];
-  const sets = details.map((d) => new Set(
-    Object.keys(d.series).filter((m) => d.series[m].length > 1)
+/** Metrics that have series data in every fetched run. */
+function sharedMetrics(runs: OverlayRunData[]): string[] {
+  if (runs.length === 0) return [];
+  const sets = runs.map((r) => new Set(
+    Object.keys(r.series).filter((m) => r.series[m].length > 1),
   ));
   return [...sets[0]].filter((m) => sets.every((s) => s.has(m))).sort();
 }
@@ -33,35 +34,27 @@ export default function Overlay() {
   }, [searchParams]);
   const runs = useMemo(() => requested.slice(0, MAX_OVERLAY_RUNS), [requested]);
 
-  const [details, setDetails] = useState<ExperimentDetail[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error } = useOverlaySeries(ws, app, runs);
   const [alpha, setAlpha] = useState(0);
   const [xMode, setXMode] = useState<XMode>("step");
+  const [logY, setLogY] = useState(false);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const [focused, setFocused] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (runs.length === 0) return;
-    Promise.all(runs.map((v) => api.experiment(ws, app, v, OVERLAY_POINTS)))
-      .then(setDetails)
-      .catch((e) => setError(String(e)));
-  }, [ws, app, runs]);
-
-  // Each run is placed on its own clock: "relative" is time since that run's start.
-  const overlayRuns = useMemo<OverlayRun[]>(
-    () => (details ?? []).map((d, i) => {
-      const series = capSeries(d.series, OVERLAY_POINTS);
-      return { key: runs[i], series, origin: runOrigin(series, d.status?.started_at) };
-    }),
-    [details, runs],
-  );
-  const metrics = useMemo(() => (details ? sharedMetrics(details) : []), [details]);
+  const loaded = useMemo(() => data?.runs ?? [], [data]);
+  const metrics = useMemo(() => sharedMetrics(loaded), [loaded]);
   const hasTimestamps = useMemo(
-    () => overlayRuns.length > 0 && overlayRuns.every((r) => allTimestamped(r.series)),
-    [overlayRuns],
+    () => loaded.length > 0 && loaded.every((r) => allTimestamped(r.series)), [loaded],
   );
   const colorOf = useMemo(() => {
     const idx = new Map(runs.map((v, i) => [v, i]));
-    return (key: string) => runColor(idx.get(key.replace(/__smooth$/, "")) ?? 0);
+    return (key: string) => runColor(idx.get(key) ?? 0);
   }, [runs]);
+  const toggle = useCallback((v: string) => setHidden((prev) => {
+    const next = new Set(prev);
+    if (!next.delete(v)) next.add(v);
+    return next;
+  }), []);
 
   const back = (
     <Link className="back-link" to={`/ws/${ws}/app/${app}`}>
@@ -78,8 +71,8 @@ export default function Overlay() {
     );
   }
 
-  if (error) return <div className="error">{error}</div>;
-  if (!details) return <Skeleton />;
+  if (error && !data) return <div className="error">{error}</div>;
+  if (!data) return <Skeleton />;
 
   return (
     <>
@@ -92,64 +85,68 @@ export default function Overlay() {
           showing the first {runs.length} of {requested.length} selected runs
         </p>
       )}
+      {data.missing.length > 0 && (
+        <p style={{ color: "var(--text-3)", margin: "0 0 12px" }}>not found: {data.missing.join(", ")}</p>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 2, fontSize: 11 }}>
-          {(["step", "wall", "relative"] as const).map((mode) => (
-            <button
-              key={mode}
-              className={xMode === mode ? "primary" : ""}
-              style={{ padding: "2px 8px", fontSize: 11, borderRadius: 4 }}
-              disabled={mode !== "step" && !hasTimestamps}
-              onClick={() => setXMode(mode)}
-            >
-              {mode === "step" ? "Step" : mode === "wall" ? "Wall" : "Relative"}
-            </button>
-          ))}
-        </div>
+        <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
+        <LogToggle value={logY} onChange={setLogY} />
         <SmoothingSlider value={alpha} onChange={setAlpha} />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, flexWrap: "wrap" }}>
-          {runs.map((v) => (
-            <span key={v} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-2)" }}>
-              <span style={{ width: 14, height: 3, borderRadius: 2, background: colorOf(v) }} />
-              {v}
-            </span>
-          ))}
-        </div>
+        <OverlayLegend
+          runs={loaded.map((r) => r.key)} colorOf={colorOf} hidden={hidden}
+          onToggle={toggle} onHover={setFocused}
+        />
       </div>
 
       {metrics.length === 0 ? (
         <div className="empty">No shared metrics with series data across the selected runs.</div>
       ) : (
         metrics.map((metric) => (
-          <MetricChart
-            key={metric}
-            metric={metric}
-            runs={overlayRuns}
-            keys={runs}
-            colorOf={colorOf}
-            alpha={alpha}
-            xMode={xMode}
-          />
+          <div key={metric} className="card" style={{ marginBottom: 16 }}>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>{metric}</div>
+            <LazyMount height={CHART_H}>
+              <OverlayChart
+                metric={metric} runs={loaded} colorOf={colorOf} xMode={xMode}
+                alpha={alpha} logY={logY} hidden={hidden} focused={focused}
+              />
+            </LazyMount>
+          </div>
         ))
       )}
     </>
   );
 }
 
-function MetricChart({ metric, runs, keys, colorOf, alpha, xMode }: {
+/** One metric across runs. Each run keeps its own typed x/y arrays, and
+ *  "relative" x is measured from each run's own start. With many runs the
+ *  smoothed curve replaces the raw one rather than doubling the lines. */
+const OverlayChart = memo(function OverlayChart({
+  metric, runs, colorOf, xMode, alpha, logY, hidden, focused,
+}: {
   metric: string;
-  runs: OverlayRun[];
-  keys: string[];
+  runs: OverlayRunData[];
   colorOf: (key: string) => string;
-  alpha: number;
   xMode: XMode;
+  alpha: number;
+  logY: boolean;
+  hidden: ReadonlySet<string>;
+  focused: string | null;
 }) {
-  const rows = useMemo(() => overlayRows(metric, runs, xMode), [metric, runs, xMode]);
-  return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div className="eyebrow" style={{ marginBottom: 10 }}>{metric}</div>
-      <CurveChart rows={rows} keys={keys} colorOf={colorOf} alpha={alpha} xMode={xMode} height={260} />
-    </div>
+  const raw = useMemo(
+    () => runs.map((r) => ({
+      key: r.key, ...toXY(r.series[metric] ?? [], xMode, r.origin, { positiveOnly: logY }),
+    })),
+    [metric, runs, xMode, logY],
   );
-}
+  const series = useMemo<CurveSeries[]>(
+    () => raw.map((r) => ({ ...r, label: r.key, color: colorOf(r.key), ys: emaXY(r.ys, alpha) })),
+    [raw, colorOf, alpha],
+  );
+  return (
+    <CurveChart
+      series={series} xMode={xMode} logY={logY} height={CHART_H}
+      hidden={hidden} focused={focused}
+    />
+  );
+});
