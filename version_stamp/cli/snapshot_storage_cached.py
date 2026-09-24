@@ -184,6 +184,12 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 raise
         return ok
 
+    def update_metadata(self, app_name, verstr, updates):
+        ok = self._local.update_metadata(app_name, verstr, updates)
+        if self._remote:
+            ok = self._remote.update_metadata(app_name, verstr, updates) or ok
+        return ok
+
     def delete(self, app_name, verstr):
         self._local.delete(app_name, verstr)
         if self._remote:
@@ -234,13 +240,13 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 raise
         return True
 
-    def save_artifact_file(self, app_name, verstr, src_path):
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
         if not self._ensure_local_record(app_name, verstr):
             return False
-        self._local.save_artifact_file(app_name, verstr, src_path)
+        self._local.save_artifact_file(app_name, verstr, src_path, name=name)
         if self._remote:
             try:
-                self._remote.save_artifact_file(app_name, verstr, src_path)
+                self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
             except Exception:
                 VMN_LOGGER.debug("Failed to save artifact to remote", exc_info=True)
                 raise

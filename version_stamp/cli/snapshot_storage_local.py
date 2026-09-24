@@ -12,6 +12,9 @@ from version_stamp.cli.snapshot_storage_files import (
     INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
+    apply_metadata_updates,
+    artifact_file_path,
+    artifact_name_for,
     atomic_write,
     checked_app_path,
     flatten_logs,
@@ -258,11 +261,14 @@ class LocalSnapshotStorage(SnapshotStorage):
         return os.path.join(self._ensure_base_dir(app_name), INDEX_CACHE_FILE)
 
     def update_note(self, app_name, verstr, note):
+        return self.update_metadata(app_name, verstr, {"note": note})
+
+    def update_metadata(self, app_name, verstr, updates):
+        """Merge *updates* into ``metadata.yml`` atomically (None drops a field)."""
         meta_path = os.path.join(self._snapshot_dir(app_name, verstr), METADATA_FILE)
         if not os.path.isfile(meta_path):
             return False
-        metadata = self._load_metadata(meta_path)
-        metadata["note"] = note
+        metadata = apply_metadata_updates(self._load_metadata(meta_path), updates)
         atomic_write(meta_path, yaml.dump(metadata, sort_keys=True))
         return True
 
@@ -292,12 +298,14 @@ class LocalSnapshotStorage(SnapshotStorage):
         atomic_write(os.path.join(self._snapshot_dir(app_name, verstr), filename), data)
         return True
 
-    def save_artifact_file(self, app_name, verstr, src_path):
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
+        name = artifact_name_for(src_path, name)
         if self._refuse_orphan_write(app_name, verstr, src_path):
             return False
         art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
-        os.makedirs(art_dir, exist_ok=True)
-        shutil.copy2(src_path, os.path.join(art_dir, os.path.basename(src_path)))
+        dest = artifact_file_path(art_dir, name)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(src_path, dest)
         return True
 
     def list_artifact_files(self, app_name, verstr):

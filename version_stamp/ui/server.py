@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
+from version_stamp.cli.snapshot_storage_files import valid_artifact_path
 from version_stamp.core import experiment_index
 from version_stamp.core.experiment_query import QueryError
 from version_stamp.ui.readers import changelog as changelog_reader
@@ -337,13 +338,16 @@ def create_app(
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/artifacts/{filename}"
+        "/experiments/{verstr}/artifacts/{filename:path}"
     )
     def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         _segment(verstr)
-        _segment(filename, "artifact name")
+        # Nested artifacts are relative paths (a/b/c.txt), each part one segment.
+        if not valid_artifact_path(filename):
+            raise HTTPException(400, f"Invalid artifact name '{filename}'")
+        download_name = filename.rsplit("/", 1)[-1]
         # The backend resolves the file — a local path, or an S3 object streamed
         # straight through — and refuses names that leave the run's dir.
         storage = _any_exp_storage(ws)
@@ -357,14 +361,14 @@ def create_app(
                 chunks,
                 media_type="application/octet-stream",
                 headers={
-                    "Content-Disposition": attachment(filename),
+                    "Content-Disposition": attachment(download_name),
                     "Content-Length": str(size),
                 },
             )
         path = storage.artifact_local_path(app_name, verstr, filename)
         if not path or not os.path.isfile(path):
             raise HTTPException(404, f"Artifact {filename} not found")
-        return FileResponse(path, filename=filename)
+        return FileResponse(path, filename=download_name)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):

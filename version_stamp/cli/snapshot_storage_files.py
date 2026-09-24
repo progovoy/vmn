@@ -55,8 +55,54 @@ def is_volatile_file(name):
     return name in VOLATILE_FILES or is_log_file(name)
 
 
-def valid_artifact_name(name):
-    return valid_path_component(name)
+def valid_artifact_path(name):
+    """Whether *name* is a safe artifact path relative to the run's artifacts:
+    ``a/b/c.txt`` yes; absolute, ``..``, ``.``, empty components, backslashes
+    or NUL no."""
+    if not isinstance(name, str):
+        return False
+    return all(valid_path_component(part) for part in name.split("/"))
+
+
+valid_artifact_name = valid_artifact_path
+
+
+def artifact_name_for(src_path, name=None):
+    """The stored name of an artifact: *name*, else *src_path*'s basename.
+    ValueError for a name that would leave the run's artifacts."""
+    name = os.path.basename(src_path) if name is None else name
+    if not valid_artifact_path(name):
+        raise ValueError(f"Invalid artifact name: {name!r}")
+    return name
+
+
+def artifact_file_path(art_dir, name):
+    """The local path of artifact *name* (already validated) under *art_dir*."""
+    return os.path.join(art_dir, *name.split("/"))
+
+
+def list_artifact_tree(art_dir):
+    """``[{"name", "size"}]`` of every file under *art_dir*, nested names
+    ``/``-joined, name-ordered."""
+    found = []
+    for dirpath, _, filenames in os.walk(art_dir):
+        rel = os.path.relpath(dirpath, art_dir)
+        prefix = "" if rel == "." else rel.replace(os.sep, "/") + "/"
+        for filename in filenames:
+            path = os.path.join(dirpath, filename)
+            if os.path.isfile(path):
+                found.append({"name": prefix + filename, "size": os.path.getsize(path)})
+    return sorted(found, key=lambda a: a["name"])
+
+
+def apply_metadata_updates(metadata, updates):
+    """*metadata* with *updates* merged in; a None value drops the field."""
+    for key, value in updates.items():
+        if value is None:
+            metadata.pop(key, None)
+        else:
+            metadata[key] = value
+    return metadata
 
 
 def log_sizes_of(files):
