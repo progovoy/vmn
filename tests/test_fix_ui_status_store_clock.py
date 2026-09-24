@@ -70,7 +70,9 @@ def test_detail_uses_the_snapshot_store_time_with_a_refresher():
     observed = object()
     snap = IndexSnapshot.build("app", 1, [{"verstr": "v"}], {"v": {}},
                                observed_at={"v": observed})
-    source = ExperimentSource("/nonexistent", refresher=object())
+    from version_stamp.ui.refresher import Refresher
+
+    source = ExperimentSource("/nonexistent", refresher=Refresher())
     options = source.detail_options(None, snap)
     assert options["read_observed_at"](None, "app", "v") is observed
 

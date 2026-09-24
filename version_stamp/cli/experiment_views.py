@@ -11,21 +11,12 @@ import math
 
 from version_stamp.core.experiment_log import experiment_row
 from version_stamp.core.experiment_status import status_fields
-from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_tree import annotate_rows
 
 PATCH_TYPES = ("working_tree", "local_commits")
 
-
-def annotated_rows(rows, run_states, observed_at=None):
-    """*rows* with status and tree fields; the tree spans all of them.
-    *observed_at* is ``{verstr: run_state.yml store write time}``."""
-    observed_at = observed_at or {}
-    return annotate_tree([
-        dict(row, **status_fields(
-            run_states.get(row["verstr"]), observed_at=observed_at.get(row["verstr"])
-        ))
-        for row in rows
-    ])
+# The name cli/experiment.py imports: rows with status and tree fields.
+annotated_rows = annotate_rows
 
 
 def patch_lines(patches):

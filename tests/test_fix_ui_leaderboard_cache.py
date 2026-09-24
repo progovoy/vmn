@@ -6,6 +6,7 @@ import datetime
 import pytest
 
 from version_stamp.core import experiment_status as status_mod
+from version_stamp.core import experiment_tree as tree_mod
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
 from version_stamp.core.experiment_log import experiment_row
 from version_stamp.core.experiment_query import QueryError
@@ -46,15 +47,15 @@ def _snapshot(n=20, generation=1, live=(), parent_of=None):
     return IndexSnapshot.build(APP, generation, rows, states)
 
 
-def _counting(monkeypatch, name):
-    calls = []
-    real = getattr(lb, name)
+def _counting(monkeypatch, name, module=lb, calls=None):
+    calls = [] if calls is None else calls
+    real = getattr(module, name)
 
     def counted(*args, **kwargs):
         calls.append(args)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(lb, name, counted)
+    monkeypatch.setattr(module, name, counted)
     return calls
 
 
@@ -89,7 +90,7 @@ def test_pages_match_the_uncached_pipeline(params):
 
 
 def test_the_pipeline_runs_once_per_generation(monkeypatch):
-    tree_calls = _counting(monkeypatch, "annotate_tree")
+    tree_calls = _counting(monkeypatch, "annotate_rows")
     sort_calls = _counting(monkeypatch, "sort_rows")
     cache = lb.LeaderboardCache()
     snap = _snapshot(n=100)
@@ -108,7 +109,9 @@ def test_the_pipeline_runs_once_per_generation(monkeypatch):
 
 
 def test_only_live_rows_are_rederived_as_time_passes(monkeypatch):
+    # The first pass derives through core's annotate_rows, a re-derive in lb.
     status_calls = _counting(monkeypatch, "status_fields")
+    _counting(monkeypatch, "status_fields", module=tree_mod, calls=status_calls)
     cache = lb.LeaderboardCache(bucket_sec=2)
     snap = _snapshot(n=50, live={7})
 

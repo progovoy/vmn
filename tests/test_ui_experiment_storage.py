@@ -9,6 +9,7 @@ import yaml
 from moto import mock_aws
 
 from version_stamp.cli.snapshot import LocalSnapshotStorage, S3SnapshotStorage
+from version_stamp.core.experiment_index import direct_rows
 from version_stamp.core.logging import init_stamp_logger
 from version_stamp.ui.index import app_snapshot
 from version_stamp.ui.readers import diffs as diff_reader
@@ -156,7 +157,7 @@ def test_direct_rows_with_storage(tmp_path):
         ts="2025-01-01T00:00:00Z",
     )
 
-    rows, _ = exp_reader.direct_rows_and_states(storage, "myapp")
+    rows, _ = direct_rows(storage, "myapp")
 
     assert len(rows) == 1
     row = rows[0]
@@ -196,7 +197,7 @@ def test_direct_rows_with_jsonl_logs(tmp_path):
         },
     )
 
-    rows, _ = exp_reader.direct_rows_and_states(storage, "myapp")
+    rows, _ = direct_rows(storage, "myapp")
 
     assert len(rows) == 1
     # Latest values win: worker-1 wrote loss=0.5 and acc=0.9 after worker-0

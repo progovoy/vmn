@@ -8,15 +8,11 @@ own with — so the web leaderboard and the CLI always agree.
 import os
 
 from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index
 from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_status import (
-    load_run_state,
-    status_fields,
-)
-from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_status import load_run_state
+from version_stamp.core.experiment_tree import annotate_rows
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.experiment_detail import experiment_detail
@@ -69,34 +65,6 @@ def list_apps(root_path):
             }
         )
     return rows
-
-
-def direct_rows_and_states(storage, app_name):
-    """``(rows, run_states)`` straight from storage, through this module's loaders."""
-    return experiment_index.direct_rows(
-        storage, app_name, read_log=_load_log, read_run_state=load_run_state
-    )
-
-
-def annotate_status(rows, run_states=None, now=None, observed_at=None):
-    """Derive each row's status and nesting from its raw run state.
-
-    Time-dependent by design (a stale heartbeat means ``stuck``), so this must
-    run on every response and its output must never be cached.
-
-    The status fields are written onto *rows* in place and ``annotate_tree``
-    returns the copies callers get back — one copy per response, not three.
-    Callers pass rows they just fetched or deserialized, never rows they keep.
-    *observed_at* is ``{verstr: run_state.yml store write time}``.
-    """
-    run_states = run_states or {}
-    observed_at = observed_at or {}
-    for row in rows:
-        verstr = row["verstr"]
-        row.update(
-            status_fields(run_states.get(verstr), now=now, observed_at=observed_at.get(verstr))
-        )
-    return annotate_tree(rows)
 
 
 def apply_filters(rows, status=None, query=None):
@@ -155,7 +123,7 @@ def leaderboard(
     neither is ever cached — callers pass freshly fetched rows. *observed_at*
     is ``{verstr: run_state.yml store write time}``.
     """
-    annotated = annotate_status(rows, run_states, observed_at=observed_at)
+    annotated = annotate_rows(rows, run_states, observed_at=observed_at)
     return sort_rows(
         apply_filters(annotated, status, query),
         schema,

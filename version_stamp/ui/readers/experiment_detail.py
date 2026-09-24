@@ -5,22 +5,23 @@ A run page polls this while the run is live, so its cost must not grow with the
 log or with the workspace: the log is returned as a tail (the rest is paged via
 :func:`log_page`), every metric series is thinned to a chart's worth of points,
 patch presence comes from the metadata flags instead of the tarball, and the
-run tree is answered from parent edges that are cached across polls. The parsed
+run tree is answered from an index snapshot's parent edges. The parsed
 log is reused across polls and log pages, and a grown local log costs only its
 new bytes (:mod:`~version_stamp.ui.readers.parsed_logs`).
 """
-import threading
-from collections import ChainMap, OrderedDict
+from collections import ChainMap
 
 from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core.experiment_log import last_metric_at, list_artifacts
 from version_stamp.core.experiment_log import load_log as _load_log
+from version_stamp.core.experiment_refs import placement_snapshot
 from version_stamp.core.experiment_status import (
     load_run_state,
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import children_by_parent, subtree_status
+from version_stamp.core.experiment_tree import children_by_parent, run_status
+from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
@@ -37,67 +38,23 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
 )
 
 
-class ParentEdges:
-    """``{verstr: parent}`` for an app's runs, kept across polls.
-
-    A run's parent is written once, when the run is created, so only runs not
-    seen before cost a metadata read; the listing itself is names only. Pruned
-    runs drop out because they are no longer listed.
-    """
-
-    def __init__(self):
-        self._by_app = {}
-        self._lock = threading.Lock()
-
-    def __call__(self, storage, app_name):
-        names = storage.list_verstrs(app_name)
-        with self._lock:
-            known = self._by_app.get(app_name)
-        if known is not None and len(known) == len(names) and all(v in known for v in names):
-            return known  # the same mapping while unchanged: callers memoize on it
-        known = known or {}
-        edges = {}
-        for verstr in names:
-            if verstr in known:
-                edges[verstr] = known[verstr]
-            else:
-                metadata = _load_metadata(storage, app_name, verstr) or {}
-                edges[verstr] = metadata.get("parent")
-        with self._lock:
-            self._by_app[app_name] = edges
-        return edges
+def _placement_edges(storage, app_name):
+    """The default edges provider: the app's index snapshot's."""
+    return placement_snapshot(storage, app_name).edges
 
 
-class _ChildrenIndex:
-    """``{parent: [child]}`` per edges mapping, rebuilt only for a new mapping.
-
-    An edges provider returns the same mapping object while the edges are
-    unchanged (and a new one when they change), so a poll costs a lookup.
-    """
-
-    def __init__(self, size=8):
-        self._size = size
-        self._by_id = OrderedDict()  # id -> (mapping, len, children_of)
-        self._lock = threading.Lock()
-
-    def __call__(self, parent_of):
-        with self._lock:
-            hit = self._by_id.get(id(parent_of))
-            if hit and hit[0] is parent_of and hit[1] == len(parent_of):
-                self._by_id.move_to_end(id(parent_of))
-                return hit[2]
-        children_of = children_by_parent(
-            {"verstr": v, "parent": p} for v, p in parent_of.items()
-        )
-        with self._lock:
-            self._by_id[id(parent_of)] = (parent_of, len(parent_of), children_of)
-            while len(self._by_id) > self._size:
-                self._by_id.popitem(last=False)
-        return children_of
-
-
-_CHILDREN = _ChildrenIndex()
+# ``{parent: [child]}`` per edges mapping: a provider hands back the same
+# mapping while the edges are unchanged, so a poll costs a lookup.
+_CHILDREN = LRU(8)
 _PARSED = ParsedLogs()
+
+
+def _children_of(parent_of):
+    return _CHILDREN.per_snapshot(
+        parent_of,
+        lambda: children_by_parent({"verstr": v, "parent": p} for v, p in parent_of.items()),
+        key=(len(parent_of),),
+    )
 
 
 def status_detail(
@@ -123,17 +80,13 @@ def status_detail(
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
         parent_of = ChainMap({verstr: metadata.get("parent")}, edges_of)
-    run_state, tree = subtree_status(
+    detail = run_status(
         verstr,
         parent_of,
         lambda v: read_run_state(storage, app_name, v),
-        children_of=_CHILDREN(edges_of),
         observed_at=lambda v: read_observed_at(storage, app_name, v),
+        children_of=_children_of(edges_of),
     )
-    detail = status_fields(
-        run_state, observed_at=read_observed_at(storage, app_name, verstr)
-    )
-    detail.update(tree)
     detail["parent"] = metadata.get("parent")
     detail["last_metric_at"] = (
         log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
@@ -207,7 +160,7 @@ def experiment_detail(
             verstr,
             metadata,
             snapshot,
-            edges or ParentEdges(),
+            edges or _placement_edges,
             read_run_state=read_run_state,
             read_observed_at=read_observed_at,
         ),

@@ -25,8 +25,7 @@ from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
-from version_stamp.ui.readers import versions as ver_reader
-from version_stamp.ui.refresher import Refresher
+from version_stamp.ui.refresher import InlineRefresher, Refresher
 from version_stamp.ui.responses import (
     GZIP_LEVEL,
     GZIP_MIN_BYTES,
@@ -73,7 +72,7 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(token)
     )
 
-    refresher = Refresher() if background_refresh else None
+    refresher = Refresher() if background_refresh else InlineRefresher()
     app.state.refresher = refresher
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
     leaderboards = LeaderboardCache()
@@ -216,12 +215,12 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
-        snapshot = source.list_snapshot(ws, app_name, s3_storage)
+        snapshot = source.snapshot(ws, app_name, s3_storage)
         schema = {} if s3_storage else source.metrics_schema(ws, app_name)
         return snapshot, schema
 
     def _detail_options(ws, app_name):
-        """Refs, edges and run states from the app's snapshot when indexed."""
+        """Refs, edges (and in the background, run states) from the app's snapshot."""
         return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
 
     @app.get(
@@ -278,7 +277,11 @@ def create_app(
             limit=limit,
             read_log=exp_reader._load_log,
             # Inline, a snapshot costs a full refresh: more than resolving directly.
-            resolve=_detail_options(ws, app_name).get("resolve") if refresher else None,
+            resolve=(
+                _detail_options(ws, app_name).get("resolve")
+                if refresher.background
+                else None
+            ),
         )
         if err:
             raise HTTPException(404, err)
@@ -329,11 +332,7 @@ def create_app(
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        app_name = _app_name(app_tag)
-        index = source.workspace_index(ws)
-        if index:
-            return index.list_versions(app_name)
-        return ver_reader.list_versions(ws.path, app_name)
+        return source.workspace_index(ws).list_versions(_app_name(app_tag))
 
     @app.post(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",

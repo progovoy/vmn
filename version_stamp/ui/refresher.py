@@ -16,8 +16,26 @@ import time
 
 REFRESH_INTERVAL_SEC = 1.0
 IDLE_SEC = 60.0
+# Background refreshes list names + live records, and everything this often
+# (see experiment_index_sweep).
+FULL_SWEEP_SEC = 30
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class InlineRefresher:
+    """:class:`Refresher`'s interface, refreshing on the request path instead:
+    a snapshot sees every write made before it (what ``create_app`` embeds
+    without ``background_refresh``)."""
+
+    # False: a snapshot costs a refresh, and its run states are left to be
+    # read from storage.
+    background = False
+    # None leaves the index's sweep interval alone: every refresh lists fully.
+    full_sweep_sec = None
+
+    def snapshot(self, index):
+        return index.refresh_if_stale(0)
 
 
 class _Watch:
@@ -28,6 +46,10 @@ class _Watch:
 
 
 class Refresher:
+    # True: a snapshot is served at once, at most ~interval_sec behind.
+    background = True
+    full_sweep_sec = FULL_SWEEP_SEC
+
     def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec

@@ -123,7 +123,9 @@ recovery command.
 
 By default the server keeps a small SQLite cache under `<data-dir>/index/` to
 make leaderboards and the stamp tree instant over large repos. It is derived
-from the source files — delete it any time — and `--no-index` reads directly.
+from the source files — delete it any time. `--no-index` keeps no on-disk cache
+for git workspaces: their index lives in the server's memory, so a restart
+rebuilds it from the files.
 
 Experiments are indexed incrementally: a refresh re-reads only what moved — a
 new run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten

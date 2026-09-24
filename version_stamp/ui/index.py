@@ -6,7 +6,8 @@ memoizes their parsed form: experiments through the incremental
 :class:`~version_stamp.core.experiment_index.ExperimentIndex` (only the files
 that changed are read again), versions keyed by the tag list. Deleting the
 database loses nothing. It lives under the server's data dir, never inside the repo,
-so it can't dirty a workspace's git status.
+so it can't dirty a workspace's git status; with ``--no-index`` it is kept in
+memory only.
 """
 import hashlib
 import json
@@ -18,29 +19,35 @@ import threading
 from version_stamp.core import experiment_index
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
+from version_stamp.ui.refresher import InlineRefresher
 from version_stamp.ui.tree_cache import versions_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
-
-# With a background refresher: names + live records each refresh, a full
-# listing this often (see experiment_index_sweep).
-FULL_SWEEP_SEC = 30
+_INLINE = InlineRefresher()
 
 
-def app_snapshot(storage, app_name, cache_path, refresher=None):
+def app_snapshot(storage, app_name, cache_path, refresher=_INLINE):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
-    With a :class:`~version_stamp.ui.refresher.Refresher` the index is kept
-    fresh in the background (fast tier) and this returns at once; without
-    one it is refreshed inline, so a request sees every write before it.
-    Falls back to a direct read when the index fails.
+    A :class:`~version_stamp.ui.refresher.Refresher` keeps the index fresh in
+    the background and this returns at once; the default
+    :class:`~version_stamp.ui.refresher.InlineRefresher` refreshes it first,
+    so a request sees every write before it. Falls back to a direct read when
+    the index fails.
     """
-    if refresher is None:
-        return experiment_index.indexed_snapshot(storage, app_name, cache_path)
+    return _snapshot_of(
+        lambda: experiment_index.shared_index(storage, app_name, cache_path),
+        storage,
+        app_name,
+        refresher,
+    )
+
+
+def _snapshot_of(index_of, storage, app_name, refresher):
     try:
-        index = experiment_index.shared_index(
-            storage, app_name, cache_path, full_sweep_sec=FULL_SWEEP_SEC
-        )
+        index = index_of()
+        if refresher.full_sweep_sec is not None:
+            index.full_sweep_sec = refresher.full_sweep_sec
         return refresher.snapshot(index)
     except Exception:
         _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
@@ -59,14 +66,21 @@ def s3_cache_path(db_dir, ws):
 
 
 class WorkspaceIndex:
-    """Per-workspace read cache. Thread-safe for server use."""
+    """Per-workspace read cache. Thread-safe for server use.
 
-    def __init__(self, root_path, db_dir):
+    Without *db_dir* (``--no-index``) nothing is persisted: the experiment
+    indexes and the versions cache live in this object's memory only.
+    """
+
+    def __init__(self, root_path, db_dir=None):
         self.root_path = root_path
-        os.makedirs(db_dir, exist_ok=True)
-        self._db_path = _db_path(db_dir, os.path.abspath(root_path))
+        self._db_path = None
+        if db_dir is not None:
+            os.makedirs(db_dir, exist_ok=True)
+            self._db_path = _db_path(db_dir, os.path.abspath(root_path))
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        self._in_memory = {}  # app name -> unpersisted ExperimentIndex
+        self._conn = sqlite3.connect(self._db_path or ":memory:", check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS cache ("
             " scope TEXT PRIMARY KEY, fingerprint TEXT, payload TEXT)"
@@ -92,9 +106,21 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def snapshot(self, app_name, refresher=None):
+    def snapshot(self, app_name, refresher=_INLINE):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
-        return app_snapshot(self._storage, app_name, self._db_path, refresher)
+        if self._db_path:
+            return app_snapshot(self._storage, app_name, self._db_path, refresher)
+        return _snapshot_of(
+            lambda: self._in_memory_index(app_name), self._storage, app_name, refresher
+        )
+
+    def _in_memory_index(self, app_name):
+        with self._lock:
+            if app_name not in self._in_memory:
+                self._in_memory[app_name] = experiment_index.ExperimentIndex(
+                    self._storage, app_name
+                )
+            return self._in_memory[app_name]
 
     def list_versions(self, app_name):
         fp = versions_fingerprint(self.root_path, app_name)
