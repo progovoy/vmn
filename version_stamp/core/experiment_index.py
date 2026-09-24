@@ -37,7 +37,11 @@ from version_stamp.core.experiment_index_sweep import (
     Sweep,
 )
 from version_stamp.core.experiment_log import experiment_row, load_log
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
+from version_stamp.core.experiment_status import (
+    RUN_STATE_FILE,
+    load_run_state,
+    observed_at_by_verstr,
+)
 from version_stamp.core.utils import parse_record_metadata
 
 _LOGGER = logging.getLogger(__name__)
@@ -332,7 +336,8 @@ def direct_snapshot(storage, app_name):
     """An :class:`IndexSnapshot` (generation 0) built by reading every record."""
     rows, states = direct_rows(storage, app_name, with_create_note=True)
     notes = {row["verstr"]: row.pop("create_note") for row in rows}
-    return IndexSnapshot.build(app_name, 0, rows, states, notes)
+    observed = observed_at_by_verstr(storage, app_name, states)
+    return IndexSnapshot.build(app_name, 0, rows, states, notes, observed)
 
 
 def indexed_rows(storage, app_name, with_create_note=False, cache_path=None):
@@ -343,3 +348,16 @@ def indexed_rows(storage, app_name, with_create_note=False, cache_path=None):
     except Exception:
         _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
         return direct_rows(storage, app_name, with_create_note)
+
+
+def indexed_status_rows(storage, app_name, with_create_note=False, cache_path=None):
+    """:func:`indexed_rows` plus ``{verstr: run_state.yml store write time}``
+    — the ``observed_at`` a status derivation takes."""
+    try:
+        index = shared_index(storage, app_name, cache_path).refresh()
+        observed = dict(index.snapshot().run_state_observed_at)
+        return index.rows(with_create_note), index.run_states(), observed
+    except Exception:
+        _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
+        rows, states = direct_rows(storage, app_name, with_create_note)
+        return rows, states, observed_at_by_verstr(storage, app_name, states)

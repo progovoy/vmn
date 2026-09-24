@@ -68,16 +68,20 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
     assert log_reads == []  # the grown log was read from its old end, not reloaded
 
 
-def test_list_runs_reads_directly_unless_asked_to_use_the_index(app_layout):
+def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
     from version_stamp.exp.reader import list_runs
 
     _bootstrap(app_layout)
     _create(app_layout, "--metrics", "loss=0.4")
+    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
+
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=False)
+    assert [r["metrics"]["loss"] for r in rows] == [0.4]
+    assert not os.path.exists(os.path.join(base, ".index.sqlite"))
 
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
     assert [r["metrics"]["loss"] for r in rows] == [0.4]
-    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
-    assert not os.path.exists(os.path.join(base, ".index.sqlite"))
+    assert os.path.isfile(os.path.join(base, ".index.sqlite"))
 
 
 def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkeypatch):

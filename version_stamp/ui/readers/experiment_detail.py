@@ -15,7 +15,11 @@ from collections import ChainMap, OrderedDict
 from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core.experiment_log import last_metric_at, list_artifacts
 from version_stamp.core.experiment_log import load_log as _load_log
-from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_status import (
+    load_run_state,
+    run_state_observed_at,
+    status_fields,
+)
 from version_stamp.core.experiment_tree import children_by_parent, subtree_status
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
@@ -97,7 +101,14 @@ _PARSED = ParsedLogs()
 
 
 def status_detail(
-    storage, app_name, verstr, metadata, log, edges, read_run_state=load_run_state
+    storage,
+    app_name,
+    verstr,
+    metadata,
+    log,
+    edges,
+    read_run_state=load_run_state,
+    read_observed_at=run_state_observed_at,
 ):
     """Status payload with the run's place in the tree.
 
@@ -105,7 +116,8 @@ def status_detail(
     a :class:`LogSnapshot`) come from the caller, which already loaded both.
     *edges* is a ``(storage, app_name) -> {verstr: parent}`` provider; it
     should hand back the same mapping while nothing changed, which makes the
-    tree lookup a dict lookup.
+    tree lookup a dict lookup. *read_observed_at* gives each member's
+    run_state.yml store write time, which stuck detection weighs too.
     """
     edges_of = edges(storage, app_name)
     parent_of = edges_of
@@ -116,8 +128,11 @@ def status_detail(
         parent_of,
         lambda v: read_run_state(storage, app_name, v),
         children_of=_CHILDREN(edges_of),
+        observed_at=lambda v: read_observed_at(storage, app_name, v),
     )
-    detail = status_fields(run_state)
+    detail = status_fields(
+        run_state, observed_at=read_observed_at(storage, app_name, verstr)
+    )
     detail.update(tree)
     detail["parent"] = metadata.get("parent")
     detail["last_metric_at"] = (
@@ -156,6 +171,7 @@ def experiment_detail(
     keys=None,
     include_series=True,
     resolve=None,
+    read_observed_at=run_state_observed_at,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -163,7 +179,8 @@ def experiment_detail(
     ``series_total`` let a client page the log and label thinned charts.
     *keys* restricts ``series`` to those metrics; ``include_series=False``
     omits them. *read_log* / *read_run_state* are the reader's own loaders;
-    *resolve* resolves the ref before storage is asked (see :func:`_resolve`).
+    *resolve* resolves the ref before storage is asked (see :func:`_resolve`);
+    *read_observed_at* is the run-state store write time loader.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -192,6 +209,7 @@ def experiment_detail(
             snapshot,
             edges or ParentEdges(),
             read_run_state=read_run_state,
+            read_observed_at=read_observed_at,
         ),
         "patches": _patch_presence(storage, app_name, verstr, metadata),
     }, None

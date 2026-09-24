@@ -39,7 +39,12 @@ from version_stamp.core.experiment_log import (
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
-from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_status import (
+    load_run_state,
+    observed_at_by_verstr,
+    run_state_observed_at,
+    status_fields,
+)
 from version_stamp.core.experiment_tree import annotate_tree, subtree_status
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.exp import _resolve_app_name
@@ -106,25 +111,26 @@ def _metrics_schema(root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _all_rows(app_name, storage, use_index=False):
+def _all_rows(app_name, storage, use_index=True):
     """Every run of an app, status-annotated, in storage order (oldest first).
 
-    Directly, this reads every run's log and run state. With *use_index* the
-    rows come from the experiment index, which re-reads only what changed
-    since the last call. Asking about a single run goes through
+    With *use_index* the rows come from the experiment index, which re-reads
+    only what changed since the last call; without, every run's log and run
+    state is read. Asking about a single run goes through
     :func:`_subtree_row` instead.
     """
     if use_index:
-        rows, run_states = experiment_index.indexed_rows(storage, app_name)
-        for row in rows:
-            row.update(status_fields(run_states.get(row["verstr"])))
-        return annotate_tree(rows)
-
-    rows, run_states = experiment_index.direct_rows(
-        storage, app_name, read_log=_load_log, read_run_state=load_run_state
-    )
+        rows, run_states, observed = experiment_index.indexed_status_rows(
+            storage, app_name
+        )
+    else:
+        rows, run_states = experiment_index.direct_rows(
+            storage, app_name, read_log=_load_log, read_run_state=load_run_state
+        )
+        observed = observed_at_by_verstr(storage, app_name, run_states)
     for row in rows:
-        row.update(status_fields(run_states.get(row["verstr"])))
+        verstr = row["verstr"]
+        row.update(status_fields(run_states.get(verstr), observed_at=observed.get(verstr)))
     return annotate_tree(rows)
 
 
@@ -141,7 +147,7 @@ def list_runs(
     last=None,
     status=None,
     query=None,
-    use_index=False,
+    use_index=True,
     include_archived=False,
 ):
     """Runs of an app, oldest first unless *sort* or a primary metric reorders.
@@ -161,7 +167,8 @@ def list_runs(
         use_index: read through the incremental experiment index cached at
             ``<experiments dir>/.index.sqlite`` — what ``vmn exp list`` and the
             ui use — so repeated calls re-read only what changed. Status is
-            still derived per call. Off by default: a plain call reads storage.
+            still derived per call. On by default; ``use_index=False`` reads
+            every run straight from storage (and writes no index file).
         include_archived: also return archived runs (hidden by default; see
             :mod:`version_stamp.exp.manage`).
     """
@@ -187,10 +194,14 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     if meta is None:
         return None, None
 
+    observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
     run_state, tree = subtree_status(
-        verstr, dict(snapshot.edges), lambda v: load_run_state(storage, app_name, v)
+        verstr,
+        dict(snapshot.edges),
+        lambda v: load_run_state(storage, app_name, v),
+        observed_at=observed_at,
     )
-    status = status_fields(run_state)
+    status = status_fields(run_state, observed_at=observed_at(verstr))
     status.update(tree)
     return {"idx": row["idx"], "meta": meta}, status
 

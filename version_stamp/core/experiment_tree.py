@@ -150,14 +150,16 @@ def annotate_tree(rows):
 TREE_FIELDS = ("children", "kind", "depth", "tree_status")
 
 
-def subtree_status(verstr, parent_of, read_state, children_of=None):
+def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=None):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
     *parent_of* is ``{verstr: parent}`` for the app's runs (only ``.get`` is
     used when *children_of* — ``{parent: [child]}``, as
     :func:`children_by_parent` builds it — is passed in); *read_state(verstr)*
     returns a raw run state and is called once per subtree member. Ancestors
-    are walked for ``depth`` but never read.
+    are walked for ``depth`` but never read. *observed_at(verstr)*, when
+    given, returns the store's write time of a member's run state (see
+    :func:`~version_stamp.core.experiment_status.derive_status`).
     """
     if children_of is None:
         children_of = children_by_parent(
@@ -170,6 +172,9 @@ def subtree_status(verstr, parent_of, read_state, children_of=None):
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
         "depth": _depth(verstr, parent_of),
-        "tree_status": rollup_status(derive_status(s) for s in states.values()),
+        "tree_status": rollup_status(
+            derive_status(s, observed_at=observed_at(v) if observed_at else None)
+            for v, s in states.items()
+        ),
     }
     return states[verstr], tree

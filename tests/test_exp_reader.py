@@ -81,6 +81,12 @@ def _running_state():
     }
 
 
+def _age_run_state(exp_path, seconds):
+    """Age run_state.yml's store write time too: a genuinely dead run."""
+    aged = datetime.datetime.now().timestamp() - seconds
+    os.utime(os.path.join(exp_path, "run_state.yml"), (aged, aged))
+
+
 def _stuck_state():
     state = _running_state()
     state["heartbeat"] = _ago(3600)
@@ -105,7 +111,7 @@ def _finished_state(exit_code):
 def _seed_all_statuses(app_layout):
     _write_experiment(app_layout, "0.0.1", run_state=None)
     _write_experiment(app_layout, "0.0.2", run_state=_running_state())
-    _write_experiment(app_layout, "0.0.3", run_state=_stuck_state())
+    _age_run_state(_write_experiment(app_layout, "0.0.3", run_state=_stuck_state()), 3600)
     _write_experiment(app_layout, "0.0.4", run_state=_finished_state(0))
     _write_experiment(app_layout, "0.0.5", run_state=_finished_state(7))
     return {
@@ -210,7 +216,7 @@ def test_stale_heartbeat_reports_stuck(app_layout):
     state = _running_state()
     state.pop("exit_code")
     state["heartbeat"] = _ago(600)
-    _write_experiment(app_layout, "0.0.1", run_state=state)
+    _age_run_state(_write_experiment(app_layout, "0.0.1", run_state=state), 700)
 
     row = _runs(app_layout)[0]
     assert row["status"] == "stuck"
@@ -469,11 +475,17 @@ def test_list_runs_still_reads_the_whole_workspace(app_layout, monkeypatch):
     _seed_two_trees(app_layout)
     counts = _count_reads(monkeypatch)
 
-    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=False)
 
     assert len(rows) == 6
     assert counts["run_state"] == 6
     assert counts["log"] == 6
+
+    counts.update(run_state=0, log=0)
+    rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
+
+    assert len(rows) == 6
+    assert counts == {"run_state": 0, "log": 0}, "served by the index by default"
 
 
 def test_get_run_with_no_artifacts(app_layout):

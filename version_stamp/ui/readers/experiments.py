@@ -12,7 +12,11 @@ from version_stamp.core import experiment_index
 from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_status import load_run_state, status_fields
+from version_stamp.core.experiment_status import (
+    load_run_state,
+    observed_at_by_verstr,
+    status_fields,
+)
 from version_stamp.core.experiment_tree import annotate_tree
 from version_stamp.core.version_math import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
@@ -94,7 +98,7 @@ def direct_rows_and_states(storage, app_name):
     )
 
 
-def annotate_status(rows, run_states=None, now=None):
+def annotate_status(rows, run_states=None, now=None, observed_at=None):
     """Derive each row's status and nesting from its raw run state.
 
     Time-dependent by design (a stale heartbeat means ``stuck``), so this must
@@ -103,19 +107,24 @@ def annotate_status(rows, run_states=None, now=None):
     The status fields are written onto *rows* in place and ``annotate_tree``
     returns the copies callers get back — one copy per response, not three.
     Callers pass rows they just fetched or deserialized, never rows they keep.
+    *observed_at* is ``{verstr: run_state.yml store write time}``.
     """
     run_states = run_states or {}
+    observed_at = observed_at or {}
     for row in rows:
-        row.update(status_fields(run_states.get(row["verstr"]), now=now))
+        verstr = row["verstr"]
+        row.update(
+            status_fields(run_states.get(verstr), now=now, observed_at=observed_at.get(verstr))
+        )
     return annotate_tree(rows)
 
 
 def rows_with_status(root_path=None, app_name=None, storage=None, now=None):
     """Leaderboard rows plus their derived status, straight from storage."""
-    rows, run_states = direct_rows_and_states(
-        storage or experiment_storage(root_path), app_name
-    )
-    return annotate_status(rows, run_states, now=now)
+    storage = storage or experiment_storage(root_path)
+    rows, run_states = direct_rows_and_states(storage, app_name)
+    observed = observed_at_by_verstr(storage, app_name, run_states)
+    return annotate_status(rows, run_states, now=now, observed_at=observed)
 
 
 def apply_filters(rows, status=None, query=None):
@@ -166,14 +175,17 @@ def leaderboard(
     status=None,
     query=None,
     order=None,
+    observed_at=None,
 ):
     """The one list pipeline: derive status, filter, then order and page.
 
     Status is derived from the current time and ``query`` is per request, so
-    neither is ever cached — callers pass freshly fetched rows.
+    neither is ever cached — callers pass freshly fetched rows. *observed_at*
+    is ``{verstr: run_state.yml store write time}``.
     """
+    annotated = annotate_status(rows, run_states, observed_at=observed_at)
     return sort_rows(
-        apply_filters(annotate_status(rows, run_states), status, query),
+        apply_filters(annotated, status, query),
         schema,
         sort=sort,
         last=last,
@@ -201,8 +213,11 @@ def facets(rows):
 
 def list_experiments(root_path, app_name, **filters):
     """Leaderboard rows, ordered exactly like ``vmn exp list``, read directly."""
-    rows, run_states = direct_rows_and_states(experiment_storage(root_path), app_name)
-    return leaderboard(rows, run_states, metrics_schema(root_path, app_name), **filters)
+    storage = experiment_storage(root_path)
+    rows, run_states = direct_rows_and_states(storage, app_name)
+    observed = observed_at_by_verstr(storage, app_name, run_states)
+    schema = metrics_schema(root_path, app_name)
+    return leaderboard(rows, run_states, schema, observed_at=observed, **filters)
 
 
 def get_experiment(root_path, app_name, verstr_ref, **detail_opts):
@@ -226,8 +241,8 @@ def list_experiments_from_storage(storage, app_name, **filters):
     poll costs one listing plus whatever changed — not a GET per experiment.
     There is no app conf for such a workspace, hence no metrics schema.
     """
-    rows, run_states = experiment_index.indexed_rows(storage, app_name)
-    return leaderboard(rows, run_states, {}, **filters)
+    rows, run_states, observed = experiment_index.indexed_status_rows(storage, app_name)
+    return leaderboard(rows, run_states, {}, observed_at=observed, **filters)
 
 
 def get_experiment_from_storage(

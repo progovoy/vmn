@@ -20,6 +20,7 @@ from version_stamp.core.experiment_status import (
     derive_status,
     load_run_state,
     parse_iso,
+    run_state_observed_at,
 )
 from version_stamp.core.logging import VMN_LOGGER
 
@@ -70,25 +71,36 @@ def _map(storage, fn, items):
         return list(pool.map(fn, items))
 
 
-def _live_runs(storage, app_name, candidates, states=None):
+def _read_state(storage, app_name, verstr):
+    """``(run state, its store write time)`` straight from storage."""
+    return (
+        load_run_state(storage, app_name, verstr),
+        run_state_observed_at(storage, app_name, verstr),
+    )
+
+
+def _live_runs(storage, app_name, candidates, snapshot=None):
     """``{verstr: status}`` of the *candidates* that may still be running.
 
-    *states* are the index's run states when there is one; else each
-    candidate's run state is read from storage.
+    The index *snapshot* supplies run states and their store write times when
+    there is one; else each candidate's are read from storage.
     """
     verstrs = [m["verstr"] for m in candidates]
-    if states is None:
-        read = lambda v: load_run_state(storage, app_name, v)  # noqa: E731
-        run_states = _map(storage, read, verstrs)
+    if snapshot is None:
+        read = lambda v: _read_state(storage, app_name, v)  # noqa: E731
+        states = _map(storage, read, verstrs)
     else:
-        run_states = [states.get(v) for v in verstrs]
-    statuses = zip(verstrs, map(derive_status, run_states))
+        observed = snapshot.run_state_observed_at
+        states = [(snapshot.run_states.get(v), observed.get(v)) for v in verstrs]
+    statuses = zip(
+        verstrs, (derive_status(state, observed_at=at) for state, at in states)
+    )
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _apply_guards(storage, app_name, metas, candidates, force, states=None):
+def _apply_guards(storage, app_name, metas, candidates, force, snapshot=None):
     """Split *candidates* into (delete, {skipped live verstr: status})."""
-    live = {} if force else _live_runs(storage, app_name, candidates, states)
+    live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
 
     doomed = {m["verstr"] for m in candidates} - set(live)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
@@ -112,8 +124,8 @@ def _local_view(storage):
     return getattr(storage, "_local", None) or storage
 
 
-def _metas_and_states(storage, app_name):
-    """``(metas oldest first, run states or None)`` — through the experiment
+def _metas_and_snapshot(storage, app_name):
+    """``(metas oldest first, index snapshot or None)`` — through the experiment
     index when the storage can be indexed, so selecting among 10k runs does not
     read every record's metadata and run state; directly otherwise."""
     if hasattr(storage, "list_files"):
@@ -128,14 +140,14 @@ def _metas_and_states(storage, app_name):
                  "parent": r.get("parent")}
                 for r in snapshot.rows
             ]
-            return metas, snapshot.run_states
+            return metas, snapshot
     return storage.list_snapshots(app_name), None
 
 
 def experiment_prune(vcs, params, storage, args, app_name):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
-    metas, states = _metas_and_states(storage, app_name)
+    metas, snapshot = _metas_and_snapshot(storage, app_name)
     if not metas:
         print("No experiments to prune")
         return 0
@@ -155,7 +167,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
         return 1
 
     to_delete, live = _apply_guards(
-        storage, app_name, metas, candidates, getattr(args, "force", False), states
+        storage, app_name, metas, candidates, getattr(args, "force", False), snapshot
     )
     for verstr in sorted(live):
         print(_skip_message(verstr, live[verstr]))
