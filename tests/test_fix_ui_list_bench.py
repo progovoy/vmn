@@ -53,7 +53,7 @@ def listed(monkeypatch):
 @pytest.fixture
 def pipeline(monkeypatch):
     calls = {"annotate": 0, "sort": 0}
-    real_tree, real_sort = leaderboard_cache.annotate_tree, leaderboard_cache.sort_rows
+    real_tree, real_sort = leaderboard_cache.annotate_rows, leaderboard_cache.sort_rows
 
     def tree(*a, **kw):
         calls["annotate"] += 1
@@ -63,7 +63,7 @@ def pipeline(monkeypatch):
         calls["sort"] += 1
         return real_sort(*a, **kw)
 
-    monkeypatch.setattr(leaderboard_cache, "annotate_tree", tree)
+    monkeypatch.setattr(leaderboard_cache, "annotate_rows", tree)
     monkeypatch.setattr(leaderboard_cache, "sort_rows", sort)
     return calls
 

@@ -43,9 +43,8 @@ from version_stamp.core.experiment_status import (
     load_run_state,
     observed_at_by_verstr,
     run_state_observed_at,
-    status_fields,
 )
-from version_stamp.core.experiment_tree import annotate_tree, subtree_status
+from version_stamp.core.experiment_tree import annotate_rows, run_status
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.exp import _resolve_app_name
 
@@ -128,10 +127,7 @@ def _all_rows(app_name, storage, use_index=True):
             storage, app_name, read_log=_load_log, read_run_state=load_run_state
         )
         observed = observed_at_by_verstr(storage, app_name, run_states)
-    for row in rows:
-        verstr = row["verstr"]
-        row.update(status_fields(run_states.get(verstr), observed_at=observed.get(verstr)))
-    return annotate_tree(rows)
+    return annotate_rows(rows, run_states, observed)
 
 
 # ---------------------------------------------------------------------------
@@ -194,15 +190,12 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     if meta is None:
         return None, None
 
-    observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
-    run_state, tree = subtree_status(
+    status = run_status(
         verstr,
         dict(snapshot.edges),
         lambda v: load_run_state(storage, app_name, v),
-        observed_at=observed_at,
+        observed_at=lambda v: run_state_observed_at(storage, app_name, v),
     )
-    status = status_fields(run_state, observed_at=observed_at(verstr))
-    status.update(tree)
     return {"idx": row["idx"], "meta": meta}, status
 
 

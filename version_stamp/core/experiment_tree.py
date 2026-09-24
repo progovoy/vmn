@@ -17,6 +17,7 @@ from version_stamp.core.experiment_status import (
     STUCK,
     SUCCEEDED,
     derive_status,
+    status_fields,
 )
 
 OUTER = "outer"  # has children
@@ -125,7 +126,27 @@ def annotate_tree(rows):
     ``status`` is left as the row's own status; ``tree_status`` is the rollup
     over the row and everything beneath it.
     """
-    rows = [dict(r) for r in rows]
+    return _annotate_tree_in_place([dict(r) for r in rows])
+
+
+def annotate_rows(rows, run_states, observed_at=None, now=None):
+    """Copies of *rows* with their derived status fields and tree fields.
+
+    *run_states* is ``{verstr: raw run state}``, *observed_at* ``{verstr:
+    run_state.yml store write time}``. Time-dependent: never cache the output.
+    """
+    run_states = run_states or {}
+    observed_at = observed_at or {}
+    return _annotate_tree_in_place([
+        dict(row, **status_fields(
+            run_states.get(row["verstr"]), now=now,
+            observed_at=observed_at.get(row["verstr"]),
+        ))
+        for row in rows
+    ])
+
+
+def _annotate_tree_in_place(rows):
     by_verstr = {r["verstr"]: r for r in rows}
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
@@ -178,3 +199,17 @@ def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=
         ),
     }
     return states[verstr], tree
+
+
+def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None):
+    """One run's status fields plus its tree fields, reading its subtree only.
+
+    Arguments as for :func:`subtree_status`; *observed_at(verstr)* weighs the
+    store's write time into the run's own status as well as the rollup.
+    """
+    run_state, tree = subtree_status(
+        verstr, parent_of, read_state, children_of=children_of, observed_at=observed_at
+    )
+    status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
+    status.update(tree)
+    return status

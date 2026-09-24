@@ -150,7 +150,7 @@ def test_successive_buckets_do_not_sort_or_annotate_every_row(monkeypatch):
 
     calls = {}
     _counted(monkeypatch, lb, "sort_rows", calls)
-    _counted(monkeypatch, lb, "annotate_tree", calls)
+    _counted(monkeypatch, lb, "annotate_rows", calls)
     _counted(monkeypatch, exp_reader, "sort_by_metric", calls)
     for step in range(1, 6):
         # Past 60s the heartbeat is stale: the live rows move from running to stuck.

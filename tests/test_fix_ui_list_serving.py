@@ -95,7 +95,7 @@ def test_a_304_does_no_leaderboard_work(served, monkeypatch):
         raise AssertionError("an unchanged poll re-ran the pipeline")
 
     monkeypatch.setattr(leaderboard_cache, "sort_rows", boom)
-    monkeypatch.setattr(leaderboard_cache, "annotate_tree", boom)
+    monkeypatch.setattr(leaderboard_cache, "annotate_rows", boom)
     r = client.get(f"{BASE}/experiments?limit=10", headers={"If-None-Match": etag})
     assert r.status_code == 304
 

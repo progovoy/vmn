@@ -256,3 +256,53 @@ def test_annotate_tree_does_not_mutate_input():
     original = [_row("s"), _row("t", parent="s")]
     tr.annotate_tree(original)
     assert "children" not in original[0]
+
+
+# ---- annotate_rows / run_status -------------------------------------------
+
+
+def _finished(exit_code):
+    return {"state": "finished", "exit_code": exit_code, "finished_at": _ago(1)}
+
+
+def test_annotate_rows_derives_status_then_the_tree_without_mutating():
+    rows = [{"verstr": "s", "parent": None}, {"verstr": "t", "parent": "s"}]
+    out = tr.annotate_rows(rows, {"t": _finished(1)}, now=NOW)
+    by = {r["verstr"]: r for r in out}
+    assert by["s"]["status"] == st.CREATED
+    assert by["t"]["status"] == st.FAILED
+    assert by["s"]["tree_status"] == st.FAILED and by["s"]["kind"] == tr.OUTER
+    assert rows == [{"verstr": "s", "parent": None}, {"verstr": "t", "parent": "s"}]
+
+
+def test_annotate_rows_weighs_the_store_write_time():
+    state = _running(heartbeat_age=3600)
+    rows = [{"verstr": "a"}]
+    assert tr.annotate_rows(rows, {"a": state}, now=NOW)[0]["status"] == st.STUCK
+    fresh = NOW - datetime.timedelta(seconds=1)
+    out = tr.annotate_rows(rows, {"a": state}, observed_at={"a": fresh}, now=NOW)
+    assert out[0]["status"] == st.RUNNING
+
+
+def test_run_status_is_the_runs_status_fields_plus_its_tree():
+    parent_of = {"s": None, "t": "s", "u": "s"}
+    live = _running(heartbeat=_iso(datetime.datetime.now(datetime.timezone.utc)))
+    states = {"s": live, "t": _finished(0), "u": _finished(1)}
+    reads = []
+
+    def read(v):
+        reads.append(v)
+        return states[v]
+
+    status = tr.run_status("s", parent_of, read)
+    assert status["status"] == st.RUNNING and status["pid"] == 4242
+    assert status["tree_status"] == st.FAILED
+    assert status["kind"] == tr.OUTER and sorted(status["children"]) == ["t", "u"]
+    assert sorted(reads) == ["s", "t", "u"]
+
+
+def test_run_status_weighs_the_store_write_time():
+    stale = _running(heartbeat_age=3600)
+    fresh = datetime.datetime.now(datetime.timezone.utc)
+    status = tr.run_status("a", {"a": None}, lambda v: stale, observed_at=lambda v: fresh)
+    assert status["status"] == st.RUNNING and status["tree_status"] == st.RUNNING

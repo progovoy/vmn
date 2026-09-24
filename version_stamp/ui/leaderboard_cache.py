@@ -25,7 +25,7 @@ import threading
 from version_stamp.core import experiment_status
 from version_stamp.core.experiment_log import primary_metric
 from version_stamp.core.experiment_status import status_fields
-from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.core.experiment_tree import annotate_rows
 from version_stamp.ui.http_params import MAX_PAGE
 from version_stamp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from version_stamp.ui.leaderboard_live import LivePatch, MergedRows, order_key
@@ -50,12 +50,6 @@ def _status(snapshot, verstr):
     )
 
 
-def _annotated(snapshot):
-    return annotate_tree(
-        {**row, **_status(snapshot, row["verstr"])} for row in snapshot.rows
-    )
-
-
 def _visible(rows, archived):
     return rows if archived else [row for row in rows if not row.get("archived")]
 
@@ -74,7 +68,9 @@ class _Base:
         live = [
             i for i, row in enumerate(snapshot.rows) if _is_live(states.get(row["verstr"]))
         ]
-        self.rows = _annotated(snapshot)
+        self.rows = annotate_rows(
+            snapshot.rows, states, snapshot.run_state_observed_at
+        )
         self.position = {row["verstr"]: i for i, row in enumerate(self.rows)}
         self.patch = LivePatch(self.rows, live, self.position)
         self._at = (bucket, [self.rows[i] for i in self.patch.changed])

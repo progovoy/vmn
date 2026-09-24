@@ -20,7 +20,7 @@ from version_stamp.core.experiment_status import (
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import children_by_parent, subtree_status
+from version_stamp.core.experiment_tree import children_by_parent, run_status
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
@@ -123,17 +123,13 @@ def status_detail(
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
         parent_of = ChainMap({verstr: metadata.get("parent")}, edges_of)
-    run_state, tree = subtree_status(
+    detail = run_status(
         verstr,
         parent_of,
         lambda v: read_run_state(storage, app_name, v),
-        children_of=_CHILDREN(edges_of),
         observed_at=lambda v: read_observed_at(storage, app_name, v),
+        children_of=_CHILDREN(edges_of),
     )
-    detail = status_fields(
-        run_state, observed_at=read_observed_at(storage, app_name, verstr)
-    )
-    detail.update(tree)
     detail["parent"] = metadata.get("parent")
     detail["last_metric_at"] = (
         log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
