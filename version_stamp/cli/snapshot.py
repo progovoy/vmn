@@ -865,20 +865,20 @@ def snapshot_list(vcs, params):
         VMN_LOGGER.info(f"No snapshots found for {vcs.name}")
         return 0
 
+    # Numbers are the storage index `@N` resolves, fixed before --last/--filter.
+    numbered = list(enumerate(snapshots, 1))
     last = params.get("last")
     if last:
-        snapshots = snapshots[-last:]
+        numbered = numbered[-last:]
 
     filters = _parse_meta_args(params.get("filter")) if params.get("filter") else None
 
-    idx = 0
-    for meta in snapshots:
+    for idx, meta in numbered:
         if filters:
             user_meta = meta.get("user_meta", {})
             if not all(str(user_meta.get(k)) == v for k, v in filters.items()):
                 continue
 
-        idx += 1
         if params.get("verbose"):
             ts_display = meta["timestamp"]
         else:
