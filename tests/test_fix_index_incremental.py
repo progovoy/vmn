@@ -66,8 +66,18 @@ def test_list_record_names_is_names_only(st):
     st.index_cache_path(APP)  # adds .gitignore next to the records
     open(os.path.join(st._snapshot_base_dir(APP), ".index.sqlite"), "w").close()
 
-    assert st.list_record_names(APP) == {"1.0.0-dev.a+b", "1.0.0-dev.c"}
-    assert st.list_record_names("missing") == set()
+    names = st.list_record_names(APP)
+    assert set(names) == {"1.0.0-dev.a+b", "1.0.0-dev.c"}
+    folder = os.stat(st._snapshot_dir(APP, "1.0.0-dev.c"))
+    assert names["1.0.0-dev.c"] == (folder.st_mtime_ns, folder.st_ino)
+    assert st.list_record_names("missing") == {}
+
+
+def test_an_atomic_write_changes_the_record_signature(st):
+    verstr = _make(st, 1, FINISHED)
+    before = st.list_record_names(APP)[verstr]
+    st.update_note(APP, verstr, "renamed")
+    assert st.list_record_names(APP)[verstr] != before
 
 
 def test_list_files_can_be_limited_to_some_records(st):
@@ -182,3 +192,57 @@ def test_a_storage_without_names_listing_always_lists_everything(st, clock):
     index.refresh()
     assert plain.calls == 2
     assert len(index.rows()) == 1
+
+
+def test_a_note_on_a_finished_run_shows_up_at_the_next_refresh(st, listed, clock):
+    done, other = _make(st, 1, FINISHED), _make(st, 2, FINISHED)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index.refresh()
+
+    st.update_note(APP, done, "renamed")
+    clock.now += 1
+    index.refresh()
+
+    assert listed[1:] == [{done}]
+    assert index.rows()[0]["note"] == "renamed"
+    assert other not in listed[1]
+
+
+def test_an_exit_code_rewrite_on_a_finished_run_shows_up_at_the_next_refresh(st, clock):
+    verstr = _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index.refresh()
+
+    st.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 9\n")
+    clock.now += 1
+    index.refresh()
+    assert index.run_states()[verstr]["exit_code"] == 9
+
+
+def test_names_without_signatures_wait_for_the_full_sweep(st, clock):
+    class NamesOnly(LocalSnapshotStorage):
+        def list_record_names(self, app_name):
+            return set(super().list_record_names(app_name))
+
+    names_only = NamesOnly(st.vmn_root_path, subdir="experiments")
+    verstr = _make(names_only, 1, FINISHED)
+    index = ExperimentIndex(names_only, APP, full_sweep_sec=300)
+    index.refresh()
+
+    names_only.update_note(APP, verstr, "renamed")
+    clock.now += 1
+    index.refresh()
+    assert index.rows()[0]["note"] is None
+    clock.now += 300
+    index.refresh()
+    assert index.rows()[0]["note"] == "renamed"
+
+
+def test_a_backend_that_cannot_list_names_gets_a_full_listing(st, listed, clock):
+    _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP)
+    index.refresh()
+    st.list_record_names = lambda app_name: None
+    clock.now += 1
+    index.refresh()
+    assert listed == [None, None]

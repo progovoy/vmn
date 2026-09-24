@@ -188,12 +188,16 @@ class LocalSnapshotStorage(SnapshotStorage):
         return results
 
     def list_record_names(self, app_name):
-        """Record keys from one directory listing — no per-record stat."""
+        """``{record key: (dir mtime_ns, inode)}`` from one directory listing.
+
+        Every write into a record is atomic (temp file + rename), which bumps
+        the record directory's mtime; only appending to an existing log does not.
+        """
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
-            return set()
+            return {}
         return {
-            unsafe_verstr(entry.name)
+            unsafe_verstr(entry.name): (entry.stat().st_mtime_ns, entry.inode())
             for entry in os.scandir(base)
             if entry.is_dir() and not entry.name.startswith(".")
         }
