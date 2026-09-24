@@ -509,8 +509,6 @@ def _edit_version_backends(current, vmn_root_path):
             if to_remove:
                 del current[to_remove]
 
-    return current
-
 
 _PIN_FIELDS = ("branch", "tag", "hash")
 
@@ -685,8 +683,6 @@ def _edit_deps(current, vmn_root_path):
             if to_remove:
                 del current[to_remove]
 
-    return current
-
 
 def _edit_policies(current):
     while True:
@@ -723,8 +719,6 @@ def _edit_policies(current):
                 ]
             else:
                 current.pop("whitelist_release_branches", None)
-
-    return current
 
 
 def _edit_external_services(current):
@@ -768,8 +762,6 @@ def _edit_external_services(current):
             to_remove = questionary.select("  Remove which?", choices=names).ask()
             if to_remove:
                 del current[to_remove]
-
-    return current
 
 
 def _edit_generic_dict(key, current):
