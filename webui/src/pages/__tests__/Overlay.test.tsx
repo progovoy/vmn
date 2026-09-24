@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 // Mock the API module before any imports that use it
 vi.mock("../../api", () => ({
@@ -32,7 +33,7 @@ function serve(runs: Record<string, Points>) {
 
 function renderOverlay(runs: string[]) {
   const search = runs.length ? `?runs=${runs.join(",")}` : "";
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={[`/ws/test/app/my-app/overlay${search}`]}>
       <Routes>
         <Route path="/ws/:ws/app/:app/overlay" element={<Overlay />} />

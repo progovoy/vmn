@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../test-utils";
 
 vi.mock("../api", () => ({
   api: { experiment: vi.fn(), metricsSchema: vi.fn() },
@@ -45,7 +46,7 @@ function detail(extra: Record<string, unknown> = {}) {
 }
 
 function renderAt(path: string, route: string, el: JSX.Element) {
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={[path]}>
       <Routes><Route path={route} element={el} /></Routes>
     </MemoryRouter>,

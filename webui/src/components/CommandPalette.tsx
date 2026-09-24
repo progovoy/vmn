@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, appTag } from "../api";
 import type { AppRow, ExperimentRow, Workspace } from "../types";
 import { relTime, runHref } from "../util";
 import { useDebounce } from "../hooks/useDebounce";
-import { useAppQueryClient } from "../queryClient";
 import { runSearchQuery } from "../util/searchQuery";
 
 interface Item {
@@ -22,7 +21,7 @@ const RECENT_STALE_MS = 30_000;
 /** The runs the palette offers: the newest until something is typed, then a
  *  server search over every run — never just a filter of the newest 20. */
 function usePaletteRuns(ws: string | undefined, app: string | undefined, needle: string) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const scoped = Boolean(ws && app);
   const recent = useQuery<ExperimentRow[]>({
     queryKey: ["recent-runs", ws, app],

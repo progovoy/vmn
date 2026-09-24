@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../api", () => ({
   api: {
@@ -36,7 +37,7 @@ describe("CommandPalette", () => {
       { verstr: "newest-run", timestamp: "2026-01-03T00:00:00Z", note: null },
       { verstr: "older-run", timestamp: "2026-01-01T00:00:00Z", note: null },
     ]);
-    render(
+    renderWithClient(
       <MemoryRouter>
         <CommandPalette ws="w" app="app" workspaces={[]} apps={[]} onClose={() => {}} />
       </MemoryRouter>,
@@ -62,7 +63,7 @@ describe("Compare run picker", () => {
     m.experimentsPaged.mockResolvedValue({
       rows: [{ verstr: "0.0.9-dev.abc", idx: 9 }], total: 1,
     });
-    render(
+    renderWithClient(
       <MemoryRouter initialEntries={["/ws/w/app/app/compare?v=@1&to=latest"]}>
         <Routes>
           <Route path="/ws/:ws/app/:app/compare" element={<Compare />} />

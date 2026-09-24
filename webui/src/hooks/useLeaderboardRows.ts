@@ -1,10 +1,9 @@
 import { useCallback, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { HttpError } from "../http";
 import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
-import { useAppQueryClient } from "../queryClient";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
 import { combineQueries } from "../util/searchQuery";
@@ -24,7 +23,7 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
  *  A refresh re-asks only the first page plus the running / on-screen rows
  *  past it (see refreshRows), and unchanged rows keep their identity. */
 export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const key = rowsKey(ws, app, filter);
   /** Verstrs on screen right now — the table keeps it current. */
   const visibleRef = useRef<() => string[]>(() => []);

@@ -1,7 +1,6 @@
 import { Link, useParams } from "react-router-dom";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
-import { useAppQueryClient } from "../queryClient";
 import { runQuery, useMetricsSchema } from "../queries";
 import { setAllParams, useUrlState } from "../hooks/useUrlState";
 import { PageHead } from "../components/ui";
@@ -31,7 +30,7 @@ function PairLinks({ verstrs, details, base }: {
 export default function CompareRuns() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const base = `/ws/${ws}/app/${app}`;
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const { params, update, setParam } = useUrlState();
   const { verstrs, dropped } = parseSelection(params);
   const onlyDiffering = params.get("diff") === "1";

@@ -1,7 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
-import { useAppQueryClient } from "../queryClient";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
 import { metricGoal, pollIntervalMs } from "../util";
@@ -34,7 +34,7 @@ export default function Leaderboard() {
 
 function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const appName = toAppName(app);
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const view = useLeaderboardView();
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);

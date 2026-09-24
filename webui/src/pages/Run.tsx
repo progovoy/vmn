@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName, artifactUrl } from "../api";
-import { useAppQueryClient } from "../queryClient";
 import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { pollIntervalMs, runHref } from "../util";
@@ -47,7 +46,7 @@ function RunBody({ ws, app, appName, detail }: {
 
 export default function Run() {
   const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   // Structural sharing keeps every unchanged part of a polled detail (its
   // series above all) the same object, so the charts don't redraw.
   const query = useQuery(runQuery(ws, app, verstr), client);

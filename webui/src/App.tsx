@@ -1,9 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
   Link, NavLink, Outlet, useLocation, useMatches, useNavigate,
 } from "react-router-dom";
 import { appName as toAppName } from "./api";
-import { useAppQueryClient } from "./queryClient";
 import { useApps, useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -64,7 +64,7 @@ export default function App() {
   const currentWs = workspaces.find((w) => w.name === ws);
 
   // Revalidate on entering/leaving home — the add-workspace form lives there.
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const atHome = location.pathname === "/";
   const firstVisit = useRef(true);
   useEffect(() => {

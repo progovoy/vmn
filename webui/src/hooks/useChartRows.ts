@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import { useAppQueryClient } from "../queryClient";
 import type { RowsFilter } from "../queries";
 import type { ExperimentRow } from "../types";
 import { chartKeys, columnsToRows } from "../util/chartColumns";
@@ -17,7 +16,7 @@ export function useChartRows(
   ws: string, app: string, filter: RowsFilter, view: ChartView,
   metricCols: string[], paramCols: string[], loaded: ExperimentRow[], total: number,
 ) {
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   const keys = useMemo(() => chartKeys(view, metricCols, paramCols), [view, metricCols, paramCols]);
   const q = useQuery({
     // `total` rides along so a new run on a poll refreshes the chart.

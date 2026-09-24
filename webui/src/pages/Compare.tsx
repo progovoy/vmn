@@ -1,7 +1,6 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, appName as toAppName } from "../api";
-import { useAppQueryClient } from "../queryClient";
 import { useMetricsSchema } from "../queries";
 import type { DiffResult } from "../types";
 import { fmtVal, metricGoal } from "../util";
@@ -37,7 +36,7 @@ export default function Compare() {
   const [params, setParams] = useSearchParams();
   const v = params.get("v") ?? "@1";
   const to = params.get("to") ?? "latest";
-  const client = useAppQueryClient();
+  const client = useQueryClient();
   // Cached per pair: a revisit paints at once and revalidates behind it.
   const diff = useQuery<DiffResult>({
     queryKey: ["experiments-diff", ws, app, v, to],
