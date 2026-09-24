@@ -7,10 +7,12 @@ import StatusPill from "../components/StatusPill";
 /** A duration on the relTime ladder (2h), with the exact seconds beside it. */
 export function Duration({ secs }: { secs: number | null | undefined }) {
   if (secs == null) return <div>—</div>;
+  const text = fmtDuration(secs);
+  const exact = `${Math.round(secs)}s`;
   return (
     <div>
-      <span>{fmtDuration(secs)}</span>{" "}
-      <span className="exact-secs">{`${Math.round(secs)}s`}</span>
+      <span>{text}</span>
+      {exact !== text && <>{" "}<span className="exact-secs">{exact}</span></>}
     </div>
   );
 }

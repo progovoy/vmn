@@ -24,6 +24,14 @@ export function fmtVal(v: number | string | null | undefined): string {
   return String(v);
 }
 
+/** A param for display: non-integer numbers to 6 significant digits (no
+ *  float noise like 0.30000000000000004), anything else verbatim. */
+export function fmtParam(v: unknown): string {
+  if (typeof v === "number" && Number.isFinite(v) && !Number.isInteger(v)) {
+    return String(Number(v.toPrecision(6)));
+  }
+  return String(v);
+}
 
 /** Compact duration for run status labels, on the same ladder as `relTime`. */
 export function fmtDuration(secs: number | null | undefined): string {

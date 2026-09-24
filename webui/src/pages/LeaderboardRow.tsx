@@ -1,7 +1,7 @@
 import { memo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
-import { fmtVal, relTime, rowParams, runHref } from "../util";
+import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { tagLabel } from "../util/tags";
 import type { ColMeta } from "./leaderboardColumns";
@@ -168,8 +168,11 @@ function Row({
         <MetricCell key={m} v={r.metrics[m]} col={colMeta[m]} style={styles[4 + i]} showBest={layout.showBest} />
       ))}
       {paramCols.map((p, i) => (
-        <td key={`p-${p}`} className="mono param-cell" style={styles[paramBase + i]}>
-          {params[p] != null ? String(params[p]) : "—"}
+        <td
+          key={`p-${p}`} className="mono param-cell" style={styles[paramBase + i]}
+          title={params[p] != null ? String(params[p]) : undefined}
+        >
+          {params[p] != null ? fmtParam(params[p]) : "—"}
         </td>
       ))}
       {tagsIdx !== null && (
