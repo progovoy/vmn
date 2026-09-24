@@ -29,6 +29,6 @@ class SelectiveGZipMiddleware(GZipMiddleware):
 
 def bearer_matches(authorization, token):
     """Constant-time ``Authorization: Bearer <token>`` check (any header bytes)."""
-    expected = f"Bearer {token}".encode("utf-8")
+    expected = f"Bearer {token}".encode()
     given = (authorization or "").encode("utf-8")
     return hmac.compare_digest(given, expected)

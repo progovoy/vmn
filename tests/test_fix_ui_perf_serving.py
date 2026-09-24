@@ -94,7 +94,7 @@ def _bundle_asset():
     assets = os.path.join(STATIC, "assets")
     if not os.path.isdir(assets) or not os.listdir(assets):
         pytest.skip("web bundle not built")
-    return sorted(os.listdir(assets))[0]
+    return min(os.listdir(assets))
 
 
 def test_hashed_assets_are_cached_forever(ws):

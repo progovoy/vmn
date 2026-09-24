@@ -5,7 +5,6 @@ finished run), ``log_dict``/``log_text``/``log_figure``/``log_artifacts``, and
 ``version_stamp.exp.manage.archive_run`` which ``list_runs`` honours.
 """
 import json
-import os
 
 import pytest
 import yaml

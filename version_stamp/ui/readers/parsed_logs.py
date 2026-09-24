@@ -18,7 +18,11 @@ from collections import OrderedDict
 
 from version_stamp.cli.snapshot import LocalSnapshotStorage
 from version_stamp.cli.snapshot_storage_files import flatten_logs
-from version_stamp.core.experiment_fold import fold_last_metric_at, fold_log, fold_values
+from version_stamp.core.experiment_fold import (
+    fold_last_metric_at,
+    fold_log,
+    fold_values,
+)
 from version_stamp.core.experiment_log import load_log, metric_series
 from version_stamp.core.experiment_logfiles import (
     LEGACY_LOG_FILE,

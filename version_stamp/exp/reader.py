@@ -28,7 +28,6 @@ import yaml
 
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core import experiment_index
-from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
 from version_stamp.core.experiment_log import (
     experiment_row,
     filter_archived,
@@ -39,6 +38,7 @@ from version_stamp.core.experiment_log import (
 )
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
+from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
 from version_stamp.core.experiment_status import load_run_state, status_fields
 from version_stamp.core.experiment_tree import annotate_tree, subtree_status
 from version_stamp.core.utils import resolve_root_path
