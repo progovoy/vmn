@@ -6,43 +6,47 @@ Every tree is a pure function of the app's tags, and those only change when a
 version is stamped, so one ``git tag --list`` per request tells whether the
 last answer still holds — instead of re-reading and re-parsing every tag.
 """
-import threading
-from collections import OrderedDict
+import hashlib
+import subprocess
 
-from version_stamp.ui.index import _versions_fingerprint
+from version_stamp.core.version_math import app_name_to_tag_name
+from version_stamp.ui.memo import LRU
 
 MAX_ENTRIES = 128
 UNKNOWN = "error"  # the fingerprint when the tags could not be listed
 
 
+def versions_fingerprint(root_path, app_name):
+    """Cheap staleness signal: the app's tag list (one local git call)."""
+    prefix = app_name_to_tag_name(app_name)
+    result = subprocess.run(
+        ["git", "tag", "--list", f"{prefix}_*"],
+        capture_output=True,
+        text=True,
+        cwd=root_path,
+    )
+    if result.returncode != 0:
+        return UNKNOWN
+    return hashlib.sha256(result.stdout.encode()).hexdigest()
+
+
 class TreeCache:
     def __init__(self, size=MAX_ENTRIES):
-        self._size = size
-        self._entries = OrderedDict()  # key -> (fingerprint, value)
-        self._lock = threading.Lock()
+        self._entries = LRU(size)  # key -> (fingerprint, value)
 
     def clear(self):
-        with self._lock:
-            self._entries.clear()
+        self._entries.clear()
 
     def get(self, root_path, app_name, kind, compute, *args):
         """``compute()``'s value, reused while the app's tags are unchanged."""
-        fingerprint = _versions_fingerprint(root_path, app_name)
+        fingerprint = versions_fingerprint(root_path, app_name)
         if fingerprint == UNKNOWN:
             return compute()
-        key = (root_path, app_name, kind) + args
-        with self._lock:
-            hit = self._entries.get(key)
-            if hit is not None and hit[0] == fingerprint:
-                self._entries.move_to_end(key)
-                return hit[1]
-        value = compute()
-        with self._lock:
-            self._entries[key] = (fingerprint, value)
-            self._entries.move_to_end(key)
-            while len(self._entries) > self._size:
-                self._entries.popitem(last=False)
-        return value
+        return self._entries.get(
+            (root_path, app_name, kind) + args,
+            lambda: (fingerprint, compute()),
+            valid=lambda hit: hit[0] == fingerprint,
+        )[1]
 
 
 TREES = TreeCache()

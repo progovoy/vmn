@@ -41,54 +41,61 @@ def _index(app_layout):
     return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir)
 
 
+def _rows(idx, app_layout):
+    return list(idx.snapshot(app_layout.app_name).rows)
+
+
+def _clients(app_layout):
+    from version_stamp.ui.server import create_app
+    from version_stamp.ui.workspaces import WorkspaceManager
+
+    manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
+    manager.attach_path("main", app_layout.repo_path)
+    return TestClient(create_app(manager)), TestClient(create_app(manager, use_index=False))
+
+
 def test_index_experiments_parity(app_layout, capfd):
-    """Indexed leaderboard rows equal the direct reader's."""
-    from version_stamp.ui.readers import experiments as exp_reader
-
+    """Indexed leaderboard pages equal the direct reader's, sorted too."""
     _seed(app_layout, capfd, n=3)
-    idx = _index(app_layout)
+    indexed, direct = _clients(app_layout)
 
-    direct = exp_reader.list_experiments(app_layout.repo_path, app_layout.app_name)
-    indexed = idx.list_experiments(app_layout.app_name)
-    assert indexed == direct
-
-    direct_sorted = exp_reader.list_experiments(
-        app_layout.repo_path, app_layout.app_name, sort="loss"
-    )
-    indexed_sorted = idx.list_experiments(app_layout.app_name, sort="loss")
-    assert indexed_sorted == direct_sorted
+    url = f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
+    for params in ({}, {"sort": "loss"}):
+        assert indexed.get(url, params=params).json() == direct.get(url, params=params).json()
 
 
 def test_index_serves_from_cache(app_layout, capfd, monkeypatch):
-    """After a warm read, unchanged data is served without re-reading YAML."""
+    """After a warm read, unchanged data is served without re-reading storage."""
+    from version_stamp.cli.snapshot import LocalSnapshotStorage
+    from version_stamp.core import experiment_index
+
     _seed(app_layout, capfd, n=2)
     idx = _index(app_layout)
 
-    warm = idx.list_experiments(app_layout.app_name)
+    warm = _rows(idx, app_layout)
     assert len(warm) == 2
 
-    # Poison the expensive fetch path: a cache hit must not call it.
-    import version_stamp.ui.index as index_mod
-
     def _boom(*a, **kw):
-        raise AssertionError("cache miss: expensive fetch was called")
+        raise AssertionError("cache miss: storage was read again")
 
-    monkeypatch.setattr(index_mod, "_fetch_experiment_rows", _boom)
-    cached = idx.list_experiments(app_layout.app_name)
-    assert cached == warm
+    # Poison every read a refresh could make: a cache hit must not call them.
+    monkeypatch.setattr(LocalSnapshotStorage, "load_file", _boom)
+    monkeypatch.setattr(LocalSnapshotStorage, "read_file_from", _boom)
+    monkeypatch.setattr(experiment_index, "direct_rows", _boom)
+    assert _rows(idx, app_layout) == warm
 
 
 def test_index_invalidates_on_new_experiment(app_layout, capfd):
     _seed(app_layout, capfd, n=1)
     idx = _index(app_layout)
-    assert len(idx.list_experiments(app_layout.app_name)) == 1
+    assert len(_rows(idx, app_layout)) == 1
 
     _make_dirty(app_layout, "ix_new.txt", "fresh")
     capfd.readouterr()
     _experiment(app_layout.app_name, note="fresh run", metrics=["loss=0.05"])
     new_verstr = extract_dev_verstr(capfd.readouterr().out)
 
-    rows = idx.list_experiments(app_layout.app_name)
+    rows = _rows(idx, app_layout)
     assert len(rows) == 2
     assert any(r["verstr"] == new_verstr for r in rows)
 
@@ -118,24 +125,14 @@ def test_index_versions_parity_and_invalidation(app_layout, capfd):
 def test_index_survives_restart(app_layout, capfd):
     """A fresh WorkspaceIndex over the same db reuses the persisted cache."""
     _seed(app_layout, capfd, n=2)
-    idx1 = _index(app_layout)
-    warm = idx1.list_experiments(app_layout.app_name)
-
-    idx2 = _index(app_layout)
-    assert idx2.list_experiments(app_layout.app_name) == warm
+    warm = _rows(_index(app_layout), app_layout)
+    assert _rows(_index(app_layout), app_layout) == warm
 
 
 def test_server_uses_index_transparently(app_layout, capfd):
     """API responses are identical with the index enabled (the default)."""
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
-
-    verstrs = _seed(app_layout, capfd, n=2)
-    manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
-    manager.attach_path("main", app_layout.repo_path)
-
-    indexed_client = TestClient(create_app(manager))
-    direct_client = TestClient(create_app(manager, use_index=False))
+    _seed(app_layout, capfd, n=2)
+    indexed_client, direct_client = _clients(app_layout)
 
     url = f"/api/v1/workspaces/main/apps/{app_layout.app_name}/experiments"
     assert indexed_client.get(url).json() == direct_client.get(url).json()

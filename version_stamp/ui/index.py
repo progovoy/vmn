@@ -13,19 +13,12 @@ import json
 import logging
 import os
 import sqlite3
-import subprocess
 import threading
 
 from version_stamp.core import experiment_index
-from version_stamp.core.experiment_status import observed_at_by_verstr
-from version_stamp.core.version_math import app_name_to_tag_name
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
-
-# Module-level aliases: the direct reads, used when the index is unavailable.
-_fetch_experiment_rows = exp_reader.fetch_experiment_rows
-_fetch_run_states = exp_reader.fetch_run_states
-_fetch_version_rows = ver_reader.list_versions
+from version_stamp.ui.tree_cache import versions_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,20 +58,6 @@ def s3_cache_path(db_dir, ws):
     return _db_path(db_dir, repr((ws.endpoint_url, ws.bucket, ws.prefix)), "s3-")
 
 
-def _versions_fingerprint(root_path, app_name):
-    """Cheap staleness signal: the app's tag list (one local git call)."""
-    prefix = app_name_to_tag_name(app_name)
-    result = subprocess.run(
-        ["git", "tag", "--list", f"{prefix}_*"],
-        capture_output=True,
-        text=True,
-        cwd=root_path,
-    )
-    if result.returncode != 0:
-        return "error"
-    return hashlib.sha256(result.stdout.encode()).hexdigest()
-
-
 class WorkspaceIndex:
     """Per-workspace read cache. Thread-safe for server use."""
 
@@ -113,45 +92,14 @@ class WorkspaceIndex:
             )
             self._conn.commit()
 
-    def experiment_rows(self, app_name):
-        """``(rows, run_states, observed_at)``, refreshing the incremental
-        experiment index (*observed_at*: each run_state.yml's store write time).
-
-        A metric appended anywhere costs that log's new bytes and a heartbeat
-        that one run state — never a re-read of every experiment. The index is
-        the process-wide one for this checkout, persisted in this db.
-        """
-        try:
-            index = experiment_index.shared_index(
-                self._storage, app_name, cache_path=self._db_path
-            ).refresh()
-            observed = dict(index.snapshot().run_state_observed_at)
-            return index.rows(), index.run_states(), observed
-        except Exception:
-            _LOGGER.debug("Experiment index failed; reading directly", exc_info=True)
-            rows = _fetch_experiment_rows(self.root_path, app_name)
-            states = _fetch_run_states(
-                root_path=self.root_path,
-                app_name=app_name,
-                verstrs=[r["verstr"] for r in rows],
-            )
-            return rows, states, observed_at_by_verstr(self._storage, app_name, states)
-
     def snapshot(self, app_name, refresher=None):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
         return app_snapshot(self._storage, app_name, self._db_path, refresher)
 
-    def list_experiments(self, app_name, **filters):
-        rows, run_states, observed = self.experiment_rows(app_name)
-        schema = exp_reader.metrics_schema(self.root_path, app_name)
-        return exp_reader.leaderboard(
-            rows, run_states, schema, observed_at=observed, **filters
-        )
-
     def list_versions(self, app_name):
-        fp = _versions_fingerprint(self.root_path, app_name)
+        fp = versions_fingerprint(self.root_path, app_name)
         rows = self._get(f"ver:{app_name}", fp)
         if rows is None:
-            rows = _fetch_version_rows(self.root_path, app_name)
+            rows = ver_reader.list_versions(self.root_path, app_name)
             self._put(f"ver:{app_name}", fp, rows)
         return rows

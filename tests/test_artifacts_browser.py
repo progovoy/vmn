@@ -50,7 +50,7 @@ def _create_artifact(storage, app, verstr, filename, content):
 
 
 def test_experiment_detail_includes_structured_artifacts(tmp_path):
-    """get_experiment should return an 'artifacts' list with name and size."""
+    """get_experiment_from_storage should return an 'artifacts' list with name and size."""
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "model.pt", "x" * 100)
@@ -58,7 +58,9 @@ def test_experiment_detail_includes_structured_artifacts(tmp_path):
         storage, "myapp", "1.0.0-dev.aaa.bbb", "config.json", '{"lr": 0.01}'
     )
 
-    result, err = exp_reader.get_experiment(str(tmp_path), "myapp", "1.0.0-dev.aaa.bbb")
+    result, err = exp_reader.get_experiment_from_storage(
+        storage, "myapp", "1.0.0-dev.aaa.bbb"
+    )
 
     assert err is None
     assert "artifacts" in result
@@ -81,7 +83,9 @@ def test_experiment_detail_no_artifacts(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
 
-    result, err = exp_reader.get_experiment(str(tmp_path), "myapp", "1.0.0-dev.aaa.bbb")
+    result, err = exp_reader.get_experiment_from_storage(
+        storage, "myapp", "1.0.0-dev.aaa.bbb"
+    )
 
     assert err is None
     assert "artifacts" in result
