@@ -132,6 +132,20 @@ def append_to_log(storage, app_name, verstr, entry):
         storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
 
 
+def append_entries_to_log(storage, app_name, verstr, entries):
+    """Append already-sanitized *entries* in one write where the backend can.
+
+    A duck-typed backend without ``append_log_entries`` gets them one by one.
+    """
+    writer = get_writer_id()
+    batch = getattr(storage, "append_log_entries", None)
+    if batch is not None:
+        return batch(app_name, verstr, writer, entries)
+    for entry in entries:
+        storage.append_log_entry(app_name, verstr, writer, entry)
+    return True
+
+
 def save_log(storage, app_name, verstr, log):
     """Save experiment log to storage. Legacy: prefer append_to_log for new code."""
     storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))

@@ -147,6 +147,16 @@ class SnapshotStorage(ABC):
             app_name, verstr, LEGACY_LOG_FILE, yaml.dump(log, sort_keys=False)
         )
 
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        """Append several entries in order. Backends override this with one
+        write per batch; this default appends them one by one."""
+        ok = True
+        for entry in entries:
+            ok = self.append_log_entry(app_name, verstr, writer_id, entry) is not False
+            if not ok:
+                break
+        return ok
+
     def load_logs_by_writer(self, app_name, verstr):
         """``{writer: [entries]}``; the legacy ``log.yml`` is writer ``""``."""
         return {"": self.load_merged_log(app_name, verstr)}

@@ -23,8 +23,9 @@ import time
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
+from version_stamp.core.experiment_values import sanitize_entry
 from version_stamp.core.experiment_writer import (
-    append_to_log,
+    append_entries_to_log,
     compute_artifact_info,
     create_log_entry,
     get_writer_id,
@@ -46,6 +47,7 @@ from version_stamp.exp.context import (  # noqa: F401  (re-exported API)
 )
 from version_stamp.exp.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from version_stamp.exp.heartbeat import Heartbeat
+from version_stamp.exp.log_buffer import LogBuffer
 from version_stamp.exp.ranks import NoOpRun, is_secondary_rank
 from version_stamp.exp.state_publisher import RunStatePublisher
 
@@ -173,6 +175,9 @@ class Run:
             resume.elapsed_before(self._state) if prior_state is not None else 0.0
         )
         self._state_publisher = RunStatePublisher(storage, app_name, verstr)
+        self._log_buffer = LogBuffer(
+            functools.partial(append_entries_to_log, storage, app_name, verstr)
+        )
         self._chore_guard = quiet(_LOGGER)
         self._log_sync = Coalescing(
             functools.partial(
@@ -243,15 +248,6 @@ class Run:
             self._heartbeat.stop()
             duration = self._duration()
             self._record_guard(
-                "final state",
-                self._publish,
-                state="finished",
-                exit_code=exit_code,
-                finished_at=now_iso(),
-                duration_sec=duration,
-                **final_state,
-            )
-            self._record_guard(
                 "run entry",
                 self._append,
                 create_log_entry(
@@ -260,6 +256,18 @@ class Run:
                     exit_code=exit_code,
                     duration_sec=duration,
                 ),
+            )
+            # The log lands before the final state: a reader that sees the run
+            # finished must also see everything it logged.
+            self._record_guard("buffered log", self._log_buffer.close)
+            self._record_guard(
+                "final state",
+                self._publish,
+                state="finished",
+                exit_code=exit_code,
+                finished_at=now_iso(),
+                duration_sec=duration,
+                **final_state,
             )
             self._log_sync.submit(get_writer_id())
             self._close_remote_writers()
@@ -323,7 +331,9 @@ class Run:
     # -- internals ---------------------------------------------------------
 
     def _append(self, entry):
-        append_to_log(self._storage, self.app_name, self.id, entry)
+        entry = sanitize_entry(entry)
+        if entry is not None:
+            self._log_buffer.append(entry)
 
     def _publish(self, **updates):
         self._state.update(updates)
@@ -332,7 +342,13 @@ class Run:
     def _beat(self):
         # Independent chores: a failed heartbeat write must not skip the sync
         # that would get the log off this box, nor the other way round.
-        for chore in (self._publish_heartbeat, self._sampler.tick, self._maybe_sync):
+        chores = (
+            self._publish_heartbeat,
+            self._sampler.tick,
+            self._log_buffer.flush,
+            self._maybe_sync,
+        )
+        for chore in chores:
             self._chore_guard(f"heartbeat chore {chore.__name__}", chore)
 
     def _publish_heartbeat(self):

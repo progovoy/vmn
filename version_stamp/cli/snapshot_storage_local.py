@@ -30,6 +30,17 @@ from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import parse_record_metadata
 
 
+def _append_bytes(path, text):
+    """Append *text* with a single ``O_APPEND`` write (looping only on a short one)."""
+    data = text.encode("utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o666)
+    try:
+        while data:
+            data = data[os.write(fd, data) :]
+    finally:
+        os.close(fd)
+
+
 class LocalSnapshotStorage(SnapshotStorage):
     def __init__(self, vmn_root_path, subdir="snapshots"):
         self.vmn_root_path = vmn_root_path
@@ -303,11 +314,18 @@ class LocalSnapshotStorage(SnapshotStorage):
             return {}
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
+        return self.append_log_entries(app_name, verstr, writer_id, [entry])
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        """Append *entries* as whole lines in one ``write``: a reader sees all
+        of the batch or none of it, never half a line."""
+        if not entries:
+            return True
         if self._refuse_orphan_write(app_name, verstr, "a log entry"):
             return False
         snap_dir = self._snapshot_dir(app_name, verstr)
-        with open(os.path.join(snap_dir, log_object_name(writer_id)), "a") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
+        data = "".join(json.dumps(e, default=str) + "\n" for e in entries)
+        _append_bytes(os.path.join(snap_dir, log_object_name(writer_id)), data)
         # An append leaves the dir mtime alone; bump it so the index's
         # record signature (list_record_names) sees the change.
         os.utime(snap_dir)
