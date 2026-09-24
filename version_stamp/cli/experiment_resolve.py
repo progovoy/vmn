@@ -52,3 +52,29 @@ def resolve_experiment(storage, app_name, ref, latest=False, snapshot=None):
     if snapshot is None:
         return _resolve_verstr(storage, app_name, ref, latest=latest, kind=KIND)
     return snapshot.resolve(ref, latest=latest, kind=KIND)
+
+
+def parent_edges(storage, app_name, snapshot=None):
+    """``{verstr: parent}`` for every run of the app."""
+    snapshot = snapshot or index_snapshot(storage, app_name)
+    if snapshot is not None:
+        return dict(snapshot.edges)
+    return {m["verstr"]: m.get("parent") for m in storage.list_snapshots(app_name)}
+
+
+def storage_index(storage, app_name, verstr, snapshot=None):
+    """The 1-based storage index (what ``@N`` resolves) of *verstr*, or None."""
+    snapshot = snapshot or index_snapshot(storage, app_name)
+    if snapshot is not None:
+        row = snapshot.row(verstr)
+        return row["idx"] if row else None
+    metas = storage.list_snapshots(app_name)
+    return next((i for i, m in enumerate(metas, 1) if m["verstr"] == verstr), None)
+
+
+def recent_verstrs(storage, app_name, count):
+    """The *count* most recent runs' verstrs in storage order."""
+    snapshot = index_snapshot(storage, app_name)
+    if snapshot is not None:
+        return [row["verstr"] for row in snapshot.rows[-count:]]
+    return [m["verstr"] for m in storage.list_snapshots(app_name)[-count:]]
