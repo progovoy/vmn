@@ -17,6 +17,7 @@ from version_stamp.core.experiment_writer import (
     attach_parent,
     compute_artifact_info,
     create_log_entry,
+    create_run,
     get_repo_lock,
     get_writer_id,
     merge_conf_into_params,
@@ -325,6 +326,66 @@ def test_allocate_run_verstr_disambiguates_a_taken_writer_suffix(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# creating a run
+# ---------------------------------------------------------------------------
+
+
+class _RecordingStorage(_FakeStorage):
+    def __init__(self, snapshots=None):
+        super().__init__(snapshots)
+        self.saved = {}
+
+    def save(self, app_name, verstr, metadata, patches):
+        self.saved[verstr] = (metadata, patches)
+        self._snapshots.append(metadata)
+
+
+def test_create_run_claims_the_verstr_and_writes_the_create_entry():
+    storage = _RecordingStorage([_meta("0.0.1-dev.aaa.bbb")])
+    template = {"verstr": "placeholder", "note": "n"}
+
+    verstr = create_run(
+        storage,
+        "app",
+        "0.0.1-dev.aaa.bbb",
+        template,
+        {"working_tree": b"diff"},
+        note="n",
+        create_data={"params": {"lr": 0.1}},
+        parent="0.0.1-dev.aaa.bbb",
+        name="sweep",
+    )
+
+    assert verstr == "0.0.1-dev.aaa.bbb.r2"
+    metadata, patches = storage.saved[verstr]
+    assert metadata == {
+        "verstr": verstr,
+        "note": "n",
+        "code_verstr": "0.0.1-dev.aaa.bbb",
+        "parent": "0.0.1-dev.aaa.bbb",
+        "name": "sweep",
+    }
+    assert patches == {"working_tree": b"diff"}
+    assert template["verstr"] == "placeholder"
+    [(app, logged_verstr, _, entry)] = storage.log_entries
+    assert (app, logged_verstr) == ("app", verstr)
+    assert entry["type"] == "create"
+    assert entry["note"] == "n"
+    assert entry["params"] == {"lr": 0.1}
+
+
+def test_create_run_never_makes_the_run_its_own_parent():
+    storage = _RecordingStorage()
+
+    verstr = create_run(
+        storage, "app", "0.0.1-dev.aaa.bbb", {}, {}, parent="0.0.1-dev.aaa.bbb"
+    )
+
+    assert "parent" not in storage.saved[verstr][0]
+    assert "name" not in storage.saved[verstr][0]
+
+
+# ---------------------------------------------------------------------------
 # layering
 # ---------------------------------------------------------------------------
 
@@ -355,8 +416,7 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
     """The SDK gets its record-shaping helpers from core, not from cli.
 
     What is left is the irreducible remainder: creating a record needs the
-    storage factory and parent resolution, which still live in
-    ``version_stamp/cli/experiment.py``. Checked across the whole ``exp``
+    storage factory, which still lives in ``version_stamp/cli/experiment.py``. Checked across the whole ``exp``
     package (run creation lives in ``exp/create.py``). Pin the list so it can
     only shrink.
     """
@@ -372,7 +432,4 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
         and (node.module or "").startswith("version_stamp.cli.experiment")
         for alias in node.names
     }
-    assert from_cli == {
-        "_get_experiment_storage",
-        "_resolve_parent",
-    }
+    assert from_cli == {"_get_experiment_storage"}

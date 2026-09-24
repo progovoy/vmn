@@ -10,13 +10,7 @@ import os
 
 import yaml
 
-from version_stamp.core.experiment_writer import (
-    allocate_run_verstr,
-    append_to_log,
-    attach_name,
-    attach_parent,
-    create_log_entry,
-)
+from version_stamp.core.experiment_writer import create_run
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import now_iso
 
@@ -42,34 +36,26 @@ def _load_snapshot_meta(snapshot_meta_path):
     return snap_meta
 
 
-def _record_factory(snap_meta, app, note, parent, name=None):
-    """``make_record(verstr) -> (metadata, patches)`` for allocate_run_verstr."""
-
-    def _record(verstr):
-        metadata = {
-            "verstr": verstr,
-            "base_version": snap_meta.get("base_version"),
-            "base_commit": snap_meta.get("base_commit"),
-            "branch": snap_meta.get("branch"),
-            "remote": snap_meta.get("remote"),
-            "timestamp": now_iso(),
-            "note": note,
-            "app_name": app,
-            "code_verstr": snap_meta["verstr"],
-            "from_snapshot": True,
-            "dirty_states": snap_meta.get("dirty_states", []),
-            "has_working_tree_patch": False,
-            "has_local_commits_patch": False,
-            "has_untracked_files": False,
-            "has_dep_patches": False,
-        }
-        if snap_meta.get("changesets"):
-            metadata["changesets"] = snap_meta["changesets"]
-        attach_parent(metadata, parent)
-        attach_name(metadata, name)
-        return metadata, {}
-
-    return _record
+def _record_template(snap_meta, app, note):
+    """The new run's metadata, minus the identity create_run stamps on it."""
+    template = {
+        "base_version": snap_meta.get("base_version"),
+        "base_commit": snap_meta.get("base_commit"),
+        "branch": snap_meta.get("branch"),
+        "remote": snap_meta.get("remote"),
+        "timestamp": now_iso(),
+        "note": note,
+        "app_name": app,
+        "from_snapshot": True,
+        "dirty_states": snap_meta.get("dirty_states", []),
+        "has_working_tree_patch": False,
+        "has_local_commits_patch": False,
+        "has_untracked_files": False,
+        "has_dep_patches": False,
+    }
+    if snap_meta.get("changesets"):
+        template["changesets"] = snap_meta["changesets"]
+    return template
 
 
 def create_from_snapshot(
@@ -98,16 +84,15 @@ def create_from_snapshot(
 
     # Allocation creates the record: the name is claimed atomically, so two
     # hosts sharing a bucket or directory never end up with the same run.
-    verstr = allocate_run_verstr(
+    verstr = create_run(
         storage,
         app,
         snap_meta["verstr"],
-        make_record=_record_factory(snap_meta, app, note, parent, name),
+        _record_template(snap_meta, app, note),
+        {},
+        note=note,
+        create_data=extra_create_data,
+        parent=parent,
+        name=name,
     )
-
-    entry = create_log_entry("create", note=note)
-    if extra_create_data:
-        entry.update(extra_create_data)
-
-    append_to_log(storage, app, verstr, entry)
     return verstr, None

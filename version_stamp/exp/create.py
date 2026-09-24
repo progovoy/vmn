@@ -11,31 +11,22 @@ takes the lock on its own, only when there is something to initialize.
 """
 import contextlib
 import os
-from types import SimpleNamespace
 
 import yaml
 
 # Still upward, and deliberately so: the storage factory and the snapshot
 # record builders live in version_stamp/cli. Lifting exp/ into its own
 # distribution needs these to move into core next.
-from version_stamp.cli.experiment import _get_experiment_storage, _resolve_parent
-from version_stamp.cli.snapshot import (
-    _build_snapshot_metadata,
-    _format_dev_verstr,
-    _resolve_verstr,
-)
+from version_stamp.cli.experiment import _get_experiment_storage
+from version_stamp.cli.snapshot import _build_snapshot_metadata, _format_dev_verstr
 from version_stamp.core.experiment_from_snapshot import create_from_snapshot
+from version_stamp.core.experiment_refs import resolve_parent
 from version_stamp.core.experiment_writer import (
-    allocate_run_verstr,
-    append_to_log,
-    attach_name,
-    attach_parent,
-    create_log_entry,
+    create_run,
     get_repo_lock,
     merge_conf_into_params,
     merge_env_into_params,
 )
-from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.exp import _resolve_app_name, capture, context
 from version_stamp.exp.coldstart import tracked_vcs
@@ -48,7 +39,7 @@ def create_record(
     app_name, note, params, parent, nested, storage, snapshot, name=None
 ):
     """Create a new run's record; ``(app_name, storage, verstr)``."""
-    # Same shape as the CLI's `-f file` params, so _get_latest_metrics and
+    # Same shape as the CLI's `-f file` params, so latest_metrics and
     # `exp diff` pick them up unchanged.
     create_data = {"params": dict(params)} if params else None
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
@@ -120,9 +111,7 @@ def pick_parent(storage, app_name, parent, nested):
     process was started with.
     """
     if parent:
-        resolved, err = _resolve_parent(
-            storage, app_name, SimpleNamespace(parent=parent)
-        )
+        resolved, err = resolve_parent(storage, app_name, parent)
         if err:
             raise ValueError(f"Unknown parent experiment: {parent}")
         return resolved
@@ -134,18 +123,7 @@ def pick_parent(storage, app_name, parent, nested):
     ref = os.environ.get(EXPERIMENT_ID_ENV)
     if ref and context.is_foreign_sibling(ref):
         ref = context.launcher_experiment_id()
-    return _resolve_env_parent(storage, app_name, ref)
-
-
-def _resolve_env_parent(storage, app_name, ref):
-    """An env-provided parent: resolved against storage, dropped when stale."""
-    if not ref:
-        return None
-    verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
-    if err:
-        VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
-        return None
-    return verstr
+    return resolve_parent(storage, app_name, env_ref=ref)[0]
 
 
 def create_from_snapshot_meta(
@@ -217,17 +195,14 @@ def _record(vcs, storage, captured, note, create_data, parent, name=None):
         template["diff_hash"] = captured.diff_hash
     if not captured.snapshot:
         template["snapshot"] = False
-    template["code_verstr"] = code_verstr
-
-    def make_record(verstr):
-        metadata = dict(template, verstr=verstr)
-        attach_parent(metadata, parent)
-        attach_name(metadata, name)
-        return metadata, captured.payload
-
-    verstr = allocate_run_verstr(storage, vcs.name, code_verstr, make_record=make_record)
-    entry = create_log_entry("create", note=note)
-    if create_data:
-        entry.update(create_data)
-    append_to_log(storage, vcs.name, verstr, entry)
-    return verstr
+    return create_run(
+        storage,
+        vcs.name,
+        code_verstr,
+        template,
+        captured.payload,
+        note=note,
+        create_data=create_data,
+        parent=parent,
+        name=name,
+    )

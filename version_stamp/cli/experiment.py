@@ -51,6 +51,7 @@ from version_stamp.core.experiment_refs import (
     placement_snapshot,
     recent_verstrs,
     resolve_experiment,
+    resolve_parent,
     storage_index,
 )
 from version_stamp.core.experiment_status import (
@@ -61,12 +62,10 @@ from version_stamp.core.experiment_status import (
 )
 from version_stamp.core.experiment_tree import subtree_status
 from version_stamp.core.experiment_writer import (
-    allocate_run_verstr,
     append_to_log,
-    attach_name,
-    attach_parent,
     compute_artifact_info,
     create_log_entry,
+    create_run,
     merge_conf_into_params,
     save_artifact,
 )
@@ -111,28 +110,13 @@ def _get_experiment_storage(vcs, params):
 
 
 def _resolve_parent(storage, app_name, args):
-    """Parent verstr for a new experiment. Returns (parent, error_code).
-
-    ``--parent`` wins over the ``VMN_EXPERIMENT_ID`` exported by an enclosing
-    ``vmn exp run``. Both are resolved against storage, so a parent is only ever
-    recorded if it exists. An explicit ``--parent`` that cannot be resolved is a
-    hard error; a stale env id is dropped with a warning — the outer run may
-    simply have been pruned, which is no reason to fail this one.
-    """
-    ref = getattr(args, "parent", None) if args is not None else None
-    explicit = bool(ref)
-    ref = ref or os.environ.get("VMN_EXPERIMENT_ID")
-    if not ref:
-        return None, None
-
-    verstr, err = resolve_experiment(storage, app_name, ref)
-    if not err:
-        return verstr, None
-    if explicit:
-        VMN_LOGGER.error(err)
-        return None, 1
-    VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
-    return None, None
+    """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID``: ``(parent, err)``."""
+    return resolve_parent(
+        storage,
+        app_name,
+        getattr(args, "parent", None),
+        os.environ.get("VMN_EXPERIMENT_ID"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -387,31 +371,27 @@ def _experiment_create_core(
         return None, err
 
     code_verstr = _compute_verstr(base_version, commit_hash, patches)
-
-    def _record(verstr):
-        metadata = _build_snapshot_metadata(
-            vcs,
-            verstr,
-            base_version,
-            commit_hash,
-            dirty_states,
-            patches,
-            ver_info,
-            note=note,
-        )
-        metadata["code_verstr"] = code_verstr
-        attach_parent(metadata, parent)
-        attach_name(metadata, name)
-        return metadata, patches
-
-    # Allocation creates the record (see _experiment_create_from_snapshot).
-    verstr = allocate_run_verstr(storage, vcs.name, code_verstr, make_record=_record)
-
-    entry = create_log_entry("create", note=note)
-    if extra_create_data:
-        entry.update(extra_create_data)
-
-    append_to_log(storage, vcs.name, verstr, entry)
+    template = _build_snapshot_metadata(
+        vcs,
+        code_verstr,
+        base_version,
+        commit_hash,
+        dirty_states,
+        patches,
+        ver_info,
+        note=note,
+    )
+    verstr = create_run(
+        storage,
+        vcs.name,
+        code_verstr,
+        template,
+        patches,
+        note=note,
+        create_data=extra_create_data,
+        parent=parent,
+        name=name,
+    )
     return verstr, None
 
 

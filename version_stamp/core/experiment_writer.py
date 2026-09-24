@@ -285,3 +285,34 @@ def allocate_run_verstr(storage, app_name, code_verstr, make_record=None):
         if _claim(storage, app_name, candidate, metadata, patches):
             return candidate
     raise RuntimeError("Could not allocate experiment verstr")
+
+
+def create_run(
+    storage,
+    app_name,
+    code_verstr,
+    template,
+    patches,
+    note=None,
+    create_data=None,
+    parent=None,
+    name=None,
+):
+    """Claim a run verstr for *template* and write the record and its create entry.
+
+    *template* is the record's metadata minus its identity: each claim attempt
+    stamps a copy with the candidate verstr, ``code_verstr``, parent and name.
+    """
+
+    def make_record(verstr):
+        metadata = dict(template, verstr=verstr, code_verstr=code_verstr)
+        attach_parent(metadata, parent)
+        attach_name(metadata, name)
+        return metadata, patches
+
+    verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
+    entry = create_log_entry("create", note=note)
+    if create_data:
+        entry.update(create_data)
+    append_to_log(storage, app_name, verstr, entry)
+    return verstr
