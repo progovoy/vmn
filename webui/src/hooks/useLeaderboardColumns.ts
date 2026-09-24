@@ -35,10 +35,15 @@ export function useLeaderboardColumns(
     [schema],
   );
   // Keyed on the *set* of names, so a poll returning the same columns keeps
-  // the same arrays (and the user's column choices).
+  // the same arrays (and the user's column choices). Facets (the server's
+  // app-wide keys) widen the set beyond what the loaded rows happen to
+  // carry, so a column only present on an unloaded row is still pickable.
   const [metricNames, paramNames] = useMemo(
-    () => [metricColumns(rows ?? [], schema).join("\u0000"), paramKey(rows)],
-    [rows, schema],
+    () => [
+      metricColumns(rows ?? [], schema, facets?.metric_keys).join("\u0000"),
+      paramKey(rows, facets?.param_keys),
+    ],
+    [rows, schema, facets],
   );
   const metricCols = useMemo(() => splitKey(metricNames), [metricNames]);
   const paramCols = useMemo(() => splitKey(paramNames), [paramNames]);

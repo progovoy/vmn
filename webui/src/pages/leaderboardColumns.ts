@@ -44,8 +44,11 @@ export function columnStyles(layout: ColumnLayout): CSSProperties[] {
 
 /** A stable identity for the set of param names across rows, so a poll that
  *  returns the same names doesn't look like a new column set. */
-export function paramKey(rows: readonly ExperimentRow[] | null | undefined): string {
-  const keys = new Set<string>();
+export function paramKey(
+  rows: readonly ExperimentRow[] | null | undefined,
+  facetKeys?: readonly string[],
+): string {
+  const keys = new Set<string>(facetKeys ?? []);
   rows?.forEach((r) => Object.keys(rowParams(r)).forEach((k) => keys.add(k)));
   return [...keys].sort().join("\u0000");
 }
@@ -56,9 +59,13 @@ export function anyTags(rows: readonly ExperimentRow[] | undefined): boolean {
 }
 
 /** Metric columns: the schema's order first, then any other metric the rows
- *  carry, alphabetically. */
-export function metricColumns(rows: readonly ExperimentRow[], schema: MetricsSchema | null): string[] {
-  const inData = new Set<string>();
+ *  (or, when given, the app-wide facets) carry, alphabetically. */
+export function metricColumns(
+  rows: readonly ExperimentRow[],
+  schema: MetricsSchema | null,
+  facetKeys?: readonly string[],
+): string[] {
+  const inData = new Set<string>(facetKeys ?? []);
   rows.forEach((r) => Object.keys(r.metrics).forEach((k) => inData.add(k)));
   const fromSchema = Object.keys(schema ?? {}).filter((k) => inData.has(k));
   const extras = [...inData].filter((k) => !(schema ?? {})[k]).sort();
