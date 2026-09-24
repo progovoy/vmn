@@ -108,6 +108,27 @@ def test_the_pipeline_runs_once_per_generation(monkeypatch):
     assert len(tree_calls) == 2
 
 
+def test_only_a_couple_of_stale_generations_keep_their_base(monkeypatch):
+    # Each generation's _Base (annotated rows for every row) is memory-heavy;
+    # only enough of them should be kept alive to survive a refresh's
+    # old-snapshot/new-snapshot handoff, not every generation ever seen.
+    tree_calls = _counting(monkeypatch, "annotate_rows")
+    cache = lb.LeaderboardCache()
+    snaps = [_snapshot(n=10, generation=g) for g in range(1, 10)]
+    for snap in snaps:
+        cache.page(snap, {}, limit=5)
+    tree_calls.clear()
+
+    # The most recent generations are still cached: no recompute.
+    cache.page(snaps[-1], {}, limit=5)
+    cache.page(snaps[-2], {}, limit=5)
+    assert len(tree_calls) == 0
+
+    # Anything older than that has been evicted and must recompute.
+    cache.page(snaps[-3], {}, limit=5)
+    assert len(tree_calls) == 1
+
+
 def test_only_live_rows_are_rederived_as_time_passes(monkeypatch):
     # The first pass derives through core's annotate_rows, a re-derive in lb.
     status_calls = _counting(monkeypatch, "status_fields")
