@@ -17,14 +17,13 @@ from abc import ABC, abstractmethod
 import yaml
 
 from version_stamp.cli.snapshot_storage_files import (
-    LEGACY_LOG_FILE,
     METADATA_FILE,
     apply_metadata_updates,
     artifact_file_path,
     list_artifact_tree,
     valid_artifact_path,
 )
-from version_stamp.core.utils import parse_record_metadata, yaml_safe_load
+from version_stamp.core.utils import parse_record_metadata
 
 
 class SnapshotStorage(ABC):
@@ -66,15 +65,6 @@ class SnapshotStorage(ABC):
         return {}
 
     # -- experiment index hooks ----------------------------------------------
-
-    def direct_files(self):
-        """The backend whose files *are* the records' files, or None.
-
-        The experiment index reads such a backend incrementally (the new bytes
-        of a grown log). A backend whose reads merge several sources returns
-        None, and the index re-reads a changed record through it instead.
-        """
-        return None
 
     def read_file_from(self, app_name, verstr, filename, offset):
         """*filename*'s bytes from *offset* on, or None when it is missing."""
@@ -147,39 +137,6 @@ class SnapshotStorage(ABC):
         art_dir = self.list_artifact_files(app_name, verstr)
         path = artifact_file_path(art_dir, name) if art_dir else None
         return path if path and os.path.isfile(path) else None
-
-    def append_log_entry(self, app_name, verstr, writer_id, entry):
-        """Append a single log entry to the writer's per-writer log file.
-        Default implementation falls back to read-modify-write on log.yml."""
-        data = self.load_file(app_name, verstr, LEGACY_LOG_FILE)
-        log = yaml_safe_load(data) if data else []
-        log.append(entry)
-        self.save_file(
-            app_name, verstr, LEGACY_LOG_FILE, yaml.dump(log, sort_keys=False)
-        )
-
-    def append_log_entries(self, app_name, verstr, writer_id, entries):
-        """Append several entries in order. Backends override this with one
-        write per batch; this default appends them one by one."""
-        ok = True
-        for entry in entries:
-            ok = self.append_log_entry(app_name, verstr, writer_id, entry) is not False
-            if not ok:
-                break
-        return ok
-
-    def load_logs_by_writer(self, app_name, verstr):
-        """``{writer: [entries]}``; the legacy ``log.yml`` is writer ``""``."""
-        return {"": self.load_merged_log(app_name, verstr)}
-
-    def load_merged_log(self, app_name, verstr):
-        """Load and merge all per-writer log files plus legacy log.yml.
-        Default implementation reads only log.yml."""
-        data = self.load_file(app_name, verstr, LEGACY_LOG_FILE)
-        if data is None:
-            return []
-        loaded = yaml_safe_load(data)
-        return loaded if isinstance(loaded, list) else []
 
     def log_sizes(self, app_name, verstr):
         """``{writer: bytes}`` of the record's logs (``""`` = legacy ``log.yml``).

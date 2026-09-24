@@ -8,7 +8,6 @@ from s3_helpers import meta, mocked_bucket, record_calls, s3_storage
 from version_stamp.cli import snapshot_storage_local
 from version_stamp.cli.experiment import _get_experiment_storage
 from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.cli.snapshot_storage import SnapshotStorage
 from version_stamp.core.experiment_logfiles import log_object_name
 from version_stamp.core.logging import init_stamp_logger
 
@@ -94,26 +93,6 @@ def test_cached_storage_batches_into_its_local_copy(tmp_path):
 
     assert cached.append_log_entries("app", V, "w", _entries(20)) is True
     assert _values(cached) == list(range(20))
-
-
-class _OneByOne(SnapshotStorage):
-    """A duck backend with only the single-entry append."""
-
-    def __init__(self):
-        self.appended = []
-
-    def append_log_entry(self, app_name, verstr, writer_id, entry):
-        self.appended.append(entry)
-        return True
-
-    save = load = list_snapshots = update_note = delete = None
-    load_file = save_file = save_artifact_file = list_artifact_files = None
-
-
-def test_the_default_batch_appends_entry_by_entry():
-    storage = _OneByOne()
-    assert storage.append_log_entries("app", V, "w", _entries(4)) is True
-    assert [e["values"]["i"] for e in storage.appended] == [0, 1, 2, 3]
 
 
 @pytest.fixture

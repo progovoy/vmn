@@ -119,7 +119,7 @@ class ExperimentIndex:
         if self._records is None:
             self._records = self._store.load(self.app_name)
         direct_files = getattr(self._storage, "direct_files", None)
-        direct = direct_files() if direct_files else None
+        direct = direct_files() if direct_files else self._storage
         listing, present = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.

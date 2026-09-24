@@ -11,8 +11,7 @@ file that grew *before* a later segment — refolds the record from scratch.
 Local-first storage with a remote reads per file too: its listing takes each
 writer's files from one copy (local or remote) and its ``read_file_from``
 reads that same copy, so only new local bytes and new remote segments are read.
-A backend whose reads merge several sources some other way (``direct`` is
-None) cannot be read per file; a change there refolds through its
+A file that vanishes mid-read refolds the record through the storage's
 ``load_logs_by_writer``.
 """
 from version_stamp.core.experiment_fold import apply_entries, new_fold
@@ -108,8 +107,7 @@ def _refold_direct(record, storage, direct, where, sigs):
 
 def _refold_merged(record, storage, where, sigs):
     fold = new_fold()
-    loader = getattr(storage, "load_logs_by_writer", None)
-    logs_by_writer = loader(*where) if loader else {"": storage.load_merged_log(*where)}
+    logs_by_writer = storage.load_logs_by_writer(*where)
     for writer in sorted(logs_by_writer):
         apply_entries(fold, writer, 0, logs_by_writer[writer] or [])
     record.update(
@@ -125,9 +123,6 @@ def update_logs(record, storage, direct, app_name, key, sigs):
     if {name: state["sig"] for name, state in old.items()} == sigs:
         return False
     where = (app_name, key)
-    if direct is None:
-        _refold_merged(record, storage, where, sigs)
-        return True
     if _appends_only(old, sigs):
         fold, counts = record["fold"], record["counts"]
         ok = True
