@@ -22,7 +22,7 @@ from version_stamp.cli.snapshot_storage_files import (
     apply_metadata_updates,
     artifact_file_path,
     list_artifact_tree,
-    valid_artifact_name,
+    valid_artifact_path,
 )
 from version_stamp.core.utils import parse_record_metadata, yaml_safe_load
 
@@ -142,7 +142,7 @@ class SnapshotStorage(ABC):
 
     def artifact_local_path(self, app_name, verstr, name):
         """A local path to artifact *name*, or None (unknown or unsafe name)."""
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         art_dir = self.list_artifact_files(app_name, verstr)
         path = artifact_file_path(art_dir, name) if art_dir else None

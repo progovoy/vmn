@@ -64,7 +64,9 @@ def valid_artifact_path(name):
     return all(valid_path_component(part) for part in name.split("/"))
 
 
-valid_artifact_name = valid_artifact_path
+def valid_artifact_name(name):
+    """Whether *name* is a single-component (un-nested) artifact name."""
+    return valid_path_component(name)
 
 
 def artifact_name_for(src_path, name=None):

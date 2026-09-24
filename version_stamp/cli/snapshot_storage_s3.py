@@ -20,7 +20,7 @@ from version_stamp.cli.snapshot_storage_files import (
     PATCH_FILES,
     artifact_file_path,
     artifact_name_for,
-    valid_artifact_name,
+    valid_artifact_path,
 )
 from version_stamp.cli.snapshot_storage_s3_base import (  # noqa: F401  (re-exported)
     S3Base,
@@ -124,12 +124,12 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         found = [
             {"name": o["Key"][len(prefix) :], "size": o["Size"]}
             for o in self._objects(prefix)
-            if valid_artifact_name(o["Key"][len(prefix) :])
+            if valid_artifact_path(o["Key"][len(prefix) :])
         ]
         return sorted(found, key=lambda a: a["name"])
 
     def artifact_local_path(self, app_name, verstr, name):
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
         try:
@@ -153,7 +153,7 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         Nothing is buffered to disk, so a multi-GB checkpoint starts arriving
         at once and leaves no cache behind.
         """
-        if not valid_artifact_name(name):
+        if not valid_artifact_path(name):
             return None
         key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
         try:
