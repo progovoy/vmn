@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+vi.mock("uplot", async () => await import("../components/__tests__/fakeUPlot"));
+
+import { enableCanvas, instances, resetInstances } from "../components/__tests__/fakeUPlot";
 import MetricBarChart from "../components/MetricBarChart";
 import MetricScatter from "../components/MetricScatter";
 import GroupedMetrics from "../components/GroupedMetrics";
@@ -60,12 +64,21 @@ describe("params come from row.params", () => {
     for (const p of paths) expect((p.getAttribute("d") ?? "").includes("L")).toBe(true);
   });
 
-  it("MetricScatter plots a numeric param from row.params", () => {
-    const rows = [row(1, { acc: 0.9 }, { lr: 0.1 }), row(2, { acc: 0.7 }, { lr: 0.01 })];
-    const { container } = render(
-      <MetricScatter rows={rows} metricCols={["acc"]} paramCols={["lr"]} schema={null} />,
-    );
-    expect(container.querySelectorAll(".recharts-scatter-symbol").length).toBe(2);
+  it("MetricScatter plots a numeric param from row.params", async () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    resetInstances();
+    enableCanvas();
+    try {
+      const rows = [row(1, { acc: 0.9 }, { lr: 0.1 }), row(2, { acc: 0.7 }, { lr: 0.01 })];
+      render(<MetricScatter rows={rows} metricCols={["acc"]} paramCols={["lr"]} schema={null} />);
+      await waitFor(() => expect(instances).toHaveLength(1));
+      const [, ...groups] = instances[0].data as [null, ...[Float64Array, Float64Array][]];
+      expect(groups.reduce((n, [xs]) => n + xs.length, 0)).toBe(2);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      HTMLCanvasElement.prototype.getContext = originalGetContext;
+    }
   });
 });
 
