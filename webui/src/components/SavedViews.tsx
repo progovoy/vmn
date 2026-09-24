@@ -1,17 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDismiss } from "../hooks/useDismiss";
 import { deleteView, listViews, saveView, type SavedView } from "../util/savedViews";
-
-/** Close *onClose* on a mousedown outside *ref*'s element while *active*. */
-function useClickOutside(ref: React.RefObject<HTMLElement>, active: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!active) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [ref, active, onClose]);
-}
 
 function ViewList({ views, onApply, onDelete }: {
   views: SavedView[];
@@ -51,8 +40,8 @@ export default function SavedViews({ ws, app, search, onApply }: {
   const [views, setViews] = useState<SavedView[]>(() => listViews(ws, app));
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const close = useRef(() => setOpen(false)).current;
-  useClickOutside(rootRef, open, close);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, rootRef, buttonRef);
 
   const toggle = () => {
     if (!open) setViews(listViews(ws, app));
@@ -71,15 +60,9 @@ export default function SavedViews({ ws, app, search, onApply }: {
     deleteView(ws, app, viewName);
     setViews(listViews(ws, app));
   };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== "Escape") return;
-    e.stopPropagation();
-    setOpen(false);
-    buttonRef.current?.focus();
-  };
 
   return (
-    <div className="saved-views" ref={rootRef} onKeyDown={onKeyDown}>
+    <div className="saved-views" ref={rootRef}>
       <button
         ref={buttonRef}
         aria-haspopup="menu"
