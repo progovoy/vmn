@@ -614,3 +614,14 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 .query-suggest li { padding: 4px 10px; cursor: pointer; }
 .query-suggest li.active, .query-suggest li:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .route-fallback { padding: 24px 0; }
+
+/* ---- run page ---- */
+.metric-line {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.metric-name { color: var(--text-2); font-size: 13px; }
+.metric-goal { color: var(--text-3); font-size: 11px; }
+.exact-secs { color: var(--text-3); font-size: 11.5px; font-family: var(--mono); }
+.run-note { color: var(--text-2); margin: 0 0 20px; display: flex; gap: 10px; align-items: baseline; }
+.run-note input { flex: 1; }
