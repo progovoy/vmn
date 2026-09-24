@@ -186,7 +186,10 @@ entry. The grammar is:
 [step=N] key=value [key=value ...]
 ```
 
-- Numeric values are parsed as floats; anything else is kept as a string.
+- Numeric values are parsed as floats; anything else is dropped (with a
+  warning) — metrics are numeric-only. Log non-numeric data (e.g.
+  `model=resnet`) as a [param](#structured-notes--params) instead, which keeps
+  strings and bools verbatim.
 - An optional leading `step=N` builds a **per-step series** (a curve). Without
   it, the values are recorded as scalars.
 - vmn **tails the file live** during the run, so metrics appear in `exp show`
