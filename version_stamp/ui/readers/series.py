@@ -9,6 +9,8 @@ series is thinned — plain striding would step over it.
 import math
 
 DEFAULT_MAX_POINTS = 2000
+# Points one response may carry across all its metrics.
+MAX_TOTAL_POINTS = 200_000
 
 
 def _finite(point):
@@ -52,3 +54,11 @@ def downsample_series(series, max_points=DEFAULT_MAX_POINTS):
     """``(thinned series, {metric: original point count})`` — each metric alone."""
     thinned = {key: downsample(points, max_points) for key, points in series.items()}
     return thinned, {key: len(points) for key, points in series.items()}
+
+
+def points_per_metric(max_points, n_metrics, budget=None):
+    """*max_points*, lowered so *n_metrics* series stay within *budget* points
+    (default :data:`MAX_TOTAL_POINTS`)."""
+    budget = MAX_TOTAL_POINTS if budget is None else budget
+    share = budget // max(n_metrics, 1)
+    return max(2, min(int(max_points), share))

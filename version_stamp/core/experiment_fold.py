@@ -80,10 +80,14 @@ def apply_entries(fold, writer, first_position, entries):
     return fold
 
 
-def fold_log(log):
-    """The fold of *log* taken as given: every value is the last one in list order."""
-    fold = new_fold()
-    for position, entry in enumerate(log):
+def fold_log(log, fold=None, start=0):
+    """The fold of *log* taken as given: every value is the last one in list order.
+
+    With *fold* — the fold of the *start* entries before *log* — the entries
+    are folded into it, so a log that grew folds only its new entries.
+    """
+    fold = new_fold() if fold is None else fold
+    for position, entry in enumerate(log, start):
         if isinstance(entry, dict):
             _apply(fold, entry, [position])
     return fold

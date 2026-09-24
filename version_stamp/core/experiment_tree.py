@@ -71,15 +71,52 @@ def _depth(verstr, parent_of):
         cursor = parent
 
 
-def _subtree_statuses(verstr, children_of, by_verstr, seen=None):
-    seen = seen if seen is not None else set()
-    if verstr in seen:
-        return []
-    seen.add(verstr)
-    statuses = [(by_verstr.get(verstr) or {}).get("status")]
-    for child in children_of.get(verstr, []):
-        statuses.extend(_subtree_statuses(child, children_of, by_verstr, seen))
-    return statuses
+def _subtree_statuses(verstr, children_of, by_verstr):
+    """Own statuses of *verstr* and everything reachable below it (cycle-safe)."""
+    return [
+        (by_verstr.get(v) or {}).get("status")
+        for v in subtree_verstrs(verstr, children_of)
+    ]
+
+
+def _has_cycle(verstrs, parent_of):
+    """Whether any parent chain from *verstrs* loops back on itself."""
+    done = set()
+    for start in verstrs:
+        path, cursor = set(), start
+        while cursor and cursor not in done:
+            if cursor in path:
+                return True
+            path.add(cursor)
+            cursor = parent_of.get(cursor)
+        done |= path
+    return False
+
+
+def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
+    """``{verstr: rollup over its subtree}``, linear for any acyclic forest."""
+    if _has_cycle(verstrs, parent_of):
+        return {
+            v: rollup_status(_subtree_statuses(v, children_of, by_verstr))
+            for v in verstrs
+        }
+    rank = {status: i for i, status in enumerate(_PRECEDENCE)}
+    best = {}
+    for root in verstrs:
+        # Post-order without recursion: a node is ranked after its children.
+        stack = [(root, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if node in best:
+                continue
+            children = children_of.get(node, [])
+            if not expanded:
+                stack.append((node, True))
+                stack.extend((c, False) for c in children if c not in best)
+                continue
+            own = rank.get((by_verstr.get(node) or {}).get("status"), len(rank))
+            best[node] = min([own] + [best[c] for c in children])
+    return {v: (_PRECEDENCE + (None,))[best[v]] for v in verstrs}
 
 
 def annotate_tree(rows):
@@ -93,6 +130,7 @@ def annotate_tree(rows):
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
     children_of = children_by_parent(rows)
+    tree_statuses = _tree_statuses(list(by_verstr), children_of, by_verstr, parent_of)
 
     for row in rows:
         verstr = row["verstr"]
@@ -105,42 +143,33 @@ def annotate_tree(rows):
         else:
             row["kind"] = SINGLE
         row["depth"] = _depth(verstr, parent_of)
-        row["tree_status"] = rollup_status(
-            _subtree_statuses(verstr, children_of, by_verstr)
-        )
+        row["tree_status"] = tree_statuses[verstr]
     return rows
 
 
 TREE_FIELDS = ("children", "kind", "depth", "tree_status")
 
 
-def subtree_status(verstr, parent_of, read_state):
+def subtree_status(verstr, parent_of, read_state, children_of=None):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
-    *parent_of* is ``{verstr: parent}`` for the app's runs; *read_state(verstr)*
+    *parent_of* is ``{verstr: parent}`` for the app's runs (only ``.get`` is
+    used when *children_of* — ``{parent: [child]}``, as
+    :func:`children_by_parent` builds it — is passed in); *read_state(verstr)*
     returns a raw run state and is called once per subtree member. Ancestors
-    are placed in the tree (for ``depth``) but never read.
+    are walked for ``depth`` but never read.
     """
-    children_of = children_by_parent(
-        [{"verstr": v, "parent": p} for v, p in parent_of.items()]
-    )
-    ordered = subtree_verstrs(verstr, children_of)
-    subtree = set(ordered)
-    nodes = {v: parent_of.get(v) for v in ordered}
-    cursor = parent_of.get(verstr)
-    while cursor and cursor not in nodes:
-        nodes[cursor] = parent_of.get(cursor)
-        cursor = nodes[cursor]
-
-    rows, run_state = [], None
-    for node, parent in nodes.items():
-        row = {"verstr": node, "parent": parent}
-        if node in subtree:
-            state = read_state(node)
-            row["status"] = derive_status(state)
-            if node == verstr:
-                run_state = state
-        rows.append(row)
-
-    tree = next(r for r in annotate_tree(rows) if r["verstr"] == verstr)
-    return run_state, {k: tree[k] for k in TREE_FIELDS}
+    if children_of is None:
+        children_of = children_by_parent(
+            [{"verstr": v, "parent": p} for v, p in parent_of.items()]
+        )
+    states = {v: read_state(v) for v in subtree_verstrs(verstr, children_of)}
+    children = list(children_of.get(verstr, []))
+    parent = parent_of.get(verstr)
+    tree = {
+        "children": children,
+        "kind": OUTER if children else (INNER if parent else SINGLE),
+        "depth": _depth(verstr, parent_of),
+        "tree_status": rollup_status(derive_status(s) for s in states.values()),
+    }
+    return states[verstr], tree
