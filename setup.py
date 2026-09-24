@@ -22,7 +22,7 @@ setuptools.setup(
     url="https://github.com/progovoy/vmn",
     install_requires=install_requires,
     extras_require={
-        "ui": ["fastapi>=0.110", "uvicorn>=0.29"],
+        "ui": ["fastapi>=0.110", "uvicorn>=0.29", "orjson>=3.9"],
         "s3": ["boto3"],
         "changelog": ["git-cliff==2.5.0; python_version >= '3.8'"],
         # The experiment SDK needs nothing third-party; the extra exists so the

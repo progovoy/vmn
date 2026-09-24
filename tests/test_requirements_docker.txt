@@ -10,3 +10,4 @@ git-cliff==2.5.0
 fastapi; python_version >= "3.9"
 httpx
 uvicorn; python_version >= "3.9"
+orjson; python_version >= "3.9"

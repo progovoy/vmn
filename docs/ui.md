@@ -132,7 +132,8 @@ run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten
 runs heartbeating, costs those files, not a re-read of every experiment. S3
 workspaces get the same index in memory, keyed by bucket and prefix, so a poll
 is one LIST plus the objects that changed (ranged GETs for grown logs). The
-stamp tree is cached by the app's tag list.
+stamp tree, root topology and dependency graphs are cached by the app's tag
+list, so they are recomputed only after a stamp.
 
 ## Run status in the dashboard
 
@@ -149,7 +150,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
@@ -221,14 +222,52 @@ curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
 | `log_tail` | the newest 200 log entries |
 | `log_total` | how many entries the log holds |
 | `log` | same as `log_tail`; pass `include_log=1` to get the whole log |
-| `series` | each metric thinned independently to at most `max_points` points (default 2000, max 20000) with min/max buckets, so spikes survive; first and last point always kept |
-| `series_total` | `{metric: points before thinning}` |
+| `series` | each metric thinned independently to at most `max_points` points (default 2000, max 20000) with min/max buckets, so spikes survive; first and last point always kept. `keys=loss,acc` returns only those metrics, `series=0` none. A response carries at most 200,000 points in all: with many metrics, `max_points` is lowered for each |
+| `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
 
 Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
 which answers `{"entries": [...], "total": N}` oldest first.
 
+A live run's poll costs its new log lines: the server keeps each parsed log and,
+when a local log file only grew, parses just the bytes appended since the last
+poll. Detail and log responses carry an `ETag` and `Cache-Control: no-cache`;
+send it back as `If-None-Match` and an unchanged answer is an empty `304`.
+
+### Series for many runs
+
+A comparison chart fetches the same metrics from many runs in one request:
+
+```sh
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"verstrs": ["1.0.0-dev.a", "1.0.0-dev.b"], "keys": ["loss"], "max_points": 500}' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/series"
+```
+
+→ `{"series": {verstr: {metric: [{"step", "ts", "value"}]}}, "series_total":
+{verstr: {metric: n}}, "missing": [verstr, ...]}`. At most 200 runs per request;
+`keys: null` means every metric. The runs share the 200,000-point cap. It is a
+read, so `--read-only` servers answer it, but as a POST it needs
+`Content-Type: application/json` and a same-site `Origin` like any other.
+
+### Diffs
+
+`GET .../experiments-diff?v=&to=` materializes both runs and diffs them. Results
+are cached per pair (a changed record is diffed again), at most two diffs run
+at once (a third waits, then gets `429`), and the text is capped at 2 MB —
+`truncated: true` says it was cut. A record with no base commit (a git-free
+experiment) answers `diff: null` with the reason in `diff_unavailable`.
+
 Artifacts download from `GET .../experiments/{verstr}/artifacts/{name}` for
 local and S3 workspaces alike (an S3 object is streamed straight through, never
 staged on the server's disk); with a token set the request needs the
-`Authorization` header like every other API call.
+`Authorization` header like every other API call. Downloads are sent as stored
+(never gzipped by the server) with an RFC 5987 `filename*` so any file name
+survives.
+
+### Caching and compression
+
+JSON responses are rendered with `orjson` (part of the `ui` extra) and gzipped
+at a moderate level. The web bundle's hashed `/assets/*` files are served with
+`Cache-Control: public, max-age=31536000, immutable`; `index.html` and client
+routes with `no-cache`. An unknown `/api/...` path is a JSON `404`.

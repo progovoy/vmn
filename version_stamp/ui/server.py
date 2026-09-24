@@ -9,7 +9,6 @@ illegal in app names. Request hardening lives in :mod:`version_stamp.ui.security
 import os
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
@@ -21,15 +20,21 @@ from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
-from version_stamp.ui.readers import tree as tree_reader
 from version_stamp.ui.readers import versions as ver_reader
-from version_stamp.ui.responses import SafeJSONResponse
-from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment, within
+from version_stamp.ui import routes_series, routes_tree
+from version_stamp.ui.http_params import attachment, key_list
+from version_stamp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
+from version_stamp.ui.responses import (
+    GZIP_LEVEL,
+    GZIP_MIN_BYTES,
+    SafeJSONResponse,
+    json_response,
+)
+from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment
+from version_stamp.ui.static_files import mount_static
 from version_stamp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
-# Responses below this size are not worth a gzip round.
-GZIP_MIN_BYTES = 1000
 # One page of leaderboard rows or log entries, whatever a client asks for.
 MAX_PAGE = 1000
 # A chart's worth of points per metric, however much a client asks for.
@@ -96,8 +101,7 @@ def create_app(
         @app.middleware("http")
         async def _token_auth(request: Request, call_next):
             if request.url.path.startswith("/api"):
-                auth = request.headers.get("Authorization", "")
-                if auth != f"Bearer {token}":
+                if not bearer_matches(request.headers.get("Authorization"), token):
                     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
             return await call_next(request)
 
@@ -113,7 +117,9 @@ def create_app(
             return JSONResponse({"detail": detail}, status_code=status)
         return await call_next(request)
 
-    app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
+    app.add_middleware(
+        SelectiveGZipMiddleware, minimum_size=GZIP_MIN_BYTES, compresslevel=GZIP_LEVEL
+    )
 
     @app.exception_handler(ValueError)
     async def _bad_path(request: Request, exc: ValueError):
@@ -275,11 +281,14 @@ def create_app(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
     )
     def get_experiment(
+        request: Request,
         ws_name: str,
         app_tag: str,
         verstr: str,
         max_points: int = detail_reader.DEFAULT_MAX_POINTS,
         include_log: bool = False,
+        keys: str = None,
+        series: bool = True,
     ):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
@@ -291,16 +300,19 @@ def create_app(
             edges=_edges_for(ws),
             max_points=max(2, min(max_points, MAX_SERIES_POINTS)),
             include_log=include_log,
+            keys=key_list(keys),
+            include_series=series,
         )
         if err:
             raise HTTPException(404, err)
-        return detail
+        return json_response(detail, request=request)
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
         "/experiments/{verstr}/log"
     )
     def experiment_log(
+        request: Request,
         ws_name: str,
         app_tag: str,
         verstr: str,
@@ -321,7 +333,7 @@ def create_app(
         )
         if err:
             raise HTTPException(404, err)
-        return page
+        return json_response(page, request=request)
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
@@ -345,7 +357,7 @@ def create_app(
                 chunks,
                 media_type="application/octet-stream",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Disposition": attachment(filename),
                     "Content-Length": str(size),
                 },
             )
@@ -402,12 +414,15 @@ def create_app(
         _segment(v)
         _segment(to)
         s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            result, err = diff_reader.experiment_diff_from_storage(
-                s3_storage, app_name, v, to
-            )
-        else:
-            result, err = diff_reader.experiment_diff(ws.path, app_name, v, to)
+        try:
+            if s3_storage:
+                result, err = diff_reader.experiment_diff_from_storage(
+                    s3_storage, app_name, v, to
+                )
+            else:
+                result, err = diff_reader.cached_experiment_diff(ws.path, app_name, v, to)
+        except diff_reader.DiffBusy:
+            raise HTTPException(429, "Too many diffs in progress; retry shortly")
         if err:
             raise HTTPException(404, err)
         return result
@@ -428,16 +443,6 @@ def create_app(
         if err:
             raise HTTPException(404, err)
         return detail
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree")
-    def version_tree(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
-        return tree_reader.version_dag(ws.path, _app_name(app_tag))
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/tree/root")
-    def root_tree(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
-        return tree_reader.root_topology(ws.path, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
     def version_changelog(
@@ -467,20 +472,15 @@ def create_app(
             raise HTTPException(404, err)
         return payload
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/deps")
-    def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
-        ws = _git_workspace(ws_name)
-        graph, err = tree_reader.dep_graph(
-            ws.path,
-            _app_name(app_tag),
-            verstr=_optional_segment(v),
-            to_verstr=_optional_segment(to),
-        )
-        if err:
-            raise HTTPException(404, err)
-        return graph
+    def _series_storage(ws_name, app_tag):
+        return _any_exp_storage(_experiment_workspace(ws_name)), _app_name(app_tag)
 
-    _mount_static(app)
+    def _checkout(ws_name, app_tag):
+        return _git_workspace(ws_name).path, _app_name(app_tag)
+
+    routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
+    routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
+    mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
 
@@ -488,29 +488,3 @@ def _indexed_edges(storage, app_name):
     """``{verstr: parent}`` from the process-wide experiment index of *storage*."""
     rows, _ = experiment_index.indexed_rows(storage, app_name)
     return {row["verstr"]: row.get("parent") for row in rows}
-
-
-def _mount_static(app):
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    if not os.path.isdir(static_dir):
-        return
-
-    from fastapi.responses import FileResponse
-    from fastapi.staticfiles import StaticFiles
-
-    app.mount(
-        "/assets",
-        StaticFiles(directory=os.path.join(static_dir, "assets")),
-        name="assets",
-    )
-
-    # History-API fallback: any non-API route is a client-side route — serve
-    # the SPA shell and let the router resolve it.
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa(full_path: str):
-        # ``full_path`` is decoded but not normalized: ``//etc/passwd`` and
-        # ``..%2f`` walks must resolve inside the bundle or fall back to the shell.
-        candidate = os.path.join(static_dir, full_path)
-        if full_path and within(static_dir, candidate) and os.path.isfile(candidate):
-            return FileResponse(candidate)
-        return FileResponse(os.path.join(static_dir, "index.html"))
