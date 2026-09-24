@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import type { HttpError } from "../http";
 import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
 import { useAppQueryClient } from "../queryClient";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
 import { combineQueries } from "../util/searchQuery";
-
-type HttpError = Error & { status?: number };
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
  *  `api.experiments`; an explicit direction needs the paged call's `order`. */
@@ -28,7 +27,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
   const client = useAppQueryClient();
   const key = rowsKey(ws, app, filter);
   /** Verstrs on screen right now — the table keeps it current. */
-  const visibleRef = useRef<string[]>([]);
+  const visibleRef = useRef<() => string[]>(() => []);
   // Only the newest request may land: a new one aborts whatever is in flight.
   const inFlight = useRef<AbortController | null>(null);
   useEffect(() => () => inFlight.current?.abort(), []);
@@ -48,23 +47,22 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
           scoped(() => api.experimentsPaged(ws, app, {
             ...filter, query: combineQueries(filter.query ?? "", q), offset: 0, limit,
           })),
-        extraVerstrs: visibleRef.current,
+        extraVerstrs: visibleRef.current(),
       });
       if (ctrl.signal.aborted) throw new DOMException("superseded", "AbortError");
       return out;
     },
-    // While a new filter loads, keep this app's previous rows on screen.
-    placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[1] === ws && prevQuery.queryKey[2] === app ? prev : undefined,
+    // While a new filter loads, keep the previous rows on screen (a hook
+    // instance only ever serves one app: the page is keyed by it).
+    placeholderData: keepPreviousData,
     // refreshRows already keeps unchanged rows' identity, by verstr.
     structuralSharing: false,
   }, client);
 
   // What was last shown survives a refused query (400) and a pending one.
-  const scope = `${ws}\u0000${app}`;
-  const lastGood = useRef<{ scope: string; data: RowsData }>();
-  if (query.data) lastGood.current = { scope, data: query.data };
-  const data = query.data ?? (lastGood.current?.scope === scope ? lastGood.current.data : undefined);
+  const lastGood = useRef<RowsData>();
+  if (query.data) lastGood.current = query.data;
+  const data = query.data ?? lastGood.current;
 
   const err = query.error && !isAbortError(query.error) ? query.error : null;
   const queryError = err?.status === 400 ? err.message : null;

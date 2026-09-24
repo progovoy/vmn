@@ -27,7 +27,7 @@ export async function refreshLoaded<O extends object, R>(
 }
 
 /** Verstrs per by-id request — keeps the query (and its URL) bounded. */
-export const VERSTR_CHUNK = 200;
+const VERSTR_CHUNK = 200;
 
 /** The query language's membership test over verstrs. Verstrs never hold a
  *  quote, so plain double quotes are always a valid literal. */
@@ -66,11 +66,10 @@ export async function refreshRows<R extends Row>({
     .filter((r) => r.status === "running" || extra.has(r.verstr))
     .map((r) => r.verstr);
 
-  const fresh = new Map<string, R>();
-  for (const ids of chunk(asked, VERSTR_CHUNK)) {
-    const { rows } = await fetchWhere(verstrInQuery(ids), ids.length);
-    rows.forEach((r) => fresh.set(r.verstr, r));
-  }
+  const pages = await Promise.all(
+    chunk(asked, VERSTR_CHUNK).map((ids) => fetchWhere(verstrInQuery(ids), ids.length)),
+  );
+  const fresh = new Map(pages.flatMap((p) => p.rows).map((r) => [r.verstr, r] as const));
 
   const current = getRows() ?? [];
   const askedSet = new Set(asked);

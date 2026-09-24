@@ -109,3 +109,6 @@ export function metricGoal(
   if (spec) return spec.goal === "min" ? "min" : "max";
   return MIN_LIKE.test(key) ? "min" : "max";
 }
+
+/** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */
+export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;

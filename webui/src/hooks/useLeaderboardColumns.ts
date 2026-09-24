@@ -33,8 +33,10 @@ export function useLeaderboardColumns(
   );
   // Keyed on the *set* of names, so a poll returning the same columns keeps
   // the same arrays (and the user's column choices).
-  const metricNames = metricColumns(list, schema).join("\u0000");
-  const paramNames = paramKey(rows);
+  const [metricNames, paramNames] = useMemo(
+    () => [metricColumns(rows ?? [], schema).join("\u0000"), paramKey(rows)],
+    [rows, schema],
+  );
   const metricCols = useMemo(() => splitKey(metricNames), [metricNames]);
   const paramCols = useMemo(() => splitKey(paramNames), [paramNames]);
   const visibleMetrics = useMemo(() => metricCols.filter((c) => !hidden.has(`m:${c}`)), [metricCols, hidden]);
@@ -49,9 +51,11 @@ export function useLeaderboardColumns(
 
   const layout = useMemo((): RowLayout => {
     const cl = columnLayout(visibleMetrics.length, visibleParams.length);
+    const paramBase = 4 + visibleMetrics.length;
     return {
       styles: columnStyles(cl), total: cl.total,
       metricCols: visibleMetrics, paramCols: visibleParams,
+      paramBase, noteIdx: paramBase + visibleParams.length,
       colMeta, showBest, runBase,
     };
   }, [visibleMetrics, visibleParams, colMeta, showBest, runBase]);

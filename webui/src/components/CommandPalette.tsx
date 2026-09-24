@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api, appTag } from "../api";
 import type { AppRow, ExperimentRow, Workspace } from "../types";
-import { relTime } from "../util";
+import { relTime, runHref } from "../util";
 import { useDebounce } from "../hooks/useDebounce";
 import { useAppQueryClient } from "../queryClient";
 import { runSearchQuery } from "../util/searchQuery";
@@ -84,7 +84,7 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
         kind: "run",
         label: r.verstr,
         hint: r.note || relTime(r.timestamp),
-        to: `${base}/run/${encodeURIComponent(r.verstr)}`,
+        to: runHref(base, r.verstr),
       })
     );
     if (ws) {

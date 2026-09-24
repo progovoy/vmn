@@ -4,7 +4,7 @@ import {
 } from "react-router-dom";
 import { appName as toAppName } from "./api";
 import { useAppQueryClient } from "./queryClient";
-import { useApps, useMeta, useWorkspaces } from "./queries";
+import { useApps, useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { CopyPath, wsLocation } from "./components/ui";
@@ -68,7 +68,7 @@ export default function App() {
   const firstVisit = useRef(true);
   useEffect(() => {
     if (firstVisit.current) { firstVisit.current = false; return; }
-    client.invalidateQueries({ queryKey: ["workspaces"] });
+    client.invalidateQueries({ queryKey: WORKSPACES_KEY });
   }, [atHome, client]);
 
   useEffect(() => {

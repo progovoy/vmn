@@ -1,24 +1,27 @@
-import { memo, type CSSProperties, type MouseEvent } from "react";
+import { memo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
-import { fmtVal, relTime, rowParams } from "../util";
+import { fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import type { ColMeta } from "./leaderboardColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
+const HOVER_INTENT_MS = 120;
+
 export interface RowLayout {
   styles: CSSProperties[];
   total: number;
   metricCols: string[];
   paramCols: string[];
+  /** Index of the first param column, and of the note column. */
+  paramBase: number;
+  noteIdx: number;
   colMeta: Record<string, ColMeta>;
   /** Highlight column bests only when there is something to beat. */
   showBest: boolean;
   runBase: string;
 }
-
-export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;
 
 function MetricCell({ v, col, style, showBest }: {
   v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
@@ -72,10 +75,12 @@ function Row({ row: r, start, size, isSelected, isFlash, layout, onToggle, onPre
   onPrefetch: (verstr: string) => void;
 }) {
   const navigate = useNavigate();
-  const { styles, metricCols, paramCols, colMeta } = layout;
+  // Prefetch on a resting pointer, not on every row a scroll slides under it.
+  const hover = useRef<ReturnType<typeof setTimeout>>();
+  const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
+  const onLeave = () => clearTimeout(hover.current);
+  const { styles, metricCols, paramCols, colMeta, paramBase, noteIdx } = layout;
   const href = runHref(layout.runBase, r.verstr);
-  const paramBase = 4 + metricCols.length;
-  const noteIdx = paramBase + paramCols.length;
   const params = paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
@@ -92,7 +97,8 @@ function Row({ row: r, start, size, isSelected, isFlash, layout, onToggle, onPre
       }}
       className={`row${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}`}
       onClick={onClick}
-      onMouseEnter={() => onPrefetch(r.verstr)}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
       <td style={styles[0]} className="check-cell">
         <input type="checkbox" checked={isSelected} onChange={() => onToggle(r.verstr)} />

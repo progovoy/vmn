@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useAppQueryClient } from "../queryClient";
-import { runKey, type RowsData } from "../queries";
+import { rowsPrefix, runKey, type RowsData } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { useJob } from "./ui";
 
@@ -21,7 +21,7 @@ export default function NoteEditor({ ws, app, verstr, note }: {
   const commit = (saved: string) => {
     client.setQueryData<ExperimentDetail>(runKey(ws, app, verstr), (d) =>
       d && { ...d, metadata: { ...d.metadata, note: saved } });
-    client.setQueriesData<RowsData>({ queryKey: ["experiments", ws, app] }, (data) =>
+    client.setQueriesData<RowsData>({ queryKey: rowsPrefix(ws, app) }, (data) =>
       data && { ...data, rows: data.rows.map((r) => (r.verstr === verstr ? { ...r, note: saved } : r)) });
   };
   const { error, run } = useJob((j) => {

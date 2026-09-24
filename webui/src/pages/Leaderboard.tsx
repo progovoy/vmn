@@ -3,8 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
 import { useAppQueryClient } from "../queryClient";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
-import { minOf } from "../util/stats";
-import { combineQueries, searchClause } from "../util/searchQuery";
+import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
 import { metricGoal, pollIntervalMs } from "../util";
 import type { ExperimentRow } from "../types";
 import { PageHead } from "../components/ui";
@@ -23,7 +22,6 @@ import LeaderboardTable, { TIMESTAMP_SORT } from "./LeaderboardTable";
 const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
   col !== TIMESTAMP_SORT && metricGoal(schema, col) === "min" ? "asc" : "desc";
 
-const branchClause = (b: string) => (b && !b.includes('"') ? `branch = "${b}"` : null);
 
 /** One app's board: switching app starts from a clean slate (filters, brush,
  *  scroll), while the URL's own view params never remount it. */
@@ -58,15 +56,20 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
 
   // Keep refreshing on our own while a run is still in flight, at the cadence
   // its heartbeat can actually move the status at.
-  const anyRunning = useMemo(() => (rows ?? []).some((r) => r.status === "running"), [rows]);
-  const heartbeatSec = useMemo(() => {
-    const fastest = minOf((rows ?? []).map((r) => r.heartbeat_interval_sec)
-      .filter((v): v is number => typeof v === "number"));
-    return Number.isNaN(fastest) ? null : fastest;
+  const { anyRunning, heartbeatSec } = useMemo(() => {
+    let running = false;
+    let fastest: number | null = null;
+    for (const r of rows ?? []) {
+      if (r.status === "running") running = true;
+      const hb = r.heartbeat_interval_sec;
+      if (typeof hb === "number" && (fastest === null || hb < fastest)) fastest = hb;
+    }
+    return { anyRunning: running, heartbeatSec: fastest };
   }, [rows]);
   usePolling(data.refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
 
-  const cols = useLeaderboardColumns(rows, schema, view.hidden, `/ws/${ws}/app/${app}`, facets);
+  const base = `/ws/${ws}/app/${app}`;
+  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets);
 
   // A brush in the parallel view narrows the table; the chart keeps every row
   // so its brush indices stay meaningful.
@@ -107,7 +110,6 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const empty = rows !== undefined && rows.length === 0 && !filtered;
   const sortLabel = view.sort ?? cols.primary;
   const selected = [...view.selected];
-  const base = `/ws/${ws}/app/${app}`;
 
   return (
     <>
@@ -174,7 +176,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           </div>
 
           <LeaderboardFilter
-            rows={all}
+            rows={facets ? undefined : all}
             branches={facets?.branches ?? null}
             facets={cols.suggestFacets}
             initial={{ search: view.search, branch: view.branch, status: view.status, query: view.query }}

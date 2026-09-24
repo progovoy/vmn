@@ -3,9 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { useAppQueryClient } from "../queryClient";
-import { findCachedRow, runQuery, useMetricsSchema } from "../queries";
+import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
 import type { ExperimentDetail } from "../types";
-import { pollIntervalMs } from "../util";
+import { pollIntervalMs, runHref } from "../util";
 import { Skeleton } from "../components/ui";
 import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
@@ -69,7 +69,12 @@ export default function Run() {
   if (!summary) return <Skeleton />;
 
   const appName = toAppName(app);
-  const runUrl = (v: string) => `/ws/${ws}/app/${app}/run/${encodeURIComponent(v)}`;
+  // New metric points change this run's row in every cached list too.
+  const onMetricsAdded = () => {
+    query.refetch();
+    client.invalidateQueries({ queryKey: rowsPrefix(ws, app) });
+  };
+  const runUrl = (v: string) => runHref(`/ws/${ws}/app/${app}`, v);
 
   return (
     <>
@@ -88,7 +93,7 @@ export default function Run() {
         <ParamsCard params={summary.params} />
         <MetricsCard metrics={summary.metrics} schema={schema}>
           {detail && (
-            <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={() => query.refetch()} />
+            <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
           )}
         </MetricsCard>
       </div>

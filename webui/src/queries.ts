@@ -22,8 +22,11 @@ export interface RowsData {
   total: number;
 }
 
+/** Every cached leaderboard list of an app, whatever its filter. */
+export const rowsPrefix = (ws: string, app: string) => ["experiments", ws, app] as const;
 export const rowsKey = (ws: string, app: string, filter: RowsFilter) =>
-  ["experiments", ws, app, filter] as const;
+  [...rowsPrefix(ws, app), filter] as const;
+export const WORKSPACES_KEY = ["workspaces"] as const;
 export const runKey = (ws: string, app: string, verstr: string) =>
   ["experiment", ws, app, verstr] as const;
 
@@ -32,7 +35,7 @@ const shared = { staleTime: SHARED_STALE_MS };
 export function useWorkspaces() {
   const client = useAppQueryClient();
   return useQuery<Workspace[]>(
-    { queryKey: ["workspaces"], queryFn: () => api.workspaces(), ...shared }, client,
+    { queryKey: WORKSPACES_KEY, queryFn: () => api.workspaces(), ...shared }, client,
   );
 }
 
@@ -89,7 +92,7 @@ export function prefetchRun(client: QueryClient, ws: string, app: string, verstr
 export function findCachedRow(
   client: QueryClient, ws: string, app: string, verstr: string,
 ): ExperimentRow | undefined {
-  for (const [, data] of client.getQueriesData<RowsData>({ queryKey: ["experiments", ws, app] })) {
+  for (const [, data] of client.getQueriesData<RowsData>({ queryKey: rowsPrefix(ws, app) })) {
     const row = data?.rows.find((r) => r.verstr === verstr);
     if (row) return row;
   }

@@ -19,10 +19,8 @@ export interface SortState {
 }
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, metricCols, paramCols, colMeta } = layout;
+  const { styles, metricCols, paramCols, colMeta, paramBase, noteIdx } = layout;
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
-  const paramBase = 4 + metricCols.length;
-  const noteIdx = paramBase + paramCols.length;
   return (
     <thead>
       <tr>
@@ -89,7 +87,7 @@ export default function LeaderboardTable({
   onPrefetch: (verstr: string) => void;
   hasMore: boolean;
   onNearEnd: () => void;
-  visibleRef: MutableRefObject<string[]>;
+  visibleRef: MutableRefObject<() => string[]>;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMemory();
@@ -102,7 +100,7 @@ export default function LeaderboardTable({
     initialOffset: scroll.initial,
   });
   const items = virtualizer.getVirtualItems();
-  visibleRef.current = items.map((it) => list[it.index]?.verstr).filter(Boolean);
+  visibleRef.current = () => items.map((it) => list[it.index]?.verstr).filter(Boolean);
 
   // Back to this entry: put the table where it was once its rows are there.
   const restored = useRef(false);
