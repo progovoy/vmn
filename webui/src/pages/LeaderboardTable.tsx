@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, type MutableRefObject } from "react";
+import { useLayoutEffect, useRef, type CSSProperties, type MutableRefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
+import { EXPERIMENT_COL_INDEX, STICKY_BG } from "./leaderboardColumns";
 import Row, { type RowLayout } from "./LeaderboardRow";
 
 const ROW_HEIGHT = 48;
@@ -20,20 +21,40 @@ export interface SortState {
   onSort: (col: string) => void;
 }
 
+/** Every header cell sticks to the top of the scroll container; the
+ *  experiment column additionally stays pinned to the left (it already
+ *  carries the sticky-left style from `columnStyles`) and sits above the
+ *  other header cells so it isn't overlapped once they scroll under it. */
+function headStyle(style: CSSProperties, index: number): CSSProperties {
+  const base: CSSProperties = {
+    ...style,
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    background: STICKY_BG,
+  };
+  return index === EXPERIMENT_COL_INDEX ? { ...base, zIndex: 3 } : base;
+}
+
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
   const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
       <tr>
-        <th style={styles[0]} className="check-cell"></th>
-        <th style={styles[1]}>#</th>
-        <th style={styles[2]}>status</th>
-        <th style={styles[3]}>experiment</th>
+        <th style={headStyle(styles[0], 0)} className="check-cell"></th>
+        <th style={headStyle(styles[1], 1)}>#</th>
+        <th style={headStyle(styles[2], 2)}>status</th>
+        <th
+          style={headStyle(styles[EXPERIMENT_COL_INDEX], EXPERIMENT_COL_INDEX)}
+          className="exp-head"
+        >
+          experiment
+        </th>
         {metricCols.map((m, i) => (
           <th
             key={m}
-            style={styles[4 + i]}
+            style={headStyle(styles[4 + i], 4 + i)}
             className={`sortable${s.sort === m ? " sorted" : ""}`}
             onClick={() => s.onSort(m)}
             title={`sort by ${m} (best first)`}
@@ -46,13 +67,19 @@ function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
           </th>
         ))}
         {paramCols.map((p, i) => (
-          <th key={`p-${p}`} className="param-head" style={styles[paramBase + i]}>{p}</th>
+          <th
+            key={`p-${p}`}
+            className="param-head"
+            style={headStyle(styles[paramBase + i], paramBase + i)}
+          >
+            {p}
+          </th>
         ))}
-        {tagsIdx !== null && <th style={styles[tagsIdx]}>tags</th>}
-        <th style={styles[noteIdx]}>note</th>
+        {tagsIdx !== null && <th style={headStyle(styles[tagsIdx], tagsIdx)}>tags</th>}
+        <th style={headStyle(styles[noteIdx], noteIdx)}>note</th>
         <th
           className={`num sortable when-head${s.sort === TIMESTAMP_SORT ? " sorted" : ""}`}
-          style={styles[noteIdx + 1]}
+          style={headStyle(styles[noteIdx + 1], noteIdx + 1)}
           onClick={() => s.onSort(TIMESTAMP_SORT)}
           title="sort by time (newest first)"
         >
