@@ -4,20 +4,27 @@
 Selection (``--keep N`` / ``--older-than``) proposes candidates; two guards then
 take runs back out of the list:
 
-* a run whose derived status is ``running`` is never deleted (``--force``
-  overrides) — its heartbeat would otherwise recreate a half-empty directory;
+* a run whose derived status is ``running`` or ``stuck`` is never deleted
+  (``--force`` overrides) — a stuck run may just have a late heartbeat, and a
+  live one would otherwise recreate a half-empty directory;
 * a run with a kept descendant is kept, so no surviving run points at a parent
   that no longer exists.
 """
 import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.core.experiment_status import (
     RUNNING,
+    STUCK,
     derive_status,
     load_run_state,
     parse_iso,
 )
 from version_stamp.core.logging import VMN_LOGGER
+
+# Remote deletes in flight at once: each is a few round trips.
+_DELETE_WORKERS = 16
+_LIVE = (RUNNING, STUCK)
 
 
 def _parse_duration(duration_str):
@@ -53,21 +60,51 @@ def _ancestors(verstr, parent_of):
     return seen
 
 
-def _apply_guards(storage, app_name, metas, candidates, force):
-    """Split *candidates* into (delete, skipped_running)."""
-    running = set()
-    if not force:
-        for meta in candidates:
-            state = load_run_state(storage, app_name, meta["verstr"])
-            if derive_status(state) == RUNNING:
-                running.add(meta["verstr"])
+def _live_runs(storage, app_name, candidates):
+    """``{verstr: status}`` of the *candidates* that may still be running."""
+    live = {}
+    for meta in candidates:
+        status = derive_status(load_run_state(storage, app_name, meta["verstr"]))
+        if status in _LIVE:
+            live[meta["verstr"]] = status
+    return live
 
-    doomed = {m["verstr"] for m in candidates} - running
+
+def _apply_guards(storage, app_name, metas, candidates, force):
+    """Split *candidates* into (delete, {skipped live verstr: status})."""
+    live = {} if force else _live_runs(storage, app_name, candidates)
+
+    doomed = {m["verstr"] for m in candidates} - set(live)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
     for meta in metas:
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
-    return [m for m in candidates if m["verstr"] in doomed], sorted(running)
+    return [m for m in candidates if m["verstr"] in doomed], live
+
+
+def _skip_message(verstr, status):
+    if status == STUCK:
+        return (
+            f"Skipping {verstr}: stuck (its heartbeat is late; it may still be "
+            "running — use --force to delete it)"
+        )
+    return f"Skipping {verstr}: still running (use --force to delete it)"
+
+
+def _delete_all(storage, app_name, verstrs):
+    """Delete *verstrs*, concurrently when each delete goes over the network;
+    yields each verstr, in order, once it is gone."""
+    is_remote = getattr(storage, "is_remote", None)
+    if len(verstrs) < 2 or not (is_remote and is_remote()):
+        for verstr in verstrs:
+            storage.delete(app_name, verstr)
+            yield verstr
+        return
+    with ThreadPoolExecutor(max_workers=_DELETE_WORKERS) as pool:
+        futures = [pool.submit(storage.delete, app_name, v) for v in verstrs]
+        for verstr, future in zip(verstrs, futures):
+            future.result()
+            yield verstr
 
 
 def _local_view(storage):
@@ -97,11 +134,11 @@ def experiment_prune(vcs, params, storage, args, app_name):
         VMN_LOGGER.error(str(e))
         return 1
 
-    to_delete, running = _apply_guards(
+    to_delete, live = _apply_guards(
         storage, app_name, metas, candidates, getattr(args, "force", False)
     )
-    for verstr in running:
-        print(f"Skipping {verstr}: still running (use --force to delete it)")
+    for verstr in sorted(live):
+        print(_skip_message(verstr, live[verstr]))
     if not to_delete:
         print("Nothing to prune")
         return 0
@@ -111,8 +148,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
             print(f"  {meta['verstr']}")
         return 0
 
-    for meta in to_delete:
-        storage.delete(app_name, meta["verstr"])
-        print(f"Deleted {meta['verstr']}")
+    for verstr in _delete_all(storage, app_name, [m["verstr"] for m in to_delete]):
+        print(f"Deleted {verstr}")
     print(f"Pruned {len(to_delete)} experiments, kept {len(metas) - len(to_delete)}")
     return 0
