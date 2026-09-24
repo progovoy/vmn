@@ -31,7 +31,7 @@ def _param(name):
 
 
 def _name(row):
-    return row.get("name", row.get("note"))
+    return row.get("name") or row.get("note")
 
 
 def column_getter(key):
