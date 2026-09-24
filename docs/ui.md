@@ -277,7 +277,7 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
  "total": 2}
 ```
 
-- `keys` is a comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`
+- `keys` is a comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`, `branch`
   and `name` (the row's `name`, else its `note`); any other key is a **400**.
   Every column is aligned with `verstrs`/`idx` (the `@N` storage index).
 - Metric values are numbers or `null` (missing or non-finite); params are

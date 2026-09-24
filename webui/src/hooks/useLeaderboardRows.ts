@@ -10,9 +10,9 @@ import { refreshRows } from "../pages/leaderboardRefresh";
 import { combineQueries } from "../util/searchQuery";
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
- *  `api.experiments`; an explicit direction needs the paged call's `order`. */
+ *  `api.experiments`; an explicit direction or archived rows need the paged call. */
 function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
-  if (f.order) return api.experimentsPaged(ws, app, { ...f, offset: 0, limit: PAGE_SIZE });
+  if (f.order || f.archived) return api.experimentsPaged(ws, app, { ...f, offset: 0, limit: PAGE_SIZE });
   const req = f.query
     ? api.experiments(ws, app, f.sort, f.status, f.query)
     : api.experiments(ws, app, f.sort, f.status);

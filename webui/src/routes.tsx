@@ -8,6 +8,7 @@ import Leaderboard from "./pages/Leaderboard";
 // visit, so the leaderboard never waits for chart or tree code.
 const Run = lazy(() => import("./pages/Run"));
 const Compare = lazy(() => import("./pages/Compare"));
+const CompareRuns = lazy(() => import("./pages/CompareRuns"));
 const Overlay = lazy(() => import("./pages/Overlay"));
 const Snapshots = lazy(() => import("./pages/Snapshots"));
 const StampTree = lazy(() => import("./pages/StampTree"));
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: "ws/:ws/app/:app", element: <Leaderboard />, handle: { page: "experiments" } },
       { path: "ws/:ws/app/:app/run/:verstr", element: page(Run), handle: { page: "run" } },
       { path: "ws/:ws/app/:app/compare", element: page(Compare), handle: { page: "compare" } },
+      { path: "ws/:ws/app/:app/compare-runs", element: page(CompareRuns), handle: { page: "compare runs" } },
       { path: "ws/:ws/app/:app/overlay", element: page(Overlay), handle: { page: "overlay" } },
       { path: "ws/:ws/app/:app/snapshots", element: page(Snapshots), handle: { page: "snapshots" } },
       { path: "ws/:ws/app/:app/tree", element: page(StampTree), handle: { page: "stamp tree" } },

@@ -124,6 +124,9 @@ def test_only_live_rows_are_rederived_as_time_passes(monkeypatch):
 def test_a_stale_heartbeat_turns_stuck_within_a_bucket(monkeypatch):
     cache = lb.LeaderboardCache(bucket_sec=2)
     snap = _snapshot(n=5, live={2}, parent_of={2: 1})
+    # Heartbeats are stamped with the import-time NOW; pin the clock to it so
+    # a slow, loaded run cannot see them as stale before the test begins.
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
     by_verstr = {r["verstr"]: r for r in cache.page(snap, {}, limit=10)["rows"]}
     assert by_verstr["1.0.0-dev.r0002"]["status"] == "running"
 

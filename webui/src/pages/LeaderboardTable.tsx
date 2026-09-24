@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, type MutableRefObject } from "react";
+import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
 import { useScrollMemory } from "../hooks/useScrollMemory";
+import { useRowKeys } from "../hooks/useRowKeys";
 import Row, { type RowLayout } from "./LeaderboardRow";
 
 const ROW_HEIGHT = 48;
@@ -19,7 +21,7 @@ export interface SortState {
 }
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, metricCols, paramCols, colMeta, paramBase, noteIdx } = layout;
+  const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
@@ -46,6 +48,7 @@ function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
         {paramCols.map((p, i) => (
           <th key={`p-${p}`} className="param-head" style={styles[paramBase + i]}>{p}</th>
         ))}
+        {tagsIdx !== null && <th style={styles[tagsIdx]}>tags</th>}
         <th style={styles[noteIdx]}>note</th>
         <th
           className={`num sortable when-head${s.sort === TIMESTAMP_SORT ? " sorted" : ""}`}
@@ -76,6 +79,7 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
 
 export default function LeaderboardTable({
   rows, layout, sort, selected, flash, onToggle, onPrefetch, hasMore, onNearEnd, visibleRef,
+  collapsedOf, onFold,
 }: {
   /** Undefined while the first page loads: skeleton rows under a live header. */
   rows: ExperimentRow[] | undefined;
@@ -83,8 +87,11 @@ export default function LeaderboardTable({
   sort: SortState;
   selected: ReadonlySet<string>;
   flash: string | null;
-  onToggle: (verstr: string) => void;
+  onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
+  /** Whether an outer run is shut (null: not an outer run). */
+  collapsedOf: (r: ExperimentRow) => boolean | null;
+  onFold: (r: ExperimentRow) => void;
   hasMore: boolean;
   onNearEnd: () => void;
   visibleRef: MutableRefObject<() => string[]>;
@@ -100,6 +107,8 @@ export default function LeaderboardTable({
     initialOffset: scroll.initial,
   });
   const items = virtualizer.getVirtualItems();
+  const navigate = useNavigate();
+  const keys = useRowKeys(parentRef, list.length, (i) => virtualizer.scrollToIndex?.(i), navigate);
   visibleRef.current = () => items.map((it) => list[it.index]?.verstr).filter(Boolean);
 
   // Back to this entry: put the table where it was once its rows are there.
@@ -124,9 +133,10 @@ export default function LeaderboardTable({
         className="tbl-scroll"
         ref={parentRef}
         onScroll={onScroll}
+        onKeyDown={keys.onKeyDown}
         style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
-        <table style={{ tableLayout: "fixed", width: layout.total }}>
+        <table role="grid" aria-label="experiments" style={{ tableLayout: "fixed", width: layout.total }}>
           <Head layout={layout} sort={sort} />
           {rows === undefined ? (
             <tbody><SkeletonRows layout={layout} /></tbody>
@@ -138,6 +148,10 @@ export default function LeaderboardTable({
                   <Row
                     key={r.verstr}
                     row={r}
+                    index={it.index}
+                    isActive={it.index === keys.active}
+                    collapsed={collapsedOf(r)}
+                    onFold={onFold}
                     start={it.start}
                     size={it.size}
                     isSelected={selected.has(r.verstr)}

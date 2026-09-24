@@ -51,7 +51,7 @@ function useClientFilter(
  *  rows locally instead, for callers that hold every row. */
 export default function LeaderboardFilter({
   rows = [], onFilter, onStatusChange, onQueryChange, onSearchChange, onBranchChange,
-  queryError, branches: knownBranches, facets = NO_FACETS, initial,
+  queryError, branches: knownBranches, facets = NO_FACETS, initial, archived, onArchivedChange,
 }: {
   rows?: ExperimentRow[];
   onFilter?: (filtered: ExperimentRow[]) => void;
@@ -70,6 +70,9 @@ export default function LeaderboardFilter({
   facets?: SuggestFacets;
   /** Values to start from (the URL's), so a restored view shows its filters. */
   initial?: FilterValues;
+  /** Whether archived runs are shown; the toggle appears with *onArchivedChange*. */
+  archived?: boolean;
+  onArchivedChange?: (on: boolean) => void;
 }) {
   const [search, setSearch] = useState(initial?.search ?? "");
   const [branch, setBranch] = useState(initial?.branch ?? "");
@@ -149,6 +152,16 @@ export default function LeaderboardFilter({
           {s}
         </button>
       ))}
+      {onArchivedChange && (
+        <button
+          className="status-toggle archived-toggle"
+          aria-pressed={Boolean(archived)}
+          title="include archived runs"
+          onClick={() => onArchivedChange(!archived)}
+        >
+          archived
+        </button>
+      )}
       {hasFilter && (
         <button title="Clear filters" onClick={clear} style={{ padding: "4px 10px" }}>
           ✕

@@ -21,6 +21,7 @@ export function XModeToggle({ value, onChange, timeEnabled }: {
         <button
           key={mode}
           className={value === mode ? "primary" : ""}
+          aria-pressed={value === mode}
           style={SMALL_BUTTON}
           disabled={mode !== "step" && !timeEnabled}
           onClick={() => onChange(mode)}

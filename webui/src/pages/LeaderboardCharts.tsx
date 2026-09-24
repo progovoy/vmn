@@ -19,11 +19,13 @@ export function ChartFallback() {
 }
 
 export default function LeaderboardCharts({
-  view, onView, rows, metricCols, paramCols, schema, onBrush,
+  view, onView, rows, label, metricCols, paramCols, schema, onBrush,
 }: {
   view: ChartView;
   onView: (v: ChartView) => void;
   rows: ExperimentRow[];
+  /** How much of the filtered set the chart covers. */
+  label?: string;
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
@@ -32,12 +34,16 @@ export default function LeaderboardCharts({
   const common = { rows, metricCols, schema };
   return (
     <>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
         {CHART_VIEWS.map((v) => (
-          <button key={v} className={view === v ? "primary" : ""} onClick={() => onView(v)}>
+          <button
+            key={v} className={view === v ? "primary" : ""}
+            aria-pressed={view === v} onClick={() => onView(v)}
+          >
             {LABELS[v]}
           </button>
         ))}
+        {label && <span className="chart-coverage">{label}</span>}
       </div>
       <Suspense fallback={<ChartFallback />}>
         {view === "trend" && <ParamPlots {...common} />}

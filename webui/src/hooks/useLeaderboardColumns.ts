@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
-  columnLayout, columnStyles, computeColMeta, metricColumns, paramKey,
+  anyTags, columnLayout, columnStyles, computeColMeta, metricColumns, paramKey,
 } from "../pages/leaderboardColumns";
 import type { RowLayout } from "../pages/LeaderboardRow";
 import { sameValue } from "../util/stableRows";
@@ -14,6 +14,9 @@ function useStable<T>(value: T): T {
   if (!sameValue(ref.current, value)) ref.current = value;
   return ref.current;
 }
+
+/** The `hide=` entry of the tags column. */
+export const TAGS_COLUMN = "c:tags";
 
 const splitKey = (key: string) => (key ? key.split("\u0000") : []);
 
@@ -48,17 +51,20 @@ export function useLeaderboardColumns(
     [rows, visibleMetrics, schema, primary],
   ));
   const showBest = list.length > 1;
+  const hasTags = useMemo(() => anyTags(rows), [rows]);
+  const showTags = hasTags && !hidden.has(TAGS_COLUMN);
 
   const layout = useMemo((): RowLayout => {
-    const cl = columnLayout(visibleMetrics.length, visibleParams.length);
+    const cl = columnLayout(visibleMetrics.length, visibleParams.length, showTags);
     const paramBase = 4 + visibleMetrics.length;
+    const tagsIdx = showTags ? paramBase + visibleParams.length : null;
     return {
       styles: columnStyles(cl), total: cl.total,
       metricCols: visibleMetrics, paramCols: visibleParams,
-      paramBase, noteIdx: paramBase + visibleParams.length,
+      paramBase, tagsIdx, noteIdx: paramBase + visibleParams.length + (showTags ? 1 : 0),
       colMeta, showBest, runBase,
     };
-  }, [visibleMetrics, visibleParams, colMeta, showBest, runBase]);
+  }, [visibleMetrics, visibleParams, showTags, colMeta, showBest, runBase]);
 
   // Query-box suggestions: the server's app-wide keys, else what is loaded.
   const suggestFacets = useMemo((): SuggestFacets => ({
@@ -66,5 +72,10 @@ export function useLeaderboardColumns(
     param_keys: facets?.param_keys ?? paramCols,
   }), [facets, metricCols, paramCols]);
 
-  return { primary, metricCols, paramCols, visibleMetrics, visibleParams, layout, suggestFacets };
+  const otherCols = hasTags ? ["tags"] : [];
+  const visibleOther = showTags ? ["tags"] : [];
+  return {
+    primary, metricCols, paramCols, visibleMetrics, visibleParams, layout, suggestFacets,
+    otherCols, visibleOther,
+  };
 }

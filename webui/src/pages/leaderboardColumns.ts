@@ -9,7 +9,7 @@ import { finiteNumbers, maxOf, minOf } from "../util/stats";
  *  `table-layout: fixed`. */
 const W = {
   check: 34, idx: 56, status: 110, experiment: 300,
-  metric: 110, param: 120, note: 200, when: 90,
+  metric: 110, param: 120, tags: 180, note: 200, when: 90,
 };
 const MIN_TABLE_WIDTH = 760;
 
@@ -18,15 +18,18 @@ export interface ColumnLayout {
   total: number;
 }
 
-export function columnLayout(nMetrics: number, nParams: number): ColumnLayout {
+/** Columns in order: check, #, status, experiment, metrics…, params…,
+ *  [tags], note, when. */
+export function columnLayout(nMetrics: number, nParams: number, tags = false): ColumnLayout {
   const fixed =
     W.check + W.idx + W.status + W.note + W.when +
-    nMetrics * W.metric + nParams * W.param;
+    nMetrics * W.metric + nParams * W.param + (tags ? W.tags : 0);
   const experiment = Math.max(W.experiment, MIN_TABLE_WIDTH - fixed);
   const widths = [
     W.check, W.idx, W.status, experiment,
     ...Array<number>(nMetrics).fill(W.metric),
     ...Array<number>(nParams).fill(W.param),
+    ...(tags ? [W.tags] : []),
     W.note, W.when,
   ];
   return { widths, total: fixed + experiment };
@@ -45,6 +48,11 @@ export function paramKey(rows: readonly ExperimentRow[] | null | undefined): str
   const keys = new Set<string>();
   rows?.forEach((r) => Object.keys(rowParams(r)).forEach((k) => keys.add(k)));
   return [...keys].sort().join("\u0000");
+}
+
+/** Whether any row carries a tag — the tags column only exists then. */
+export function anyTags(rows: readonly ExperimentRow[] | undefined): boolean {
+  return Boolean(rows?.some((r) => r.tags && Object.keys(r.tags).length > 0));
 }
 
 /** Metric columns: the schema's order first, then any other metric the rows
