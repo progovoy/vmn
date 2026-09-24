@@ -204,3 +204,22 @@ def test_resave_drops_patch_files_the_new_state_lacks(st):
     st.save("app", "v1", _meta("v1"), {"working_tree": "w2\n"})
     _, patches = st.load("app", "v1")
     assert patches == {"working_tree": "w2\n"}
+
+
+def test_cached_storage_without_a_remote_lists_names_and_some_records(st):
+    st.save("app", "v1", _meta("v1"), {})
+    st.save("app", "v2", _meta("v2"), {})
+    cached = CachedSnapshotStorage(st)
+    assert cached.list_record_names("app") == st.list_record_names("app")
+    assert cached.list_files("app", keys=["v1"]) == st.list_files("app", keys=["v1"])
+
+
+def test_cached_storage_with_a_remote_cannot_list_names_alone(st):
+    class Remote:
+        def list_files(self, app_name):
+            return {"v9": {"metadata.yml": (1, 1, "etag")}}
+
+    st.save("app", "v1", _meta("v1"), {})
+    cached = CachedSnapshotStorage(st, Remote())
+    assert cached.list_record_names("app") is None
+    assert set(cached.list_files("app", keys=["v1", "v9", "v5"])) == {"v1", "v9"}

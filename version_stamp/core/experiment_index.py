@@ -2,9 +2,10 @@
 """An incremental index of an app's experiments: leaderboard rows without
 re-reading every log whenever anything changes.
 
-Which records a refresh looks at is :mod:`experiment_index_sweep`'s call:
-normally the new and live ones from a names-only listing, every
-``full_sweep_sec`` all of them. Of those only what moved is read: a new record
+Which records a refresh looks at is :mod:`experiment_index_sweep`'s call: by
+default all of them; with ``full_sweep_sec`` set (opt-in, for a server that
+refreshes often), the new and live ones from a names-only listing and all of
+them every ``full_sweep_sec``. Of those only what moved is read: a new record
 is loaded, a changed ``metadata.yml`` re-read, a grown log read from where it
 was last read up to (:mod:`experiment_index_logs`), a rewritten
 ``run_state.yml`` — a heartbeat — re-read on its own. The folded state
@@ -83,6 +84,15 @@ class ExperimentIndex:
         self._lock = threading.Lock()
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
+
+    @property
+    def full_sweep_sec(self):
+        """Seconds between full listings; 0 (the default) lists fully every time."""
+        return self._sweep.full_sweep_sec
+
+    @full_sweep_sec.setter
+    def full_sweep_sec(self, value):
+        self._sweep.full_sweep_sec = value
 
     # -- refresh -------------------------------------------------------------
 
@@ -248,13 +258,21 @@ _SHARED = {}
 _SHARED_LOCK = threading.Lock()
 
 
-def shared_index(storage, app_name, cache_path=None):
+def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None):
     """The process-wide index for *storage*'s *app_name* data.
 
     Keyed by the backend's ``cache_identity()`` so equivalent storage objects
     share one warm index. Persisted at *cache_path* when given (the ui keeps its
     own under the server data dir), else at the backend's ``index_cache_path``.
+    A *full_sweep_sec* other than None sets that index's sweep interval.
     """
+    index = _process_index(storage, app_name, cache_path)
+    if full_sweep_sec is not None:
+        index.full_sweep_sec = full_sweep_sec
+    return index
+
+
+def _process_index(storage, app_name, cache_path):
     if cache_path is None:
         path_of = getattr(storage, "index_cache_path", None)
         cache_path = path_of(app_name) if path_of else None
@@ -296,11 +314,14 @@ def direct_rows(
     return rows, states
 
 
-def indexed_snapshot(storage, app_name, cache_path=None, max_age_sec=0):
+def indexed_snapshot(
+    storage, app_name, cache_path=None, max_age_sec=0, full_sweep_sec=None
+):
     """The shared index's :class:`IndexSnapshot`, refreshed when older than
-    *max_age_sec*; one built by a direct read if the index fails."""
+    *max_age_sec*; one built by a direct read if the index fails.
+    *full_sweep_sec* is passed on to :func:`shared_index`."""
     try:
-        index = shared_index(storage, app_name, cache_path)
+        index = shared_index(storage, app_name, cache_path, full_sweep_sec)
         return index.refresh_if_stale(max_age_sec)
     except Exception:
         _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)

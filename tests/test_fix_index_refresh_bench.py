@@ -45,7 +45,8 @@ class CountingStorage(LocalSnapshotStorage):
 def test_a_no_change_refresh_lists_no_finished_record(tmp_path):
     _seed(str(tmp_path))
     storage = CountingStorage(str(tmp_path), subdir="experiments")
-    index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "idx.sqlite"))
+    index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "idx.sqlite"),
+                           full_sweep_sec=300)
     index.refresh()
     assert len(index.rows()) == RUNS
 

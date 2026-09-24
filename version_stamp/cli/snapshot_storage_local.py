@@ -191,7 +191,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         """``{record key: (dir mtime_ns, inode)}`` from one directory listing.
 
         Every write into a record is atomic (temp file + rename), which bumps
-        the record directory's mtime; only appending to an existing log does not.
+        the record directory's mtime, and ``append_log_entry`` bumps it too.
         """
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
@@ -305,11 +305,12 @@ class LocalSnapshotStorage(SnapshotStorage):
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if self._refuse_orphan_write(app_name, verstr, "a log entry"):
             return False
-        path = os.path.join(
-            self._snapshot_dir(app_name, verstr), log_object_name(writer_id)
-        )
-        with open(path, "a") as f:
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        with open(os.path.join(snap_dir, log_object_name(writer_id)), "a") as f:
             f.write(json.dumps(entry, default=str) + "\n")
+        # An append leaves the dir mtime alone; bump it so the index's
+        # record signature (list_record_names) sees the change.
+        os.utime(snap_dir)
         return True
 
     def load_logs_by_writer(self, app_name, verstr):

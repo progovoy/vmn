@@ -14,11 +14,15 @@ Every ``full_sweep_sec`` — and always for a backend without names-only
 listing, or one answering None — one full ``list_files`` catches what no sig
 shows (any change to a record whose sig is None, a record removed only partly).
 A plain set of names is accepted as all-None sigs.
+
+The fast tier is opt-in: ``full_sweep_sec`` defaults to 0, where every refresh
+is a full listing and an in-place write by anyone shows up at once. A server
+that refreshes often sets it (a mutable attribute) and sweeps in the background.
 """
 from version_stamp.core.experiment_status import FAILED, SUCCEEDED, derive_status
 
 METADATA_FILE = "metadata.yml"
-DEFAULT_FULL_SWEEP_SEC = 300
+DEFAULT_FULL_SWEEP_SEC = 0  # 0: every refresh is a full listing
 
 
 def _finished(run_state):
@@ -41,7 +45,7 @@ class Sweep:
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC):
         self._storage = storage
         self._app_name = app_name
-        self._full_sweep_sec = full_sweep_sec
+        self.full_sweep_sec = full_sweep_sec
         self._last_full = None
         self._touched = {}  # key -> when a refresh last saw it change
         self._sigs = {}  # key -> its sig at the last listing
@@ -56,6 +60,8 @@ class Sweep:
     def listing(self, records, now):
         """``(files of the records to refresh, keys of every present record)``."""
         names_of = getattr(self._storage, "list_record_names", None)
+        # Sigs are kept even while every refresh is full, so switching the
+        # fast tier on later does not re-list every record once.
         sigs = _as_sigs(names_of(self._app_name)) if names_of else None
         if sigs is None or self._full_due(now):
             return self._full_listing(sigs or {}, now)
@@ -72,7 +78,7 @@ class Sweep:
         return listing, {k for k, names in listing.items() if METADATA_FILE in names}
 
     def _full_due(self, now):
-        return self._last_full is None or now - self._last_full >= self._full_sweep_sec
+        return self._last_full is None or now - self._last_full >= self.full_sweep_sec
 
     def _may_change(self, records, key, sig, now):
         record = records.get(key)
@@ -84,4 +90,4 @@ class Sweep:
             return True
         if sig is not None and sig != self._sigs.get(key):
             return True
-        return now - self._touched.get(key, float("-inf")) < self._full_sweep_sec
+        return now - self._touched.get(key, float("-inf")) < self.full_sweep_sec

@@ -95,7 +95,7 @@ def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
     finished = [_make(st, i, FINISHED) for i in range(3)]
     live = _make(st, 5, "state: running\nheartbeat: '2026-01-01T00:00:00Z'\n")
     never_run = _make(st, 6)
-    index = ExperimentIndex(st, APP)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
     index.refresh()
     assert listed == [None]  # the first refresh is a full sweep
 
@@ -108,7 +108,7 @@ def test_a_no_change_refresh_lists_only_live_records(st, listed, clock):
 
 def test_new_and_removed_records_are_seen_without_a_full_sweep(st, listed, clock):
     old = [_make(st, i, FINISHED) for i in range(2)]
-    index = ExperimentIndex(st, APP)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
     index.refresh()
 
     new = _make(st, 7, FINISHED)
@@ -240,9 +240,62 @@ def test_names_without_signatures_wait_for_the_full_sweep(st, clock):
 
 def test_a_backend_that_cannot_list_names_gets_a_full_listing(st, listed, clock):
     _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
     index.refresh()
     st.list_record_names = lambda app_name: None
     clock.now += 1
     index.refresh()
     assert listed == [None, None]
+
+
+# -- opting in -----------------------------------------------------------------
+
+
+def test_by_default_every_refresh_is_a_full_listing(st, listed, clock):
+    verstr = _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP)
+    assert index.full_sweep_sec == 0
+    index.refresh()
+    folder = st._snapshot_dir(APP, verstr)
+    with open(os.path.join(folder, "log.w.jsonl"), "a") as f:
+        f.write('{"timestamp": "u", "type": "metrics", "values": {"loss": 0.5}}\n')
+    index.refresh()
+    assert listed == [None, None]
+    assert index.rows()[0]["metrics"]["loss"] == 0.5
+
+
+def test_the_fast_tier_can_be_switched_on_later(st, listed, clock):
+    _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP)
+    index.refresh()
+    index.full_sweep_sec = 300
+    clock.now += 1
+    index.refresh()
+    assert listed == [None]
+
+
+def test_shared_index_and_indexed_snapshot_set_the_sweep_interval(st):
+    index = experiment_index.shared_index(st, APP, full_sweep_sec=30)
+    assert index.full_sweep_sec == 30
+    assert experiment_index.shared_index(st, APP).full_sweep_sec == 30
+    experiment_index.indexed_snapshot(st, APP, full_sweep_sec=5)
+    assert index.full_sweep_sec == 5
+
+
+def test_an_append_through_the_storage_bumps_the_record_signature(st):
+    verstr = _make(st, 1, FINISHED)
+    before = st.list_record_names(APP)[verstr]
+    st.append_log_entry(APP, verstr, "w", {"timestamp": "u", "type": "note"})
+    assert st.list_record_names(APP)[verstr] != before
+
+
+def test_an_append_to_a_finished_run_shows_up_in_the_fast_tier(st, listed, clock):
+    verstr = _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP, full_sweep_sec=300)
+    index.refresh()
+    st.append_log_entry(APP, verstr, "w", {"timestamp": "u", "type": "metrics",
+                                            "values": {"loss": 0.25}})
+    clock.now += 1
+    index.refresh()
+    assert listed[1:] == [{verstr}]
+    assert index.rows()[0]["metrics"]["loss"] == 0.25
