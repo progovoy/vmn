@@ -4,12 +4,18 @@ import type { ExperimentDetail, ExperimentRow, RunStatus } from "../types";
  *  so the page can paint from the row cache before the detail arrives. */
 export interface RunSummary {
   verstr: string;
+  /** Human-readable name, when the run has one. */
+  name: string | null;
+  tags: Record<string, string>;
   branch: string | null;
   note: string | null;
   status: RunStatus | null;
   metrics: ExperimentDetail["metrics"];
   params: Record<string, unknown> | null;
 }
+
+/** One shared empty tag set, so an untagged run's tags keep their identity. */
+const NO_TAGS: Record<string, string> = Object.freeze({}) as Record<string, string>;
 
 /** The verbatim params, or snapshot `user_meta` for a record without any. */
 const paramsOrMeta = (
@@ -20,6 +26,8 @@ export function summaryFromDetail(d: ExperimentDetail): RunSummary {
   const meta = d.metadata;
   return {
     verstr: meta.verstr,
+    name: (meta.name as string | undefined) || null,
+    tags: (meta.tags as Record<string, string> | undefined) ?? NO_TAGS,
     branch: (meta.branch as string | undefined) ?? null,
     note: (meta.note as string | undefined) || null,
     status: d.status ?? null,
@@ -54,6 +62,8 @@ function statusFromRow(r: ExperimentRow): RunStatus | null {
 export function summaryFromRow(r: ExperimentRow): RunSummary {
   return {
     verstr: r.verstr,
+    name: r.name || null,
+    tags: r.tags ?? NO_TAGS,
     branch: r.branch,
     note: r.note,
     status: statusFromRow(r),

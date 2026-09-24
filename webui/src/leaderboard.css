@@ -9,3 +9,12 @@
 td.tags-cell { overflow: hidden; white-space: nowrap; }
 a.run-name { font-weight: 500; }
 .exp-verstr { margin-right: 6px; font-size: 11px; }
+.run-verstr { color: var(--text-3); font-size: 12px; }
+.tag-editor { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.tag-editor .tag-chip { margin: 0; display: inline-flex; align-items: center; gap: 4px; }
+.tag-remove {
+  border: 0; background: transparent; color: var(--text-3); padding: 0 2px;
+  cursor: pointer; font-size: 12px; line-height: 1;
+}
+.tag-remove:hover { color: var(--bad); }
+.tag-editor input { width: 180px; }

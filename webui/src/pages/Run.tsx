@@ -12,6 +12,7 @@ import ArtifactsList from "../components/ArtifactsList";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
+import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import TrainingCurves from "../components/TrainingCurves";
 import { MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
@@ -80,11 +81,19 @@ export default function Run() {
     <>
       <Link className="back-link" to={`/ws/${ws}/app/${app}`}>← experiments</Link>
       <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
-        <h1 className="mono" style={{ fontSize: 20 }}>{summary.verstr}</h1>
+        {summary.name ? (
+          <>
+            <h1 style={{ fontSize: 20 }}>{summary.name}</h1>
+            <span className="mono run-verstr">{summary.verstr}</span>
+          </>
+        ) : (
+          <h1 className="mono" style={{ fontSize: 20 }}>{summary.verstr}</h1>
+        )}
         {summary.branch && <span className="badge">{summary.branch}</span>}
         <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
       </div>
       <NoteEditor key={summary.verstr} ws={ws} app={app} verstr={summary.verstr} note={summary.note} />
+      <TagEditor key={`tags-${summary.verstr}`} ws={ws} app={app} verstr={summary.verstr} tags={summary.tags} />
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
 
