@@ -22,8 +22,8 @@ from version_stamp.core.experiment_status import (
 )
 from version_stamp.core.logging import VMN_LOGGER
 
-# Remote deletes in flight at once: each is a few round trips.
-_DELETE_WORKERS = 16
+# Remote reads/deletes in flight at once; a delete fans out further inside S3.
+_REMOTE_WORKERS = 4
 _LIVE = (RUNNING, STUCK)
 
 
@@ -60,14 +60,21 @@ def _ancestors(verstr, parent_of):
     return seen
 
 
+def _map(storage, fn, items):
+    """``[fn(item)]`` in order — concurrently when each call goes over the
+    network, so 10k remote runs are not 10k serial round trips."""
+    if len(items) < 2 or not storage.is_remote():
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
+        return list(pool.map(fn, items))
+
+
 def _live_runs(storage, app_name, candidates):
     """``{verstr: status}`` of the *candidates* that may still be running."""
-    live = {}
-    for meta in candidates:
-        status = derive_status(load_run_state(storage, app_name, meta["verstr"]))
-        if status in _LIVE:
-            live[meta["verstr"]] = status
-    return live
+    verstrs = [m["verstr"] for m in candidates]
+    states = _map(storage, lambda v: load_run_state(storage, app_name, v), verstrs)
+    statuses = zip(verstrs, map(derive_status, states))
+    return {v: status for v, status in statuses if status in _LIVE}
 
 
 def _apply_guards(storage, app_name, metas, candidates, force):
@@ -90,21 +97,6 @@ def _skip_message(verstr, status):
         )
     return f"Skipping {verstr}: still running (use --force to delete it)"
 
-
-def _delete_all(storage, app_name, verstrs):
-    """Delete *verstrs*, concurrently when each delete goes over the network;
-    yields each verstr, in order, once it is gone."""
-    is_remote = getattr(storage, "is_remote", None)
-    if len(verstrs) < 2 or not (is_remote and is_remote()):
-        for verstr in verstrs:
-            storage.delete(app_name, verstr)
-            yield verstr
-        return
-    with ThreadPoolExecutor(max_workers=_DELETE_WORKERS) as pool:
-        futures = [pool.submit(storage.delete, app_name, v) for v in verstrs]
-        for verstr, future in zip(verstrs, futures):
-            future.result()
-            yield verstr
 
 
 def _local_view(storage):
@@ -148,7 +140,9 @@ def experiment_prune(vcs, params, storage, args, app_name):
             print(f"  {meta['verstr']}")
         return 0
 
-    for verstr in _delete_all(storage, app_name, [m["verstr"] for m in to_delete]):
+    verstrs = [m["verstr"] for m in to_delete]
+    _map(storage, lambda v: storage.delete(app_name, v), verstrs)
+    for verstr in verstrs:
         print(f"Deleted {verstr}")
     print(f"Pruned {len(to_delete)} experiments, kept {len(metas) - len(to_delete)}")
     return 0

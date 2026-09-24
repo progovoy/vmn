@@ -12,8 +12,8 @@ from version_stamp.cli.snapshot_storage_files import (
 from version_stamp.core.logging import VMN_LOGGER
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs,
-# few enough to stay under the default connection pool (10) plus headroom.
-S3_WORKERS = 16
+# few enough to fit boto3's default connection pool (10 per client).
+S3_WORKERS = 10
 MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 
@@ -110,12 +110,7 @@ class S3Base:
 
     def _get_or_raise(self, key):
         """*key*'s bytes, None when it is missing; any other failure raises."""
-        try:
-            return self._s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
-        except Exception as e:
-            if is_missing(e):
-                return None
-            raise
+        return self._get_with_etag(key)[0]
 
     def _get_with_etag(self, key):
         """``(bytes, etag)`` of *key*, ``(None, None)`` when it is missing."""

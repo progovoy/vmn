@@ -19,8 +19,7 @@ from version_stamp.cli.snapshot_storage_files import (
     log_sizes_of,
     log_writer_and_seq,
 )
-from version_stamp.core import utils as core_utils
-from version_stamp.core.experiment_status import RUN_STATE_FILE
+from version_stamp.core.experiment_status import load_run_state
 from version_stamp.core.logging import VMN_LOGGER
 
 LOCAL, REMOTE = "local", "remote"
@@ -42,15 +41,11 @@ def pick_log_sources(remote_sizes, local_sizes):
     """
     sources = {}
     for writer in set(remote_sizes) | set(local_sizes):
-        local = local_sizes.get(writer)
-        if writer == "":
-            sources[writer] = LOCAL if local is not None else REMOTE
-        else:
-            sources[writer] = (
-                LOCAL
-                if local is not None and local >= remote_sizes.get(writer, 0)
-                else REMOTE
-            )
+        size = local_sizes.get(writer)
+        newest = size is not None and (
+            writer == "" or size >= remote_sizes.get(writer, 0)
+        )
+        sources[writer] = LOCAL if newest else REMOTE
     return sources
 
 
@@ -69,6 +64,7 @@ class CachedLogs:
         # (app, verstr, writer) -> LOCAL | REMOTE, as the last listing chose
         self._log_sources = {}
         self._sync_lock = threading.Lock()
+        self._compacted = set()  # writers already compacted after their run finished
 
     # -- listings ---------------------------------------------------------------
 
@@ -174,8 +170,10 @@ class CachedLogs:
             return
         with self._sync_lock:
             self._ship_new_lines(app_name, verstr, writer_id)
-        if self._run_finished(app_name, verstr):
+        key = (app_name, verstr, writer_id)
+        if key not in self._compacted and self._run_finished(app_name, verstr):
             self._compact(app_name, verstr, writer_id)
+            self._compacted.add(key)
 
     def _ship_new_lines(self, app_name, verstr, writer_id):
         base = log_object_name(writer_id)
@@ -205,9 +203,8 @@ class CachedLogs:
         return data[: data.rfind(b"\n") + 1]
 
     def _run_finished(self, app_name, verstr):
-        raw = self._local.load_file(app_name, verstr, RUN_STATE_FILE)
-        state = core_utils.yaml_safe_load(raw) if raw else None
-        return isinstance(state, dict) and state.get("state") == "finished"
+        state = load_run_state(self._local, app_name, verstr)
+        return (state or {}).get("state") == "finished"
 
     def _compact(self, app_name, verstr, writer_id):
         compact = getattr(self._remote, "compact_log_segments", None)

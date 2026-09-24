@@ -76,7 +76,7 @@ class S3Listing:
         raw = self._get_or_raise(f"{prefix}/{safe_verstr(name)}/{METADATA_FILE}")
         if raw is None:
             return None
-        owner = (core_utils.yaml_safe_load(raw) or {}).get("app_name") or ""
+        owner = (core_utils.parse_record_metadata(raw) or {}).get("app_name") or ""
         self._legacy_owners[(prefix, name)] = owner
         return owner
 
@@ -97,7 +97,7 @@ class S3Listing:
     def _merge_legacy(self, app_name, by_key):
         """*by_key* ``[(prefix, {verstr: value})]`` (current key first) merged:
         the current key wins, the legacy one adds only the app's own records."""
-        (current, merged), *legacy = by_key
+        (_, merged), *legacy = by_key
         merged = dict(merged)
         for prefix, found in legacy:
             extra = {k: v for k, v in found.items() if k not in merged}
@@ -163,16 +163,16 @@ class S3Listing:
 
     def _list_files_of(self, app_name, keys):
         prefixes = self._app_prefixes(app_name)
-        wanted = [key for key in keys if _valid_record_name(key)]
+        wanted = [key for key in keys if core_utils.valid_path_component(key)]
         jobs = [(key, prefix) for key in wanted for prefix in prefixes]
         listed = parallel_map(
             lambda job: self._files_at(f"{job[1]}/{safe_verstr(job[0])}/"), jobs
         )
-        by_key = {prefix: {} for prefix in prefixes}
-        for (key, prefix), found in zip(jobs, listed):
-            if found:
-                by_key[prefix][key] = found
-        return self._merge_legacy(app_name, list(by_key.items()))
+        by_key = [
+            (prefix, {k: f for (k, p), f in zip(jobs, listed) if p == prefix and f})
+            for prefix in prefixes
+        ]
+        return self._merge_legacy(app_name, by_key)
 
     def _files_at(self, record_prefix):
         """One record's own files, delimited: its subtrees are never listed."""
@@ -187,11 +187,3 @@ class S3Listing:
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime, etag)}`` for one record's files — one LIST."""
         return self._files_at(f"{self._record_prefix(app_name, verstr)}/")
-
-
-def _valid_record_name(name):
-    try:
-        safe_verstr(name)
-    except ValueError:
-        return False
-    return True

@@ -46,8 +46,9 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         self._init_logs()
 
     def _local_patches(self, patches):
-        """What of a record's body the local copy keeps: all of it."""
-        return patches
+        """What of a record's body the local copy keeps: all of it, unless
+        the local copy is only a log buffer."""
+        return patches if self._local_is_replica else {}
 
     def save(self, app_name, verstr, metadata, patches):
         self._local.save(app_name, verstr, metadata, self._local_patches(patches))

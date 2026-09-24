@@ -47,9 +47,6 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at = {}
         atexit.register(self.close)
 
-    def _local_patches(self, patches):
-        return {}
-
     def load(self, app_name, verstr):
         return self._remote.load(app_name, verstr)
 

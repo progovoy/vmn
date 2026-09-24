@@ -15,7 +15,6 @@ from version_stamp.cli.snapshot_storage_files import (
     LEGACY_LOG_FILE,
     flatten_logs,
     group_log_names,
-    is_log_file,
     log_object_name,
     log_sizes_of,
     log_writer_and_seq,
@@ -42,14 +41,8 @@ class S3Logs:
 
     def log_objects(self, app_name, verstr, writer_id):
         """``[(name, size)]`` of the writer's visible log objects, in order."""
-        prefix = f"{self._record_prefix(app_name, verstr)}/"
-        sizes = {
-            name: size
-            for name, size in self._log_names(prefix).items()
-            if is_log_file(name) and log_writer_and_seq(name)[0] == writer_id
-        }
-        names = group_log_names(sizes).get(writer_id, [])
-        return [(name, sizes[name]) for name in names]
+        sizes = self._log_names(f"{self._record_prefix(app_name, verstr)}/")
+        return [(n, sizes[n]) for n in group_log_names(sizes).get(writer_id, [])]
 
     def delete_log_segments(self, app_name, verstr, writer_id):
         prefix = self._record_prefix(app_name, verstr)
