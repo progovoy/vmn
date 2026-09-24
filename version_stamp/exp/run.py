@@ -28,6 +28,7 @@ from version_stamp.core.experiment_writer import (
     append_entries_to_log,
     compute_artifact_info,
     create_log_entry,
+    create_tags_entry,
     get_writer_id,
     save_artifact,
 )
@@ -49,6 +50,7 @@ from version_stamp.exp.create import SNAPSHOT_METADATA_ENV, create_record  # noq
 from version_stamp.exp.heartbeat import Heartbeat
 from version_stamp.exp.log_buffer import LogBuffer
 from version_stamp.exp.ranks import NoOpRun, is_secondary_rank
+from version_stamp.exp.run_artifacts import RunArtifacts
 from version_stamp.exp.state_publisher import RunStatePublisher
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
@@ -78,6 +80,8 @@ def start_run(
     snapshot=True,
     run_id=None,
     all_ranks=False,
+    name=None,
+    tags=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -98,6 +102,9 @@ def start_run(
     ``snapshot=False`` records only the code identity (base commit and diff
     hash), with no patches or untracked tarball — for many lightweight runs.
 
+    ``name`` is a human-readable run name, stored in ``metadata.yml`` and shown
+    by ``vmn exp list``; ``tags`` (``{key: value}``) are set once the run opens.
+
     ``run_id`` (or ``VMN_RESUME_RUN_ID``) reopens an existing run of the app
     instead of creating one — a requeued job continuing where it was preempted.
 
@@ -117,7 +124,7 @@ def start_run(
         app_name, storage, verstr, prior_state = resume.locate(app_name, ref, storage)
     else:
         app_name, storage, verstr = create_record(
-            app_name, note, params, parent, nested, storage, snapshot
+            app_name, note, params, parent, nested, storage, snapshot, name
         )
 
     run = Run(
@@ -128,10 +135,13 @@ def start_run(
         system_metrics=system_metrics,
         sync_interval_sec=sync_interval_sec,
         prior_state=prior_state,
+        name=name,
     )
     run._open()
     if prior_state is not None:
         _record_resume_inputs(run, note, params)
+    if tags:
+        run.set_tags(tags)
     return run
 
 
@@ -143,7 +153,7 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-class Run:
+class Run(RunArtifacts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     def __init__(
@@ -155,10 +165,12 @@ class Run:
         system_metrics=False,
         sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
         prior_state=None,
+        name=None,
     ):
         self._storage = storage
         self.app_name = app_name
         self.id = verstr
+        self.name = name
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None and atexit leaves it alone.
         self.pid = os.getpid()
@@ -323,10 +335,25 @@ class Run:
     def log_note(self, text):
         self._append(create_log_entry("note", text=text))
 
-    def log_artifact(self, path):
+    def log_artifact(self, path, name=None):
+        """Store the file at *path* as artifact *name* (a relative ``a/b/c``
+        path; default: its basename)."""
         info = compute_artifact_info(path)
-        save_artifact(self._storage, self.app_name, self.id, path)
+        if name is not None:
+            info["path"] = name
+        save_artifact(self._storage, self.app_name, self.id, path, name=name)
         self._append(create_log_entry("artifact", **info))
+
+    # Tags are mutable, and can be set on a finished run: each call appends a
+    # `tags` entry, and readers fold them per key, last write wins.
+    def set_tag(self, key, value):
+        self.set_tags({key: value})
+
+    def set_tags(self, tags):
+        self._append(create_tags_entry(tags))
+
+    def remove_tag(self, key):
+        self._append(create_tags_entry(remove=[key]))
 
     # -- internals ---------------------------------------------------------
 

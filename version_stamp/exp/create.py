@@ -28,6 +28,7 @@ from version_stamp.core.experiment_from_snapshot import create_from_snapshot
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
+    attach_name,
     attach_parent,
     create_log_entry,
     get_repo_lock,
@@ -43,7 +44,9 @@ from version_stamp.exp.context import EXPERIMENT_ID_ENV, current_run
 SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 
 
-def create_record(app_name, note, params, parent, nested, storage, snapshot):
+def create_record(
+    app_name, note, params, parent, nested, storage, snapshot, name=None
+):
     """Create a new run's record; ``(app_name, storage, verstr)``."""
     # Same shape as the CLI's `-f file` params, so _get_latest_metrics and
     # `exp diff` pick them up unchanged.
@@ -51,11 +54,11 @@ def create_record(app_name, note, params, parent, nested, storage, snapshot):
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
     if meta_path:
         app_name, storage, verstr, err = create_from_snapshot_meta(
-            app_name, meta_path, note, create_data, parent, nested, storage
+            app_name, meta_path, note, create_data, parent, nested, storage, name
         )
     else:
         app_name, storage, verstr, err = create_in_checkout(
-            app_name, note, create_data, parent, nested, storage, snapshot
+            app_name, note, create_data, parent, nested, storage, snapshot, name
         )
     if err:
         raise RuntimeError(
@@ -146,7 +149,7 @@ def _resolve_env_parent(storage, app_name, ref):
 
 
 def create_from_snapshot_meta(
-    app_name, meta_path, note, create_data, parent, nested, storage
+    app_name, meta_path, note, create_data, parent, nested, storage, name=None
 ):
     """Container mode: record against an exported snapshot, no git needed."""
     app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
@@ -165,12 +168,13 @@ def create_from_snapshot_meta(
             note=note,
             extra_create_data=create_data,
             parent=pick_parent(storage, app_name, parent, nested),
+            name=name,
         )
     return app_name, storage, verstr, err
 
 
 def create_in_checkout(
-    app_name, note, create_data, parent, nested, storage, snapshot=True
+    app_name, note, create_data, parent, nested, storage, snapshot=True, name=None
 ):
     """The normal mode: cold-start if needed, capture, then claim under the lock."""
     app_name = _resolve_app_name(app_name, stamped_apps)
@@ -188,11 +192,11 @@ def create_in_checkout(
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     with get_repo_lock(root_path):
-        verstr = _record(vcs, storage, captured, note, create_data, parent)
+        verstr = _record(vcs, storage, captured, note, create_data, parent, name)
     return app_name, storage, verstr, None
 
 
-def _record(vcs, storage, captured, note, create_data, parent):
+def _record(vcs, storage, captured, note, create_data, parent, name=None):
     """Claim a verstr for *captured* and write the record and its create entry."""
     code_verstr = _format_dev_verstr(
         captured.base_version, captured.commit_hash, captured.diff_hash
@@ -218,6 +222,7 @@ def _record(vcs, storage, captured, note, create_data, parent):
     def make_record(verstr):
         metadata = dict(template, verstr=verstr)
         attach_parent(metadata, parent)
+        attach_name(metadata, name)
         return metadata, captured.payload
 
     verstr = allocate_run_verstr(storage, vcs.name, code_verstr, make_record=make_record)

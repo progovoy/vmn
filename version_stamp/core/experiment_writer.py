@@ -196,9 +196,13 @@ def compute_artifact_info(path):
     }
 
 
-def save_artifact(storage, app_name, verstr, src_path):
-    """Copy an artifact file into the experiment directory."""
-    storage.save_artifact_file(app_name, verstr, src_path)
+def save_artifact(storage, app_name, verstr, src_path, name=None):
+    """Copy an artifact file into the experiment directory, as *name* (a
+    relative ``a/b/c`` path) when given, else under its basename."""
+    if name is None:
+        storage.save_artifact_file(app_name, verstr, src_path)
+    else:
+        storage.save_artifact_file(app_name, verstr, src_path, name=name)
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +214,12 @@ def attach_parent(metadata, parent):
     """Record the experiment that launched this one — never the run itself."""
     if parent and parent != metadata["verstr"]:
         metadata["parent"] = parent
+
+
+def attach_name(metadata, name):
+    """Record the run's human-readable name, when it was given one."""
+    if name:
+        metadata["name"] = str(name)
 
 
 _MAX_RUN_CANDIDATES = 100000

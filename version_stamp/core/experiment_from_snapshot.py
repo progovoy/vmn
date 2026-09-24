@@ -13,6 +13,7 @@ import yaml
 from version_stamp.core.experiment_writer import (
     allocate_run_verstr,
     append_to_log,
+    attach_name,
     attach_parent,
     create_log_entry,
 )
@@ -41,7 +42,7 @@ def _load_snapshot_meta(snapshot_meta_path):
     return snap_meta
 
 
-def _record_factory(snap_meta, app, note, parent):
+def _record_factory(snap_meta, app, note, parent, name=None):
     """``make_record(verstr) -> (metadata, patches)`` for allocate_run_verstr."""
 
     def _record(verstr):
@@ -65,6 +66,7 @@ def _record_factory(snap_meta, app, note, parent):
         if snap_meta.get("changesets"):
             metadata["changesets"] = snap_meta["changesets"]
         attach_parent(metadata, parent)
+        attach_name(metadata, name)
         return metadata, {}
 
     return _record
@@ -77,6 +79,7 @@ def create_from_snapshot(
     note=None,
     extra_create_data=None,
     parent=None,
+    name=None,
 ):
     """Create an experiment from an exported snapshot directory or metadata file.
 
@@ -99,7 +102,7 @@ def create_from_snapshot(
         storage,
         app,
         snap_meta["verstr"],
-        make_record=_record_factory(snap_meta, app, note, parent),
+        make_record=_record_factory(snap_meta, app, note, parent, name),
     )
 
     entry = create_log_entry("create", note=note)

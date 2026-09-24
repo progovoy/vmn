@@ -49,6 +49,7 @@ class NoOpRun:
     """
 
     id = None
+    name = None
 
     def __init__(self, app_name=None):
         self.app_name = app_name
@@ -69,8 +70,14 @@ class NoOpRun:
     def log_note(self, text):
         return None
 
-    def log_artifact(self, path):
+    def log_artifact(self, path, name=None):
         return None
+
+    def _ignore(self, *args, **kwargs):
+        return None
+
+    set_tag = set_tags = remove_tag = _ignore
+    log_dict = log_text = log_figure = log_artifacts = _ignore
 
     def __enter__(self):
         return self
