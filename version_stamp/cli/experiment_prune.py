@@ -13,7 +13,7 @@ take runs back out of the list:
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.core.experiment_index import shared_index
+from version_stamp.core.experiment_index import indexed_snapshot
 from version_stamp.core.experiment_status import (
     RUNNING,
     STUCK,
@@ -129,12 +129,8 @@ def _metas_and_snapshot(storage, app_name):
     index when the storage can be indexed, so selecting among 10k runs does not
     read every record's metadata and run state; directly otherwise."""
     if hasattr(storage, "list_files"):
-        try:
-            snapshot = shared_index(storage, app_name).refresh().snapshot()
-        except Exception:
-            VMN_LOGGER.debug("Experiment index unavailable; reading directly",
-                             exc_info=True)
-        else:
+        snapshot = indexed_snapshot(storage, app_name, wait=True, fallback=None)
+        if snapshot is not None:
             metas = [
                 {"verstr": r["verstr"], "timestamp": r.get("timestamp"),
                  "parent": r.get("parent")}

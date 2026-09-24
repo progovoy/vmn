@@ -124,7 +124,7 @@ def test_shared_index_is_keyed_by_an_explicit_cache_path(tmp_path):
 
     first = experiment_index.shared_index(storage, APP, cache_path=db)
     again = experiment_index.shared_index(storage, APP, cache_path=db)
-    rows, _ = experiment_index.indexed_rows(storage, APP, cache_path=db)
+    rows = experiment_index.indexed_snapshot(storage, APP, cache_path=db).rows
 
     assert first is again
     assert os.path.isfile(db)

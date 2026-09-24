@@ -13,24 +13,12 @@ a metadata-only listing answers instead.
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
 """
-import logging
 
 from version_stamp.core import experiment_index
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
 
 KIND = "experiment"
 _LATEST_WORDS = ("latest", "@latest")
-_LOGGER = logging.getLogger(__name__)
-
-
-def index_snapshot(storage, app_name):
-    """The app's up-to-date :class:`IndexSnapshot`, or None if the index fails."""
-    try:
-        index = experiment_index.shared_index(storage, app_name)
-        return index.refresh_if_stale(0)
-    except Exception:
-        _LOGGER.debug("Experiment index unavailable", exc_info=True)
-        return None
 
 
 def _listed_snapshot(storage, app_name):
@@ -50,10 +38,8 @@ def _listed_snapshot(storage, app_name):
 
 def placement_snapshot(storage, app_name, snapshot=None):
     """*snapshot*, else the index's, else one built from a metadata-only listing."""
-    return (
-        snapshot
-        or index_snapshot(storage, app_name)
-        or _listed_snapshot(storage, app_name)
+    return snapshot or experiment_index.indexed_snapshot(
+        storage, app_name, fallback=_listed_snapshot
     )
 
 
