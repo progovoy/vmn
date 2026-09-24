@@ -95,7 +95,7 @@ describe("leaderboard view state lives in the URL", () => {
     const second = (await screen.findByText("0.0.2-dev.x")).closest("tr")!;
     fireEvent.click(within(second).getByRole("checkbox"));
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["0.0.1-dev.x", "0.0.2-dev.x"]));
-    expect(screen.getByRole("button", { name: /compare 2 selected/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /code diff of 2 selected/i })).toBeInTheDocument();
   });
 
   it("hides the columns the URL hides", async () => {

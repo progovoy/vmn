@@ -46,7 +46,7 @@ export default function LeaderboardSelectionBar({
         <button className="primary" onClick={() => go(
           `compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
         )}>
-          Compare 2 selected →
+          Code diff of 2 selected →
         </button>
       )}
       {n >= 2 && n <= MAX_COMPARE_RUNS && (

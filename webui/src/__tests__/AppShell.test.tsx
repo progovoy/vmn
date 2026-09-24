@@ -94,6 +94,6 @@ describe("routes", () => {
     m.recentExperiments.mockResolvedValue([]);
     renderShell(routes, "/ws/w/app/a/compare?v=a&to=b");
     expect(document.querySelector(".route-fallback")).not.toBeNull();
-    expect(await screen.findByText("Compare runs")).toBeInTheDocument();
+    expect(await screen.findByText("Code diff")).toBeInTheDocument();
   });
 });
