@@ -29,17 +29,6 @@ def files_in(path):
     }
 
 
-def _settled(mtime_ns, scanned_at):
-    """Whether a directory with *mtime_ns* can be trusted to show any later
-    change in its signature. A sub-second mtime comes from a fine-grained
-    clock, where a later change always moves it; a whole-second one may be a
-    coarse clock, where a change within the same tick keeps it — trusted only
-    once it is older than the coarsest granularity."""
-    if mtime_ns % 10**9:
-        return mtime_ns < scanned_at
-    return mtime_ns <= scanned_at - _SETTLED_NS
-
-
 def _stat_again(path, names):
     """``files_in(path)`` for a directory known to hold exactly *names*;
     None when one of them is gone or no longer a regular file."""
@@ -84,7 +73,7 @@ class RecordListings:
         if files is None:
             scanned_at = time.time_ns()
             files = files_in(entry.path)
-            if not _settled(st.st_mtime_ns, scanned_at):
+            if st.st_mtime_ns > scanned_at - _SETTLED_NS:
                 return files
         settled[entry.path] = (sig, list(files))
         return files

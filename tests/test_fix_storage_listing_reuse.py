@@ -107,13 +107,16 @@ def test_a_removed_record_leaves_the_listing(storage):
     assert sorted(storage.list_files(APP)) == ["0.0.1-dev.abc.r0", "0.0.1-dev.abc.r1"]
 
 
-def test_a_fine_grained_mtime_is_trusted_at_once(storage, scans):
-    # Sub-second mtimes: a later change always moves the signature, so a
-    # just-written record need not settle before its listing is reused.
-    for i in range(3):
-        _set_mtime(_dir(storage, i), time.time_ns() - 10**6 - 12345)
-    first = storage.list_files(APP)
-    scans.clear()
+def test_a_fine_grained_mtime_can_still_collide_and_is_not_trusted_at_once(storage):
+    # ext4/xfs/overlayfs/tmpfs store mtimes with sub-second digits, but the
+    # clock backing them often only ticks every few ms, so two writes moments
+    # apart can still land on the identical mtime. A sub-second mtime alone
+    # must not be trusted before the settle window has passed.
+    path = _dir(storage, 0)
+    before = time.time_ns() - 10**6 - 12345  # sub-second precision, just now
+    _set_mtime(path, before)
+    storage.list_files(APP)
+    storage.save_file(APP, "0.0.1-dev.abc.r0", "run_state.yml", "state: running\n")
+    _set_mtime(path, before)  # the coarse clock gives the same value again
 
-    assert storage.list_files(APP) == first
-    assert len(scans) == 1  # the base directory only
+    assert "run_state.yml" in storage.list_files(APP)["0.0.1-dev.abc.r0"]
