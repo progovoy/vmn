@@ -32,6 +32,15 @@ def test_cached_record_names_carry_the_local_dir_signature(tmp_path):
     assert a.list_record_names("app")["va"] == (st.st_mtime_ns, st.st_ino)
 
 
+def test_cached_list_run_verstrs_merges_local_and_remote_for_that_code(tmp_path):
+    a, b = cached_host(tmp_path, "a"), cached_host(tmp_path, "b")
+    a.save("app", "0.0.1", meta("0.0.1"), {})
+    b.save("app", "0.0.1.r2", meta("0.0.1.r2"), {})
+    b.save("app", "9.9.9", meta("9.9.9"), {})  # an unrelated code_verstr
+
+    assert a.list_run_verstrs("app", "0.0.1") == {"0.0.1", "0.0.1.r2"}
+
+
 def test_cached_list_files_for_keys_merges_local_and_remote(tmp_path):
     a, _ = _two_hosts(tmp_path)
     files = a.list_files("app", keys=["va", "vb"])
@@ -55,6 +64,7 @@ def _break_remote(host, method):
         ("list_record_names", lambda h: h.list_record_names("app")),
         ("list_snapshots", lambda h: h.list_snapshots("app")),
         ("list_verstrs", lambda h: h.list_verstrs("app")),
+        ("list_run_verstrs", lambda h: h.list_run_verstrs("app", "va")),
     ],
 )
 def test_a_failing_remote_listing_raises(tmp_path, method, call):

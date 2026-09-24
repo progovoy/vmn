@@ -225,8 +225,17 @@ def attach_name(metadata, name):
 _MAX_RUN_CANDIDATES = 100000
 
 
-def _taken_verstrs(storage, app_name):
-    """Names already used — names only, never a parse of every metadata.yml."""
+def _taken_verstrs(storage, app_name, code_verstr):
+    """Names that could collide with a new run of *code_verstr* — names
+    only, never a parse of every metadata.yml.
+
+    Scoped to *code_verstr*'s own runs when the backend can list those
+    alone: an app that has stamped many code versions, each with many runs,
+    would otherwise list every run of every one of them just to allocate
+    one more run of this one.
+    """
+    if hasattr(storage, "list_run_verstrs"):
+        return set(storage.list_run_verstrs(app_name, code_verstr))
     if hasattr(storage, "list_verstrs"):
         return set(storage.list_verstrs(app_name))
     return {m.get("verstr", "") for m in storage.list_snapshots(app_name)}
@@ -275,7 +284,7 @@ def allocate_run_verstr(storage, app_name, code_verstr, make_record=None):
     host claimed first (a shared bucket or directory) is skipped. Without it
     the first free-looking name is returned unclaimed.
     """
-    taken = _taken_verstrs(storage, app_name)
+    taken = _taken_verstrs(storage, app_name, code_verstr)
     for candidate in _run_verstr_candidates(code_verstr, taken):
         if make_record is None:
             if not storage.exists(app_name, candidate):

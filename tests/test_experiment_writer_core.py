@@ -325,6 +325,46 @@ def test_allocate_run_verstr_disambiguates_a_taken_writer_suffix(monkeypatch):
     )
 
 
+class _ScopedStorage(_FakeStorage):
+    """A storage whose ``list_verstrs`` covers every run of every code
+    version, and whose ``list_run_verstrs`` covers only one code_verstr's —
+    the one allocation should actually use, so it never lists (or pays for
+    listing) runs of code versions it is not allocating for."""
+
+    def __init__(self, snapshots=None):
+        super().__init__(snapshots)
+        self.list_verstrs_calls = 0
+        self.list_run_verstrs_calls = []
+
+    def list_verstrs(self, app_name):
+        self.list_verstrs_calls += 1
+        return [m["verstr"] for m in self._snapshots]
+
+    def list_run_verstrs(self, app_name, code_verstr):
+        self.list_run_verstrs_calls.append(code_verstr)
+        return {
+            v
+            for v in (m["verstr"] for m in self._snapshots)
+            if v == code_verstr or v.startswith(code_verstr + ".")
+        }
+
+
+def test_allocate_run_verstr_prefers_a_code_verstr_scoped_listing():
+    storage = _ScopedStorage(
+        [
+            _meta("0.0.1-dev.aaa.bbb"),
+            _meta("0.0.1-dev.aaa.bbb.r2"),
+            _meta("9.9.9-dev.other.run"),
+        ]
+    )
+
+    verstr = allocate_run_verstr(storage, "app", "0.0.1-dev.aaa.bbb")
+
+    assert verstr == "0.0.1-dev.aaa.bbb.r3"
+    assert storage.list_run_verstrs_calls == ["0.0.1-dev.aaa.bbb"]
+    assert storage.list_verstrs_calls == 0
+
+
 # ---------------------------------------------------------------------------
 # creating a run
 # ---------------------------------------------------------------------------

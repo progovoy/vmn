@@ -42,6 +42,15 @@ def _is_record_file(name):
     return bool(name) and "/" not in name and not name.startswith(".")
 
 
+def _record_relpath(base, key):
+    """*key*'s ``(verstr, name)`` under *base*, and the ``StartAfter``
+    sentinel to skip past its subtree when *name* is nested (inside
+    ``artifacts/``, ``deps/``, or any other one) — else None."""
+    verstr, _, name = key[len(base) :].partition("/")
+    subdir, nested, _ = name.partition("/")
+    return verstr, name, (f"{base}{verstr}/{subdir}0" if nested else None)
+
+
 class S3Listing:
     def _app_prefixes(self, app_name):
         """The app's key prefix, then the legacy one when it holds any data."""
@@ -126,6 +135,31 @@ class S3Listing:
     def list_verstrs(self, app_name):
         return list(self._names_by_prefix(app_name))
 
+    def list_run_verstrs(self, app_name, code_verstr):
+        """Verstrs that could collide with a new run of *code_verstr* —
+        itself and its ``.<suffix>`` runs (``.rN``, a writer id, ...).
+
+        Listed by a prefix scoped to *code_verstr*, so allocating a run
+        never lists every run of every other code version the app has
+        stamped. A record actually named *code_verstr* plus "." is a valid
+        string prefix match on its own — no other code_verstr can share it
+        (``0.0.10`` never matches a listing scoped to ``0.0.1.``) — so this
+        needs one HEAD (the bare name) and one listing (its ``.`` suffixes)
+        per app key, not a listing of the whole app.
+        """
+        safe_code = safe_verstr(code_verstr)
+
+        def _for_prefix(prefix):
+            base = prefix + "/"
+            found = set()
+            if self._head(f"{base}{safe_code}/{METADATA_FILE}"):
+                found.add(code_verstr)
+            for cp in self._common_prefixes(f"{base}{safe_code}."):
+                found.add(unsafe_verstr(cp[len(base) :].rstrip("/")))
+            return found
+
+        return set().union(*parallel_map(_for_prefix, self._app_prefixes(app_name)))
+
     def _load_listed_metadata(self, meta_key):
         meta = core_utils.parse_record_metadata(self._get_or_raise(meta_key))
         if meta is None:
@@ -154,12 +188,34 @@ class S3Listing:
         )
 
     def _all_record_files(self, base):
+        """*base*'s record files, keyed by verstr.
+
+        A record's ``artifacts/`` or ``deps/`` subtree can hold far more
+        objects than the record itself (checkpoints, per-dep patches, ...).
+        Once a page ends inside one, the next request jumps past it with
+        ``StartAfter`` instead of paging through the rest of it object by
+        object — a record with thousands of them costs one extra call, not
+        one per 1000. A subtree that ends within a page (the common, small
+        case) costs nothing extra: it pages exactly as a plain walk would.
+        """
         files = {}
-        for obj in self._objects(base):
-            verstr, _, name = obj["Key"][len(base) :].partition("/")
-            if _is_record_file(name):
-                files.setdefault(unsafe_verstr(verstr), {})[name] = _signature(obj)
-        return files
+        params = {"Prefix": base}
+        while True:
+            page = self._s3.list_objects_v2(Bucket=self.bucket, **params)
+            skip_to = None
+            for obj in page.get("Contents", []):
+                verstr, name, skip_to = _record_relpath(base, obj["Key"])
+                if skip_to:
+                    continue
+                if _is_record_file(name):
+                    files.setdefault(unsafe_verstr(verstr), {})[name] = _signature(obj)
+            if not page.get("IsTruncated"):
+                return files
+            params = (
+                {"Prefix": base, "StartAfter": skip_to}
+                if skip_to
+                else {"Prefix": base, "ContinuationToken": page["NextContinuationToken"]}
+            )
 
     def _list_files_of(self, app_name, keys):
         prefixes = self._app_prefixes(app_name)
