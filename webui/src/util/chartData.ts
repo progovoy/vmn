@@ -2,15 +2,12 @@
  *
  *  Each metric is built from its own points: a sparse `val_loss` logged every
  *  100 steps must survive next to a per-step `loss`, so nothing here ever
- *  downsamples one metric by another's x values. The canvas charts use the
- *  typed per-curve arrays in seriesArrays.ts; the row builders below
- *  (`buildRows`/`overlayRows`/`smoothRows`) are the older merged-by-x form. */
+ *  downsamples one metric by another's x values. The canvas charts build their
+ *  typed per-curve arrays from these in seriesArrays.ts. */
 import type { SeriesPoint } from "../types";
-import { ema } from "../hooks/useSmoothing";
 import { downsampleLTTB } from "./downsample";
 
 export type XMode = "step" | "wall" | "relative";
-export type ChartRow = Record<string, number>;
 type Series = Record<string, SeriesPoint[]>;
 
 /** Client-side safety cap per metric (the server already downsamples). */
@@ -70,57 +67,6 @@ export function capSeries(series: Series, maxPoints = MAX_POINTS_PER_METRIC): Se
       downsampleLTTB(pts.map((p, i) => ({ x: i, y: p.value ?? 0 })), maxPoints).map((d) => d.x),
     );
     out[name] = pts.filter((_, i) => keep.has(i));
-  }
-  return out;
-}
-
-function mergeInto(byX: Map<number, ChartRow>, x: number | null, key: string, value: unknown) {
-  if (x === null || typeof value !== "number" || !Number.isFinite(value)) return;
-  const row = byX.get(x) ?? { x };
-  row[key] = value;
-  byX.set(x, row);
-}
-
-const sortedRows = (byX: Map<number, ChartRow>) =>
-  [...byX.values()].sort((a, b) => a.x - b.x);
-
-/** Rows `{x, <metric>: value}` for one run's metrics. */
-export function buildRows(
-  series: Series, metrics: string[], mode: XMode, origin = runOrigin(series),
-): ChartRow[] {
-  const byX = new Map<number, ChartRow>();
-  for (const m of metrics) {
-    (series[m] ?? []).forEach((p, i) => mergeInto(byX, xOf(p, i, mode, origin), m, p.value));
-  }
-  return sortedRows(byX);
-}
-
-export interface OverlayRun {
-  key: string;
-  series: Series;
-  origin: number;
-}
-
-/** Rows `{x, <run key>: value}` for one metric across runs; "relative" x is
- *  measured from each run's own origin so runs started days apart overlap. */
-export function overlayRows(metric: string, runs: OverlayRun[], mode: XMode): ChartRow[] {
-  const byX = new Map<number, ChartRow>();
-  for (const run of runs) {
-    (run.series[metric] ?? []).forEach((p, i) =>
-      mergeInto(byX, xOf(p, i, mode, run.origin), run.key, p.value));
-  }
-  return sortedRows(byX);
-}
-
-/** Adds `<key>__smooth` next to each key, smoothing only that key's points. */
-export function smoothRows(rows: ChartRow[], keys: string[], alpha: number): ChartRow[] {
-  if (alpha === 0 || rows.length === 0) return rows;
-  const out = rows.map((r) => ({ ...r }));
-  for (const k of keys) {
-    const sm = ema(rows.map((r) => r[k]), alpha);
-    sm.forEach((v, i) => {
-      if (v !== undefined) out[i][`${k}__smooth`] = v;
-    });
   }
   return out;
 }
