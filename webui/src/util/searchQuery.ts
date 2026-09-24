@@ -39,3 +39,8 @@ export function runSearchQuery(text: string): string {
   const safe = text.replaceAll(quote, "");
   return `verstr ~ ${quote}${safe}${quote} or note ~ ${quote}${safe}${quote}`;
 }
+
+/** The query language's membership test over verstrs. Verstrs never hold a
+ *  quote, so plain double quotes are always a valid literal. */
+export const verstrInQuery = (verstrs: readonly string[]) =>
+  `verstr in (${verstrs.map((v) => `"${v}"`).join(", ")})`;

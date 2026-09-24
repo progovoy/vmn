@@ -64,7 +64,9 @@ Fetch first page (200 rows) → render immediately → fetch remaining pages in 
 
 ### 0.6 Request management utilities
 
-- **New:** `hooks/useFetch.ts` (~50 lines) — wraps fetch with `AbortController` (cancel on unmount/re-fetch), deduplication (same URL within 100ms returns same promise), and error state
+> **Historical:** `hooks/useFetch.ts` was built here and later removed — react-query (`queries.ts`, `queryClient.ts`) now handles abort, dedupe and error state.
+
+- **New:** `hooks/useFetch.ts` (~50 lines, since removed) — wraps fetch with `AbortController` (cancel on unmount/re-fetch), deduplication (same URL within 100ms returns same promise), and error state
 - **Modify:** `api.ts` `get<T>()` — accept optional `AbortSignal`
 - **Tests:** abort cancels in-flight request, dedup returns same promise for concurrent calls
 
@@ -91,7 +93,7 @@ Client-side filter toolbar above the table. Three filter types: text search (not
 
 Poll experiments endpoint when user toggles "Live" button. Backend already reads JSONL fresh per request. Smart polling interval: 3s for Run detail (single experiment, small payload), 5s for Leaderboard (many experiments). Uses the paginated endpoint — only re-fetches page 1 (most recent) during live mode to keep updates snappy at scale.
 
-- **New:** `hooks/usePolling.ts` (~40 lines) — reusable interval hook, accepts interval ms and enabled flag. Aborts in-flight request before starting next poll (via `useFetch` from 0.6).
+- **New:** `hooks/usePolling.ts` (~40 lines) — reusable interval hook, accepts interval ms and enabled flag. Aborts in-flight request before starting next poll (originally via `useFetch` from 0.6; react-query now).
 - **Modify:** `Leaderboard.tsx` — add Live toggle button with pulse dot. Live mode re-fetches page 1 only, merges new rows into existing state.
 - **Modify:** `Run.tsx` — same for single-run detail (live training curves)
 - **Backend:** None
@@ -232,7 +234,7 @@ Phase 0: Scalability foundation (sequential — everything else depends on this)
 
 | File | Phase | ~Lines |
 |------|-------|--------|
-| `hooks/useFetch.ts` | 0.6 | 50 |
+| `hooks/useFetch.ts` (removed; replaced by react-query) | 0.6 | 50 |
 | `hooks/useProgressiveLoad.ts` | 0.5 | 60 |
 | `hooks/useDebounce.ts` | 1.1 | 15 |
 | `hooks/usePolling.ts` | 1.2 | 40 |

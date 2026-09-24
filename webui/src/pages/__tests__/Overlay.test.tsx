@@ -4,32 +4,30 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 // Mock the API module before any imports that use it
 vi.mock("../../api", () => ({
-  api: {
-    experiment: vi.fn(),
-  },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
+vi.mock("../../apiSeries", () => ({
+  fetchSeriesBatch: vi.fn(),
+  fetchRunStatuses: vi.fn(() => Promise.resolve({})),
+}));
 
-import { api } from "../../api";
-import type { ExperimentDetail } from "../../types";
+import { fetchSeriesBatch } from "../../apiSeries";
 import Overlay from "../Overlay";
 
-const mockedApi = api as unknown as {
-  experiment: ReturnType<typeof vi.fn>;
-};
+const mockedBatch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
 
-function makeDetail(verstr: string, series: Record<string, { step: number; value: number }[]>): ExperimentDetail {
-  return {
-    metadata: { verstr, branch: "main", base_version: "0.0.1" },
-    metrics: {},
-    series: Object.fromEntries(
-      Object.entries(series).map(([k, pts]) =>
-        [k, pts.map((p) => ({ step: p.step, value: p.value, ts: null }))]
-      )
-    ),
-    log: [],
-    patches: {},
-  };
+type Points = Record<string, { step: number; value: number }[]>;
+
+/** The batch endpoint answering with each run's *series*. */
+function serve(runs: Record<string, Points>) {
+  mockedBatch.mockResolvedValue({
+    series: Object.fromEntries(Object.entries(runs).map(([verstr, series]) => [
+      verstr,
+      Object.fromEntries(Object.entries(series).map(([k, pts]) =>
+        [k, pts.map((p) => ({ step: p.step, value: p.value, ts: null }))])),
+    ])),
+    missing: [],
+  });
 }
 
 function renderOverlay(runs: string[]) {
@@ -49,17 +47,16 @@ beforeEach(() => {
 
 describe("Overlay page", () => {
   it("renders a chart per shared metric across selected runs", async () => {
-    const d1 = makeDetail("0.0.1-rc.1", {
-      loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
-      acc: [{ step: 0, value: 0.5 }, { step: 1, value: 0.7 }],
+    serve({
+      "0.0.1-rc.1": {
+        loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
+        acc: [{ step: 0, value: 0.5 }, { step: 1, value: 0.7 }],
+      },
+      "0.0.2-rc.1": {
+        loss: [{ step: 0, value: 0.9 }, { step: 1, value: 0.6 }],
+        acc: [{ step: 0, value: 0.6 }, { step: 1, value: 0.8 }],
+      },
     });
-    const d2 = makeDetail("0.0.2-rc.1", {
-      loss: [{ step: 0, value: 0.9 }, { step: 1, value: 0.6 }],
-      acc: [{ step: 0, value: 0.6 }, { step: 1, value: 0.8 }],
-    });
-    mockedApi.experiment
-      .mockResolvedValueOnce(d1)
-      .mockResolvedValueOnce(d2);
 
     renderOverlay(["0.0.1-rc.1", "0.0.2-rc.1"]);
 
@@ -71,15 +68,14 @@ describe("Overlay page", () => {
   });
 
   it("renders one line per run per metric", async () => {
-    const d1 = makeDetail("0.0.1-rc.1", {
-      loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
+    serve({
+      "0.0.1-rc.1": {
+        loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
+      },
+      "0.0.2-rc.1": {
+        loss: [{ step: 0, value: 0.9 }, { step: 1, value: 0.6 }],
+      },
     });
-    const d2 = makeDetail("0.0.2-rc.1", {
-      loss: [{ step: 0, value: 0.9 }, { step: 1, value: 0.6 }],
-    });
-    mockedApi.experiment
-      .mockResolvedValueOnce(d1)
-      .mockResolvedValueOnce(d2);
 
     renderOverlay(["0.0.1-rc.1", "0.0.2-rc.1"]);
 
@@ -93,15 +89,14 @@ describe("Overlay page", () => {
   });
 
   it("shows run legend with verstr labels", async () => {
-    const d1 = makeDetail("0.0.1-rc.1", {
-      loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
+    serve({
+      "0.0.1-rc.1": {
+        loss: [{ step: 0, value: 1.0 }, { step: 1, value: 0.8 }],
+      },
+      "0.0.3-rc.2": {
+        loss: [{ step: 0, value: 0.5 }, { step: 1, value: 0.4 }],
+      },
     });
-    const d2 = makeDetail("0.0.3-rc.2", {
-      loss: [{ step: 0, value: 0.5 }, { step: 1, value: 0.4 }],
-    });
-    mockedApi.experiment
-      .mockResolvedValueOnce(d1)
-      .mockResolvedValueOnce(d2);
 
     renderOverlay(["0.0.1-rc.1", "0.0.3-rc.2"]);
 

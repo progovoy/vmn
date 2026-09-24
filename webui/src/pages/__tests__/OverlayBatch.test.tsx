@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 vi.mock("uplot", async () => await import("../../components/__tests__/fakeUPlot"));
 vi.mock("../../api", () => ({
-  api: { experiment: vi.fn() },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
 vi.mock("../../apiSeries", () => ({
@@ -12,14 +11,12 @@ vi.mock("../../apiSeries", () => ({
   fetchRunStatuses: vi.fn(),
 }));
 
-import { api } from "../../api";
 import { fetchRunStatuses, fetchSeriesBatch } from "../../apiSeries";
 import {
   enableCanvas, instances, resetInstances,
 } from "../../components/__tests__/fakeUPlot";
 import Overlay from "../Overlay";
 
-const mockedExperiment = api.experiment as unknown as ReturnType<typeof vi.fn>;
 const mockedBatch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
 const mockedStatuses = fetchRunStatuses as unknown as ReturnType<typeof vi.fn>;
 
@@ -64,17 +61,12 @@ describe("Overlay batch loading", () => {
     await screen.findByText("loss");
     expect(mockedBatch).toHaveBeenCalledTimes(1);
     expect(mockedBatch).toHaveBeenCalledWith("w", "my-app", runs, null, 1000);
-    expect(mockedExperiment).not.toHaveBeenCalled();
   });
 
-  it("falls back to one request per run when the batch endpoint is unavailable", async () => {
+  it("shows the error when the batch request fails", async () => {
     mockedBatch.mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 }));
-    mockedExperiment.mockImplementation((_w: string, _a: string, v: string) => Promise.resolve({
-      metadata: { verstr: v }, metrics: {}, patches: {}, series: { loss: curve(1) },
-    }));
     renderOverlay(["a", "b"]);
-    await screen.findByText("loss");
-    expect(mockedExperiment).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/Not Found/)).toBeInTheDocument();
   });
 
   it("lists runs the server could not find", async () => {

@@ -1,14 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { chunk, refreshRows, verstrInQuery } from "../leaderboardRefresh";
+import { chunk, refreshRows } from "../leaderboardRefresh";
 
 type Row = { verstr: string; status?: string; v?: number };
 const r = (verstr: string, extra: Partial<Row> = {}): Row => ({ verstr, ...extra });
-
-describe("verstrInQuery", () => {
-  it("builds the query language's `in` clause", () => {
-    expect(verstrInQuery(["a", "0.0.1-dev.x"])).toBe('verstr in ("a", "0.0.1-dev.x")');
-  });
-});
 
 describe("chunk", () => {
   it("splits into pieces of at most n", () => {

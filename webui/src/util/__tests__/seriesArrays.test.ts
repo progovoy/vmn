@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   emaXY, filterMetrics, nearestIndex, toXY, tooltipRows,
 } from "../seriesArrays";
+import { runOrigin } from "../chartData";
 import type { SeriesPoint } from "../../types";
 
 const pt = (step: number | null, value: number, ts: string | null = null): SeriesPoint =>
@@ -99,5 +100,23 @@ describe("filterMetrics", () => {
   });
   it("keeps everything for an empty query", () => {
     expect(filterMetrics(["loss", "acc"], "  ")).toEqual(["loss", "acc"]);
+  });
+});
+
+describe("toXY time axes", () => {
+  it("places step-less samples by time, not by array index", () => {
+    const t0 = Date.UTC(2026, 0, 1, 0, 0, 0);
+    const sys = [0, 1, 2].map((i) => pt(null, 10 + i, new Date(t0 + i * 30_000).toISOString()));
+    expect([...toXY(sys, "step", t0).xs]).toEqual([0, 30, 60]);
+  });
+
+  it("measures relative time from each run's own origin", () => {
+    const mk = (t0: number) => [0, 1].map((i) => pt(i, i, new Date(t0 + i * 10_000).toISOString()));
+    const a = mk(Date.UTC(2026, 0, 1, 0, 0, 0));
+    const b = mk(Date.UTC(2026, 0, 2, 0, 0, 0));
+    const xa = toXY(a, "relative", runOrigin({ loss: a })).xs;
+    const xb = toXY(b, "relative", runOrigin({ loss: b })).xs;
+    expect([...xa]).toEqual([0, 10]);
+    expect([...xb]).toEqual([0, 10]);
   });
 });

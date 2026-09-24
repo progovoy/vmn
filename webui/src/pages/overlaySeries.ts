@@ -1,16 +1,16 @@
 /** Loading (and re-polling) the overlay's runs: one batch request for every
- *  run's series, falling back to one detail request per run on servers that
- *  predate the batch endpoint. */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api";
+ *  run's series, plus their status rows. */
+import { useQuery } from "@tanstack/react-query";
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import { usePolling } from "../hooks/usePolling";
+import { useAppQueryClient } from "../queryClient";
+import { withSignal } from "../requestScope";
 import type { RunStatus, SeriesPoint } from "../types";
 import { pollIntervalMs } from "../util";
-import { capSeries, runOrigin } from "../util/chartData";
+import { runOrigin } from "../util/chartData";
 
 /** Per-metric point budget per run once several runs share a chart. */
-export const OVERLAY_POINTS = 1000;
+const OVERLAY_POINTS = 1000;
 
 type Series = Record<string, SeriesPoint[]>;
 
@@ -50,14 +50,6 @@ async function loadBatch(ws: string, app: string, runs: string[]): Promise<Overl
   };
 }
 
-async function loadEach(ws: string, app: string, runs: string[]): Promise<OverlayData> {
-  const details = await Promise.all(runs.map((v) => api.experiment(ws, app, v, OVERLAY_POINTS)));
-  return {
-    runs: details.map((d, i) => toRun(runs[i], capSeries(d.series, OVERLAY_POINTS), d.status)),
-    missing: [],
-  };
-}
-
 /** Refresh cadence while runs are live: the fastest heartbeat among them. */
 function pollInterval(runs: OverlayRunData[]): number | null {
   const live = runs.filter((r) => r.status === "running");
@@ -67,39 +59,15 @@ function pollInterval(runs: OverlayRunData[]): number | null {
 }
 
 export function useOverlaySeries(ws: string, app: string, runs: string[]) {
-  const [data, setData] = useState<OverlayData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const batchAvailable = useRef(true);
-  const current = useRef(runs);
-  current.current = runs;
-
-  const load = useCallback(async () => {
-    if (runs.length === 0) return;
-    let next: OverlayData | null = null;
-    if (batchAvailable.current) {
-      next = await loadBatch(ws, app, runs).catch((e) => {
-        // Only a server without the endpoint turns batching off for good; any
-        // other failure falls back for this load and retries the batch next poll.
-        if (e?.status === 404 || e?.status === 405) batchAvailable.current = false;
-        return null;
-      });
-    }
-    try {
-      next ??= await loadEach(ws, app, runs);
-      if (current.current === runs) setData(next);
-    } catch (e) {
-      // A failed poll keeps the charts already on screen.
-      if (current.current === runs) setError((prev) => prev ?? String(e));
-    }
-  }, [ws, app, runs]);
-
-  useEffect(() => {
-    setData(null);
-    setError(null);
-    load();
-  }, [load]);
-
+  const client = useAppQueryClient();
+  const query = useQuery<OverlayData>({
+    queryKey: ["overlay", ws, app, runs],
+    queryFn: ({ signal }) => withSignal(signal, () => loadBatch(ws, app, runs)),
+    enabled: runs.length > 0,
+  }, client);
+  const data = query.data ?? null;
   const interval = data ? pollInterval(data.runs) : null;
-  usePolling(load, interval ?? 0, interval !== null);
-  return { data, error };
+  // A failed poll keeps the charts already on screen.
+  usePolling(() => query.refetch(), interval ?? 0, interval !== null);
+  return { data, error: query.error ? String(query.error) : null };
 }

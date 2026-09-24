@@ -2,7 +2,6 @@
 import type { ExperimentDetail, MetricsSchema } from "../types";
 import { metricGoal } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
-import { setAllParams } from "../hooks/useUrlState";
 import { summaryFromDetail } from "./runSummary";
 
 export const MAX_COMPARE_RUNS = 50;
@@ -14,13 +13,6 @@ export function parseSelection(params: URLSearchParams): { verstrs: string[]; dr
     verstrs: unique.slice(0, MAX_COMPARE_RUNS),
     dropped: Math.max(0, unique.length - MAX_COMPARE_RUNS),
   };
-}
-
-/** *params* minus one selected run, everything else kept. */
-export function withoutRun(params: URLSearchParams, verstr: string): URLSearchParams {
-  const next = new URLSearchParams(params);
-  setAllParams(next, "sel", next.getAll("sel").filter((v) => v !== verstr));
-  return next;
 }
 
 /** A run's display name: its `name`, else its verstr. */
