@@ -19,8 +19,6 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export { PAGE_SIZE };
-
 export interface PageOpts {
   sort?: string;
   status?: string;

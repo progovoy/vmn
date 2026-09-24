@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  MAX_COMPARE_RUNS, compareRows, parseSelection, runLabel, withoutRun,
+  MAX_COMPARE_RUNS, compareRows, parseSelection, runLabel,
 } from "../compareRunsData";
 import type { ExperimentDetail } from "../../types";
 
@@ -27,16 +27,6 @@ describe("parseSelection", () => {
 
   it("ignores empty values", () => {
     expect(parseSelection(new URLSearchParams("sel=&sel=a")).verstrs).toEqual(["a"]);
-  });
-});
-
-describe("withoutRun", () => {
-  it("drops one verstr and keeps every other param", () => {
-    const p = new URLSearchParams("sel=a&sel=b&sel=c&diff=1");
-    const next = withoutRun(p, "b");
-    expect(next.getAll("sel")).toEqual(["a", "c"]);
-    expect(next.get("diff")).toBe("1");
-    expect(p.getAll("sel")).toEqual(["a", "b", "c"]);
   });
 });
 

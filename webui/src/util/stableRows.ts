@@ -32,10 +32,3 @@ export function stabilizeRows<T extends Keyed>(prev: readonly T[] | undefined | 
   }
   return allSame ? (prev as T[]) : next;
 }
-
-/** The previous rows when a poll brought the same data, else the new array
- *  (with its unchanged rows keeping their previous identity). */
-export function keepIfUnchanged<T>(prev: T[] | null, next: T[]): T[] {
-  if (!prev || prev.length !== next.length) return next;
-  return sameValue(prev, next) ? prev : next;
-}
