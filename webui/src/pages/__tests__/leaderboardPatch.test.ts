@@ -32,7 +32,7 @@ describe("refreshRows", () => {
     const tailIdle = r("c", { status: "succeeded" });
     const prev = [r("a"), r("b"), tailIdle, r("d", { status: "running", v: 1 })];
     const fetchFirst = vi.fn(async () => ({ rows: [r("a"), r("b")], total: 9 }));
-    const fetchWhere = vi.fn(async () => ({ rows: [r("d", { status: "succeeded", v: 2 })] }));
+    const fetchWhere = vi.fn(async (_q: string, _l: number) => ({ rows: [r("d", { status: "succeeded", v: 2 })] }));
     const out = await refreshRows({ getRows: () => prev, fetchFirst, fetchWhere });
 
     expect(fetchWhere).toHaveBeenCalledTimes(1);
@@ -46,7 +46,7 @@ describe("refreshRows", () => {
   it("also refreshes the extra (visible) rows it is given", async () => {
     const prev = [r("a"), r("x"), r("y")];
     const fetchFirst = vi.fn(async () => ({ rows: [r("a")], total: 3 }));
-    const fetchWhere = vi.fn(async () => ({ rows: [r("y", { v: 5 })] }));
+    const fetchWhere = vi.fn(async (_q: string, _l: number) => ({ rows: [r("y", { v: 5 })] }));
     const out = await refreshRows({
       getRows: () => prev, fetchFirst, fetchWhere, extraVerstrs: ["y", "a"],
     });

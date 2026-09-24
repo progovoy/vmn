@@ -3,7 +3,12 @@
  *  Pages paint whatever the cache holds for their key at once and revalidate
  *  in the background; identical requests in flight share one fetch. */
 import { useContext, useState } from "react";
-import { QueryClient, QueryClientContext } from "@tanstack/react-query";
+import { notifyManager, QueryClient, QueryClientContext } from "@tanstack/react-query";
+
+// Deliver cache notifications on a microtask rather than a macrotask: a
+// response lands in the same turn it resolved in, so a page reacts to it (a
+// poll stopping once nothing runs) before any other timer fires.
+notifyManager.setScheduler(queueMicrotask);
 
 /** Freshness of app-wide resources (workspaces, apps, metrics schema,
  *  facets): they change rarely, so they are not refetched on every mount. */
