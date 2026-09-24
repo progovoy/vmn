@@ -21,8 +21,8 @@ from version_stamp.core.experiment_logfiles import (
 from version_stamp.core.experiment_logfiles import (
     group_log_names,
     log_writer_and_seq,
-    parse_json_line,
 )
+from version_stamp.core.jsonl_tail import read_complete_lines
 from version_stamp.core.utils import yaml_safe_load
 
 
@@ -35,25 +35,6 @@ def log_signatures(names):
     if LEGACY_LOG in names:
         visible.add(LEGACY_LOG)
     return {n: list(sig) for n, sig in names.items() if n in visible}
-
-
-def _parse_complete(data):
-    """``(entries, bytes consumed)`` — an unterminated line that is not yet
-    valid JSON is left for the next read (its writer is mid-append)."""
-    end = data.rfind(b"\n") + 1
-    entries = []
-    for line in data[:end].decode("utf-8", errors="replace").splitlines():
-        entry = parse_json_line(line)
-        if entry is not None:
-            entries.append(entry)
-    tail = data[end:]
-    if not tail.strip():
-        return entries, len(data)
-    entry = parse_json_line(tail.decode("utf-8", errors="replace"))
-    if entry is None:
-        return entries, end
-    entries.append(entry)
-    return entries, len(data)
 
 
 def _appends_only(old, new):
@@ -78,10 +59,10 @@ def _appends_only(old, new):
 def _read_tail(fold, counts, direct, where, name, state):
     """Fold the bytes of *name* past ``state["consumed"]``; False if it vanished."""
     writer, _ = log_writer_and_seq(name)
-    data = direct.read_file_from(*where, name, state["consumed"])
-    if data is None:
+    read = read_complete_lines(direct, *where, name, state["consumed"])
+    if read is None:
         return False
-    entries, used = _parse_complete(data)
+    entries, used = read
     apply_entries(fold, writer, counts.get(writer, 0), entries)
     counts[writer] = counts.get(writer, 0) + len(entries)
     state["consumed"] += used
