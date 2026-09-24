@@ -4,32 +4,40 @@
 All writes land on local disk; the remote provides durability and sharing
 between hosts. Immutable files fetched from the remote are cached locally;
 volatile ones (run state, logs) never are — a cached copy is stale the moment
-the owning host writes again.
+the owning host writes again. Logs: :mod:`snapshot_storage_cached_logs`.
+
+Listings are all-or-nothing: a remote that fails to list raises, because a
+merge missing its remote half reads as "those records are gone" — and the
+index would forget them, prune would miscount what it keeps.
 """
+
 from version_stamp.cli.snapshot_storage import SnapshotStorage
+from version_stamp.cli.snapshot_storage_cached_logs import CachedLogs
 from version_stamp.cli.snapshot_storage_files import (
-    flatten_logs,
+    METADATA_FILE,
     is_volatile_file,
-    log_object_name,
-    log_writer_and_seq,
 )
 from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
 from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
 from version_stamp.core.logging import VMN_LOGGER
 
 
-class CachedSnapshotStorage(SnapshotStorage):
+class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
     """Local-first storage with optional S3 sync. All ops hit local disk;
     S3 provides durability and distribution."""
 
     def __init__(self, local_storage, remote_storage=None):
         self._local = local_storage
         self._remote = remote_storage
-        # (app, verstr, writer) -> (bytes already on the remote, next segment)
-        self._synced = {}
+        self._init_logs()
+
+    def _local_patches(self, patches):
+        """What of a record's body the local copy keeps: all of it, unless
+        the local copy is only a log buffer."""
+        return patches if self._local_is_replica else {}
 
     def save(self, app_name, verstr, metadata, patches):
-        self._local.save(app_name, verstr, metadata, patches)
+        self._local.save(app_name, verstr, metadata, self._local_patches(patches))
         if self._remote:
             try:
                 self._remote.save(app_name, verstr, metadata, patches)
@@ -39,7 +47,8 @@ class CachedSnapshotStorage(SnapshotStorage):
                 raise
 
     def create_exclusive(self, app_name, verstr, metadata, patches):
-        if not self._local.create_exclusive(app_name, verstr, metadata, patches):
+        local_patches = self._local_patches(patches)
+        if not self._local.create_exclusive(app_name, verstr, metadata, local_patches):
             return False
         if not self._remote:
             return True
@@ -72,6 +81,7 @@ class CachedSnapshotStorage(SnapshotStorage):
         return False
 
     def _remote_or(self, default, method, *args):
+        """Best effort, for reads where a missing remote answer loses nothing."""
         if not self._remote:
             return default
         try:
@@ -80,20 +90,39 @@ class CachedSnapshotStorage(SnapshotStorage):
             VMN_LOGGER.debug(f"Remote {method} failed", exc_info=True)
             return default
 
+    def _remote_listing(self, default, method, *args, **kwargs):
+        """A remote listing; raises when the remote fails (see the module doc)."""
+        if not self._remote:
+            return default
+        return getattr(self._remote, method)(*args, **kwargs)
+
     def list_verstrs(self, app_name):
         names = list(self._local.list_verstrs(app_name))
         seen = set(names)
-        for name in self._remote_or([], "list_verstrs", app_name):
+        for name in self._remote_listing([], "list_verstrs", app_name):
             if name not in seen:
                 names.append(name)
                 seen.add(name)
         return names
 
+    def list_record_names(self, app_name):
+        """``{name: local dir signature, or None for a remote-only record}``."""
+        names = dict.fromkeys(self._remote_record_names(app_name))
+        names.update(self._local.list_record_names(app_name))
+        return names
+
+    def _remote_record_names(self, app_name):
+        if not self._remote:
+            return []
+        if hasattr(self._remote, "list_record_names"):
+            return self._remote.list_record_names(app_name)
+        return self._remote.list_verstrs(app_name)
+
     def list_snapshots(self, app_name):
         local_snaps = self._local.list_snapshots(app_name)
         seen = {m["verstr"] for m in local_snaps}
         all_snaps = list(local_snaps)
-        for m in self._remote_or([], "list_snapshots", app_name):
+        for m in self._remote_listing([], "list_snapshots", app_name):
             if m["verstr"] not in seen:
                 all_snaps.append(m)
                 seen.add(m["verstr"])
@@ -101,29 +130,39 @@ class CachedSnapshotStorage(SnapshotStorage):
         return all_snaps
 
     def list_files(self, app_name, keys=None):
-        if keys is not None:
-            if not self._remote:
-                return self._local.list_files(app_name, keys=keys)
-            files = self.list_files(app_name)
-            return {key: files[key] for key in keys if key in files}
+        """``{verstr: {filename: signature}}`` — every record's, or *keys*'."""
+        by_keys = {} if keys is None else {"keys": keys}
+        remote = self._remote_listing({}, "list_files", app_name, **by_keys)
+        local = self._local_files(app_name, keys)
+        return {
+            verstr: self._merge_record_files(
+                app_name, verstr, remote.get(verstr, {}), local.get(verstr, {})
+            )
+            for verstr in [*remote, *(v for v in local if v not in remote)]
+        }
+
+    def _local_files(self, app_name, keys):
+        if not self._local_is_replica:
+            return {}
+        if keys is None:
+            return self._local.list_files(app_name)
         files = {}
-        for verstr, remote_files in self._remote_or({}, "list_files", app_name).items():
-            files[verstr] = dict(remote_files)
-        for verstr, local_files in self._local.list_files(app_name).items():
-            files.setdefault(verstr, {}).update(local_files)
+        for key in keys:
+            try:
+                found = self._local.record_files(app_name, key)
+            except ValueError:
+                continue
+            if METADATA_FILE in found:
+                files[key] = found
         return files
 
     def direct_files(self):
-        # With a remote, a record's log is the per-writer merge of two copies.
-        return self._local if self._remote is None else None
+        # Per-file reads route each writer's log to the copy the listing picked.
+        return self._local if self._remote is None else self
 
     def record_files(self, app_name, verstr):
         """One record's file signatures, or None when reads merge a remote too."""
         return None if self._remote else self._local.record_files(app_name, verstr)
-
-    def list_record_names(self, app_name):
-        """Local ``{name: sig}``; None with a remote (the index lists fully)."""
-        return None if self._remote else self._local.list_record_names(app_name)
 
     def is_remote(self):
         return self._remote is not None
@@ -220,82 +259,6 @@ class CachedSnapshotStorage(SnapshotStorage):
             None, "artifact_local_path", app_name, verstr, name
         )
 
-    def append_log_entry(self, app_name, verstr, writer_id, entry):
-        # Local only: sync_log_to_remote ships the new bytes periodically.
-        if not self._ensure_local_record(app_name, verstr):
-            return False
-        return self._local.append_log_entry(app_name, verstr, writer_id, entry)
-
-    def load_logs_by_writer(self, app_name, verstr):
-        local_logs = self._local.load_logs_by_writer(app_name, verstr)
-        return self._with_newer_remote_writers(app_name, verstr, local_logs)
-
-    def load_merged_log(self, app_name, verstr):
-        local_logs = self._local.load_logs_by_writer(app_name, verstr)
-        if not any(local_logs.values()):
-            return self._remote.load_merged_log(app_name, verstr) if self._remote else []
-        return flatten_logs(
-            self._with_newer_remote_writers(app_name, verstr, local_logs)
-        )
-
-    def _with_newer_remote_writers(self, app_name, verstr, local_logs):
-        """*local_logs* plus each writer whose remote copy is the bigger one.
-
-        A writer's log only ever grows, so sizes alone say which copy is newer:
-        writers the remote merely mirrors are never downloaded.
-        """
-        logs = dict(local_logs)
-        if not self._remote:
-            return logs
-        local_sizes = self._local.log_sizes(app_name, verstr)
-        remote_sizes = self._remote_or({}, "log_sizes", app_name, verstr)
-        newer = [w for w, n in remote_sizes.items() if n > local_sizes.get(w, 0)]
-        if newer:
-            remote_logs = self._remote_or(
-                {}, "load_logs_by_writer", app_name, verstr, newer
-            )
-            for writer, entries in remote_logs.items():
-                if len(entries) > len(logs.get(writer, [])):
-                    logs[writer] = entries
-        return logs
-
-    def _remote_log_state(self, app_name, verstr, writer_id):
-        objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-        offset = sum(size for _, size in objects)
-        seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
-        return offset, (max(seqs) + 1 if seqs else 0)
-
-    def sync_log_to_remote(self, app_name, verstr, writer_id):
-        """Ship the writer's complete lines appended since the last sync."""
-        if not self._remote:
-            return
-        base = log_object_name(writer_id)
-        local_size = self._local.log_sizes(app_name, verstr).get(writer_id, 0)
-        if not local_size:
-            return
-        key = (app_name, verstr, writer_id)
-        if key not in self._synced:
-            self._synced[key] = self._remote_log_state(app_name, verstr, writer_id)
-        offset, seq = self._synced[key]
-        if offset > local_size:
-            # The remote holds more than this host ever wrote: start over.
-            data = self._complete_lines(app_name, verstr, base, 0)
-            if data:
-                self._remote.save_file(app_name, verstr, base, data)
-                self._remote.delete_log_segments(app_name, verstr, writer_id)
-                self._synced[key] = (len(data), 1)
-            return
-        chunk = self._complete_lines(app_name, verstr, base, offset)
-        if chunk:
-            name = log_object_name(writer_id, seq)
-            self._remote.save_file(app_name, verstr, name, chunk)
-            self._synced[key] = (offset + len(chunk), seq + 1)
-
-    def _complete_lines(self, app_name, verstr, name, offset):
-        """The complete lines of local *name* from *offset* on (b"" if none)."""
-        data = self._local.read_file_from(app_name, verstr, name, offset) or b""
-        return data[: data.rfind(b"\n") + 1]
-
 
 def get_snapshot_storage(
     backend,
@@ -304,7 +267,11 @@ def get_snapshot_storage(
     prefix="vmn-snapshots",
     endpoint_url=None,
     subdir="snapshots",
+    buffer_logs=False,
 ):
+    """The storage for *backend*. ``buffer_logs``: without a local dir, still
+    buffer logs locally (a private temp dir) and ship them as segments — for
+    writers; a pure-S3 reader has no use for it."""
     local = None
     remote = None
 
@@ -323,6 +290,12 @@ def get_snapshot_storage(
             raise ValueError("--bucket is required for s3 backend")
         if local:
             return CachedSnapshotStorage(local, remote)
+        if buffer_logs:
+            from version_stamp.cli.snapshot_storage_buffered import (
+                BufferedRemoteStorage,
+            )
+
+            return BufferedRemoteStorage(remote, subdir=subdir)
         return remote
     else:
         raise ValueError(f"Unknown backend: {backend}")
