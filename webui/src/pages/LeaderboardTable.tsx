@@ -38,23 +38,19 @@ function headStyle(style: CSSProperties, index: number): CSSProperties {
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
   const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
+  const headStyles = styles.map(headStyle);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
       <tr>
-        <th style={headStyle(styles[0], 0)} className="check-cell"></th>
-        <th style={headStyle(styles[1], 1)}>#</th>
-        <th style={headStyle(styles[2], 2)}>status</th>
-        <th
-          style={headStyle(styles[EXPERIMENT_COL_INDEX], EXPERIMENT_COL_INDEX)}
-          className="exp-head"
-        >
-          experiment
-        </th>
+        <th style={headStyles[0]} className="check-cell"></th>
+        <th style={headStyles[1]}>#</th>
+        <th style={headStyles[2]}>status</th>
+        <th style={headStyles[EXPERIMENT_COL_INDEX]} className="exp-head">experiment</th>
         {metricCols.map((m, i) => (
           <th
             key={m}
-            style={headStyle(styles[4 + i], 4 + i)}
+            style={headStyles[4 + i]}
             className={`sortable${s.sort === m ? " sorted" : ""}`}
             onClick={() => s.onSort(m)}
             title={`sort by ${m} (best first)`}
@@ -67,19 +63,13 @@ function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
           </th>
         ))}
         {paramCols.map((p, i) => (
-          <th
-            key={`p-${p}`}
-            className="param-head"
-            style={headStyle(styles[paramBase + i], paramBase + i)}
-          >
-            {p}
-          </th>
+          <th key={`p-${p}`} className="param-head" style={headStyles[paramBase + i]}>{p}</th>
         ))}
-        {tagsIdx !== null && <th style={headStyle(styles[tagsIdx], tagsIdx)}>tags</th>}
-        <th style={headStyle(styles[noteIdx], noteIdx)}>note</th>
+        {tagsIdx !== null && <th style={headStyles[tagsIdx]}>tags</th>}
+        <th style={headStyles[noteIdx]}>note</th>
         <th
           className={`num sortable when-head${s.sort === TIMESTAMP_SORT ? " sorted" : ""}`}
-          style={headStyle(styles[noteIdx + 1], noteIdx + 1)}
+          style={headStyles[noteIdx + 1]}
           onClick={() => s.onSort(TIMESTAMP_SORT)}
           title="sort by time (newest first)"
         >
