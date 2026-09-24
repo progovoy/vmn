@@ -99,7 +99,11 @@ class CachedLogs:
 
     # -- whole-log reads -----------------------------------------------------
 
-    # Local only: sync_log_to_remote ships the new bytes periodically.
+    # Local only: sync_log_to_remote ships the new bytes periodically. A live
+    # run's heartbeat loop (the `exp run` supervisor, the SDK) does that on its
+    # own schedule; a one-shot caller with no such loop (`tag`/`add --note`/
+    # `create --metrics`) must call sync_log_to_remote itself right after
+    # appending -- see core.experiment_writer.flush_log.
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if not self._ensure_local_record(app_name, verstr):
             return False

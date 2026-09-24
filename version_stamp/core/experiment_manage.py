@@ -11,7 +11,11 @@ Shared by ``vmn exp tag/archive/unarchive`` and ``version_stamp.exp.manage``.
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
 """
-from version_stamp.core.experiment_writer import create_tags_entry, get_writer_id
+from version_stamp.core.experiment_writer import (
+    create_tags_entry,
+    flush_log,
+    get_writer_id,
+)
 
 ARCHIVED_FIELD = "archived"
 
@@ -24,8 +28,15 @@ def set_archived(storage, app_name, verstr, archived=True):
 
 def tag_run(storage, app_name, verstr, tags=None, remove=None):
     """Set *tags* and drop the *remove* keys on *verstr*; False when there is
-    no such record. ValueError for an empty change or a bad key."""
+    no such record. ValueError for an empty change or a bad key.
+
+    A one-shot call: no run supervisor or SDK heartbeat is around to flush
+    this to the remote later, so it is flushed right here.
+    """
     entry = create_tags_entry(tags, remove)
     if not storage.exists(app_name, verstr):
         return False
-    return storage.append_log_entry(app_name, verstr, get_writer_id(), entry) is not False
+    if storage.append_log_entry(app_name, verstr, get_writer_id(), entry) is False:
+        return False
+    flush_log(storage, app_name, verstr)
+    return True

@@ -164,6 +164,22 @@ def append_entries_to_log(storage, app_name, verstr, entries):
     return True
 
 
+def flush_log(storage, app_name, verstr):
+    """Ship this writer's just-appended log entries to the remote right away.
+
+    Storage such as :class:`CachedSnapshotStorage` only ships new log bytes
+    when something calls ``sync_log_to_remote`` -- ordinarily a live run's
+    heartbeat loop (`exp run`'s supervisor, the SDK), on its own schedule.
+    A one-shot caller (``tag``, ``add --note``, ``create --metrics`` on a run
+    with no such loop) has no heartbeat left to do that later, so it must call
+    this right after appending. Backends without the method (a plain S3
+    remote, which has nothing to sync) are left alone.
+    """
+    sync = getattr(storage, "sync_log_to_remote", None)
+    if sync is not None:
+        sync(app_name, verstr, get_writer_id())
+
+
 def save_log(storage, app_name, verstr, log):
     """Save experiment log to storage. Legacy: prefer append_to_log for new code."""
     storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
