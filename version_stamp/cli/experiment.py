@@ -66,6 +66,7 @@ from version_stamp.core.experiment_writer import (
     compute_artifact_info,
     create_log_entry,
     create_run,
+    flush_log,
     merge_conf_into_params,
     save_artifact,
 )
@@ -329,6 +330,9 @@ def experiment_create(vcs, params, storage, args):
             create_log_entry("metrics", values=_parse_metrics(args.metrics)),
         )
 
+    # One-shot command: nothing else will flush this to the remote later.
+    flush_log(storage, app_name, verstr)
+
     print(verstr)
     return 0
 
@@ -434,6 +438,9 @@ def experiment_add(vcs, params, storage, args):
         entry = create_log_entry("structured", **notes_data)
         append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
+
+    # One-shot command: nothing else will flush this to the remote later.
+    flush_log(storage, app_name, verstr)
 
     return 0
 
