@@ -129,7 +129,18 @@ class LeaderboardCache:
         self.max_page = max_page
         self.bucket_sec = bucket_sec
         self._tokens = itertools.count(1)
-        self._bases = LRU(8)
+        # A snapshot's token identifies it across every app/workspace sharing
+        # this cache, so it must never repeat (hence the counter above, not
+        # e.g. snapshot.generation, which restarts per app). Keeping it in
+        # its own small LRU, separate from the heavy _bases below, means a
+        # snapshot recomputed after its _Base was evicted still gets back the
+        # token it had before, so its etag stays stable; entries here are a
+        # few bytes each, so a larger bound than _bases costs nothing.
+        self._base_tokens = LRU(size)
+        # Each generation's _Base is a full copy of annotated rows (heavy at
+        # 100k+ runs); keep just enough to survive a refresh's old/new
+        # snapshot handoff without recomputing for requests straddling it.
+        self._bases = LRU(2)
         self._facets = LRU(8)
         self._static = LRU(size)
         self._sorted = LRU(size)
@@ -141,9 +152,8 @@ class LeaderboardCache:
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live."""
         bucket = self._bucket()
-        base = self._bases.per_snapshot(
-            snapshot, lambda: _Base(snapshot, next(self._tokens), bucket)
-        )
+        token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
+        base = self._bases.per_snapshot(snapshot, lambda: _Base(snapshot, token, bucket))
         return base, (bucket if base.patch.live else None)
 
     def _ordered(self, snapshot, schema, sort, last, status, query, order, archived=False):
