@@ -26,8 +26,9 @@ import os
 
 import yaml
 
-from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.core import experiment_index
+from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
 from version_stamp.core.experiment_log import (
     experiment_row,
     filter_by_status,
@@ -168,32 +169,25 @@ def list_runs(
     return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)
 
 
-def _subtree_row(app_name, storage, verstr):
+def _subtree_row(app_name, storage, verstr, snapshot):
     """The row for one run, costing the run's subtree rather than the workspace.
 
-    A metadata-only listing gives the parent/child edges and the row's index; run
-    states are then read for the subtree alone, which is all ``tree_status`` can
-    depend on. No log is read here — the caller loads the one it needs.
+    The placement *snapshot* gives the parent/child edges and the row's index;
+    the run's own metadata is the only record read, and run states are read for
+    the subtree alone, which is all ``tree_status`` can depend on. No log is
+    read here — the caller loads the one it needs.
     """
-    metas = storage.list_snapshots(app_name)
-    target = next(
-        (
-            {"idx": idx, "meta": meta}
-            for idx, meta in enumerate(metas, 1)
-            if meta["verstr"] == verstr
-        ),
-        None,
-    )
-    if target is None:
+    row = snapshot.row(verstr)
+    meta = storage.load_metadata(app_name, verstr) if row else None
+    if meta is None:
         return None, None
 
-    parent_of = {meta["verstr"]: meta.get("parent") for meta in metas}
     run_state, tree = subtree_status(
-        verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
+        verstr, dict(snapshot.edges), lambda v: load_run_state(storage, app_name, v)
     )
     status = status_fields(run_state)
     status.update(tree)
-    return target, status
+    return {"idx": row["idx"], "meta": meta}, status
 
 
 def get_run(app_name=None, ref="latest", *, storage=None):
@@ -203,11 +197,14 @@ def get_run(app_name=None, ref="latest", *, storage=None):
     or ``latest``. Raises ValueError when it resolves to nothing.
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    verstr, err = _resolve_verstr(storage, app_name, ref or "latest", kind="experiment")
+    snapshot = placement_snapshot(storage, app_name)
+    verstr, err = resolve_experiment(
+        storage, app_name, ref or "latest", snapshot=snapshot
+    )
     if err:
         raise ValueError(err)
 
-    target, status = _subtree_row(app_name, storage, verstr)
+    target, status = _subtree_row(app_name, storage, verstr, snapshot)
     if target is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 

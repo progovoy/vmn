@@ -508,10 +508,12 @@ sorted by a metric. Inner runs are indented under their outer run.
 vmn exp list my_app                        # all
 vmn exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
 vmn exp list my_app --last 10              # most recent 10
+vmn exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
+vmn exp list my_app --json                 # machine-readable
 ```
 
 The `[N]` in front of each row is the run's storage index — the same number
-`-v @N` resolves — so it never changes with `--sort`, `--top` or `--last`:
+`-v @N` resolves — so it never changes with `--sort`, `--top`, `--last` or `--query`:
 `vmn exp list my_app --sort loss` showing `[7]` first means `vmn exp show my_app
 -v @7` opens that run.
 
@@ -519,9 +521,26 @@ The `[N]` in front of each row is the run's storage index — the same number
 list|show|diff|export`) are read-only and take no repo lock, so they never wait
 for — or hold up — a `create`/`run` in the same checkout.
 
-Richer filtering — `metrics.loss < 0.5 and status = "succeeded"` — is available
-from the SDK reader and the REST API via [the query
-language](sdk.md#the-query-language), not yet as a flag here.
+`--query '<expr>'` keeps the runs matching [the query
+language](sdk.md#the-query-language) — the same one the SDK reader and the
+REST API use. It sees every row field, including `status`, `kind`, `depth` and
+`tree_status`, and applies before `--last`, `--sort` and `--top`. A bad query
+exits 1 with the offending offset.
+
+`--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
+JSON array instead of the table — one object per run with the keys of an SDK
+[`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`, `code_verstr`,
+`timestamp`, `note`, `create_note`, `branch`, `base_version`, `user_meta`,
+`params`, `metrics`, `parent`, `last_metric_at`, the status fields (`status`,
+`exit_code`, `started_at`, `finished_at`, `heartbeat`, `duration_sec`, `pid`,
+`host`, ...) and the tree fields (`children`, `kind`, `depth`, `tree_status`).
+Keys are sorted and non-finite metrics are `null`, so the output is strict JSON.
+An app with no runs prints `[]`.
+
+`list`, `show` and `compare` read through the experiment index
+(`.index.sqlite` beside the records), so a workspace with thousands of runs
+costs one listing plus whatever changed — never a re-read of every record. So
+does resolving `@N`, `latest` and prefixes.
 
 ### `show`
 
@@ -534,7 +553,12 @@ line saying how many earlier ones were hidden. `--full-log` prints all of them.
 vmn exp show my_app          # latest
 vmn exp show my_app -v @1
 vmn exp show my_app -v @1 --full-log
+vmn exp show my_app -v @1 --json
 ```
+
+`--json` prints one object: the `list --json` row keys plus `base_commit`,
+`has_dep_patches`, `patches` (`{working_tree|local_commits: line count}`),
+`log` (the newest 50 entries, all of them with `--full-log`) and `log_total`.
 
 ### `compare`
 
