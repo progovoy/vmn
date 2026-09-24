@@ -71,4 +71,21 @@ describe("api paging and abort", () => {
     await api.experiments("w", "app");
     expect(fetchMock.mock.calls[0][1].signal).toBeUndefined();
   });
+
+  it("POSTs made inside withSignal carry that signal", async () => {
+    const ctrl = new AbortController();
+    await withSignal(ctrl.signal, () => api.action("w", "my/app", "stamp", { x: 1 }));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/workspaces/w/apps/my-app/actions/stamp");
+    expect(init.method).toBe("POST");
+    expect(init.signal).toBe(ctrl.signal);
+  });
+
+  it("a failed POST rejects with the server's detail and status", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ detail: "busy" }), { status: 409 })));
+    await expect(api.action("w", "app", "stamp", {})).rejects.toMatchObject({
+      message: "busy", status: 409,
+    });
+  });
 });

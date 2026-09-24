@@ -3,21 +3,10 @@ import type {
   ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow,
   Workspace,
 } from "./types";
-import { authHeaders, BASE, get } from "./http";
+import { appTag, BASE, get, post } from "./http";
 import { PAGE_SIZE } from "./paging";
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const b = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(b.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
+export { appTag };
 
 export interface PageOpts {
   sort?: string;
@@ -56,8 +45,6 @@ async function fetchPage(
   return Array.isArray(body) ? { rows: body, total: body.length } : body;
 }
 
-/** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
-export const appTag = (name: string) => name.replaceAll("/", "-");
 /** Inverse of appTag: the real app name behind a URL tag. */
 export const appName = (tag: string) => tag.replaceAll("-", "/");
 

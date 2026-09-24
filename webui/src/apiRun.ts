@@ -1,6 +1,5 @@
 /** Run-detail endpoints beyond the core `api` object: the paged run log. */
-import { appTag } from "./api";
-import { get } from "./http";
+import { appTag, get } from "./http";
 import type { LogEntry } from "./types";
 
 export interface LogPage {

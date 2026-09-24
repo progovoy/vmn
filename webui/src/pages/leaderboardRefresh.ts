@@ -1,4 +1,5 @@
 import { MAX_PAGE, PAGE_SIZE } from "../paging";
+import { verstrInQuery } from "../util/searchQuery";
 import { stabilizeRows } from "../util/stableRows";
 
 type Page<R> = { rows: R[]; total: number };
@@ -28,11 +29,6 @@ export async function refreshLoaded<O extends object, R>(
 
 /** Verstrs per by-id request — keeps the query (and its URL) bounded. */
 const VERSTR_CHUNK = 200;
-
-/** The query language's membership test over verstrs. Verstrs never hold a
- *  quote, so plain double quotes are always a valid literal. */
-export const verstrInQuery = (verstrs: readonly string[]) =>
-  `verstr in (${verstrs.map((v) => `"${v}"`).join(", ")})`;
 
 export function chunk<T>(items: readonly T[], n: number): T[][] {
   const out: T[][] = [];

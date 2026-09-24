@@ -4,7 +4,10 @@ import { currentSignal } from "./requestScope";
 
 export const BASE = "/api/v1";
 
-/** What `get` throws: the message plus the HTTP status. */
+/** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
+export const appTag = (name: string) => name.replaceAll("/", "-");
+
+/** What `get` and `post` throw: the message plus the HTTP status. */
 export type HttpError = Error & { status?: number };
 
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -23,6 +26,20 @@ export async function get<T>(path: string, signal = currentSignal()): Promise<T>
       return get<T>(path, signal);
     }
   }
+  return parse<T>(res);
+}
+
+export async function post<T>(path: string, body: unknown, signal = currentSignal()): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    signal,
+  });
+  return parse<T>(res);
+}
+
+async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     // The status rides along: a 400 is the caller's input (a bad experiment
