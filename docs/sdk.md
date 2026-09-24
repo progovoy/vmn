@@ -77,6 +77,9 @@ start_run(
     storage=None,
     system_metrics=False,
     sync_interval_sec=30,
+    snapshot=True,
+    run_id=None,
+    all_ranks=False,
 )
 ```
 
@@ -90,7 +93,10 @@ start_run(
 | `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
 | `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn[sysmetrics]"` |
-| `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, from the heartbeat thread — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
+| `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
+| `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
+| `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
+| `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
 
 The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn exp
 run`, which measures the child's process tree instead):
@@ -115,10 +121,22 @@ cold-start one fresh checkout at the same moment: they serialize on the repo
 lock, and each builds its view of the repo only once it holds the lock, so the
 ones that wait see the initialization the first one did.
 
-That create/cold-start phase is the only part that touches the repository, so it
-is the only part that takes the per-repo vmn lock (`.vmn/vmn.lock`). The lock is
-released before your training code runs — a run that trains for hours does not
-block other `vmn` commands, and a subprocess you launch can use vmn freely.
+**An SDK cold start is local-only.** Unlike `vmn exp`/`vmn stamp`, it never
+pushes: the init commit and the `<app>_0.0.0` tag stay in your checkout, so a
+training script neither publishes refs as a side effect nor fails in a checkout
+that has no remote. Push them when you want to share them
+(`git push --follow-tags`).
+
+The repo lock (`.vmn/vmn.lock`) is held only where it is needed: by the cold
+start, when there is something to initialize, and for the verstr claim. The
+snapshot itself — `git diff`, format-patch, hashing and tarring untracked files —
+is captured *before* the lock is taken, so the trials of a sweep started at once
+capture in parallel instead of queueing behind each other. Within one process
+the untracked tarball is memoized by the tree's identity (repo, `HEAD`, diff
+hash — which covers the untracked files' contents), so trials 2..N of an
+unchanged tree reuse trial 1's. The lock is released before your training code
+runs — a run that trains for hours does not block other `vmn` commands, and a
+subprocess you launch can use vmn freely.
 
 ### Runs without a git checkout (containers)
 
@@ -360,12 +378,57 @@ workload — so it carries its own daemon thread. That is what makes
 that is OOM-killed or loses its node goes stale and is reported `stuck`, instead
 of sitting at `running` forever with nobody left to write down that it died.
 
+Each beat also bumps `heartbeat_seq` in `run_state.yml`. The remote copy of the
+run state and the log sync are uploaded off the heartbeat thread, and only the
+newest pending state is uploaded (in order, so the final state is never
+overwritten by an older beat): a hung S3 PUT cannot delay the local heartbeat.
+
+**SIGTERM finalizes the run.** A preempted job (spot reclaim, `scancel`, a
+Kubernetes eviction) is sent `SIGTERM`, and `atexit` never runs for a process a
+signal kills. While a run is open the SDK therefore handles `SIGTERM`: it
+finishes every open run with exit code `143` (`128 + 15`, so it reads `failed`,
+never `stuck`) and `received_signal: SIGTERM`, syncs the log, and then hands the
+signal on — a handler you installed before `start_run()` is called, otherwise
+the default action is re-delivered, so the process still dies of `SIGTERM`. The
+handler is installed only from the main thread (Python allows no other), only
+while a run is open, and never over `SIG_IGN`.
+
 **A flaky store never becomes your error.** `finish()` does not raise for a
 storage failure (a remote that returns 503 at the end of a ten-hour run is logged
 as a warning, not thrown at the workload), and it always closes the run — the
 run leaves the open-run registry and the environment is handed back regardless.
 An exception from your own code inside the `with` block is re-raised unchanged;
 a storage error while recording it is logged, never substituted for it.
+
+### Resuming a preempted run
+
+A requeued job should continue the run it was rather than start a new one:
+
+```python
+run = start_run("my_app", run_id=saved_run_id)
+# or set VMN_RESUME_RUN_ID=<verstr> in the requeued job's environment
+```
+
+The run is reopened — same verstr, `state: running` again with this process's
+pid/host, heartbeating — and new entries are appended to its log (this process
+writes its own log segment; readers merge them). `started_at` is kept, so
+`duration_sec` spans every attempt; `resume_count` and `resumed_at` record the
+restarts. A `note`/`params` passed on resume is appended as a note/params entry.
+A reference that matches no experiment of the app raises `ValueError`.
+`$VMN_RESUME_RUN_ID` is consumed (removed from the environment) when used, so
+neither the next run this process opens nor a vmn subprocess resumes it again;
+an explicit `run_id` wins over it.
+
+### Distributed training (DDP, torchrun, Slurm)
+
+Every rank of a distributed job runs the same script. On a non-zero rank —
+`RANK > 0`, or (without `RANK`) `LOCAL_RANK > 0` with `WORLD_SIZE > 1`, or
+`SLURM_PROCID > 0` — `start_run()` returns a `NoOpRun`: the same interface
+(`log_metric`, `log_params`, `finish`, `with` ...), recording nothing, with no
+heartbeat thread and no git or storage access. It is never registered as open,
+so `current_run()` is `None` there and autologging records nothing. Rank 0
+records as usual and exports `VMN_EXPERIMENT_ID`. Pass `all_ranks=True` to
+record on every rank.
 
 ---
 

@@ -253,6 +253,8 @@ class _Supervision:
             "host": socket.gethostname(),
             "started_at": started_at,
             "heartbeat": started_at,
+            # Bumped every beat: a liveness signal that needs no clock.
+            "heartbeat_seq": 0,
             "heartbeat_interval_sec": heartbeat_interval,
             "exit_code": None,
             "finished_at": None,
@@ -278,7 +280,11 @@ class _Supervision:
                 self.sync.request()
                 last_sync = now
             if now - last_heartbeat >= heartbeat_interval:
-                self._publish("heartbeat", heartbeat=now_iso())
+                self._publish(
+                    "heartbeat",
+                    heartbeat=now_iso(),
+                    heartbeat_seq=self.run_state["heartbeat_seq"] + 1,
+                )
                 self.guard("system metrics", sampler.tick)
                 last_heartbeat = now
             self.forwarder.enforce_grace()

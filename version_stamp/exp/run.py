@@ -12,274 +12,55 @@ come from the same helpers ``vmn exp run`` uses, so ``vmn exp list/show`` and th
 dashboard read an SDK run with no special cases.
 """
 import atexit
-import contextlib
+import functools
 import logging
 import os
+import signal
 import socket
 import sys
 import time
-from types import SimpleNamespace
 
-import yaml
-
-from version_stamp.cli.constants import INIT_FILENAME
-
-# Still upward, and deliberately so: creating an experiment record needs the git
-# snapshot capture and the storage factory, both of which live in
-# version_stamp/cli/snapshot.py. Everything that merely *shapes* a record comes
-# from version_stamp.core.experiment_writer below. Lifting exp/ into its own
-# distribution needs these to move into core next.
-from version_stamp.cli.experiment import (
-    _experiment_create_core,
-    _get_experiment_storage,
-    _resolve_parent,
-)
-from version_stamp.cli.snapshot import _resolve_verstr
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.best_effort import BestEffort, quiet
-from version_stamp.core.constants import VMN_BE_TYPE_GIT
-from version_stamp.core.experiment_from_snapshot import create_from_snapshot
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_writer import (
     append_to_log,
     compute_artifact_info,
     create_log_entry,
-    get_repo_lock,
     get_writer_id,
-    merge_conf_into_params,
-    merge_env_into_params,
     save_artifact,
-    save_run_state,
 )
-from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import now_iso, resolve_root_path
-from version_stamp.exp import _resolve_app_name, context, sysmetrics
+from version_stamp.core.utils import now_iso
+from version_stamp.exp import (
+    _resolve_app_name,  # noqa: F401  (one shared resolver)
+    context,
+    resume,
+    signals,
+    sysmetrics,
+)
+from version_stamp.exp.background import Coalescing
 from version_stamp.exp.context import (  # noqa: F401  (re-exported API)
     _OPEN_RUNS,
     EXPERIMENT_ID_ENV,
     current_run,
 )
+from version_stamp.exp.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from version_stamp.exp.heartbeat import Heartbeat
+from version_stamp.exp.ranks import NoOpRun, is_secondary_rank
+from version_stamp.exp.state_publisher import RunStatePublisher
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
 # a library emits records rather than configuring handlers.
 _LOGGER = logging.getLogger(__name__)
 
-SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 DEFAULT_SYNC_INTERVAL_SEC = 30
-
-# The repo state `vmn exp create` demands, and what it tolerates — the SDK
-# cold-starts on exactly the same terms.
-_EXPECTED_STATUS = {"repo_tracked", "app_tracked"}
-_OPTIONAL_STATUS = {
-    "repos_exist_locally",
-    "detached",
-    "pending",
-    "outgoing",
-    "version_not_matched",
-    "dirty_deps",
-    "deps_synced_with_conf",
-}
-_DIRTY_OK = {"pending", "outgoing"}
+# How long finish() waits for the last remote writes before giving up on them.
+FINAL_REMOTE_TIMEOUT_SEC = 60
 
 # A run that reached interpreter exit still open was abandoned — the workload
 # raised past us, called sys.exit(), or simply forgot to finish. It did not
 # succeed, so it must not read as succeeded.
 ABANDONED_EXIT_CODE = 1
-
-
-def _stamped_apps():
-    from version_stamp.cli.completion import _complete_apps
-
-    return _complete_apps("")
-
-
-def _build_vcs(app_name):
-    from version_stamp.stamping.publisher import VersionControlStamper
-
-    return VersionControlStamper(
-        {
-            "root": False,
-            "name": app_name,
-            "root_path": resolve_root_path(),
-            "be_type": VMN_BE_TYPE_GIT,
-        }
-    )
-
-
-def _cold_start(vcs):
-    """Auto-initialize vmn tracking and a 0.0.0 baseline, as ``vmn exp`` does.
-
-    ``vmn exp create``/``run`` work in a fresh repo — they init the repo and the
-    app on first use. ``start_run`` is the in-process equivalent, so it must too,
-    and it calls the very same CLI helpers rather than growing its own init.
-    """
-    from version_stamp.cli.commands import _get_repo_status, _init_app, handle_init
-
-    # An untracked repo or app is the cold-start case this function exists to
-    # handle, so it must not be announced as an error first — that made a
-    # successful first run look like a crash.
-    status = _get_repo_status(
-        vcs,
-        _EXPECTED_STATUS,
-        _OPTIONAL_STATUS,
-        suppress_errors={"repo_tracked", "app_tracked"},
-    )
-    if not status.error:
-        return
-
-    be = vcs.backend
-    initialized = False
-    vmn_init_file = os.path.join(vcs.vmn_root_path, ".vmn", INIT_FILENAME)
-
-    if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
-        # handle_init only ever reads vmn_ctx.vcs, so there is no argparse
-        # namespace to fabricate.
-        if handle_init(SimpleNamespace(vcs=vcs), extra_optional=_DIRTY_OK) != 0:
-            raise RuntimeError(_cold_start_failure(vcs.name, "initialize the repo"))
-        initialized = True
-
-    if "app_tracked" not in status.state and not be.is_path_tracked(vcs.app_dir_path):
-        if _init_app(vcs, "0.0.0", extra_optional=_DIRTY_OK):
-            raise RuntimeError(_cold_start_failure(vcs.name, "stamp a baseline"))
-        initialized = True
-
-    if initialized:
-        vcs.update_attrs_from_app_conf_file()
-        vcs.initialize_backend_attrs()
-
-
-def _cold_start_failure(app_name, what):
-    return (
-        f"Could not {what} for '{app_name}' automatically. "
-        f"Run 'vmn stamp -r patch {app_name}' once, then start the run again."
-    )
-
-
-def _build_storage(vcs):
-    params = {"backend": "local", "prefix": "vmn-experiments"}
-    merge_conf_into_params(vcs, params)
-    return _get_experiment_storage(vcs, params)
-
-
-def _pick_parent(storage, app_name, parent, nested):
-    """Resolve the parent experiment, following the CLI's validation policy.
-
-    Precedence: an explicit ``parent`` (a bad one is a hard error), then the
-    calling context's open run when ``nested``, then ``VMN_EXPERIMENT_ID`` (a
-    stale one is warned about and dropped — the outer run may have been pruned,
-    which is no reason to fail this one).
-
-    ``VMN_EXPERIMENT_ID`` naming a run another thread of this process has open is
-    a sibling's export, not a launcher: it is skipped in favour of the value the
-    process was started with.
-    """
-    if parent:
-        resolved, err = _resolve_parent(
-            storage, app_name, SimpleNamespace(parent=parent)
-        )
-        if err:
-            raise ValueError(f"Unknown parent experiment: {parent}")
-        return resolved
-
-    enclosing = current_run() if nested else None
-    if enclosing is not None:
-        return enclosing.id
-
-    ref = os.environ.get(EXPERIMENT_ID_ENV)
-    if ref and context.is_foreign_sibling(ref):
-        ref = context.launcher_experiment_id()
-    return _resolve_env_parent(storage, app_name, ref)
-
-
-def _resolve_env_parent(storage, app_name, ref):
-    """An env-provided parent: resolved against storage, dropped when stale."""
-    if not ref:
-        return None
-    verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
-    if err:
-        VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
-        return None
-    return verstr
-
-
-def _snapshot_app_names(meta_path):
-    """The app an exported snapshot's metadata names, as resolver candidates."""
-    if os.path.isdir(meta_path):
-        meta_path = os.path.join(meta_path, "vmn_metadata.yml")
-    try:
-        with open(meta_path) as f:
-            meta = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError):
-        return []
-    app = meta.get("app_name") if isinstance(meta, dict) else None
-    return [app] if app else []
-
-
-def _snapshot_mode_storage():
-    """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
-    and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
-    params = {"backend": "local", "prefix": "vmn-experiments"}
-    merge_env_into_params(params)
-    try:
-        return _get_experiment_storage(None, params)
-    except ValueError:
-        raise ValueError(
-            "No experiment store for a run without a git checkout: "
-            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_BUCKET (or pass storage=)."
-        )
-
-
-def _create_from_snapshot(
-    app_name, meta_path, note, create_data, parent, nested, storage
-):
-    """Container mode: record against an exported snapshot, no git needed."""
-    app_name = _resolve_app_name(app_name, lambda: _snapshot_app_names(meta_path))
-    if storage is None:
-        storage = _snapshot_mode_storage()
-    # A shared VMN_EXPERIMENT_DIR is the only thing concurrent git-less workers
-    # have in common: serialize verstr allocation on it, like a checkout's lock.
-    lock_root = os.environ.get("VMN_EXPERIMENT_DIR")
-    if lock_root:
-        os.makedirs(os.path.join(lock_root, ".vmn"), exist_ok=True)
-    with get_repo_lock(lock_root) if lock_root else contextlib.nullcontext():
-        verstr, err = create_from_snapshot(
-            storage,
-            app_name,
-            meta_path,
-            note=note,
-            extra_create_data=create_data,
-            parent=_pick_parent(storage, app_name, parent, nested),
-        )
-    return app_name, storage, verstr, err
-
-
-def _create_in_checkout(app_name, note, create_data, parent, nested, storage):
-    """The normal mode: cold-start if needed, then snapshot the git checkout."""
-    app_name = _resolve_app_name(app_name, _stamped_apps)
-    root_path = resolve_root_path()
-    os.makedirs(os.path.join(root_path, ".vmn"), exist_ok=True)
-
-    # Cold start inits the repo and stamps a baseline, and verstr allocation
-    # scans for a free `.rN` - both must not race a concurrent vmn. The vcs is
-    # built under the lock too: one built before it would miss an init another
-    # worker finished while this one waited. The rest of the run writes only
-    # inside its own experiment directory, so the lock is scoped to creation and
-    # never held for the life of the run.
-    with get_repo_lock(root_path):
-        vcs = _build_vcs(app_name)
-        _cold_start(vcs)
-        if storage is None:
-            storage = _build_storage(vcs)
-
-        verstr, err = _experiment_create_core(
-            vcs,
-            storage,
-            note=note,
-            extra_create_data=create_data,
-            parent=_pick_parent(storage, app_name, parent, nested),
-        )
-    return app_name, storage, verstr, err
 
 
 def start_run(
@@ -292,8 +73,11 @@ def start_run(
     storage=None,
     system_metrics=False,
     sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
+    snapshot=True,
+    run_id=None,
+    all_ranks=False,
 ):
-    """Create an experiment, mark it running and return the open ``Run``.
+    """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
     ``app_name=None`` resolves the app from the current checkout. Use the result
     as a context manager, or call ``finish()`` yourself.
@@ -303,33 +87,35 @@ def start_run(
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
 
     ``system_metrics=True`` records this process's CPU and memory (and GPU, with
-    ``pynvml``) as ``sys_*`` metrics on every heartbeat. Off by default: it adds
-    a log entry per beat, which a run that only wants its own metrics should not
-    pay for.
+    ``pynvml``) as ``sys_*`` metrics on every heartbeat.
 
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
-    one) at most that often, from the heartbeat thread, so a run killed mid-way
-    still leaves its metrics behind. ``None``/``0`` syncs only on ``finish()``.
+    one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
+    on ``finish()``.
+
+    ``snapshot=False`` records only the code identity (base commit and diff
+    hash), with no patches or untracked tarball — for many lightweight runs.
+
+    ``run_id`` (or ``VMN_RESUME_RUN_ID``) reopens an existing run of the app
+    instead of creating one — a requeued job continuing where it was preempted.
+
+    On a non-zero rank of a distributed job (``RANK``, ``LOCAL_RANK`` with
+    ``WORLD_SIZE > 1``, or ``SLURM_PROCID``) this returns a :class:`NoOpRun`
+    that records nothing, unless ``all_ranks=True``.
     """
+    if not all_ranks and is_secondary_rank():
+        return NoOpRun(app_name)
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     vmn_logging.ensure_logger()
-    # Same shape as the CLI's `-f file` params, so _get_latest_metrics and
-    # `exp diff` pick them up unchanged.
-    create_data = {"params": dict(params)} if params else None
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
-    if meta_path:
-        app_name, storage, verstr, err = _create_from_snapshot(
-            app_name, meta_path, note, create_data, parent, nested, storage
-        )
+
+    prior_state = None
+    ref = resume.requested_run_id(run_id)
+    if ref:
+        app_name, storage, verstr, prior_state = resume.locate(app_name, ref, storage)
     else:
-        app_name, storage, verstr, err = _create_in_checkout(
-            app_name, note, create_data, parent, nested, storage
-        )
-    if err:
-        raise RuntimeError(
-            f"Failed to create an experiment for '{app_name}' (error {err}). "
-            f"Run 'vmn exp create {app_name}' to see what the CLI reports."
+        app_name, storage, verstr = create_record(
+            app_name, note, params, parent, nested, storage, snapshot
         )
 
     run = Run(
@@ -339,9 +125,20 @@ def start_run(
         heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
         system_metrics=system_metrics,
         sync_interval_sec=sync_interval_sec,
+        prior_state=prior_state,
     )
     run._open()
+    if prior_state is not None:
+        _record_resume_inputs(run, note, params)
     return run
+
+
+def _record_resume_inputs(run, note, params):
+    """A resumed run's new note/params are appended, like any later entry."""
+    if params:
+        run.log_params(params)
+    if note:
+        run.log_note(note)
 
 
 class Run:
@@ -355,6 +152,7 @@ class Run:
         heartbeat_interval_sec,
         system_metrics=False,
         sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
+        prior_state=None,
     ):
         self._storage = storage
         self.app_name = app_name
@@ -369,21 +167,23 @@ class Run:
         self._last_sync = self._monotonic_start
         self._ctx_prev = None
 
-        started_at = now_iso()
-        self._state = {
-            "state": "running",
-            # There is no child command here — the run *is* this process. Its
-            # argv is the honest answer, and consumers read the key.
-            "command": list(sys.argv),
-            "pid": os.getpid(),
-            "host": socket.gethostname(),
-            "started_at": started_at,
-            "heartbeat": started_at,
-            "heartbeat_interval_sec": heartbeat_interval_sec,
-            "exit_code": None,
-            "finished_at": None,
-            "duration_sec": None,
-        }
+        self._state = self._initial_state(heartbeat_interval_sec, prior_state)
+        # A resumed run's duration spans every attempt, from the first start.
+        self._elapsed_before = (
+            resume.elapsed_before(self._state) if prior_state is not None else 0.0
+        )
+        self._state_publisher = RunStatePublisher(storage, app_name, verstr)
+        self._chore_guard = quiet(_LOGGER)
+        self._log_sync = Coalescing(
+            functools.partial(
+                self._chore_guard,
+                "experiment log sync",
+                storage.sync_log_to_remote,
+                app_name,
+                verstr,
+            ),
+            "vmn-exp-sync",
+        )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
@@ -393,13 +193,36 @@ class Run:
             _LOGGER,
             lambda what, exc: f"vmn: could not record the {what} of run {self.id}: {exc}",
         )
-        self._chore_guard = quiet(_LOGGER)
+
+    @staticmethod
+    def _initial_state(heartbeat_interval_sec, prior_state):
+        started_at = now_iso()
+        state = {
+            "state": "running",
+            # There is no child command here — the run *is* this process. Its
+            # argv is the honest answer, and consumers read the key.
+            "command": list(sys.argv),
+            "pid": os.getpid(),
+            "host": socket.gethostname(),
+            "started_at": started_at,
+            "heartbeat": started_at,
+            # Bumped every beat: a liveness signal that needs no clock.
+            "heartbeat_seq": 0,
+            "heartbeat_interval_sec": heartbeat_interval_sec,
+            "exit_code": None,
+            "finished_at": None,
+            "duration_sec": None,
+        }
+        if prior_state is not None:
+            state = resume.resumed_state(prior_state, state)
+        return state
 
     # -- lifecycle ---------------------------------------------------------
 
     def _open(self):
         self._publish()
         context.register(self)
+        signals.install(_finalize_signaled)
         self._heartbeat.start()
 
     def finish(self, exit_code=0):
@@ -409,13 +232,16 @@ class Run:
         run is logged, not thrown at the workload), and always closes the run —
         it leaves the open-run registry and hands the env back either way.
         """
+        self._finish(exit_code)
+
+    def _finish(self, exit_code, **final_state):
         if self._finished:
             return
         self._finished = True
 
         try:
             self._heartbeat.stop()
-            duration = round(time.monotonic() - self._monotonic_start, 3)
+            duration = self._duration()
             self._record_guard(
                 "final state",
                 self._publish,
@@ -423,6 +249,7 @@ class Run:
                 exit_code=exit_code,
                 finished_at=now_iso(),
                 duration_sec=duration,
+                **final_state,
             )
             self._record_guard(
                 "run entry",
@@ -434,9 +261,23 @@ class Run:
                     duration_sec=duration,
                 ),
             )
-            self._sync()
+            self._log_sync.submit(get_writer_id())
+            self._close_remote_writers()
         finally:
             context.unregister(self)
+            if not context.open_runs():
+                signals.uninstall()
+
+    def _close_remote_writers(self):
+        # One deadline for both: they upload in parallel, so waiting for each
+        # in turn would double the worst case.
+        deadline = time.monotonic() + FINAL_REMOTE_TIMEOUT_SEC
+        for what, writer in (("log", self._log_sync), ("state", self._state_publisher)):
+            if not writer.close(max(0.0, deadline - time.monotonic())):
+                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+
+    def _duration(self):
+        return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
 
     def __enter__(self):
         return self
@@ -485,7 +326,8 @@ class Run:
         append_to_log(self._storage, self.app_name, self.id, entry)
 
     def _publish(self, **updates):
-        save_run_state(self._storage, self.app_name, self.id, self._state, **updates)
+        self._state.update(updates)
+        self._state_publisher.publish(self._state)
 
     def _beat(self):
         # Independent chores: a failed heartbeat write must not skip the sync
@@ -494,7 +336,7 @@ class Run:
             self._chore_guard(f"heartbeat chore {chore.__name__}", chore)
 
     def _publish_heartbeat(self):
-        self._publish(heartbeat=now_iso())
+        self._publish(heartbeat=now_iso(), heartbeat_seq=self._state["heartbeat_seq"] + 1)
 
     def _maybe_sync(self):
         if not self._sync_interval_sec:
@@ -502,19 +344,10 @@ class Run:
         if time.monotonic() - self._last_sync < self._sync_interval_sec:
             return
         self._last_sync = time.monotonic()
-        self._sync()
-
-    def _sync(self):
-        self._chore_guard(
-            "experiment log sync",
-            self._storage.sync_log_to_remote,
-            self.app_name,
-            self.id,
-            get_writer_id(),
-        )
+        self._log_sync.submit(get_writer_id())
 
 
-def _finalize_open_runs():
+def _finalize_open_runs(exit_code=ABANDONED_EXIT_CODE, **final_state):
     """Never leave a run claiming ``running`` just because nobody finished it.
 
     Only this process's runs: a forked child exiting normally must not finalize
@@ -522,9 +355,14 @@ def _finalize_open_runs():
     """
     for run in list(reversed(context.open_runs())):
         try:
-            run.finish(exit_code=ABANDONED_EXIT_CODE)
+            run._finish(exit_code, **final_state)
         except Exception:
             _LOGGER.debug("Failed to finalize an abandoned run", exc_info=True)
+
+
+def _finalize_signaled(signum):
+    """A run a signal ended exits ``128 + N``, as a shell reports it."""
+    _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
 
 
 atexit.register(_finalize_open_runs)
