@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 
+from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort
 from version_stamp.core.logging import VMN_LOGGER
 
@@ -84,39 +85,45 @@ def supervision_guard():
 
 
 class BackgroundSync:
-    """Remote log syncs off the supervise loop, at most one in flight.
+    """Remote log syncs off the supervise loop, one at a time, newest wins.
 
     A sync uploads the log; on a slow link that takes longer than a heartbeat
     interval, and doing it inline starved the heartbeat until the run read
     ``stuck``.
     """
 
+    _FINAL = "final"
+
     def __init__(self, sync):
         self._sync = sync
-        self._thread = None
+        self._worker = Coalescing(self._run, "vmn-exp-sync")
+        self._lock = threading.Lock()
+        self._final_started = False
+        self._final_abandoned = False
 
     def request(self):
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._thread = self._start()
+        self._worker.submit()
 
     def final(self, timeout):
         """One last sync, waiting at most *timeout* seconds for everything."""
-        deadline = time.monotonic() + timeout
-        if self._thread is not None:
-            self._thread.join(max(0.0, deadline - time.monotonic()))
-            if self._thread.is_alive():
-                VMN_LOGGER.warning("Experiment run: final sync skipped, a sync hangs")
-                return
-        thread = self._start()
-        thread.join(max(0.0, deadline - time.monotonic()))
-        if thread.is_alive():
+        self._worker.submit(self._FINAL)
+        if self._worker.close(timeout):
+            return
+        with self._lock:
+            self._final_abandoned = True
+            started = self._final_started
+        if started:
             VMN_LOGGER.warning(f"Experiment run: final sync timed out after {timeout}s")
+        else:
+            VMN_LOGGER.warning("Experiment run: final sync skipped, a sync hangs")
 
-    def _start(self):
-        thread = threading.Thread(target=self._sync, name="vmn-exp-sync", daemon=True)
-        thread.start()
-        return thread
+    def _run(self, item):
+        if item is self._FINAL:
+            with self._lock:
+                if self._final_abandoned:
+                    return
+                self._final_started = True
+        self._sync()
 
 
 def _delivered_by_terminal(signum, proc):

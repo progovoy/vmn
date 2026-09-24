@@ -9,7 +9,7 @@ import os
 
 from helpers import _bootstrap, _experiment, extract_dev_verstr
 
-from version_stamp.cli.experiment import _get_latest_metrics
+from version_stamp.core.experiment_log import latest_metrics
 
 
 def _append_log_entry(app_layout, verstr, entry, writer="sdk"):
@@ -36,12 +36,12 @@ def _params_entry(params, ts="2099-01-01T00:00:00Z"):
 
 def test_params_entry_is_picked_up():
     log = [_params_entry({"lr": 0.01, "batch_size": 32})]
-    assert _get_latest_metrics(log) == {"lr": 0.01, "batch_size": 32}
+    assert latest_metrics(log) == {"lr": 0.01, "batch_size": 32}
 
 
 def test_params_entry_coerces_numbers_and_skips_the_rest():
     log = [_params_entry({"lr": "0.01", "steps": "5", "optimizer": "adam"})]
-    assert _get_latest_metrics(log) == {"lr": 0.01, "steps": 5.0}
+    assert latest_metrics(log) == {"lr": 0.01, "steps": 5.0}
 
 
 def test_a_later_params_entry_overrides_an_earlier_one():
@@ -49,7 +49,7 @@ def test_a_later_params_entry_overrides_an_earlier_one():
         _params_entry({"lr": 0.01}, ts="2026-01-01T00:00:00Z"),
         _params_entry({"lr": 0.02}, ts="2026-01-01T00:01:00Z"),
     ]
-    assert _get_latest_metrics(log) == {"lr": 0.02}
+    assert latest_metrics(log) == {"lr": 0.02}
 
 
 def test_a_params_entry_overrides_create_params():
@@ -57,7 +57,7 @@ def test_a_params_entry_overrides_create_params():
         {"timestamp": "2026-01-01T00:00:00Z", "type": "create", "params": {"lr": 0.01}},
         _params_entry({"lr": 0.05}, ts="2026-01-01T00:01:00Z"),
     ]
-    assert _get_latest_metrics(log) == {"lr": 0.05}
+    assert latest_metrics(log) == {"lr": 0.05}
 
 
 def test_create_params_still_work_on_their_own():
@@ -73,7 +73,7 @@ def test_create_params_still_work_on_their_own():
             "values": {"loss": 0.3},
         },
     ]
-    assert _get_latest_metrics(log) == {"lr": 0.01, "loss": 0.3}
+    assert latest_metrics(log) == {"lr": 0.01, "loss": 0.3}
 
 
 # ---------------------------------------------------------------------------

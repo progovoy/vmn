@@ -17,6 +17,7 @@ import logging
 
 from version_stamp.core import experiment_index
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+from version_stamp.core.logging import VMN_LOGGER
 
 KIND = "experiment"
 _LATEST_WORDS = ("latest", "@latest")
@@ -76,6 +77,30 @@ def resolve_experiment(storage, app_name, ref, latest=False, snapshot=None):
         return ref, None
     snapshot = placement_snapshot(storage, app_name, snapshot)
     return snapshot.resolve(ref, latest=latest, kind=KIND)
+
+
+
+def resolve_parent(storage, app_name, explicit=None, env_ref=None):
+    """Parent verstr for a new experiment: ``(parent, error_code)``.
+
+    *explicit* (``--parent``) wins over *env_ref* (the ``VMN_EXPERIMENT_ID`` an
+    enclosing run exported). Both are resolved against storage, so a parent is
+    only ever recorded if it exists. An unresolvable explicit ref is a hard
+    error; a stale env ref is dropped with a warning — the outer run may simply
+    have been pruned, which is no reason to fail this one.
+    """
+    ref = explicit or env_ref
+    if not ref:
+        return None, None
+
+    verstr, err = resolve_experiment(storage, app_name, ref)
+    if not err:
+        return verstr, None
+    if explicit:
+        VMN_LOGGER.error(err)
+        return None, 1
+    VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
+    return None, None
 
 
 def parent_edges(storage, app_name, snapshot=None):

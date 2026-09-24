@@ -9,7 +9,7 @@ import os
 
 from helpers import _bootstrap, _experiment, _storage, extract_dev_verstr
 
-from version_stamp.cli.experiment import _create_entry_params
+from version_stamp.core.experiment_log import effective_params
 
 
 def _append(app_layout, verstr, entry):
@@ -129,7 +129,7 @@ def test_exp_show_keeps_the_existing_entry_lines_unchanged(app_layout, capfd):
 
 def test_create_entry_params_still_read_from_the_create_entry():
     log = [{"type": "create", "params": {"lr": "0.01", "optimizer": "adam"}}]
-    assert _create_entry_params(log) == {"lr": "0.01", "optimizer": "adam"}
+    assert effective_params(log) == {"lr": "0.01", "optimizer": "adam"}
 
 
 def test_create_entry_params_folds_a_mid_run_params_entry():
@@ -137,7 +137,7 @@ def test_create_entry_params_folds_a_mid_run_params_entry():
         {"type": "create", "params": {"lr": 0.01}},
         _params_entry({"batch_size": 32}),
     ]
-    assert _create_entry_params(log) == {"lr": 0.01, "batch_size": 32}
+    assert effective_params(log) == {"lr": 0.01, "batch_size": 32}
 
 
 def test_a_params_entry_overrides_a_create_param():
@@ -145,7 +145,7 @@ def test_a_params_entry_overrides_a_create_param():
         {"type": "create", "params": {"lr": 0.01}},
         _params_entry({"lr": 0.05}, ts="2026-01-01T00:01:00Z"),
     ]
-    assert _create_entry_params(log) == {"lr": 0.05}
+    assert effective_params(log) == {"lr": 0.05}
 
 
 def test_a_later_params_entry_wins():
@@ -153,12 +153,12 @@ def test_a_later_params_entry_wins():
         _params_entry({"lr": 0.01}, ts="2026-01-01T00:00:00Z"),
         _params_entry({"lr": 0.02}, ts="2026-01-01T00:01:00Z"),
     ]
-    assert _create_entry_params(log) == {"lr": 0.02}
+    assert effective_params(log) == {"lr": 0.02}
 
 
 def test_params_entries_keep_non_numeric_values_verbatim():
     log = [_params_entry({"optimizer": "adam"})]
-    assert _create_entry_params(log) == {"optimizer": "adam"}
+    assert effective_params(log) == {"optimizer": "adam"}
 
 
 # ---------------------------------------------------------------------------

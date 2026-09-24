@@ -334,60 +334,61 @@ def test_cached_sync_log_to_remote_noop_without_remote(tmp_path):
 
 
 def test_get_writer_id_from_env_vmn_writer_id(monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.setenv("VMN_WRITER_ID", "my-pod")
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    from version_stamp.cli.experiment import _get_writer_id
+    from version_stamp.core.experiment_writer import get_writer_id
 
-    assert _get_writer_id() == "my-pod"
-    experiment._WRITER_ID = None
+    assert get_writer_id() == "my-pod"
+    experiment_writer._WRITER_ID = None
 
 
 def test_get_writer_id_from_hostname(monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.setenv("HOSTNAME", "k8s-pod-abc")
 
-    from version_stamp.cli.experiment import _get_writer_id
+    from version_stamp.core.experiment_writer import get_writer_id
 
-    assert _get_writer_id() == "k8s-pod-abc"
-    experiment._WRITER_ID = None
+    assert get_writer_id() == "k8s-pod-abc"
+    experiment_writer._WRITER_ID = None
 
 
 def test_get_writer_id_fallback_hostname(monkeypatch):
     """Without VMN_WRITER_ID or HOSTNAME env, falls back to socket.gethostname()."""
     import socket
-    import version_stamp.cli.experiment as experiment
 
-    experiment._WRITER_ID = None
+    from version_stamp.core import experiment_writer
+
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    from version_stamp.cli.experiment import _get_writer_id
+    from version_stamp.core.experiment_writer import get_writer_id
 
-    wid = _get_writer_id()
+    wid = get_writer_id()
     assert wid == socket.gethostname()
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_get_writer_id_cached_across_calls(monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    from version_stamp.cli.experiment import _get_writer_id
+    from version_stamp.core.experiment_writer import get_writer_id
 
-    first = _get_writer_id()
-    second = _get_writer_id()
+    first = get_writer_id()
+    second = get_writer_id()
     assert first == second
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 # =========================================================================
@@ -421,40 +422,40 @@ def test_app_name_both_none():
 
 
 def test_allocate_verstr_with_writer_id(exp_storage, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.setenv("VMN_WRITER_ID", "pod-abc")
 
-    from version_stamp.cli.experiment import _allocate_run_verstr
+    from version_stamp.core.experiment_writer import allocate_run_verstr
 
-    verstr = _allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     assert verstr == "1.0.0-dev.aaa.bbb.pod-abc"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_allocate_verstr_writer_id_collision(exp_storage, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.setenv("VMN_WRITER_ID", "pod-abc")
 
     # Pre-save an experiment with the .pod-abc suffix
     _save_exp(exp_storage, "app", "1.0.0-dev.aaa.bbb.pod-abc")
 
-    from version_stamp.cli.experiment import _allocate_run_verstr
+    from version_stamp.core.experiment_writer import allocate_run_verstr
 
-    verstr = _allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     assert verstr == "1.0.0-dev.aaa.bbb.pod-abc.2"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_allocate_verstr_single_user_first_run(exp_storage, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
-    from version_stamp.cli.experiment import _allocate_run_verstr
+    from version_stamp.core.experiment_writer import allocate_run_verstr
 
-    verstr = _allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     assert verstr == "1.0.0-dev.aaa.bbb"
 
 
@@ -462,9 +463,9 @@ def test_allocate_verstr_single_user_second_run(exp_storage, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     _save_exp(exp_storage, "app", "1.0.0-dev.aaa.bbb")
 
-    from version_stamp.cli.experiment import _allocate_run_verstr
+    from version_stamp.core.experiment_writer import allocate_run_verstr
 
-    verstr = _allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
+    verstr = allocate_run_verstr(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     assert verstr == "1.0.0-dev.aaa.bbb.r2"
 
 
@@ -474,9 +475,9 @@ def test_allocate_verstr_single_user_second_run(exp_storage, monkeypatch):
 
 
 def test_create_from_snapshot_reads_metadata(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
@@ -503,13 +504,13 @@ def test_create_from_snapshot_reads_metadata(tmp_path, monkeypatch):
 
     meta, _ = storage.load("myapp", verstr)
     assert meta["from_snapshot"] is True
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
@@ -534,7 +535,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
     verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(snap_dir))
     assert err is None
     assert verstr is not None
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_create_from_snapshot_missing_file(tmp_path):
@@ -549,9 +550,9 @@ def test_create_from_snapshot_missing_file(tmp_path):
 
 
 def test_create_from_snapshot_missing_verstr(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
@@ -563,13 +564,13 @@ def test_create_from_snapshot_missing_verstr(tmp_path, monkeypatch):
     verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path))
     assert verstr is None
     assert err == 1
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_create_from_snapshot_with_note_and_extra(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
@@ -603,13 +604,13 @@ def test_create_from_snapshot_with_note_and_extra(tmp_path, monkeypatch):
     create_entry = next(e for e in log if e.get("type") == "create")
     assert create_entry["note"] == "my note"
     assert create_entry["hypothesis"] == "test hypothesis"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
@@ -639,7 +640,7 @@ def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
 
     meta, _ = storage.load("from_meta", verstr)
     assert meta["app_name"] == "from_meta"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 # =========================================================================
@@ -686,9 +687,9 @@ def test_get_experiment_storage_default_uses_vcs_root(tmp_path):
 
 
 def test_run_experiment_from_snapshot_create(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
@@ -724,13 +725,13 @@ def test_run_experiment_from_snapshot_create(tmp_path, monkeypatch):
     )
     ret = _run_experiment_from_snapshot(args)
     assert ret == 0
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
     from version_stamp.cli.entry import _run_experiment_from_snapshot
@@ -769,13 +770,13 @@ def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
     # Plain pop, not monkeypatch.delenv: delenv would record "my-pod" as the
     # value to restore at teardown and leak it into every later test.
     os.environ.pop("VMN_WRITER_ID", None)
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
     from version_stamp.cli.entry import _run_experiment_from_snapshot
 
@@ -792,7 +793,7 @@ def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
     )
     ret = _run_experiment_from_snapshot(args)
     assert ret == 1
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 # =========================================================================
@@ -803,7 +804,7 @@ def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
 def test_handle_experiment_reads_experiment_dir_from_conf(monkeypatch):
     """experiment_dir from conf.yml experiment.storage.experiment_dir is used
     when CLI arg is not provided."""
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
     exp_conf = {"storage": {"experiment_dir": "/mnt/shared/experiments"}}
     vcs = SimpleNamespace(
@@ -820,13 +821,13 @@ def test_handle_experiment_reads_experiment_dir_from_conf(monkeypatch):
         "experiment_dir": None,
     }
 
-    experiment._merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params)
     assert params["experiment_dir"] == "/mnt/shared/experiments"
 
 
 def test_handle_experiment_cli_experiment_dir_overrides_conf(monkeypatch):
     """CLI --experiment-dir takes precedence over conf.yml."""
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
     exp_conf = {"storage": {"experiment_dir": "/mnt/shared/experiments"}}
     vcs = SimpleNamespace(
@@ -843,52 +844,53 @@ def test_handle_experiment_cli_experiment_dir_overrides_conf(monkeypatch):
         "experiment_dir": "/cli/override",
     }
 
-    experiment._merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params)
     assert params["experiment_dir"] == "/cli/override"
 
 
 def test_get_writer_id_from_conf(monkeypatch):
     """writer_id from conf.yml experiment.storage.writer_id is used."""
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    wid = experiment._get_writer_id(conf_writer_id="build-server-1")
+    wid = experiment_writer.get_writer_id(conf_writer_id="build-server-1")
     assert wid == "build-server-1"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_get_writer_id_env_overrides_conf(monkeypatch):
     """VMN_WRITER_ID env var takes precedence over conf.yml."""
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
     monkeypatch.setenv("VMN_WRITER_ID", "env-pod")
 
-    wid = experiment._get_writer_id(conf_writer_id="conf-server")
+    wid = experiment_writer.get_writer_id(conf_writer_id="conf-server")
     assert wid == "env-pod"
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_get_writer_id_defaults_to_hostname(monkeypatch):
     """When no env, no conf, writer_id defaults to platform hostname."""
     import socket
-    import version_stamp.cli.experiment as experiment
 
-    experiment._WRITER_ID = None
+    from version_stamp.core import experiment_writer
+
+    experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    wid = experiment._get_writer_id()
+    wid = experiment_writer.get_writer_id()
     assert wid == socket.gethostname()
-    experiment._WRITER_ID = None
+    experiment_writer._WRITER_ID = None
 
 
 def test_handle_experiment_passes_writer_id_from_conf(monkeypatch):
     """writer_id from conf is passed through params to _get_writer_id."""
-    import version_stamp.cli.experiment as experiment
+    from version_stamp.core import experiment_writer
 
     exp_conf = {"storage": {"writer_id": "team-server"}}
     vcs = SimpleNamespace(
@@ -906,5 +908,5 @@ def test_handle_experiment_passes_writer_id_from_conf(monkeypatch):
         "writer_id": None,
     }
 
-    experiment._merge_conf_into_params(vcs, params)
+    experiment_writer.merge_conf_into_params(vcs, params)
     assert params["writer_id"] == "team-server"

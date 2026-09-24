@@ -26,7 +26,7 @@ from version_stamp.cli.constants import (
     LOG_FILENAME,
     VMN_ARGS,
 )
-from version_stamp.cli.experiment import get_repo_lock, handle_experiment
+from version_stamp.cli.experiment import handle_experiment
 from version_stamp.cli.worktree_state import (
     WORKTREE_READONLY_MARKER,
     is_local_only_island,
@@ -39,7 +39,7 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_GIT,
     VMN_BE_TYPE_LOCAL_FILE,
 )
-from version_stamp.core.experiment_writer import merge_env_into_params
+from version_stamp.core.experiment_writer import get_repo_lock, merge_env_into_params
 from version_stamp.core.logging import (
     VMN_LOGGER,
     _runtime_ctx,
