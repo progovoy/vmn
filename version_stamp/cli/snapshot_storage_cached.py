@@ -100,7 +100,12 @@ class CachedSnapshotStorage(SnapshotStorage):
         all_snaps.sort(key=lambda m: m.get("timestamp", ""))
         return all_snaps
 
-    def list_files(self, app_name):
+    def list_files(self, app_name, keys=None):
+        if keys is not None:
+            if not self._remote:
+                return self._local.list_files(app_name, keys=keys)
+            files = self.list_files(app_name)
+            return {key: files[key] for key in keys if key in files}
         files = {}
         for verstr, remote_files in self._remote_or({}, "list_files", app_name).items():
             files[verstr] = dict(remote_files)
@@ -115,6 +120,10 @@ class CachedSnapshotStorage(SnapshotStorage):
     def record_files(self, app_name, verstr):
         """One record's file signatures, or None when reads merge a remote too."""
         return None if self._remote else self._local.record_files(app_name, verstr)
+
+    def list_record_names(self, app_name):
+        """Local ``{name: sig}``; None with a remote (the index lists fully)."""
+        return None if self._remote else self._local.list_record_names(app_name)
 
     def is_remote(self):
         return self._remote is not None

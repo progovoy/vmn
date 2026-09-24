@@ -187,15 +187,43 @@ class LocalSnapshotStorage(SnapshotStorage):
         results.sort(key=lambda m: m.get("timestamp", ""))
         return results
 
-    def list_files(self, app_name):
-        files = {}
-        for entry in self._record_dirs(app_name):
-            files[unsafe_verstr(entry.name)] = {
-                f.name: (f.stat().st_size, f.stat().st_mtime_ns)
-                for f in os.scandir(entry.path)
-                if f.is_file() and not f.name.startswith(".")
+    def list_record_names(self, app_name):
+        """``{record key: (dir mtime_ns, inode)}`` from one directory listing.
+
+        Every write into a record is atomic (temp file + rename), which bumps
+        the record directory's mtime, and ``append_log_entry`` bumps it too.
+        """
+        base = self._snapshot_base_dir(app_name)
+        if not os.path.isdir(base):
+            return {}
+        return {
+            unsafe_verstr(entry.name): (entry.stat().st_mtime_ns, entry.inode())
+            for entry in os.scandir(base)
+            if entry.is_dir() and not entry.name.startswith(".")
+        }
+
+    def list_files(self, app_name, keys=None):
+        """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
+        (a key without a record is left out)."""
+        if keys is None:
+            return {
+                unsafe_verstr(entry.name): self._files_in(entry.path)
+                for entry in self._record_dirs(app_name)
             }
+        files = {}
+        for key in keys:
+            names = self.record_files(app_name, key)
+            if METADATA_FILE in names:
+                files[key] = names
         return files
+
+    @staticmethod
+    def _files_in(path):
+        return {
+            f.name: (f.stat().st_size, f.stat().st_mtime_ns)
+            for f in os.scandir(path)
+            if f.is_file() and not f.name.startswith(".")
+        }
 
     def direct_files(self):
         return self
@@ -270,23 +298,19 @@ class LocalSnapshotStorage(SnapshotStorage):
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""
         try:
-            entries = list(os.scandir(self._snapshot_dir(app_name, verstr)))
+            return self._files_in(self._snapshot_dir(app_name, verstr))
         except FileNotFoundError:
             return {}
-        return {
-            e.name: (e.stat().st_size, e.stat().st_mtime_ns)
-            for e in entries
-            if e.is_file() and not e.name.startswith(".")
-        }
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if self._refuse_orphan_write(app_name, verstr, "a log entry"):
             return False
-        path = os.path.join(
-            self._snapshot_dir(app_name, verstr), log_object_name(writer_id)
-        )
-        with open(path, "a") as f:
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        with open(os.path.join(snap_dir, log_object_name(writer_id)), "a") as f:
             f.write(json.dumps(entry, default=str) + "\n")
+        # An append leaves the dir mtime alone; bump it so the index's
+        # record signature (list_record_names) sees the change.
+        os.utime(snap_dir)
         return True
 
     def load_logs_by_writer(self, app_name, verstr):

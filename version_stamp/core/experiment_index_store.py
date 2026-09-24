@@ -6,6 +6,9 @@ store never raises. A database that will not open, is corrupt, or stays locked
 is treated as missing — the in-memory index is still correct, just colder next
 time. Several processes (the CLI, the SDK, a ``vmn ui`` server) may share one
 database: WAL, a busy timeout and one short transaction per refresh.
+
+A record's run state lives in its own table: a heartbeat rewrites one small
+row, never the record's folded log.
 """
 import json
 import logging
@@ -14,7 +17,7 @@ import sqlite3
 
 # Bump whenever a record's shape or the fold's semantics change: records
 # written by another version are dropped rather than trusted.
-SCHEMA_VERSION = "exp-index-1"
+SCHEMA_VERSION = "exp-index-2"
 _BUSY_TIMEOUT_MS = 5000
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,9 +35,14 @@ def _connect(path):
         "CREATE TABLE IF NOT EXISTS exp_index ("
         " app TEXT, key TEXT, data TEXT, PRIMARY KEY (app, key))"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS exp_index_state ("
+        " app TEXT, key TEXT, data TEXT, PRIMARY KEY (app, key))"
+    )
     row = conn.execute("SELECT v FROM exp_index_meta WHERE k = 'schema'").fetchone()
     if not row or row[0] != SCHEMA_VERSION:
         conn.execute("DELETE FROM exp_index")
+        conn.execute("DELETE FROM exp_index_state")
         conn.execute(
             "INSERT OR REPLACE INTO exp_index_meta (k, v) VALUES ('schema', ?)",
             (SCHEMA_VERSION,),
@@ -82,36 +90,69 @@ class IndexStore:
             return None
 
     def load(self, app_name):
-        """``{key: record}`` persisted for *app_name*; ``{}`` when unavailable."""
+        """``{key: record}`` persisted for *app_name*, each with its
+        ``rs_sig``/``run_state``; ``{}`` when unavailable."""
         if self._conn is None:
             return {}
         try:
-            rows = self._conn.execute(
-                "SELECT key, data FROM exp_index WHERE app = ?", (app_name,)
-            ).fetchall()
-            return {key: json.loads(data) for key, data in rows}
+            records = {
+                key: dict(_state_of({}), **json.loads(data))
+                for key, data in self._select("exp_index", app_name)
+            }
+            for key, data in self._select("exp_index_state", app_name):
+                if key in records:
+                    records[key].update(json.loads(data))
+            return records
         except (sqlite3.Error, ValueError):
             _LOGGER.debug("Could not read the experiment index", exc_info=True)
             return {}
 
-    def save(self, app_name, changed, removed):
-        """Persist *changed* records and forget *removed* keys, best effort."""
-        if self._conn is None or not (changed or removed):
+    def _select(self, table, app_name):
+        return self._conn.execute(
+            f"SELECT key, data FROM {table} WHERE app = ?", (app_name,)
+        ).fetchall()
+
+    def save(self, app_name, changed, removed, states=None):
+        """Persist *changed* records and the run state of the *states* records
+        (both ``{key: record}``), forget *removed* keys — best effort. A
+        record's ``rs_sig``/``run_state`` are stored only through *states*."""
+        states = states or {}
+        if self._conn is None or not (changed or removed or states):
             return
+        records = [
+            (app_name, key, json.dumps(_without_state(record), default=str))
+            for key, record in changed.items()
+        ]
+        run_states = [
+            (app_name, key, json.dumps(_state_of(record), default=str))
+            for key, record in states.items()
+        ]
+        gone = [(app_name, key) for key in removed]
         try:
             with self._conn:
-                self._conn.executemany(
-                    "INSERT OR REPLACE INTO exp_index (app, key, data) VALUES (?, ?, ?)",
-                    [
-                        (app_name, key, json.dumps(record, default=str))
-                        for key, record in changed.items()
-                    ],
-                )
-                self._conn.executemany(
-                    "DELETE FROM exp_index WHERE app = ? AND key = ?",
-                    [(app_name, key) for key in removed],
-                )
+                self._upsert("exp_index", records)
+                self._upsert("exp_index_state", run_states)
+                for table in ("exp_index", "exp_index_state"):
+                    self._conn.executemany(
+                        f"DELETE FROM {table} WHERE app = ? AND key = ?", gone
+                    )
         except sqlite3.Error:
             # Locked by another process past the timeout, read-only, full disk:
             # the next refresh recomputes whatever did not get persisted.
             _LOGGER.debug("Could not persist the experiment index", exc_info=True)
+
+    def _upsert(self, table, rows):
+        self._conn.executemany(
+            f"INSERT OR REPLACE INTO {table} (app, key, data) VALUES (?, ?, ?)", rows
+        )
+
+
+_STATE_KEYS = ("rs_sig", "run_state")
+
+
+def _state_of(record):
+    return {k: record.get(k) for k in _STATE_KEYS}
+
+
+def _without_state(record):
+    return {k: v for k, v in record.items() if k not in _STATE_KEYS}
