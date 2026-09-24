@@ -16,6 +16,8 @@ export interface RowsFilter {
   order?: "asc" | "desc";
   status?: string;
   query?: string;
+  /** Include archived runs. */
+  archived?: boolean;
 }
 export interface RowsData {
   rows: ExperimentRow[];

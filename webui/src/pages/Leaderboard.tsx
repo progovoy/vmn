@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
 import { useAppQueryClient } from "../queryClient";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
@@ -9,15 +9,16 @@ import type { ExperimentRow } from "../types";
 import { PageHead } from "../components/ui";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
-import ColumnPicker from "../components/ColumnPicker";
-import LiveToggle from "../components/LiveToggle";
 import { usePolling } from "../hooks/usePolling";
 import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useChartRows } from "../hooks/useChartRows";
+import { useBoardSelection } from "../hooks/useBoardSelection";
+import { collapsedByDefault, isCollapsed, visibleRows } from "../util/sweepTree";
 import LeaderboardCharts from "./LeaderboardCharts";
 import LeaderboardTable, { TIMESTAMP_SORT } from "./LeaderboardTable";
+import LeaderboardToolbar from "./LeaderboardToolbar";
 
 /** A column's best-first direction: newest first for time, else its goal's. */
 const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
@@ -33,7 +34,6 @@ export default function Leaderboard() {
 
 function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const appName = toAppName(app);
-  const navigate = useNavigate();
   const client = useAppQueryClient();
   const view = useLeaderboardView();
   const schema = useMetricsSchema(ws, app);
@@ -41,6 +41,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const [live, setLive] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [brushed, setBrushed] = useState<Set<string> | null>(null);
+  // Bumped when a saved view replaces the URL, so the filter bar re-reads it.
+  const [filterGen, setFilterGen] = useState(0);
 
   // Search, branch and the typed query all travel to the server as one query.
   const serverQuery = combineQueries(
@@ -51,7 +53,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     order: view.sort ? view.order : undefined,
     status: view.status || undefined,
     query: serverQuery || undefined,
-  }), [view.sort, view.order, view.status, serverQuery]);
+    archived: view.archived || undefined,
+  }), [view.sort, view.order, view.status, serverQuery, view.archived]);
   const data = useLeaderboardRows(ws, app, filter);
   const rows = data.rows;
 
@@ -84,10 +87,19 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
       : null),
     [chart.rows],
   );
-  const tableRows = useMemo(
-    () => (rows && brushed && view.chart === "parallel" ? rows.filter((r) => brushed.has(r.verstr)) : rows),
-    [rows, brushed, view.chart],
+  const { expanded, collapsed } = view;
+  const tableRows = useMemo(() => {
+    if (!rows) return rows;
+    const brushedRows = brushed && view.chart === "parallel" ? rows.filter((r) => brushed.has(r.verstr)) : rows;
+    return visibleRows(brushedRows, expanded, collapsed);
+  }, [rows, brushed, view.chart, expanded, collapsed]);
+  const collapsedOf = useCallback(
+    (r: ExperimentRow) => (r.children?.length ? isCollapsed(r, expanded, collapsed) : null),
+    [expanded, collapsed],
   );
+  const { toggleCollapsed } = view;
+  const onFold = useCallback((r: ExperimentRow) => toggleCollapsed(r.verstr, collapsedByDefault(r)), [toggleCollapsed]);
+  const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { data.refresh(); });
 
   const onPrefetch = useCallback(
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },
@@ -110,10 +122,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
 
-  const filtered = view.query || view.status || view.search || view.branch;
+  const filtered = view.query || view.status || view.search || view.branch || view.archived;
   const empty = rows !== undefined && rows.length === 0 && !filtered;
   const sortLabel = view.sort ?? cols.primary;
-  const selected = [...view.selected];
 
   return (
     <>
@@ -152,36 +163,14 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         )
       ) : (
         <>
-          <div className="toolbar">
-            <span className="legend-chip"><span className="sq" /> best in column</span>
-            <LiveToggle live={live} onToggle={() => setLive((v) => !v)} />
-            <span className="spacer" />
-            {selected.length === 2 && (
-              <button className="primary" onClick={() => navigate(
-                `${base}/compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
-              )}>
-                Compare 2 selected →
-              </button>
-            )}
-            {selected.length >= 2 && (
-              <button className="primary" onClick={() => navigate(
-                `${base}/overlay?runs=${selected.map(encodeURIComponent).join(",")}`,
-              )}>
-                Overlay curves →
-              </button>
-            )}
-            {!view.creating && <button onClick={() => view.openCreate(true)}>+ New experiment</button>}
-            <ColumnPicker
-              columns={cols.paramCols} visible={cols.visibleParams}
-              onToggle={(c) => view.toggleHidden(`p:${c}`)}
-              metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
-              onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
-              otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
-              onToggleOther={(c) => view.toggleHidden(`c:${c}`)}
-            />
-          </div>
+          <LeaderboardToolbar
+            ws={ws} app={app} base={base} view={view} cols={cols} selection={selection}
+            total={data.total} live={live} onLive={() => setLive((v) => !v)}
+            onViewApplied={() => setFilterGen((g) => g + 1)}
+          />
 
           <LeaderboardFilter
+            key={filterGen}
             rows={facets ? undefined : all}
             branches={facets?.branches ?? null}
             facets={cols.suggestFacets}
@@ -191,6 +180,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             onSearchChange={view.setSearch}
             onBranchChange={view.setBranch}
             queryError={data.queryError}
+            archived={view.archived}
+            onArchivedChange={view.setArchived}
           />
 
           <LeaderboardCharts
@@ -204,8 +195,10 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             sort={sortState}
             selected={view.selected}
             flash={flash}
-            onToggle={view.toggleSelected}
+            onToggle={selection.toggle}
             onPrefetch={onPrefetch}
+            collapsedOf={collapsedOf}
+            onFold={onFold}
             hasMore={all.length < data.total}
             onNearEnd={data.loadMore}
             visibleRef={data.visibleRef}

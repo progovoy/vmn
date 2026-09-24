@@ -18,3 +18,17 @@ a.run-name { font-weight: 500; }
 }
 .tag-remove:hover { color: var(--bad); }
 .tag-editor input { width: 180px; }
+tr.row.archived td { opacity: 0.55; }
+tr.row.archived .run-link { text-decoration: line-through; text-decoration-color: var(--text-3); }
+.fold-toggle {
+  border: 0; background: transparent; color: var(--text-2); padding: 0 2px;
+  width: 16px; cursor: pointer; font-size: 11px; line-height: 1;
+}
+.sel-count { color: var(--text-2); font-size: 12.5px; display: inline-flex; gap: 4px; align-items: center; }
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(6, 6, 5, 0.6); z-index: 60;
+  display: flex; justify-content: center; align-items: flex-start; padding-top: 18vh;
+}
+.confirm-dialog { min-width: 300px; max-width: 420px; }
+.confirm-dialog p { margin: 0 0 14px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }

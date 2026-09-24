@@ -23,12 +23,13 @@ export function useLeaderboardView() {
     chart: (CHART_VIEWS as readonly string[]).includes(read("view"))
       ? (read("view") as ChartView) : "trend",
     creating: params.get("new") === "1",
+    archived: params.get("archived") === "1",
   };
 
-  const hiddenKey = params.getAll("hide").join("\u0000");
-  const hidden = useMemo(() => new Set(hiddenKey ? hiddenKey.split("\u0000") : []), [hiddenKey]);
-  const selKey = params.getAll("sel").join("\u0000");
-  const selected = useMemo(() => new Set(selKey ? selKey.split("\u0000") : []), [selKey]);
+  const hidden = useParamSet(params, "hide");
+  const selected = useParamSet(params, "sel");
+  const expanded = useParamSet(params, "expand");
+  const collapsed = useParamSet(params, "collapse");
 
   /** Sort by *col*; picking the sorted column again flips the direction.
    *  *best* is the direction the column's goal calls best-first. */
@@ -54,6 +55,35 @@ export function useLeaderboardView() {
     [update],
   );
 
+  const setAll = useCallback(
+    (name: string, values: readonly string[]) =>
+      update((p) => {
+        p.delete(name);
+        values.forEach((v) => p.append(name, v));
+      }),
+    [update],
+  );
+
+  /** Flip a sweep open/shut; the URL records only departures from its
+   *  default (big sweeps start collapsed). */
+  const toggleCollapsed = useCallback(
+    (verstr: string, collapsedByDefault: boolean) =>
+      update((p) => {
+        const drop = (name: string) => {
+          const rest = p.getAll(name).filter((v) => v !== verstr);
+          p.delete(name);
+          rest.forEach((v) => p.append(name, v));
+        };
+        const shut = p.getAll("collapse").includes(verstr) ||
+          (collapsedByDefault && !p.getAll("expand").includes(verstr));
+        drop("collapse");
+        drop("expand");
+        if (shut && collapsedByDefault) p.append("expand", verstr);
+        if (!shut && !collapsedByDefault) p.append("collapse", verstr);
+      }),
+    [update],
+  );
+
   const setters = useMemo(() => ({
     setStatus: (csv: string) => setParam("status", csv),
     setQuery: (q: string) => setParam("q", q),
@@ -63,7 +93,17 @@ export function useLeaderboardView() {
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),
     toggleSelected: (verstr: string) => toggleIn("sel", verstr),
-  }), [setParam, toggleIn]);
+    setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
+    setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
+  }), [setParam, toggleIn, setAll]);
 
-  return { ...view, hidden, selected, clickSort, ...setters };
+  return {
+    ...view, hidden, selected, expanded, collapsed, clickSort, toggleCollapsed, ...setters,
+  };
+}
+
+/** A repeated query param as a set, stable while its values are. */
+function useParamSet(params: URLSearchParams, name: string): ReadonlySet<string> {
+  const key = params.getAll(name).join("\u0000");
+  return useMemo(() => new Set(key ? key.split("\u0000") : []), [key]);
 }
