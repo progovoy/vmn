@@ -125,15 +125,41 @@ By default the server keeps a small SQLite cache under `<data-dir>/index/` to
 make leaderboards and the stamp tree instant over large repos. It is derived
 from the source files — delete it any time — and `--no-index` reads directly.
 
-Experiments are indexed incrementally. Each leaderboard request lists the
-experiment files once (sizes and mtimes) and re-reads only what moved: a new
-run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten
+Experiments are indexed incrementally: a refresh re-reads only what moved — a
+new run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten
 `run_state.yml` (a heartbeat). So a live run appending metrics, or a hundred
 runs heartbeating, costs those files, not a re-read of every experiment. S3
-workspaces get the same index in memory, keyed by bucket and prefix, so a poll
-is one LIST plus the objects that changed (ranged GETs for grown logs). The
-stamp tree, root topology and dependency graphs are cached by the app's tag
-list, so they are recomputed only after a stamp.
+workspaces get the same index, keyed by bucket and prefix and persisted next to
+the others (`<data-dir>/index/s3-*.sqlite`), so a restarted server does not
+re-read every record; a refresh is a LIST plus the objects that changed (ranged
+GETs for grown logs). The stamp tree, root topology and dependency graphs are
+cached by the app's tag list, so they are recomputed only after a stamp.
+
+### Background refresh
+
+Requests never refresh the index themselves. Each app someone is looking at
+(any experiment request within the last minute) gets a daemon thread that
+refreshes its index about once a second; an app nobody asks about stops being
+refreshed until the next request. A refresh lists record names and directory
+signatures, the live (unfinished) runs and whatever changed recently; every
+30 seconds it lists everything, which catches edits a signature cannot show. A
+request serves the latest snapshot at once, so the dashboard is at most about a
+second behind the files; only an app's very first request waits for its initial
+load (fast when the index was persisted by an earlier run). A refresh that
+fails — say the bucket is unreachable — is logged and the last snapshot keeps
+being served.
+
+A list, facets or run page then costs a slice of work memoized per index
+generation: status, the run tree, filtering and sorting are derived once per
+generation (live runs' status once per 2-second bucket, so `stuck` shows within
+seconds), paging is a slice, and run detail resolves `latest`/`@N`/prefixes,
+the run tree and the subtree's run states from the snapshot, without listing
+the storage. The app list (`.../apps`) is cached per workspace for 5 seconds.
+
+Embedding `create_app()` directly (tests, scripts) leaves the background
+refresher off unless you pass `background_refresh=True`: every request then
+refreshes the index first and sees every write made before it, at the cost of a
+full listing per request.
 
 ## Run status in the dashboard
 
@@ -150,7 +176,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
@@ -204,7 +230,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 
 `GET .../apps/{app}/experiments` takes `offset` and `limit` (capped at 1000
 rows per response) and answers `{"rows": [...], "total": N}` when `limit` is
-given — the dashboard always pages. `sort` is a metric name or `timestamp`
+given — the dashboard always pages. Without `limit` it answers a plain list of
+at most 1000 rows from `offset`. `sort` is a metric name or `timestamp`
 (newest first); `order=asc|desc` overrides the direction the metric's schema
 goal implies. Runs without the metric stay last in either direction.
 
@@ -212,6 +239,23 @@ goal implies. Runs without the metric stay last in either direction.
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
   "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?sort=loss&order=asc&limit=50"
 ```
+
+Each list response carries an `ETag` derived from the index generation, the
+query parameters and — while runs are live — the status time bucket. Send it
+back as `If-None-Match`: an unchanged poll is an empty `304` that costs no row
+work at all.
+
+### Facets
+
+`GET .../apps/{app}/experiments-facets` answers the app's filter vocabulary,
+computed once per index generation:
+
+```json
+{"branches": ["feat/x", "main"], "metric_keys": ["acc", "loss"], "param_keys": ["lr", "opt"], "total": 5000}
+```
+
+Every list is sorted; `metric_keys` includes numeric params (they fold into
+`metrics`), `total` counts all runs. It carries an `ETag` like the other reads.
 
 ### Run detail is bounded
 

@@ -325,9 +325,14 @@ def indexed_snapshot(
         return index.refresh_if_stale(max_age_sec)
     except Exception:
         _LOGGER.debug("Experiment index unavailable; reading directly", exc_info=True)
-        rows, states = direct_rows(storage, app_name, with_create_note=True)
-        notes = {row["verstr"]: row.pop("create_note") for row in rows}
-        return IndexSnapshot.build(app_name, 0, rows, states, notes)
+        return direct_snapshot(storage, app_name)
+
+
+def direct_snapshot(storage, app_name):
+    """An :class:`IndexSnapshot` (generation 0) built by reading every record."""
+    rows, states = direct_rows(storage, app_name, with_create_note=True)
+    notes = {row["verstr"]: row.pop("create_note") for row in rows}
+    return IndexSnapshot.build(app_name, 0, rows, states, notes)
 
 
 def indexed_rows(storage, app_name, with_create_note=False, cache_path=None):

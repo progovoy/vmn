@@ -126,9 +126,16 @@ def status_detail(
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
-def _resolve(storage, app_name, verstr_ref):
-    """``(verstr, metadata, error)`` for a ref, loading metadata only."""
-    verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
+def _resolve(storage, app_name, verstr_ref, resolve=None):
+    """``(verstr, metadata, error)`` for a ref, loading metadata only.
+
+    *resolve* (``ref -> (verstr, error)``, e.g. an index snapshot's) is tried
+    first; storage answers what it cannot, such as a run it has not seen yet.
+    """
+    if resolve:
+        verstr, err = resolve(verstr_ref)
+    if not resolve or err:
+        verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
     if err:
         return None, None, err
     metadata = _load_metadata(storage, app_name, verstr)
@@ -148,15 +155,17 @@ def experiment_detail(
     read_run_state=load_run_state,
     keys=None,
     include_series=True,
+    resolve=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
     ``log`` is the tail unless *include_log*; ``log_tail`` / ``log_total`` and
     ``series_total`` let a client page the log and label thinned charts.
     *keys* restricts ``series`` to those metrics; ``include_series=False``
-    omits them. *read_log* / *read_run_state* are the reader's own loaders.
+    omits them. *read_log* / *read_run_state* are the reader's own loaders;
+    *resolve* resolves the ref before storage is asked (see :func:`_resolve`).
     """
-    verstr, metadata, err = _resolve(storage, app_name, verstr_ref)
+    verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
         return None, err
 
@@ -218,9 +227,12 @@ def run_series(
     return thinned_series(snapshot, keys, max_points, budget)
 
 
-def log_page(storage, app_name, verstr_ref, offset=0, limit=LOG_TAIL, read_log=_load_log):
+def log_page(
+    storage, app_name, verstr_ref, offset=0, limit=LOG_TAIL, read_log=_load_log,
+    resolve=None,
+):
     """``({"entries", "total"}, error)`` — a slice of the log, oldest first."""
-    verstr, _, err = _resolve(storage, app_name, verstr_ref)
+    verstr, _, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
         return None, err
     snapshot = _PARSED.get(storage, app_name, verstr, read_log)

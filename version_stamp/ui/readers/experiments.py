@@ -183,6 +183,22 @@ def leaderboard(
     )
 
 
+def facets(rows):
+    """The filter vocabulary of *rows*: distinct branches, metric and param keys."""
+    branches, metric_keys, param_keys = set(), set(), set()
+    for row in rows:
+        if row.get("branch"):
+            branches.add(str(row["branch"]))
+        metric_keys.update(row.get("metrics") or {})
+        param_keys.update(row.get("params") or {})
+    return {
+        "branches": sorted(branches),
+        "metric_keys": sorted(metric_keys),
+        "param_keys": sorted(param_keys),
+        "total": len(rows),
+    }
+
+
 def list_experiments(root_path, app_name, **filters):
     """Leaderboard rows, ordered exactly like ``vmn exp list``, read directly."""
     rows, run_states = direct_rows_and_states(experiment_storage(root_path), app_name)
@@ -214,14 +230,19 @@ def list_experiments_from_storage(storage, app_name, **filters):
     return leaderboard(rows, run_states, {}, **filters)
 
 
-def get_experiment_from_storage(storage, app_name, verstr_ref, **detail_opts):
-    """Get experiment detail from storage backend directly."""
+def get_experiment_from_storage(
+    storage, app_name, verstr_ref, read_run_state=None, **detail_opts
+):
+    """Get experiment detail from storage backend directly.
+
+    *read_run_state* defaults to reading each subtree run state from storage.
+    """
     return experiment_detail(
         storage,
         app_name,
         verstr_ref,
         read_log=_load_log,
-        read_run_state=load_run_state,
+        read_run_state=read_run_state or load_run_state,
         **detail_opts,
     )
 
