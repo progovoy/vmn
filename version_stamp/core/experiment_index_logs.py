@@ -8,8 +8,12 @@ last one, so when that is all that changed only the new bytes are read and
 folded. Anything else — a rewritten ``log.yml``, a shrunk or vanished file, a
 file that grew *before* a later segment — refolds the record from scratch.
 
-A backend whose reads merge several sources (``direct`` is None) cannot be
-read per file; a change there refolds through its ``load_logs_by_writer``.
+Local-first storage with a remote reads per file too: its listing takes each
+writer's files from one copy (local or remote) and its ``read_file_from``
+reads that same copy, so only new local bytes and new remote segments are read.
+A backend whose reads merge several sources some other way (``direct`` is
+None) cannot be read per file; a change there refolds through its
+``load_logs_by_writer``.
 """
 from version_stamp.core.experiment_fold import apply_entries, new_fold
 from version_stamp.core.experiment_logfiles import (
@@ -17,7 +21,6 @@ from version_stamp.core.experiment_logfiles import (
 )
 from version_stamp.core.experiment_logfiles import (
     group_log_names,
-    is_log_file,
     log_writer_and_seq,
     parse_json_line,
 )
@@ -25,10 +28,14 @@ from version_stamp.core.utils import yaml_safe_load
 
 
 def log_signatures(names):
-    """The log files among ``{name: (size, mtime)}``, signatures as lists."""
-    return {
-        n: list(sig) for n, sig in names.items() if n == LEGACY_LOG or is_log_file(n)
-    }
+    """The log files a reader sees among ``{name: (size, mtime)}``, signatures
+    as lists. Files a compacted object supersedes are left out: they vanish
+    from the signatures the moment the merged object appears, which refolds
+    the record instead of folding the merged copy on top of its parts."""
+    visible = {n for group in group_log_names(names).values() for n in group}
+    if LEGACY_LOG in names:
+        visible.add(LEGACY_LOG)
+    return {n: list(sig) for n, sig in names.items() if n in visible}
 
 
 def _parse_complete(data):

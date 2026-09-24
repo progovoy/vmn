@@ -4,20 +4,27 @@
 Selection (``--keep N`` / ``--older-than``) proposes candidates; two guards then
 take runs back out of the list:
 
-* a run whose derived status is ``running`` is never deleted (``--force``
-  overrides) — its heartbeat would otherwise recreate a half-empty directory;
+* a run whose derived status is ``running`` or ``stuck`` is never deleted
+  (``--force`` overrides) — a stuck run may just have a late heartbeat, and a
+  live one would otherwise recreate a half-empty directory;
 * a run with a kept descendant is kept, so no surviving run points at a parent
   that no longer exists.
 """
 import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.core.experiment_status import (
     RUNNING,
+    STUCK,
     derive_status,
     load_run_state,
     parse_iso,
 )
 from version_stamp.core.logging import VMN_LOGGER
+
+# Remote reads/deletes in flight at once; a delete fans out further inside S3.
+_REMOTE_WORKERS = 4
+_LIVE = (RUNNING, STUCK)
 
 
 def _parse_duration(duration_str):
@@ -53,21 +60,43 @@ def _ancestors(verstr, parent_of):
     return seen
 
 
-def _apply_guards(storage, app_name, metas, candidates, force):
-    """Split *candidates* into (delete, skipped_running)."""
-    running = set()
-    if not force:
-        for meta in candidates:
-            state = load_run_state(storage, app_name, meta["verstr"])
-            if derive_status(state) == RUNNING:
-                running.add(meta["verstr"])
+def _map(storage, fn, items):
+    """``[fn(item)]`` in order — concurrently when each call goes over the
+    network, so 10k remote runs are not 10k serial round trips."""
+    if len(items) < 2 or not storage.is_remote():
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
+        return list(pool.map(fn, items))
 
-    doomed = {m["verstr"] for m in candidates} - running
+
+def _live_runs(storage, app_name, candidates):
+    """``{verstr: status}`` of the *candidates* that may still be running."""
+    verstrs = [m["verstr"] for m in candidates]
+    states = _map(storage, lambda v: load_run_state(storage, app_name, v), verstrs)
+    statuses = zip(verstrs, map(derive_status, states))
+    return {v: status for v, status in statuses if status in _LIVE}
+
+
+def _apply_guards(storage, app_name, metas, candidates, force):
+    """Split *candidates* into (delete, {skipped live verstr: status})."""
+    live = {} if force else _live_runs(storage, app_name, candidates)
+
+    doomed = {m["verstr"] for m in candidates} - set(live)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
     for meta in metas:
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
-    return [m for m in candidates if m["verstr"] in doomed], sorted(running)
+    return [m for m in candidates if m["verstr"] in doomed], live
+
+
+def _skip_message(verstr, status):
+    if status == STUCK:
+        return (
+            f"Skipping {verstr}: stuck (its heartbeat is late; it may still be "
+            "running — use --force to delete it)"
+        )
+    return f"Skipping {verstr}: still running (use --force to delete it)"
+
 
 
 def _local_view(storage):
@@ -97,11 +126,11 @@ def experiment_prune(vcs, params, storage, args, app_name):
         VMN_LOGGER.error(str(e))
         return 1
 
-    to_delete, running = _apply_guards(
+    to_delete, live = _apply_guards(
         storage, app_name, metas, candidates, getattr(args, "force", False)
     )
-    for verstr in running:
-        print(f"Skipping {verstr}: still running (use --force to delete it)")
+    for verstr in sorted(live):
+        print(_skip_message(verstr, live[verstr]))
     if not to_delete:
         print("Nothing to prune")
         return 0
@@ -111,8 +140,9 @@ def experiment_prune(vcs, params, storage, args, app_name):
             print(f"  {meta['verstr']}")
         return 0
 
-    for meta in to_delete:
-        storage.delete(app_name, meta["verstr"])
-        print(f"Deleted {meta['verstr']}")
+    verstrs = [m["verstr"] for m in to_delete]
+    _map(storage, lambda v: storage.delete(app_name, v), verstrs)
+    for verstr in verstrs:
+        print(f"Deleted {verstr}")
     print(f"Pruned {len(to_delete)} experiments, kept {len(metas) - len(to_delete)}")
     return 0
