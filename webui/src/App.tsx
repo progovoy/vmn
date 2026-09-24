@@ -7,6 +7,7 @@ import { useAppQueryClient } from "./queryClient";
 import { useApps, useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ThemeToggle from "./components/ThemeToggle";
 import { CopyPath, wsLocation } from "./components/ui";
 
 function NavIcon({ name }: { name: string }) {
@@ -172,6 +173,7 @@ export default function App() {
               <span>Search</span>
               <span className="key">⌘K</span>
             </button>
+            <ThemeToggle />
             <div className="host-chip">
               <span className="status-dot pulse" />
               <span>local</span>

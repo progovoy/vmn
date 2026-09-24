@@ -1,6 +1,7 @@
 import { memo, useMemo, useRef, useState } from "react";
 import type { XMode } from "../util/chartData";
 import { chartTheme } from "../util/cssColor";
+import { useThemeVersion } from "../hooks/useTheme";
 import {
   curveData, curveOptions, X_TICK, type CurveSeries,
 } from "../util/curveOptions";
@@ -35,9 +36,10 @@ function CurveChart({
   // Keyed on the curves' identity, not their arrays: fresh values for the
   // same curves (a poll) must not rebuild the plot.
   const shape = series.map((s) => `${s.key}|${s.color}|${s.faded ? 1 : 0}`).join(",");
+  const themeVersion = useThemeVersion();
   const options = useMemo(
     () => curveOptions(series, { xMode, logY, height, hideX, theme: chartTheme() }),
-    [shape, xMode, logY, height, hideX],
+    [shape, xMode, logY, height, hideX, themeVersion],
   );
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
