@@ -18,7 +18,7 @@ Grammar::
                | field [ "not" ] "in" "(" literal { "," literal } ")"
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
                | "~" | "!~" | "contains"
-    field      = name | ( "metrics" | "params" | "tags" ) "." name
+    field      = name | ( "metrics" | "params" | "tags" ) "." ( name | string )
     literal    = number | string | "true" | "false" | "null"
     number     = [ "-" ] digits [ "." digits ] [ ( "e" | "E" ) [ "+" | "-" ] digits ]
 
@@ -37,6 +37,12 @@ expression, so a query and its ``not`` always partition the rows. ``= null`` is
 how you ask for absence; ``!= x`` is therefore true for a row that has no ``x``.
 Values of unlike types (number vs string, bool vs number) never order — the
 comparison is false, never a ``TypeError``.
+
+A dict-prefixed field name that isn't a plain identifier — it has a ``/``,
+``.`` or ``-`` in it, e.g. a Lightning/TensorBoard-style ``train/loss`` — is
+written as a quoted string right after the dot: ``metrics."train/loss"`` or
+``params.'val-acc'``. Ordinary names keep working unquoted exactly as before;
+the quoted form is purely additive.
 
 ``metrics.x`` and ``params.x`` read different dicts: ``params`` carries the
 values the run was given verbatim, so ``params.model = "xgb"`` and
@@ -84,6 +90,23 @@ def _fail(message, pos):
     raise QueryError(f"{message} at offset {pos}")
 
 
+def _describe(token):
+    """A user-facing rendering of *token* for "expected X, found ..." errors.
+
+    The end-of-input sentinel has ``value=None``, which would otherwise print
+    as the Python-internal-looking ``found 'None'``; render it in words
+    instead. A quoted-name token's value is a ``(prefix, key)`` tuple, which
+    would otherwise print as a raw Python tuple.
+    """
+    kind, value, _ = token
+    if kind == "end":
+        return "end of query"
+    if kind == "name" and isinstance(value, tuple):
+        prefix, key = value
+        return f"'{prefix}.\"{key}\"'"
+    return f"'{value}'"
+
+
 def _lex_string(text, pos):
     quote = text[pos]
     end = text.find(quote, pos + 1)
@@ -127,6 +150,15 @@ def _lex_name(text, pos):
     while end < len(text) and (text[end].isalnum() or text[end] in "_."):
         end += 1
     raw = text[pos:end]
+    # A quote right after a trailing dot (``metrics."train/loss"``) names a
+    # field whose key contains characters an unquoted identifier can't
+    # capture (``/``, ``.``, ``-``, ...). The unquoted path above is
+    # untouched: this only triggers when nothing alnum/``_``/``.`` could be
+    # consumed, i.e. the loop stopped right on a quote.
+    if raw.endswith(".") and end < len(text) and text[end] in "'\"":
+        prefix = raw[:-1]
+        string_token, end = _lex_string(text, end)
+        return ("name", (prefix, string_token[1]), pos), end
     kind = "kw" if raw.lower() in _KEYWORDS else "name"
     return (kind, raw.lower() if kind == "kw" else raw, pos), end
 
@@ -166,6 +198,11 @@ def tokenize(text):
 
 
 def _getter(name, pos):
+    if isinstance(name, tuple):
+        prefix, key = name
+        if prefix in DICT_PREFIXES:
+            return lambda row: (row.get(prefix) or {}).get(key)
+        _fail(f"unknown field '{prefix}.{key}'", pos)
     parts = name.split(".")
     if len(parts) == 1:
         if name not in ROW_FIELDS:
@@ -260,7 +297,7 @@ class _Parser:
     def parse(self):
         predicate = self.parse_or()
         if self.peek()[0] != "end":
-            _fail(f"unexpected '{self.peek()[1]}'", self.peek()[2])
+            _fail(f"unexpected {_describe(self.peek())}", self.peek()[2])
         return predicate
 
     # A chain of and/or terms is one flat predicate, not a nested closure per
@@ -305,7 +342,7 @@ class _Parser:
     def parse_comparison(self):
         token = self.peek()
         if token[0] != "name":
-            _fail(f"expected a field name, found '{token[1]}'", token[2])
+            _fail(f"expected a field name, found {_describe(token)}", token[2])
         self.next()
         get = _getter(token[1], token[2])
 
@@ -322,7 +359,7 @@ class _Parser:
 
         operator = self.peek()
         if operator[0] not in ("op", "kw") or operator[1] not in _COMPARISONS:
-            _fail(f"expected an operator, found '{operator[1]}'", operator[2])
+            _fail(f"expected an operator, found {_describe(operator)}", operator[2])
         self.next()
         literal = self.parse_literal()
         if operator[1] in ("~", "!~", "contains") and not isinstance(literal, str):
@@ -336,7 +373,7 @@ class _Parser:
             return token[1]
         if token[0] == "kw" and token[1] in ("true", "false", "null"):
             return {"true": True, "false": False, "null": None}[token[1]]
-        _fail(f"expected a value, found '{token[1]}'", token[2])
+        _fail(f"expected a value, found {_describe(token)}", token[2])
 
     def parse_literal_list(self):
         self.expect("(", "(", "'(' after 'in'")

@@ -335,6 +335,51 @@ def test_booleans_are_not_compared_as_numbers():
     assert filter_rows(rows, "metrics.ok > 0") == []
 
 
+# ---- quoted field names -----------------------------------------------------
+
+
+def test_quoted_metric_name_with_slash_and_dot():
+    rows = [
+        _row("1.0.0", metrics={"train/loss": 0.2}),
+        _row("2.0.0", metrics={"train/loss": 0.9}),
+    ]
+    assert _verstrs('metrics."train/loss" < 0.5', rows) == ["1.0.0"]
+
+
+def test_quoted_param_name_with_hyphen_single_quotes():
+    rows = [
+        _row("1.0.0", params={"val-acc": 0.95}),
+        _row("2.0.0", params={"val-acc": 0.1}),
+    ]
+    assert _verstrs("params.'val-acc' > 0.5", rows) == ["1.0.0"]
+
+
+def test_unquoted_metric_name_still_works_alongside_quoted_syntax():
+    # Regression: adding quoted-name support must not disturb the plain path.
+    assert _verstrs("metrics.loss < 0.5") == ["0.0.1", "0.0.4"]
+    assert _verstrs("metrics.acc >= 0.9") == ["0.0.1"]
+
+
+def test_quoted_and_unquoted_field_names_combine_in_one_query():
+    rows = [
+        _row("1.0.0", metrics={"eval/loss": 0.1, "loss": 0.2}),
+        _row("2.0.0", metrics={"eval/loss": 0.9, "loss": 0.2}),
+    ]
+    text = 'metrics."eval/loss" < 0.5 and metrics.loss < 0.5'
+    assert _verstrs(text, rows) == ["1.0.0"]
+
+
+def test_unterminated_quoted_field_name_is_a_clean_query_error():
+    with pytest.raises(QueryError) as exc:
+        compile_query('metrics."train/loss < 1')
+    assert "unterminated" in str(exc.value).lower()
+
+
+def test_unknown_prefix_with_quoted_name_is_a_query_error():
+    with pytest.raises(QueryError):
+        compile_query('bogus."x/y" = 1')
+
+
 # ---- syntax errors ---------------------------------------------------------
 
 
@@ -388,6 +433,40 @@ def test_unterminated_string_says_so():
     with pytest.raises(QueryError) as exc:
         compile_query('note ~ "oops')
     assert "unterminated" in str(exc.value).lower()
+
+
+def test_missing_operator_at_end_of_query_has_a_clean_message():
+    # A bare field name with nothing after it used to render the internal
+    # end-of-input sentinel as `found 'None'`.
+    with pytest.raises(QueryError) as exc:
+        compile_query("archived")
+    msg = str(exc.value)
+    assert "None" not in msg
+    assert "at offset 8" in msg
+
+
+def test_not_without_a_following_field_has_a_clean_message():
+    with pytest.raises(QueryError) as exc:
+        compile_query("NOT archived")
+    msg = str(exc.value)
+    assert "'None'" not in msg
+    assert "None" not in msg
+
+
+def test_trailing_operator_message_has_no_python_internals():
+    with pytest.raises(QueryError) as exc:
+        compile_query("idx = 1 and")
+    msg = str(exc.value)
+    assert "None" not in msg
+    assert "at offset 11" in msg
+
+
+def test_dangling_equals_has_a_clean_message():
+    with pytest.raises(QueryError) as exc:
+        compile_query("idx =")
+    msg = str(exc.value)
+    assert "None" not in msg
+    assert "at offset 5" in msg
 
 
 def test_injection_flavored_input_is_rejected_not_evaluated():
