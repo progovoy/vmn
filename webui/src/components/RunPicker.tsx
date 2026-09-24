@@ -3,16 +3,9 @@ import { api } from "../api";
 import type { ExperimentRow } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 import { isAbortError, withSignal } from "../requestScope";
+import { runSearchQuery } from "../util/searchQuery";
 
 const SUGGESTIONS = 20;
-
-/** The experiment query that matches *text* in a run's verstr or note.
- *  String literals have no escapes, so pick the quote the text doesn't use. */
-export function searchQuery(text: string): string {
-  const quote = text.includes('"') ? "'" : '"';
-  const safe = text.replaceAll(quote, "");
-  return `verstr ~ ${quote}${safe}${quote} or note ~ ${quote}${safe}${quote}`;
-}
 
 /** A typeahead over the server: suggestions come from a bounded search (the
  *  newest runs until something is typed), never from loading every run. */
@@ -34,7 +27,7 @@ export default function RunPicker({ ws, app, value, onChange }: {
     const search = typed && typed !== value;
     withSignal(ctrl.signal, () =>
       search
-        ? api.experimentsPaged(ws, app, { query: searchQuery(typed), limit: SUGGESTIONS })
+        ? api.experimentsPaged(ws, app, { query: runSearchQuery(typed), limit: SUGGESTIONS })
             .then((page) => page.rows)
         : api.recentExperiments(ws, app, SUGGESTIONS)
     )

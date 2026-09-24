@@ -18,3 +18,12 @@ export function combineQueries(query: string, search: string | null): string {
   if (!q) return search;
   return `(${q}) and (${search})`;
 }
+
+/** The experiment query that matches *text* in a run's verstr or note — what
+ *  the run pickers (RunPicker, the command palette) search with. String
+ *  literals have no escapes, so pick the quote the text doesn't use. */
+export function runSearchQuery(text: string): string {
+  const quote = text.includes('"') ? "'" : '"';
+  const safe = text.replaceAll(quote, "");
+  return `verstr ~ ${quote}${safe}${quote} or note ~ ${quote}${safe}${quote}`;
+}

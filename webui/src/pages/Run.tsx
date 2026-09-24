@@ -79,7 +79,7 @@ export default function Run() {
         {summary.branch && <span className="badge">{summary.branch}</span>}
         <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
       </div>
-      <NoteEditor ws={ws} app={app} verstr={summary.verstr} note={summary.note} />
+      <NoteEditor key={summary.verstr} ws={ws} app={app} verstr={summary.verstr} note={summary.note} />
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
 
@@ -88,7 +88,7 @@ export default function Run() {
         <ParamsCard params={summary.params} />
         <MetricsCard metrics={summary.metrics} schema={schema}>
           {detail && (
-            <AppendMetrics ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={() => query.refetch()} />
+            <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={() => query.refetch()} />
           )}
         </MetricsCard>
       </div>

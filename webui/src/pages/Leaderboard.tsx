@@ -25,8 +25,14 @@ const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order
 
 const branchClause = (b: string) => (b && !b.includes('"') ? `branch = "${b}"` : null);
 
+/** One app's board: switching app starts from a clean slate (filters, brush,
+ *  scroll), while the URL's own view params never remount it. */
 export default function Leaderboard() {
   const { ws, app } = useParams() as { ws: string; app: string };
+  return <AppLeaderboard key={`${ws}/${app}`} ws={ws} app={app} />;
+}
+
+function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const appName = toAppName(app);
   const navigate = useNavigate();
   const client = useAppQueryClient();
