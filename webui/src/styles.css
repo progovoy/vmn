@@ -689,3 +689,24 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 .compare-runs tr.differs td.compare-key { font-weight: 600; }
 .compare-pairs { flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 /* ---- end N-run compare table ---- */
+/* ---- artifact tree + preview (Run page) ---- */
+.artifact-tree { list-style: none; padding: 0; margin: 0; }
+.artifact-tree .artifact-tree { padding-left: 16px; }
+.artifact-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.artifact-row a { color: var(--accent); }
+.artifact-actions { display: flex; gap: 12px; align-items: center; }
+.artifact-size { color: var(--text-3); font-size: 12px; }
+.artifact-folder { padding: 6px 0; color: var(--text-2); font-family: var(--mono); }
+.artifact-preview { padding: 8px 0 12px; border-bottom: 1px solid var(--line); }
+.artifact-img { max-width: 100%; max-height: 480px; display: block; background: var(--panel-2); }
+.artifact-text {
+  max-height: 420px; overflow: auto; margin: 0; padding: 10px;
+  background: var(--panel-2); font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+}
+.artifact-table { max-height: 420px; overflow: auto; }
+.artifact-table td, .artifact-table th { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.artifact-note, .artifact-loading { color: var(--text-3); font-size: 12px; margin-top: 6px; }
+/* ---- end artifact tree + preview ---- */

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { appName as toAppName } from "../api";
+import { appName as toAppName, artifactUrl } from "../api";
 import { useAppQueryClient } from "../queryClient";
 import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
 import type { ExperimentDetail } from "../types";
@@ -38,9 +38,7 @@ function RunBody({ ws, app, appName, detail }: {
       {detail.artifacts && detail.artifacts.length > 0 && (
         <ArtifactsList
           artifacts={detail.artifacts}
-          downloadUrl={(filename) =>
-            `/api/v1/workspaces/${ws}/apps/${app}/experiments/${encodeURIComponent(verstr)}/artifacts/${encodeURIComponent(filename)}`
-          }
+          downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
         />
       )}
     </>
