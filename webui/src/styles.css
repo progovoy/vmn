@@ -43,7 +43,46 @@
   --series-4: #008300;
   --series-5: var(--pre);
   --series-6: var(--major);
+
+  --scroll-thumb: #2f2f2b;
+  --focus-ring: var(--accent);
+  color-scheme: dark;
 }
+
+/* Light palette: the OS preference unless the toggle pins dark, or pinned
+   light by the toggle (useTheme sets html[data-theme]). Charts resolve these
+   variables at build time and rebuild on a theme change. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f6f2; --panel: #ffffff; --panel-2: #f1f0eb; --panel-3: #e8e7e1;
+    --line: #e0ded6; --line-2: #cbc9bf;
+    --text: #1b1b18; --text-2: #4b4a43; --text-3: #6f6e65;
+    --accent: #2563d6;
+    --good: #1c8560; --bad: #c43f42; --major: #c43f42; --minor: #2563d6;
+    --patch: #1c8560; --hotfix: #9c660b; --pre: #6a58d3;
+    --series-4: #007000;
+    --scroll-thumb: #cbc9bf;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f7f6f2; --panel: #ffffff; --panel-2: #f1f0eb; --panel-3: #e8e7e1;
+  --line: #e0ded6; --line-2: #cbc9bf;
+  --text: #1b1b18; --text-2: #4b4a43; --text-3: #6f6e65;
+  --accent: #2563d6;
+  --good: #1c8560; --bad: #c43f42; --major: #c43f42; --minor: #2563d6;
+  --patch: #1c8560; --hotfix: #9c660b; --pre: #6a58d3;
+  --series-4: #007000;
+  --scroll-thumb: #cbc9bf;
+  color-scheme: light;
+}
+
+/* Keyboard focus is always visible; pointer clicks don't draw a ring. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+tr[tabindex]:focus-visible { outline-offset: -2px; }
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
@@ -70,7 +109,7 @@ input, select, button, textarea { font-family: inherit; }
 .yaml-value { color: var(--text); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
-  background: #2f2f2b; border-radius: 6px; border: 2px solid var(--bg);
+  background: var(--scroll-thumb); border-radius: 6px; border: 2px solid var(--bg);
 }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -201,6 +240,10 @@ tr.flash { animation: flashbg 1.8s ease-out; }
 .search-pill .key {
   font-family: var(--mono); background: var(--panel-2);
   border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px;
+}
+.theme-toggle {
+  padding: 3px 9px; font-size: 13px; line-height: 1.2; color: var(--text-2);
+  background: none; border-color: var(--line-2);
 }
 .host-chip { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
 
