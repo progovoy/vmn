@@ -61,10 +61,30 @@ DEFAULT_SYNC_INTERVAL_SEC = 30
 # How long finish() waits for the last remote writes before giving up on them.
 FINAL_REMOTE_TIMEOUT_SEC = 60
 
-# A run that reached interpreter exit still open was abandoned — the workload
-# raised past us, called sys.exit(), or simply forgot to finish. It did not
-# succeed, so it must not read as succeeded.
+# A run that reached interpreter exit still open was abandoned. Most of the
+# time that is just an mlflow-style "forgot to call finish()" — the process
+# fell off the end cleanly — and must read as succeeded, like the workload's
+# own exit code says. Only a genuinely uncaught exception (see
+# ``_note_uncaught_exception`` below) makes it read as failed instead.
 ABANDONED_EXIT_CODE = 1
+
+# Whether an uncaught exception has reached the top of this process. Only
+# this flips the atexit-abandoned default from succeeded to failed:
+# ``SystemExit`` never reaches ``sys.excepthook`` (CPython special-cases it
+# before running atexit handlers), so a bare ``sys.exit(N)`` outside a
+# context-managed run stays indistinguishable from a clean exit here — the
+# same as it would be for any other process without our instrumentation.
+_uncaught_exception_seen = False
+_prev_excepthook = sys.excepthook
+
+
+def _note_uncaught_exception(exc_type, exc_value, tb):
+    global _uncaught_exception_seen
+    _uncaught_exception_seen = True
+    _prev_excepthook(exc_type, exc_value, tb)
+
+
+sys.excepthook = _note_uncaught_exception
 
 
 def start_run(
@@ -308,6 +328,11 @@ class Run(RunArtifacts):
         if exc is None:
             self.finish()
             return False
+        if isinstance(exc, SystemExit):
+            # sys.exit(0) inside the block is a clean, intentional exit — not
+            # an error — and the real code (when non-zero) beats a generic 1.
+            self.finish(exit_code=_system_exit_code(exc))
+            return False
         self._record_guard(
             "error entry",
             self._append,
@@ -390,17 +415,34 @@ class Run(RunArtifacts):
         self._log_sync.submit(get_writer_id())
 
 
-def _finalize_open_runs(exit_code=ABANDONED_EXIT_CODE, **final_state):
+def _finalize_open_runs(exit_code=None, **final_state):
     """Never leave a run claiming ``running`` just because nobody finished it.
+
+    With no explicit *exit_code* (the atexit case) a clean process exit reads
+    as succeeded, and only a genuinely uncaught exception reads as failed —
+    see ``_uncaught_exception_seen``. ``_finalize_signaled`` always passes an
+    explicit code, so a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
     — and so mark failed — the parent's still-running run.
     """
+    if exit_code is None:
+        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception_seen else 0
     for run in list(reversed(context.open_runs())):
         try:
             run._finish(exit_code, **final_state)
         except Exception:
             _LOGGER.debug("Failed to finalize an abandoned run", exc_info=True)
+
+
+def _system_exit_code(exc):
+    """``sys.exit()``'s effective process exit code, as the interpreter itself
+    computes it: no argument (or ``None``) is 0, a non-int argument (a message)
+    is printed and counts as 1, anything else is used as-is."""
+    code = exc.code
+    if code is None:
+        return 0
+    return code if isinstance(code, int) else 1
 
 
 def _finalize_signaled(signum):

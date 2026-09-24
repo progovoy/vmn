@@ -512,7 +512,9 @@ def test_sdk_runs_in_a_bare_python_process(app_layout):
     assert [e for e in _log(app_layout, verstr) if e.get("type") == "note"]
 
 
-def test_atexit_finalizes_a_run_that_was_never_finished(app_layout):
+def test_atexit_finalizes_a_forgotten_run_as_succeeded(app_layout):
+    """No ``run.finish()``, no exception, no ``with``: mlflow users expect a
+    process that just ends to read as a normal, successful run, not failed."""
     _bootstrap(app_layout)
 
     proc = _run_python(
@@ -531,5 +533,54 @@ def test_atexit_finalizes_a_run_that_was_never_finished(app_layout):
     verstr = proc.stdout.strip().splitlines()[-1]
     state = _state(app_layout, verstr)
     assert state["state"] == "finished", "a forgotten run must not stay running"
+    assert state["exit_code"] == 0
+    assert st.derive_status(state) == st.SUCCEEDED
+
+
+def test_atexit_finalizes_a_crashed_run_as_failed(app_layout):
+    """The one abandon case that must keep reading failed: an uncaught
+    exception no ``with`` block ever got a chance to see."""
+    _bootstrap(app_layout)
+
+    proc = _run_python(
+        app_layout,
+        _sdk_script(
+            app_layout.app_name,
+            "import sys\n"
+            "run = start_run(APP)\n"
+            "print(run.id)\n"
+            "sys.stdout.flush()\n"
+            "raise RuntimeError('boom')\n",
+        ),
+    )
+    assert proc.returncode != 0
+
+    verstr = proc.stdout.strip().splitlines()[-1]
+    state = _state(app_layout, verstr)
+    assert state["state"] == "finished"
     assert state["exit_code"] != 0
+    assert st.derive_status(state) == st.FAILED
+
+
+def test_system_exit_zero_inside_a_run_is_succeeded(app_layout):
+    _bootstrap(app_layout)
+
+    with pytest.raises(SystemExit):
+        with start_run(app_layout.app_name) as run:
+            sys.exit(0)
+
+    state = _state(app_layout, run.id)
+    assert state["exit_code"] == 0
+    assert st.derive_status(state) == st.SUCCEEDED
+
+
+def test_system_exit_nonzero_inside_a_run_records_that_code(app_layout):
+    _bootstrap(app_layout)
+
+    with pytest.raises(SystemExit):
+        with start_run(app_layout.app_name) as run:
+            sys.exit(3)
+
+    state = _state(app_layout, run.id)
+    assert state["exit_code"] == 3
     assert st.derive_status(state) == st.FAILED

@@ -121,14 +121,46 @@ def test_a_run_never_becomes_its_own_parent(app_layout):
     _bootstrap(app_layout)
 
     with start_run(app_layout.app_name) as run:
-        # Mid-run the env points at this very run: a sibling started now must
-        # parent to it, and the run itself must never have gained a parent.
+        # Mid-run the env points at this very run. Opening another run under
+        # it is only supported explicitly (nested=True, see
+        # test_reentry_on_the_same_thread_without_nesting_is_rejected for the
+        # bare re-entry case) — but the run itself must never gain a parent
+        # from its own self-referencing export either way.
         assert os.environ["VMN_EXPERIMENT_ID"] == run.id
-        with start_run(app_layout.app_name) as sibling:
+        with start_run(app_layout.app_name, nested=True) as inner:
             pass
 
     assert "parent" not in _meta(app_layout, run.id)
-    assert _meta(app_layout, sibling.id)["parent"] == run.id
+    assert _meta(app_layout, inner.id)["parent"] == run.id
+
+
+def test_reentry_on_the_same_thread_without_nesting_is_rejected(app_layout):
+    """Re-running a notebook cell that never called ``run.finish()`` must not
+    silently chain the new run under the stale still-open one."""
+    _bootstrap(app_layout)
+
+    run = start_run(app_layout.app_name)
+    try:
+        with pytest.raises(RuntimeError, match="already active"):
+            start_run(app_layout.app_name)
+    finally:
+        run.finish()
+
+    # the rejected call left no experiment record behind
+    assert [m["verstr"] for m in _metas(app_layout)] == [run.id]
+
+
+def test_reentry_is_allowed_again_once_the_open_run_finishes(app_layout):
+    _bootstrap(app_layout)
+
+    first = start_run(app_layout.app_name)
+    first.finish()
+
+    with start_run(app_layout.app_name) as second:
+        pass
+
+    assert second.id != first.id
+    assert "parent" not in _meta(app_layout, second.id)
 
 
 def test_env_is_exported_while_open_and_restored_on_finish(app_layout):
