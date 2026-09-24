@@ -49,6 +49,7 @@ class Sweep:
         self._last_full = None
         self._touched = {}  # key -> when a refresh last saw it change
         self._sigs = {}  # key -> its sig at the last listing
+        self._sigs_known = True  # False once the backend answered only None sigs
 
     def touch(self, key, now):
         self._touched[key] = now
@@ -61,8 +62,13 @@ class Sweep:
         """``(files of the records to refresh, keys of every present record)``."""
         names_of = getattr(self._storage, "list_record_names", None)
         # Sigs are kept even while every refresh is full, so switching the
-        # fast tier on later does not re-list every record once.
+        # fast tier on later does not re-list every record once — unless the
+        # backend has no sigs to give (S3), where asking is a wasted listing.
+        if not self.full_sweep_sec and not self._sigs_known:
+            names_of = None
         sigs = _as_sigs(names_of(self._app_name)) if names_of else None
+        if sigs:
+            self._sigs_known = any(sig is not None for sig in sigs.values())
         if sigs is None or self._full_due(now):
             return self._full_listing(sigs or {}, now)
         keys = [key for key, sig in sigs.items() if self._may_change(records, key, sig, now)]

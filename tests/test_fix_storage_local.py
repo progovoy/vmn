@@ -214,12 +214,17 @@ def test_cached_storage_without_a_remote_lists_names_and_some_records(st):
     assert cached.list_files("app", keys=["v1"]) == st.list_files("app", keys=["v1"])
 
 
-def test_cached_storage_with_a_remote_cannot_list_names_alone(st):
+def test_cached_storage_with_a_remote_merges_names(st):
     class Remote:
-        def list_files(self, app_name):
-            return {"v9": {"metadata.yml": (1, 1, "etag")}}
+        def list_record_names(self, app_name):
+            return {"v9": None}
+
+        def list_files(self, app_name, keys=None):
+            files = {"v9": {"metadata.yml": (1, 1, "etag")}}
+            return {k: v for k, v in files.items() if keys is None or k in keys}
 
     st.save("app", "v1", _meta("v1"), {})
     cached = CachedSnapshotStorage(st, Remote())
-    assert cached.list_record_names("app") is None
+    names = cached.list_record_names("app")
+    assert names["v9"] is None and names["v1"] == st.list_record_names("app")["v1"]
     assert set(cached.list_files("app", keys=["v1", "v9", "v5"])) == {"v1", "v9"}
