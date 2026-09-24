@@ -120,6 +120,24 @@ def create_log_entry(entry_type, **kwargs):
     return entry
 
 
+def create_tags_entry(tags=None, remove=None):
+    """A ``tags`` log entry: set *tags* (values stored as strings), drop *remove*.
+
+    Tags are mutable: readers fold these entries per key, last write wins, and
+    a removal is a write like any other.
+    """
+    tags, remove = dict(tags or {}), list(remove or [])
+    for key in list(tags) + remove:
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"Tag keys must be non-empty strings, got {key!r}")
+    if not tags and not remove:
+        raise ValueError("Nothing to tag: give tags to set or keys to remove")
+    entry = create_log_entry("tags", set={k: str(v) for k, v in tags.items()})
+    if remove:
+        entry["remove"] = remove
+    return entry
+
+
 def append_to_log(storage, app_name, verstr, entry):
     """Append an entry to the experiment log using per-writer JSONL files.
 

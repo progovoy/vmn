@@ -17,7 +17,7 @@ import sqlite3
 
 # Bump whenever a record's shape or the fold's semantics change: records
 # written by another version are dropped rather than trusted.
-SCHEMA_VERSION = "exp-index-2"
+SCHEMA_VERSION = "exp-index-3"
 _BUSY_TIMEOUT_MS = 5000
 
 _LOGGER = logging.getLogger(__name__)

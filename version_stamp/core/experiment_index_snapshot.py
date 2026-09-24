@@ -10,6 +10,7 @@ dicts here) as read-only and copy before changing anything.
 from dataclasses import dataclass, field
 
 from version_stamp.core.experiment_fold import fold_row
+from version_stamp.core.experiment_status import observed_at_from_mtime
 
 
 @dataclass(frozen=True, eq=False)
@@ -20,10 +21,16 @@ class IndexSnapshot:
     run_states: dict  # {verstr: raw run state or None}
     edges: dict  # {verstr: parent verstr or None}
     create_notes: dict = field(default_factory=dict, repr=False)
+    # {verstr: when the store last saw run_state.yml written (aware UTC
+    # datetime), or None} — pass it to derive_status/status_fields as
+    # observed_at for clock-skew-proof stuck detection.
+    run_state_observed_at: dict = field(default_factory=dict, repr=False)
     _by_verstr: dict = field(default_factory=dict, repr=False)
 
     @classmethod
-    def build(cls, app_name, generation, rows, run_states, create_notes=None):
+    def build(
+        cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None
+    ):
         rows = tuple(rows)
         return cls(
             app_name=app_name,
@@ -32,6 +39,7 @@ class IndexSnapshot:
             run_states=run_states,
             edges={row["verstr"]: row.get("parent") for row in rows},
             create_notes=create_notes or {},
+            run_state_observed_at=observed_at or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -105,10 +113,16 @@ class RowCache:
 
     def snapshot(self, app_name, generation, order, records):
         """The :class:`IndexSnapshot` of *records* (``{key: record}``) in *order*."""
-        rows, notes, states = [], {}, {}
+        rows, notes, states, observed = [], {}, {}, {}
         for idx, key in enumerate(order, 1):
             row, note = self._row(key, idx, records[key])
             rows.append(row)
             notes[row["verstr"]] = note
             states[row["verstr"]] = records[key]["run_state"]
-        return IndexSnapshot.build(app_name, generation, rows, states, notes)
+            observed[row["verstr"]] = _observed_at(records[key]["rs_sig"])
+        return IndexSnapshot.build(app_name, generation, rows, states, notes, observed)
+
+
+def _observed_at(rs_sig):
+    """The run state's storage mtime from its ``[size, mtime, ...]`` signature."""
+    return observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
