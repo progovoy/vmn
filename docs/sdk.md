@@ -530,6 +530,10 @@ runs stays cheap while they train. It is a disposable cache: delete it any time,
 and if it cannot be opened (read-only disk, corrupt file) the rows are read
 directly. Status is still derived on every call.
 
+`get_run` always goes through the index to resolve `@N`/`latest`/prefixes and
+to find the run's place in the tree; it then reads just that run — its
+metadata, log and artifacts, and the run states of its own subtree.
+
 As on the write side, `app_name=None` resolves from the current repo.
 
 ---
@@ -592,8 +596,8 @@ An invalid query raises `QueryError` with the offending character offset
 a 400. Nothing is ever `eval`'d: the implementation is a hand-written lexer plus
 recursive-descent parser in `version_stamp/core/experiment_query.py`.
 
-There is no `vmn exp list --query` flag yet; the query language is available from
-the SDK and the REST API.
+On the command line the same expressions go to `vmn exp list <app> --query
+'<expr>'` (see [experiments.md](experiments.md#list)).
 
 ---
 
