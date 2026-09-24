@@ -12,8 +12,6 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_query import QueryError
 from version_stamp.ui.readers import changelog as changelog_reader
 from version_stamp.ui.readers import config as config_reader
 from version_stamp.ui.readers import diffs as diff_reader
@@ -21,7 +19,8 @@ from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import snapshots as snap_reader
 from version_stamp.ui.readers import versions as ver_reader
-from version_stamp.ui import routes_series, routes_tree
+from version_stamp.ui import routes_leaderboard, routes_series, routes_tree
+from version_stamp.ui.experiment_source import ExperimentSource
 from version_stamp.ui.http_params import attachment, key_list
 from version_stamp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
 from version_stamp.ui.responses import (
@@ -31,7 +30,10 @@ from version_stamp.ui.responses import (
     json_response,
 )
 from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment
+from version_stamp.ui.leaderboard_cache import LeaderboardCache
+from version_stamp.ui.refresher import Refresher
 from version_stamp.ui.static_files import mount_static
+from version_stamp.ui.ttl_cache import TTLCache
 from version_stamp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
@@ -39,6 +41,8 @@ API_PREFIX = "/api/v1"
 MAX_PAGE = 1000
 # A chart's worth of points per metric, however much a client asks for.
 MAX_SERIES_POINTS = 20_000
+# The app list walks .vmn/ and lists every app's runs: a few seconds stale is fine.
+APPS_TTL_SEC = 5
 
 
 def create_app(
@@ -48,7 +52,13 @@ def create_app(
     use_index=True,
     bind_host=None,
     allowed_hosts=None,
+    background_refresh=False,
 ):
+    """The FastAPI app. With *background_refresh* (what ``vmn ui`` runs)
+    watched apps' indexes are refreshed by daemon threads and requests serve
+    the latest snapshot at once, up to about a second behind storage;
+    without it each request refreshes the index first, seeing every write
+    made before it."""
     from version_stamp.ui.jobs import JobRunner, build_command
 
     app = FastAPI(
@@ -64,37 +74,14 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(token)
     )
 
-    indexes = {}
-    # Parent edges never change once written, so each workspace keeps its own
-    # across polls and a run page never re-reads every run's metadata.
-    edge_caches = {}
+    refresher = Refresher() if background_refresh else None
+    app.state.refresher = refresher
+    source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
+    leaderboards = LeaderboardCache(max_page=MAX_PAGE)
+    app_lists = TTLCache(APPS_TTL_SEC)
     # One client per S3 workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
     s3_storages = {}
-
-    def _index_for(ws):
-        """Per-workspace read cache under the server data dir (never in the repo)."""
-        if not use_index:
-            return None
-        if ws.name not in indexes:
-            from version_stamp.ui.index import WorkspaceIndex
-
-            indexes[ws.name] = WorkspaceIndex(
-                ws.path, db_dir=os.path.join(manager.data_dir, "index")
-            )
-        return indexes[ws.name]
-
-    def _edges_for(ws):
-        """Run-tree edges: from the experiment index when there is one."""
-        if ws.name not in edge_caches:
-            index = _index_for(ws) if ws.kind == "git" else None
-            if index:
-                edge_caches[ws.name] = index.parent_edges
-            elif ws.kind == "s3" and use_index:
-                edge_caches[ws.name] = _indexed_edges
-            else:
-                edge_caches[ws.name] = detail_reader.ParentEdges()
-        return edge_caches[ws.name]
 
     if token:
 
@@ -216,8 +203,8 @@ def create_app(
         except WorkspaceError as e:
             raise HTTPException(404, str(e))
         # A later workspace of the same name may point elsewhere.
-        indexes.pop(ws_name, None)
-        edge_caches.pop(ws_name, None)
+        source.forget(ws_name)
+        app_lists.pop(ws_name)
         s3_storages.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
@@ -225,57 +212,21 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         s3_storage = _exp_storage_for(ws)
         if s3_storage:
-            return exp_reader.list_apps_from_storage(s3_storage)
-        return exp_reader.list_apps(ws.path)
+            return app_lists.get(ws_name, lambda: exp_reader.list_apps_from_storage(s3_storage))
+        return app_lists.get(ws_name, lambda: exp_reader.list_apps(ws.path))
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments")
-    def list_experiments(
-        ws_name: str,
-        app_tag: str,
-        sort: str = None,
-        last: int = None,
-        offset: int = 0,
-        limit: int = None,
-        status: str = None,
-        q: str = None,
-        order: str = None,
-    ):
+    def _leaderboard_inputs(ws_name, app_tag):
+        """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
-        if order is not None and order not in exp_reader.ORDERS:
-            raise HTTPException(400, f"order must be one of {', '.join(exp_reader.ORDERS)}")
-        offset, limit = _page(offset, limit)
-        filters = dict(
-            sort=sort,
-            last=last,
-            offset=offset,
-            limit=limit,
-            status=status,
-            query=q,
-            order=order,
-        )
-        rows, run_states, schema = _rows_states_schema(ws, app_name)
-        # A query that will not compile is the caller's typo: answer 400 with the
-        # compiler's message (it carries the offset), not a 500 or an empty list.
-        try:
-            return exp_reader.leaderboard(rows, run_states, schema, **filters)
-        except QueryError as e:
-            raise HTTPException(400, str(e))
-
-    def _rows_states_schema(ws, app_name):
-        """Leaderboard inputs: indexed when possible, straight from storage if not."""
         s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            rows, states = experiment_index.indexed_rows(s3_storage, app_name)
-            return rows, states, {}  # no app conf for an S3 workspace
-        index = _index_for(ws)
-        if index:
-            rows, states = index.experiment_rows(app_name)
-        else:
-            rows, states = exp_reader.direct_rows_and_states(
-                exp_reader.experiment_storage(ws.path), app_name
-            )
-        return rows, states, exp_reader.metrics_schema(ws.path, app_name)
+        snapshot = source.list_snapshot(ws, app_name, s3_storage)
+        schema = {} if s3_storage else exp_reader.metrics_schema(ws.path, app_name)
+        return snapshot, schema
+
+    def _detail_options(ws, app_name):
+        """Refs, edges and run states from the app's snapshot when indexed."""
+        return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
@@ -297,11 +248,11 @@ def create_app(
             _any_exp_storage(ws),
             app_name,
             verstr,
-            edges=_edges_for(ws),
             max_points=max(2, min(max_points, MAX_SERIES_POINTS)),
             include_log=include_log,
             keys=key_list(keys),
             include_series=series,
+            **_detail_options(ws, app_name),
         )
         if err:
             raise HTTPException(404, err)
@@ -330,6 +281,7 @@ def create_app(
             offset=offset,
             limit=limit,
             read_log=exp_reader._load_log,
+            resolve=_detail_options(ws, app_name).get("resolve"),
         )
         if err:
             raise HTTPException(404, err)
@@ -378,7 +330,7 @@ def create_app(
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
         app_name = _app_name(app_tag)
-        index = _index_for(ws)
+        index = source.workspace_index(ws)
         if index:
             return index.list_versions(app_name)
         return ver_reader.list_versions(ws.path, app_name)
@@ -478,13 +430,9 @@ def create_app(
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
+    routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
-
-def _indexed_edges(storage, app_name):
-    """``{verstr: parent}`` from the process-wide experiment index of *storage*."""
-    rows, _ = experiment_index.indexed_rows(storage, app_name)
-    return {row["verstr"]: row.get("parent") for row in rows}

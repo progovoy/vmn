@@ -106,6 +106,15 @@ def _accepts_gzip(request):
     return request is not None and "gzip" in request.headers.get("accept-encoding", "")
 
 
+def not_modified(request, etag):
+    """An empty ``304`` when *request* already holds *etag*, else None — so a
+    handler that knows its ETag up front can skip building the payload."""
+    etag = _quoted(etag)
+    if _matches(request.headers.get("if-none-match"), etag):
+        return Response(status_code=304, headers={"Cache-Control": "no-cache", "ETag": etag})
+    return None
+
+
 def json_response(payload, etag=None, request=None, status_code=200):
     """A fully rendered JSON :class:`Response` with ``Cache-Control: no-cache``.
 

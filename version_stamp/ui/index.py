@@ -28,6 +28,37 @@ _fetch_version_rows = ver_reader.list_versions
 
 _LOGGER = logging.getLogger(__name__)
 
+# With a background refresher: names + live records each refresh, a full
+# listing this often (see experiment_index_sweep).
+FULL_SWEEP_SEC = 30
+
+
+def app_snapshot(storage, app_name, cache_path, refresher=None):
+    """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
+
+    With a :class:`~version_stamp.ui.refresher.Refresher` the index is kept
+    fresh in the background (fast tier) and this returns at once; without
+    one it is refreshed inline, so a request sees every write before it.
+    Falls back to a direct read when the index fails.
+    """
+    if refresher is None:
+        return experiment_index.indexed_snapshot(storage, app_name, cache_path)
+    try:
+        index = experiment_index.shared_index(
+            storage, app_name, cache_path, full_sweep_sec=FULL_SWEEP_SEC
+        )
+        return refresher.snapshot(index)
+    except Exception:
+        _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
+        return experiment_index.direct_snapshot(storage, app_name)
+
+
+def s3_cache_path(db_dir, ws):
+    """Where an S3 workspace's index persists, one database per bucket+prefix."""
+    source = repr((ws.endpoint_url, ws.bucket, ws.prefix))
+    os.makedirs(db_dir, exist_ok=True)
+    return os.path.join(db_dir, f"s3-{hashlib.sha256(source.encode()).hexdigest()[:16]}.sqlite")
+
 
 def _versions_fingerprint(root_path, app_name):
     """Cheap staleness signal: the app's tag list (one local git call)."""
@@ -100,10 +131,9 @@ class WorkspaceIndex:
             )
             return rows, states
 
-    def parent_edges(self, storage, app_name):
-        """``{verstr: parent}`` from the index rows — a run-detail edges provider."""
-        rows, _ = self.experiment_rows(app_name)
-        return {row["verstr"]: row.get("parent") for row in rows}
+    def snapshot(self, app_name, refresher=None):
+        """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
+        return app_snapshot(self._storage, app_name, self._db_path, refresher)
 
     def list_experiments(self, app_name, **filters):
         rows, run_states = self.experiment_rows(app_name)
