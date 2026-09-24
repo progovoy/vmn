@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDismiss } from "../hooks/useDismiss";
 
 function Section({ title, columns, visible, onToggle }: {
   title?: string;
@@ -26,9 +27,11 @@ function Section({ title, columns, visible, onToggle }: {
 }
 
 /** Show/hide leaderboard columns: params (*columns*) and, when given, metric
- *  columns in a section of their own — filterable once there are many. */
+ *  columns and other columns (tags) in sections of their own — filterable
+ *  once there are many. Escape or a click outside closes it. */
 export default function ColumnPicker({
   columns, visible, onToggle, metricColumns = [], visibleMetrics = [], onToggleMetric,
+  otherColumns = [], visibleOther = [], onToggleOther,
 }: {
   columns: string[];
   visible: string[];
@@ -36,11 +39,18 @@ export default function ColumnPicker({
   metricColumns?: string[];
   visibleMetrics?: string[];
   onToggleMetric?: (col: string) => void;
+  otherColumns?: string[];
+  visibleOther?: string[];
+  onToggleOther?: (col: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, box, button);
 
-  if (columns.length + metricColumns.length === 0) return null;
+  if (columns.length + metricColumns.length + otherColumns.length === 0) return null;
 
   const needle = filter.trim().toLowerCase();
   const match = (cols: string[]) =>
@@ -48,8 +58,11 @@ export default function ColumnPicker({
   const hasMetrics = metricColumns.length > 0 && onToggleMetric;
 
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      <button title="Columns" onClick={() => setOpen((v) => !v)} style={{ padding: "4px 10px" }}>
+    <div ref={box} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        ref={button} title="Columns" aria-haspopup="true" aria-expanded={open}
+        onClick={() => setOpen((v) => !v)} style={{ padding: "4px 10px" }}
+      >
         ⋮
       </button>
       {open && (
@@ -76,6 +89,9 @@ export default function ColumnPicker({
             visible={visible}
             onToggle={onToggle}
           />
+          {onToggleOther && (
+            <Section title="other" columns={match(otherColumns)} visible={visibleOther} onToggle={onToggleOther} />
+          )}
         </div>
       )}
     </div>

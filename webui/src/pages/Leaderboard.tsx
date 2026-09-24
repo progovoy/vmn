@@ -176,6 +176,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
               onToggle={(c) => view.toggleHidden(`p:${c}`)}
               metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
               onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
+              otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
+              onToggleOther={(c) => view.toggleHidden(`c:${c}`)}
             />
           </div>
 

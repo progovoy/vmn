@@ -14,8 +14,9 @@ export interface RowLayout {
   total: number;
   metricCols: string[];
   paramCols: string[];
-  /** Index of the first param column, and of the note column. */
+  /** Index of the first param column, the tags column (null: none) and the note column. */
   paramBase: number;
+  tagsIdx: number | null;
   noteIdx: number;
   colMeta: Record<string, ColMeta>;
   /** Highlight column bests only when there is something to beat. */
@@ -49,8 +50,8 @@ function ExperimentCell({ r, href, style, onPrefetch }: {
     <td style={style} className="exp-cell">
       <div className="nest" style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
         {(r.depth ?? 0) > 0 && <span className="nest-mark" title="inner run">⤷</span>}
-        <Link className="mono run-link" to={href} onFocus={() => onPrefetch(r.verstr)}>
-          {r.verstr}
+        <Link className={`run-link${r.name ? " run-name" : " mono"}`} to={href} onFocus={() => onPrefetch(r.verstr)}>
+          {r.name || r.verstr}
         </Link>
         {r.children && r.children.length > 0 && (
           <span className="tree-roll">
@@ -59,8 +60,22 @@ function ExperimentCell({ r, href, style, onPrefetch }: {
           </span>
         )}
       </div>
-      <div className="exp-branch">{r.branch}</div>
+      <div className="exp-branch">
+        {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
+        {r.branch}
+      </div>
     </td>
+  );
+}
+
+export function TagChips({ tags }: { tags: Record<string, string> | undefined }) {
+  if (!tags) return null;
+  return (
+    <>
+      {Object.entries(tags).map(([k, v]) => (
+        <span key={k} className="tag-chip" title={`tags.${k} = ${v}`}>{v ? `${k}: ${v}` : k}</span>
+      ))}
+    </>
   );
 }
 
@@ -79,7 +94,7 @@ function Row({ row: r, start, size, isSelected, isFlash, layout, onToggle, onPre
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
   const onLeave = () => clearTimeout(hover.current);
-  const { styles, metricCols, paramCols, colMeta, paramBase, noteIdx } = layout;
+  const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
   const href = runHref(layout.runBase, r.verstr);
   const params = paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
@@ -121,6 +136,9 @@ function Row({ row: r, start, size, isSelected, isFlash, layout, onToggle, onPre
           {params[p] != null ? String(params[p]) : "—"}
         </td>
       ))}
+      {tagsIdx !== null && (
+        <td className="tags-cell" style={styles[tagsIdx]}><TagChips tags={r.tags} /></td>
+      )}
       <td className="note-cell" style={styles[noteIdx]}>{r.note}</td>
       <td className="when-cell" style={styles[noteIdx + 1]} title={r.timestamp ?? ""}>
         {relTime(r.timestamp)}

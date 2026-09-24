@@ -19,7 +19,7 @@ export interface SortState {
 }
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, metricCols, paramCols, colMeta, paramBase, noteIdx } = layout;
+  const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
@@ -46,6 +46,7 @@ function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
         {paramCols.map((p, i) => (
           <th key={`p-${p}`} className="param-head" style={styles[paramBase + i]}>{p}</th>
         ))}
+        {tagsIdx !== null && <th style={styles[tagsIdx]}>tags</th>}
         <th style={styles[noteIdx]}>note</th>
         <th
           className={`num sortable when-head${s.sort === TIMESTAMP_SORT ? " sorted" : ""}`}

@@ -1,2 +1,11 @@
 /* Leaderboard: coverage label, sweeps, names/tags, archive, selection. */
 .chart-coverage { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.tag-chip {
+  display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; border-radius: 9px;
+  font-size: 11px; line-height: 17px; background: var(--panel-3); color: var(--text-2);
+  border: 1px solid var(--line-2); white-space: nowrap; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+}
+td.tags-cell { overflow: hidden; white-space: nowrap; }
+a.run-name { font-weight: 500; }
+.exp-verstr { margin-right: 6px; font-size: 11px; }
