@@ -68,23 +68,43 @@ FINAL_REMOTE_TIMEOUT_SEC = 60
 # ``_note_uncaught_exception`` below) makes it read as failed instead.
 ABANDONED_EXIT_CODE = 1
 
-# Whether an uncaught exception has reached the top of this process. Only
-# this flips the atexit-abandoned default from succeeded to failed:
-# ``SystemExit`` never reaches ``sys.excepthook`` (CPython special-cases it
-# before running atexit handlers), so a bare ``sys.exit(N)`` outside a
-# context-managed run stays indistinguishable from a clean exit here — the
-# same as it would be for any other process without our instrumentation.
+# Whether an uncaught exception has reached the top of this process while a
+# run was open. Only this flips the atexit-abandoned default from succeeded
+# to failed: ``SystemExit`` never reaches ``sys.excepthook`` (CPython
+# special-cases it before running atexit handlers), so a bare ``sys.exit(N)``
+# outside a context-managed run stays indistinguishable from a clean exit
+# here — the same as it would be for any other process without our
+# instrumentation.
+#
+# Scoped exactly like ``signals.install``/``uninstall`` (see ``_open``/
+# ``_finish`` below): installed only while a run is open, chained to and
+# restored to whatever hook was there before, so a process with no open run
+# is left untouched.
 _uncaught_exception_seen = False
-_prev_excepthook = sys.excepthook
+_excepthook_state = {"installed": False, "previous": None}
 
 
 def _note_uncaught_exception(exc_type, exc_value, tb):
     global _uncaught_exception_seen
     _uncaught_exception_seen = True
-    _prev_excepthook(exc_type, exc_value, tb)
+    _excepthook_state["previous"](exc_type, exc_value, tb)
 
 
-sys.excepthook = _note_uncaught_exception
+def _install_excepthook():
+    if _excepthook_state["installed"]:
+        return
+    global _uncaught_exception_seen
+    _uncaught_exception_seen = False
+    _excepthook_state.update(installed=True, previous=sys.excepthook)
+    sys.excepthook = _note_uncaught_exception
+
+
+def _uninstall_excepthook():
+    if not _excepthook_state["installed"]:
+        return
+    if sys.excepthook is _note_uncaught_exception:
+        sys.excepthook = _excepthook_state["previous"]
+    _excepthook_state.update(installed=False, previous=None)
 
 
 def start_run(
@@ -260,6 +280,7 @@ class Run(RunArtifacts):
         self._publish()
         context.register(self)
         signals.install(_finalize_signaled)
+        _install_excepthook()
         self._heartbeat.start()
 
     def finish(self, exit_code=0):
@@ -307,6 +328,7 @@ class Run(RunArtifacts):
             context.unregister(self)
             if not context.open_runs():
                 signals.uninstall()
+                _uninstall_excepthook()
 
     def _close_remote_writers(self):
         # One deadline for both: they upload in parallel, so waiting for each
