@@ -8,7 +8,6 @@ own with — so the web leaderboard and the CLI always agree.
 import os
 
 from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index
 from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
@@ -66,13 +65,6 @@ def list_apps(root_path):
             }
         )
     return rows
-
-
-def direct_rows_and_states(storage, app_name):
-    """``(rows, run_states)`` straight from storage, through this module's loaders."""
-    return experiment_index.direct_rows(
-        storage, app_name, read_log=_load_log, read_run_state=load_run_state
-    )
 
 
 def apply_filters(rows, status=None, query=None):

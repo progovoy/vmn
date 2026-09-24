@@ -809,7 +809,7 @@ def add_arg_ui(subprasers):
         "--no-index",
         action="store_true",
         default=False,
-        help="Disable the SQLite read cache (always read directly)",
+        help="Keep no on-disk read cache (the index lives in memory only)",
     )
 
 

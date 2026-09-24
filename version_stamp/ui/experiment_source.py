@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """Where the server's experiment reads come from, per workspace.
 
-Indexed reads go through one :class:`IndexSnapshot` per request: the list
-pipeline, the run tree's edges, ``latest``/``@N``/prefix refs and — with a
-background refresher — the subtree's run states, so a request never lists
-the storage. Git workspaces persist their index under ``<data_dir>/index``
-(:class:`WorkspaceIndex`), S3 workspaces in a database of their own next to
-it, so a restarted server starts warm either way.
+Reads go through one :class:`IndexSnapshot` per request: the list pipeline,
+the run tree's edges, ``latest``/``@N``/prefix refs and — with a background
+refresher — the subtree's run states, so a request never lists the storage.
+Git workspaces persist their index under ``<data_dir>/index``
+(:class:`WorkspaceIndex`; in memory only with ``--no-index``), S3 workspaces
+in a database of their own next to it, so a restarted server starts warm
+either way.
 """
 import os
 import threading
 
-from version_stamp.core.experiment_index_snapshot import IndexSnapshot
-from version_stamp.core.experiment_status import (
-    observed_at_by_verstr,
-    run_state_observed_at,
-)
+from version_stamp.core.experiment_status import run_state_observed_at
 from version_stamp.ui import index as ui_index
 from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.refresher import InlineRefresher
 from version_stamp.ui.schema_cache import MetricsSchemaCache
@@ -64,51 +60,35 @@ def _latest_memoized(snap):
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None):
         self._db_dir = os.path.join(data_dir, "index")
-        self._use_index = use_index
+        # --no-index: git workspaces' indexes are kept in memory only.
+        self._ws_db_dir = self._db_dir if use_index else None
         self.refresher = refresher or InlineRefresher()
         self._indexes = {}  # workspace name -> WorkspaceIndex
-        self._edges = {}  # workspace name -> ParentEdges, for unindexed reads
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._lock = threading.Lock()
 
     def workspace_index(self, ws):
-        """The git workspace's read cache, or None with ``--no-index``."""
-        if not self._use_index:
-            return None
+        """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
             if ws.name not in self._indexes:
-                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, db_dir=self._db_dir)
+                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None):
-        """The app's current snapshot; None for an unindexed git workspace."""
+        """The app's current :class:`IndexSnapshot`."""
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
             return ui_index.app_snapshot(s3_storage, app_name, cache_path, self.refresher)
-        index = self.workspace_index(ws)
-        return index.snapshot(app_name, self.refresher) if index else None
+        return self.workspace_index(ws).snapshot(app_name, self.refresher)
 
     def metrics_schema(self, ws, app_name):
         """The git workspace app's metrics schema, parsed once per conf change."""
         return self._schemas.get(ws.path, app_name)
 
-    def list_snapshot(self, ws, app_name, s3_storage=None):
-        """Like :meth:`snapshot`, read directly when there is no index."""
-        snap = self.snapshot(ws, app_name, s3_storage)
-        if snap is not None:
-            return snap
-        storage = exp_reader.experiment_storage(ws.path)
-        rows, states = exp_reader.direct_rows_and_states(storage, app_name)
-        observed = observed_at_by_verstr(storage, app_name, states)
-        return IndexSnapshot.build(app_name, 0, rows, states, observed_at=observed)
-
     def detail_options(self, ws, snap):
         """``edges``/``resolve``/``read_run_state``/``read_observed_at`` for a
         run-detail read."""
-        if snap is None:
-            with self._lock:
-                return {"edges": self._edges.setdefault(ws.name, detail_reader.ParentEdges())}
         # The same edges mapping per snapshot, so the children index is reused.
         options = {
             "edges": lambda storage, app_name: snap.edges,
@@ -125,4 +105,3 @@ class ExperimentSource:
         """Drop a removed workspace's caches: a later one may point elsewhere."""
         with self._lock:
             self._indexes.pop(ws_name, None)
-            self._edges.pop(ws_name, None)
