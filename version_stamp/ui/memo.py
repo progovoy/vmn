@@ -38,13 +38,21 @@ class LRU:
         self._entries = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, key, compute, valid=lambda value: True):
+    def clear(self):
+        with self._lock:
+            self._entries.clear()
+
+    def get(self, key, compute, valid=lambda value: True, store=lambda value: True):
+        """*key*'s value; *compute* runs on a miss or when *valid* rejects the
+        hit, and its value is kept only when *store* accepts it."""
         with self._lock:
             hit = self._entries.get(key)
             if hit is not None and valid(hit):
                 self._entries.move_to_end(key)
                 return hit
         value = compute()
+        if not store(value):
+            return value
         with self._lock:
             self._entries[key] = value
             self._entries.move_to_end(key)
