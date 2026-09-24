@@ -1,0 +1,22 @@
+# Central-server profile for vmn CI: the daily run (and UI/webhook triggers) go to
+# an on-demand Docker worker, pinned to the triggered commit. Laptops keep using
+# `muster run ci/pipeline.py` with no profile — the pipeline file is unchanged.
+#
+#   MTD_BROKER_BIND=0.0.0.0 MTD_BROKER_PORT=8721 muster serve --conf ci/server.toml
+root = ".."
+
+[cache]
+dir = ".mtd/cache"
+
+[execution]
+default_runner = "docker"
+
+[runners.docker.pool]
+backend = "docker"
+base_image = "vmn-ci-base:latest"   # python>=3.11 + git + make (the release lane runs make)
+max = 2
+reuse = "never"                     # clean container per run ...
+volume = "vmn-ci-cache"             # ... warm mirror, venv and cache
+idle_s = 900
+cpus = 8
+memory = "8g"

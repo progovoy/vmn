@@ -6,10 +6,17 @@ file, so the run tests the checked-out repo whether it's launched from the CLI,
 the UI trigger, or the daily schedule — not an empty per-run scratch dir.
 
 The venv is built by muster from each stage's ``requires`` (see
-substrate/envs.py): declared reqs files + vmn installed editable. muster
-content-addresses the venv by the reqs files' contents (under ``.mtd/envs``), so
-all stages share one venv, it persists across runs, and it rebuilds only when a
-requirements file changes; concurrent builders are serialized by muster's build
+substrate/envs.py): the muster runtime, then the declared reqs files and vmn
+installed editable. ``requires`` does NOT augment whatever the process running
+muster happens to have installed — the venv starts empty, so every tool a stage
+invokes has to be declared (ruff/pytest/mypy all are, in test_requirements.txt).
+Because ``requires`` installs after the runtime, a pin here wins over a muster
+runtime dep of the same name.
+
+muster content-addresses the venv by the interpreter identity plus the reqs
+files' contents (``.mtd/envs/cpython-<X.Y>-<digest>``), so all stages share one
+venv, it persists across runs, and it rebuilds only when a requirements file or
+the interpreter changes; concurrent builders are serialized by muster's build
 lock, so the three stages run in parallel.
 
 Each stage runs its tool with ``ctx.run`` (bare names resolve via the venv's
@@ -28,6 +35,13 @@ Cut a release (each param is independent; combine as needed):
 
 Or start the server (./ci/start.sh) and let the daily schedule fire it.
 UI at http://localhost:8000 (no auth needed).
+
+The same file runs unchanged on a central server that sends each run to an
+on-demand Docker worker (``ci/server.toml``): the run is pinned to the triggered
+commit, so the worker tests exactly that tree (a dirty tree is refused unless
+``--allow-dirty`` ships the patch). ``workspace=".."`` still resolves to the repo
+root inside the worker's checkout. From a laptop:
+    muster run ci/pipeline.py --runs-on docker
 """
 
 from debug_router.pipeline import Param, Pipeline, stage
@@ -52,10 +66,10 @@ def lint(ctx):
 
 
 # deterministic=True + declared inputs make this content-addressable: the key is
-# the stage's source closure, the hash of the trees below, and the venv
-# fingerprint (muster keys that on the requirements files' contents). An
-# unchanged repo restores reports/ from the cache instead of re-running the
-# suite; setup.py is an input because `-e .` decides what the tests import, and
+# the stage's source closure, the hash of the trees below, the venv
+# fingerprint (interpreter + the requirements files' contents) and the platform
+# (so a macOS laptop's result is never served to Linux CI). An unchanged repo
+# restores reports/ from the cache instead of re-running the suite; setup.py is an input because `-e .` decides what the tests import, and
 # muster's tree hashing ignores __pycache__ so bytecode never churns the key.
 @stage(
     requires=REQUIRES,
