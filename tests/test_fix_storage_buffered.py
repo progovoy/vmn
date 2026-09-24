@@ -130,3 +130,38 @@ def test_pending_lines_are_shipped_at_exit_even_if_the_storage_was_dropped():
     del pod
     snapshot_storage_buffered.close_all()
     assert _values() == [0, 1, 2]
+
+
+def test_a_finished_run_cleans_up_its_buffer_dir_without_close():
+    import os
+
+    pod = _pod()
+    buffer_root = pod._buffer_root
+    for i in range(3):
+        pod.append_log_entry("app", V, "w", entry(i))
+        pod.sync_log_to_remote("app", V, "w")
+    pod.save_file("app", V, "run_state.yml", yaml.dump({"state": "finished"}))
+    pod.sync_log_to_remote("app", V, "w")
+    assert not os.path.exists(buffer_root)
+
+
+def test_close_after_the_run_already_cleaned_up_is_a_harmless_noop():
+    pod = _pod()
+    for i in range(3):
+        pod.append_log_entry("app", V, "w", entry(i))
+        pod.sync_log_to_remote("app", V, "w")
+    pod.save_file("app", V, "run_state.yml", yaml.dump({"state": "finished"}))
+    pod.sync_log_to_remote("app", V, "w")
+    pod.close()  # the buffer dir is already gone; must not raise
+
+
+def test_close_all_still_removes_the_buffer_dir_for_an_unfinished_run():
+    import os
+
+    pod = _pod()
+    buffer_root = pod._buffer_root
+    for i in range(3):
+        pod.append_log_entry("app", V, "w", entry(i))
+    del pod  # still pending (unshipped lines), so close_all's atexit path fires
+    snapshot_storage_buffered.close_all()
+    assert not os.path.exists(buffer_root)

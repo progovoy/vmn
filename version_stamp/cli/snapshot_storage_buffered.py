@@ -110,8 +110,19 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at[key] = time.monotonic()
         super().sync_log_to_remote(app_name, verstr, writer_id)
         self._unshipped.discard(key)
-        if not self._unshipped:
-            _PENDING.discard(self)
+        if self._unshipped:
+            return
+        _PENDING.discard(self)
+        # Nothing left to ship, and the run is done: no atexit safety net is
+        # coming, so the buffer dir must go now or it never will.
+        if self._run_finished(app_name, verstr):
+            self._cleanup_buffer()
+
+    def _cleanup_buffer(self):
+        """Drop the buffer dir. Idempotent: ``rmtree`` on an already-gone
+        directory is a safe no-op, so a later call (``close()``, or another
+        writer's sync) costs nothing."""
+        shutil.rmtree(self._buffer_root, ignore_errors=True)
 
     def _initial_sync_state(self, app_name, verstr, writer_id):
         # The buffer starts empty: ship all of it, after what the remote holds
@@ -137,4 +148,4 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._unshipped.clear()
         _PENDING.discard(self)
         self._synced.clear()
-        shutil.rmtree(self._buffer_root, ignore_errors=True)
+        self._cleanup_buffer()
