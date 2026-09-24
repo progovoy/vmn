@@ -151,10 +151,16 @@ being served.
 
 A list, facets or run page then costs a slice of work memoized per index
 generation: status, the run tree, filtering and sorting are derived once per
-generation (live runs' status once per 2-second bucket, so `stuck` shows within
-seconds), paging is a slice, and run detail resolves `latest`/`@N`/prefixes,
-the run tree and the subtree's run states from the snapshot, without listing
-the storage. The app list (`.../apps`) is cached per workspace for 5 seconds.
+generation, paging is a slice. Live runs' status is re-derived once per
+2-second bucket (so `stuck` shows within seconds), and only those rows move:
+their ancestors' `tree_status` is rolled up again and they are re-filtered and
+bisected into the cached order of the finished runs, so a poll while a run is
+live costs O(live runs · log N), not a re-sort of every run (`last=` alone
+still re-runs the full pipeline per bucket). The metrics schema is re-read only when the app's
+`conf.yml` changes (its mtime or size). Run detail resolves
+`latest`/`@N`/prefixes, the run tree and the subtree's run states from the
+snapshot, without listing the storage. The app list (`.../apps`) is cached per
+workspace for 5 seconds.
 
 Embedding `create_app()` directly (tests, scripts) leaves the background
 refresher off unless you pass `background_refresh=True`: every request then
@@ -176,7 +182,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
@@ -244,6 +250,43 @@ Each list response carries an `ETag` derived from the index generation, the
 query parameters and — while runs are live — the status time bucket. Send it
 back as `If-None-Match`: an unchanged poll is an empty `304` that costs no row
 work at all.
+
+### Archived runs
+
+Rows with a truthy `archived` field (soft-deleted runs) are left out of
+`.../experiments`, `.../experiments-columns` and `.../experiments-facets` —
+including their `total` — unless the request passes `archived=1`. Rows without
+the field count as not archived. The flag is part of the ETag.
+
+### Columns for whole-set charts
+
+`GET .../apps/{app}/experiments-columns?keys=...` answers a few values per run
+for every run the filters match, so a chart can plot all of them instead of
+the loaded page:
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'keys=metrics.loss,params.lr,status' \
+  --data-urlencode 'q=metrics.loss < 0.5' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments-columns?sort=loss"
+```
+
+```json
+{"verstrs": ["...r0003", "...r0001"], "idx": [4, 2],
+ "columns": {"metrics.loss": [0.1, 0.3], "params.lr": [0.01, "auto"], "status": ["succeeded", "running"]},
+ "total": 2}
+```
+
+- `keys` is a comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`
+  and `name` (the row's `name`, else its `note`); any other key is a **400**.
+  Every column is aligned with `verstrs`/`idx` (the `@N` storage index).
+- Metric values are numbers or `null` (missing or non-finite); params are
+  served verbatim.
+- `q`, `status`, `sort`, `order` and `archived` mean what they mean on the list;
+  the rows come in the list's order. `limit` (default 20000, at most 50000)
+  caps the rows returned; `total` counts every match.
+- Memoized per index snapshot (and status bucket while runs are live), with an
+  `ETag`/`304` like the list.
 
 ### Facets
 

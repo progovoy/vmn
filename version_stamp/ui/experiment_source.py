@@ -16,6 +16,7 @@ from version_stamp.ui import index as ui_index
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
+from version_stamp.ui.schema_cache import MetricsSchemaCache
 
 
 def _state_reader(run_states):
@@ -52,6 +53,7 @@ class ExperimentSource:
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._edges = {}  # workspace name -> ParentEdges, for unindexed reads
         self._resolvers = LRU(8)
+        self._schemas = MetricsSchemaCache()
         self._lock = threading.Lock()
 
     def workspace_index(self, ws):
@@ -70,6 +72,10 @@ class ExperimentSource:
             return ui_index.app_snapshot(s3_storage, app_name, cache_path, self.refresher)
         index = self.workspace_index(ws)
         return index.snapshot(app_name, self.refresher) if index else None
+
+    def metrics_schema(self, ws, app_name):
+        """The git workspace app's metrics schema, parsed once per conf change."""
+        return self._schemas.get(ws.path, app_name)
 
     def list_snapshot(self, ws, app_name, s3_storage=None):
         """Like :meth:`snapshot`, read directly when there is no index."""
