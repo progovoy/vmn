@@ -5,13 +5,9 @@
  *  downsamples one metric by another's x values. The canvas charts build their
  *  typed per-curve arrays from these in seriesArrays.ts. */
 import type { SeriesPoint } from "../types";
-import { downsampleLTTB } from "./downsample";
 
 export type XMode = "step" | "wall" | "relative";
 type Series = Record<string, SeriesPoint[]>;
-
-/** Client-side safety cap per metric (the server already downsamples). */
-export const MAX_POINTS_PER_METRIC = 2000;
 
 const SYS_PREFIX = "sys_";
 
@@ -53,22 +49,6 @@ export function xOf(p: SeriesPoint, i: number, mode: XMode, origin: number): num
     return p.step ?? i;
   }
   return p.step;
-}
-
-/** Downsample every metric on its own (LTTB keeps first and last points). */
-export function capSeries(series: Series, maxPoints = MAX_POINTS_PER_METRIC): Series {
-  const out: Series = {};
-  for (const [name, pts] of Object.entries(series)) {
-    if (pts.length <= maxPoints) {
-      out[name] = pts;
-      continue;
-    }
-    const keep = new Set(
-      downsampleLTTB(pts.map((p, i) => ({ x: i, y: p.value ?? 0 })), maxPoints).map((d) => d.x),
-    );
-    out[name] = pts.filter((_, i) => keep.has(i));
-  }
-  return out;
 }
 
 /** Whether every point of every series carries a timestamp. */

@@ -1,12 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ema } from "../hooks/useSmoothing";
-import { capSeries, splitSysMetrics } from "../util/chartData";
+import { splitSysMetrics } from "../util/chartData";
 import { maxOf, minOf } from "../util/stats";
 import { paramValue, runColor } from "../util";
-import type { SeriesPoint } from "../types";
-
-const pt = (step: number | null, value: number, ts: string | null = null): SeriesPoint =>
-  ({ step, value, ts });
 
 describe("ema skips gaps", () => {
   it("does not propagate NaN past a missing value", () => {
@@ -27,18 +23,6 @@ describe("ema skips gaps", () => {
 });
 
 describe("per-metric series", () => {
-  const loss = Array.from({ length: 5000 }, (_, i) => pt(i, 1 / (i + 1)));
-  const valLoss = [0, 100, 200].map((s) => pt(s, 0.5));
-
-  it("capSeries downsamples each metric on its own and keeps first/last", () => {
-    const capped = capSeries({ loss, val_loss: valLoss }, 500);
-    expect(capped.loss.length).toBeLessThanOrEqual(500);
-    expect(capped.loss[0].step).toBe(0);
-    expect(capped.loss[capped.loss.length - 1].step).toBe(4999);
-    // the sparse series survives intact
-    expect(capped.val_loss).toHaveLength(3);
-  });
-
   it("splitSysMetrics separates sys_* metrics", () => {
     expect(splitSysMetrics(["loss", "sys_rss_mb", "acc"])).toEqual({
       training: ["loss", "acc"], system: ["sys_rss_mb"],
