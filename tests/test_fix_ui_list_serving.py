@@ -230,3 +230,48 @@ def test_the_s3_index_persists_under_the_data_dir(s3_workspace, monkeypatch):
 
     assert sorted(r["metrics"]["loss"] for r in rows) == [0.0, 0.1, 0.2]
     assert gets == []
+
+
+def test_a_failing_background_listing_keeps_the_last_snapshot(background, monkeypatch, caplog):
+    client, storage = background
+    _run(storage, 0, loss=0.1)
+    assert client.get(f"{BASE}/experiments?limit=10").json()["total"] == 1
+
+    def unreachable(*a, **kw):
+        raise OSError("remote listing failed")
+
+    monkeypatch.setattr(LocalSnapshotStorage, "list_files", unreachable)
+    monkeypatch.setattr(LocalSnapshotStorage, "list_record_names", unreachable)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not any(
+        "refresh failed" in r.getMessage() for r in caplog.records
+    ):
+        time.sleep(0.05)
+
+    assert any("refresh failed" in r.getMessage() for r in caplog.records)
+    r = client.get(f"{BASE}/experiments?limit=10")
+    assert r.status_code == 200 and r.json()["total"] == 1
+
+
+def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
+    from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+    from version_stamp.ui.experiment_source import ExperimentSource
+    from version_stamp.ui.workspaces import Workspace
+
+    rows = [{"verstr": f"1.0.0-dev.r{i}", "timestamp": _ts(i)} for i in range(5)]
+    snap = IndexSnapshot.build(APP, 1, rows, {})
+    scans = []
+    real = IndexSnapshot._latest
+
+    def counted(self, kind):
+        scans.append(kind)
+        return real(self, kind)
+
+    monkeypatch.setattr(IndexSnapshot, "_latest", counted)
+    source = ExperimentSource(str(tmp_path))
+    ws = Workspace(name="ws", path=str(tmp_path))
+
+    for _ in range(3):
+        assert source.detail_options(ws, snap)["resolve"]("latest") == ("1.0.0-dev.r4", None)
+    assert source.detail_options(ws, snap)["resolve"]("@2") == ("1.0.0-dev.r1", None)
+    assert len(scans) == 1

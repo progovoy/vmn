@@ -13,6 +13,7 @@ import threading
 
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
 from version_stamp.ui import index as ui_index
+from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers import experiment_detail as detail_reader
 from version_stamp.ui.readers import experiments as exp_reader
 
@@ -28,6 +29,21 @@ def _state_reader(run_states):
     return read
 
 
+def _latest_memoized(snap):
+    """*snap*'s ``resolve`` answering ``latest`` from a memo: finding it scans
+    every row, and a run page polls it."""
+    latest = []
+
+    def resolve(ref):
+        if ref not in ("latest", "@latest"):
+            return snap.resolve(ref)
+        if not latest:
+            latest.append(snap.resolve(ref))
+        return latest[0]
+
+    return resolve
+
+
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None):
         self._db_dir = os.path.join(data_dir, "index")
@@ -35,6 +51,7 @@ class ExperimentSource:
         self.refresher = refresher
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._edges = {}  # workspace name -> ParentEdges, for unindexed reads
+        self._resolvers = LRU(8)
         self._lock = threading.Lock()
 
     def _workspace_index(self, ws):
@@ -71,9 +88,13 @@ class ExperimentSource:
             with self._lock:
                 return {"edges": self._edges.setdefault(ws.name, detail_reader.ParentEdges())}
         # The same edges mapping per snapshot, so the children index is reused.
-        options = {"edges": lambda storage, app_name: snap.edges, "resolve": snap.resolve}
+        options = {
+            "edges": lambda storage, app_name: snap.edges,
+            "resolve": self._resolvers.per_snapshot(snap, lambda: _latest_memoized(snap)),
+        }
         if self.refresher is not None:
-            # Inline refreshes read states fresh; a refresher's are ~1s old.
+            # A refreshed-inline snapshot leaves the subtree's states to be
+            # read from storage; a background one's are at most ~1s old.
             options["read_run_state"] = _state_reader(snap.run_states)
         return options
 

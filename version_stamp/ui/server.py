@@ -31,9 +31,9 @@ from version_stamp.ui.responses import (
 )
 from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment
 from version_stamp.ui.leaderboard_cache import LeaderboardCache
+from version_stamp.ui.memo import TTLCache
 from version_stamp.ui.refresher import Refresher
 from version_stamp.ui.static_files import mount_static
-from version_stamp.ui.ttl_cache import TTLCache
 from version_stamp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
@@ -281,7 +281,8 @@ def create_app(
             offset=offset,
             limit=limit,
             read_log=exp_reader._load_log,
-            resolve=_detail_options(ws, app_name).get("resolve"),
+            # Inline, a snapshot costs a full refresh: more than resolving directly.
+            resolve=_detail_options(ws, app_name).get("resolve") if refresher else None,
         )
         if err:
             raise HTTPException(404, err)

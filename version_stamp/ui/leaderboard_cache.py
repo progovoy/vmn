@@ -17,40 +17,17 @@ import itertools
 import json
 import os
 import threading
-from collections import OrderedDict
 
 from version_stamp.core import experiment_status
 from version_stamp.core.experiment_status import status_fields
 from version_stamp.core.experiment_tree import annotate_tree
+from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.experiments import apply_filters, facets, sort_rows
 
 BUCKET_SEC = 2
 MAX_PAGE = 1000
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
-
-
-class _LRU:
-    """A small thread-safe LRU; *compute* runs outside the lock."""
-
-    def __init__(self, size):
-        self._size = size
-        self._entries = OrderedDict()
-        self._lock = threading.Lock()
-
-    def get(self, key, compute, valid=lambda value: True):
-        with self._lock:
-            hit = self._entries.get(key)
-            if hit is not None and valid(hit):
-                self._entries.move_to_end(key)
-                return hit
-        value = compute()
-        with self._lock:
-            self._entries[key] = value
-            self._entries.move_to_end(key)
-            while len(self._entries) > self._size:
-                self._entries.popitem(last=False)
-        return value
 
 
 def _is_live(run_state):
@@ -103,9 +80,9 @@ class LeaderboardCache:
         self.max_page = max_page
         self.bucket_sec = bucket_sec
         self._tokens = itertools.count(1)
-        self._bases = _LRU(8)
-        self._facets = _LRU(8)
-        self._sorted = _LRU(size)
+        self._bases = LRU(8)
+        self._facets = LRU(8)
+        self._sorted = LRU(size)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
@@ -113,10 +90,8 @@ class LeaderboardCache:
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live."""
         bucket = self._bucket()
-        base = self._bases.get(
-            id(snapshot),
-            lambda: _Base(snapshot, next(self._tokens), bucket),
-            valid=lambda hit: hit.snapshot is snapshot,
+        base = self._bases.per_snapshot(
+            snapshot, lambda: _Base(snapshot, next(self._tokens), bucket)
         )
         return base, (bucket if base.live else None)
 
@@ -160,8 +135,4 @@ class LeaderboardCache:
 
     def facets(self, snapshot):
         """The app's filter vocabulary, once per snapshot."""
-        return self._facets.get(
-            id(snapshot),
-            lambda: (snapshot, facets(snapshot.rows)),
-            valid=lambda hit: hit[0] is snapshot,
-        )[1]
+        return self._facets.per_snapshot(snapshot, lambda: facets(snapshot.rows))
