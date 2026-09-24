@@ -60,16 +60,12 @@ def valid_artifact_name(name):
 
 
 def log_sizes_of(files):
-    """``{writer: total bytes}`` over ``(name, size)`` pairs of a record's files."""
-    sizes = {}
-    for name, size in files:
-        if name == LEGACY_LOG_FILE:
-            writer = ""
-        elif is_log_file(name):
-            writer = log_writer_and_seq(name)[0]
-        else:
-            continue
-        sizes[writer] = sizes.get(writer, 0) + size
+    """``{writer: total bytes}`` over ``(name, size)`` pairs of a record's files,
+    counting only the log files a reader sees (not what a compaction superseded)."""
+    files = dict(files)
+    sizes = {"": files[LEGACY_LOG_FILE]} if LEGACY_LOG_FILE in files else {}
+    for writer, names in group_log_names(files).items():
+        sizes[writer] = sum(files[name] for name in names)
     return sizes
 
 

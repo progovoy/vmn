@@ -147,6 +147,7 @@ def _get_experiment_storage(vcs, params):
         prefix=params.get("prefix", "vmn-experiments"),
         endpoint_url=params.get("endpoint_url"),
         subdir="experiments",
+        buffer_logs=True,
     )
 
 
