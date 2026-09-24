@@ -630,8 +630,9 @@ vmn exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 one
 
 Two guards take runs back out of the selection:
 
-- a run whose status is `running` is never deleted (it is reported as skipped);
-  `--force` deletes it anyway. A `stuck` run is deletable.
+- a run whose status is `running` or `stuck` is never deleted (it is reported
+  as skipped — a stuck run may just have a late heartbeat); `--force` deletes
+  it anyway.
 - a run with a kept descendant is kept, so no surviving inner run is left
   pointing at a parent that no longer exists.
 
