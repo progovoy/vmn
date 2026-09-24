@@ -10,7 +10,9 @@ frontend all agree on what a run's status is.
 
 Status is *derived*, never stored: a run whose heartbeat went stale without a
 terminal exit code is ``stuck`` — the runner died, was OOM-killed or lost its
-node, and nothing was left behind to say so.
+node, and nothing was left behind to say so. Stale means both clocks agree:
+the writer's heartbeat timestamp and, when known, the store's write time of
+``run_state.yml`` (see :func:`derive_status`).
 """
 import datetime
 
@@ -102,6 +104,11 @@ def run_state_observed_at(storage, app_name, verstr):
     return observed_at_from_mtime(mtime)
 
 
+def observed_at_by_verstr(storage, app_name, verstrs):
+    """``{verstr: run_state_observed_at(...)}`` for a direct (unindexed) read."""
+    return {v: run_state_observed_at(storage, app_name, v) for v in verstrs}
+
+
 def observed_at_from_mtime(mtime):
     """A storage file signature's mtime as an aware UTC datetime, or None.
 
@@ -114,27 +121,43 @@ def observed_at_from_mtime(mtime):
     return datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
 
 
-def _heartbeat_age_sec(run_state, now, observed_at):
-    """Seconds since the run last proved it was alive, or None if unknown.
+def _writer_age_sec(run_state, now):
+    """Seconds since the writer's own clock last stamped a beat, or None.
 
-    Measured on the store's clock when *observed_at* is known — that tolerates
-    any skew between the writer's and the reader's clocks — else on the
-    writer's heartbeat timestamp. Before the first beat lands, the start time
-    stands in for it.
+    Before the first beat lands, the start time stands in for it.
     """
-    if observed_at is not None:
-        return (now - observed_at).total_seconds()
     age = _age_sec(run_state.get("heartbeat"), now)
     if age is None and run_state.get("heartbeat") is None:
         age = _age_sec(run_state.get("started_at"), now)
     return age
 
 
+def _liveness_age_sec(run_state, now, observed_at):
+    """Seconds since the freshest proof that the run is alive, or None.
+
+    Two clocks can prove it: the writer's heartbeat timestamp and — when
+    *observed_at* is known — the store's write time of ``run_state.yml``. The
+    fresher one wins, so a run is stale only once *both* are. A heartbeat
+    dated in the future is the writer's clock running ahead and proves
+    nothing the store's clock can check, so it is ignored then.
+    """
+    writer_age = _writer_age_sec(run_state, now)
+    if observed_at is None:
+        return writer_age
+    store_age = (now - observed_at).total_seconds()
+    if writer_age is None or writer_age < 0:
+        return store_age
+    return min(writer_age, store_age)
+
+
 def derive_status(run_state, now=None, observed_at=None):
     """Status of one run: created / running / stuck / succeeded / failed.
 
     *observed_at* is the storage mtime of ``run_state.yml``
-    (:func:`run_state_observed_at`); pass it when you have it.
+    (:func:`run_state_observed_at`); pass it when you have it. A run with no
+    exit code is ``stuck`` only when its heartbeat timestamp *and* that store
+    write time are both older than :func:`stale_after_sec`; without
+    *observed_at* the heartbeat timestamp alone decides.
     """
     if not run_state:
         return CREATED
@@ -146,7 +169,7 @@ def derive_status(run_state, now=None, observed_at=None):
         return CREATED
 
     # No exit code: only the heartbeat can tell a live run from a dead one.
-    age = _heartbeat_age_sec(run_state, _now(now), observed_at)
+    age = _liveness_age_sec(run_state, _now(now), observed_at)
     if age is None:
         return STUCK
     return RUNNING if age <= stale_after_sec(run_state) else STUCK
@@ -170,7 +193,7 @@ def status_fields(run_state, now=None, observed_at=None):
             duration = round((end - started).total_seconds(), 3)
 
     if observed_at is not None:
-        stale_sec = (now - observed_at).total_seconds()
+        stale_sec = _liveness_age_sec(run_state, now, observed_at)
     else:
         stale_sec = _age_sec(run_state.get("heartbeat"), now)
     return {

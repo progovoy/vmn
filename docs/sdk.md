@@ -573,7 +573,7 @@ best = get_run("my_app", ref="latest")
 ```
 
 - `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None,
-  query=None, use_index=False, include_archived=False)` — archived runs are
+  query=None, use_index=True, include_archived=False)` — archived runs are
   left out unless `include_archived=True`; `sort` picks the metric to order by (the configured [primary
   metric](experiments.md#metrics-schema-sorting--goals) when omitted), `last`
   caps the result count, `status` filters to one derived status, and `query` is
@@ -589,8 +589,9 @@ A `list_runs` row carries the latest value of each metric, the run's `name`
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
-`vmn exp list`, the ui and `list_runs(..., use_index=True)` read through an
-incremental index (a plain `list_runs()` reads storage directly): the folded
+`vmn exp list`, the ui and `list_runs()` read through an incremental index
+(`list_runs(..., use_index=False)` reads storage directly and writes no index
+file): the folded
 rows persist in `.vmn/<app>/experiments/.index.sqlite`, next to the records
 (the directory's own `.gitignore` keeps it out of `git status`). A call lists
 the record files once and re-reads only what changed since the last one — the

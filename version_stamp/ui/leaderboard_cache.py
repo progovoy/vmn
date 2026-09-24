@@ -42,9 +42,17 @@ def _is_live(run_state):
     return bool(run_state) and run_state.get("exit_code") is None
 
 
-def _annotated(rows, run_states):
+def _status(snapshot, verstr):
+    """*verstr*'s status fields, judged with the store's write time too."""
+    return status_fields(
+        snapshot.run_states.get(verstr),
+        observed_at=snapshot.run_state_observed_at.get(verstr),
+    )
+
+
+def _annotated(snapshot):
     return annotate_tree(
-        {**row, **status_fields(run_states.get(row["verstr"]))} for row in rows
+        {**row, **_status(snapshot, row["verstr"])} for row in snapshot.rows
     )
 
 
@@ -66,7 +74,7 @@ class _Base:
         live = [
             i for i, row in enumerate(snapshot.rows) if _is_live(states.get(row["verstr"]))
         ]
-        self.rows = _annotated(snapshot.rows, states)
+        self.rows = _annotated(snapshot)
         self.position = {row["verstr"]: i for i, row in enumerate(self.rows)}
         self.patch = LivePatch(self.rows, live, self.position)
         self._at = (bucket, [self.rows[i] for i in self.patch.changed])
@@ -87,9 +95,8 @@ class _Base:
         return rows
 
     def _rederive_live(self):
-        states = self.snapshot.run_states
         fresh = {
-            i: {**self.rows[i], **status_fields(states.get(self.rows[i]["verstr"]))}
+            i: {**self.rows[i], **_status(self.snapshot, self.rows[i]["verstr"])}
             for i in self.patch.live
         }
         return self.patch.rolled_up(self.rows, fresh)

@@ -12,6 +12,10 @@ import os
 import threading
 
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+from version_stamp.core.experiment_status import (
+    observed_at_by_verstr,
+    run_state_observed_at,
+)
 from version_stamp.ui import index as ui_index
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers import experiment_detail as detail_reader
@@ -26,6 +30,17 @@ def _state_reader(run_states):
         if verstr in run_states:
             return run_states[verstr]
         return exp_reader.load_run_state(storage, app_name, verstr)
+
+    return read
+
+
+def _observed_at_reader(observed_at):
+    """A ``read_observed_at`` answering from *observed_at*, storage for the rest."""
+
+    def read(storage, app_name, verstr):
+        if verstr in observed_at:
+            return observed_at[verstr]
+        return run_state_observed_at(storage, app_name, verstr)
 
     return read
 
@@ -82,13 +97,14 @@ class ExperimentSource:
         snap = self.snapshot(ws, app_name, s3_storage)
         if snap is not None:
             return snap
-        rows, states = exp_reader.direct_rows_and_states(
-            exp_reader.experiment_storage(ws.path), app_name
-        )
-        return IndexSnapshot.build(app_name, 0, rows, states)
+        storage = exp_reader.experiment_storage(ws.path)
+        rows, states = exp_reader.direct_rows_and_states(storage, app_name)
+        observed = observed_at_by_verstr(storage, app_name, states)
+        return IndexSnapshot.build(app_name, 0, rows, states, observed_at=observed)
 
     def detail_options(self, ws, snap):
-        """``edges``/``resolve``/``read_run_state`` for a run-detail read."""
+        """``edges``/``resolve``/``read_run_state``/``read_observed_at`` for a
+        run-detail read."""
         if snap is None:
             with self._lock:
                 return {"edges": self._edges.setdefault(ws.name, detail_reader.ParentEdges())}
@@ -101,6 +117,7 @@ class ExperimentSource:
             # A refreshed-inline snapshot leaves the subtree's states to be
             # read from storage; a background one's are at most ~1s old.
             options["read_run_state"] = _state_reader(snap.run_states)
+            options["read_observed_at"] = _observed_at_reader(snap.run_state_observed_at)
         return options
 
     def forget(self, ws_name):

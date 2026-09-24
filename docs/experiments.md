@@ -296,8 +296,8 @@ time, so a run whose machine vanished does not need anybody to update a record:
 | Status | Means |
 |---|---|
 | `created` | the experiment exists but no command was ever started (e.g. `exp create`) |
-| `running` | the heartbeat is fresh |
-| `stuck` | claims to be running, but the heartbeat went stale and there is no exit code |
+| `running` | the heartbeat is fresh (by the writer's timestamp or the store's write time) |
+| `stuck` | claims to be running, but the heartbeat went stale on both clocks and there is no exit code |
 | `succeeded` | finished, exit code 0 |
 | `failed` | finished, non-zero exit code |
 
@@ -307,13 +307,18 @@ before vmn calls a run stuck — the staleness window is
 `max(3 × heartbeat_interval_sec, 60s)`.
 
 The writer's `heartbeat` timestamp comes from the writer's clock, which may be
-off from the reader's. `derive_status(state, observed_at=...)` in
-`version_stamp.core.experiment_status` therefore accepts the *storage's* mtime of
-`run_state.yml` (`run_state_observed_at(storage, app, verstr)`: the file mtime
-locally, `LastModified` on S3) and, when given, measures the heartbeat's age on
-that clock instead — a writer whose clock is behind never reads `stuck` while it
-beats, and one whose clock is ahead does not read `running` long after it died.
-Without it, the timestamp rule above applies. `heartbeat_seq` increases by one on
+off from the reader's. So every reader — `vmn exp list`/`show`, `prune`'s live
+guard, the ui and the SDK reader — also weighs the *store's* write time of
+`run_state.yml` (the file mtime locally, `LastModified` on S3): a run is `stuck`
+only when **both** the heartbeat timestamp **and** that write time are older than
+the staleness window. A fresh store write proves the run alive even when its
+writer's clock is behind; a heartbeat dated in the future (a writer clock ahead)
+is ignored, so such a run still turns `stuck` once the store sees no writes.
+When the store time is unknown (a backend listing that carries no mtime), the
+timestamp rule above applies alone. In code: `derive_status(state,
+observed_at=...)` in `version_stamp.core.experiment_status`, with `observed_at`
+from `run_state_observed_at(storage, app, verstr)` or an index snapshot's
+`run_state_observed_at`; `stale_sec` is the age of the fresher of the two. `heartbeat_seq` increases by one on
 every beat, for readers that poll and want a clock-free "it moved" signal.
 
 ### Preemption and signals

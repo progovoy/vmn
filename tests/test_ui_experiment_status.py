@@ -81,6 +81,12 @@ def _stuck_state():
     return state
 
 
+def _age_run_state(exp_path, seconds):
+    """Age run_state.yml's store write time too: a genuinely dead run."""
+    aged = datetime.datetime.now().timestamp() - seconds
+    os.utime(os.path.join(exp_path, "run_state.yml"), (aged, aged))
+
+
 def _finished_state(exit_code):
     return {
         "state": "finished",
@@ -116,7 +122,8 @@ def _index(app_layout):
 def _seed_all_statuses(app_layout):
     _write_experiment(app_layout, "0.0.1", run_state=None)
     _write_experiment(app_layout, "0.0.2", run_state=_running_state())
-    _write_experiment(app_layout, "0.0.3", run_state=_stuck_state())
+    stuck = _write_experiment(app_layout, "0.0.3", run_state=_stuck_state())
+    _age_run_state(stuck, 3600)
     _write_experiment(app_layout, "0.0.4", run_state=_finished_state(0))
     _write_experiment(app_layout, "0.0.5", run_state=_finished_state(3))
     return {
@@ -218,7 +225,7 @@ def test_stale_heartbeat_without_exit_code_is_stuck(app_layout):
     state = _running_state()
     state.pop("exit_code")
     state["heartbeat"] = _ago(600)
-    _write_experiment(app_layout, "0.0.1", run_state=state)
+    _age_run_state(_write_experiment(app_layout, "0.0.1", run_state=state), 700)
 
     rows = _client(app_layout).get(f"{API}/{app_layout.app_name}/experiments").json()
     assert rows[0]["status"] == "stuck"

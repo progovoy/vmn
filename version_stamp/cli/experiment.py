@@ -61,6 +61,7 @@ from version_stamp.core.experiment_refs import (
 from version_stamp.core.experiment_status import (
     STUCK,
     load_run_state,
+    run_state_observed_at,
     status_fields,
 )
 from version_stamp.core.experiment_tree import subtree_status
@@ -568,7 +569,7 @@ def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
     # Through the experiment index: after the first listing, only the logs and
     # run states that changed since are read again.
-    index_rows, run_states = experiment_index.indexed_rows(
+    index_rows, run_states, observed = experiment_index.indexed_status_rows(
         storage, app_name, with_create_note=True
     )
     as_json = getattr(args, "json", False)
@@ -578,7 +579,7 @@ def experiment_list(vcs, params, storage, args):
 
     # Status and tree fields span every run, so depth, tree_status and the
     # query see the whole tree whatever subset is shown.
-    tree_rows = annotated_rows(index_rows, run_states)
+    tree_rows = annotated_rows(index_rows, run_states, observed)
     try:
         matching = filter_rows(tree_rows, getattr(args, "query", None))
         matching = filter_archived(matching, getattr(args, "archived", False))
@@ -611,20 +612,26 @@ def experiment_list(vcs, params, storage, args):
 
 
 def _subtree(storage, app_name, verstr, metadata, snapshot=None):
-    """``(run_state, tree fields)`` of *verstr*: the parent edges come from the
-    experiment index, and run state is read for the run's subtree only — a
-    handful of rows even when the app has thousands of experiments."""
+    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent edges
+    come from the experiment index, and run state (with its store write time)
+    is read for the run's subtree only — a handful of rows even when the app
+    has thousands of experiments."""
     parent_of = parent_edges(storage, app_name, snapshot)
     parent_of.setdefault(verstr, metadata.get("parent"))
-    return subtree_status(
-        verstr, parent_of, lambda v: load_run_state(storage, app_name, v)
+    observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
+    run_state, tree = subtree_status(
+        verstr,
+        parent_of,
+        lambda v: load_run_state(storage, app_name, v),
+        observed_at=observed_at,
     )
+    return run_state, tree, observed_at(verstr)
 
 
 def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
     """Derived run status, runner identity and the experiment's nesting."""
-    run_state, tree = _subtree(storage, app_name, verstr, metadata, snapshot)
-    fields = status_fields(run_state)
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
+    fields = status_fields(run_state, observed_at=observed_at)
     print(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
         print(f"  Exit code: {fields['exit_code']}")
@@ -700,10 +707,13 @@ SHOW_LOG_TAIL = 50
 
 
 def _print_show_json(storage, app_name, verstr, metadata, patches, log, args, snapshot):
-    run_state, tree = _subtree(storage, app_name, verstr, metadata, snapshot)
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
     idx = storage_index(storage, app_name, verstr, snapshot)
     tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
-    print(dumps(show_payload(idx, metadata, patches, log, run_state, tree, tail)))
+    payload = show_payload(
+        idx, metadata, patches, log, run_state, tree, tail, observed_at=observed_at
+    )
+    print(dumps(payload))
     return 0
 
 

@@ -17,6 +17,7 @@ import subprocess
 import threading
 
 from version_stamp.core import experiment_index
+from version_stamp.core.experiment_status import observed_at_by_verstr
 from version_stamp.core.version_math import app_name_to_tag_name
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
@@ -113,7 +114,8 @@ class WorkspaceIndex:
             self._conn.commit()
 
     def experiment_rows(self, app_name):
-        """``(rows, run_states)``, refreshing the incremental experiment index.
+        """``(rows, run_states, observed_at)``, refreshing the incremental
+        experiment index (*observed_at*: each run_state.yml's store write time).
 
         A metric appended anywhere costs that log's new bytes and a heartbeat
         that one run state — never a re-read of every experiment. The index is
@@ -123,7 +125,8 @@ class WorkspaceIndex:
             index = experiment_index.shared_index(
                 self._storage, app_name, cache_path=self._db_path
             ).refresh()
-            return index.rows(), index.run_states()
+            observed = dict(index.snapshot().run_state_observed_at)
+            return index.rows(), index.run_states(), observed
         except Exception:
             _LOGGER.debug("Experiment index failed; reading directly", exc_info=True)
             rows = _fetch_experiment_rows(self.root_path, app_name)
@@ -132,16 +135,18 @@ class WorkspaceIndex:
                 app_name=app_name,
                 verstrs=[r["verstr"] for r in rows],
             )
-            return rows, states
+            return rows, states, observed_at_by_verstr(self._storage, app_name, states)
 
     def snapshot(self, app_name, refresher=None):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
         return app_snapshot(self._storage, app_name, self._db_path, refresher)
 
     def list_experiments(self, app_name, **filters):
-        rows, run_states = self.experiment_rows(app_name)
+        rows, run_states, observed = self.experiment_rows(app_name)
         schema = exp_reader.metrics_schema(self.root_path, app_name)
-        return exp_reader.leaderboard(rows, run_states, schema, **filters)
+        return exp_reader.leaderboard(
+            rows, run_states, schema, observed_at=observed, **filters
+        )
 
     def list_versions(self, app_name):
         fp = _versions_fingerprint(self.root_path, app_name)

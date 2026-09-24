@@ -172,6 +172,8 @@ full listing per request.
 Every run row carries a color-coded status pill — `created`, `running`, `stuck`,
 `succeeded`, `failed`. `running` pulses; `stuck` (a run whose heartbeat went
 stale with no exit code — the node died and nothing recorded it) is flagged.
+Staleness is judged on both the writer's heartbeat timestamp and the store's
+write time of `run_state.yml`, so a writer with a lagging clock never shows `stuck`.
 Inner runs are nested under their outer run, so a sweep collapses to one row
 whose status is the rollup over its whole subtree. The page auto-refreshes while
 anything is unfinished. See
@@ -196,7 +198,7 @@ Every experiment row from `GET .../apps/{app}/experiments` and the
 | `exit_code` | the command's exit code once finished, else `null` |
 | `started_at` / `finished_at` | ISO-8601 timestamps |
 | `heartbeat` | last heartbeat refresh |
-| `stale_sec` | seconds since the last heartbeat |
+| `stale_sec` | seconds since the last proof of life: the fresher of the heartbeat timestamp and the store's write time of `run_state.yml` |
 | `duration_sec` | wall-clock run time once finished |
 | `pid` / `host` / `command` | what ran, where |
 | `last_metric_at` | when a metric was last logged — use it to spot a run that is alive but no longer progressing |
