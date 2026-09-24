@@ -109,6 +109,55 @@ def _get_experiment_storage(vcs, params):
     )
 
 
+def _other_configured_apps(vcs):
+    """Names of vmn apps already configured in this repo, other than *vcs.name*.
+
+    Mirrors the ``.vmn/<app>/conf.yml`` layout the ui reader's ``list_apps``
+    walks: an app is "configured" once it has its own conf.yml under ``.vmn/``.
+    """
+    vmn_dir = os.path.join(vcs.vmn_root_path, ".vmn")
+    if not os.path.isdir(vmn_dir):
+        return []
+
+    apps = set()
+    for dirpath, dirnames, filenames in os.walk(vmn_dir):
+        rel = os.path.relpath(dirpath, vmn_dir)
+        if rel == ".":
+            continue
+        parts = rel.split(os.sep)
+        if parts[0].startswith(".") or "branch_conf" in parts:
+            dirnames[:] = []
+            continue
+        if "conf.yml" in filenames:
+            apps.add("/".join(parts))
+
+    apps.discard(vcs.name)
+    return sorted(apps)
+
+
+def _closest_app_names(name, candidates, limit=3):
+    """A simple, dependency-free "did you mean" hint: substring match first,
+    falling back to difflib's stdlib fuzzy matcher, else the full list."""
+    substring_hits = [c for c in candidates if name in c or c in name]
+    if substring_hits:
+        return substring_hits[:limit]
+
+    import difflib
+
+    close = difflib.get_close_matches(name, candidates, n=limit, cutoff=0.5)
+    return close or candidates[:limit]
+
+
+def _new_app_guard_error(app_name, other_apps):
+    hints = _closest_app_names(app_name, other_apps)
+    return (
+        f"App '{app_name}' does not exist, and this repo already has "
+        f"{'an app' if len(other_apps) == 1 else 'apps'} "
+        f"({', '.join(other_apps)}). Did you mean: {', '.join(hints)}? "
+        f"If '{app_name}' is genuinely a new app, re-run with --new-app."
+    )
+
+
 def _resolve_parent(storage, app_name, args):
     """``--parent``, else the enclosing run's ``VMN_EXPERIMENT_ID``: ``(parent, err)``."""
     return resolve_parent(
@@ -231,18 +280,33 @@ def handle_experiment(vmn_ctx):
 
             _dirty_ok = {"pending", "outgoing"}
 
-            if "repo_tracked" not in status.state and not be.is_path_tracked(
+            repo_missing = "repo_tracked" not in status.state and not be.is_path_tracked(
                 vmn_init_file
-            ):
+            )
+            app_missing = "app_tracked" not in status.state and not be.is_path_tracked(
+                vcs.app_dir_path
+            )
+
+            # A brand-new app name in a repo that already has other apps is
+            # far more likely a typo than a deliberate new app, and unlike
+            # `vmn show`/`vmn goto` this path commits, tags and pushes as a
+            # side effect. Refuse unless the repo is genuinely uninitialized
+            # (no other app could exist yet) or the user opted in with
+            # --new-app.
+            if app_missing and not repo_missing and not getattr(args, "new_app", False):
+                other_apps = _other_configured_apps(vcs)
+                if other_apps:
+                    VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
+                    return 1
+
+            if repo_missing:
                 VMN_LOGGER.info("Auto-initializing repository...")
                 ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
                 if ret != 0:
                     return 1
                 auto_initialized = True
 
-            if "app_tracked" not in status.state and not be.is_path_tracked(
-                vcs.app_dir_path
-            ):
+            if app_missing:
                 # Name the app and the baseline: a typo'd app name becomes a
                 # permanent git tag, so creating one must never be silent.
                 VMN_LOGGER.info(

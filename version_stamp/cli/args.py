@@ -596,6 +596,14 @@ def _add_experiment_parser(subprasers, name):
         help="create/run: a human-readable name for the run",
     )
     pexp.add_argument(
+        "--new-app",
+        action="store_true",
+        default=False,
+        help="create/run: confirm that this app name is genuinely new when "
+        "other vmn apps already exist in this repo (guards against a typo'd "
+        "app name silently creating one)",
+    )
+    pexp.add_argument(
         "--remove",
         action="append",
         default=None,
