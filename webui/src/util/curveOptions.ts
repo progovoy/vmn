@@ -58,17 +58,23 @@ export interface CurveOptionsArgs {
   read?: (name: string) => string;
 }
 
-export function curveOptions(
-  series: CurveSeries[], { xMode, height, theme, logY = false, hideX = false, read }: CurveOptionsArgs,
-): Omit<uPlot.Options, "width"> {
-  const font = `10.5px ${resolveCssColor("var(--mono, monospace)", read)}`;
-  const axis = (extra: Partial<uPlot.Axis> = {}, grid = true): uPlot.Axis => ({
+/** An axis in the theme's colours (shared by the line and scatter charts). */
+export function themedAxis(
+  theme: ChartTheme, read?: (name: string) => string, extra: Partial<uPlot.Axis> = {}, grid = true,
+): uPlot.Axis {
+  return {
     stroke: theme.axis,
     grid: { show: grid, stroke: theme.grid, width: 1 },
     ticks: { stroke: theme.grid, width: 1 },
-    font,
+    font: `10.5px ${resolveCssColor("var(--mono, monospace)", read)}`,
     ...extra,
-  });
+  };
+}
+
+export function curveOptions(
+  series: CurveSeries[], { xMode, height, theme, logY = false, hideX = false, read }: CurveOptionsArgs,
+): Omit<uPlot.Options, "width"> {
+  const axis = (extra: Partial<uPlot.Axis> = {}, grid = true) => themedAxis(theme, read, extra, grid);
   const xTick = X_TICK[xMode];
   return {
     mode: 2,

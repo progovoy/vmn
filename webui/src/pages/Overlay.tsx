@@ -13,7 +13,7 @@ import { Skeleton } from "../components/ui";
 import { useOverlaySeries, type OverlayRunData } from "./overlaySeries";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
-export const MAX_OVERLAY_RUNS = 20;
+export const MAX_OVERLAY_RUNS = 100;
 const CHART_H = 260;
 
 /** Metrics that have series data in every fetched run. */

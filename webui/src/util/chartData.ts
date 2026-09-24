@@ -2,8 +2,9 @@
  *
  *  Each metric is built from its own points: a sparse `val_loss` logged every
  *  100 steps must survive next to a per-step `loss`, so nothing here ever
- *  downsamples one metric by another's x values. Rows are merged by x only
- *  for recharts' benefit, and every Line is drawn with `connectNulls`. */
+ *  downsamples one metric by another's x values. The canvas charts use the
+ *  typed per-curve arrays in seriesArrays.ts; the row builders below
+ *  (`buildRows`/`overlayRows`/`smoothRows`) are the older merged-by-x form. */
 import type { SeriesPoint } from "../types";
 import { ema } from "../hooks/useSmoothing";
 import { downsampleLTTB } from "./downsample";

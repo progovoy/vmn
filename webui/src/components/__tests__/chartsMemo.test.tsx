@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import CurveChart from "../CurveChart";
 import GroupedMetrics from "../GroupedMetrics";
 import MetricBarChart from "../MetricBarChart";
@@ -36,20 +36,29 @@ const row = (i: number, metrics: Record<string, number>): ExperimentRow => ({
 });
 const ROWS = [row(1, { loss: 0.5, acc: 0.1 }), row(2, { loss: 0.4, acc: 0.2 })];
 
-function axisStrokes(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".recharts-cartesian-axis-line")]
-    .map((el) => el.getAttribute("stroke") ?? "");
-}
-
-describe("axes take their colour from the theme", () => {
+describe("charts take their colours from the theme", () => {
   it.each([
     ["MetricBarChart", () => <MetricBarChart rows={ROWS} metricCols={["loss"]} schema={null} />],
-    ["MetricScatter", () => <MetricScatter rows={ROWS} metricCols={["loss", "acc"]} paramCols={[]} schema={null} />],
     ["GroupedMetrics", () => <GroupedMetrics rows={ROWS} metricCols={["loss"]} paramCols={[]} schema={null} />],
-  ])("%s", (_name, el) => {
+  ])("%s uses CSS variables, not hard-coded colours", (_name, el) => {
     const { container } = render(el());
-    const strokes = axisStrokes(container);
-    expect(strokes.length).toBeGreaterThan(0);
-    for (const s of strokes) expect(s).toBe("var(--text-3)");
+    expect(container.innerHTML).toContain("var(--");
+    expect(container.innerHTML).not.toMatch(/#[0-9a-f]{6}/i);
+  });
+});
+
+describe("GroupedMetrics chart", () => {
+  it("draws one bar per group, sized by the group mean, with a ± std whisker", () => {
+    const rows = [
+      row(1, { loss: 0.2 }), row(3, { loss: 0.6 }), // main: mean 0.4, std 0.2
+      row(2, { loss: 0.8 }), // dev: mean 0.8
+    ];
+    render(<GroupedMetrics rows={rows} metricCols={["loss"]} paramCols={[]} schema={null} />);
+    const bars = screen.getAllByTestId("group-bar");
+    expect(bars.map((b) => b.getAttribute("data-group"))).toEqual(["main", "dev"]);
+    expect(bars[0].style.height).toBe("50%");
+    expect(bars[1].style.height).toBe("100%");
+    expect(screen.getAllByTestId("group-whisker")[0].style.height).toBe("50%");
+    expect(bars[0].getAttribute("title")).toBe("main: 0.4 ± 0.2 (n=2)");
   });
 });

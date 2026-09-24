@@ -1,6 +1,7 @@
 import { fmtVal } from "../util";
 import { Y_AXIS_SIZE, type CurveSeries } from "../util/curveOptions";
 import type { TooltipRow } from "../util/seriesArrays";
+import { TOOLTIP_STYLE } from "./chartStyles";
 import type { CursorInfo } from "./UPlotChart";
 
 export default function CurveTooltip({ rows, series, cursor, width, formatX }: {
@@ -18,19 +19,10 @@ export default function CurveTooltip({ rows, series, cursor, width, formatX }: {
     <div
       data-testid="curve-tooltip"
       style={{
-        position: "absolute",
+        ...TOOLTIP_STYLE,
         top: Math.max(0, cursor.top - 10),
         left: flip ? left - 12 : left + 12,
         transform: flip ? "translateX(-100%)" : undefined,
-        pointerEvents: "none",
-        background: "var(--panel-2)",
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-        color: "var(--text)",
-        fontSize: 11.5,
-        padding: "6px 8px",
-        zIndex: 5,
-        whiteSpace: "nowrap",
       }}
     >
       <div className="mono" style={{ color: "var(--text-3)", marginBottom: 4 }}>{formatX(rows[0].x)}</div>
