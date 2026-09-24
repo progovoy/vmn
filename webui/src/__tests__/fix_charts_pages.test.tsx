@@ -15,11 +15,13 @@ vi.mock("../api", () => ({
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
 vi.mock("../apiRun", () => ({ runLog: vi.fn() }));
+vi.mock("../apiSeries", () => ({ fetchSeriesBatch: vi.fn(), fetchRunStatuses: vi.fn() }));
 
 import { api } from "../api";
 import { runLog } from "../apiRun";
+import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import Run from "../pages/Run";
-import Overlay from "../pages/Overlay";
+import Overlay, { MAX_OVERLAY_RUNS } from "../pages/Overlay";
 
 const mockedApi = api as unknown as {
   experiment: ReturnType<typeof vi.fn>;
@@ -108,14 +110,20 @@ describe("Run page", () => {
 
 describe("Overlay page", () => {
   it("caps the number of overlaid runs", async () => {
-    const runs = Array.from({ length: 30 }, (_, i) => `0.0.1-dev.r${i}`);
-    mockedApi.experiment.mockImplementation((_w: string, _a: string, v: string) =>
-      Promise.resolve({ ...detail(), metadata: { verstr: v } }));
+    expect(MAX_OVERLAY_RUNS).toBe(100);
+    const runs = Array.from({ length: 130 }, (_, i) => `0.0.1-dev.r${i}`);
+    const batch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
+    batch.mockImplementation((_w: string, _a: string, vs: string[]) => Promise.resolve({
+      series: Object.fromEntries(vs.map((v) => [v, detail().series])), missing: [],
+    }));
+    (fetchRunStatuses as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
     renderAt(
       `/ws/w/app/app/overlay?runs=${runs.join(",")}`, "/ws/:ws/app/:app/overlay", <Overlay />,
     );
-    await waitFor(() => expect(mockedApi.experiment).toHaveBeenCalled());
-    expect(mockedApi.experiment.mock.calls.length).toBe(20);
-    expect(screen.getByText(/showing the first 20 of 30/)).toBeInTheDocument();
+    await waitFor(() => expect(batch).toHaveBeenCalled());
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][2]).toEqual(runs.slice(0, 100));
+    expect(mockedApi.experiment).not.toHaveBeenCalled();
+    expect(await screen.findByText(/showing the first 100 of 130/)).toBeInTheDocument();
   });
 });
