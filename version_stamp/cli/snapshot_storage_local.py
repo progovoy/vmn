@@ -28,8 +28,10 @@ from version_stamp.cli.snapshot_storage_files import (
     unsafe_verstr,
     write_patches_to_dir,
 )
+from version_stamp.cli.snapshot_storage_listing import RecordListings, files_in
 from version_stamp.core import utils as core_utils
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.record_files import read_file, read_file_from
 from version_stamp.core.utils import parse_record_metadata
 
 
@@ -48,6 +50,7 @@ class LocalSnapshotStorage(SnapshotStorage):
     def __init__(self, vmn_root_path, subdir="snapshots"):
         self.vmn_root_path = vmn_root_path
         self._subdir = subdir
+        self._listings = RecordListings()
 
     def _snapshot_base_dir(self, app_name):
         app_dir = checked_app_path(app_name).replace("/", os.sep)
@@ -220,10 +223,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
         (a key without a record is left out)."""
         if keys is None:
-            return {
-                unsafe_verstr(entry.name): self._files_in(entry.path)
-                for entry in self._record_dirs(app_name)
-            }
+            return self._list_all_files(app_name)
         files = {}
         for key in keys:
             names = self.record_files(app_name, key)
@@ -231,25 +231,30 @@ class LocalSnapshotStorage(SnapshotStorage):
                 files[key] = names
         return files
 
-    @staticmethod
-    def _files_in(path):
-        return {
-            f.name: (f.stat().st_size, f.stat().st_mtime_ns)
-            for f in os.scandir(path)
-            if f.is_file() and not f.name.startswith(".")
-        }
+    def _list_all_files(self, app_name):
+        # The same records as _record_dirs, without stat-ing metadata.yml twice.
+        base = self._snapshot_base_dir(app_name)
+        if not os.path.isdir(base):
+            return {}
+        listed = self._listings.list_all(base, lambda files: METADATA_FILE in files)
+        return {unsafe_verstr(name): files for name, files in listed.items()}
+
+    _files_in = staticmethod(files_in)
 
     def direct_files(self):
         return self
 
     def read_file_from(self, app_name, verstr, filename, offset):
         path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
-        try:
-            with open(path, "rb") as f:
-                f.seek(offset)
-                return f.read()
-        except FileNotFoundError:
+        return read_file_from(path, offset)
+
+    def plain_record_dir(self, app_name, verstr):
+        """The directory of *verstr*'s files, for a reader that opens them
+        itself (the index's worker processes); None from a subclass, which
+        may read its files some other way."""
+        if type(self) is not LocalSnapshotStorage:
             return None
+        return self._snapshot_dir(app_name, verstr)
 
     def cache_identity(self):
         return ("local", os.path.realpath(self.vmn_root_path), self._subdir)
@@ -278,11 +283,7 @@ class LocalSnapshotStorage(SnapshotStorage):
             shutil.rmtree(snap_dir, ignore_errors=True)
 
     def load_file(self, app_name, verstr, filename):
-        path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
-        if not os.path.isfile(path):
-            return None
-        with open(path, "rb") as f:
-            return f.read()
+        return read_file(os.path.join(self._snapshot_dir(app_name, verstr), filename))
 
     def _refuse_orphan_write(self, app_name, verstr, what):
         """A write into a record that does not exist (pruned, never created)

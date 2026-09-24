@@ -70,16 +70,21 @@ def group_log_names(names):
     return {w: [n for _, n in _visible(spans)] for w, spans in groups.items()}
 
 
+# json.loads minus its per-call Python layers: the C scanner at offset 0 of a
+# stripped line is exactly json.loads when it consumes the whole line.
+_scan = json.JSONDecoder().scan_once
+
+
 def parse_json_line(line):
     """One log entry from a JSONL line, or None for a blank/corrupt/non-object line."""
     line = line.strip()
     if not line:
         return None
     try:
-        entry = json.loads(line)
-    except ValueError:
+        entry, end = _scan(line, 0)
+    except (StopIteration, ValueError):
         return None
-    return entry if isinstance(entry, dict) else None
+    return entry if end == len(line) and isinstance(entry, dict) else None
 
 
 def parse_jsonl(text, writer):
