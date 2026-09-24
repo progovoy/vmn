@@ -96,14 +96,26 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         return self._ship_if_due(app_name, verstr, writer_id)
 
     def _ship_if_due(self, app_name, verstr, writer_id):
+        # The append above is already durable: a shipping failure here (a
+        # network blip) must not look like a failed write to the caller — the
+        # SDK's LogBuffer retries a failed write by resubmitting the whole
+        # batch, which would append these entries a second time. Leave them
+        # unshipped instead; close() (or a later due check) retries them.
         key = (app_name, verstr, writer_id)
         last = self._flushed_at.get(key)
-        if last is None or time.monotonic() - last >= self._flush_interval_sec:
+        if last is not None and time.monotonic() - last < self._flush_interval_sec:
+            self._mark_unshipped(key)
+            return True
+        try:
             self.sync_log_to_remote(app_name, verstr, writer_id)
-        else:
-            self._unshipped.add(key)
-            _PENDING.add(self)
+        except Exception:
+            VMN_LOGGER.debug("Eager log ship failed; retrying later", exc_info=True)
+            self._mark_unshipped(key)
         return True
+
+    def _mark_unshipped(self, key):
+        self._unshipped.add(key)
+        _PENDING.add(self)
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         key = (app_name, verstr, writer_id)

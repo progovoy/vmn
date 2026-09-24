@@ -47,10 +47,15 @@ class LogBuffer:
             self._write([entry])
             return
         self._pending.append(entry)
-        if len(self._pending) >= MAX_PENDING_ENTRIES:
-            self.flush()
-        elif self._flusher is None:
+        if self._flusher is None:
             self._start_flusher()
+        if len(self._pending) >= MAX_PENDING_ENTRIES:
+            # Eager, but never on the caller's behalf: a flaky store must not
+            # turn a metric call into a raised exception. The periodic flusher
+            # (_flush_quietly) already swallows failures and keeps the batch
+            # queued for the next attempt; reuse it here instead of the raising
+            # self.flush().
+            self._flush_quietly()
 
     def flush(self):
         """Write what is queued. On failure the batch is kept for the next try."""
