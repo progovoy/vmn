@@ -21,7 +21,7 @@ from version_stamp.cli.experiment_run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
-from version_stamp.cli.experiment_views import annotated_rows, dumps, show_payload
+from version_stamp.cli.experiment_views import dumps, show_payload
 from version_stamp.cli.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
@@ -60,7 +60,7 @@ from version_stamp.core.experiment_status import (
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import subtree_status
+from version_stamp.core.experiment_tree import annotate_rows, subtree_status
 from version_stamp.core.experiment_writer import (
     append_to_log,
     compute_artifact_info,
@@ -503,7 +503,7 @@ def experiment_list(vcs, params, storage, args):
 
     # Status and tree fields span every run, so depth, tree_status and the
     # query see the whole tree whatever subset is shown.
-    tree_rows = annotated_rows(index_rows, run_states, observed)
+    tree_rows = annotate_rows(index_rows, run_states, observed)
     try:
         matching = filter_rows(tree_rows, getattr(args, "query", None))
         matching = filter_archived(matching, getattr(args, "archived", False))

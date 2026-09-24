@@ -11,12 +11,9 @@ import math
 
 from version_stamp.core.experiment_log import experiment_row
 from version_stamp.core.experiment_status import status_fields
-from version_stamp.core.experiment_tree import annotate_rows
 
 PATCH_TYPES = ("working_tree", "local_commits")
 
-# The name cli/experiment.py imports: rows with status and tree fields.
-annotated_rows = annotate_rows
 
 
 def patch_lines(patches):
