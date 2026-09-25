@@ -68,6 +68,20 @@ export interface RunStatus {
   /** Rollup over this run and its whole subtree. */
   tree_status: string | null;
   last_metric_at: string | null;
+  fleet?: Fleet | null;
+}
+
+export interface FleetChild {
+  verstr: string;
+  status: RunState;
+  progress: number | null;
+  progress_total: number | null;
+}
+
+export interface Fleet {
+  expected: number;
+  counts: Record<string, number>;
+  children: FleetChild[];
 }
 
 /** Status fields are optional: older servers omit them entirely. */

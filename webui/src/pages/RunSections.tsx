@@ -1,6 +1,6 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, MetricsSchema, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricsSchema, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
 
@@ -106,6 +106,100 @@ export function MetricsCard({ metrics, schema, children }: {
         </div>
       )}
       {children}
+    </div>
+  );
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  running: "var(--accent)",
+  succeeded: "var(--good)",
+  failed: "var(--bad)",
+  stuck: "var(--hotfix)",
+  created: "var(--text-3)",
+  waiting: "var(--text-3)",
+};
+
+const COLLAPSE_THRESHOLD = 10;
+
+export function FleetCard({ fleet, runUrl }: { fleet: Fleet; runUrl: (v: string) => string }) {
+  const [expanded, setExpanded] = useState(false);
+  const nonZeroCounts = Object.entries(fleet.counts).filter(([, n]) => n > 0);
+  const visibleChildren = expanded || fleet.children.length <= COLLAPSE_THRESHOLD
+    ? fleet.children
+    : fleet.children.slice(0, COLLAPSE_THRESHOLD);
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="eyebrow">fleet</div>
+      <div className="fleet-summary">
+        {nonZeroCounts.map(([status, count]) => (
+          <span key={status} className="fleet-count">
+            <span className="dot" style={{ background: STATUS_COLORS[status] ?? "var(--text-3)" }} />
+            <span>{count}</span>
+            <span style={{ color: "var(--text-2)" }}>{status}</span>
+          </span>
+        ))}
+      </div>
+      <div className="fleet-bar">
+        {nonZeroCounts.map(([status, count]) => (
+          <div
+            key={status}
+            className="segment"
+            style={{
+              width: `${(count / fleet.expected) * 100}%`,
+              background: STATUS_COLORS[status] ?? "var(--text-3)",
+            }}
+          />
+        ))}
+      </div>
+      <div className="fleet-children">
+        <table>
+          <thead>
+            <tr>
+              <th>run</th>
+              <th>status</th>
+              <th>progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleChildren.map((child) => (
+              <tr key={child.verstr}>
+                <td>
+                  <Link className="mono" to={runUrl(child.verstr)}>{child.verstr}</Link>
+                </td>
+                <td>
+                  <StatusPill status={child.status} />
+                </td>
+                <td>
+                  {child.progress != null && child.progress_total != null ? (
+                    <span className="progress-bar">
+                      <span>{child.progress} / {child.progress_total}</span>
+                      <span className="progress-track">
+                        <span
+                          className="progress-fill"
+                          style={{ width: `${(child.progress / child.progress_total) * 100}%` }}
+                        />
+                      </span>
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--text-3)" }}>{"—"}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {fleet.children.length > COLLAPSE_THRESHOLD && !expanded && (
+          <button
+            className="link"
+            style={{ marginTop: 8 }}
+            onClick={() => setExpanded(true)}
+            aria-label={`Show all ${fleet.children.length} children`}
+          >
+            Show all {fleet.children.length}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

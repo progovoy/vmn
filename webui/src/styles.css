@@ -762,3 +762,41 @@ tr.row.archived .run-link { text-decoration: line-through; text-decoration-color
 .confirm-dialog { min-width: 300px; max-width: 420px; }
 .confirm-dialog p { margin: 0 0 14px; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- fleet card ---- */
+.fleet-summary {
+  display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0;
+}
+.fleet-summary .fleet-count {
+  display: flex; align-items: center; gap: 4px; font-size: 13px;
+}
+.fleet-summary .fleet-count .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.fleet-bar {
+  display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+  background: var(--panel-2); margin: 8px 0 12px;
+}
+.fleet-bar .segment { transition: width 0.3s; }
+.fleet-children { margin-top: 8px; }
+.fleet-children table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.fleet-children th {
+  text-align: left; padding: 4px 8px; font-weight: 500;
+  color: var(--text-2); border-bottom: 1px solid var(--line);
+}
+.fleet-children td {
+  padding: 4px 8px; border-bottom: 1px solid var(--line);
+}
+.fleet-children .progress-bar {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.fleet-children .progress-track {
+  width: 60px; height: 4px; border-radius: 2px;
+  background: var(--panel-2); overflow: hidden;
+}
+.fleet-children .progress-fill {
+  height: 100%; border-radius: 2px; background: var(--good);
+}
+/* ---- end fleet card ---- */
