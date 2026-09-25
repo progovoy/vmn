@@ -65,7 +65,12 @@ vmn ui --host 0.0.0.0 --port 8265 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
 
 - **Auth**: a single shared bearer token (`--token` or the `VMN_UI_TOKEN` env).
   Every `/api` request must send `Authorization: Bearer <token>`. Binding beyond
-  localhost without a token logs a warning.
+  localhost without a token refuses to start — the Host-header allowlist below
+  is not authentication, so anything reachable over the network could forge an
+  allowed `Host` and get full read-write access. Add `--read-only` to allow this
+  combination anyway (mutations stay blocked; the Host allowlist still limits,
+  but does not authenticate, reads), pass `--token`/`VMN_UI_TOKEN`, or bind to
+  loopback.
 - **TLS & users**: put a reverse proxy (nginx/Caddy) in front — vmn does not
   terminate TLS or manage accounts.
 - **`--read-only`**: disables all mutation endpoints (stamp/restore/goto/…),

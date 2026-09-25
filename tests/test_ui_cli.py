@@ -131,3 +131,59 @@ def test_ui_build_manager_idempotent(app_layout, capfd):
     n1 = len(m1.list())
     m2 = build_manager(args)
     assert len(m2.list()) == n1
+
+
+# ---------------------------------------------------------------------------
+# Non-loopback bind without a token: the Host-header allowlist is not
+# authentication, so a plain LAN client can forge an allowed Host and get
+# full read-write access. `handle_ui` must refuse this combination instead
+# of just warning and serving read-write anyway.
+# ---------------------------------------------------------------------------
+
+
+def _run_handle_ui(tmp_path, monkeypatch, extra):
+    from version_stamp.cli.args import parse_user_commands
+    from version_stamp.core.logging import init_stamp_logger, reset_logger
+    from version_stamp.ui.cli import handle_ui
+
+    reset_logger()
+    init_stamp_logger()
+    monkeypatch.chdir(tmp_path)
+
+    calls = []
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: calls.append((a, k)))
+
+    data_dir = str(tmp_path / "ui_data")
+    args = parse_user_commands(["ui", "--data-dir", data_dir, "--no-browser"] + extra)
+    rc = handle_ui(args)
+    return rc, calls
+
+
+def test_ui_refuses_non_loopback_without_token_or_read_only(tmp_path, monkeypatch, capfd):
+    rc, calls = _run_handle_ui(tmp_path, monkeypatch, ["--host", "0.0.0.0"])
+
+    assert rc == 1
+    assert calls == []
+    captured = capfd.readouterr()
+    assert "[ERROR]" in captured.err
+    assert "--token" in captured.err
+    assert "--read-only" in captured.err
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param(["--host", "0.0.0.0", "--read-only"], id="non-loopback-read-only"),
+        pytest.param([], id="loopback-no-token"),
+        pytest.param(["--host", "0.0.0.0", "--token", "t0k"], id="non-loopback-with-token"),
+    ],
+)
+def test_ui_starts_read_write_when_safely_configured(tmp_path, monkeypatch, capfd, extra):
+    """Regression: read-only-without-a-token, loopback-without-a-token and
+    non-loopback-with-a-token must all keep starting the server, unchanged."""
+    rc, calls = _run_handle_ui(tmp_path, monkeypatch, extra)
+
+    assert rc == 0
+    assert len(calls) == 1
+    captured = capfd.readouterr()
+    assert "[ERROR]" not in captured.err
