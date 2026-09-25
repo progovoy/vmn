@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """``vmn exp prune``: delete old experiments without breaking live runs or trees.
 
-Selection (``--keep N`` / ``--older-than``) proposes candidates; two guards then
-take runs back out of the list:
+Selection proposes candidates, either by policy (``--keep N`` / ``--older-than``)
+or, with ``-v <ref>`` (repeatable — a verstr, a unique prefix or ``@N``), by
+naming the exact run(s) to delete. Either way, guards then take runs back out
+of the list:
 
 * a run whose derived status is ``running`` or ``stuck`` is never deleted
   (``--force`` overrides) — a stuck run may just have a late heartbeat, and a
   live one would otherwise recreate a half-empty directory;
+* a run carrying a ``--protect-tag`` key is never deleted (``--force``
+  overrides), so a run someone tagged ``stage=prod`` survives a bulk prune —
+  and a ``-v`` targeting it directly, for the same reason;
 * a run with a kept descendant is kept, so no surviving run points at a parent
   that no longer exists.
 """
@@ -14,6 +19,7 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.core.experiment_index import indexed_snapshot
+from version_stamp.core.experiment_refs import resolve_experiment
 from version_stamp.core.experiment_status import (
     RUNNING,
     STUCK,
@@ -98,16 +104,35 @@ def _live_runs(storage, app_name, candidates, snapshot=None):
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _apply_guards(storage, app_name, metas, candidates, force, snapshot=None):
-    """Split *candidates* into (delete, {skipped live verstr: status})."""
-    live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
+def _tag_protected(candidates, protect_tags):
+    """``{verstr: matched tag name}`` of *candidates* carrying any of
+    *protect_tags* — a run's own current tags, so a removed tag never
+    protects it."""
+    if not protect_tags:
+        return {}
+    protect = set(protect_tags)
+    protected = {}
+    for meta in candidates:
+        hit = protect & set((meta.get("tags") or {}).keys())
+        if hit:
+            protected[meta["verstr"]] = sorted(hit)[0]
+    return protected
 
-    doomed = {m["verstr"] for m in candidates} - set(live)
+
+def _apply_guards(
+    storage, app_name, metas, candidates, force, protect_tags=None, snapshot=None
+):
+    """Split *candidates* into (delete, {skipped live verstr: status},
+    {skipped tag-protected verstr: tag name})."""
+    live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
+    protected = {} if force else _tag_protected(candidates, protect_tags)
+
+    doomed = {m["verstr"] for m in candidates} - set(live) - set(protected)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
     for meta in metas:
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
-    return [m for m in candidates if m["verstr"] in doomed], live
+    return [m for m in candidates if m["verstr"] in doomed], live, protected
 
 
 def _skip_message(verstr, status):
@@ -117,6 +142,13 @@ def _skip_message(verstr, status):
             "running — use --force to delete it)"
         )
     return f"Skipping {verstr}: still running (use --force to delete it)"
+
+
+def _tag_skip_message(verstr, tag_name):
+    return (
+        f"Skipping {verstr}: protected by tag '{tag_name}' "
+        "(use --force to delete it)"
+    )
 
 
 def _local_view(storage):
@@ -133,11 +165,27 @@ def _metas_and_snapshot(storage, app_name):
         if snapshot is not None:
             metas = [
                 {"verstr": r["verstr"], "timestamp": r.get("timestamp"),
-                 "parent": r.get("parent")}
+                 "parent": r.get("parent"), "tags": r.get("tags") or {}}
                 for r in snapshot.rows
             ]
             return metas, snapshot
     return storage.list_snapshots(app_name), None
+
+
+def _targeted_candidates(storage, app_name, metas, snapshot, refs):
+    """The subset of *metas* named by *refs*, or (None, error) for the first
+    ref that does not resolve to an existing run."""
+    by_verstr = {m["verstr"]: m for m in metas}
+    candidates = []
+    for ref in refs:
+        verstr, err = resolve_experiment(storage, app_name, ref, snapshot=snapshot)
+        if err:
+            return None, err
+        meta = by_verstr.get(verstr)
+        if meta is None:
+            return None, f"Experiment '{verstr}' not found for {app_name}"
+        candidates.append(meta)
+    return candidates, None
 
 
 def experiment_prune(vcs, params, storage, args, app_name):
@@ -150,23 +198,45 @@ def experiment_prune(vcs, params, storage, args, app_name):
 
     keep = getattr(args, "keep", None)
     older_than = getattr(args, "older_than", None)
-    if keep is None and older_than is None:
-        VMN_LOGGER.error("Specify --keep N or --older-than Xd")
-        return 1
-    if keep is not None and 0 < len(metas) <= keep:
-        print(f"Only {len(metas)} experiments, nothing to prune (--keep {keep})")
-        return 0
-    try:
-        candidates = _candidates(metas, keep, older_than)
-    except ValueError as e:
-        VMN_LOGGER.error(str(e))
-        return 1
+    refs = getattr(args, "version", None)
 
-    to_delete, live = _apply_guards(
-        storage, app_name, metas, candidates, getattr(args, "force", False), snapshot
+    if refs:
+        if keep is not None or older_than is not None:
+            VMN_LOGGER.error(
+                "-v cannot be combined with --keep/--older-than: prune either "
+                "a specific run or by policy, not both"
+            )
+            return 1
+        candidates, err = _targeted_candidates(storage, app_name, metas, snapshot, refs)
+        if err:
+            VMN_LOGGER.error(err)
+            return 1
+    else:
+        if keep is None and older_than is None:
+            VMN_LOGGER.error("Specify --keep N or --older-than Xd (or -v <ref>)")
+            return 1
+        if keep is not None and 0 < len(metas) <= keep:
+            print(f"Only {len(metas)} experiments, nothing to prune (--keep {keep})")
+            return 0
+        try:
+            candidates = _candidates(metas, keep, older_than)
+        except ValueError as e:
+            VMN_LOGGER.error(str(e))
+            return 1
+
+    to_delete, live, protected = _apply_guards(
+        storage,
+        app_name,
+        metas,
+        candidates,
+        force=getattr(args, "force", False),
+        protect_tags=getattr(args, "protect_tag", None),
+        snapshot=snapshot,
     )
     for verstr in sorted(live):
         print(_skip_message(verstr, live[verstr]))
+    for verstr in sorted(protected):
+        print(_tag_skip_message(verstr, protected[verstr]))
     if not to_delete:
         print("Nothing to prune")
         return 0

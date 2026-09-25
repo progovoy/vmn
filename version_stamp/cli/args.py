@@ -620,7 +620,8 @@ def _add_experiment_parser(subprasers, name):
         "--version",
         action="append",
         default=None,
-        help="Version string(s). Repeatable for compare.",
+        help="Version string(s). Repeatable for compare; prune deletes exactly "
+        "the named run(s) instead of applying --keep/--older-than.",
     )
     pexp.add_argument("--note", default=None, help="Note or description")
     pexp.add_argument(
@@ -684,6 +685,13 @@ def _add_experiment_parser(subprasers, name):
         action="store_true",
         default=False,
         help="prune: delete local copies only, keep the remote (S3) ones",
+    )
+    pexp.add_argument(
+        "--protect-tag",
+        dest="protect_tag",
+        action="append",
+        default=None,
+        help="prune: never delete a run carrying this tag key (repeatable)",
     )
     pexp.add_argument(
         "--full-log",

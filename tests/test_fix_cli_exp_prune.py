@@ -41,6 +41,16 @@ def _prune(app_layout, capfd, *extra, keep=None):
     return err, capfd.readouterr().out
 
 
+def _prune_v(app_layout, capfd, verstr, *extra):
+    capfd.readouterr()
+    err = _exp(app_layout.app_name, action="prune", version=verstr, extra_args=list(extra))
+    return err, capfd.readouterr().out
+
+
+def _tag(app_layout, verstr, *pairs):
+    assert _exp(app_layout.app_name, action="tag", extra_args=[verstr, *pairs]) == 0
+
+
 def test_prune_skips_running_runs(app_layout, capfd):
     _bootstrap(app_layout)
     live = _create(app_layout)
@@ -96,6 +106,148 @@ def test_prune_prints_each_deleted_run(app_layout, capfd):
     assert "Pruned 2" in out
     for verstr in runs[:2]:
         assert verstr in out
+
+
+def test_prune_protects_tagged_runs(app_layout, capfd):
+    _bootstrap(app_layout)
+    prod = _create(app_layout)
+    other = _create(app_layout)
+    _tag(app_layout, prod, "stage=prod")
+
+    err, out = _prune(app_layout, capfd, "--protect-tag", "stage", keep=0)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [prod]
+    assert other in out
+    assert "protected" in out.lower() and prod in out
+
+
+def test_prune_without_protect_tag_flag_still_prunes_tagged_runs(app_layout, capfd):
+    _bootstrap(app_layout)
+    prod = _create(app_layout)
+    _tag(app_layout, prod, "stage=prod")
+
+    err, out = _prune(app_layout, capfd, keep=0)
+    assert err == 0, out
+    assert _verstrs(app_layout) == []
+
+
+def test_prune_force_deletes_tag_protected_runs(app_layout, capfd):
+    _bootstrap(app_layout)
+    prod = _create(app_layout)
+    _tag(app_layout, prod, "stage=prod")
+
+    err, out = _prune(app_layout, capfd, "--protect-tag", "stage", "--force", keep=0)
+    assert err == 0, out
+    assert _verstrs(app_layout) == []
+
+
+def test_prune_protects_ancestor_of_tag_protected_run(app_layout, capfd):
+    _bootstrap(app_layout)
+    outer = _create(app_layout)
+    unrelated = _create(app_layout)
+    inner = _create(app_layout, "--parent", outer)
+    _tag(app_layout, inner, "stage=prod")
+
+    err, out = _prune(app_layout, capfd, "--protect-tag", "stage", keep=0)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [outer, inner]
+    assert unrelated in out
+
+
+def test_prune_v_deletes_exactly_one_run(app_layout, capfd):
+    _bootstrap(app_layout)
+    a = _create(app_layout)
+    b = _create(app_layout)
+    c = _create(app_layout)
+
+    err, out = _prune_v(app_layout, capfd, b)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [a, c]
+    assert b in out
+
+
+def test_prune_v_dry_run_previews_only(app_layout, capfd):
+    _bootstrap(app_layout)
+    a = _create(app_layout)
+
+    err, out = _prune_v(app_layout, capfd, a, "--dry-run")
+    assert err == 0, out
+    assert _verstrs(app_layout) == [a]
+    assert "Would delete" in out and a in out
+
+
+def test_prune_v_skips_running_run_without_force(app_layout, capfd):
+    _bootstrap(app_layout)
+    live = _create(app_layout)
+    _mark_running(app_layout, live)
+
+    err, out = _prune_v(app_layout, capfd, live)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [live]
+    assert "running" in out
+
+
+def test_prune_v_force_deletes_running_run(app_layout, capfd):
+    _bootstrap(app_layout)
+    live = _create(app_layout)
+    _mark_running(app_layout, live)
+
+    err, out = _prune_v(app_layout, capfd, live, "--force")
+    assert err == 0, out
+    assert _verstrs(app_layout) == []
+
+
+def test_prune_v_refuses_tag_protected_run_without_force(app_layout, capfd):
+    _bootstrap(app_layout)
+    prod = _create(app_layout)
+    _tag(app_layout, prod, "stage=prod")
+
+    err, out = _prune_v(app_layout, capfd, prod, "--protect-tag", "stage")
+    assert err == 0, out
+    assert _verstrs(app_layout) == [prod]
+    assert "protected" in out.lower()
+
+
+def test_prune_v_force_overrides_tag_protection(app_layout, capfd):
+    _bootstrap(app_layout)
+    prod = _create(app_layout)
+    _tag(app_layout, prod, "stage=prod")
+
+    err, out = _prune_v(app_layout, capfd, prod, "--protect-tag", "stage", "--force")
+    assert err == 0, out
+    assert _verstrs(app_layout) == []
+
+
+def test_prune_v_keeps_ancestor_when_it_has_a_kept_descendant(app_layout, capfd):
+    _bootstrap(app_layout)
+    outer = _create(app_layout)
+    inner = _create(app_layout, "--parent", outer)
+
+    err, out = _prune_v(app_layout, capfd, outer)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [outer, inner]
+
+
+def test_prune_v_rejects_combination_with_keep(app_layout, capfd):
+    _bootstrap(app_layout)
+    a = _create(app_layout)
+
+    capfd.readouterr()
+    err = _exp(app_layout.app_name, action="prune", version=a, keep=0)
+    assert err == 1
+
+
+def test_prune_v_unknown_ref_errors(app_layout, capfd):
+    _bootstrap(app_layout)
+    _create(app_layout)
+
+    capfd.readouterr()
+    err = _exp(
+        app_layout.app_name,
+        action="prune",
+        version="0.0.1-dev.deadbeef.cafebabe",
+    )
+    assert err == 1
 
 
 @pytest.fixture
