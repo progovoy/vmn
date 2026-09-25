@@ -115,7 +115,7 @@ describe("Leaderboard query box", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     expect(mockedApi.experiments).toHaveBeenCalledTimes(2);
     expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-      "test", "my-app", undefined, undefined, "metrics.loss < 0.5"
+      "test", "my-app", "timestamp", undefined, "metrics.loss < 0.5"
     );
   });
 
@@ -129,7 +129,7 @@ describe("Leaderboard query box", () => {
 
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", undefined, "succeeded", 'params.model = "xgb"'
+        "test", "my-app", "timestamp", "succeeded", 'params.model = "xgb"'
       )
     );
   });

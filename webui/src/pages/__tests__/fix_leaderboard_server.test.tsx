@@ -111,7 +111,7 @@ describe("free-text search runs on the server", () => {
 
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", undefined, undefined,
+        "test", "my-app", "timestamp", undefined,
         'verstr ~ "bat" or note ~ "bat" or branch ~ "bat"',
       ),
     );
@@ -127,7 +127,7 @@ describe("free-text search runs on the server", () => {
 
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", undefined, undefined,
+        "test", "my-app", "timestamp", undefined,
         "(metrics.loss < 0.5) and (verstr ~ 'say \"hi\"' or note ~ 'say \"hi\"' or branch ~ 'say \"hi\"')",
       ),
     );

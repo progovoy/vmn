@@ -103,7 +103,7 @@ describe("Leaderboard status column", () => {
     ]);
   });
 
-  it("nests inner runs under their outer run and shows the child count", async () => {
+  it("hides inner runs from the list and shows the child count on the outer", async () => {
     mockedApi.experiments.mockResolvedValue([
       row(1, "running", {
         kind: "outer", children: ["0.0.2-rc.1", "0.0.3-rc.1"], tree_status: "running",
@@ -120,10 +120,9 @@ describe("Leaderboard status column", () => {
     expect(outer.querySelector(".nest-mark")).toBeNull();
     expect(outer.querySelector(".tree-roll")?.textContent).toContain("2 inner");
 
-    const inner = cellOf("0.0.2-rc.1");
-    expect(inner.querySelector(".nest-mark")?.textContent).toContain("⤷");
-    expect((inner.querySelector(".nest") as HTMLElement).style.paddingLeft)
-      .toBe("14px");
+    // Inner runs are filtered from the default list view
+    expect(screen.queryByText("0.0.2-rc.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.0.3-rc.1")).not.toBeInTheDocument();
   });
 
   it("shows the subtree rollup on an outer row when it differs", async () => {
@@ -191,7 +190,7 @@ describe("Leaderboard status filter", () => {
 
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", undefined, "running"
+        "test", "my-app", "timestamp", "running"
       )
     );
   });

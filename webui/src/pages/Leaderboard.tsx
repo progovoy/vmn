@@ -49,7 +49,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     combineQueries(view.query, searchClause(view.search)), branchClause(view.branch),
   );
   const filter = useMemo(() => ({
-    sort: view.sort ?? undefined,
+    sort: view.sort ?? "timestamp",
     order: view.sort ? view.order : undefined,
     status: view.status || undefined,
     query: serverQuery || undefined,
@@ -90,7 +90,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const { expanded, collapsed } = view;
   const tableRows = useMemo(() => {
     if (!rows) return rows;
-    const brushedRows = brushed && view.chart === "parallel" ? rows.filter((r) => brushed.has(r.verstr)) : rows;
+    const topLevel = rows.filter((r) => !r.depth);
+    const brushedRows = brushed && view.chart === "parallel" ? topLevel.filter((r) => brushed.has(r.verstr)) : topLevel;
     return visibleRows(brushedRows, expanded, collapsed);
   }, [rows, brushed, view.chart, expanded, collapsed]);
   const collapsedOf = useCallback(

@@ -59,7 +59,7 @@ describe("leaderboard view state lives in the URL", () => {
     renderBoard("/ws/test/app/my-app?status=running&q=metrics.loss%20%3C%201&search=bat");
     await waitFor(() =>
       expect(m.experiments).toHaveBeenCalledWith(
-        "test", "my-app", undefined, "running",
+        "test", "my-app", "timestamp", "running",
         '(metrics.loss < 1) and (verstr ~ "bat" or note ~ "bat" or branch ~ "bat")',
       ),
     );
@@ -72,7 +72,7 @@ describe("leaderboard view state lives in the URL", () => {
     renderBoard("/ws/test/app/my-app?branch=feat");
     await waitFor(() =>
       expect(m.experiments).toHaveBeenCalledWith(
-        "test", "my-app", undefined, undefined, 'branch = "feat"',
+        "test", "my-app", "timestamp", undefined, 'branch = "feat"',
       ),
     );
   });

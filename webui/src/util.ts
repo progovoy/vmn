@@ -17,6 +17,7 @@ export function relTime(iso: string | null | undefined): string {
 export function fmtVal(v: number | string | null | undefined): string {
   if (v === null || v === undefined) return "–";
   if (typeof v === "number") {
+    if (Number.isInteger(v)) return String(v);
     return Math.abs(v) >= 1000 || (v !== 0 && Math.abs(v) < 0.001)
       ? v.toExponential(3)
       : String(Math.round(v * 10000) / 10000);
