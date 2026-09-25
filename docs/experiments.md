@@ -619,20 +619,31 @@ vmn exp export my_app --latest -o best.tar.gz
 
 ### `prune`
 
-Delete old experiments by count or age. Each deleted verstr is printed.
+Delete old experiments by count or age, or name exact runs with `-v`. Each
+deleted verstr is printed.
 
 ```sh
 vmn exp prune my_app --keep 10              # keep the 10 most recent
 vmn exp prune my_app --older-than 30d       # remove anything older than 30 days (Nd/Nw/Nh)
 vmn exp prune my_app --keep 10 --dry-run    # print what would go, delete nothing
 vmn exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
+vmn exp prune my_app -v @4                  # delete exactly that one run
+vmn exp prune my_app --keep 5 --protect-tag stage  # never prune a run tagged stage=...
 ```
 
-Two guards take runs back out of the selection:
+`-v <ref>` (repeatable — a verstr, a unique prefix, or `@N`) deletes exactly the
+named run(s) instead of applying `--keep`/`--older-than`; it cannot be combined
+with either.
+
+Guards take runs back out of the selection, whether it came from `--keep`/
+`--older-than` or from `-v`:
 
 - a run whose status is `running` or `stuck` is never deleted (it is reported
   as skipped — a stuck run may just have a late heartbeat); `--force` deletes
   it anyway.
+- a run carrying a tag key named by `--protect-tag` (repeatable) is never
+  deleted, so a run tagged e.g. `stage=prod` survives `--keep`/`-v` alike;
+  `--force` deletes it anyway.
 - a run with a kept descendant is kept, so no surviving inner run is left
   pointing at a parent that no longer exists.
 
@@ -642,10 +653,12 @@ the local copies.
 
 | Flag | Description |
 |---|---|
+| `-v <ref>` | Delete exactly this run (repeatable); not combined with `--keep`/`--older-than` |
 | `--keep N` | Keep the N most recent experiments |
 | `--older-than <dur>` | Delete experiments older than `Nd`/`Nw`/`Nh` |
+| `--protect-tag <key>` | Never delete a run carrying this tag key (repeatable) |
 | `--dry-run` | Print what would be deleted, delete nothing |
-| `--force` | Also delete runs that are still `running` |
+| `--force` | Also delete runs that are still `running`, or tag-protected |
 | `--local-only` | Keep the remote (S3) copies |
 
 Archived runs are pruned like any other finished run.
