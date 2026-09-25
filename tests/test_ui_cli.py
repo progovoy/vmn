@@ -141,16 +141,8 @@ def test_ui_build_manager_idempotent(app_layout, capfd):
 # ---------------------------------------------------------------------------
 
 
-def _ui_args(tmp_path, extra):
-    from version_stamp.cli.args import parse_user_commands
-
-    data_dir = str(tmp_path / "ui_data")
-    return parse_user_commands(
-        ["ui", "--data-dir", data_dir, "--no-browser"] + extra
-    )
-
-
 def _run_handle_ui(tmp_path, monkeypatch, extra):
+    from version_stamp.cli.args import parse_user_commands
     from version_stamp.core.logging import init_stamp_logger, reset_logger
     from version_stamp.ui.cli import handle_ui
 
@@ -161,7 +153,8 @@ def _run_handle_ui(tmp_path, monkeypatch, extra):
     calls = []
     monkeypatch.setattr("uvicorn.run", lambda *a, **k: calls.append((a, k)))
 
-    args = _ui_args(tmp_path, extra)
+    data_dir = str(tmp_path / "ui_data")
+    args = parse_user_commands(["ui", "--data-dir", data_dir, "--no-browser"] + extra)
     rc = handle_ui(args)
     return rc, calls
 
@@ -177,34 +170,18 @@ def test_ui_refuses_non_loopback_without_token_or_read_only(tmp_path, monkeypatc
     assert "--read-only" in captured.err
 
 
-def test_ui_allows_non_loopback_without_token_when_read_only(tmp_path, monkeypatch, capfd):
-    rc, calls = _run_handle_ui(
-        tmp_path, monkeypatch, ["--host", "0.0.0.0", "--read-only"]
-    )
-
-    assert rc == 0
-    assert len(calls) == 1
-    captured = capfd.readouterr()
-    assert "[ERROR]" not in captured.err
-
-
-def test_ui_allows_loopback_without_token(tmp_path, monkeypatch, capfd):
-    """Regression: loopback with no token is the documented default and
-    must keep starting read-write, unchanged."""
-    rc, calls = _run_handle_ui(tmp_path, monkeypatch, [])
-
-    assert rc == 0
-    assert len(calls) == 1
-    captured = capfd.readouterr()
-    assert "[ERROR]" not in captured.err
-
-
-def test_ui_allows_non_loopback_with_token(tmp_path, monkeypatch, capfd):
-    """Regression: a configured token is the correctly-secured case and
-    must keep starting read-write, unchanged."""
-    rc, calls = _run_handle_ui(
-        tmp_path, monkeypatch, ["--host", "0.0.0.0", "--token", "t0k"]
-    )
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param(["--host", "0.0.0.0", "--read-only"], id="non-loopback-read-only"),
+        pytest.param([], id="loopback-no-token"),
+        pytest.param(["--host", "0.0.0.0", "--token", "t0k"], id="non-loopback-with-token"),
+    ],
+)
+def test_ui_starts_read_write_when_safely_configured(tmp_path, monkeypatch, capfd, extra):
+    """Regression: read-only-without-a-token, loopback-without-a-token and
+    non-loopback-with-a-token must all keep starting the server, unchanged."""
+    rc, calls = _run_handle_ui(tmp_path, monkeypatch, extra)
 
     assert rc == 0
     assert len(calls) == 1
