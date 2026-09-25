@@ -7,6 +7,7 @@ as `vmn` CLI subprocesses that acquire it themselves.
 import os
 
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.ui.security import LOOPBACK_HOSTS
 
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
 
@@ -90,13 +91,23 @@ def handle_ui(args):
         )
         return 1
 
-    manager = build_manager(args)
     token = args.token or os.environ.get("VMN_UI_TOKEN")
-    if args.host not in ("127.0.0.1", "localhost") and not token:
+    if args.host not in LOOPBACK_HOSTS and not token and not args.read_only:
+        VMN_LOGGER.error(
+            f"Refusing to bind {args.host} beyond localhost without --token: "
+            "the Host-header allowlist is not authentication, so any host that "
+            "can reach this port could forge it and get full read-write access. "
+            "Pass --token (or set VMN_UI_TOKEN), pass --read-only to serve reads "
+            "only, or bind --host to 127.0.0.1/localhost."
+        )
+        return 1
+    if args.host not in LOOPBACK_HOSTS and not token:
         VMN_LOGGER.warning(
-            "Binding beyond localhost without --token — the API is unauthenticated."
+            "Binding beyond localhost without --token — --read-only keeps mutations "
+            "blocked, but the Host-header allowlist is not authentication for reads."
         )
 
+    manager = build_manager(args)
     app = create_app(
         manager,
         token=token,
