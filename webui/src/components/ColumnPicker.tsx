@@ -107,7 +107,7 @@ export default function ColumnPicker({
         ref={button} title="Columns" aria-haspopup="true" aria-expanded={open}
         onClick={() => setOpen((v) => !v)} style={{ padding: "4px 10px" }}
       >
-        ⋮
+        Columns {open ? "▴" : "▾"}
       </button>
       {open && (
         <div className="col-picker">

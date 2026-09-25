@@ -237,7 +237,7 @@ def test_fleet_summary_cap_children_detail():
 
 
 def test_fleet_summary_negative_expected():
-    """Negative expected is clamped to 0."""
+    """Negative expected is clamped to len(children)."""
     children_of = {"parent": ["child1"]}
     states = {"child1": _running()}
 
@@ -248,7 +248,25 @@ def test_fleet_summary_negative_expected():
         expected=-1,
     )
 
-    assert result["expected"] == 0
+    assert result["expected"] == 1
+    assert result["counts"]["waiting"] == 0
+
+
+def test_fleet_summary_expected_less_than_children():
+    """expected_pods=5 but 8 children visible -> expected=8."""
+    child_names = [f"child{i}" for i in range(8)]
+    children_of = {"parent": child_names}
+    states = {name: _running() for name in child_names}
+
+    result = fleet_summary(
+        "parent",
+        children_of,
+        read_state=lambda v: states.get(v),
+        expected=5,
+    )
+
+    assert result["expected"] == 8
+    assert result["counts"][RUNNING] == 8
     assert result["counts"]["waiting"] == 0
 
 

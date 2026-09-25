@@ -48,36 +48,26 @@ beforeEach(() => {
   m.experiment.mockResolvedValue({ metadata: { verstr: "x" }, metrics: {}, series: {}, patches: {} });
 });
 
-describe("collapsible sweeps", () => {
-  it("collapses a sweep of more than 20 inner runs by default and expands it on demand", async () => {
+describe("inner runs hidden from list", () => {
+  it("hides inner runs from the list and shows the outer and lone runs", async () => {
     m.experiments.mockResolvedValue(page(sweep(25)));
     renderBoard();
+    // The outer run (depth=0) is visible
     await screen.findByRole("link", { name: v(1) });
+    // Inner runs (depth=1) are filtered out
     expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
+    // The lone run after the sweep (depth=0) is visible
     expect(screen.getByRole("link", { name: v(27) })).toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: `Expand ${v(1)}` });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(toggle);
-    await waitFor(() => expect(urlParams().getAll("expand")).toEqual([v(1)]));
-    expect(screen.getByRole("link", { name: v(2) })).toBeInTheDocument();
-    // The toggle's click is its own: it does not open the run.
-    expect(location.pathname).toBe("/ws/test/app/my-app");
   });
 
-  it("shows a small sweep expanded and collapses it into the URL", async () => {
+  it("hides inner runs of a small sweep too", async () => {
     m.experiments.mockResolvedValue(page(sweep(3)));
     renderBoard();
-    await screen.findByRole("link", { name: v(2) });
-    fireEvent.click(screen.getByRole("button", { name: `Collapse ${v(1)}` }));
-    await waitFor(() => expect(urlParams().getAll("collapse")).toEqual([v(1)]));
-    expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
-  });
-
-  it("restores a collapsed sweep from the URL", async () => {
-    m.experiments.mockResolvedValue(page(sweep(3)));
-    renderBoard(`/ws/test/app/my-app?collapse=${v(1)}`);
     await screen.findByRole("link", { name: v(1) });
+    // Inner runs are not shown even for small sweeps
     expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
+    // The lone run after the sweep is still visible
+    expect(screen.getByRole("link", { name: v(5) })).toBeInTheDocument();
   });
 });
 

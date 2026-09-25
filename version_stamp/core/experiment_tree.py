@@ -266,7 +266,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     if expected is None:
         expected = len(children)
     else:
-        expected = max(expected, 0)
+        expected = max(expected, len(children))
 
     known = sum(counts.values())
     waiting = max(0, expected - known)

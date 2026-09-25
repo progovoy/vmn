@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fmtDuration, humanizeSeconds, pollIntervalMs, relTime } from "../util";
+import { fmtDuration, fmtVal, humanizeSeconds, pollIntervalMs, relTime } from "../util";
 
 describe("humanizeSeconds", () => {
   it("walks the s/m/h/d ladder", () => {
@@ -39,6 +39,29 @@ describe("fmtDuration / relTime share one ladder", () => {
       const iso = new Date(Date.now() - secs * 1000).toISOString();
       expect(relTime(iso)).toBe(`${fmtDuration(secs)} ago`);
     }
+  });
+});
+
+describe("fmtVal", () => {
+  it("returns integers as plain strings, not scientific notation", () => {
+    expect(fmtVal(20260531)).toBe("20260531");
+    expect(fmtVal(1000)).toBe("1000");
+    expect(fmtVal(999999999)).toBe("999999999");
+    expect(fmtVal(0)).toBe("0");
+    expect(fmtVal(-42)).toBe("-42");
+  });
+
+  it("still formats small floats in scientific notation", () => {
+    expect(fmtVal(0.00001)).toBe("1.000e-5");
+  });
+
+  it("returns a dash for null/undefined", () => {
+    expect(fmtVal(null)).toBe("–");
+    expect(fmtVal(undefined)).toBe("–");
+  });
+
+  it("returns strings verbatim", () => {
+    expect(fmtVal("hello")).toBe("hello");
   });
 });
 

@@ -208,7 +208,7 @@ describe("Leaderboard create refetch", () => {
     fireEvent.click(screen.getByRole("button", { name: "running" }));
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", undefined, "running"
+        "test", "my-app", "timestamp", "running"
       )
     );
     fireEvent.click(screen.getByText("fake-create"));

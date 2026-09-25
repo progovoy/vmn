@@ -112,4 +112,12 @@ describe("FleetCard", () => {
     const pills = container.querySelectorAll(".fleet-children .status-pill");
     expect(pills.length).toBe(4);
   });
+
+  it("displays statuses in order: waiting, running, succeeded, failed", () => {
+    const { container } = renderFleet();
+    const summary = container.querySelector(".fleet-summary")!;
+    const labels = Array.from(summary.querySelectorAll(".fleet-count"))
+      .map((el) => el.textContent?.replace(/\d+/g, "").trim());
+    expect(labels).toEqual(["waiting", "running", "succeeded", "failed"]);
+  });
 });

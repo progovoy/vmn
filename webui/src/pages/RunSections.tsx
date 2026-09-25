@@ -119,11 +119,14 @@ const STATUS_COLORS: Record<string, string> = {
   waiting: "var(--text-3)",
 };
 
+const FLEET_DISPLAY_ORDER = ["waiting", "running", "succeeded", "failed", "stuck", "created"];
 const COLLAPSE_THRESHOLD = 10;
 
 export function FleetCard({ fleet, runUrl }: { fleet: Fleet; runUrl: (v: string) => string }) {
   const [expanded, setExpanded] = useState(false);
-  const nonZeroCounts = Object.entries(fleet.counts).filter(([, n]) => n > 0);
+  const nonZeroCounts = FLEET_DISPLAY_ORDER
+    .filter((s) => (fleet.counts[s] ?? 0) > 0)
+    .map((s) => [s, fleet.counts[s]] as const);
   const visibleChildren = expanded || fleet.children.length <= COLLAPSE_THRESHOLD
     ? fleet.children
     : fleet.children.slice(0, COLLAPSE_THRESHOLD);
