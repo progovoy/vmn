@@ -364,6 +364,8 @@ survives.
 ### Caching and compression
 
 JSON responses are rendered with `orjson` (part of the `ui` extra) and gzipped
-at a moderate level. The web bundle's hashed `/assets/*` files are served with
-`Cache-Control: public, max-age=31536000, immutable`; `index.html` and client
-routes with `no-cache`. An unknown `/api/...` path is a JSON `404`.
+at a moderate level. The whole web bundle is served `Cache-Control: no-cache` —
+`/assets/*` as well as `index.html` and client routes — so an upgrade is never
+served a stale chunk. Assets carry an ETag, so a reload revalidates and gets a
+bodiless `304` while the file is unchanged. An unknown `/api/...` path is a
+JSON `404`.

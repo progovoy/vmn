@@ -61,7 +61,9 @@ cd webui && npm run build
 ```
 
 The built assets under `version_stamp/ui/static/` are committed, so rebuild and
-include them in any PR that touches `webui/src/`.
+include them in any PR that touches `webui/src/`. Chunk filenames are stable
+rather than content-hashed, so that rebuild should only touch the chunks you
+actually changed — a diff spanning the whole bundle means something else moved.
 
 ## Submitting Changes
 

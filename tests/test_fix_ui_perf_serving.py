@@ -17,6 +17,8 @@ APP = "app"
 V = "1.0.0-dev.a"
 ART = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}/artifacts"
 STATIC = os.path.join(os.path.dirname(server_mod.__file__), "static")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VITE_CONFIG = os.path.join(REPO_ROOT, "webui", "vite.config.ts")
 
 
 @pytest.fixture
@@ -97,11 +99,34 @@ def _bundle_asset():
     return min(os.listdir(assets))
 
 
-def test_hashed_assets_are_cached_forever(ws):
+def test_the_bundle_is_named_by_chunk_not_by_content_hash():
+    if not os.path.isfile(VITE_CONFIG):
+        pytest.skip("webui sources not present")
+    with open(VITE_CONFIG) as fid:
+        config = fid.read()
+    for key, pattern in (
+        ("entryFileNames", "assets/[name].js"),
+        ("chunkFileNames", "assets/[name].js"),
+        ("assetFileNames", "assets/[name].[ext]"),
+    ):
+        assert f'{key}: "{pattern}"' in config, key
+    # ...and the committed bundle was actually built with it.
+    with open(os.path.join(STATIC, "index.html")) as fid:
+        assert 'src="/assets/index.js"' in fid.read()
+
+
+def test_stable_assets_revalidate(ws):
+    # Stable names mean a browser must not keep a chunk across an upgrade.
     manager, _, _ = ws
-    r = TestClient(create_app(manager)).get(f"/assets/{_bundle_asset()}")
+    client = TestClient(create_app(manager))
+    asset = _bundle_asset()
+    r = client.get(f"/assets/{asset}")
     assert r.status_code == 200
-    assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert r.headers["cache-control"] == "no-cache"
+    # Revalidating still costs no transfer while the asset is unchanged.
+    fresh = client.get(f"/assets/{asset}", headers={"If-None-Match": r.headers["etag"]})
+    assert fresh.status_code == 304
+    assert fresh.headers["cache-control"] == "no-cache"
 
 
 def test_the_spa_shell_is_revalidated(ws):

@@ -1,0 +1,1 @@
+import{n as u,r,aj as p}from"./index.js";function c(a){var o;const{ws:s,app:n}=u(),t=(o=r.useContext(p))==null?void 0:o.navigator;return r.useCallback(e=>{a?a(e):t&&s&&n&&t.push(`/ws/${s}/app/${n}/run/${encodeURIComponent(e)}`)},[a,t,s,n])}export{c as u};

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""The web bundle: hashed assets cached forever, the SPA shell revalidated.
+"""The web bundle: nothing cached blind, every file revalidated.
 
-Vite names every file under ``assets/`` by its content hash, so a browser may
-keep them for a year; ``index.html`` names the current hashes and must be
-revalidated on each load. Paths under ``/api`` never fall back to the shell —
-an unknown endpoint is a JSON 404, not a 200 page of HTML.
+Vite names the files under ``assets/`` by chunk, not by content hash, so one
+name means different bytes after an upgrade and nothing may be cached past it.
+Everything here is ``no-cache``. ``assets/`` is mounted separately only to get
+Starlette's conditional-request handling, which ``FileResponse`` lacks: the
+browser asks on each load and a 304 skips the body while the chunk is
+unchanged. Paths under ``/api`` never fall back to the shell — an unknown
+endpoint is a JSON 404, not a 200 page of HTML.
 """
 import os
 
@@ -13,15 +16,13 @@ from fastapi.staticfiles import StaticFiles
 
 from version_stamp.ui.security import within
 
-IMMUTABLE = "public, max-age=31536000, immutable"
 REVALIDATE = "no-cache"
 
 
-class ImmutableStaticFiles(StaticFiles):
+class RevalidatedStaticFiles(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
-        if response.status_code in (200, 304):
-            response.headers["Cache-Control"] = IMMUTABLE
+        response.headers["Cache-Control"] = REVALIDATE
         return response
 
 
@@ -45,7 +46,7 @@ def mount_static(app, static_dir):
 
     app.mount(
         "/assets",
-        ImmutableStaticFiles(directory=os.path.join(static_dir, "assets")),
+        RevalidatedStaticFiles(directory=os.path.join(static_dir, "assets")),
         name="assets",
     )
 
