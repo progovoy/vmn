@@ -164,28 +164,17 @@ class GitBranchMixin:
 
         assumed_remote = f"{self.selected_remote.name}/{local_branch_name}"
 
-        out = self._be.git.branch("-r", "--contains", "HEAD")
-        # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
-        out = [s.strip() for s in out.split("\n") if s.strip() and "->" not in s]
-
-        VMN_LOGGER.info(f"The output of 'git branch -r --contains HEAD' is:\n{out}")
-
-        if assumed_remote in out:
-            VMN_LOGGER.info(
-                f"Assuming remote: {assumed_remote} as it was present in the output"
+        try:
+            self._be.git.rev_parse("--verify", "--quiet", assumed_remote)
+        except Exception:
+            VMN_LOGGER.error(
+                f"Branch {local_branch_name} has no upstream and {assumed_remote} "
+                f"does not exist. Publish it first: "
+                f"git push -u {self.selected_remote.name} {local_branch_name}"
             )
-            out = assumed_remote
-        elif out:
-            VMN_LOGGER.info(
-                f"Assuming remote: {out[0]} as this is the first element in the output"
-            )
-            out = out[0]
+            return 1
 
-        if not out:
-            VMN_LOGGER.info(
-                f"Assuming remote: {assumed_remote} as the output was empty"
-            )
-            out = assumed_remote
+        out = assumed_remote
 
         try:
             self._be.git.execute(

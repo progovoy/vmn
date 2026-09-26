@@ -25,6 +25,7 @@ from version_stamp.core.constants import (
     END_CHAR,
     GIT_CACHE_TTL_MINUTES,
     VMN_BE_TYPE_GIT,
+    VMN_READONLY_REMOTE,
     VMN_USER_NAME,
 )
 from version_stamp.core.logging import (
@@ -112,7 +113,8 @@ class GitBackend(
         # Currently just selecting the first one. None when no remote is
         # configured — local read commands still work; remote-requiring
         # commands fail fast (see cli/entry.py).
-        self.selected_remote = self._be.remotes[0] if self._be.remotes else None
+        remotes = [r for r in self._be.remotes if r.name != VMN_READONLY_REMOTE]
+        self.selected_remote = remotes[0] if remotes else None
         self.repo_path = repo_path
         self.active_branch = self.get_active_branch()
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)

@@ -18,6 +18,7 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 # Directory inside an app dir holding branch-specific configs:
 # .vmn/{app}/branch_conf/{branch}/conf.yml
 BRANCH_CONF_DIR = "branch_conf"
+VMN_READONLY_REMOTE = "vmn-readonly"
 
 # ── Regex patterns ───────────────────────────────────────────────────
 
