@@ -7,7 +7,11 @@ import { row } from "./leaderboardHarness";
 const paramCols = ["lr", "dropout", "opt", "amsgrad", "steps"];
 const layout: RowLayout = {
   styles: Array.from({ length: 16 }, () => ({})),
-  total: 1000, metricCols: [], paramCols, paramBase: 4, tagsIdx: null, noteIdx: 4 + paramCols.length,
+  total: 1000,
+  metricCols: [],
+  paramCols,
+  cells: paramCols.map((k) => ({ kind: "param" as const, key: k })),
+  paramBase: 4, tagsIdx: null, noteIdx: 4 + paramCols.length,
   colMeta: {}, showBest: false, runBase: "/ws/test/app/my-app",
 };
 

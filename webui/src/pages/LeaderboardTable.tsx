@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
-import { EXPERIMENT_COL_INDEX, STICKY_BG } from "./leaderboardColumns";
+import { STICKY_BG } from "./leaderboardColumns";
 import Row, { type RowLayout } from "./LeaderboardRow";
 
 const ROW_HEIGHT = 48;
@@ -21,11 +21,11 @@ export interface SortState {
   onSort: (col: string) => void;
 }
 
-/** Every header cell sticks to the top of the scroll container; the
- *  experiment column additionally stays pinned to the left (it already
- *  carries the sticky-left style from `columnStyles`) and sits above the
- *  other header cells so it isn't overlapped once they scroll under it. */
-function headStyle(style: CSSProperties, index: number): CSSProperties {
+/** Every header cell sticks to the top of the scroll container; cells whose
+ *  body style already has `position: "sticky"` (experiment + pinned metric/
+ *  param columns) sit at zIndex 3 so they aren't overlapped by other headers
+ *  when both axes scroll simultaneously. */
+function headStyle(style: CSSProperties): CSSProperties {
   const base: CSSProperties = {
     ...style,
     position: "sticky",
@@ -33,11 +33,11 @@ function headStyle(style: CSSProperties, index: number): CSSProperties {
     zIndex: 2,
     background: STICKY_BG,
   };
-  return index === EXPERIMENT_COL_INDEX ? { ...base, zIndex: 3 } : base;
+  return style.position === "sticky" ? { ...base, zIndex: 3 } : base;
 }
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
+  const { styles, cells, colMeta, tagsIdx, noteIdx } = layout;
   const headStyles = styles.map(headStyle);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
@@ -46,25 +46,31 @@ function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
         <th style={headStyles[0]} className="check-cell"></th>
         <th style={headStyles[1]}>#</th>
         <th style={headStyles[2]}>status</th>
-        <th style={headStyles[EXPERIMENT_COL_INDEX]} className="exp-head">experiment</th>
-        {metricCols.map((m, i) => (
-          <th
-            key={m}
-            style={headStyles[4 + i]}
-            className={`sortable${s.sort === m ? " sorted" : ""}`}
-            onClick={() => s.onSort(m)}
-            title={`sort by ${m} (best first)`}
-          >
-            {m}{" "}
-            {colMeta[m].best !== null && (
-              <span className="goal">{colMeta[m].goal === "min" ? "↓" : "↑"}</span>
-            )}
-            {arrow(m)}
-          </th>
-        ))}
-        {paramCols.map((p, i) => (
-          <th key={`p-${p}`} className="param-head" style={headStyles[paramBase + i]}>{p}</th>
-        ))}
+        <th style={headStyles[3]} className="exp-head">experiment</th>
+        {cells.map((cell, i) => {
+          const style = headStyles[4 + i];
+          if (cell.kind === "metric") {
+            const m = cell.key;
+            return (
+              <th
+                key={`m:${m}`}
+                style={style}
+                className={`sortable${s.sort === m ? " sorted" : ""}`}
+                onClick={() => s.onSort(m)}
+                title={`sort by ${m} (best first)`}
+              >
+                {m}{" "}
+                {colMeta[m].best !== null && (
+                  <span className="goal">{colMeta[m].goal === "min" ? "↓" : "↑"}</span>
+                )}
+                {arrow(m)}
+              </th>
+            );
+          }
+          return (
+            <th key={`p:${cell.key}`} className="param-head" style={style}>{cell.key}</th>
+          );
+        })}
         {tagsIdx !== null && <th style={headStyles[tagsIdx]}>tags</th>}
         <th style={headStyles[noteIdx]}>note</th>
         <th

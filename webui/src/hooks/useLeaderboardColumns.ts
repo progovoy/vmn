@@ -3,9 +3,11 @@ import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
   anyTags, columnLayout, columnStyles, computeColMeta, metricColumns, paramKey,
 } from "../pages/leaderboardColumns";
+import type { ColumnCell, ColumnLayout } from "../pages/leaderboardColumns";
 import type { RowLayout } from "../pages/LeaderboardRow";
 import { sameValue } from "../util/stableRows";
 import type { SuggestFacets } from "../util/querySuggest";
+import { orderedKeys } from "../util/columnOrder";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -20,24 +22,30 @@ export const TAGS_COLUMN = "c:tags";
 
 const splitKey = (key: string) => (key ? key.split("\u0000") : []);
 
+// Stable empty array used as default param so callers that omit order/pinned
+// don't trigger useMemo re-runs on every render.
+const EMPTY: readonly string[] = [];
+
 /** The table's columns: metric and param columns from the rows (minus the
- *  hidden `m:`/`p:` ones), their widths, and the row layout every row shares. */
+ *  hidden `m:`/`p:` ones), their widths, and the row layout every row shares.
+ *
+ *  `order` and `pinned` come from URL params `col=` and `pin=` (as stable
+ *  arrays from `useLeaderboardView`). Columns in `order` appear first;
+ *  columns in `pinned` are sticky after the experiment column. */
 export function useLeaderboardColumns(
   rows: readonly ExperimentRow[] | undefined,
   schema: MetricsSchema | null,
   hidden: ReadonlySet<string>,
   runBase: string,
   facets: ExperimentFacets | null,
+  order: readonly string[] = EMPTY,
+  pinned: readonly string[] = EMPTY,
 ) {
   const list = rows ?? [];
   const primary = useMemo(
     () => Object.keys(schema ?? {}).find((k) => schema![k].primary) ?? null,
     [schema],
   );
-  // Keyed on the *set* of names, so a poll returning the same columns keeps
-  // the same arrays (and the user's column choices). Facets (the server's
-  // app-wide keys) widen the set beyond what the loaded rows happen to
-  // carry, so a column only present on an unloaded row is still pickable.
   const [metricNames, paramNames] = useMemo(
     () => [
       metricColumns(rows ?? [], schema, facets?.metric_keys).join("\u0000"),
@@ -50,6 +58,37 @@ export function useLeaderboardColumns(
   const visibleMetrics = useMemo(() => metricCols.filter((c) => !hidden.has(`m:${c}`)), [metricCols, hidden]);
   const visibleParams = useMemo(() => paramCols.filter((c) => !hidden.has(`p:${c}`)), [paramCols, hidden]);
 
+  // Combined key list for ordering: m:name for metrics, p:name for params.
+  const defaultKeys = useMemo(
+    () => [
+      ...visibleMetrics.map((m) => `m:${m}`),
+      ...visibleParams.map((p) => `p:${p}`),
+    ],
+    [visibleMetrics, visibleParams],
+  );
+
+  // Apply URL order and pin to produce an ordered, combined cell list.
+  const orderedCellKeys = useMemo(
+    () => orderedKeys(defaultKeys, order, pinned),
+    // order/pinned are stable arrays from useParamList in the view hook
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [defaultKeys, order, pinned],
+  );
+
+  const cells = useMemo(
+    (): readonly ColumnCell[] =>
+      orderedCellKeys.map((k) => ({
+        kind: (k.startsWith("m:") ? "metric" : "param") as ColumnCell["kind"],
+        key: k.slice(2),
+      })),
+    [orderedCellKeys],
+  );
+
+  const pinnedCount = useMemo(() => {
+    const pinnedSet = new Set(pinned);
+    return orderedCellKeys.filter((k) => pinnedSet.has(k)).length;
+  }, [orderedCellKeys, pinned]);
+
   const colMeta = useStable(useMemo(
     () => computeColMeta(list, visibleMetrics, schema, primary),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,18 +99,22 @@ export function useLeaderboardColumns(
   const showTags = hasTags && !hidden.has(TAGS_COLUMN);
 
   const layout = useMemo((): RowLayout => {
-    const cl = columnLayout(visibleMetrics.length, visibleParams.length, showTags);
-    const paramBase = 4 + visibleMetrics.length;
-    const tagsIdx = showTags ? paramBase + visibleParams.length : null;
+    const cl: ColumnLayout = columnLayout(cells, showTags);
+    const metricCols: string[] = [];
+    const paramCols: string[] = [];
+    for (const c of cells) (c.kind === "metric" ? metricCols : paramCols).push(c.key);
+    const tagsIdx = showTags ? 4 + cells.length : null;
+    const noteIdx = 4 + cells.length + (showTags ? 1 : 0);
     return {
-      styles: columnStyles(cl), total: cl.total,
-      metricCols: visibleMetrics, paramCols: visibleParams,
-      paramBase, tagsIdx, noteIdx: paramBase + visibleParams.length + (showTags ? 1 : 0),
+      styles: columnStyles(cl, pinnedCount),
+      total: cl.total,
+      metricCols, paramCols, cells,
+      paramBase: 4 + metricCols.length,
+      tagsIdx, noteIdx,
       colMeta, showBest, runBase,
     };
-  }, [visibleMetrics, visibleParams, showTags, colMeta, showBest, runBase]);
+  }, [cells, showTags, pinnedCount, colMeta, showBest, runBase]);
 
-  // Query-box suggestions: the server's app-wide keys, else what is loaded.
   const suggestFacets = useMemo((): SuggestFacets => ({
     metric_keys: facets?.metric_keys ?? metricCols,
     param_keys: facets?.param_keys ?? paramCols,
@@ -80,7 +123,7 @@ export function useLeaderboardColumns(
   const otherCols = hasTags ? ["tags"] : [];
   const visibleOther = showTags ? ["tags"] : [];
   return {
-    primary, metricCols, paramCols, visibleMetrics, visibleParams, layout, suggestFacets,
+    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, layout, suggestFacets,
     otherCols, visibleOther,
   };
 }

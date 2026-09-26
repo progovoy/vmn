@@ -4,7 +4,7 @@ import type { ExperimentRow } from "../types";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { tagLabel } from "../util/tags";
-import type { ColMeta } from "./leaderboardColumns";
+import type { ColMeta, ColumnCell } from "./leaderboardColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -13,10 +13,15 @@ const HOVER_INTENT_MS = 120;
 export interface RowLayout {
   styles: CSSProperties[];
   total: number;
+  /** Metric and param columns in rendered order (pinned first, then unpinned). */
+  cells: readonly ColumnCell[];
+  /** Metric keys in cells order — kept for chart/toolbar consumers. */
   metricCols: string[];
+  /** Param keys in cells order — kept for chart/toolbar consumers. */
   paramCols: string[];
-  /** Index of the first param column, the tags column (null: none) and the note column. */
+  /** Index of the first param column (for tags/note index arithmetic). */
   paramBase: number;
+  /** Index of the tags column (null: no tags column). */
   tagsIdx: number | null;
   noteIdx: number;
   colMeta: Record<string, ColMeta>;
@@ -122,9 +127,9 @@ function Row({
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
   const onLeave = () => clearTimeout(hover.current);
-  const { styles, metricCols, paramCols, colMeta, paramBase, tagsIdx, noteIdx } = layout;
+  const { styles, cells, colMeta, tagsIdx, noteIdx } = layout;
   const href = runHref(layout.runBase, r.verstr);
-  const params = paramCols.length ? rowParams(r) : {};
+  const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
   const onClick = (e: MouseEvent) => {
@@ -164,17 +169,25 @@ function Row({
       <ExperimentCell
         r={r} href={href} style={styles[3]} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
       />
-      {metricCols.map((m, i) => (
-        <MetricCell key={m} v={r.metrics[m]} col={colMeta[m]} style={styles[4 + i]} showBest={layout.showBest} />
-      ))}
-      {paramCols.map((p, i) => (
-        <td
-          key={`p-${p}`} className="mono param-cell" style={styles[paramBase + i]}
-          title={params[p] != null ? String(params[p]) : undefined}
-        >
-          {params[p] != null ? fmtParam(params[p]) : "—"}
-        </td>
-      ))}
+      {cells.map((cell, i) => {
+        const style = styles[4 + i];
+        if (cell.kind === "metric") {
+          return (
+            <MetricCell
+              key={`m:${cell.key}`}
+              v={r.metrics[cell.key]} col={colMeta[cell.key]} style={style} showBest={layout.showBest}
+            />
+          );
+        }
+        return (
+          <td
+            key={`p:${cell.key}`} className="mono param-cell" style={style}
+            title={params[cell.key] != null ? String(params[cell.key]) : undefined}
+          >
+            {params[cell.key] != null ? fmtParam(params[cell.key]) : "—"}
+          </td>
+        );
+      })}
       {tagsIdx !== null && (
         <td className="tags-cell" style={styles[tagsIdx]}><TagChips tags={r.tags} /></td>
       )}
