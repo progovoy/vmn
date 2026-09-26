@@ -20,6 +20,7 @@ function row(i: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
 }
 
 const hidden = new Set<string>();
+const noOrder: readonly string[] = [];
 
 describe("useLeaderboardColumns facets", () => {
   it("offers metric/param columns from facets even when no loaded row carries them", () => {
@@ -50,5 +51,41 @@ describe("useLeaderboardColumns facets", () => {
     const schema = { loss: { primary: true } };
     const { result } = renderHook(() => useLeaderboardColumns(rows, schema, hidden, "", facets));
     expect(result.current.metricCols).toEqual(["loss", "accuracy"]);
+  });
+});
+
+describe("useLeaderboardColumns order and pinning", () => {
+  it("cells follow col= order: acc before loss when col=m:acc&col=m:loss", () => {
+    const rows = [row(1, { metrics: { loss: 0.5, acc: 0.9 } })];
+    const order = ["m:acc", "m:loss"];
+    const { result } = renderHook(() =>
+      useLeaderboardColumns(rows, null, hidden, "", null, order, noOrder));
+    expect(result.current.cells[0]).toEqual({ kind: "metric", key: "acc" });
+    expect(result.current.cells[1]).toEqual({ kind: "metric", key: "loss" });
+  });
+
+  it("pinned cells come before unpinned within the combined list", () => {
+    const rows = [row(1, { metrics: { loss: 0.5, acc: 0.9 }, params: { lr: 0.1 } })];
+    const pinned = ["m:acc"];
+    const { result } = renderHook(() =>
+      useLeaderboardColumns(rows, null, hidden, "", null, noOrder, pinned));
+    expect(result.current.cells[0]).toEqual({ kind: "metric", key: "acc" });
+  });
+
+  it("styles are referentially stable across equal rerenders", () => {
+    const rows = [row(1, { metrics: { loss: 0.5 }, params: { lr: 0.1 } })];
+    const { result, rerender } = renderHook(() =>
+      useLeaderboardColumns(rows, null, hidden, "", null));
+    const styles1 = result.current.layout.styles;
+    rerender();
+    expect(result.current.layout.styles).toBe(styles1);
+  });
+
+  it("old call (no order/pin) renders default order unchanged", () => {
+    const rows = [row(1, { metrics: { loss: 0.5, acc: 0.9 } })];
+    const { result } = renderHook(() =>
+      useLeaderboardColumns(rows, null, hidden, "", null));
+    // default: schema/facet order, then alpha — loss and acc are both extras so alpha: acc, loss
+    expect(result.current.metricCols).toEqual(["acc", "loss"]);
   });
 });

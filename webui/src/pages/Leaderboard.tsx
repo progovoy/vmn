@@ -73,7 +73,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   usePolling(data.refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
 
   const base = `/ws/${ws}/app/${app}`;
-  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets);
+  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets, view.colOrder, view.pinned);
 
   const all = useMemo(() => rows ?? [], [rows]);
   const chart = useChartRows(

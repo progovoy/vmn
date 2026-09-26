@@ -28,17 +28,21 @@ export interface ColumnLayout {
   total: number;
 }
 
-/** Columns in order: check, #, status, experiment, metrics…, params…,
- *  [tags], note, when. */
-export function columnLayout(nMetrics: number, nParams: number, tags = false): ColumnLayout {
-  const fixed =
-    W.check + W.idx + W.status + W.note + W.when +
-    nMetrics * W.metric + nParams * W.param + (tags ? W.tags : 0);
+/** A single visible metric-or-param column, in rendered order. */
+export interface ColumnCell {
+  kind: "metric" | "param";
+  key: string;
+}
+
+/** Columns in order: check, #, status, experiment, cells…, [tags], note, when.
+ *  Each cell contributes its own width (metric = 110, param = 120). */
+export function columnLayout(cells: readonly ColumnCell[], tags = false): ColumnLayout {
+  const cellsWidth = cells.reduce((s, c) => s + (c.kind === "metric" ? W.metric : W.param), 0);
+  const fixed = W.check + W.idx + W.status + W.note + W.when + cellsWidth + (tags ? W.tags : 0);
   const experiment = Math.max(W.experiment, MIN_TABLE_WIDTH - fixed);
   const widths = [
     W.check, W.idx, W.status, experiment,
-    ...Array<number>(nMetrics).fill(W.metric),
-    ...Array<number>(nParams).fill(W.param),
+    ...cells.map((c) => (c.kind === "metric" ? W.metric : W.param)),
     ...(tags ? [W.tags] : []),
     W.note, W.when,
   ];
@@ -49,23 +53,32 @@ export function columnLayout(nMetrics: number, nParams: number, tags = false): C
  *  object, so a re-render allocates nothing per cell and React skips the
  *  style diff entirely.
  *
- *  The experiment column additionally pins itself to the left edge of the
- *  scroll container, so the run identifier stays visible while scrolling
- *  sideways across metric/param columns — mirrors the sticky-left pattern
- *  the compare-runs table uses for `.compare-key`. */
-export function columnStyles(layout: ColumnLayout): CSSProperties[] {
+ *  The experiment column and the first `pinnedCount` metric/param cells pin
+ *  themselves to the left edge with cumulative `left` offsets so they stay
+ *  visible while scrolling sideways. */
+export function columnStyles(layout: ColumnLayout, pinnedCount = 0): CSSProperties[] {
+  const FIRST_CELL = EXPERIMENT_COL_INDEX + 1;
   const stickyLeft = layout.widths
     .slice(0, EXPERIMENT_COL_INDEX)
     .reduce((sum, w) => sum + w, 0);
+
+  // Pre-compute the left offset for each pinned metric/param cell.
+  const pinnedLefts: number[] = [];
+  let acc = stickyLeft + layout.widths[EXPERIMENT_COL_INDEX];
+  for (let i = 0; i < pinnedCount; i++) {
+    pinnedLefts.push(acc);
+    acc += layout.widths[FIRST_CELL + i] ?? 0;
+  }
+
   return layout.widths.map((w, i) => {
-    if (i !== EXPERIMENT_COL_INDEX) return { width: `${w}px` };
-    return {
-      width: `${w}px`,
-      position: "sticky",
-      left: stickyLeft,
-      zIndex: 1,
-      background: STICKY_BG,
-    };
+    if (i === EXPERIMENT_COL_INDEX) {
+      return { width: `${w}px`, position: "sticky", left: stickyLeft, zIndex: 1, background: STICKY_BG };
+    }
+    const cellIdx = i - FIRST_CELL;
+    if (cellIdx >= 0 && cellIdx < pinnedCount) {
+      return { width: `${w}px`, position: "sticky", left: pinnedLefts[cellIdx], zIndex: 1, background: STICKY_BG };
+    }
+    return { width: `${w}px` };
   });
 }
 
