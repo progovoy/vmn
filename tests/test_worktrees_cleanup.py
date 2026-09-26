@@ -2,7 +2,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from version_stamp.cli import worktrees
+from version_stamp.cli import worktree_create, worktrees
 from version_stamp.cli.args import parse_user_commands
 from version_stamp.core.logging import init_stamp_logger
 
@@ -221,7 +221,7 @@ def test_rollback_uses_each_dependency_source_repo(tmp_path):
         },
     }
 
-    assert worktrees._cleanup_island(
+    assert worktree_create._cleanup_island(
         "/source/main",
         "/island/main",
         "island/demo/main",

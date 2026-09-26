@@ -3,7 +3,7 @@ import os
 import subprocess
 from types import SimpleNamespace
 
-from version_stamp.cli import worktree_sources, worktree_state, worktrees
+from version_stamp.cli import worktree_create, worktree_sources, worktree_state, worktrees
 from version_stamp.core.logging import init_stamp_logger
 
 
@@ -57,9 +57,9 @@ def test_version_source_starts_main_worktree_at_tagged_commit(tmp_path):
     ctx = _version_ctx(repo, "1.0.0", {".": {"hash": first}})
     source = {"type": "version", "ref": "1.0.0"}
 
-    assert worktrees._resolve_version_source(ctx, source)
+    assert worktree_create._resolve_version_source(ctx, source)
     dest = tmp_path / "island"
-    assert worktrees._create_main_worktree(repo, dest, "island/test/main", source) == 0
+    assert worktree_create._create_main_worktree(repo, dest, "island/test/main", source) == 0
 
     assert _git(dest, "rev-parse", "HEAD") == first
     assert _git(dest, "rev-parse", "HEAD") != second
@@ -82,7 +82,7 @@ def test_invalid_version_is_rejected_before_island_directory_is_created(tmp_path
         shallow_deps=False,
     )
 
-    assert worktrees.worktree_create(SimpleNamespace(args=args, vcs=vcs)) == 1
+    assert worktree_create.worktree_create(SimpleNamespace(args=args, vcs=vcs)) == 1
     assert not (tmp_path / "islands" / "bad-version").exists()
 
 
@@ -90,7 +90,7 @@ def test_version_with_zero_dependencies_does_not_fall_back_to_current_config():
     ctx = _version_ctx("/unused", "1.0.0", {".": {"hash": "abc"}})
     source = {"type": "version", "ref": "1.0.0"}
 
-    assert worktrees._resolve_deps(ctx, source) == {}
+    assert worktree_create._resolve_deps(ctx, source) == {}
 
 
 def test_dependency_basename_collision_is_rejected():
@@ -127,7 +127,7 @@ def test_unknown_editable_dependency_is_rejected(tmp_path, caplog):
         shallow_deps=False,
     )
 
-    assert worktrees.worktree_create(SimpleNamespace(args=args, vcs=vcs)) == 1
+    assert worktree_create.worktree_create(SimpleNamespace(args=args, vcs=vcs)) == 1
     assert "Unknown --editable-dep: typo" in caplog.text
     assert not (tmp_path / "islands" / "bad-editable").exists()
 
@@ -144,7 +144,7 @@ def test_shallow_editable_dep_finishes_at_recorded_hash(tmp_path):
     dest = tmp_path / "dep-island"
     info = {"remote": f"file://{remote}", "branch": "main", "hash": first}
 
-    assert worktrees._shallow_clone_dep(info, dest, "island/demo/dep") == 0
+    assert worktree_create._shallow_clone_dep(info, dest, "island/demo/dep") == 0
     assert _git(dest, "rev-parse", "HEAD") == first
     assert _git(dest, "branch", "--show-current") == "island/demo/dep"
     assert _git(dest, "rev-parse", "HEAD") != second
