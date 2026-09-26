@@ -904,6 +904,19 @@ def handle_snapshot(vmn_ctx):
         return 1
 
 
+def _on_configured_branch(path, branch_name, configured_branch):
+    """A dep is on its configured branch, or on an island's private copy of it
+    with no commits the configured branch lacks (so its hash is reachable)."""
+    if branch_name == configured_branch:
+        return True
+    from version_stamp.cli.worktree_git import head_contained_in_upstream
+    from version_stamp.cli.worktree_state import island_source_branch
+
+    return island_source_branch(
+        branch_name
+    ) == configured_branch and head_contained_in_upstream(path)
+
+
 @measure_runtime_decorator
 def _get_repo_status(
     vcs, expected_status, optional_status=set(), suppress_errors=frozenset()
@@ -1019,7 +1032,9 @@ def _get_repo_status(
                         f"{branch_name} than what is required by the configuration: "
                         f"{vcs.configured_deps[repo]['branch']}"
                     )
-                    assert branch_name == vcs.configured_deps[repo]["branch"]
+                    assert _on_configured_branch(
+                        full_path, branch_name, vcs.configured_deps[repo]["branch"]
+                    )
                 except Exception:
                     status.deps_synced_with_conf = False
                     status.err_msgs[

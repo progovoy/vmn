@@ -3,7 +3,7 @@ import os
 import subprocess
 from types import SimpleNamespace
 
-from version_stamp.cli import worktree_create, worktree_sources, worktree_state, worktrees
+from version_stamp.cli import worktree_create, worktree_sources, worktrees
 from version_stamp.core.logging import init_stamp_logger
 
 
@@ -75,7 +75,6 @@ def test_invalid_version_is_rejected_before_island_directory_is_created(tmp_path
     )
     args = SimpleNamespace(
         base_path=str(tmp_path / "islands"),
-        editable_dep=None,
         from_branch=None,
         from_version="missing",
         island_name="bad-version",
@@ -105,33 +104,6 @@ def test_dependency_basename_collision_is_rejected():
     assert worktree_sources.deps_from_configured(SimpleNamespace(vcs=vcs)) is None
 
 
-def test_unknown_editable_dependency_is_rejected(tmp_path, caplog):
-    main = tmp_path / "main"
-    dep = tmp_path / "known"
-    _new_repo(main)
-    _new_repo(dep)
-    vcs = SimpleNamespace(
-        actual_deps_state={},
-        configured_deps={"../known": {"remote": None}},
-        name="app",
-        selected_tag=None,
-        ver_infos_from_repo={},
-        vmn_root_path=str(main),
-    )
-    args = SimpleNamespace(
-        base_path=str(tmp_path / "islands"),
-        editable_dep=["typo"],
-        from_branch=None,
-        from_version=None,
-        island_name="bad-editable",
-        shallow_deps=False,
-    )
-
-    assert worktree_create.worktree_create(SimpleNamespace(args=args, vcs=vcs)) == 1
-    assert "Unknown --editable-dep: typo" in caplog.text
-    assert not (tmp_path / "islands" / "bad-editable").exists()
-
-
 def test_shallow_editable_dep_finishes_at_recorded_hash(tmp_path):
     source = tmp_path / "dep"
     first, second = _new_repo(source)
@@ -150,13 +122,121 @@ def test_shallow_editable_dep_finishes_at_recorded_hash(tmp_path):
     assert _git(dest, "rev-parse", "HEAD") != second
 
 
-def test_readonly_marker_is_written_to_main_and_dependency_checkouts(tmp_path):
+def _pinned_ctx(main, configured, actual=None):
+    vcs = SimpleNamespace(
+        actual_deps_state=actual or {},
+        configured_deps=configured,
+        vmn_root_path=str(main),
+    )
+    return SimpleNamespace(vcs=vcs)
+
+
+def _dep_ctx(tmp_path, conf, local=None):
     main = tmp_path / "main"
+    main.mkdir(exist_ok=True)
     dep = tmp_path / "dep"
-    main.mkdir()
-    dep.mkdir()
+    first, second = _new_repo(dep)
+    if local == "other":
+        _git(dep, "checkout", "-b", "elsewhere")
+    elif local == "detached":
+        _git(dep, "checkout", "--detach", "HEAD")
+    elif local == "missing":
+        import shutil
 
-    worktree_state.write_island_markers([main, dep])
+        shutil.rmtree(dep)
+    actual = {"../dep": {"hash": second, "remote": "file:///r"}}
+    return _pinned_ctx(main, {"../dep": conf}, actual), first, second
 
-    for checkout in (main, dep):
-        assert (checkout / ".vmn" / worktree_state.WORKTREE_READONLY_MARKER).is_file()
+
+def test_dep_pinned_by_hash_starts_at_that_hash(tmp_path):
+    ctx, first, _ = _dep_ctx(tmp_path, {"hash": "abc123"})
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        "abc123",
+        None,
+        False,
+    )
+
+
+def test_dep_pinned_by_tag_starts_at_that_tag(tmp_path):
+    ctx, _, _ = _dep_ctx(tmp_path, {"tag": "v1"})
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        "v1",
+        None,
+        False,
+    )
+
+
+def test_dep_pinned_branch_with_local_on_that_branch_uses_local_hash(tmp_path):
+    ctx, _, second = _dep_ctx(tmp_path, {"branch": "main"})
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        second,
+        "main",
+        False,
+    )
+
+
+def test_dep_pinned_branch_with_local_elsewhere_fetches_the_pinned_branch(tmp_path):
+    ctx, _, _ = _dep_ctx(tmp_path, {"branch": "main"}, local="other")
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        "vmn-readonly/main",
+        "main",
+        True,
+    )
+
+
+def test_dep_pinned_branch_with_missing_local_fetches_the_pinned_branch(tmp_path):
+    ctx, _, _ = _dep_ctx(tmp_path, {"branch": "release/1"}, local="missing")
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        "vmn-readonly/release/1",
+        "release/1",
+        True,
+    )
+
+
+def test_unpinned_dep_on_a_branch_uses_that_branch_at_local_hash(tmp_path):
+    ctx, _, second = _dep_ctx(tmp_path, {}, local="other")
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        second,
+        "elsewhere",
+        False,
+    )
+
+
+def test_unpinned_detached_dep_has_no_source_branch(tmp_path):
+    ctx, _, second = _dep_ctx(tmp_path, {}, local="detached")
+
+    dep = worktree_sources.deps_from_configured(ctx)["dep"]
+
+    assert (dep["start_point"], dep["source_branch"], dep["fetch"]) == (
+        second,
+        None,
+        False,
+    )
+
+
+def test_deps_from_version_have_no_source_branch():
+    deps = worktree_sources.deps_from_version(
+        _version_ctx("/unused", "1.0.0", {"../dep": {"hash": "abc"}}), "1.0.0"
+    )
+
+    assert deps["dep"]["start_point"] == "abc"
+    assert deps["dep"]["source_branch"] is None
+    assert deps["dep"]["fetch"] is False

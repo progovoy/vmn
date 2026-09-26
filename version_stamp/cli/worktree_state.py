@@ -2,8 +2,9 @@
 import json
 import os
 
+from version_stamp.core.constants import ISLAND_BRANCH_PREFIX
+
 ISLAND_MANIFEST_FILENAME = "island.json"
-ISLAND_BRANCH_PREFIX = "island/"
 
 
 def write_manifest(manifest):
@@ -18,3 +19,11 @@ def island_branch_name(island_name, source_branch):
 
 def is_island_branch(branch):
     return bool(branch) and branch.startswith(ISLAND_BRANCH_PREFIX)
+
+
+def island_source_branch(branch):
+    """'main' for 'island/<name>/main'; None for any other branch."""
+    if not is_island_branch(branch):
+        return None
+    parts = branch.split("/", 2)
+    return parts[2] if len(parts) == 3 else None

@@ -19,6 +19,7 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 # .vmn/{app}/branch_conf/{branch}/conf.yml
 BRANCH_CONF_DIR = "branch_conf"
 VMN_READONLY_REMOTE = "vmn-readonly"
+ISLAND_BRANCH_PREFIX = "island/"
 
 # ── Regex patterns ───────────────────────────────────────────────────
 

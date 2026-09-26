@@ -5,6 +5,7 @@ import os
 import shutil
 
 from version_stamp.cli.worktree_git import (
+    remove_readonly_remote_if_unused,
     remove_registered_worktree,
     source_repo_from_worktree,
 )
@@ -100,6 +101,13 @@ def worktree_remove(vmn_ctx):
         )
         return 1
 
+    for repo in _source_repos(manifest, main_source):
+        remove_readonly_remote_if_unused(repo)
     shutil.rmtree(island_path, ignore_errors=True)
     VMN_LOGGER.info(f"Removed island: {name}")
     return 0
+
+
+def _source_repos(manifest, main_source):
+    deps = manifest.get("deps", {}).values()
+    return [main_source, *(dep["source_path"] for dep in deps if dep.get("source_path"))]

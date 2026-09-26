@@ -894,12 +894,6 @@ def _add_worktrees_parser(subprasers, name):
         help="Use depth=1 for dependency worktrees",
     )
     pwt.set_defaults(shallow_deps=False)
-    pwt.add_argument(
-        "--editable-dep",
-        action="append",
-        default=None,
-        help="Dep that gets a branch instead of detached HEAD (repeatable)",
-    )
 
 
 def _add_install_args(parser):

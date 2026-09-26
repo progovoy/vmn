@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """Git backend mixin: branch, checkout, and state-check operations."""
+from version_stamp.core.constants import ISLAND_BRANCH_PREFIX, VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
+
+def _is_island_readonly_upstream(local_branch_name, upstream):
+    """An island's private branch tracks its source via the read-only remote.
+
+    vmn never pushes island branches, so that upstream is safe to use for
+    status checks. Any other branch tracking it is treated as having none.
+    """
+    return local_branch_name.startswith(ISLAND_BRANCH_PREFIX) and upstream.startswith(
+        f"{VMN_READONLY_REMOTE}/"
+    )
 
 class GitBranchMixin:
     """Methods for branch management and state checks. Mixed into GitBackend."""
@@ -126,8 +137,10 @@ class GitBranchMixin:
         try:
             ret = self._be.git.execute(command)
 
+            if _is_island_readonly_upstream(local_branch_name, ret):
+                return ret
             try:
-                assert ret.startswith(self.selected_remote.name)
+                assert ret.startswith(f"{self.selected_remote.name}/")
             except Exception:
                 VMN_LOGGER.warning(
                     f"Found remote branch {ret} however it belongs to a "

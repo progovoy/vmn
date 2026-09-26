@@ -1,6 +1,8 @@
 """Version and dependency resolution for worktree islands."""
 import os
 
+from version_stamp.cli.worktree_git import git_current_branch
+from version_stamp.core.constants import VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER
 
 
@@ -37,22 +39,56 @@ def deps_from_version(vmn_ctx, version):
 
 
 def deps_from_configured(vmn_ctx):
-    configured = getattr(vmn_ctx.vcs, "configured_deps", {})
-    actual = getattr(vmn_ctx.vcs, "actual_deps_state", {})
+    vcs = vmn_ctx.vcs
+    configured = getattr(vcs, "configured_deps", {})
+    actual = getattr(vcs, "actual_deps_state", {})
+    root = getattr(vcs, "vmn_root_path", None)
     raw_deps = {}
     for rel_path, conf in configured.items():
         if rel_path == ".":
             continue
-        info = {
-            "remote": conf.get("remote"),
-            "branch": conf.get("branch"),
-            "rel_path": rel_path,
-        }
-        if rel_path in actual:
-            info["hash"] = actual[rel_path].get("hash")
-            info["remote"] = info["remote"] or actual[rel_path].get("remote")
-        raw_deps[rel_path] = info
+        local = os.path.join(root, rel_path) if root else None
+        local_branch = git_current_branch(local) if local and os.path.isdir(local) else None
+        raw_deps[rel_path] = _configured_dep_info(
+            rel_path, conf, actual.get(rel_path, {}), local_branch
+        )
     return _collect_deps(raw_deps, already_normalized=True)
+
+
+def _configured_dep_info(rel_path, conf, actual_info, local_branch):
+    """Where an island should start a dependency, given its conf pin.
+
+    A hash or tag pin wins. A branch pin keeps the local checkout when it is
+    already on that branch (so the island starts at the current hash) and
+    otherwise asks for the branch to be fetched. With no pin the island follows
+    the local checkout.
+    """
+    local_hash = actual_info.get("hash")
+    info = {
+        "remote": conf.get("remote") or actual_info.get("remote"),
+        "branch": conf.get("branch"),
+        "rel_path": rel_path,
+        "source_branch": None,
+        "fetch": False,
+    }
+    if conf.get("hash"):
+        info.update(hash=conf["hash"], start_point=conf["hash"])
+    elif conf.get("tag"):
+        info.update(hash=None, start_point=conf["tag"])
+    elif conf.get("branch"):
+        branch = conf["branch"]
+        info["source_branch"] = branch
+        if local_branch == branch:
+            info.update(hash=local_hash, start_point=local_hash)
+        else:
+            info.update(
+                hash=None,
+                start_point=f"{VMN_READONLY_REMOTE}/{branch}",
+                fetch=True,
+            )
+    else:
+        info.update(hash=local_hash, start_point=local_hash, source_branch=local_branch)
+    return info
 
 
 def _collect_deps(raw_deps, already_normalized=False):
@@ -72,9 +108,12 @@ def _collect_deps(raw_deps, already_normalized=False):
         else:
             info = {
                 "hash": raw_info.get("hash"),
+                "start_point": raw_info.get("hash"),
                 "remote": raw_info.get("remote"),
                 "branch": raw_info.get("branch"),
                 "rel_path": rel_path,
+                "source_branch": None,
+                "fetch": False,
             }
         deps[dep_name] = info
     return deps

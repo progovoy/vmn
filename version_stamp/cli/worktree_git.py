@@ -3,7 +3,12 @@ import os
 import shutil
 import subprocess
 
+from version_stamp.core.constants import VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER
+
+# A plain path, not "host:path": a colon makes git try ssh and print a
+# confusing "Could not resolve hostname" error.
+READONLY_PUSH_URL = "/vmn-readonly/island-branches-are-not-pushable"
 
 
 def run_git(repo_path, args):
@@ -29,6 +34,92 @@ def git_remote_url(repo_path):
     return None
 
 
+def branch_upstream(repo_path, branch):
+    """The upstream of *branch* (e.g. 'origin/main'), or None."""
+    return _git_stdout(
+        repo_path,
+        [
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            f"{branch}@{{upstream}}",
+        ],
+    )
+
+
+def head_contained_in_upstream(repo_path):
+    """True when HEAD has no commits beyond its branch's upstream."""
+    result = run_git(repo_path, ["merge-base", "--is-ancestor", "HEAD", "@{upstream}"])
+    return bool(result and result.returncode == 0)
+
+
+def git_head(repo_path):
+    return _git_stdout(repo_path, ["rev-parse", "HEAD"])
+
+
+def is_dirty(repo_path):
+    return bool(_git_stdout(repo_path, ["status", "--porcelain"]))
+
+
+def ensure_readonly_remote(repo_path, source_remote="origin"):
+    """Create or refresh the read-only mirror of *source_remote*.
+
+    It fetches from the same URL but its push URL cannot work, and it has no
+    fetch refspecs until fetch_readonly_branch adds them. False when the repo
+    has no *source_remote*.
+    """
+    url = _git_stdout(repo_path, ["remote", "get-url", source_remote])
+    if not url:
+        return False
+    if _git_stdout(repo_path, ["remote", "get-url", VMN_READONLY_REMOTE]) is None:
+        run_git(repo_path, ["remote", "add", VMN_READONLY_REMOTE, url])
+        run_git(
+            repo_path, ["config", "--unset-all", f"remote.{VMN_READONLY_REMOTE}.fetch"]
+        )
+    else:
+        run_git(repo_path, ["remote", "set-url", VMN_READONLY_REMOTE, url])
+    run_git(
+        repo_path,
+        ["remote", "set-url", "--push", VMN_READONLY_REMOTE, READONLY_PUSH_URL],
+    )
+    return True
+
+
+def fetch_readonly_branch(repo_path, branch):
+    """Fetch *branch* through the read-only remote and keep tracking it."""
+    refspec = f"+refs/heads/{branch}:refs/remotes/{VMN_READONLY_REMOTE}/{branch}"
+    result = run_git(repo_path, ["fetch", VMN_READONLY_REMOTE, refspec])
+    if result is None or result.returncode != 0:
+        return False
+    key = f"remote.{VMN_READONLY_REMOTE}.fetch"
+    if refspec not in (_git_stdout(repo_path, ["config", "--get-all", key]) or ""):
+        run_git(repo_path, ["config", "--add", key, refspec])
+    return True
+
+
+def track_privately(repo_path, private_branch, upstream):
+    """Track *upstream* and send any bare push of *private_branch* nowhere."""
+    result = run_git(
+        repo_path, ["branch", f"--set-upstream-to={upstream}", private_branch]
+    )
+    if result is None or result.returncode != 0:
+        VMN_LOGGER.error(f"Failed to set upstream {upstream} for {private_branch}")
+        return False
+    run_git(
+        repo_path,
+        ["config", f"branch.{private_branch}.pushRemote", VMN_READONLY_REMOTE],
+    )
+    return True
+
+
+def remove_readonly_remote_if_unused(repo_path):
+    """Drop the read-only remote once no island branch is left in the repo."""
+    if _git_stdout(repo_path, ["for-each-ref", "--count=1", "refs/heads/island/"]):
+        return
+    if _git_stdout(repo_path, ["remote", "get-url", VMN_READONLY_REMOTE]) is not None:
+        run_git(repo_path, ["remote", "remove", VMN_READONLY_REMOTE])
+
+
 def create_main_worktree(repo_path, dest_path, branch_name, source):
     start_point = source.get("commit")
     if source["type"] == "branch":
@@ -47,13 +138,13 @@ def create_main_worktree(repo_path, dest_path, branch_name, source):
 
 
 def create_dep_worktree(repo_path, dest_path, dep_info, branch_name):
-    target_hash = dep_info.get("hash")
+    start_point = dep_info.get("start_point") or dep_info.get("hash")
     if branch_name:
         cmd = ["worktree", "add", "-b", branch_name, str(dest_path)]
     else:
         cmd = ["worktree", "add", "--detach", str(dest_path)]
-    if target_hash:
-        cmd.append(target_hash)
+    if start_point:
+        cmd.append(start_point)
 
     result = run_git(repo_path, cmd)
     if result is None or result.returncode != 0:
@@ -131,6 +222,7 @@ def cleanup_island(
     island_branch,
     dep_manifests,
     run_git=run_git,
+    island_path=None,
 ):
     success = True
     for dep_info in dep_manifests.values():
@@ -149,7 +241,7 @@ def cleanup_island(
         success = False
 
     if success:
-        shutil.rmtree(os.path.dirname(str(main_dest)), ignore_errors=True)
+        shutil.rmtree(island_path or os.path.dirname(str(main_dest)), ignore_errors=True)
     return success
 
 
