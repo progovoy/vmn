@@ -5,6 +5,7 @@ import type { ExperimentRow } from "../types";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { STICKY_BG } from "./leaderboardColumns";
+import type { ColumnCell } from "./leaderboardColumns";
 import Row, { type RowLayout } from "./LeaderboardRow";
 
 const ROW_HEIGHT = 48;
@@ -37,7 +38,11 @@ function headStyle(style: CSSProperties): CSSProperties {
 }
 
 function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, cells, colMeta, tagsIdx, noteIdx } = layout;
+  const { styles, colMeta, tagsIdx, noteIdx } = layout;
+  const cells: readonly ColumnCell[] = layout.cells ?? [
+    ...layout.metricCols.map((k): ColumnCell => ({ kind: "metric", key: k })),
+    ...layout.paramCols.map((k): ColumnCell => ({ kind: "param", key: k })),
+  ];
   const headStyles = styles.map(headStyle);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (

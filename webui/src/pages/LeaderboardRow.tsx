@@ -13,8 +13,9 @@ const HOVER_INTENT_MS = 120;
 export interface RowLayout {
   styles: CSSProperties[];
   total: number;
-  /** Metric and param columns in rendered order (pinned first, then unpinned). */
-  cells: readonly ColumnCell[];
+  /** Metric and param columns in rendered order (pinned first, then unpinned).
+   *  Falls back to metricCols + paramCols when absent (legacy callers). */
+  cells?: readonly ColumnCell[];
   /** Metric keys in cells order — kept for chart/toolbar consumers. */
   metricCols: string[];
   /** Param keys in cells order — kept for chart/toolbar consumers. */
@@ -127,7 +128,12 @@ function Row({
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
   const onLeave = () => clearTimeout(hover.current);
-  const { styles, cells, colMeta, tagsIdx, noteIdx } = layout;
+  const { styles, colMeta, tagsIdx, noteIdx } = layout;
+  // Derive the fallback once per render so the per-cell loop stays O(1) per cell.
+  const cells: readonly ColumnCell[] = layout.cells ?? [
+    ...layout.metricCols.map((k): ColumnCell => ({ kind: "metric", key: k })),
+    ...layout.paramCols.map((k): ColumnCell => ({ kind: "param", key: k })),
+  ];
   const href = runHref(layout.runBase, r.verstr);
   const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
