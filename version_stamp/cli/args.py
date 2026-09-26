@@ -314,6 +314,8 @@ def add_arg_show(subprasers):
     pshow.set_defaults(display_type=False)
     pshow.add_argument("--dev", dest="dev", action="store_true")
     pshow.set_defaults(dev=False)
+    pshow.add_argument("--base", dest="base", action="store_true")
+    pshow.set_defaults(base=False)
 
 
 def add_arg_init_app(subprasers):

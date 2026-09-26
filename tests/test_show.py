@@ -721,3 +721,36 @@ def test_show_and_goto_do_not_migrate(app_layout, capfd):
         cwd=app_layout.repo_path,
     ).decode()
     assert status.strip() == ""
+
+
+def test_show_base_option(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch", prerelease="rc")
+    assert err == 0
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "0.0.1-rc.1\n" == captured.out
+
+    err = _show(app_layout.app_name, base=True)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
+
+    err = _show(app_layout.app_name, verbose=True)
+    assert err == 0
+    captured = capfd.readouterr()
+    out_dict = yaml.safe_load(captured.out)
+    assert out_dict["version"] == "0.0.1-rc.1"
+    assert out_dict["base_version"] == "0.0.1"
+
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    capfd.readouterr()
+    err = _show(app_layout.app_name, base=True)
+    assert err == 0
+    captured = capfd.readouterr()
+    assert "0.0.1\n" == captured.out
