@@ -356,3 +356,32 @@ def test_setup_completion_uses_supported_default_completer_api(monkeypatch):
         argparse.Namespace(command="worktrees"),
         action=SimpleNamespace(dest="action"),
     ) == ["remove"]
+
+
+def test_wt_alias_completes_actions_and_island_names(tmp_path, monkeypatch):
+    root = tmp_path / "repo"
+    island_root = tmp_path / "islands"
+    (root / ".vmn").mkdir(parents=True)
+    (island_root / "feature-one").mkdir(parents=True)
+    (island_root / "feature-one" / "island.json").write_text("{}")
+    monkeypatch.setenv("VMN_WORKING_DIR", str(root))
+    import argcomplete
+
+    captured = {}
+    monkeypatch.setattr(
+        argcomplete,
+        "autocomplete",
+        lambda parser, **kwargs: captured.update(kwargs),
+    )
+    completion.setup_completion(argparse.ArgumentParser())
+    default_completer = captured["default_completer"]
+
+    assert default_completer(
+        "r",
+        argparse.Namespace(command="wt"),
+        action=SimpleNamespace(dest="action"),
+    ) == ["remove"]
+    parsed_args = argparse.Namespace(
+        command="wt", action="remove", base_path=str(island_root)
+    )
+    assert completion.app_name_completer("feature", parsed_args) == ["feature-one"]

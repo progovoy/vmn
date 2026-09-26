@@ -43,6 +43,9 @@ def _complete_apps(prefix):
     return sorted(app for app in apps if app.startswith(prefix))
 
 
+_WORKTREES_COMMANDS = ("worktrees", "wt")
+
+
 def _complete_islands(prefix, parsed_args):
     root = _find_vmn_root()
     if root is None:
@@ -68,7 +71,7 @@ def _complete_islands(prefix, parsed_args):
 
 def app_name_completer(prefix, parsed_args, **kwargs):
     """Complete app names, or island names for ``worktrees remove``."""
-    if getattr(parsed_args, "command", None) == "worktrees":
+    if getattr(parsed_args, "command", None) in _WORKTREES_COMMANDS:
         action = getattr(parsed_args, "action", None)
         if action == "remove":
             return _complete_islands(prefix, parsed_args)
@@ -90,7 +93,7 @@ def setup_completion(parser):
     def default_completer(prefix, parsed_args, action=None, **kwargs):
         command = getattr(parsed_args, "command", None)
         action_dest = getattr(action, "dest", None)
-        if command == "worktrees" and action_dest == "action":
+        if command in _WORKTREES_COMMANDS and action_dest == "action":
             choices = ("create", "list", "remove")
             return [item for item in choices if item.startswith(prefix)]
         if action_dest == "name":

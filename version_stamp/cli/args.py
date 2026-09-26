@@ -86,6 +86,8 @@ def parse_user_commands(command_line):
 
 
 def normalize_worktrees(args):
+    if getattr(args, "command", None) == "wt":
+        args.command = "worktrees"
     if getattr(args, "command", None) != "worktrees":
         return
 
@@ -838,8 +840,16 @@ def add_arg_exp(subprasers):
 
 
 def add_arg_worktrees(subprasers):
+    _add_worktrees_parser(subprasers, "worktrees")
+
+
+def add_arg_wt(subprasers):
+    _add_worktrees_parser(subprasers, "wt")
+
+
+def _add_worktrees_parser(subprasers, name):
     pwt = subprasers.add_parser(
-        "worktrees",
+        name,
         help="Create and manage read-only worktree islands (repo + pinned deps)",
     )
     pwt.set_defaults(strict_version=False, validate_app_name=False)

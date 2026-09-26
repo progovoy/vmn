@@ -91,6 +91,17 @@ def test_worktrees_shorthand_and_action_requirements():
     assert listed.name is None
 
 
+def test_wt_alias_parses_like_worktrees():
+    listed = parse_user_commands(["wt", "list"])
+    assert listed.command == "worktrees"
+    assert listed.action == "list"
+
+    shorthand = parse_user_commands(["wt", "my_app"])
+    assert shorthand.command == "worktrees"
+    assert shorthand.action == "create"
+    assert shorthand.name == "my_app"
+
+
 def test_remove_cleans_detached_and_editable_dep_registrations(tmp_path):
     main_repo = tmp_path / "main"
     detached_repo = tmp_path / "detached"
