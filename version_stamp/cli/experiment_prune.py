@@ -18,7 +18,9 @@ of the list:
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+from version_stamp.cli.experiment_prune_query import print_preview, query_candidates
 from version_stamp.core.experiment_index import indexed_snapshot
+from version_stamp.core.experiment_query import QueryError
 from version_stamp.core.experiment_refs import resolve_experiment
 from version_stamp.core.experiment_status import (
     RUNNING,
@@ -188,6 +190,71 @@ def _targeted_candidates(storage, app_name, metas, snapshot, refs):
     return candidates, None
 
 
+def _select_candidates(storage, app_name, metas, snapshot, args):
+    """Return ``(candidates, error_code)`` according to the selection flags.
+
+    *error_code* is non-None when the caller should return it immediately.
+    *candidates* is None when the function already printed a "nothing to do"
+    message and the caller should return 0.
+    """
+    keep = getattr(args, "keep", None)
+    older_than = getattr(args, "older_than", None)
+    refs = getattr(args, "version", None)
+    query = getattr(args, "query", None)
+
+    if query is not None:
+        if refs:
+            VMN_LOGGER.error(
+                "--query cannot be combined with -v: use one or the other"
+            )
+            return None, 1
+        try:
+            candidates = query_candidates(storage, app_name, metas, query)
+        except QueryError as e:
+            VMN_LOGGER.error(f"Invalid --query: {e}")
+            return None, 1
+        # --keep / --older-than refine within the query scope
+        if keep is not None or older_than is not None:
+            if keep is not None and keep >= len(candidates):
+                print(
+                    f"Only {len(candidates)} matching experiments, "
+                    f"nothing to prune (--keep {keep})"
+                )
+                return None, None
+            try:
+                candidates = _candidates(candidates, keep, older_than)
+            except ValueError as e:
+                VMN_LOGGER.error(str(e))
+                return None, 1
+        return candidates, None
+
+    if refs:
+        if keep is not None or older_than is not None:
+            VMN_LOGGER.error(
+                "-v cannot be combined with --keep/--older-than: prune either "
+                "a specific run or by policy, not both"
+            )
+            return None, 1
+        candidates, err = _targeted_candidates(storage, app_name, metas, snapshot, refs)
+        if err:
+            VMN_LOGGER.error(err)
+            return None, 1
+        return candidates, None
+
+    if keep is None and older_than is None:
+        VMN_LOGGER.error("Specify --keep N or --older-than Xd (or -v <ref>)")
+        return None, 1
+    if keep is not None and 0 < len(metas) <= keep:
+        print(f"Only {len(metas)} experiments, nothing to prune (--keep {keep})")
+        return None, None
+    try:
+        candidates = _candidates(metas, keep, older_than)
+    except ValueError as e:
+        VMN_LOGGER.error(str(e))
+        return None, 1
+    return candidates, None
+
+
 def experiment_prune(vcs, params, storage, args, app_name):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
@@ -196,33 +263,11 @@ def experiment_prune(vcs, params, storage, args, app_name):
         print("No experiments to prune")
         return 0
 
-    keep = getattr(args, "keep", None)
-    older_than = getattr(args, "older_than", None)
-    refs = getattr(args, "version", None)
-
-    if refs:
-        if keep is not None or older_than is not None:
-            VMN_LOGGER.error(
-                "-v cannot be combined with --keep/--older-than: prune either "
-                "a specific run or by policy, not both"
-            )
-            return 1
-        candidates, err = _targeted_candidates(storage, app_name, metas, snapshot, refs)
-        if err:
-            VMN_LOGGER.error(err)
-            return 1
-    else:
-        if keep is None and older_than is None:
-            VMN_LOGGER.error("Specify --keep N or --older-than Xd (or -v <ref>)")
-            return 1
-        if keep is not None and 0 < len(metas) <= keep:
-            print(f"Only {len(metas)} experiments, nothing to prune (--keep {keep})")
-            return 0
-        try:
-            candidates = _candidates(metas, keep, older_than)
-        except ValueError as e:
-            VMN_LOGGER.error(str(e))
-            return 1
+    candidates, rc = _select_candidates(storage, app_name, metas, snapshot, args)
+    if rc is not None:
+        return rc
+    if candidates is None:
+        return 0
 
     to_delete, live, protected = _apply_guards(
         storage,
@@ -240,10 +285,18 @@ def experiment_prune(vcs, params, storage, args, app_name):
     if not to_delete:
         print("Nothing to prune")
         return 0
-    if getattr(args, "dry_run", False):
-        print(f"Would delete {len(to_delete)} experiments:")
-        for meta in to_delete:
-            print(f"  {meta['verstr']}")
+
+    query = getattr(args, "query", None)
+    dry_run = getattr(args, "dry_run", False) or (
+        query is not None and not getattr(args, "yes", False)
+    )
+    if dry_run:
+        if query is not None:
+            print_preview(to_delete)
+        else:
+            print(f"Would delete {len(to_delete)} experiments:")
+            for meta in to_delete:
+                print(f"  {meta['verstr']}")
         return 0
 
     verstrs = [m["verstr"] for m in to_delete]
