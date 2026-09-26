@@ -1,5 +1,5 @@
 """`vmn wt create --carry-changes`: copy uncommitted work into an island."""
-from version_stamp.cli.snapshot import copy_untracked_files
+from version_stamp.devversion.untracked import copy_untracked_files
 from version_stamp.cli.worktree_git import git_head, is_dirty, run_git
 from version_stamp.core.logging import VMN_LOGGER
 

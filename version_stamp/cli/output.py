@@ -106,7 +106,7 @@ def show(vcs, params, verstr=None):
 
     if params.get("dev") and not params.get("from_file") and dirty_states:
         try:
-            from version_stamp.cli.snapshot import (
+            from version_stamp.devversion.capture import (
                 _compute_verstr,
                 _generate_dep_patches,
                 _generate_patches,
