@@ -3,7 +3,7 @@ import json
 import os
 
 from version_stamp.cli.worktree_git import git_current_branch, is_dirty, run_git
-from version_stamp.cli.worktree_state import ISLAND_MANIFEST_FILENAME
+from version_stamp.cli.worktree_state import ISLAND_MANIFEST_FILENAME, island_dir
 from version_stamp.core.logging import VMN_LOGGER
 
 
@@ -23,8 +23,7 @@ def _find_manifest(vmn_ctx):
     """The island manifest named on the command line, or the one around cwd."""
     name = vmn_ctx.args.name
     if name:
-        base = os.path.join(vmn_ctx.vcs.vmn_root_path, vmn_ctx.args.base_path)
-        path = os.path.join(os.path.abspath(base), name, ISLAND_MANIFEST_FILENAME)
+        path = os.path.join(island_dir(vmn_ctx, name), ISLAND_MANIFEST_FILENAME)
         if os.path.isfile(path):
             return path
         VMN_LOGGER.error(f"Island not found: {name}")

@@ -12,10 +12,10 @@ from version_stamp.cli.worktree_git import (
     head_contained_in_upstream,
     run_git,
 )
-from version_stamp.cli.worktree_state import is_island_branch
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import (
     branch_conf_canonical_path,
+    is_island_branch,
     resolve_branch_conf_path,
 )
 
@@ -35,9 +35,7 @@ def worktree_freeze(vmn_ctx):
         return 1
 
     conf_path = branch_conf_canonical_path(vcs.app_dir_path, branch)
-    seed = conf_path
-    if not os.path.isfile(conf_path):
-        seed, _ = resolve_branch_conf_path(vcs.app_dir_path, branch)
+    seed, _ = resolve_branch_conf_path(vcs.app_dir_path, branch)
     raw_conf = _read_raw_conf(seed)
 
     changed, problems = _pin_dep_branches(raw_conf, root)

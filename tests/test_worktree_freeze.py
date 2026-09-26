@@ -6,23 +6,12 @@ import yaml
 
 from version_stamp.cli.worktree_freeze import worktree_freeze
 from version_stamp.core.logging import init_stamp_logger
+from island_helpers import _commit, _git
 
 
 @pytest.fixture(autouse=True)
 def _init_logger():
     init_stamp_logger()
-
-
-def _git(path, *args, check=True):
-    return subprocess.run(
-        ["git", "-C", str(path), *args], capture_output=True, text=True, check=check
-    )
-
-
-def _commit(path, name):
-    (path / name).write_text(name)
-    _git(path, "add", name)
-    _git(path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", name)
 
 
 def _clone_with_remote(tmp_path, name):

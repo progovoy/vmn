@@ -28,7 +28,7 @@ from version_stamp.cli.constants import (
 )
 from version_stamp.cli.experiment import handle_experiment
 from version_stamp.cli.worktree_git import git_current_branch
-from version_stamp.cli.worktree_state import is_island_branch
+from version_stamp.core.utils import is_island_branch
 from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 from version_stamp.core.constants import (
     BOLD_CHAR,

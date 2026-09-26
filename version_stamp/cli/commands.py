@@ -905,16 +905,21 @@ def handle_snapshot(vmn_ctx):
 
 
 def _on_configured_branch(path, branch_name, configured_branch):
-    """A dep is on its configured branch, or on an island's private copy of it
-    with no commits the configured branch lacks (so its hash is reachable)."""
+    """A dep is on its configured branch, or on a local branch that tracks it
+    and has no commits of its own (so the recorded hash is reachable).
+
+    The second case is a `vmn wt` island's private branch.
+    """
     if branch_name == configured_branch:
         return True
-    from version_stamp.cli.worktree_git import head_contained_in_upstream
-    from version_stamp.cli.worktree_state import island_source_branch
+    from version_stamp.cli.worktree_git import (
+        branch_upstream,
+        head_contained_in_upstream,
+    )
 
-    return island_source_branch(
-        branch_name
-    ) == configured_branch and head_contained_in_upstream(path)
+    upstream = branch_upstream(path, branch_name) or ""
+    tracked = upstream.split("/", 1)[-1]
+    return tracked == configured_branch and head_contained_in_upstream(path)
 
 
 @measure_runtime_decorator

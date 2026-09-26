@@ -17,9 +17,10 @@ def _out(path, *args):
 
 
 def _commit(path, name, content=None):
+    """Commit a file; sets an identity so it works in repos without git config."""
     (Path(path) / name).write_text(content or name)
     _git(path, "add", name)
-    _git(path, "commit", "-q", "-m", name)
+    _git(path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", name)
 
 
 def _remote_refs(remote):

@@ -4,22 +4,7 @@ import pytest
 
 from version_stamp.cli import worktree_git as wg
 from version_stamp.core.constants import VMN_READONLY_REMOTE
-
-
-def _git(path, *args, check=True):
-    return subprocess.run(
-        ["git", "-C", str(path), *args], capture_output=True, text=True, check=check
-    )
-
-
-def _out(path, *args):
-    return _git(path, *args).stdout.strip()
-
-
-def _commit(path, name):
-    (path / name).write_text(name)
-    _git(path, "add", name)
-    _git(path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", name)
+from island_helpers import _commit, _git, _out
 
 
 @pytest.fixture

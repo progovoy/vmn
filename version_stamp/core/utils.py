@@ -5,7 +5,7 @@ import os
 
 import yaml
 
-from version_stamp.core.constants import BRANCH_CONF_DIR, JINJA_TAG_RE
+from version_stamp.core.constants import BRANCH_CONF_DIR, ISLAND_BRANCH_PREFIX, JINJA_TAG_RE
 from version_stamp.core.logging import VMN_LOGGER
 
 # libyaml's loader is ~10x faster than the pure-Python one, and experiment
@@ -117,6 +117,11 @@ def branch_to_conf_prefix(branch_name):
 
 def _conf_basename(root):
     return "root_conf.yml" if root else "conf.yml"
+
+
+def is_island_branch(branch):
+    """True for a private `vmn wt` branch (island/<name>/<source>)."""
+    return bool(branch) and branch.startswith(ISLAND_BRANCH_PREFIX)
 
 
 def branch_conf_canonical_path(app_dir_path, branch, root=False):

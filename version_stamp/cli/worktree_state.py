@@ -13,17 +13,11 @@ def write_manifest(manifest):
         json.dump(manifest, stream, indent=2)
 
 
+def island_dir(vmn_ctx, name):
+    """Directory of island *name* under the --base-path of the current repo."""
+    base = os.path.join(vmn_ctx.vcs.vmn_root_path, vmn_ctx.args.base_path)
+    return os.path.join(os.path.abspath(base), name)
+
+
 def island_branch_name(island_name, source_branch):
     return f"{ISLAND_BRANCH_PREFIX}{island_name}/{source_branch}"
-
-
-def is_island_branch(branch):
-    return bool(branch) and branch.startswith(ISLAND_BRANCH_PREFIX)
-
-
-def island_source_branch(branch):
-    """'main' for 'island/<name>/main'; None for any other branch."""
-    if not is_island_branch(branch):
-        return None
-    parts = branch.split("/", 2)
-    return parts[2] if len(parts) == 3 else None

@@ -94,8 +94,9 @@ def setup_completion(parser):
         command = getattr(parsed_args, "command", None)
         action_dest = getattr(action, "dest", None)
         if command in _WORKTREES_COMMANDS and action_dest == "action":
-            choices = ("create", "list", "remove", "freeze", "pull")
-            return [item for item in choices if item.startswith(prefix)]
+            from version_stamp.cli.constants import WORKTREES_ACTIONS
+
+            return [item for item in WORKTREES_ACTIONS if item.startswith(prefix)]
         if action_dest == "name":
             return app_name_completer(prefix, parsed_args, **kwargs)
         return files_completer(

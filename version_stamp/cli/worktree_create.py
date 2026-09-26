@@ -5,45 +5,28 @@ import json
 import os
 import shutil
 
+# The underscore aliases are the names tests monkeypatch.
 from version_stamp.cli.worktree_git import (
     cleanup_island as _cleanup_island,
-)
-from version_stamp.cli.worktree_git import (
     create_dep_worktree as _create_dep_worktree,
-)
-from version_stamp.cli.worktree_git import (
     create_main_worktree as _create_main_worktree,
-)
-from version_stamp.cli.worktree_git import (
-    git_current_branch as _git_current_branch,
-)
-from version_stamp.cli.worktree_git import (
-    git_remote_url as _git_remote_url,
-)
-from version_stamp.cli.worktree_git import (
     ensure_readonly_remote,
     fetch_readonly_branch,
+    git_current_branch as _git_current_branch,
     git_head,
+    git_remote_url as _git_remote_url,
     is_dirty,
     remove_readonly_remote_if_unused,
-    track_privately,
-)
-from version_stamp.cli.worktree_git import (
     shallow_clone_dep as _shallow_clone_dep,
+    track_privately,
 )
 from version_stamp.cli.worktree_sources import (
     find_dep_repo_path as _find_dep_repo_path,
-)
-from version_stamp.cli.worktree_sources import (
     resolve_deps as _resolve_deps,
-)
-from version_stamp.cli.worktree_sources import (
     resolve_version_source as _resolve_version_source,
 )
 from version_stamp.cli.worktree_state import (
     island_branch_name as _island_branch_name,
-)
-from version_stamp.cli.worktree_state import (
     write_manifest as _write_manifest,
 )
 from version_stamp.core.constants import VMN_READONLY_REMOTE
@@ -94,8 +77,8 @@ def worktree_create(vmn_ctx):
         main_dest,
         island_branch,
         current_branch,
+        main_source_branch,
     )
-    manifest["main_repo"]["source_branch"] = main_source_branch
     if main_source_branch:
         upstream = _track_source(main_repo_path, island_branch, main_source_branch)
         if upstream is None:
@@ -241,6 +224,7 @@ def _new_manifest(
     main_dest,
     island_branch,
     current_branch,
+    source_branch,
 ):
     return {
         "name": island_name,
@@ -256,6 +240,7 @@ def _new_manifest(
             "source_path": main_repo_path,
             "branch": island_branch,
             "original_branch": current_branch,
+            "source_branch": source_branch,
             "remote": _git_remote_url(main_repo_path),
         },
         "deps": {},

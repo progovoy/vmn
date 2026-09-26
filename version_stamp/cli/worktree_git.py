@@ -3,7 +3,7 @@ import os
 import shutil
 import subprocess
 
-from version_stamp.core.constants import VMN_READONLY_REMOTE
+from version_stamp.core.constants import ISLAND_BRANCH_PREFIX, VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER
 
 # A plain path, not "host:path": a colon makes git try ssh and print a
@@ -27,11 +27,8 @@ def git_current_branch(repo_path):
     return None
 
 
-def git_remote_url(repo_path):
-    result = run_git(repo_path, ["remote", "get-url", "origin"])
-    if result and result.returncode == 0:
-        return result.stdout.strip()
-    return None
+def git_remote_url(repo_path, remote="origin"):
+    return _git_stdout(repo_path, ["remote", "get-url", remote])
 
 
 def branch_upstream(repo_path, branch):
@@ -68,10 +65,10 @@ def ensure_readonly_remote(repo_path, source_remote="origin"):
     fetch refspecs until fetch_readonly_branch adds them. False when the repo
     has no *source_remote*.
     """
-    url = _git_stdout(repo_path, ["remote", "get-url", source_remote])
+    url = git_remote_url(repo_path, source_remote)
     if not url:
         return False
-    if _git_stdout(repo_path, ["remote", "get-url", VMN_READONLY_REMOTE]) is None:
+    if git_remote_url(repo_path, VMN_READONLY_REMOTE) is None:
         run_git(repo_path, ["remote", "add", VMN_READONLY_REMOTE, url])
         run_git(
             repo_path, ["config", "--unset-all", f"remote.{VMN_READONLY_REMOTE}.fetch"]
@@ -114,9 +111,10 @@ def track_privately(repo_path, private_branch, upstream):
 
 def remove_readonly_remote_if_unused(repo_path):
     """Drop the read-only remote once no island branch is left in the repo."""
-    if _git_stdout(repo_path, ["for-each-ref", "--count=1", "refs/heads/island/"]):
+    island_refs = f"refs/heads/{ISLAND_BRANCH_PREFIX}"
+    if _git_stdout(repo_path, ["for-each-ref", "--count=1", island_refs]):
         return
-    if _git_stdout(repo_path, ["remote", "get-url", VMN_READONLY_REMOTE]) is not None:
+    if git_remote_url(repo_path, VMN_READONLY_REMOTE) is not None:
         run_git(repo_path, ["remote", "remove", VMN_READONLY_REMOTE])
 
 
@@ -138,7 +136,7 @@ def create_main_worktree(repo_path, dest_path, branch_name, source):
 
 
 def create_dep_worktree(repo_path, dest_path, dep_info, branch_name):
-    start_point = dep_info.get("start_point") or dep_info.get("hash")
+    start_point = dep_info["start_point"]
     if branch_name:
         cmd = ["worktree", "add", "-b", branch_name, str(dest_path)]
     else:

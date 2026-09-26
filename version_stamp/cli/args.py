@@ -5,7 +5,11 @@ import sys
 
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
-from version_stamp.cli.constants import VMN_ARGS
+from version_stamp.cli.constants import (
+    VMN_ARGS,
+    WORKTREES_ACTIONS,
+    WORKTREES_NAME_REQUIRED,
+)
 from version_stamp.core.constants import (
     SEMVER_BUILDMETADATA_REGEX,
     VMN_VERSION_FORMAT,
@@ -91,14 +95,13 @@ def normalize_worktrees(args):
     if getattr(args, "command", None) != "worktrees":
         return
 
-    actions = {"create", "list", "remove", "freeze", "pull"}
-    if args.action not in actions:
+    if args.action not in WORKTREES_ACTIONS:
         if args.name is not None:
             raise RuntimeError("worktrees accepts at most an action and a name")
         args.name = args.action
         args.action = "create"
 
-    if args.action in {"create", "remove", "freeze"} and not args.name:
+    if args.action in WORKTREES_NAME_REQUIRED and not args.name:
         raise RuntimeError(f"worktrees {args.action} requires a name")
     if args.action == "list" and args.name:
         raise RuntimeError("worktrees list does not accept a name")
@@ -840,16 +843,9 @@ def add_arg_exp(subprasers):
 
 
 def add_arg_worktrees(subprasers):
-    _add_worktrees_parser(subprasers, "worktrees")
-
-
-def add_arg_wt(subprasers):
-    _add_worktrees_parser(subprasers, "wt")
-
-
-def _add_worktrees_parser(subprasers, name):
     pwt = subprasers.add_parser(
-        name,
+        "worktrees",
+        aliases=["wt"],
         help="Create and manage read-only worktree islands (repo + pinned deps)",
     )
     pwt.set_defaults(strict_version=False, validate_app_name=False)
@@ -857,7 +853,7 @@ def _add_worktrees_parser(subprasers, name):
         "action",
         nargs="?",
         default=None,
-        help="Worktree action: create (default), list, remove, freeze, pull",
+        help=f"Worktree action: {', '.join(WORKTREES_ACTIONS)} (create is the default)",
     )
     pwt.add_argument(
         "name",

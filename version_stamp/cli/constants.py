@@ -39,7 +39,6 @@ VMN_ARGS = {
     "exp": "local",
     "ui": "local",
     "worktrees": "local",
-    "wt": "local",
     "ai": "local",
     "skill": "local",
 }
@@ -79,3 +78,7 @@ class RepoStatus:
     repos: Dict[str, Any] = field(default_factory=dict)
     matched_version_info: Optional[dict] = None
     local_repos_diff: Set[str] = field(default_factory=set)
+
+# `vmn worktrees` (alias `vmn wt`) actions, and those that need a name.
+WORKTREES_ACTIONS = ("create", "list", "remove", "freeze", "pull")
+WORKTREES_NAME_REQUIRED = frozenset({"create", "remove", "freeze"})

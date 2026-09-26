@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Git backend mixin: branch, checkout, and state-check operations."""
-from version_stamp.core.constants import ISLAND_BRANCH_PREFIX, VMN_READONLY_REMOTE
+from version_stamp.core.constants import VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.utils import is_island_branch
 
 
 def _is_island_readonly_upstream(local_branch_name, upstream):
@@ -10,7 +11,7 @@ def _is_island_readonly_upstream(local_branch_name, upstream):
     vmn never pushes island branches, so that upstream is safe to use for
     status checks. Any other branch tracking it is treated as having none.
     """
-    return local_branch_name.startswith(ISLAND_BRANCH_PREFIX) and upstream.startswith(
+    return is_island_branch(local_branch_name) and upstream.startswith(
         f"{VMN_READONLY_REMOTE}/"
     )
 
@@ -187,8 +188,6 @@ class GitBranchMixin:
             )
             return 1
 
-        out = assumed_remote
-
         try:
             self._be.git.execute(
                 [
@@ -200,14 +199,14 @@ class GitBranchMixin:
                     local_branch_name,
                 ]
             )
-            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
+            self._be.git.branch(f"--set-upstream-to={assumed_remote}", local_branch_name)
         except Exception:
             VMN_LOGGER.debug(
                 f"Failed to set upstream branch for {local_branch_name}:", exc_info=True
             )
             return 1
 
-        self.remote_active_branch = out
+        self.remote_active_branch = assumed_remote
 
         return 0
 

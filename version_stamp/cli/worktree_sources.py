@@ -35,7 +35,10 @@ def deps_from_version(vmn_ctx, version):
     if resolved is None:
         return None
     _, app_data = resolved
-    return _collect_deps(app_data.get("changesets", {}))
+    changesets = app_data.get("changesets", {})
+    return _collect_deps(
+        {rel: _version_dep_info(rel, raw) for rel, raw in changesets.items()}
+    )
 
 
 def deps_from_configured(vmn_ctx):
@@ -48,14 +51,17 @@ def deps_from_configured(vmn_ctx):
         if rel_path == ".":
             continue
         local = os.path.join(root, rel_path) if root else None
-        local_branch = git_current_branch(local) if local and os.path.isdir(local) else None
         raw_deps[rel_path] = _configured_dep_info(
-            rel_path, conf, actual.get(rel_path, {}), local_branch
+            rel_path, conf, actual.get(rel_path, {}), local
         )
-    return _collect_deps(raw_deps, already_normalized=True)
+    return _collect_deps(raw_deps)
 
 
-def _configured_dep_info(rel_path, conf, actual_info, local_branch):
+def _local_branch(path):
+    return git_current_branch(path) if path and os.path.isdir(path) else None
+
+
+def _configured_dep_info(rel_path, conf, actual_info, local_path):
     """Where an island should start a dependency, given its conf pin.
 
     A hash or tag pin wins. A branch pin keeps the local checkout when it is
@@ -78,7 +84,7 @@ def _configured_dep_info(rel_path, conf, actual_info, local_branch):
     elif conf.get("branch"):
         branch = conf["branch"]
         info["source_branch"] = branch
-        if local_branch == branch:
+        if _local_branch(local_path) == branch:
             info.update(hash=local_hash, start_point=local_hash)
         else:
             info.update(
@@ -87,11 +93,28 @@ def _configured_dep_info(rel_path, conf, actual_info, local_branch):
                 fetch=True,
             )
     else:
-        info.update(hash=local_hash, start_point=local_hash, source_branch=local_branch)
+        info.update(
+            hash=local_hash,
+            start_point=local_hash,
+            source_branch=_local_branch(local_path),
+        )
     return info
 
 
-def _collect_deps(raw_deps, already_normalized=False):
+def _version_dep_info(rel_path, raw_info):
+    """A dep of a --from-version island: detached at its recorded hash."""
+    return {
+        "hash": raw_info.get("hash"),
+        "start_point": raw_info.get("hash"),
+        "remote": raw_info.get("remote"),
+        "branch": raw_info.get("branch"),
+        "rel_path": rel_path,
+        "source_branch": None,
+        "fetch": False,
+    }
+
+
+def _collect_deps(raw_deps):
     deps = {}
     for rel_path, raw_info in raw_deps.items():
         if rel_path == ".":
@@ -103,18 +126,7 @@ def _collect_deps(raw_deps, already_normalized=False):
                 f"both map to island directory '{dep_name}'"
             )
             return None
-        if already_normalized:
-            info = dict(raw_info)
-        else:
-            info = {
-                "hash": raw_info.get("hash"),
-                "start_point": raw_info.get("hash"),
-                "remote": raw_info.get("remote"),
-                "branch": raw_info.get("branch"),
-                "rel_path": rel_path,
-                "source_branch": None,
-                "fetch": False,
-            }
+        info = dict(raw_info)
         deps[dep_name] = info
     return deps
 

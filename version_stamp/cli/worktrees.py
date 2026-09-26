@@ -14,6 +14,7 @@ from version_stamp.cli.worktree_git import (
 )
 from version_stamp.cli.worktree_state import (
     ISLAND_MANIFEST_FILENAME,
+    island_dir,
 )
 from version_stamp.cli.worktree_create import worktree_create
 from version_stamp.cli.worktree_freeze import worktree_freeze
@@ -70,10 +71,7 @@ def worktree_list(vmn_ctx):
 
 def worktree_remove(vmn_ctx):
     name = vmn_ctx.args.name
-    base_path = os.path.abspath(
-        os.path.join(vmn_ctx.vcs.vmn_root_path, vmn_ctx.args.base_path)
-    )
-    island_path = os.path.join(base_path, name)
+    island_path = island_dir(vmn_ctx, name)
     manifest_path = os.path.join(island_path, ISLAND_MANIFEST_FILENAME)
     if not os.path.isfile(manifest_path):
         VMN_LOGGER.error(f"Island not found: {name}")
