@@ -7,6 +7,10 @@
 # Usage:
 #   ./ci/start.sh                  # start server + UI
 #   ./ci/start.sh --run-now        # also trigger one run immediately
+#
+# MTD_PYTHON picks the interpreter for the muster venv (default: Homebrew's
+# python3.12). Any Python >= 3.11 whose stdlib loads works, e.g. uv's:
+#   MTD_PYTHON=~/.local/bin/python3.12 ./ci/start.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,11 +18,22 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MTD_ROOT="$REPO_ROOT/../multi_target_debugger"
 VENV_DIR="$REPO_ROOT/.mtd/muster_venv"
 PYTHON="${VENV_DIR}/bin/python"
+BASE_PYTHON="${MTD_PYTHON:-/opt/homebrew/bin/python3.12}"
 
 # ---- bootstrap muster venv (idempotent) ----
-if [ ! -f "$PYTHON" ]; then
-    echo "Creating muster venv at $VENV_DIR ..."
-    /opt/homebrew/bin/python3.12 -m venv "$VENV_DIR"
+# A venv without pip (a failed earlier bootstrap) is rebuilt from scratch.
+if [ ! -f "$VENV_DIR/bin/pip" ]; then
+    # Homebrew python bottles are built on the newest macOS and can need a
+    # system libexpat this machine lacks; pip cannot even install then.
+    if ! "$BASE_PYTHON" -c "import ensurepip, pyexpat, ssl" >/dev/null 2>&1; then
+        echo "$BASE_PYTHON cannot load its standard library (pyexpat/ssl)." >&2
+        echo "Update macOS, or point MTD_PYTHON at a self-contained Python:" >&2
+        echo "  uv python install 3.12 && MTD_PYTHON=~/.local/bin/python3.12 $0" >&2
+        exit 1
+    fi
+    rm -rf "$VENV_DIR"
+    echo "Creating muster venv at $VENV_DIR with $BASE_PYTHON ..."
+    "$BASE_PYTHON" -m venv "$VENV_DIR"
 fi
 
 echo "Installing muster from $MTD_ROOT ..."

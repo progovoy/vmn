@@ -272,7 +272,7 @@ Everything under `.mtd/` is gitignored. Delete it to start completely fresh.
 
 ## Prerequisites
 
-- Python 3.12 (`/opt/homebrew/bin/python3.12`)
+- Python >= 3.11 (default `/opt/homebrew/bin/python3.12`; override with `MTD_PYTHON=<path>`)
 - Node.js (for building the muster web UI from source — `brew install node`)
 - `../multi_target_debugger` checked out next to this repo
 - Docker (optional, only for the backward-compat tests)
@@ -317,5 +317,16 @@ network is broken, they skip gracefully. This is expected.
 
 **"venv creation failed"**
 
-Ensure Python 3.12 is at `/opt/homebrew/bin/python3.12`. If it's elsewhere,
-edit line 21 of `ci/start.sh`.
+Ensure Python 3.12 is at `/opt/homebrew/bin/python3.12`, or point
+`MTD_PYTHON` at another interpreter.
+
+**"cannot load its standard library (pyexpat/ssl)"**
+
+Homebrew's Python bottle was built on a newer macOS than this machine runs, so
+its `pyexpat` needs a symbol the system `libexpat` lacks and pip cannot
+bootstrap. Either update macOS, or use a self-contained interpreter:
+
+```sh
+uv python install 3.12
+MTD_PYTHON=~/.local/bin/python3.12 ./ci/start.sh
+```
