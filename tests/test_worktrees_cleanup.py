@@ -102,6 +102,20 @@ def test_wt_alias_parses_like_worktrees():
     assert shorthand.name == "my_app"
 
 
+def test_freeze_requires_an_app_and_pull_takes_an_optional_island():
+    freeze = parse_user_commands(["wt", "freeze", "my_app"])
+    assert (freeze.action, freeze.name) == ("freeze", "my_app")
+    try:
+        parse_user_commands(["wt", "freeze"])
+    except (RuntimeError, SystemExit):
+        pass
+    else:
+        raise AssertionError("freeze should require an app name")
+
+    assert parse_user_commands(["wt", "pull"]).name is None
+    assert parse_user_commands(["wt", "pull", "feat"]).name == "feat"
+
+
 def test_remove_cleans_detached_and_editable_dep_registrations(tmp_path):
     main_repo = tmp_path / "main"
     detached_repo = tmp_path / "detached"

@@ -3,7 +3,7 @@ import os
 import subprocess
 from types import SimpleNamespace
 
-from version_stamp.cli import worktree_create, worktree_sources, worktrees
+from version_stamp.cli import worktree_create, worktree_sources
 from version_stamp.core.logging import init_stamp_logger
 
 

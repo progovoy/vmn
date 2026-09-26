@@ -16,6 +16,8 @@ from version_stamp.cli.worktree_state import (
     ISLAND_MANIFEST_FILENAME,
 )
 from version_stamp.cli.worktree_create import worktree_create
+from version_stamp.cli.worktree_freeze import worktree_freeze
+from version_stamp.cli.worktree_pull import worktree_pull
 from version_stamp.compat.worktree_manifest import legacy_dep_source
 from version_stamp.core.logging import VMN_LOGGER
 
@@ -27,6 +29,8 @@ def handle_worktrees(vmn_ctx):
         "create": worktree_create,
         "list": worktree_list,
         "remove": worktree_remove,
+        "freeze": worktree_freeze,
+        "pull": worktree_pull,
     }
     return handlers[vmn_ctx.args.action](vmn_ctx)
 

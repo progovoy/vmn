@@ -91,14 +91,14 @@ def normalize_worktrees(args):
     if getattr(args, "command", None) != "worktrees":
         return
 
-    actions = {"create", "list", "remove"}
+    actions = {"create", "list", "remove", "freeze", "pull"}
     if args.action not in actions:
         if args.name is not None:
             raise RuntimeError("worktrees accepts at most an action and a name")
         args.name = args.action
         args.action = "create"
 
-    if args.action in {"create", "remove"} and not args.name:
+    if args.action in {"create", "remove", "freeze"} and not args.name:
         raise RuntimeError(f"worktrees {args.action} requires a name")
     if args.action == "list" and args.name:
         raise RuntimeError("worktrees list does not accept a name")
@@ -857,13 +857,13 @@ def _add_worktrees_parser(subprasers, name):
         "action",
         nargs="?",
         default=None,
-        help="Worktree action: create (default), list, remove",
+        help="Worktree action: create (default), list, remove, freeze, pull",
     )
     pwt.add_argument(
         "name",
         nargs="?",
         default=None,
-        help="The application name (for create) or island name (for remove)",
+        help="App name (create, freeze) or island name (remove, pull)",
     )
     pwt.add_argument(
         "--island-name",
