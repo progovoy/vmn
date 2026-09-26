@@ -3,12 +3,10 @@ import os
 import subprocess
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.untracked import _extract_untracked_tarball
-
-
-def _ensure_trailing_newline(s):
-    """git apply/am require patches to end with a newline."""
-    return s if s.endswith("\n") else s + "\n"
+from version_stamp.devversion.untracked import (
+    _ensure_trailing_newline,
+    _extract_untracked_tarball,
+)
 
 
 def _apply_patches_to_workdir(dest, patches):

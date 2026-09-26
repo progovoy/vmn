@@ -3,25 +3,17 @@ import hashlib
 import os
 import sys
 
-import yaml
-
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import now_iso
+from version_stamp.core.utils import yaml_safe_load
 from version_stamp.devversion.untracked import (
+    _ensure_trailing_newline,
     _hash_untracked_content,
     untracked_payload,
 )
 
-_now_iso = now_iso
-
 # Diff-hash prefix lengths tried, shortest first, when a verstr is taken by a
 # snapshot with different content (a 7-hex prefix is only 28 bits).
 _DIFF_HASH_LENGTHS = (7, 12, 16, 24, 32, 64)
-
-
-def _ensure_trailing_newline(s):
-    """git apply/am require patches to end with a newline."""
-    return s if s.endswith("\n") else s + "\n"
 
 
 def _generate_patches(backend, lightweight=False):
@@ -136,8 +128,8 @@ def _stored_diff_hash(storage, app_name, verstr):
     if raw is None:
         return False, None
     try:
-        meta = yaml.safe_load(raw)
-    except yaml.YAMLError:
+        meta = yaml_safe_load(raw)
+    except Exception:
         meta = None
     return True, meta.get("diff_hash") if isinstance(meta, dict) else None
 

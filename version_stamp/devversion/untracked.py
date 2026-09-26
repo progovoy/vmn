@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import stat as stat_module
 import subprocess
 import tarfile
@@ -11,7 +12,10 @@ import tempfile
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import sha256_file
 
-_sha256_file = sha256_file
+
+def _ensure_trailing_newline(s):
+    """git apply/am require patches to end with a newline."""
+    return s if s.endswith("\n") else s + "\n"
 
 _UNTRACKED_CACHE_FILE = "untracked_hash.cache"
 _DEFAULT_MAX_FILE_MB = 50
@@ -89,7 +93,7 @@ def _hash_untracked_content(repo_path):
         if cached and cached[0] == st.st_size and cached[1] == st.st_mtime_ns:
             content_sha = cached[2]
         else:
-            content_sha = _sha256_file(abs_path)
+            content_sha = sha256_file(abs_path)
         new_cache[rel_path] = [st.st_size, st.st_mtime_ns, content_sha]
         h.update(f"{rel_path}\0{content_sha}\n".encode())
         file_count += 1
@@ -143,8 +147,12 @@ def _untracked_candidates(repo_path):
         if not rel_path or rel_path.startswith(".vmn/") or rel_path == ".vmn":
             continue
         abs_path = os.path.join(repo_path, rel_path)
-        if os.path.isfile(abs_path):
-            candidates.append((rel_path, abs_path, os.path.getsize(abs_path)))
+        try:
+            st = os.stat(abs_path)
+            if stat_module.S_ISREG(st.st_mode):
+                candidates.append((rel_path, abs_path, st.st_size))
+        except OSError:
+            pass
     return candidates
 
 
@@ -229,8 +237,6 @@ def untracked_payload(repo_path):
 
 def copy_untracked_files(repo_path, dest):
     """Copy untracked non-ignored files (never .vmn/) from repo to dest."""
-    import shutil
-
     for rel_path, abs_path, _ in _untracked_candidates(repo_path):
         dst = os.path.join(dest, rel_path)
         os.makedirs(os.path.dirname(dst), exist_ok=True)

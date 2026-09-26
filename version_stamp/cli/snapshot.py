@@ -42,7 +42,6 @@ from version_stamp.devversion.capture import (  # noqa: F401
     _compute_diff_hash,
     _compute_verstr,
     _DIFF_HASH_LENGTHS,
-    _ensure_trailing_newline,
     _format_dev_verstr,
     _generate_dep_patches,
     _generate_patches,
@@ -73,6 +72,7 @@ from version_stamp.devversion.materialize import (  # noqa: F401
 from version_stamp.devversion.untracked import (  # noqa: F401
     _collect_untracked_tarball,
     _DEFAULT_MAX_FILE_MB,
+    _ensure_trailing_newline,
     _DEFAULT_MAX_TOTAL_MB,
     _extract_untracked_tarball,
     _fmt_size,
