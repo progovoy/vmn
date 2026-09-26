@@ -64,8 +64,10 @@ class IndexStore:
 
     def __init__(self, path):
         self._conn = None
+        self._path = None
         if path:
-            self._conn = self._open(path)
+            self._path = path
+            self._conn = self._open(self._path)
 
     @staticmethod
     def _open(path):
@@ -89,6 +91,18 @@ class IndexStore:
             _LOGGER.debug("Experiment index %s unavailable", path, exc_info=True)
             return None
 
+    def _reset(self):
+        """Discard a corrupt connection and reconnect via _open (which deletes
+        the unreadable file and rebuilds a fresh one)."""
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+        if self._path:
+            self._conn = self._open(self._path)
+
     def load(self, app_name):
         """``{key: record}`` persisted for *app_name*, each with its
         ``rs_sig``/``run_state``; ``{}`` when unavailable."""
@@ -103,8 +117,17 @@ class IndexStore:
                 if key in records:
                     records[key].update(json.loads(data))
             return records
-        except (sqlite3.Error, ValueError):
-            _LOGGER.debug("Could not read the experiment index", exc_info=True)
+        except (sqlite3.Error, ValueError) as exc:
+            if type(exc) is sqlite3.DatabaseError:
+                # File corruption detected on a read (e.g. file was replaced
+                # after the connection was opened).  Reset so future calls work.
+                _LOGGER.debug(
+                    "Corrupt experiment index on read %s; resetting",
+                    self._path, exc_info=True,
+                )
+                self._reset()
+            else:
+                _LOGGER.debug("Could not read the experiment index", exc_info=True)
             return {}
 
     def _select(self, table, app_name):
