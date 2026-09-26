@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useDismiss } from "../hooks/useDismiss";
+import type { ColumnCell } from "../pages/leaderboardColumns";
+import ColumnOrderSection from "./ColumnOrderSection";
 
 /** Toggle every column in *columns* whose current visibility differs from
  *  *want* — as many `onToggle` calls as columns that actually need to flip. */
@@ -71,11 +73,13 @@ function Section({ title, columns, visible, onToggle }: {
 /** Show/hide leaderboard columns: params (*columns*) and, when given, metric
  *  columns and other columns (tags) in sections of their own — filterable
  *  once there are many, with "all"/"none" and per-row "only" bulk actions
- *  scoped to each section (and to the current filter). Escape or a click
- *  outside closes it. */
+ *  scoped to each section (and to the current filter). When *orderedCells* is
+ *  given an order/pin section is rendered above the visibility sections.
+ *  Escape or a click outside closes it. */
 export default function ColumnPicker({
   columns, visible, onToggle, metricColumns = [], visibleMetrics = [], onToggleMetric,
   otherColumns = [], visibleOther = [], onToggleOther,
+  orderedCells, pinnedCols = [], onMoveColumn, onTogglePin,
 }: {
   columns: string[];
   visible: string[];
@@ -86,6 +90,11 @@ export default function ColumnPicker({
   otherColumns?: string[];
   visibleOther?: string[];
   onToggleOther?: (col: string) => void;
+  /** When provided, renders the column order/pin section. */
+  orderedCells?: readonly ColumnCell[];
+  pinnedCols?: readonly string[];
+  onMoveColumn?: (key: string, delta: number) => void;
+  onTogglePin?: (key: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -94,7 +103,8 @@ export default function ColumnPicker({
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, box, button);
 
-  if (columns.length + metricColumns.length + otherColumns.length === 0) return null;
+  const hasOrderSection = orderedCells && orderedCells.length > 0 && onMoveColumn && onTogglePin;
+  if (columns.length + metricColumns.length + otherColumns.length === 0 && !hasOrderSection) return null;
 
   const needle = filter.trim().toLowerCase();
   const match = (cols: string[]) =>
@@ -119,6 +129,14 @@ export default function ColumnPicker({
             onChange={(e) => setFilter(e.target.value)}
             autoFocus
           />
+          {hasOrderSection && (
+            <ColumnOrderSection
+              cells={orderedCells!}
+              pinned={pinnedCols}
+              onMoveColumn={onMoveColumn!}
+              onTogglePin={onTogglePin!}
+            />
+          )}
           {hasMetrics && (
             <Section
               title="metrics"

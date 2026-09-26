@@ -123,7 +123,7 @@ export function useLeaderboardColumns(
   const otherCols = hasTags ? ["tags"] : [];
   const visibleOther = showTags ? ["tags"] : [];
   return {
-    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, layout, suggestFacets,
-    otherCols, visibleOther,
+    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout,
+    suggestFacets, otherCols, visibleOther,
   };
 }
