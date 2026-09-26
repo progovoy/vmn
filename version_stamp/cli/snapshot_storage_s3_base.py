@@ -54,7 +54,7 @@ class S3Base:
         except ImportError:
             raise ImportError(
                 "boto3 is required for S3 snapshot storage. "
-                "Install it with: pip install boto3"
+                "Install it with: pip install 'vmn[s3]'"
             )
         self.bucket = bucket
         self.prefix = prefix

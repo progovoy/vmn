@@ -116,3 +116,43 @@ def test_heavy_frameworks_are_not_pulled_in_by_the_exp_extra():
     heavy = ("torch", "tensorflow", "keras", "lightning")
     for req in extras.get("exp", []):
         assert not req.lower().startswith(heavy), f"'{req}' does not belong in [exp]"
+
+
+def _read_requirements_txt_lines():
+    """Return non-empty, non-comment lines from tests/requirements.txt."""
+    req_path = ROOT / "tests" / "requirements.txt"
+    return [
+        ln.strip()
+        for ln in req_path.read_text().splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+
+
+def test_gitpython_not_exact_pinned():
+    """GitPython in install_requires must use a range, not an exact pin.
+
+    An exact ==X.Y.Z fights the resolver when mlflow/dvc declare a different
+    constraint.  The CI-exact pin belongs in tests/constraints.txt only.
+    """
+    lines = _read_requirements_txt_lines()
+    gitpython_lines = [ln for ln in lines if ln.lower().startswith("gitpython")]
+    assert gitpython_lines, "GitPython not found in tests/requirements.txt"
+    for line in gitpython_lines:
+        assert "==" not in line, (
+            f"GitPython uses an exact pin in tests/requirements.txt: {line!r}. "
+            "Use a range like >=3.1.41,<3.2 and put the exact pin in "
+            "tests/constraints.txt for CI."
+        )
+        assert ">=" in line or ">" in line, (
+            f"GitPython in tests/requirements.txt has no lower bound: {line!r}"
+        )
+
+
+def test_s3_import_error_suggests_vmn_s3():
+    """The boto3 ImportError must direct users to `pip install 'vmn[s3]'`."""
+    s3_base = ROOT / "version_stamp" / "cli" / "snapshot_storage_s3_base.py"
+    text = s3_base.read_text()
+    assert "vmn[s3]" in text, (
+        "snapshot_storage_s3_base.py's ImportError should say "
+        "`pip install 'vmn[s3]'`, not `pip install boto3`."
+    )

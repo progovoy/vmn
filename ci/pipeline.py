@@ -51,6 +51,8 @@ from debug_router.pipeline import Param, Pipeline, stage
 REQUIRES = [
     "-r",
     "tests/requirements.txt",
+    "-c",
+    "tests/constraints.txt",
     "-r",
     "tests/test_requirements.txt",
     "-e",
