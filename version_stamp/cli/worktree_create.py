@@ -33,7 +33,7 @@ from version_stamp.cli.worktree_sources import (
     resolve_version_source as _resolve_version_source,
 )
 from version_stamp.cli.worktree_state import (
-    write_island_markers as _write_island_markers,
+    island_branch_name as _island_branch_name,
 )
 from version_stamp.cli.worktree_state import (
     write_manifest as _write_manifest,
@@ -70,7 +70,7 @@ def worktree_create(vmn_ctx):
 
     os.makedirs(island_path)
     main_dest = os.path.join(island_path, os.path.basename(main_repo_path))
-    island_branch = f"island/{island_name}/{current_branch}"
+    island_branch = _island_branch_name(island_name, current_branch)
     if _create_main_worktree(main_repo_path, main_dest, island_branch, source) != 0:
         shutil.rmtree(island_path, ignore_errors=True)
         return 1
@@ -89,7 +89,7 @@ def worktree_create(vmn_ctx):
 
     for dep_name, dep_info in deps.items():
         if dep_name in editable_deps:
-            dep_branch = f"island/{island_name}/{dep_name}"
+            dep_branch = _island_branch_name(island_name, dep_name)
         else:
             dep_branch = None
         dep_dest = os.path.join(island_path, dep_name)
@@ -126,9 +126,6 @@ def worktree_create(vmn_ctx):
         }
         _write_manifest(manifest)
 
-    _write_island_markers(
-        [main_dest, *(dep["path"] for dep in manifest["deps"].values())],
-    )
     manifest_json = json.dumps(manifest, indent=2)
     print(manifest_json)
     return 0

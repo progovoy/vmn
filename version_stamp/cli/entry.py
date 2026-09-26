@@ -27,7 +27,8 @@ from version_stamp.cli.constants import (
     VMN_ARGS,
 )
 from version_stamp.cli.experiment import handle_experiment
-from version_stamp.cli.worktree_state import WORKTREE_READONLY_MARKER
+from version_stamp.cli.worktree_git import git_current_branch
+from version_stamp.cli.worktree_state import is_island_branch
 from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 from version_stamp.core.constants import (
     BOLD_CHAR,
@@ -114,14 +115,16 @@ def _takes_repo_lock(args):
     return getattr(args, "action", None) not in read_only
 
 
-def _reject_readonly_version_creation(args, root_path):
-    marker = os.path.join(root_path, ".vmn", WORKTREE_READONLY_MARKER)
-    if args.command not in _VERSION_CREATING_COMMANDS or not os.path.exists(marker):
+def _reject_island_version_creation(args, root_path):
+    if args.command not in _VERSION_CREATING_COMMANDS:
+        return False
+    branch = git_current_branch(root_path)
+    if not is_island_branch(branch):
         return False
     VMN_LOGGER.error(
-        "Version creation is disabled in this worktree island. "
-        "Stamp on the branch after merging, or remove "
-        ".vmn/.worktree-readonly to override."
+        f"Version creation is disabled on island branch {branch}. "
+        "Check out a real branch (git checkout -b <name>) to stamp here, "
+        "or stamp on the source branch after merging."
     )
     return True
 
@@ -264,7 +267,7 @@ def vmn_run(command_line=None):
             init_stamp_logger(debug=args.debug)
 
         root_path = resolve_root_path()
-        if _reject_readonly_version_creation(args, root_path):
+        if _reject_island_version_creation(args, root_path):
             return 1, None
         vmn_path = os.path.join(root_path, ".vmn")
         pathlib.Path(vmn_path).mkdir(parents=True, exist_ok=True)
