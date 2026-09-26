@@ -37,7 +37,8 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_GIT,
     VMN_BE_TYPE_LOCAL_FILE,
 )
-from version_stamp.core.experiment_writer import get_repo_lock, merge_env_into_params
+from version_stamp.core.experiment_writer import merge_env_into_params
+from version_stamp.core.repo_lock import get_repo_lock
 from version_stamp.core.logging import (
     VMN_LOGGER,
     _runtime_ctx,
