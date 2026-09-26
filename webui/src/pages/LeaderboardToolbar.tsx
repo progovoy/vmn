@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import LiveToggle from "../components/LiveToggle";
@@ -26,6 +27,11 @@ export default function LeaderboardToolbar({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const onMoveColumn = useCallback(
+    (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view.moveColumn, cols.defaultKeys],
+  );
   return (
     <div className="toolbar">
       <span className="legend-chip"><span className="sq" /> best in column</span>
@@ -54,6 +60,10 @@ export default function LeaderboardToolbar({
         onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
         onToggleOther={() => view.toggleHidden(TAGS_COLUMN)}
+        orderedCells={cols.cells}
+        pinnedCols={view.pinned}
+        onMoveColumn={onMoveColumn}
+        onTogglePin={view.togglePin}
       />
     </div>
   );

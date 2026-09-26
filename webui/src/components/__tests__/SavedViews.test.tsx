@@ -77,4 +77,35 @@ describe("SavedViews", () => {
     open();
     expect(screen.getByText(/no saved views/i)).toBeInTheDocument();
   });
+
+  it("preserves col= params through a saved view round-trip", () => {
+    render(<SavedViews ws="w" app="a" search="?col=m%3Alr&col=m%3Aloss&sort=loss" onApply={() => {}} />);
+    open();
+    fireEvent.change(screen.getByLabelText("View name"), { target: { value: "ordered" } });
+    fireEvent.keyDown(screen.getByLabelText("View name"), { key: "Enter" });
+    const views = listViews("w", "a");
+    expect(views).toHaveLength(1);
+    expect(views[0].search).toContain("col=");
+    expect(new URLSearchParams(views[0].search).getAll("col")).toEqual(["m:lr", "m:loss"]);
+  });
+
+  it("preserves pin= params through a saved view round-trip", () => {
+    render(<SavedViews ws="w" app="a" search="?pin=m%3Alr&col=m%3Alr" onApply={() => {}} />);
+    open();
+    fireEvent.change(screen.getByLabelText("View name"), { target: { value: "pinned" } });
+    fireEvent.keyDown(screen.getByLabelText("View name"), { key: "Enter" });
+    const views = listViews("w", "a");
+    expect(new URLSearchParams(views[0].search).getAll("pin")).toEqual(["m:lr"]);
+  });
+
+  it("applying a saved view with col/pin restores the params", () => {
+    saveView("w", "a", "reordered", "?col=m%3Aloss&pin=m%3Aloss");
+    const onApply = vi.fn();
+    render(<SavedViews ws="w" app="a" search="" onApply={onApply} />);
+    open();
+    fireEvent.click(screen.getByRole("menuitem", { name: "reordered" }));
+    const applied = new URLSearchParams(onApply.mock.calls[0][0]);
+    expect(applied.getAll("col")).toEqual(["m:loss"]);
+    expect(applied.getAll("pin")).toEqual(["m:loss"]);
+  });
 });

@@ -52,3 +52,75 @@ describe("ColumnPicker closing and state", () => {
     expect(screen.queryByLabelText("Filter columns")).toBeNull();
   });
 });
+
+const cells = [
+  { kind: "metric" as const, key: "lr" },
+  { kind: "metric" as const, key: "loss" },
+];
+const orderProps = {
+  columns: [] as string[], visible: [] as string[], onToggle: () => {},
+  orderedCells: cells,
+  pinnedCols: [] as string[],
+  onMoveColumn: vi.fn(),
+  onTogglePin: vi.fn(),
+};
+
+describe("ColumnOrderSection accessibility", () => {
+  it("move buttons have descriptive aria-labels", () => {
+    render(<ColumnPicker {...orderProps} />);
+    fireEvent.click(screen.getByTitle("Columns"));
+    expect(screen.getByRole("button", { name: "Move lr up" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Move lr down" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pin lr" })).toBeInTheDocument();
+  });
+
+  it("pin button has aria-pressed reflecting pin state", () => {
+    render(<ColumnPicker {...orderProps} pinnedCols={["m:lr"]} />);
+    fireEvent.click(screen.getByTitle("Columns"));
+    expect(screen.getByRole("button", { name: "Pin lr" }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Pin loss" }))
+      .toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("Enter and Space trigger move buttons (native button behaviour)", () => {
+    const onMoveColumn = vi.fn();
+    render(<ColumnPicker {...orderProps} onMoveColumn={onMoveColumn} />);
+    fireEvent.click(screen.getByTitle("Columns"));
+    const btn = screen.getByRole("button", { name: "Move loss up" });
+    fireEvent.keyDown(btn, { key: "Enter" });
+    fireEvent.click(btn);   // JSDOM fires click on Enter/Space for buttons
+    expect(onMoveColumn).toHaveBeenCalledWith("m:loss", -1);
+  });
+
+  it("focus moves to the same direction button of the moved item", async () => {
+    const cells2 = [
+      { kind: "metric" as const, key: "lr" },
+      { kind: "metric" as const, key: "loss" },
+      { kind: "metric" as const, key: "f1" },
+    ];
+    const { rerender } = render(
+      <ColumnPicker
+        {...orderProps}
+        orderedCells={cells2}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Columns"));
+    const btn = screen.getByRole("button", { name: "Move loss down" });
+    fireEvent.click(btn);
+    // Simulate parent updating orderedCells after move (loss and f1 swapped)
+    const reordered = [
+      { kind: "metric" as const, key: "lr" },
+      { kind: "metric" as const, key: "f1" },
+      { kind: "metric" as const, key: "loss" },
+    ];
+    rerender(
+      <ColumnPicker
+        {...orderProps}
+        orderedCells={reordered}
+      />,
+    );
+    // loss is now last in its group, so "down" is disabled; focus falls back to "up"
+    expect(screen.getByRole("button", { name: "Move loss up" })).toHaveFocus();
+  });
+});
