@@ -49,7 +49,7 @@ KNOWN_VIOLATIONS: frozenset = frozenset(
         ("version_stamp.core.experiment_refs", "version_stamp.core.logging"),
         ("version_stamp.core.experiment_status", "version_stamp.core"),
         ("version_stamp.core.experiment_status", "version_stamp.core.logging"),
-        ("version_stamp.core.experiment_writer", "version_stamp.core.constants"),
+        ("version_stamp.core.experiment_writer", "version_stamp.core.repo_lock"),
         ("version_stamp.core.experiment_writer", "version_stamp.core.utils"),
         ("version_stamp.exp.capture", "version_stamp.core.logging"),
         ("version_stamp.exp.coldstart", "version_stamp.cli.commands"),
