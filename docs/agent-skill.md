@@ -81,23 +81,21 @@ vmn snapshot restore <app_name> --latest
 vmn snapshot diff <app_name>  # compare snapshot to current state
 ```
 
-## Worktree islands (read-only checkouts)
-
-To inspect a released version together with its dependencies, without touching the main checkout:
+## Worktree islands (app + dependencies side by side)
 
 ```sh
-# Check out the app and every dep at the state recorded for a version
-vmn worktrees create <app_name> --island-name <name> --from-version <version>
-
-# Read island.json in the created directory to understand the layout:
-# - main_repo.path: the app checkout
-# - deps: dependency checkouts at their pinned hashes
-
-vmn worktrees list
-vmn worktrees remove <name>
+vmn wt create <app_name> --island-name <name>   # worktrees of the app and every dep
+vmn wt pull                                     # rebase private branches onto their sources
+vmn wt freeze <app_name>                        # pin deps to the real branches they are on
+vmn wt list
+vmn wt remove <name>
 ```
 
-Islands are read-only: `vmn stamp`, `release`, and `add` are refused inside them. To version work done in a side checkout, merge it and stamp on the branch.
+- Read `island.json` in the island directory: `main_repo.path` and each dep's `path`, private `branch`, and `source_branch`.
+- Island checkouts start on private `island/<name>/<source>` branches. They cannot be pushed and `vmn stamp` refuses to run on them.
+- Branches you create inside an island are normal branches: publish one with `git push -u origin <branch>`.
+- To share: check out real branches in the repos you changed, push them, run `vmn wt freeze <app_name>` in the app, then commit and push the conf file it wrote.
+- `--from-version <version>` builds an island at a released state instead.
 
 ## Key rules
 

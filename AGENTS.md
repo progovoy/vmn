@@ -134,9 +134,11 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
-- `vmn worktrees create <name>`: Create a read-only island (git worktrees for main repo + all deps, pinned to a recorded state; stamping is refused inside). `--island-name`, `--from-version`, `--shallow-deps`, `--editable-dep`.
+- `vmn worktrees create <name>` (alias `vmn wt`): Create an island (git worktrees for main repo + all deps, on private non-pushable `island/<name>/<source>` branches; stamping is refused on them). `--island-name`, `--from-version`, `--from-branch`, `--shallow-deps`.
 - `vmn worktrees list`: List active islands.
 - `vmn worktrees remove <island>`: Clean up an island.
+- `vmn worktrees freeze <name>`: Pin deps that are on real branches to those branches in the current branch conf.
+- `vmn worktrees pull [island]`: Rebase private island branches onto their source branches.
 - `vmn --completion [SHELL]`: Print shell completion setup script (bash/zsh/fish/tcsh). Auto-detects shell.
 - `vmn --completion-install [SHELL]`: Append completion to shell rc file. Idempotent.
 

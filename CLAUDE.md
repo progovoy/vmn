@@ -159,18 +159,24 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn skill`: Print the AI-agent skill block to stdout. `--install` writes it instead (`--target claude` → `.claude/skills/vmn/SKILL.md`, `cursor` → `.cursorrules`, `agents` → `AGENTS.md`); `--methodology` appends the opinionated TDD/worktree rules; `--force` overwrites an existing Claude SKILL.md. Cursor/agents targets only rewrite vmn's marker block and preserve surrounding text.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
-- `vmn worktrees create <name>`: Create a read-only island (git worktrees for main repo + all deps, pinned to a recorded state). `--island-name`, `-fv`/`--from-version`, `-fb`/`--from-branch`, `--base-path` (default `../vmn-islands`), `--shallow-deps`, `--editable-dep`. `create` is the default action, so `vmn worktrees <name>` works.
+- `vmn worktrees create <name>` (alias `vmn wt`): Create an island (git worktrees for main repo + all deps). `--island-name`, `-fv`/`--from-version`, `-fb`/`--from-branch`, `--base-path` (default `../vmn-islands`), `--shallow-deps`. `create` is the default action, so `vmn wt <name>` works.
 - `vmn worktrees list`: List active islands.
-- `vmn worktrees remove <island>`: Clean up an island (removes its worktrees and local branches).
+- `vmn worktrees remove <island>`: Clean up an island (removes its worktrees, private branches, and the `vmn-readonly` remote once no island uses it).
+- `vmn worktrees freeze <name>`: In the app checkout, pin every dep that is on a real (non-`island/`) branch to that branch in the current branch's canonical branch conf. Refuses on an `island/` branch, on detached HEAD, or while a dep has commits only on its private branch. Never commits or pushes.
+- `vmn worktrees pull [island]`: `git pull --rebase` in every island checkout still on its private branch (skips repos moved to a real branch; dirty repos and conflicts exit 1). Without a name, finds `island.json` above the cwd.
 - `vmn --completion [SHELL]`: Print shell completion setup script (bash/zsh/fish/tcsh). Auto-detects shell.
 - `vmn --completion-install [SHELL]`: Append completion to shell rc file. Idempotent.
 - `vmn --completion-uninstall [SHELL]`: Remove completion from the shell rc file. Idempotent.
 
 ### Islands (worktrees)
 
-- Main repo gets a new branch `island/{name}/{original-branch}`; deps are detached HEAD at the hash recorded when the source version was stamped. `--editable-dep` gives a dep its own island branch.
-- `island.json` in the island root is the machine-readable manifest (paths, branches, dep hashes, `shallow_deps`).
-- Islands are always read-only: `.vmn/.worktree-readonly` in every checkout makes `vmn stamp`/`release`/`add`/`init-app` refuse to run there. Version work from a side checkout by merging it and stamping on the branch. Islands are a state-recovery tool next to `goto`, not the way to spawn parallel worktrees — the worktree methodology uses plain `git worktree`.
+- Layout mirrors the source: every checkout sits at its path relative to the common parent of the app and its deps, so configured dep paths like `../libs/B` resolve inside the island.
+- Source branch = the branch each repo was on (or `--from-branch`); `--from-version` islands have none. Each repo with a source branch gets private branch `island/{name}/{source}` tracking `vmn-readonly/{source}` with `pushRemote=vmn-readonly`. `vmn-readonly` is a per-repo remote with origin's fetch URL, an unusable push URL, and refspecs only for islands' source branches; vmn never selects it as its remote.
+- Dep start point comes from the conf pin: hash/tag → that ref (detached); branch X → the local checkout if it is on X, else `vmn-readonly/X` fetched; no pin → the local checkout.
+- `stamp`/`release`/`add`/`init-app` are refused on an `island/` branch (checked before the lock). A real branch checked out inside an island stamps normally once pushed. A dep on `island/{name}/X` with no commits beyond its upstream counts as synced with a `branch: X` pin.
+- `island.json` in the island root is the machine-readable manifest (paths, private `branch`, `source_branch`, `upstream`, dep hashes, `shallow_deps`).
+- vmn never borrows another branch's upstream: a branch whose upstream is missing (or on another remote) needs `git push -u origin <branch>` before `vmn stamp`.
+- Islands are for app + deps work next to `goto`, not the way to spawn parallel worktrees — the worktree methodology uses plain `git worktree`.
 
 ## Environment Variables
 

@@ -161,17 +161,26 @@ vmn goto -v 1.4.0 my_app
 Use `--pull` when the requested refs are not available locally, or
 `--deps-only` to leave the application repository unchanged.
 
-To inspect a recorded state without moving your main checkout, `vmn worktrees`
-builds a read-only island instead: git worktrees for the application and every
-dependency, pinned to the recorded revisions, next to an `island.json` manifest:
+To work on the application and its dependencies side by side without moving
+your main checkout, `vmn wt` (alias of `vmn worktrees`) builds an island: git
+worktrees for the application and every dependency, laid out like the originals,
+next to an `island.json` manifest. Each checkout starts on a private
+`island/<name>/<branch>` branch that follows its source branch but cannot be
+pushed, and stamping is refused on it.
 
 ```sh
-vmn worktrees create my_app --island-name hotfix-review -fv 2.1.0
-vmn worktrees list
-vmn worktrees remove hotfix-review
+vmn wt create my_app --island-name feat   # from the current commits
+vmn wt pull                               # rebase onto the source branches
+vmn wt freeze my_app                      # pin deps to the branches they are on
+vmn wt remove feat
 ```
 
-Stamping is refused inside an island. Merge the work and stamp on the branch.
+To share the work, check out a real branch in each repo you changed
+(`git checkout -b feature/x`, then `git push -u origin feature/x`) and run
+`vmn wt freeze` in the application. It records those dependency branches in
+the current branch's conf, so a colleague who checks out `feature/x` and runs
+`vmn wt create` gets the same dependency state. `-fv 2.1.0` builds an island at
+a recorded version instead.
 
 Do not embed credentials in Git remote URLs: dependency remotes are part of
 release metadata. Use SSH, a Git credential helper, or vmn's per-command push
@@ -337,7 +346,7 @@ instructions untouched.
 | `vmn goto` | Restore recorded application and dependency revisions |
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
 | `vmn exp` | Track experiments built on working-state snapshots |
-| `vmn worktrees` | Create, list, or remove read-only worktree islands of a recorded state |
+| `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps on private branches (create, pull, freeze, remove) |
 | `vmn ai` | Output or install AI agent skill blocks and methodology rules |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
