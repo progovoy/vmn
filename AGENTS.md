@@ -134,7 +134,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn add -v <version> --bm <metadata> <name>`: Attach build metadata.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
-- `vmn worktrees create <name>` (alias `vmn wt`): Create an island (git worktrees for main repo + all deps, on private non-pushable `island/<name>/<source>` branches; stamping is refused on them). `--island-name`, `--from-version`, `--from-branch`, `--shallow-deps`.
+- `vmn worktrees create <name>` (alias `vmn wt`): Create an island (git worktrees for main repo + all deps, on private non-pushable `island/<name>/<source>` branches; stamping is refused on them). `--island-name`, `--from-version`, `--from-branch`, `--shallow-deps`, `--carry-changes` (copy uncommitted work into the island).
 - `vmn worktrees list`: List active islands.
 - `vmn worktrees remove <island>`: Clean up an island.
 - `vmn worktrees freeze <name>`: Pin deps that are on real branches to those branches in the current branch conf.

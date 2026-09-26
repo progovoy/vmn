@@ -85,6 +85,7 @@ vmn snapshot diff <app_name>  # compare snapshot to current state
 
 ```sh
 vmn wt create <app_name> --island-name <name>   # worktrees of the app and every dep
+vmn wt create <app_name> --island-name <name> --carry-changes   # also copy uncommitted work
 vmn wt pull                                     # rebase private branches onto their sources
 vmn wt freeze <app_name>                        # pin deps to the real branches they are on
 vmn wt list

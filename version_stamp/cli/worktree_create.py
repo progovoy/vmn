@@ -6,6 +6,7 @@ import os
 import shutil
 
 # The underscore aliases are the names tests monkeypatch.
+from version_stamp.cli.worktree_carry import carry_changes
 from version_stamp.cli.worktree_git import (
     cleanup_island as _cleanup_island,
     create_dep_worktree as _create_dep_worktree,
@@ -55,7 +56,8 @@ def worktree_create(vmn_ctx):
         return 1
 
     dep_sources = {name: _find_dep_repo_path(vmn_ctx, dep) for name, dep in deps.items()}
-    _warn_about_uncommitted_changes(main_repo_path, dep_sources.values())
+    if not args.carry_changes:
+        _warn_about_uncommitted_changes(main_repo_path, dep_sources.values())
 
     layout = _island_layout(main_repo_path, deps, island_path)
     os.makedirs(island_path)
@@ -95,6 +97,10 @@ def worktree_create(vmn_ctx):
         manifest["deps"][dep_name] = entry
         _write_manifest(manifest)
 
+    if args.carry_changes and not _carry_all(manifest):
+        _rollback(main_repo_path, main_dest, island_branch, manifest, dep_sources)
+        return 1
+
     print(json.dumps(manifest, indent=2))
     return 0
 
@@ -106,6 +112,15 @@ def _main_source_branch(source, current_branch):
     if source["type"] == "head":
         return current_branch
     return None
+
+
+def _carry_all(manifest):
+    checkouts = [manifest["main_repo"], *manifest["deps"].values()]
+    return all(
+        carry_changes(checkout["source_path"], checkout["path"])
+        for checkout in checkouts
+        if checkout["source_path"]
+    )
 
 
 def _warn_about_uncommitted_changes(main_repo_path, dep_paths):

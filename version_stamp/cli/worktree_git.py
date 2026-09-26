@@ -11,10 +11,10 @@ from version_stamp.core.logging import VMN_LOGGER
 READONLY_PUSH_URL = "/vmn-readonly/island-branches-are-not-pushable"
 
 
-def run_git(repo_path, args):
+def run_git(repo_path, args, stdin=None):
     cmd = ["git", "-C", str(repo_path)] + args
     try:
-        return subprocess.run(cmd, capture_output=True, text=True)
+        return subprocess.run(cmd, input=stdin, capture_output=True, text=True)
     except Exception as exc:
         VMN_LOGGER.debug(f"git command failed: {cmd} - {exc}")
         return None

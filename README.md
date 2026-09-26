@@ -170,6 +170,7 @@ pushed, and stamping is refused on it.
 
 ```sh
 vmn wt create my_app --island-name feat   # from the current commits
+vmn wt create my_app --island-name feat --carry-changes   # ...plus uncommitted work
 vmn wt pull                               # rebase onto the source branches
 vmn wt freeze my_app                      # pin deps to the branches they are on
 vmn wt remove feat

@@ -1286,25 +1286,12 @@ def _apply_patches_to_workdir(dest, patches):
             )
 
 
-def _copy_untracked_files(repo_path, dest):
-    """Copy untracked non-ignored files from repo to dest."""
-    result = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        cwd=repo_path,
-    )
-    if result.returncode != 0:
-        return
-
-    for rel_path in result.stdout.strip().split("\n"):
-        if not rel_path:
-            continue
-        src = os.path.join(repo_path, rel_path)
+def copy_untracked_files(repo_path, dest):
+    """Copy untracked non-ignored files (never .vmn/) from repo to dest."""
+    for rel_path, abs_path, _ in _untracked_candidates(repo_path):
         dst = os.path.join(dest, rel_path)
-        if os.path.isfile(src):
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copy2(src, dst)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(abs_path, dst)
 
 
 def _resolve_remote(remote, vcs):
@@ -1369,7 +1356,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
             if current_head.startswith(base_commit[:7]) or base_commit.startswith(
                 current_head[:7]
             ):
-                _copy_untracked_files(vcs.vmn_root_path, output_path)
+                copy_untracked_files(vcs.vmn_root_path, output_path)
             else:
                 VMN_LOGGER.debug(
                     f"HEAD ({current_head[:7]}) != base_commit ({base_commit[:7]}), "

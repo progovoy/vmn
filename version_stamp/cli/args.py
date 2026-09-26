@@ -890,6 +890,13 @@ def add_arg_worktrees(subprasers):
         help="Use depth=1 for dependency worktrees",
     )
     pwt.set_defaults(shallow_deps=False)
+    pwt.add_argument(
+        "--carry-changes",
+        dest="carry_changes",
+        action="store_true",
+        help="Copy uncommitted changes of the app and its deps into the island",
+    )
+    pwt.set_defaults(carry_changes=False)
 
 
 def _add_install_args(parser):
