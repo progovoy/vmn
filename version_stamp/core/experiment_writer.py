@@ -17,11 +17,10 @@ import os
 import socket
 
 import yaml
-from filelock import FileLock
 
-from version_stamp.core.constants import LOCK_FILE_ENV, LOCK_FILENAME
 from version_stamp.core.experiment_status import RUN_STATE_FILE
 from version_stamp.core.experiment_values import sanitize_entry
+from version_stamp.core.repo_lock import get_repo_lock  # noqa: F401
 from version_stamp.core.utils import now_iso, sha256_file
 
 # Storage conf keys that an app's conf.yml may supply, and the CLI defaults that
@@ -45,19 +44,6 @@ STORAGE_ENV = {
     "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
 }
 
-
-def get_repo_lock(vmn_root_path):
-    """The per-repo vmn lock that serializes mutations of a checkout.
-
-    One definition for every entry point: the CLI holds it around a command, and
-    ``version_stamp.exp.start_run`` holds it around the mutating create phase.
-    ``$VMN_LOCK_FILE_PATH`` overrides the path for the whole process, which is
-    what a user pointing vmn at a shared lock expects.
-    """
-    return FileLock(
-        os.environ.get(LOCK_FILE_ENV)
-        or os.path.join(vmn_root_path, ".vmn", LOCK_FILENAME)
-    )
 
 
 _WRITER_ID = None
