@@ -622,8 +622,8 @@ vmn exp export my_app --latest -o best.tar.gz
 
 ### `prune`
 
-Delete old experiments by count or age, or name exact runs with `-v`. Each
-deleted verstr is printed.
+Delete old experiments by count, age, query, or exact ref. Each deleted verstr
+is printed.
 
 ```sh
 vmn exp prune my_app --keep 10              # keep the 10 most recent
@@ -632,14 +632,27 @@ vmn exp prune my_app --keep 10 --dry-run    # print what would go, delete nothin
 vmn exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
 vmn exp prune my_app -v @4                  # delete exactly that one run
 vmn exp prune my_app --keep 5 --protect-tag stage  # never prune a run tagged stage=...
+
+# Query-based selection (uses the same query language as vmn exp list --query):
+vmn exp prune my_app --query 'status = "failed"'          # preview (dry-run by default)
+vmn exp prune my_app --query 'status = "failed"' --yes    # actually delete
+vmn exp prune my_app --query 'tags.env = "test"' --keep 1 --yes  # keep newest match
 ```
+
+`--query <expr>` selects candidates via the same query language as
+`vmn exp list --query` — it sees full rows including `status`, `metrics`, and
+`tags`.  Because a typo in a `<`/`>` comparison could delete far more than
+intended, **`--query` is a dry-run preview by default**; pass `--yes`/`-y` to
+confirm deletion.  `--dry-run` always wins over `--yes`.  An empty or invalid
+query is an error.  `--keep N`/`--older-than` apply *within* the query scope
+(further refining the matched set).  `-v` cannot be combined with `--query`.
 
 `-v <ref>` (repeatable — a verstr, a unique prefix, or `@N`) deletes exactly the
 named run(s) instead of applying `--keep`/`--older-than`; it cannot be combined
 with either.
 
 Guards take runs back out of the selection, whether it came from `--keep`/
-`--older-than` or from `-v`:
+`--older-than`, `--query`, or `-v`:
 
 - a run whose status is `running` or `stuck` is never deleted (it is reported
   as skipped — a stuck run may just have a late heartbeat); `--force` deletes
@@ -656,11 +669,13 @@ the local copies.
 
 | Flag | Description |
 |---|---|
+| `--query <expr>` | Select candidates by query; dry-run unless `--yes`/`-y` |
+| `--yes`/`-y` | Confirm deletion when `--query` is given |
 | `-v <ref>` | Delete exactly this run (repeatable); not combined with `--keep`/`--older-than` |
-| `--keep N` | Keep the N most recent experiments |
-| `--older-than <dur>` | Delete experiments older than `Nd`/`Nw`/`Nh` |
+| `--keep N` | Keep the N most recent experiments (applies within `--query` scope too) |
+| `--older-than <dur>` | Delete experiments older than `Nd`/`Nw`/`Nh` (applies within `--query` scope too) |
 | `--protect-tag <key>` | Never delete a run carrying this tag key (repeatable) |
-| `--dry-run` | Print what would be deleted, delete nothing |
+| `--dry-run` | Print what would be deleted, delete nothing (beats `--yes`) |
 | `--force` | Also delete runs that are still `running`, or tag-protected |
 | `--local-only` | Keep the remote (S3) copies |
 

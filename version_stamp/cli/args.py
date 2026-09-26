@@ -707,7 +707,17 @@ def _add_experiment_parser(subprasers, name):
     pexp.add_argument(
         "--query",
         default=None,
-        help='list: keep runs matching a query (e.g. \'metrics.loss < 0.5\')',
+        help=(
+            "list: filter rows by query (e.g. 'metrics.loss < 0.5'); "
+            "prune: select candidates by query (dry-run unless --yes/-y)"
+        ),
+    )
+    pexp.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="prune --query: confirm deletion (omitting this flag defaults to a preview)",
     )
     pexp.add_argument(
         "--json",
