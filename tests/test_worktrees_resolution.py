@@ -79,7 +79,6 @@ def test_invalid_version_is_rejected_before_island_directory_is_created(tmp_path
         from_branch=None,
         from_version="missing",
         island_name="bad-version",
-        no_stamp=False,
         shallow_deps=False,
     )
 
@@ -125,7 +124,6 @@ def test_unknown_editable_dependency_is_rejected(tmp_path, caplog):
         from_branch=None,
         from_version=None,
         island_name="bad-editable",
-        no_stamp=False,
         shallow_deps=False,
     )
 
@@ -152,14 +150,13 @@ def test_shallow_editable_dep_finishes_at_recorded_hash(tmp_path):
     assert _git(dest, "rev-parse", "HEAD") != second
 
 
-def test_no_stamp_marker_is_written_to_main_and_dependency_checkouts(tmp_path):
+def test_readonly_marker_is_written_to_main_and_dependency_checkouts(tmp_path):
     main = tmp_path / "main"
     dep = tmp_path / "dep"
     main.mkdir()
     dep.mkdir()
 
-    worktree_state.write_island_markers([main, dep], readonly=True)
+    worktree_state.write_island_markers([main, dep])
 
     for checkout in (main, dep):
-        assert (checkout / ".vmn" / worktree_state.WORKTREE_ISLAND_MARKER).is_file()
         assert (checkout / ".vmn" / worktree_state.WORKTREE_READONLY_MARKER).is_file()

@@ -159,7 +159,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `vmn skill`: Print the AI-agent skill block to stdout. `--install` writes it instead (`--target claude` → `.claude/skills/vmn/SKILL.md`, `cursor` → `.cursorrules`, `agents` → `AGENTS.md`); `--methodology` appends the opinionated TDD/worktree rules; `--force` overwrites an existing Claude SKILL.md. Cursor/agents targets only rewrite vmn's marker block and preserve surrounding text.
 - `vmn config <name>`: TUI config editor. `--vim` for $EDITOR, `--global` for repo-level config. `--branch` edits the current branch's canonical branch conf (seeded from the effective conf).
 - `vmn config gen <name>`: Non-interactively create a config file (no TTY needed, for CI/scripting). Default creates `conf.yml`; `--branch` (± `--root`) creates the canonical branch conf seeded from the existing effective conf. Never overwrites an existing file.
-- `vmn worktrees create <name>`: Create isolated development islands (git worktrees for main repo + all deps). `--island-name`, `-fv`/`--from-version`, `-fb`/`--from-branch`, `--base-path` (default `../vmn-islands`), `--no-stamp`, `--shallow-deps`, `--editable-dep`. `create` is the default action, so `vmn worktrees <name>` works.
+- `vmn worktrees create <name>`: Create a read-only island (git worktrees for main repo + all deps, pinned to a recorded state). `--island-name`, `-fv`/`--from-version`, `-fb`/`--from-branch`, `--base-path` (default `../vmn-islands`), `--shallow-deps`, `--editable-dep`. `create` is the default action, so `vmn worktrees <name>` works.
 - `vmn worktrees list`: List active islands.
 - `vmn worktrees remove <island>`: Clean up an island (removes its worktrees and local branches).
 - `vmn --completion [SHELL]`: Print shell completion setup script (bash/zsh/fish/tcsh). Auto-detects shell.
@@ -169,8 +169,8 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 ### Islands (worktrees)
 
 - Main repo gets a new branch `island/{name}/{original-branch}`; deps are detached HEAD at the hash recorded when the source version was stamped. `--editable-dep` gives a dep its own island branch.
-- `island.json` in the island root is the machine-readable manifest (paths, branches, dep hashes, `readonly`, `shallow_deps`).
-- Stamping inside an island keeps the version commit on the local island branch and pushes only the tag — the island branch is never published. `--no-stamp` creates a read-only island where `vmn stamp` is refused.
+- `island.json` in the island root is the machine-readable manifest (paths, branches, dep hashes, `shallow_deps`).
+- Islands are always read-only: `.vmn/.worktree-readonly` in every checkout makes `vmn stamp`/`release`/`add`/`init-app` refuse to run there. Version work from a side checkout by merging it and stamping on the branch. Islands are a state-recovery tool next to `goto`, not the way to spawn parallel worktrees — the worktree methodology uses plain `git worktree`.
 
 ## Environment Variables
 

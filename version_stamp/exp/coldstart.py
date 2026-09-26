@@ -30,7 +30,7 @@ _OPTIONAL_STATUS = {
     "deps_synced_with_conf",
 }
 _DIRTY_OK = {"pending", "outgoing"}
-_PUSHING_METHODS = ("push", "push_tags")
+_PUSHING_METHODS = ("push",)
 
 
 def build_vcs(app_name):

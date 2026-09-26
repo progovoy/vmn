@@ -91,30 +91,23 @@ vmn snapshot restore <app_name> --latest
 vmn snapshot diff <app_name>  # compare snapshot to current state
 ```
 
-## Parallel work with islands
+## Worktree islands (read-only checkouts)
 
-For working on multiple features simultaneously (especially useful when multiple AI agents run in parallel):
+To inspect a released version together with its dependencies, without touching the main checkout:
 
 ```sh
-# Create an isolated worktree island
-vmn worktrees create <app_name> --island-name <feature-name>
+# Check out the app and every dep at the state recorded for a version
+vmn worktrees create <app_name> --island-name <name> --from-version <version>
 
 # Read island.json in the created directory to understand the layout:
-# - main_repo.path: where to make changes
-# - deps: read-only dependency checkouts at pinned hashes
+# - main_repo.path: the app checkout
+# - deps: dependency checkouts at their pinned hashes
 
-# List active islands
 vmn worktrees list
-
-# Clean up when done
-vmn worktrees remove <feature-name>
+vmn worktrees remove <name>
 ```
 
-Use `--no-stamp` for islands where you don't want version creation (CI, testing, review).
-
-Always create islands from the current HEAD — don't switch branches or specify a different base before running `vmn worktrees create`.
-
-Island branches are named `island/<island-name>/<original-branch>`. When stamping inside an island, vmn resolves a branch conf matching this full branch name — create one with `vmn config gen <app> --branch` if you need to pin deps to different branches in the island.
+Islands are read-only: `vmn stamp`, `release`, and `add` are refused inside them. To version work done in a side checkout, merge it and stamp on the branch.
 
 ## Key rules
 
@@ -189,14 +182,13 @@ Rules:
 - If you spot a larger cleanup opportunity outside your current scope, spawn a subagent in a separate worktree to handle it — don't block or pollute the current task's diff.
 """,
     "worktrees": r"""### Parallel worktree workflow
-- Split big tasks into separate worktrees and run in parallel, but **TDD takes precedence**. Each worktree agent must follow TDD internally: write tests first (red), then implement (green). If multiple worktrees touch independent features, each worktree owns its own red-green-refactor cycle.
-- Use `vmn worktrees create` to spawn isolated islands for independent features or experiments.
-- Never push island branches to remote — they are local-only.
-- Run the full test suite in the island before merging back.
+- Split big tasks into separate git worktrees and run in parallel, but **TDD takes precedence**. Each worktree agent must follow TDD internally: write tests first (red), then implement (green). If multiple worktrees touch independent features, each worktree owns its own red-green-refactor cycle.
+- Never push worktree branches to remote — they are local-only.
+- Run the full test suite in the worktree before merging back.
 - Run `/simplify` on the finished change before merging (Claude Code) — it catches reuse opportunities and unnecessary complexity while the context is fresh.
 - A task is not done until it is merged and pushed. Before merging, ask the developer which branch to merge into.
-- Verify no work is lost (`git diff` and `git log` against merge target) before removing an island.
-- Remove islands immediately after merging (`vmn worktrees remove <name>`). Run `vmn worktrees list` at session start and clean up stale ones.
+- Verify no work is lost (`git diff` and `git log` against merge target) before removing a worktree.
+- Remove worktrees immediately after merging (`git worktree remove --force`, then `git branch -D`). Run `git worktree list` at session start and clean up stale ones.
 """,
     "communication": r"""### Communication
 - If the task is ambiguous or has multiple valid interpretations, ask one clarifying question before starting — don't guess at requirements.
@@ -222,7 +214,7 @@ ALL_METHODOLOGY_KEYS = list(METHODOLOGY_SECTIONS.keys())
 
 CLAUDE_DESCRIPTION = (
     "Use when stamping versions, tracking experiments, taking snapshots, or "
-    "working with worktree islands via the vmn CLI in this repo."
+    "restoring multi-repo state via the vmn CLI in this repo."
 )
 
 # Where each --target writes. `claude` gets a real Agent Skill directory;

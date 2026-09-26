@@ -160,9 +160,6 @@ def _log_no_release_mode(vcs):
 
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
-    from version_stamp.cli.worktree_state import is_local_only_island
-
-    local_only_island = is_local_only_island(vmn_ctx.vcs.vmn_root_path)
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
     vmn_ctx.vcs.buildmetadata = None
     vmn_ctx.vcs.release_mode = vmn_ctx.args.release_mode
@@ -271,8 +268,6 @@ def handle_stamp(vmn_ctx):
             raise RuntimeError(err)
 
     optional_status = {"version_not_matched", "detached"}
-    if local_only_island:
-        optional_status.add("outgoing")
     expected_status = {
         "repos_exist_locally",
         "repo_tracked",
@@ -361,7 +356,7 @@ def handle_stamp(vmn_ctx):
     # We didn't find any existing version
     if vmn_ctx.args.pull:
         try:
-            _retrieve_stamp_updates(vmn_ctx.vcs, local_only_island)
+            _retrieve_stamp_updates(vmn_ctx.vcs)
         except Exception:
             VMN_LOGGER.error("Failed to pull, run with --debug for more details")
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
@@ -430,7 +425,7 @@ def handle_stamp(vmn_ctx):
     try:
         version = _stamp_version(
             vmn_ctx.vcs,
-            vmn_ctx.args.pull and not local_only_island,
+            vmn_ctx.args.pull,
             vmn_ctx.args.check_vmn_version,
             initial_version,
         )
@@ -448,10 +443,9 @@ def handle_stamp(vmn_ctx):
     return 0
 
 
-def _retrieve_stamp_updates(vcs, local_only=False):
+def _retrieve_stamp_updates(vcs):
     vcs.backend.perform_cached_fetch(force=True)
-    if not local_only:
-        vcs.retrieve_remote_changes()
+    vcs.retrieve_remote_changes()
 
 
 def _determine_initial_version(vmn_ctx):
@@ -910,14 +904,6 @@ def handle_snapshot(vmn_ctx):
         return 1
 
 
-def _is_editable_island_dep(path, backend, optional_status):
-    if "outgoing" not in optional_status or backend.in_detached_head():
-        return False
-    from version_stamp.cli.worktree_state import is_local_only_island
-
-    return is_local_only_island(path)
-
-
 @measure_runtime_decorator
 def _get_repo_status(
     vcs, expected_status, optional_status=set(), suppress_errors=frozenset()
@@ -1025,10 +1011,7 @@ def _get_repo_status(
                 status.repos[repo]["pending"] = True
                 status.repos[repo]["state"].add("pending")
 
-            editable_island_dep = _is_editable_island_dep(
-                full_path, dep_be, optional_status
-            )
-            if not editable_island_dep and "branch" in vcs.configured_deps[repo]:
+            if "branch" in vcs.configured_deps[repo]:
                 try:
                     branch_name = dep_be.get_active_branch()
                     err_msg = (
@@ -1048,7 +1031,7 @@ def _get_repo_status(
                     status.repos[repo]["branch_synced_error"] = True
                     status.repos[repo]["state"].add("not_synced_with_conf")
 
-            if not editable_island_dep and "tag" in vcs.configured_deps[repo]:
+            if "tag" in vcs.configured_deps[repo]:
                 try:
                     err_msg = (
                         f"Repository in not on the requested tag by the configuration "
@@ -1068,7 +1051,7 @@ def _get_repo_status(
                     status.repos[repo]["tag_synced_error"] = True
                     status.repos[repo]["state"].add("not_synced_with_conf")
 
-            if not editable_island_dep and "hash" in vcs.configured_deps[repo]:
+            if "hash" in vcs.configured_deps[repo]:
                 try:
                     err_msg = (
                         f"Repository in not on the requested hash by the configuration "

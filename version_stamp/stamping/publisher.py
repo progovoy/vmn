@@ -28,11 +28,7 @@ from version_stamp.core.version_math import parse_conventional_commit_message
 from version_stamp.stamping.base import IVersionsStamper
 
 
-def _push_published_refs(backend, tags, local_only=False):
-    if local_only:
-        backend.push_tags(tags)
-        return
-
+def _push_published_refs(backend, tags):
     backend.push(tags)
     count = 0
     error = backend.check_for_outgoing_changes()
@@ -557,13 +553,7 @@ class VersionControlStamper(IVersionsStamper):
             if self.dry_run:
                 VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
             else:
-                from version_stamp.cli.worktree_state import is_local_only_island
-
-                _push_published_refs(
-                    self.backend,
-                    all_tags,
-                    local_only=is_local_only_island(self.vmn_root_path),
-                )
+                _push_published_refs(self.backend, all_tags)
         except Exception:
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
             VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")

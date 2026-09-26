@@ -151,7 +151,6 @@ def worktree_create(vmn_ctx):
 
     _write_island_markers(
         [main_dest, *(dep["path"] for dep in manifest["deps"].values())],
-        readonly=args.no_stamp,
     )
     manifest_json = json.dumps(manifest, indent=2)
     print(manifest_json)
@@ -185,7 +184,6 @@ def _new_manifest(
             "remote": _git_remote_url(main_repo_path),
         },
         "deps": {},
-        "readonly": vmn_ctx.args.no_stamp,
         "shallow_deps": vmn_ctx.args.shallow_deps,
     }
 

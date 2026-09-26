@@ -27,10 +27,7 @@ from version_stamp.cli.constants import (
     VMN_ARGS,
 )
 from version_stamp.cli.experiment import handle_experiment
-from version_stamp.cli.worktree_state import (
-    WORKTREE_READONLY_MARKER,
-    is_local_only_island,
-)
+from version_stamp.cli.worktree_state import WORKTREE_READONLY_MARKER
 from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
 from version_stamp.core.constants import (
     BOLD_CHAR,
@@ -122,8 +119,9 @@ def _reject_readonly_version_creation(args, root_path):
     if args.command not in _VERSION_CREATING_COMMANDS or not os.path.exists(marker):
         return False
     VMN_LOGGER.error(
-        "Version creation is disabled in this worktree (--no-stamp island). "
-        "Remove .vmn/.worktree-readonly to override."
+        "Version creation is disabled in this worktree island. "
+        "Stamp on the branch after merging, or remove "
+        ".vmn/.worktree-readonly to override."
     )
     return True
 
@@ -370,15 +368,10 @@ def _vmn_run(args, root_path, lock=None):
         VMN_LOGGER.info("Run vmn -h for help")
         return 1, vmnc
 
-    local_only_command = is_local_only_island(root_path) and vmnc.args.command in {
-        "stamp",
-        "release",
-        "add",
-    }
     needs_remote = VMN_ARGS[vmnc.args.command] == "remote" or (
         "pull" in vmnc.args and vmnc.args.pull
     )
-    if needs_remote and not local_only_command:
+    if needs_remote:
         if vmnc.vcs.backend.selected_remote is None:
             VMN_LOGGER.error(
                 f"No git remote is configured. vmn requires a remote to "

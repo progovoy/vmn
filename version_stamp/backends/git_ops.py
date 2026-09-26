@@ -147,13 +147,6 @@ class GitOpsMixin:
                 raise RuntimeError(tag_err_str)
 
     @measure_runtime_decorator
-    def push_tags(self, tags):
-        if self.selected_remote is None:
-            raise RuntimeError("No git remote is configured; cannot push tags")
-        for tag in tags:
-            self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
-
-    @measure_runtime_decorator
     def push(self, tags=()):
         if self.selected_remote is None:
             raise RuntimeError(

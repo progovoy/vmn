@@ -840,7 +840,7 @@ def add_arg_exp(subprasers):
 def add_arg_worktrees(subprasers):
     pwt = subprasers.add_parser(
         "worktrees",
-        help="Create and manage isolated development islands (worktrees with deps)",
+        help="Create and manage read-only worktree islands (repo + pinned deps)",
     )
     pwt.set_defaults(strict_version=False, validate_app_name=False)
     pwt.add_argument(
@@ -877,13 +877,6 @@ def add_arg_worktrees(subprasers):
         default="../vmn-islands",
         help="Directory where islands are stored (default: ../vmn-islands)",
     )
-    pwt.add_argument(
-        "--no-stamp",
-        dest="no_stamp",
-        action="store_true",
-        help="Make the island read-only (vmn stamp disabled inside)",
-    )
-    pwt.set_defaults(no_stamp=False)
     pwt.add_argument(
         "--shallow-deps",
         dest="shallow_deps",
