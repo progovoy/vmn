@@ -162,7 +162,7 @@ def create_app(
 
     @app.get(f"{API_PREFIX}/meta")
     def meta():
-        from version_stamp import version as version_mod
+        from version_stamp.api import version as version_mod
 
         return {"version": version_mod.version}
 

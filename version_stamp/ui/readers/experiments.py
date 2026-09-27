@@ -13,7 +13,7 @@ from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import load_run_state
 from version_stamp.core.experiment_tree import annotate_rows
-from version_stamp.core.version_math import tag_name_to_app_name
+from version_stamp.api import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.experiment_detail import experiment_detail
 from version_stamp.ui.readers.versions import version_counts
