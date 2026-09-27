@@ -87,7 +87,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument(
         "action", nargs="?", default="create",
         choices=["create", "run", "add", "list", "show", "compare", "diff",
-                 "restore", "export", "prune", "tag", "archive", "unarchive"],
+                 "restore", "export", "prune", "tag", "archive", "unarchive",
+                 "import-mlflow"],
         help="Experiment action (default: create)",
     )
     pexp.add_argument("name", help="The application's name")
@@ -169,6 +170,22 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--bucket", default=None, help="S3 bucket name")
     pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
+    # import-mlflow flags
+    _mlf = pexp.add_mutually_exclusive_group()
+    _mlf.add_argument("--mlruns", default=None, metavar="DIR",
+                      help="import-mlflow: path to mlruns/ FileStore directory")
+    _mlf.add_argument("--tracking-uri", default=None, metavar="URI",
+                      help="import-mlflow: MLflow tracking server URI "
+                           "(requires mlflow-skinny)")
+    pexp.add_argument("--experiment", action="append", default=None,
+                      metavar="NAME_OR_ID",
+                      help="import-mlflow: include only this experiment (repeatable)")
+    pexp.add_argument("--skip-artifacts", action="store_true", default=False,
+                      help="import-mlflow: do not copy local artifacts")
+    pexp.add_argument("--include-deleted", action="store_true", default=False,
+                      help="import-mlflow: include deleted/trashed runs")
+    pexp.add_argument("--workers", type=int, default=8,
+                      help="import-mlflow: parallel import workers (default: 8)")
 
 
 def _add_ui_parser(subprasers):  # noqa: N802
@@ -330,10 +347,20 @@ def _handle_ui(vmn_ctx):
 # ---------------------------------------------------------------------------
 
 def _exp_run_without_repo(args):
-    """Experiment commands that work without a git repo (--from-snapshot mode).
+    """Experiment commands that work without a git repo.
+
+    Handles: import-mlflow (always git-free) and from-snapshot mode.
 
     Returns an int exit code if handled, None to fall through to normal dispatch.
     """
+    # import-mlflow is always git-free — intercept before from_snapshot check
+    if (
+        getattr(args, "command", None) in ("experiment", "exp")
+        and getattr(args, "action", None) == "import-mlflow"
+    ):
+        from vmn_exp.importers.cli import import_mlflow_run_without_repo
+        return import_mlflow_run_without_repo(args)
+
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
     )
@@ -455,7 +482,9 @@ def _register_all() -> None:
             ),
             handle=_handle_experiment,
             access="local",
-            read_only_actions=frozenset({"list", "show", "compare", "diff", "export"}),
+            read_only_actions=frozenset(
+                {"list", "show", "compare", "diff", "export", "import-mlflow"}
+            ),
             split_after_double_dash=True,
             run_without_repo=_exp_run_without_repo,
         ))

@@ -33,7 +33,7 @@ from version_stamp.core.experiment_writer import (
     flush_log,
     save_run_state,
 )
-from version_stamp.core.utils import now_iso
+from version_stamp.api import now_iso
 
 # ---------------------------------------------------------------------------
 # Constants
