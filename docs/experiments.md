@@ -541,7 +541,10 @@ for — or hold up — a `create`/`run` in the same checkout.
 language](sdk.md#the-query-language) — the same one the SDK reader and the
 REST API use. It sees every row field, including `status`, `kind`, `depth` and
 `tree_status`, and applies before `--last`, `--sort` and `--top`. A bad query
-exits 1 with the offending offset.
+exits 1 with the offending offset. Provenance fields are also queryable:
+`inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind` (3-part paths
+for each logged input), `env.<key>` and `env.packages.<pkg>` (environment
+summary), and `imported_from` (set on runs imported from external tools).
 
 `--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
 JSON array instead of the table — one object per run with the keys of an SDK
