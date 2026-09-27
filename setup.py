@@ -57,7 +57,6 @@ setuptools.setup(
         "version_stamp.cli",
         "version_stamp.devversion",
         "version_stamp.exp",
-        "version_stamp._moved",
         "vmn_exp",
         "vmn_exp.cli",
         "vmn_exp.core",
