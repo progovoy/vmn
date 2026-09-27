@@ -139,7 +139,7 @@ def test_env_experiment_id_resolves_references(app_layout, capfd):
 
 def test_show_reads_run_state_only_within_the_subtree(app_layout, capfd, monkeypatch):
     """`exp show` must not read every experiment's run state to print one Subtree."""
-    from version_stamp.cli import experiment as exp_mod
+    from vmn_exp.cli import experiment as exp_mod
 
     _bootstrap(app_layout)
 
@@ -184,7 +184,7 @@ def test_show_reads_run_state_only_within_the_subtree(app_layout, capfd, monkeyp
 
 
 def test_show_skips_tree_reads_for_a_lone_experiment(app_layout, capfd, monkeypatch):
-    from version_stamp.cli import experiment as exp_mod
+    from vmn_exp.cli import experiment as exp_mod
 
     _bootstrap(app_layout)
     os.environ.pop("VMN_EXPERIMENT_ID", None)

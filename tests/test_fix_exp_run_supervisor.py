@@ -18,7 +18,7 @@ from helpers import (
     extract_dev_verstr,
 )
 
-from version_stamp.cli import experiment_run as runmod
+from vmn_exp.cli import run as runmod
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.core import status as st
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state

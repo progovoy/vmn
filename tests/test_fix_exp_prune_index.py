@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from version_stamp.cli import experiment_prune as prune_mod
+from vmn_exp.cli import prune as prune_mod
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 

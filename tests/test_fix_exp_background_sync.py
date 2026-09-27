@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from version_stamp.cli import experiment_supervisor as supervisor
+from vmn_exp.cli import supervisor
 from vmn_exp.cli.supervisor import BackgroundSync
 
 

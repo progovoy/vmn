@@ -235,7 +235,7 @@ def test_diff_inputs_change():
 
 def test_diff_imported_no_code(monkeypatch, caplog):
     import logging
-    from version_stamp.cli import experiment as exp_mod
+    from vmn_exp.cli import experiment as exp_mod
 
     meta = _imported_meta(source_commit="deadbeef123")
     storage = _FakeStorage(meta)
@@ -260,7 +260,7 @@ def test_diff_imported_no_code(monkeypatch, caplog):
 
 def test_restore_imported_refuses_with_commit_hint(monkeypatch, caplog):
     import logging
-    from version_stamp.cli import experiment as exp_mod
+    from vmn_exp.cli import experiment as exp_mod
 
     meta = _imported_meta(source_commit="deadbeef123")
     storage = _FakeStorage(meta)
@@ -286,7 +286,7 @@ def test_restore_imported_refuses_with_commit_hint(monkeypatch, caplog):
 
 def test_export_imported_refuses(monkeypatch, caplog):
     import logging
-    from version_stamp.cli import experiment as exp_mod
+    from vmn_exp.cli import experiment as exp_mod
 
     meta = _imported_meta()
     storage = _FakeStorage(meta)
