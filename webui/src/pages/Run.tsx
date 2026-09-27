@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName, artifactUrl } from "../api";
-import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
+import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useMeta } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { pollIntervalMs, runHref } from "../util";
 import { Skeleton } from "../components/ui";
 import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
+import RegisterModelDialog from "../components/RegisterModelDialog";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
@@ -16,6 +17,23 @@ import RunLog from "../components/RunLog";
 import TrainingCurves from "../components/TrainingCurves";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
+
+function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
+  const meta = useMeta().data;
+  const [open, setOpen] = useState(false);
+  if (meta?.read_only) return null;
+  return (
+    <>
+      <button className="link" style={{ marginTop: 8 }} onClick={() => setOpen(true)}
+        aria-label="Register as model">
+        Register as model
+      </button>
+      {open && (
+        <RegisterModelDialog ws={ws} app={app} verstr={verstr} onDone={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
 
 function RunBody({ ws, app, appName, detail }: {
   ws: string; app: string; appName: string; detail: ExperimentDetail;
@@ -35,10 +53,13 @@ function RunBody({ ws, app, appName, detail }: {
         </div>
       </div>
       {detail.artifacts && detail.artifacts.length > 0 && (
-        <ArtifactsList
-          artifacts={detail.artifacts}
-          downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
-        />
+        <>
+          <ArtifactsList
+            artifacts={detail.artifacts}
+            downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
+          />
+          <RegisterModelButton ws={ws} app={appName} verstr={verstr} />
+        </>
       )}
     </>
   );
