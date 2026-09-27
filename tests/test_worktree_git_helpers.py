@@ -15,6 +15,9 @@ def repos(tmp_path):
     a = tmp_path / "a"
     subprocess.run(["git", "clone", "-q", str(remote), str(a)], check=True)
     _git(a, "checkout", "-q", "-b", "main")
+    # pull --rebase rewrites commits, so it needs an identity of its own
+    _git(a, "config", "user.email", "t@t")
+    _git(a, "config", "user.name", "t")
     _commit(a, "init")
     _git(a, "push", "-q", "-u", "origin", "main")
     other = tmp_path / "other"

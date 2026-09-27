@@ -194,7 +194,7 @@ def _all_vs_modules() -> frozenset:
 
 def test_no_new_boundary_violations() -> None:
     """Found violations must be a subset of the known allowlist."""
-    from tests.architecture_known_violations import KNOWN_VIOLATIONS
+    from architecture_known_violations import KNOWN_VIOLATIONS
 
     found = _scan_violations()
     new = found - KNOWN_VIOLATIONS
@@ -208,7 +208,7 @@ def test_no_new_boundary_violations() -> None:
 
 def test_allowlist_has_no_stale_entries() -> None:
     """The allowlist must shrink as migration steps land, never grow stale."""
-    from tests.architecture_known_violations import KNOWN_VIOLATIONS
+    from architecture_known_violations import KNOWN_VIOLATIONS
 
     found = _scan_violations()
     stale = KNOWN_VIOLATIONS - found
