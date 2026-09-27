@@ -57,6 +57,7 @@ import weakref
 
 from version_stamp.core.experiment_values import metric_number
 from version_stamp.exp import (
+    autolog_hf,
     autolog_keras,
     autolog_lightning,
     autolog_sklearn,
@@ -353,4 +354,7 @@ SUPPORTED_FRAMEWORKS = {
     # other, so both reuse the adapter rather than restating it.
     "tensorflow": autolog_keras.TENSORFLOW,
     "pytorch_lightning": autolog_lightning.LIGHTNING,
+    # HuggingFace Transformers: watches transformers.trainer (lazy submodule)
+    # and adds a VmnCallback via Trainer.train instrumentation.
+    "transformers": autolog_hf.TRANSFORMERS,
 }
