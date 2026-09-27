@@ -42,9 +42,22 @@ _Call = collections.namedtuple(
 #: ``instrument(call, run)`` returns the call to make instead (Keras adds a
 #: per-epoch callback); ``fitted_params(call)`` names params that only exist
 #: after training.
+#:
+#: ``watch``: a tuple of submodule names whose import triggers patching instead
+#: of the framework's top-level module.  Empty tuple (the default) means watch
+#: the top-level module — the existing behaviour.  Useful when ``import pkg``
+#: is lazy and does not actually import the submodule that holds the class to
+#: wrap (e.g. ``transformers`` vs ``transformers.trainer``).
+#:
+#: ``method_owners``: an optional callable ``(module) -> List[(owner, attr)]``
+#: that replaces ``discover`` for locating which ``(class, method_name)`` pairs
+#: to wrap.  ``None`` (the default) falls back to ``discover``.  Use this when
+#: the training entry point is not ``fit`` — e.g. ``Trainer.train``.
 _Adapter = collections.namedtuple(
     "_Adapter",
-    "label discover subject params metrics series save instrument fitted_params",
+    "label discover subject params metrics series save instrument fitted_params"
+    " watch method_owners",
+    defaults=((), None),
 )
 
 
@@ -58,6 +71,8 @@ def _adapter(
     save=None,
     instrument=None,
     fitted_params=None,
+    watch=(),
+    method_owners=None,
 ):
     """An :data:`_Adapter` with the scikit-learn-shaped defaults filled in."""
     return _Adapter(
@@ -70,6 +85,8 @@ def _adapter(
         save=save or _pickle_model,
         instrument=instrument or _as_called,
         fitted_params=fitted_params or _best_params,
+        watch=watch,
+        method_owners=method_owners,
     )
 
 
