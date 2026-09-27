@@ -343,15 +343,21 @@ def test_summary_contains_all_fields(tmp_path, capsys):
 
 
 def test_exit_1_on_failure(tmp_path, capsys):
-    """Verify exit 1 when the mlruns path does not exist."""
-    exp_dir = str(tmp_path / "vmn_data")
-    args = _make_args(mlruns="/nonexistent/path/mlruns", experiment_dir=exp_dir)
-    # Should either exit 1 or succeed with 0 imported runs
-    # (the filestore silently returns nothing for a missing dir)
+    """Verify exit 1 when a run fails to import.
+
+    Uses a valid mlruns dir but an experiment_dir that is an existing file
+    (not a directory), so all write attempts raise NotADirectoryError, causing
+    each run to be counted as "failed" and the handler to return 1.
+    """
+    mlruns = _build_mlruns(tmp_path)
+
+    # Make experiment_dir a file so LocalSnapshotStorage cannot create subdirs.
+    bad_dir = tmp_path / "not_a_dir.txt"
+    bad_dir.write_text("I am a file, not a directory")
+
+    args = _make_args(mlruns=mlruns, experiment_dir=str(bad_dir), workers=1)
     rc = _call(args)
-    # Either 0 (no runs, no error) or 1 (explicit failure) is acceptable;
-    # the important thing is that it doesn't raise an unhandled exception.
-    assert rc in (0, 1)
+    assert rc == 1
 
 
 # ---------------------------------------------------------------------------
