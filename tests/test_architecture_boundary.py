@@ -25,6 +25,7 @@ EXPERIMENTS_GLOBS = (
     "version_stamp.ui",               # ui package and all submodules
     "version_stamp.cli.snapshot",     # cli/snapshot.py + cli/snapshot_storage*.py
     "version_stamp.cli.experiment",   # cli/experiment.py + cli/experiment_*.py
+    "version_stamp.cli._builtin_exp_plugin",  # temporary plugin; moves to vmn_exp in step h4
     "version_stamp.core.experiment_", # core/experiment_*.py (trailing _ = prefix match)
     "version_stamp.core.jsonl_tail",
     "version_stamp.core.background",
@@ -35,7 +36,8 @@ EXPERIMENTS_GLOBS = (
 # Modules that are exempt from both sides of the boundary check
 EXEMPT_MODULES = frozenset(
     {
-        "version_stamp.cli.plugins",      # plugin registry shim
+        "version_stamp.cli.plugin_api",   # plugin registry — used by both sides
+        "version_stamp.cli.plugins",      # plugin loader shim
         "version_stamp._aliases",         # meta-path finder
     }
 )
