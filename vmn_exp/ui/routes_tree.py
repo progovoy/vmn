@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Stamp-tree routes — ``/tree``, ``/tree/root``, ``/deps`` — answered from
-:data:`~version_stamp.ui.tree_cache.TREES` while the app's tags are unchanged."""
+:data:`~vmn_exp.ui.tree_cache.TREES` while the app's tags are unchanged."""
 from fastapi import HTTPException
 
-from version_stamp.ui.readers import tree as tree_reader
-from version_stamp.ui.tree_cache import TREES
+from vmn_exp.ui.readers import tree as tree_reader
+from vmn_exp.ui.tree_cache import TREES
 
 
 def register(app, prefix, checkout_for, optional_segment):

@@ -4,7 +4,7 @@ import hmac
 
 from fastapi.middleware.gzip import GZipMiddleware
 
-from version_stamp.ui.responses import GZIP_LEVEL, GZIP_MIN_BYTES
+from vmn_exp.ui.responses import GZIP_LEVEL, GZIP_MIN_BYTES
 
 ARTIFACT_SEGMENT = "/artifacts/"
 

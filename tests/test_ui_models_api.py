@@ -17,8 +17,8 @@ from fastapi.testclient import TestClient
 
 def _client(tmp_path, read_only=False):
     """Build a TestClient over a WorkspaceManager pointing at a tmp dir."""
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     # attach_path requires .git or .vmn
     vmn_dir = tmp_path / ".vmn"

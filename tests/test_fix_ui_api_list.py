@@ -11,7 +11,7 @@ from vmn_exp.snapshot import (
     S3SnapshotStorage,
     get_snapshot_storage,
 )
-from version_stamp.ui.readers.experiments import sort_rows
+from vmn_exp.ui.readers.experiments import sort_rows
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -26,8 +26,8 @@ def _client(tmp_path, use_index=True):
     (root / ".git").mkdir(parents=True, exist_ok=True)
     storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
 
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
@@ -119,8 +119,8 @@ def s3_client(tmp_path):
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
     with moto.mock_aws():
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="vmn-bucket")
-        from version_stamp.ui.server import create_app
-        from version_stamp.ui.workspaces import WorkspaceManager
+        from vmn_exp.ui.server import create_app
+        from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_s3("ws", bucket="vmn-bucket", prefix="exps")

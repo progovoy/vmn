@@ -7,7 +7,7 @@ as `vmn` CLI subprocesses that acquire it themselves.
 import os
 
 from version_stamp.api import VMN_LOGGER
-from version_stamp.ui.security import LOOPBACK_HOSTS
+from vmn_exp.ui.security import LOOPBACK_HOSTS
 
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
 
@@ -37,7 +37,7 @@ def build_manager(args):
     explicit source is given — the repo enclosing the current directory.
     Re-attaching an already-registered source is a no-op.
     """
-    from version_stamp.ui.workspaces import WorkspaceError, WorkspaceManager
+    from vmn_exp.ui.workspaces import WorkspaceError, WorkspaceManager
 
     data_dir = args.data_dir or DEFAULT_DATA_DIR
     manager = WorkspaceManager(data_dir)
@@ -83,7 +83,7 @@ def handle_ui(args):
     try:
         import uvicorn
 
-        from version_stamp.ui.server import create_app
+        from vmn_exp.ui.server import create_app
     except ImportError:
         VMN_LOGGER.error(
             "The web UI requires the 'ui' extra. Install it with:\n\n"

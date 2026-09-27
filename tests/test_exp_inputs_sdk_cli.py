@@ -17,7 +17,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _parse(s):
-    from version_stamp.cli.experiment_inputs_arg import parse_input_arg
+    from vmn_exp.cli.inputs_arg import parse_input_arg
     return parse_input_arg(s)
 
 

@@ -1260,7 +1260,7 @@ def test_get_metric_series_unit():
 
 def test_metrics_tailer_incremental_reads(tmp_path):
     """The tailer consumes only complete new lines on each poll."""
-    from version_stamp.cli.experiment import _MetricsTailer
+    from vmn_exp.cli.experiment import _MetricsTailer
 
     p = tmp_path / "metrics.txt"
     p.write_text("")

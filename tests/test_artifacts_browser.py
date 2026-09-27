@@ -6,7 +6,7 @@ import pytest
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
-from version_stamp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.readers import experiments as exp_reader
 
 
 @pytest.fixture(autouse=True)
@@ -122,8 +122,8 @@ except ImportError:
 def _make_client(tmp_path):
     """Build a TestClient with a workspace pointing to tmp_path."""
     from fastapi.testclient import TestClient
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     data_dir = os.path.join(str(tmp_path), "ui_data")
     manager = WorkspaceManager(data_dir)

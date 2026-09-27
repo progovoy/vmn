@@ -15,9 +15,9 @@ import pytest
 pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
-from version_stamp.ui import jobs as jobs_mod
-from version_stamp.ui.server import create_app
-from version_stamp.ui.workspaces import WorkspaceManager
+from vmn_exp.ui import jobs as jobs_mod
+from vmn_exp.ui.server import create_app
+from vmn_exp.ui.workspaces import WorkspaceManager
 
 SECRET = "db_password=hunter2"
 

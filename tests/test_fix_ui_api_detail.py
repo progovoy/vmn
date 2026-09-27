@@ -34,8 +34,8 @@ def ws(tmp_path):
     (root / ".git").mkdir(parents=True)
     storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
 
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

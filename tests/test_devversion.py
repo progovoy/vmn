@@ -57,7 +57,7 @@ import version_stamp.devversion.materialize
 
 FORBIDDEN_PREFIXES = (
     "version_stamp.exp",
-    "version_stamp.ui",
+    "vmn_exp.ui",
     "vmn_exp.snapshot",
     "version_stamp.core.experiment_",
     "vmn_exp.core.jsonl_tail",

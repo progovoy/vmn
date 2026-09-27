@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from vmn_exp.core.log import experiment_row
-from version_stamp.ui.leaderboard_columns import columns_payload
+from vmn_exp.ui.leaderboard_columns import columns_payload
 
 
 def _row(idx, **meta):

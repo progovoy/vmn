@@ -469,7 +469,7 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
         for path in exp_dir.glob("*.py")
         for node in ast.walk(ast.parse(path.read_text()))
         if isinstance(node, ast.ImportFrom)
-        and (node.module or "").startswith("version_stamp.cli.experiment")
+        and (node.module or "").startswith("vmn_exp.cli.experiment")
         for alias in node.names
     }
     assert from_cli == {"_get_experiment_storage"}

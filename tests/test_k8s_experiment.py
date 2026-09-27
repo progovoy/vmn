@@ -397,21 +397,21 @@ def test_get_writer_id_cached_across_calls(monkeypatch):
 
 
 def test_app_name_from_vcs():
-    from version_stamp.cli.experiment import _app_name
+    from vmn_exp.cli.experiment import _app_name
 
     vcs = SimpleNamespace(name="myapp")
     assert _app_name(vcs) == "myapp"
 
 
 def test_app_name_from_args_when_vcs_none():
-    from version_stamp.cli.experiment import _app_name
+    from vmn_exp.cli.experiment import _app_name
 
     args = SimpleNamespace(name="myapp")
     assert _app_name(None, args) == "myapp"
 
 
 def test_app_name_both_none():
-    from version_stamp.cli.experiment import _app_name
+    from vmn_exp.cli.experiment import _app_name
 
     assert _app_name(None, None) is None
 
@@ -496,7 +496,7 @@ def test_create_from_snapshot_reads_metadata(tmp_path, monkeypatch):
         )
     )
 
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path))
     assert err is None
@@ -530,7 +530,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
         )
     )
 
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(snap_dir))
     assert err is None
@@ -540,7 +540,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
 
 def test_create_from_snapshot_missing_file(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(
         storage, "myapp", str(tmp_path / "nonexistent.yml")
@@ -559,7 +559,7 @@ def test_create_from_snapshot_missing_verstr(tmp_path, monkeypatch):
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(yaml.dump({"app_name": "myapp", "base_version": "1.0.0"}))
 
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(storage, "myapp", str(meta_path))
     assert verstr is None
@@ -589,7 +589,7 @@ def test_create_from_snapshot_with_note_and_extra(tmp_path, monkeypatch):
         )
     )
 
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(
         storage,
@@ -629,7 +629,7 @@ def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
         )
     )
 
-    from version_stamp.cli.experiment import _experiment_create_from_snapshot
+    from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(
         storage,
@@ -649,7 +649,7 @@ def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
 
 
 def test_get_experiment_storage_with_experiment_dir(tmp_path):
-    from version_stamp.cli.experiment import _get_experiment_storage
+    from vmn_exp.cli.experiment import _get_experiment_storage
 
     params = {"experiment_dir": str(tmp_path), "backend": "local"}
     storage = _get_experiment_storage(None, params)
@@ -660,7 +660,7 @@ def test_get_experiment_storage_with_experiment_dir(tmp_path):
 
 
 def test_get_experiment_storage_env_var(tmp_path, monkeypatch):
-    from version_stamp.cli.experiment import _get_experiment_storage
+    from vmn_exp.cli.experiment import _get_experiment_storage
 
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path))
     params = {"backend": "local"}
@@ -671,7 +671,7 @@ def test_get_experiment_storage_env_var(tmp_path, monkeypatch):
 
 
 def test_get_experiment_storage_default_uses_vcs_root(tmp_path):
-    from version_stamp.cli.experiment import _get_experiment_storage
+    from vmn_exp.cli.experiment import _get_experiment_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
     params = {"backend": "local"}

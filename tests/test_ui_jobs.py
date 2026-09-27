@@ -17,8 +17,8 @@ from helpers import (
 
 
 def _client(app_layout, read_only=False, extra=None):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
@@ -147,7 +147,7 @@ def test_ui_action_cli_preview(app_layout, capfd):
 
 def test_ui_exp_create_build_command():
     """exp_create translates note + metrics into a `vmn experiment create` argv."""
-    from version_stamp.ui.jobs import build_command
+    from vmn_exp.ui.jobs import build_command
 
     cmd, err = build_command(
         "exp_create", "my_app", {"note": "swin-t", "metrics": {"loss": 0.1, "acc": 0.9}}
@@ -178,7 +178,7 @@ def test_ui_exp_create_build_command():
 
 def test_ui_exp_add_build_command():
     """exp_add appends metrics (and/or a note) to an existing experiment."""
-    from version_stamp.ui.jobs import build_command
+    from vmn_exp.ui.jobs import build_command
 
     cmd, err = build_command(
         "exp_add",
@@ -274,7 +274,7 @@ def test_ui_exp_create_action(app_layout, capfd):
 def test_ui_goto_build_command_version_optional():
     """`goto` accepts an empty version: goes to the tip of the branch,
     matching `vmn goto <app>` with no `-v`."""
-    from version_stamp.ui.jobs import build_command
+    from vmn_exp.ui.jobs import build_command
 
     cmd, err = build_command("goto", "my_app", {})
     assert err is None
@@ -309,7 +309,7 @@ def test_ui_goto_action_without_version(app_layout, capfd):
 
 
 def test_ui_snapshot_create_build_command():
-    from version_stamp.ui.jobs import build_command
+    from vmn_exp.ui.jobs import build_command
 
     cmd, err = build_command("snapshot_create", "my_app", {"note": "wip refactor"})
     assert err is None

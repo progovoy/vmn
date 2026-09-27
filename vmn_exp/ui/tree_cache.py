@@ -10,7 +10,7 @@ import hashlib
 import subprocess
 
 from version_stamp.api import app_name_to_tag_name
-from version_stamp.ui.memo import LRU
+from vmn_exp.ui.memo import LRU
 
 MAX_ENTRIES = 128
 UNKNOWN = "error"  # the fingerprint when the tags could not be listed

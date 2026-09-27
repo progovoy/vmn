@@ -190,7 +190,7 @@ def test_s3_reads_fall_back_to_the_legacy_underscore_prefix():
 
 
 def test_list_apps_from_storage_decodes_app_names():
-    from version_stamp.ui.readers.experiments import list_apps_from_storage
+    from vmn_exp.ui.readers.experiments import list_apps_from_storage
 
     s3 = _s3()
     s3.save("my_app", "v1", _meta("v1"), {})

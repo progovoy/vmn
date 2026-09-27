@@ -18,7 +18,7 @@ index (:mod:`vmn_exp.core.index`, persisted as
 ``.index.sqlite`` beside the records), which re-reads only what changed.
 
 Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
-on ``version_stamp.ui``, so the experiment feature can be lifted out later. The
+on ``vmn_exp.ui``, so the experiment feature can be lifted out later. The
 log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """

@@ -8,8 +8,8 @@ pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
 from vmn_exp.snapshot import get_snapshot_storage
-from version_stamp.ui.server import create_app
-from version_stamp.ui.workspaces import WorkspaceManager
+from vmn_exp.ui.server import create_app
+from vmn_exp.ui.workspaces import WorkspaceManager
 
 LIST = "/api/v1/workspaces/ws/apps/app/experiments"
 

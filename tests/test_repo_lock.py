@@ -39,7 +39,7 @@ def test_repo_lock_module_imports_no_experiment_modules():
         "    m.startswith(p) for p in ("
         "        'version_stamp.core.experiment_',"
         "        'version_stamp.exp',"
-        "        'version_stamp.ui',"
+        "        'vmn_exp.ui',"
         "        'vmn_exp',"
         "    )"
         ")]; "

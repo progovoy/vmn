@@ -6,12 +6,12 @@ needed).  Origin / read-only guards run in the shared middleware layer.
 """
 from fastapi import HTTPException
 
-from version_stamp.ui.jobs_models import (
+from vmn_exp.ui.jobs_models import (
     validate_alias_body,
     validate_register_body,
     validate_status_body,
 )
-from version_stamp.ui.readers.models import list_models_response, model_detail_response
+from vmn_exp.ui.readers.models import list_models_response, model_detail_response
 from vmn_exp.registry.log import remove_alias, set_alias, set_version_status
 from vmn_exp.registry.names import valid_alias_name, valid_model_name
 from vmn_exp.registry.store import ensure_model, register_version

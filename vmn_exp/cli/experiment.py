@@ -7,21 +7,21 @@ from typing import List, Optional
 
 import yaml
 
-from version_stamp.cli.experiment_manage import (
+from vmn_exp.cli.manage import (
     MANAGE_ACTIONS,
     experiment_manage,
     refuse_stray_refs,
 )
-from version_stamp.cli.experiment_prune import experiment_prune as _experiment_prune
+from vmn_exp.cli.prune import experiment_prune as _experiment_prune
 
 # `vmn exp run` lives in its own module; these names stay importable from here.
-from version_stamp.cli.experiment_run import (  # noqa: F401
+from vmn_exp.cli.run import (  # noqa: F401
     _MetricsTailer,
     _parse_metric_line,
     _parse_metrics,
     experiment_run,
 )
-from version_stamp.cli.experiment_views import dumps, show_payload
+from vmn_exp.cli.views import dumps, show_payload
 from vmn_exp.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
@@ -73,8 +73,8 @@ from vmn_exp.core.writer import (
     save_artifact,
 )
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
-from version_stamp.cli.experiment_inputs_arg import parse_input_arg
-from version_stamp.cli.experiment_provenance import (
+from vmn_exp.cli.inputs_arg import parse_input_arg
+from vmn_exp.cli.provenance import (
     format_env_oneliner,
     format_inputs_lines,
     print_provenance_diff_section,

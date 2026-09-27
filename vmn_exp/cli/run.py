@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import time
 
-from version_stamp.cli.experiment_supervisor import (
+from vmn_exp.cli.supervisor import (
     BackgroundSync,
     MetricsTailer,
     SignalForwarder,
@@ -147,7 +147,7 @@ def _detect_python_exe(run_cmd):
 
 def _create_experiment(vcs, storage, args):
     """Create the run's experiment record. Returns ``(app_name, verstr, err)``."""
-    import version_stamp.cli.experiment as cli
+    import vmn_exp.cli.experiment as cli
 
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
@@ -207,7 +207,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if err is not None:
         return err
 
-    import version_stamp.cli.experiment as cli
+    import vmn_exp.cli.experiment as cli
     cli._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
 
     # The mutating phase is over: everything below writes only inside this run's

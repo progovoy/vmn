@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.core.log import latest_metrics, load_log
-from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers.experiments import experiment_storage
-from version_stamp.ui.readers.snapshots import _load_metadata
+from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.experiments import experiment_storage
+from vmn_exp.ui.readers.snapshots import _load_metadata
 
 MAX_DIFF_BYTES = 2 * 1024 * 1024
 NO_BASE_COMMIT = "tree diff unavailable: {} has no base commit"

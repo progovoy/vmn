@@ -210,3 +210,49 @@ def test_worker_command_imports_new_path():
     assert "version_stamp.core.experiment_index_workers" not in cmd_str, (
         f"worker command still references old path version_stamp.core.experiment_index_workers: {cmd}"
     )
+
+
+def test_cli_experiment_old_path_gone():
+    """After h4: version_stamp.cli.experiment* must not be importable."""
+    old_names = [
+        "version_stamp.cli.experiment",
+        "version_stamp.cli.experiment_run",
+        "version_stamp.cli.experiment_prune",
+        "version_stamp.cli.experiment_prune_query",
+        "version_stamp.cli.experiment_manage",
+        "version_stamp.cli.experiment_supervisor",
+        "version_stamp.cli.experiment_inputs_arg",
+        "version_stamp.cli.experiment_provenance",
+        "version_stamp.cli.experiment_views",
+        "version_stamp.cli._builtin_exp_plugin",
+    ]
+    for old_name in old_names:
+        sys.modules.pop(old_name, None)
+        try:
+            mod = importlib.import_module(old_name)
+            raise AssertionError(
+                f"Expected {old_name!r} to be unimportable after h4 move, "
+                f"but got: {mod}"
+            )
+        except ModuleNotFoundError:
+            pass  # expected
+
+
+def test_ui_old_path_gone():
+    """After h5: version_stamp.ui must not be importable."""
+    old_names = [
+        "version_stamp.ui",
+        "version_stamp.ui.server",
+        "version_stamp.ui.cli",
+        "version_stamp.ui.readers",
+    ]
+    for old_name in old_names:
+        sys.modules.pop(old_name, None)
+        try:
+            mod = importlib.import_module(old_name)
+            raise AssertionError(
+                f"Expected {old_name!r} to be unimportable after h5 move, "
+                f"but got: {mod}"
+            )
+        except ModuleNotFoundError:
+            pass  # expected

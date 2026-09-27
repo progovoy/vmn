@@ -8,7 +8,7 @@ from moto import mock_aws
 from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
 from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.core.utils import parse_record_metadata, valid_path_component
-from version_stamp.ui.security import safe_segment
+from vmn_exp.ui.security import safe_segment
 
 GOOD = ["0.0.1-dev.abc.def", "1.0.0+build.1", "model.pt", "a.b", "r2"]
 BAD = ["", ".", "..", "../x", "a/b", "a\\b", "a..b", "x\0y"]

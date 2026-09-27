@@ -84,8 +84,8 @@ def _finished_state(exit_code):
 
 
 def _client(app_layout, use_index=True):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     # A data dir per client, so a test can hold both read paths open at once.
     manager = WorkspaceManager(
@@ -262,8 +262,8 @@ def _storage_page(app_layout, tmp_path, query):
     """The S3 workspace list pipeline: index snapshot, then the leaderboard memo."""
     from helpers import _storage
 
-    from version_stamp.ui.index import app_snapshot
-    from version_stamp.ui.leaderboard_cache import LeaderboardCache
+    from vmn_exp.ui.index import app_snapshot
+    from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
     snapshot = app_snapshot(
         _storage(app_layout), app_layout.app_name, str(tmp_path / "idx.sqlite")

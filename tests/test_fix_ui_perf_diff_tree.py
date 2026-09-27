@@ -8,11 +8,11 @@ pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
 from vmn_exp.snapshot import get_snapshot_storage
-from version_stamp.ui import tree_cache
-from version_stamp.ui.readers import diffs as diff_reader
-from version_stamp.ui.readers import tree as tree_reader
-from version_stamp.ui.server import create_app
-from version_stamp.ui.workspaces import WorkspaceManager
+from vmn_exp.ui import tree_cache
+from vmn_exp.ui.readers import diffs as diff_reader
+from vmn_exp.ui.readers import tree as tree_reader
+from vmn_exp.ui.server import create_app
+from vmn_exp.ui.workspaces import WorkspaceManager
 
 APP = "app"
 DIFF = f"/api/v1/workspaces/ws/apps/{APP}/experiments-diff"

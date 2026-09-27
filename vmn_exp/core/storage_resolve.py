@@ -1,7 +1,7 @@
 """Unified experiment storage resolution helper.
 
 Single source of truth for the resolution order shared by:
-- ``vmn exp``  (version_stamp.cli.experiment._get_experiment_storage)
+- ``vmn exp``  (vmn_exp.cli.experiment._get_experiment_storage)
 - ``vmn model`` (vmn_exp.registry.cli._get_storage)
 - ``vmn exp import-mlflow`` (vmn_exp.importers.cli._get_storage)
 - SDK (version_stamp.exp.models._resolve_storage)

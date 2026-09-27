@@ -2,7 +2,7 @@
 import threading
 import time
 
-from version_stamp.ui.memo import LRU
+from vmn_exp.ui.memo import LRU
 
 
 def _counting(value):

@@ -46,8 +46,8 @@ def _seed_experiments(app_layout, capfd, n=3):
 
 def _client(app_layout, token=None, extra_paths=None):
     """Build a TestClient over a WorkspaceManager with the fixture repo attached."""
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     data_dir = os.path.join(app_layout.base_dir, "ui_data")
     manager = WorkspaceManager(data_dir)
@@ -270,7 +270,7 @@ def test_ui_two_workspaces_same_remote_are_independent(app_layout, capfd):
 
 def test_ui_registry_persists(app_layout, capfd):
     """The workspace registry survives a manager restart (workspaces.yml)."""
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     _seed_experiments(app_layout, capfd, n=1)
     data_dir = os.path.join(app_layout.base_dir, "ui_data")

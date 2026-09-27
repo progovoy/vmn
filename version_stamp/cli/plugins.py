@@ -13,7 +13,7 @@ import logging
 
 _log = logging.getLogger(__name__)
 
-BUILTIN_PLUGINS: tuple = ("version_stamp.cli._builtin_exp_plugin",)
+BUILTIN_PLUGINS: tuple = ("vmn_exp.cli.plugin",)
 
 
 def load_builtin_plugins() -> None:

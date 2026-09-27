@@ -2,8 +2,8 @@
 thinning the whole series again."""
 import random
 
-from version_stamp.ui.readers import series as series_mod
-from version_stamp.ui.readers.series import SeriesThinner, downsample
+from vmn_exp.ui.readers import series as series_mod
+from vmn_exp.ui.readers.series import SeriesThinner, downsample
 
 
 def _points(n, seed=0):

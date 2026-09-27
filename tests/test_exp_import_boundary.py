@@ -2,7 +2,7 @@
 
 The SDK should be importable without dragging in git, rich, prompt_toolkit, jinja2,
 tomlkit, questionary, argcomplete, version_stamp.backends, version_stamp.stamping,
-version_stamp.cli.commands, or version_stamp.ui.
+version_stamp.cli.commands, or vmn_exp.ui.
 
 P0.1 from the roadmap: lazy ``version_stamp/cli/__init__.py``.
 """
@@ -31,7 +31,7 @@ _HEAVY_MODULES = [
     "version_stamp.cli.config_tui",
     "version_stamp.cli.entry",
     "version_stamp.cli.args",
-    "version_stamp.ui",
+    "vmn_exp.ui",
 ]
 
 _CHECK_SCRIPT = """\

@@ -13,8 +13,8 @@ from vmn_exp.core.log import (
     load_log,
     metric_series,
 )
-from version_stamp.ui.readers import parsed_logs
-from version_stamp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.ui.readers import parsed_logs
+from vmn_exp.ui.readers.parsed_logs import ParsedLogs
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -199,7 +199,7 @@ def test_a_custom_reader_is_honoured(storage):
 
 
 def test_a_grown_runs_series_are_thinned_incrementally(storage, monkeypatch):
-    from version_stamp.ui.readers import series as series_mod
+    from vmn_exp.ui.readers import series as series_mod
 
     cache = ParsedLogs()
     _append(storage, 1, 5_000)

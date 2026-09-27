@@ -9,7 +9,7 @@ import os
 import git
 
 from version_stamp.api import VMN_USER_NAME, group_commits
-from version_stamp.ui.readers.versions import list_versions
+from vmn_exp.ui.readers.versions import list_versions
 
 
 def _row_for(rows, verstr):

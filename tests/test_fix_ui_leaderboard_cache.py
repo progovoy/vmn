@@ -10,8 +10,8 @@ from vmn_exp.core import tree as tree_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.query import QueryError
-from version_stamp.ui import leaderboard_cache as lb
-from version_stamp.ui.readers import experiments as exp_reader
+from vmn_exp.ui import leaderboard_cache as lb
+from vmn_exp.ui.readers import experiments as exp_reader
 
 APP = "app"
 NOW = datetime.datetime.now(datetime.timezone.utc)

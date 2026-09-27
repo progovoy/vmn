@@ -132,7 +132,7 @@ def test_shared_index_is_keyed_by_an_explicit_cache_path(tmp_path):
 
 
 def test_one_leaderboard_pipeline_filters_orders_and_pages():
-    from version_stamp.ui.readers.experiments import leaderboard
+    from vmn_exp.ui.readers.experiments import leaderboard
 
     rows = [_row(0, 0.3), _row(1, 0.1), _row(2, 0.2)]
     page = leaderboard(rows, {}, {}, sort="loss", order="asc", offset=1, limit=1)
@@ -147,8 +147,8 @@ def test_one_leaderboard_pipeline_filters_orders_and_pages():
 
 def _client(tmp_path, use_index=True):
     root, storage = _storage(tmp_path)
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", root)
@@ -157,7 +157,7 @@ def _client(tmp_path, use_index=True):
 
 @pytest.mark.parametrize("use_index", [True, False])
 def test_unchanged_run_detail_and_log_pages_are_not_reparsed(tmp_path, monkeypatch, use_index):
-    from version_stamp.ui.readers import experiments as exp_reader
+    from vmn_exp.ui.readers import experiments as exp_reader
 
     client, storage = _client(tmp_path, use_index)
     _runs(storage, 1)
@@ -204,7 +204,7 @@ def test_version_query_params_are_validated(tmp_path, route):
 
 
 def test_a_storage_path_error_is_a_400(tmp_path, monkeypatch):
-    from version_stamp.ui.readers import experiments as exp_reader
+    from vmn_exp.ui.readers import experiments as exp_reader
 
     client, _ = _client(tmp_path)
 
@@ -227,7 +227,7 @@ def s3_ws(tmp_path):
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
     with moto.mock_aws():
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="vmn-bucket")
-        from version_stamp.ui.workspaces import WorkspaceManager
+        from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_s3("ws", bucket="vmn-bucket", prefix="exps")
@@ -235,7 +235,7 @@ def s3_ws(tmp_path):
 
 
 def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
-    from version_stamp.ui import server as server_mod
+    from vmn_exp.ui import server as server_mod
 
     built = []
     real = server_mod.get_snapshot_storage
@@ -257,7 +257,7 @@ def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):
     import tempfile
 
     from vmn_exp.snapshot import S3SnapshotStorage
-    from version_stamp.ui.server import create_app
+    from vmn_exp.ui.server import create_app
 
     storage = S3SnapshotStorage("vmn-bucket", prefix="exps")
     verstr = "1.0.0-dev.s3run"

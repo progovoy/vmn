@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
-from version_stamp.ui import leaderboard_cache as lb
-from version_stamp.ui import schema_cache
-from version_stamp.ui.readers import experiments as exp_reader
+from vmn_exp.ui import leaderboard_cache as lb
+from vmn_exp.ui import schema_cache
+from vmn_exp.ui.readers import experiments as exp_reader
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -28,8 +28,8 @@ def _app(tmp_path):
     (root / ".git").mkdir(parents=True, exist_ok=True)
     storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
 
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
@@ -122,7 +122,7 @@ def _synthetic_client(rows):
     does not fold ``archived`` yet: the rows carry it directly)."""
     from fastapi import FastAPI
 
-    from version_stamp.ui import routes_leaderboard
+    from vmn_exp.ui import routes_leaderboard
 
     snap = IndexSnapshot.build(APP, 1, rows, {})
     app = FastAPI()

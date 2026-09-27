@@ -11,7 +11,7 @@ import pytest
 import yaml
 from helpers import _bootstrap, _exp, _storage
 
-from version_stamp.cli.experiment_prune import experiment_prune
+from vmn_exp.cli.prune import experiment_prune
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core import status as st
 from version_stamp.core.logging import init_stamp_logger

@@ -61,7 +61,7 @@ def test_ui_defaults_parse():
 def test_ui_build_manager_from_args(app_layout, capfd):
     """--repo paths and S3 sources become workspaces; cwd repo is implicit."""
     from version_stamp.cli.args import parse_user_commands
-    from version_stamp.ui.cli import build_manager
+    from vmn_exp.ui.cli import build_manager
 
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -96,7 +96,7 @@ def test_ui_build_manager_from_args(app_layout, capfd):
 def test_ui_build_manager_cwd_repo(app_layout, capfd, monkeypatch):
     """Run inside a repo with no sources: the cwd repo is auto-attached."""
     from version_stamp.cli.args import parse_user_commands
-    from version_stamp.ui.cli import build_manager
+    from vmn_exp.ui.cli import build_manager
 
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -117,7 +117,7 @@ def test_ui_build_manager_cwd_repo(app_layout, capfd, monkeypatch):
 def test_ui_build_manager_idempotent(app_layout, capfd):
     """Re-running with the same sources doesn't duplicate workspaces."""
     from version_stamp.cli.args import parse_user_commands
-    from version_stamp.ui.cli import build_manager
+    from vmn_exp.ui.cli import build_manager
 
     _run_vmn_init()
     _init_app(app_layout.app_name)
@@ -144,7 +144,7 @@ def test_ui_build_manager_idempotent(app_layout, capfd):
 def _run_handle_ui(tmp_path, monkeypatch, extra):
     from version_stamp.cli.args import parse_user_commands
     from version_stamp.core.logging import init_stamp_logger, reset_logger
-    from version_stamp.ui.cli import handle_ui
+    from vmn_exp.ui.cli import handle_ui
 
     reset_logger()
     init_stamp_logger()

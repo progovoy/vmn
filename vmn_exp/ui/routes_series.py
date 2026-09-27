@@ -16,10 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, Request
 
-from version_stamp.ui.readers import experiment_detail as detail_reader
-from version_stamp.ui.readers import series as series_reader
-from version_stamp.ui.responses import json_response
-from version_stamp.ui.security import safe_segment
+from vmn_exp.ui.readers import experiment_detail as detail_reader
+from vmn_exp.ui.readers import series as series_reader
+from vmn_exp.ui.responses import json_response
+from vmn_exp.ui.security import safe_segment
 
 MAX_RUNS = 200
 WORKERS = 8

@@ -13,11 +13,11 @@ import os
 import threading
 
 from vmn_exp.core.status import run_state_observed_at
-from version_stamp.ui import index as ui_index
-from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers import experiments as exp_reader
-from version_stamp.ui.refresher import InlineRefresher
-from version_stamp.ui.schema_cache import MetricsSchemaCache
+from vmn_exp.ui import index as ui_index
+from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.refresher import InlineRefresher
+from vmn_exp.ui.schema_cache import MetricsSchemaCache
 
 
 def _state_reader(run_states):

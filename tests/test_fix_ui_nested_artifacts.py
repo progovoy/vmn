@@ -21,8 +21,8 @@ def client(tmp_path):
     src.write_bytes(b"nested bytes")
     storage.save_artifact_file(APP, V, str(src), name="a/b/c.txt")
 
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

@@ -128,7 +128,7 @@ def test_exp_list_serves_appended_metrics_from_the_index(app_layout, capfd, log_
 
 
 def test_workspace_index_folds_an_append_without_reloading_logs(app_layout, log_reads, tmp_path):
-    from version_stamp.ui.index import WorkspaceIndex
+    from vmn_exp.ui.index import WorkspaceIndex
 
     _bootstrap(app_layout)
     first = _create(app_layout, "--metrics", "loss=0.4")
@@ -151,7 +151,7 @@ def test_s3_workspace_listing_is_cached_across_requests(monkeypatch, tmp_path):
     import boto3
 
     from vmn_exp.snapshot import S3SnapshotStorage
-    from version_stamp.ui.index import app_snapshot
+    from vmn_exp.ui.index import app_snapshot
 
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")

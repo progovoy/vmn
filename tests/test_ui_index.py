@@ -35,7 +35,7 @@ def _seed(app_layout, capfd, n=2):
 
 
 def _index(app_layout):
-    from version_stamp.ui.index import WorkspaceIndex
+    from vmn_exp.ui.index import WorkspaceIndex
 
     db_dir = os.path.join(app_layout.base_dir, "ui_data", "index")
     return WorkspaceIndex(app_layout.repo_path, db_dir=db_dir)
@@ -46,8 +46,8 @@ def _rows(idx, app_layout):
 
 
 def _clients(app_layout):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
@@ -101,7 +101,7 @@ def test_index_invalidates_on_new_experiment(app_layout, capfd):
 
 
 def test_index_versions_parity_and_invalidation(app_layout, capfd):
-    from version_stamp.ui.readers import versions as ver_reader
+    from vmn_exp.ui.readers import versions as ver_reader
 
     _seed(app_layout, capfd, n=1)
     idx = _index(app_layout)

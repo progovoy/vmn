@@ -9,9 +9,9 @@ pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
 from vmn_exp.snapshot import CachedSnapshotStorage, get_snapshot_storage
-from version_stamp.ui import server as server_mod
-from version_stamp.ui.server import create_app
-from version_stamp.ui.workspaces import WorkspaceManager
+from vmn_exp.ui import server as server_mod
+from vmn_exp.ui.server import create_app
+from vmn_exp.ui.workspaces import WorkspaceManager
 
 APP = "app"
 V = "1.0.0-dev.a"

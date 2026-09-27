@@ -2,7 +2,7 @@
 import sys
 import time
 
-from version_stamp.ui.jobs import MAX_JOB_LOG_BYTES, JobRunner
+from vmn_exp.ui.jobs import MAX_JOB_LOG_BYTES, JobRunner
 
 
 def _wait(runner, job_id, timeout=30):

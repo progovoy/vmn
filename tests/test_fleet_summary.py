@@ -13,7 +13,7 @@ from vmn_exp.core.status import (
     SUCCEEDED,
 )
 from vmn_exp.core.tree import fleet_summary
-from version_stamp.ui.readers.experiment_detail import _DETAIL_STATUS_KEYS
+from vmn_exp.ui.readers.experiment_detail import _DETAIL_STATUS_KEYS
 
 
 def _iso(dt):

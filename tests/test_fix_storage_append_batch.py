@@ -6,7 +6,7 @@ import pytest
 from s3_helpers import meta, mocked_bucket, record_calls, s3_storage
 
 from vmn_exp.storage import local as snapshot_storage_local
-from version_stamp.cli.experiment import _get_experiment_storage
+from vmn_exp.cli.experiment import _get_experiment_storage
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.core.logfiles import log_object_name
 from version_stamp.core.logging import init_stamp_logger

@@ -14,8 +14,8 @@ API = "/api/v1/workspaces/main/apps"
 
 
 def _client(app_layout, use_index=True):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
@@ -54,7 +54,7 @@ def test_detail_trusts_a_fresh_store_write(app_layout, use_index):
 
 def test_leaderboard_rederive_keeps_using_the_store_time(app_layout, monkeypatch):
     """A later time bucket re-derives live rows: still with the store time."""
-    from version_stamp.ui import leaderboard_cache
+    from vmn_exp.ui import leaderboard_cache
 
     expected = _seed(app_layout)
     client = _client(app_layout)
@@ -65,12 +65,12 @@ def test_leaderboard_rederive_keeps_using_the_store_time(app_layout, monkeypatch
 
 def test_detail_uses_the_snapshot_store_time_with_a_refresher():
     from vmn_exp.core.index_snapshot import IndexSnapshot
-    from version_stamp.ui.experiment_source import ExperimentSource
+    from vmn_exp.ui.experiment_source import ExperimentSource
 
     observed = object()
     snap = IndexSnapshot.build("app", 1, [{"verstr": "v"}], {"v": {}},
                                observed_at={"v": observed})
-    from version_stamp.ui.refresher import Refresher
+    from vmn_exp.ui.refresher import Refresher
 
     source = ExperimentSource("/nonexistent", refresher=Refresher())
     options = source.detail_options(None, snap)

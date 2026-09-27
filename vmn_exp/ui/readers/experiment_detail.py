@@ -7,7 +7,7 @@ log or with the workspace: the log is returned as a tail (the rest is paged via
 patch presence comes from the metadata flags instead of the tarball, and the
 run tree is answered from an index snapshot's parent edges. The parsed
 log is reused across polls and log pages, and a grown local log costs only its
-new bytes (:mod:`~version_stamp.ui.readers.parsed_logs`).
+new bytes (:mod:`~vmn_exp.ui.readers.parsed_logs`).
 """
 from collections import ChainMap
 
@@ -24,10 +24,10 @@ from vmn_exp.core.status import (
     status_fields,
 )
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
-from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
-from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
-from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
+from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
+from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
+from vmn_exp.ui.readers.snapshots import _load_metadata, _patch_presence
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 

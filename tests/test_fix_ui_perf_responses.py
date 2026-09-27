@@ -11,8 +11,8 @@ from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from vmn_exp.snapshot import get_snapshot_storage
-from version_stamp.ui import responses
-from version_stamp.ui.responses import SafeJSONResponse, json_response
+from vmn_exp.ui import responses
+from vmn_exp.ui.responses import SafeJSONResponse, json_response
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -121,8 +121,8 @@ def ws(tmp_path):
              "values": {"loss": float("nan") if i == 3 else i / 10}},
         )
 
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

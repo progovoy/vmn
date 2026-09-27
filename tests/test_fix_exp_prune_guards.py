@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from version_stamp.cli.experiment_prune import experiment_prune
+from vmn_exp.cli.prune import experiment_prune
 from version_stamp.core.logging import init_stamp_logger
 
 

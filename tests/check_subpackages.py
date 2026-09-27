@@ -31,14 +31,14 @@ for dirpath, _dirnames, filenames in os.walk(PKG_ROOT):
         )
 
 # package_data is easy to declare and easy to forget; verify it landed.
-import version_stamp.ui  # noqa: E402
+import vmn_exp.ui  # noqa: E402
 
-installed_static = os.path.join(os.path.dirname(version_stamp.ui.__file__), "static")
-source_static = os.path.join(PKG_ROOT, "ui", "static")
+installed_static = os.path.join(os.path.dirname(vmn_exp.ui.__file__), "static")
+source_static = os.path.join(SRC_ROOT, "vmn_exp", "ui", "static")
 if os.path.isdir(source_static) and os.listdir(source_static):
     if not os.path.isdir(installed_static) or not os.listdir(installed_static):
         problems.append(
-            "version_stamp/ui/static: package_data missing from the install"
+            "vmn_exp/ui/static: package_data missing from the install"
         )
 
 if problems:

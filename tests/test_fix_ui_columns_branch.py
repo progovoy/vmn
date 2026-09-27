@@ -1,6 +1,6 @@
 """``.../experiments-columns`` serves ``branch``: the leaderboard's grouped
 chart groups every filtered run by it."""
-from version_stamp.ui.leaderboard_columns import column_getter, columns_payload
+from vmn_exp.ui.leaderboard_columns import column_getter, columns_payload
 
 
 def test_branch_is_a_column():

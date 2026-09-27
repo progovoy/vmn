@@ -5,7 +5,7 @@ non-ASCII metrics line made the next poll land mid-character and raise
 UnicodeDecodeError, killing the supervisor while the child ran on unsupervised.
 """
 
-from version_stamp.cli.experiment import _MetricsTailer
+from vmn_exp.cli.experiment import _MetricsTailer
 
 
 def _append(path, data):

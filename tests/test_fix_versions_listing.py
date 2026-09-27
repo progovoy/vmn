@@ -5,7 +5,7 @@ import time
 import git
 import yaml
 
-from version_stamp.ui.readers import versions as ver_reader
+from vmn_exp.ui.readers import versions as ver_reader
 from helpers import _init_app, _run_vmn_init, _stamp_app
 
 

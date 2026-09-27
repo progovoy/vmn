@@ -15,9 +15,9 @@ from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
 from version_stamp.api import tag_name_to_app_name
-from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
-from version_stamp.ui.readers.experiment_detail import experiment_detail
-from version_stamp.ui.readers.versions import version_counts
+from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
+from vmn_exp.ui.readers.experiment_detail import experiment_detail
+from vmn_exp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):

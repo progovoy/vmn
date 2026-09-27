@@ -17,7 +17,7 @@ import yaml
 # Still upward, and deliberately so: the storage factory and the snapshot
 # record builders live in version_stamp/cli. Lifting exp/ into its own
 # distribution needs these to move into core next.
-from version_stamp.cli.experiment import _get_experiment_storage
+from vmn_exp.cli.experiment import _get_experiment_storage
 from vmn_exp.snapshot import _build_snapshot_metadata, _format_dev_verstr
 from vmn_exp.core.env import (
     CAPTURE_ENV_ENV,

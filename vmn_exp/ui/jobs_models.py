@@ -1,6 +1,6 @@
 """Validation helpers for model registry mutations.
 
-Analogous to :mod:`version_stamp.ui.jobs_exp_meta`.  Mutations are executed
+Analogous to :mod:`vmn_exp.ui.jobs_exp_meta`.  Mutations are executed
 in-process (the registry is git-free and needs no repo lock) rather than as
 CLI subprocesses.
 """

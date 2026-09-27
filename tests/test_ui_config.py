@@ -14,8 +14,8 @@ from helpers import (
 
 
 def _client(app_layout):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
@@ -23,7 +23,7 @@ def _client(app_layout):
 
 
 def test_read_app_conf_missing_is_empty():
-    from version_stamp.ui.readers.config import read_app_conf
+    from vmn_exp.ui.readers.config import read_app_conf
 
     assert read_app_conf("/nonexistent", "nope") == {}
 

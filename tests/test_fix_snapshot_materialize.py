@@ -8,7 +8,7 @@ import yaml
 from vmn_exp import snapshot as snap
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.snapshot import LocalSnapshotStorage
-from version_stamp.ui.readers import snapshots as snap_reader
+from vmn_exp.ui.readers import snapshots as snap_reader
 from helpers import _init_app, _run_vmn_init, _snapshot, _stamp_app, extract_dev_verstr
 
 UNREACHABLE_REMOTE = "https://127.0.0.1:9/no/such/repo.git"

@@ -95,7 +95,7 @@ def _args(**kwargs):
 # ===========================================================================
 
 def test_show_prints_env_line():
-    from version_stamp.cli.experiment_provenance import format_env_oneliner
+    from vmn_exp.cli.provenance import format_env_oneliner
 
     summary = _summary(
         key_packages={"torch": "2.2.1"},
@@ -112,7 +112,7 @@ def test_show_prints_env_line():
 # ===========================================================================
 
 def test_show_prints_inputs():
-    from version_stamp.cli.experiment_provenance import format_inputs_lines
+    from vmn_exp.cli.provenance import format_inputs_lines
 
     inputs = {
         "train": {

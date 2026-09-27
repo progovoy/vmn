@@ -10,7 +10,7 @@ export default defineConfig({
     globals: true,
   },
   build: {
-    outDir: "../version_stamp/ui/static",
+    outDir: "../vmn_exp/ui/static",
     emptyOutDir: true,
     // Name chunks after themselves, not their content hash. The bundle is
     // committed, and a hash cascades: one edit rewrites every chunk importing

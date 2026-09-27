@@ -8,9 +8,9 @@ cheap, so the parsed schema is kept per app until the file's
 """
 import os
 
-from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers import experiments as exp_reader
-from version_stamp.ui.readers.config import _conf_relpath
+from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.readers.config import _conf_relpath
 
 
 def _signature(path):

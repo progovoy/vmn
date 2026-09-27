@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from version_stamp.cli import experiment_supervisor as supervisor
-from version_stamp.cli.experiment_supervisor import BackgroundSync
+from vmn_exp.cli.supervisor import BackgroundSync
 
 
 @pytest.fixture

@@ -22,10 +22,10 @@ import pytest
 # Special: "vmn_exp.snapshot" also matches "version_stamp.cli.snapshot_*".
 EXPERIMENTS_GLOBS = (
     "version_stamp.exp",              # exp package and all submodules
-    "version_stamp.ui",               # ui package and all submodules
+    "vmn_exp.ui",               # ui package and all submodules
     "vmn_exp.snapshot",     # cli/snapshot.py + cli/snapshot_storage*.py
-    "version_stamp.cli.experiment",   # cli/experiment.py + cli/experiment_*.py
-    "version_stamp.cli._builtin_exp_plugin",  # temporary plugin; moves to vmn_exp in step h4
+    "vmn_exp.cli.experiment",   # cli/experiment.py + cli/experiment_*.py
+    "vmn_exp.cli.plugin",  # temporary plugin; moves to vmn_exp in step h4
     "version_stamp.core.experiment_", # core/experiment_*.py (trailing _ = prefix match)
     "vmn_exp.core.jsonl_tail",
     "vmn_exp.core.background",
@@ -233,9 +233,9 @@ def test_stamping_core_does_not_load_experiments() -> None:
         import version_stamp.backends
         exp_mods = [m for m in sys.modules if (
             m.startswith("version_stamp.exp")
-            or m.startswith("version_stamp.ui")
+            or m.startswith("vmn_exp.ui")
             or m.startswith("vmn_exp.snapshot")
-            or m.startswith("version_stamp.cli.experiment")
+            or m.startswith("vmn_exp.cli.experiment")
             or (m.startswith("version_stamp.core.experiment_"))
             or m in {
                 "vmn_exp.core.jsonl_tail",

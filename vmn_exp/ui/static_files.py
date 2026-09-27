@@ -14,7 +14,7 @@ import os
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from version_stamp.ui.security import within
+from vmn_exp.ui.security import within
 
 REVALIDATE = "no-cache"
 

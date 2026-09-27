@@ -5,7 +5,7 @@ import os
 import git
 import yaml
 
-from version_stamp.ui.readers.versions import list_versions
+from vmn_exp.ui.readers.versions import list_versions
 
 
 def _conf_relpath(app_name):

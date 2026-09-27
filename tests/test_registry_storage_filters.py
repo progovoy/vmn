@@ -10,7 +10,7 @@ from vmn_exp.snapshot import (
     get_snapshot_storage,
 )
 from version_stamp.exp.reader import _apps_with_experiments
-from version_stamp.ui.readers.experiments import list_apps, list_apps_from_storage
+from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
 
 BUCKET = "vmn-test-bucket"
 PREFIX = "exps"

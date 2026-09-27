@@ -19,8 +19,8 @@ API = "/api/v1/workspaces/main/apps"
 
 
 def _client(app_layout, use_index=True):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceError, WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceError, WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     try:

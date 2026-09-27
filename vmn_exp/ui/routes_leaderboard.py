@@ -3,7 +3,7 @@
 (whole-set chart data) and ``.../experiments-facets``.
 
 Both answer from the app's current index snapshot through a
-:class:`~version_stamp.ui.leaderboard_cache.LeaderboardCache`, so a poll costs
+:class:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache`, so a poll costs
 a page slice. The list's ``ETag`` is known before any row is touched (index
 generation, parameters, and the time bucket while runs are live): a client
 repeating it gets an empty ``304`` without the payload ever being built.
@@ -13,9 +13,9 @@ Archived rows are left out of all three unless the request passes
 from fastapi import HTTPException, Request
 
 from vmn_exp.core.query import QueryError
-from version_stamp.ui.http_params import clamp_page, key_list
-from version_stamp.ui.readers.experiments import ORDERS
-from version_stamp.ui.responses import json_response, not_modified
+from vmn_exp.ui.http_params import clamp_page, key_list
+from vmn_exp.ui.readers.experiments import ORDERS
+from vmn_exp.ui.responses import json_response, not_modified
 
 
 def register(app, api_prefix, inputs, cache):

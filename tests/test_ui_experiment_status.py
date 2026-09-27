@@ -103,8 +103,8 @@ def _finished_state(exit_code):
 
 
 def _client(app_layout, use_index=True):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
@@ -112,7 +112,7 @@ def _client(app_layout, use_index=True):
 
 
 def _index(app_layout):
-    from version_stamp.ui.index import WorkspaceIndex
+    from vmn_exp.ui.index import WorkspaceIndex
 
     return WorkspaceIndex(
         app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index")
@@ -121,7 +121,7 @@ def _index(app_layout):
 
 def _indexed_list(idx, app_layout):
     """The leaderboard over the workspace index's current snapshot."""
-    from version_stamp.ui.readers import experiments as exp_reader
+    from vmn_exp.ui.readers import experiments as exp_reader
 
     snap = idx.snapshot(app_layout.app_name)
     rows = [dict(row) for row in snap.rows]  # status is written onto the rows
@@ -382,7 +382,7 @@ def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
 
 def test_detail_status_only_reads_its_own_subtree(app_layout, monkeypatch):
     """A run-detail read must not scan the whole workspace for its status."""
-    from version_stamp.ui.readers import experiments as exp_reader
+    from vmn_exp.ui.readers import experiments as exp_reader
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     _write_experiment(
@@ -474,8 +474,8 @@ def test_existing_list_row_keys_are_unchanged(app_layout):
 
 def test_indexed_and_direct_rows_agree(app_layout):
     _seed_all_statuses(app_layout)
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)

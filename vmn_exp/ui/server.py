@@ -4,7 +4,7 @@
 Reads go straight to the vmn library (lock-free); the SPA is served from
 ``static/`` when present. App names in URLs use vmn's dashed tag form
 (``root_app/svc`` → ``root_app-svc``), which is bijective because ``-`` is
-illegal in app names. Request hardening lives in :mod:`version_stamp.ui.security`.
+illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`.
 """
 import os
 
@@ -13,28 +13,28 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.storage.files import valid_artifact_path
-from version_stamp.ui import routes_leaderboard, routes_models, routes_series, routes_tree
-from version_stamp.ui.experiment_source import ExperimentSource
-from version_stamp.ui.http_params import attachment, clamp_page, key_list
-from version_stamp.ui.leaderboard_cache import LeaderboardCache
-from version_stamp.ui.memo import TTLCache
-from version_stamp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
-from version_stamp.ui.readers import changelog as changelog_reader
-from version_stamp.ui.readers import config as config_reader
-from version_stamp.ui.readers import diffs as diff_reader
-from version_stamp.ui.readers import experiment_detail as detail_reader
-from version_stamp.ui.readers import experiments as exp_reader
-from version_stamp.ui.readers import snapshots as snap_reader
-from version_stamp.ui.refresher import InlineRefresher, Refresher
-from version_stamp.ui.responses import (
+from vmn_exp.ui import routes_leaderboard, routes_models, routes_series, routes_tree
+from vmn_exp.ui.experiment_source import ExperimentSource
+from vmn_exp.ui.http_params import attachment, clamp_page, key_list
+from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+from vmn_exp.ui.memo import TTLCache
+from vmn_exp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
+from vmn_exp.ui.readers import changelog as changelog_reader
+from vmn_exp.ui.readers import config as config_reader
+from vmn_exp.ui.readers import diffs as diff_reader
+from vmn_exp.ui.readers import experiment_detail as detail_reader
+from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.readers import snapshots as snap_reader
+from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.responses import (
     GZIP_LEVEL,
     GZIP_MIN_BYTES,
     SafeJSONResponse,
     json_response,
 )
-from version_stamp.ui.security import RequestGuard, safe_app_name, safe_segment
-from version_stamp.ui.static_files import mount_static
-from version_stamp.ui.workspaces import WorkspaceError
+from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.static_files import mount_static
+from vmn_exp.ui.workspaces import WorkspaceError
 
 API_PREFIX = "/api/v1"
 # A chart's worth of points per metric, however much a client asks for.
@@ -57,7 +57,7 @@ def create_app(
     the latest snapshot at once, up to about a second behind storage;
     without it each request refreshes the index first, seeing every write
     made before it."""
-    from version_stamp.ui.jobs import JobRunner, build_command
+    from vmn_exp.ui.jobs import JobRunner, build_command
 
     app = FastAPI(
         title="vmn ui",

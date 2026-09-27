@@ -11,8 +11,8 @@ import pytest
 from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
-from version_stamp.ui import leaderboard_cache as lb
-from version_stamp.ui.readers import experiments as exp_reader
+from vmn_exp.ui import leaderboard_cache as lb
+from vmn_exp.ui.readers import experiments as exp_reader
 
 APP = "app"
 T0 = datetime.datetime(2026, 3, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)

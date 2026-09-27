@@ -14,7 +14,7 @@ import threading
 import uuid
 from collections import OrderedDict
 
-from version_stamp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
+from vmn_exp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
 
 # Substrings a successful job's log can carry to mean "ran fine, but there
 # was nothing to do" - distinct from actually producing the thing the action

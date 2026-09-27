@@ -42,7 +42,7 @@ def test_tag_run_reaches_the_remote_with_no_heartbeat(tmp_path):
 def test_create_metrics_flush_reaches_the_remote_with_no_heartbeat(tmp_path):
     """``vmn exp create --metrics``: the metrics entry is logged before any
     run ever starts, so its caller must flush it itself (see
-    ``experiment_create`` in ``version_stamp.cli.experiment``)."""
+    ``experiment_create`` in ``vmn_exp.cli.experiment``)."""
     host = cached_host(tmp_path, "a")
     host.save("app", "v1", meta("v1"), {})
 

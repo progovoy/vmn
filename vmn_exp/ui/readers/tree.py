@@ -5,7 +5,7 @@ Shapes the raw tag rows from ``readers.versions`` into the structures the UI
 draws. All reads are cheap local git operations.
 """
 from version_stamp.api import get_base_vmn_version
-from version_stamp.ui.readers.versions import list_versions
+from vmn_exp.ui.readers.versions import list_versions
 
 
 def _base_version(verstr):

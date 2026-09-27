@@ -340,12 +340,12 @@ def _handle_snapshot(vmn_ctx):
 
 
 def _handle_experiment(vmn_ctx):
-    from version_stamp.cli.experiment import handle_experiment
+    from vmn_exp.cli.experiment import handle_experiment
     return handle_experiment(vmn_ctx)
 
 
 def _handle_ui(vmn_ctx):
-    from version_stamp.ui.cli import handle_ui
+    from vmn_exp.ui.cli import handle_ui
     return handle_ui(vmn_ctx.args)
 
 
@@ -374,7 +374,7 @@ def _exp_run_without_repo(args):
     if args.command not in ("experiment", "exp") or not from_snapshot:
         return None
 
-    from version_stamp.cli.experiment import (
+    from vmn_exp.cli.experiment import (
         _get_experiment_storage,
         experiment_add,
         experiment_compare,

@@ -11,9 +11,9 @@ from moto import mock_aws
 from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
 from vmn_exp.core.index import direct_rows
 from version_stamp.core.logging import init_stamp_logger
-from version_stamp.ui.index import app_snapshot
-from version_stamp.ui.readers import diffs as diff_reader
-from version_stamp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.index import app_snapshot
+from vmn_exp.ui.readers import diffs as diff_reader
+from vmn_exp.ui.readers import experiments as exp_reader
 
 
 @pytest.fixture(autouse=True)

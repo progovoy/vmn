@@ -4,8 +4,8 @@ import os
 
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.storage.files import INDEX_CACHE_FILE
-from version_stamp.ui.experiment_source import ExperimentSource
-from version_stamp.ui.workspaces import Workspace
+from vmn_exp.ui.experiment_source import ExperimentSource
+from vmn_exp.ui.workspaces import Workspace
 
 APP = "app"
 

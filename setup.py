@@ -57,19 +57,20 @@ setuptools.setup(
         "version_stamp.cli",
         "version_stamp.devversion",
         "version_stamp.exp",
-        "version_stamp.ui",
-        "version_stamp.ui.readers",
         "version_stamp._moved",
         "vmn_exp",
+        "vmn_exp.cli",
         "vmn_exp.core",
         "vmn_exp.importers",
         "vmn_exp.integrations",
         "vmn_exp.registry",
         "vmn_exp.snapshot",
         "vmn_exp.storage",
+        "vmn_exp.ui",
+        "vmn_exp.ui.readers",
     ],
     package_data={
-        "version_stamp.ui": ["static/*", "static/assets/*"],
+        "vmn_exp.ui": ["static/*", "static/assets/*"],
     },
     entry_points={
         "console_scripts": [

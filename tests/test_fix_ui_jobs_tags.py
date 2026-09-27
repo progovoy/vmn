@@ -1,7 +1,7 @@
 """ui job actions for run tags and archiving: argv shape and strict input checks."""
 import pytest
 
-from version_stamp.ui.jobs import build_command
+from vmn_exp.ui.jobs import build_command
 
 V1 = "0.0.1-dev.abc.def"
 V2 = "0.0.2-dev.abc.def"

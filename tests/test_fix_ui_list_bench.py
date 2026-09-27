@@ -12,7 +12,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage
-from version_stamp.ui import leaderboard_cache
+from vmn_exp.ui import leaderboard_cache
 
 APP = "app"
 RUNS = 5000
@@ -69,8 +69,8 @@ def pipeline(monkeypatch):
 
 
 def test_warm_list_polls_do_no_per_record_work(tmp_path, listed, pipeline):
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)

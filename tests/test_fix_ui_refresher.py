@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from version_stamp.ui.refresher import Refresher
+from vmn_exp.ui.refresher import Refresher
 
 
 class FakeIndex:
@@ -115,7 +115,7 @@ class StaleIndex(FakeIndex):
 
 
 def test_inline_refresher_refreshes_before_every_snapshot():
-    from version_stamp.ui.refresher import InlineRefresher
+    from vmn_exp.ui.refresher import InlineRefresher
 
     index = StaleIndex()
     inline = InlineRefresher()
@@ -125,7 +125,7 @@ def test_inline_refresher_refreshes_before_every_snapshot():
 
 
 def test_inline_refresher_keeps_the_full_sweep_default():
-    from version_stamp.ui.refresher import InlineRefresher
+    from vmn_exp.ui.refresher import InlineRefresher
 
     assert InlineRefresher().full_sweep_sec is None
     assert Refresher().full_sweep_sec == 30
@@ -133,9 +133,9 @@ def test_inline_refresher_keeps_the_full_sweep_default():
 
 def test_create_app_refreshes_inline_unless_asked_otherwise(tmp_path):
     pytest.importorskip("fastapi")
-    from version_stamp.ui.refresher import InlineRefresher
-    from version_stamp.ui.server import create_app
-    from version_stamp.ui.workspaces import WorkspaceManager
+    from vmn_exp.ui.refresher import InlineRefresher
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
 
     app = create_app(WorkspaceManager(str(tmp_path / "data")))
     assert isinstance(app.state.refresher, InlineRefresher)

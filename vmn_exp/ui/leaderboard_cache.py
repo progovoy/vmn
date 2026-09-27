@@ -11,7 +11,7 @@ heartbeat turns ``running`` into ``stuck``). Finished and never-run rows get
 their status once per snapshot, and each ordering of them is sorted once.
 Per ``bucket_sec`` time bucket only the live rows are re-derived, their
 ancestors' ``tree_status`` rolled up again, and those few rows re-filtered
-and bisected into the cached order (:mod:`~version_stamp.ui.leaderboard_live`)
+and bisected into the cached order (:mod:`~vmn_exp.ui.leaderboard_live`)
 — O(live · log N), never a full sort. Only ``last`` (a storage-order window
 taken after filtering) still re-runs the whole pipeline per bucket.
 Rows handed out are shared: callers must treat them as read-only.
@@ -26,12 +26,12 @@ import vmn_exp.core.status as experiment_status
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
-from version_stamp.ui.http_params import MAX_PAGE
-from version_stamp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
-from version_stamp.ui.leaderboard_live import LivePatch, MergedRows, order_key
-from version_stamp.ui.memo import LRU
-from version_stamp.ui.readers.experiments import _DESCENDING as DESCENDING
-from version_stamp.ui.readers.experiments import apply_filters, facets, sort_rows
+from vmn_exp.ui.http_params import MAX_PAGE
+from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
+from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, order_key
+from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
+from vmn_exp.ui.readers.experiments import apply_filters, facets, sort_rows
 
 BUCKET_SEC = 2
 # Tokens are per process, so an ETag from before a restart never matches.

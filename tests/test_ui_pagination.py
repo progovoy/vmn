@@ -1,6 +1,6 @@
 """Tests for experiment list pagination."""
 import pytest
-from version_stamp.ui.readers.experiments import sort_rows
+from vmn_exp.ui.readers.experiments import sort_rows
 
 
 def _make_rows(n):

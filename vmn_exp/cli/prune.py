@@ -18,7 +18,7 @@ of the list:
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.cli.experiment_prune_query import print_preview, query_candidates
+from vmn_exp.cli.prune_query import print_preview, query_candidates
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment

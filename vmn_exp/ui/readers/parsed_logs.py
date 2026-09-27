@@ -26,7 +26,7 @@ from vmn_exp.core.fold import (
 from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
-from version_stamp.ui.readers.series import SeriesThinner
+from vmn_exp.ui.readers.series import SeriesThinner
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_MAX_ENTRIES = 128

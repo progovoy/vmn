@@ -17,10 +17,10 @@ import sqlite3
 import threading
 
 import vmn_exp.core.index as experiment_index
-from version_stamp.ui.readers import experiments as exp_reader
-from version_stamp.ui.readers import versions as ver_reader
-from version_stamp.ui.refresher import InlineRefresher
-from version_stamp.ui.tree_cache import versions_fingerprint
+from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.readers import versions as ver_reader
+from vmn_exp.ui.refresher import InlineRefresher
+from vmn_exp.ui.tree_cache import versions_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
 _INLINE = InlineRefresher()
@@ -29,9 +29,9 @@ _INLINE = InlineRefresher()
 def app_snapshot(storage, app_name, cache_path, refresher=_INLINE):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
-    A :class:`~version_stamp.ui.refresher.Refresher` keeps the index fresh in
+    A :class:`~vmn_exp.ui.refresher.Refresher` keeps the index fresh in
     the background and this returns at once; the default
-    :class:`~version_stamp.ui.refresher.InlineRefresher` refreshes it first,
+    :class:`~vmn_exp.ui.refresher.InlineRefresher` refreshes it first,
     so a request sees every write before it. Falls back to a direct read when
     the index fails.
     """

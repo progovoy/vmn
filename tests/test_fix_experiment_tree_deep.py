@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from vmn_exp.core import status as st
 from vmn_exp.core.tree import annotate_tree, subtree_status
-from version_stamp.ui.readers import experiment_detail
+from vmn_exp.ui.readers import experiment_detail
 
 DEPTH = 5000
 

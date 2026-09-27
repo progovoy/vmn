@@ -89,7 +89,7 @@ def test_the_wheel_ships_every_subpackage(wheel_path):
     with zipfile.ZipFile(wheel_path) as zf:
         names = set(zf.namelist())
 
-    for package in ("version_stamp/exp", "version_stamp/ui", "version_stamp/ui/readers"):
+    for package in ("version_stamp/exp", "vmn_exp/ui", "vmn_exp/ui/readers"):
         assert f"{package}/__init__.py" in names, f"{package} is not in the wheel"
 
 
@@ -137,7 +137,7 @@ def test_the_ui_extra_installs_its_dependencies(installed_venv, tmp_path):
     proc = _in_venv(
         python,
         "import fastapi, uvicorn\n"
-        "from version_stamp.ui.server import create_app\n"
+        "from vmn_exp.ui.server import create_app\n"
         "assert create_app\n"
         "print('ok')\n",
         cwd=str(tmp_path),
