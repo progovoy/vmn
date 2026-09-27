@@ -8,25 +8,34 @@ bumps it; vmn's writes are all atomic renames), so a record whose ``(mtime,
 inode)`` has not moved since it was last scanned holds the same files: they
 are just stat-ed again, which still catches an in-place append.
 
-A scan is only trusted once the directory's mtime is ``_SETTLED_NS`` older
-than the scan: a filesystem with coarse timestamps can stamp a change right
-after the scan with the very mtime it saw. A file gone behind an unchanged
+A scan is only trusted once the directory's mtime is older than the scan by
+the filesystem's timestamp granularity: one with coarse timestamps can stamp a
+change right after the scan with the very mtime it saw. A whole-second mtime
+waits ``_COARSE_SETTLED_NS``; one with sub-second digits comes from a finer
+filesystem (whose clock may still tick every few ms) and waits
+``_FINE_SETTLED_NS``. A file gone behind an unchanged
 signature, or no longer a regular file, sends the record back to a scan.
 """
 import os
 import stat
 import time
 
-_SETTLED_NS = 2 * 10**9  # FAT's mtime granularity; ext4/APFS/NFS are finer
+_COARSE_SETTLED_NS = 2 * 10**9  # FAT's mtime granularity
+_FINE_SETTLED_NS = 10**8  # well past exFAT's 10ms and a coarse kernel clock tick
 
 
 def files_in(path):
     """``{filename: (size, mtime_ns)}`` of the regular, non-hidden files in *path*."""
-    return {
-        f.name: (f.stat().st_size, f.stat().st_mtime_ns)
-        for f in os.scandir(path)
-        if f.is_file() and not f.name.startswith(".")
-    }
+    files = {}
+    for f in os.scandir(path):
+        if f.is_file() and not f.name.startswith("."):
+            st = f.stat()
+            files[f.name] = (st.st_size, st.st_mtime_ns)
+    return files
+
+
+def _settle_ns(mtime_ns):
+    return _FINE_SETTLED_NS if mtime_ns % 10**9 else _COARSE_SETTLED_NS
 
 
 def _stat_again(path, names):
@@ -73,7 +82,7 @@ class RecordListings:
         if files is None:
             scanned_at = time.time_ns()
             files = files_in(entry.path)
-            if st.st_mtime_ns > scanned_at - _SETTLED_NS:
+            if st.st_mtime_ns > scanned_at - _settle_ns(st.st_mtime_ns):
                 return files
         settled[entry.path] = (sig, list(files))
         return files

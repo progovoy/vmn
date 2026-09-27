@@ -120,3 +120,19 @@ def test_a_fine_grained_mtime_can_still_collide_and_is_not_trusted_at_once(stora
     _set_mtime(path, before)  # the coarse clock gives the same value again
 
     assert "run_state.yml" in storage.list_files(APP)["0.0.1-dev.abc.r0"]
+
+
+def test_a_fine_grained_mtime_settles_well_before_a_coarse_one(storage, scans):
+    # Sub-second digits mean the filesystem stamps finer than FAT's 2s, so a
+    # listing half a second after the change can be trusted; a whole-second
+    # mtime just as old still cannot.
+    half_second_ago = time.time_ns() - 5 * 10**8
+    _set_mtime(_dir(storage, 0), half_second_ago // 10**6 * 10**6 + 12345)
+    _set_mtime(_dir(storage, 1), (time.time_ns() - 5 * 10**8) // 10**9 * 10**9)
+    _set_mtime(_dir(storage, 2), time.time_ns() - HOUR_NS)
+    storage.list_files(APP)
+    scans.clear()
+
+    storage.list_files(APP)
+
+    assert sorted(os.path.basename(p) for p in scans[1:]) == ["0.0.1-dev.abc.r1"]
