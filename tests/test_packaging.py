@@ -4,6 +4,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VERSION_STAMP_DIR = ROOT / "version_stamp"
+VMN_EXP_DIR = ROOT / "vmn_exp"
 
 
 def _get_setup_packages():
@@ -15,13 +16,14 @@ def _get_setup_packages():
 
 
 def _find_all_subpackages():
-    """Find all directories under version_stamp/ that have __init__.py."""
+    """Find all directories under version_stamp/ and vmn_exp/ that have __init__.py."""
     packages = []
-    for dirpath, dirnames, filenames in os.walk(VERSION_STAMP_DIR):
-        if "__init__.py" in filenames:
-            rel = os.path.relpath(dirpath, ROOT)
-            package_name = rel.replace(os.sep, ".")
-            packages.append(package_name)
+    for top in (VERSION_STAMP_DIR, VMN_EXP_DIR):
+        for dirpath, dirnames, filenames in os.walk(top):
+            if "__init__.py" in filenames:
+                rel = os.path.relpath(dirpath, ROOT)
+                package_name = rel.replace(os.sep, ".")
+                packages.append(package_name)
     return sorted(packages)
 
 
