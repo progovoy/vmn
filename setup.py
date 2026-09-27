@@ -59,6 +59,7 @@ setuptools.setup(
         "version_stamp.exp",
         "version_stamp.ui",
         "version_stamp.ui.readers",
+        "version_stamp._moved",
         "vmn_exp",
         "vmn_exp.importers",
         "vmn_exp.integrations",
