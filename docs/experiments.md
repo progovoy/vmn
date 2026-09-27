@@ -835,3 +835,53 @@ and the page auto-refreshes while anything is unfinished. See
 To get live curves, have your command log `step=`-tagged lines to
 `$VMN_METRICS_FILE` — `exp run` tails the file during the run, so the curve
 updates in the browser *while the command is still executing*.
+
+---
+
+## Importing from MLflow
+
+`vmn exp import-mlflow` reads runs from an existing MLflow store and writes
+them into vmn experiment storage.  The imported runs appear in `vmn exp list`,
+the web UI, and are queryable with `--query 'imported_from != null'`.
+
+```sh
+# From a local mlruns/ directory (no mlflow package needed)
+vmn exp import-mlflow --mlruns ./mlruns my_app
+
+# From a tracking server (requires pip install mlflow-skinny)
+vmn exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
+
+# Limit to specific experiments (repeatable, by name or numeric ID)
+vmn exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 my_app
+
+# Preview without writing (dry-run)
+vmn exp import-mlflow --mlruns ./mlruns --dry-run my_app
+
+# Skip copying local artifact files
+vmn exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
+
+# Include deleted/trashed runs
+vmn exp import-mlflow --mlruns ./mlruns --include-deleted my_app
+
+# Tune parallelism (default: 8 workers)
+vmn exp import-mlflow --mlruns ./mlruns --workers 16 my_app
+```
+
+**Re-import is safe**: running the command a second time skips already-imported
+runs (`skipped N (already present)`).  Runs are identified by their MLflow
+`run_id`, and their vmn verstr is deterministic (`0.0.0-mlflow.<run_id[:12]>`),
+so parents are resolved correctly regardless of import order.
+
+**Summary line** printed on completion:
+```
+imported 42, skipped 0 (already present), resumed 0, failed 0
+```
+Exit code is 1 if any run failed.
+
+**No git repo needed**: the command does not take the repo lock and does not
+auto-init the vmn app.  Use `--experiment-dir` or `VMN_EXPERIMENT_DIR` to
+point at an experiment directory outside a repo, or `--bucket` /
+`VMN_EXPERIMENT_BUCKET` to write directly to S3.
+
+See [docs/migrating-from-mlflow.md](migrating-from-mlflow.md) for a migration
+guide including artifact layout, query equivalences, and known differences.
