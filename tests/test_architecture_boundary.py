@@ -38,14 +38,11 @@ EXEMPT_MODULES = frozenset(
     {
         "version_stamp.cli.plugin_api",   # plugin registry — used by both sides
         "version_stamp.cli.plugins",      # plugin loader shim
-        "version_stamp._aliases",         # meta-path finder
     }
 )
 
 # Prefixes that are exempt (not yet present, reserved for future steps)
-EXEMPT_PREFIXES = (
-    "version_stamp._moved",             # _moved/* alias tables
-)
+EXEMPT_PREFIXES = ()
 
 # The ONE stamping module that experiments are allowed to import (future facade)
 ALLOWED_FACADE = "version_stamp.api"
