@@ -39,6 +39,7 @@ import version_stamp.core.experiment_writer as experiment_writer
 from version_stamp.core.experiment_from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
+from version_stamp.core.experiment_fold import fold_inputs_dict, fold_log, fold_values
 from version_stamp.core.experiment_log import (
     effective_params,
     filter_archived,
@@ -73,6 +74,12 @@ from version_stamp.core.experiment_writer import (
 )
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 from version_stamp.cli.experiment_inputs_arg import parse_input_arg
+from version_stamp.cli.experiment_provenance import (
+    format_env_oneliner,
+    format_inputs_lines,
+    print_provenance_diff_section,
+    refuse_no_code,
+)
 from version_stamp.core.experiment_inputs import create_input_entry
 
 
@@ -718,6 +725,9 @@ def experiment_show(vcs, params, storage, args):
         print(f"  Note:      {metadata['note']}")
     if metadata.get("has_dep_patches"):
         print("  Deps:      patches captured")
+    env_summary = metadata.get("env")
+    if env_summary:
+        print(f"  Env:       {format_env_oneliner(env_summary)}")
     _print_status_block(storage, app_name, verstr, metadata, snapshot)
 
     # Patch stats
@@ -726,8 +736,16 @@ def experiment_show(vcs, params, storage, args):
             lines = patches[ptype].count("\n")
             print(f"  {ptype}: {lines} lines")
 
+    # Fold log once for both inputs and metrics
+    _fold = fold_log(log)
+    inputs = fold_inputs_dict(_fold)
+    if inputs:
+        print("\n  Inputs:")
+        for ln in format_inputs_lines(inputs):
+            print(f"  {ln}")
+
     # Metrics from log
-    metrics = latest_metrics(log)
+    metrics = fold_values(_fold, "metrics")
     if metrics:
         print("\n  Metrics:")
         for k, v in sorted(metrics.items()):
@@ -941,11 +959,20 @@ def experiment_diff(vcs, params, storage, args):
         return 1
     (meta1, patches1, log1), (meta2, patches2, log2) = exps
     v1, v2 = meta1["verstr"], meta2["verstr"]
+    app_name = _app_name(vcs, args)
 
     print(f"Comparing {v1} -> {v2}\n")
     _print_delta_line("params", effective_params(log1), effective_params(log2))
     _print_delta_line("metrics", latest_metrics(log1), latest_metrics(log2))
+
+    print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2)
     print()
+
+    # Refuse code diff for runs with no code snapshot (e.g. MLflow imports)
+    for meta in (meta1, meta2):
+        rc = refuse_no_code(meta, action="diff")
+        if rc is not None:
+            return rc
 
     tool = getattr(args, "tool", None) or get_git_difftool(vcs)
     if tool:
@@ -973,6 +1000,10 @@ def experiment_restore(vcs, params, storage, args):
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
+    rc = refuse_no_code(metadata, action="restore")
+    if rc is not None:
+        return rc
+
     return _restore_with_safety_net(vcs, params, metadata, patches)
 
 
@@ -996,6 +1027,10 @@ def experiment_export(vcs, params, storage, args):
     if metadata is None:
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
+
+    rc = refuse_no_code(metadata, action="export")
+    if rc is not None:
+        return rc
 
     log = load_log(storage, app_name, verstr)
 
