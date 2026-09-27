@@ -7,10 +7,7 @@ no lock, no network, no working-tree access.
 import git
 import yaml
 
-from version_stamp.core.version_math import (
-    app_name_to_tag_name,
-    deserialize_tag_name,
-)
+from version_stamp.api import app_name_to_tag_name, deserialize_tag_name
 
 _FIELD_SEP = "\x00"
 _RECORD_SEP = "\x1e"

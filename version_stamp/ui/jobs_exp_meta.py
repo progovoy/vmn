@@ -4,7 +4,7 @@ Everything here ends up as argv for a ``vmn`` subprocess, so every input is
 checked strictly: one path component per verstr, printable bounded tag keys
 and values, and nothing that starts with ``-`` (it would parse as a flag).
 """
-from version_stamp.core.utils import valid_path_component
+from version_stamp.api import valid_path_component
 
 MAX_TAG_KEY_LEN = 64
 MAX_TAG_VALUE_LEN = 256

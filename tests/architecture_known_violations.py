@@ -51,18 +51,5 @@ KNOWN_VIOLATIONS: frozenset = frozenset(
         ("version_stamp.core.experiment_status", "version_stamp.core.logging"),
         ("version_stamp.core.experiment_writer", "version_stamp.core.repo_lock"),
         ("version_stamp.core.experiment_writer", "version_stamp.core.utils"),
-        ("version_stamp.ui.cli", "version_stamp.core.logging"),
-        ("version_stamp.ui.index", "version_stamp.core"),
-        ("version_stamp.ui.jobs_exp_meta", "version_stamp.core.utils"),
-        ("version_stamp.ui.leaderboard_cache", "version_stamp.core"),
-        ("version_stamp.ui.readers.changelog", "version_stamp.core.changelog"),
-        ("version_stamp.ui.readers.changelog", "version_stamp.core.constants"),
-        ("version_stamp.ui.readers.experiments", "version_stamp.core.version_math"),
-        ("version_stamp.ui.readers.tree", "version_stamp.core.version_math"),
-        ("version_stamp.ui.readers.versions", "version_stamp.core.version_math"),
-        ("version_stamp.ui.security", "version_stamp.core.utils"),
-        ("version_stamp.ui.security", "version_stamp.core.version_math"),
-        ("version_stamp.ui.server", "version_stamp"),
-        ("version_stamp.ui.tree_cache", "version_stamp.core.version_math"),
     }
 )
