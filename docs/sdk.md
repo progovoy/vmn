@@ -42,6 +42,8 @@ one.
 - [Nesting](#nesting)
 - [Reading runs back](#reading-runs-back)
 - [The query language](#the-query-language)
+- [Model registry](#model-registry)
+- [Integrations](#integrations)
 - [Library logging](#library-logging)
 
 ---
@@ -753,6 +755,109 @@ way as experiment runs:
 2. `VMN_EXPERIMENT_DIR` set → that directory
 3. Otherwise → the current git checkout's `.vmn` root (with `VMN_EXPERIMENT_BUCKET`
    and other env overrides applied)
+
+---
+
+## Integrations
+
+Higher-level wrappers for specific ML frameworks and experiment-management
+libraries.  Each integration lives in `vmn_exp.integrations.*` and is separate
+from autologging: autolog patches the framework's training entrypoint
+automatically; integrations are explicit helpers you call when you need more
+control.  Install the matching extra if you want pip to manage the dependency:
+`pip install "vmn[hf]"`, `vmn[optuna]`, `vmn[ray]`.
+
+### Hugging Face Transformers — `VmnCallback`
+
+`VmnCallback` records Trainer params and per-step train/eval metrics.  It is
+injected automatically when `autolog()` is active; you can also attach it
+manually without calling `autolog()`:
+
+```python
+from vmn_exp.integrations.hf import VmnCallback
+# VmnCallback is assembled lazily — transformers is NOT imported by this line
+
+from transformers import Trainer, TrainingArguments
+from version_stamp.exp import start_run
+
+with start_run("my_app") as run:
+    trainer = Trainer(
+        model=model,
+        args=TrainingArguments(...),
+        callbacks=[VmnCallback()],
+    )
+    trainer.train()
+    # params.learning_rate, metrics.train/loss, metrics.eval/f1, … are recorded
+```
+
+`VmnCallback` only records on rank 0 (world_process_zero).  Checkpoint artifacts
+are saved when `log_models=True` is passed to `autolog()`; the manual callback
+does not save checkpoints by default.
+
+For `autolog("transformers")` behaviour see the [Autologging](#autologging)
+section above.
+
+### Optuna — `start_study_run` + `StudyTracker`
+
+`start_study_run` opens an outer run for an Optuna study and returns a
+`StudyTracker`.  Each trial maps to an inner run with the study's run as its
+parent, so the tree view in `vmn ui` shows one row per sweep with all trials
+nested under it.
+
+```python
+import optuna
+from vmn_exp.integrations.optuna_study import start_study_run
+from version_stamp.exp import autolog
+
+autolog()   # autolog records into whatever run is active on each thread
+
+def objective(trial):
+    lr = trial.suggest_float("lr", 1e-4, 1e-1, log=True)
+    # ... train ...
+    return val_loss
+
+study = optuna.create_study(direction="minimize")
+tracker = start_study_run(study, app_name="my_app", name="lr_sweep")
+
+study.optimize(tracker.wrap(objective), n_trials=20, n_jobs=4)
+tracker.finish()   # records best trial metrics on the outer run
+```
+
+`tracker.wrap(objective)` returns a new callable that opens an inner run before
+calling `objective` and closes it afterwards.  With `n_jobs > 1` (thread-pool
+parallelism), each trial thread gets its own inner run; `autolog()` records into
+the thread's current run automatically.
+
+Pruned trials (`optuna.TrialPruned`) are recorded as `succeeded` with
+`tag state=pruned` and the exception is re-raised so Optuna marks the trial
+`PRUNED`.
+
+### Ray Tune — `TuneRecorder` + `VmnTuneCallback`
+
+The Ray integration is driver-side only (D20 decision): it records trial outcomes
+from the driver process that calls `tune.run`.  Worker-side autolog is deferred.
+
+```python
+from vmn_exp.integrations.ray_tune import TuneRecorder, make_callback
+import ray.tune as tune
+from version_stamp.exp import start_run
+
+recorder = TuneRecorder(app_name="my_app", experiment_name="lr_sweep")
+
+analysis = tune.run(
+    trainable,
+    config={"lr": tune.grid_search([1e-3, 3e-4, 1e-4])},
+    callbacks=[make_callback(recorder)],
+)
+recorder.finish()
+```
+
+`TuneRecorder` creates one outer run on the first `on_trial_start` event and one
+inner run per trial.  Ray's bookkeeping keys (`config`, `timestamp`, `pid`, …)
+are stripped; the rest of each result dict is logged as metrics.  The outer run's
+`tree_status` rolls up to `failed` if any trial failed.
+
+See also: [docs/models.md](models.md) for registering the model after a sweep.
 
 ---
 

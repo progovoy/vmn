@@ -32,19 +32,23 @@ stronger on everything downstream of a finished run.
 | --- | --- | --- |
 | Params / metrics / notes / artifacts | Yes | Yes |
 | Per-step metric series + charts | Yes | Yes |
-| Autologging | sklearn, xgboost, keras/tensorflow, lightning | Broader (incl. spark, statsmodels, prophet, LLM libs) |
-| System metrics (CPU/mem/GPU) | Yes, on the heartbeat | Yes |
+| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. spark, statsmodels, prophet, LLM libs) |
+| Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
+| System metrics (CPU/mem/GPU) | Yes, on the heartbeat (`vmn[sysmetrics]`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
 | Run status | **Derived** — `created`/`running`/`stuck`/`succeeded`/`failed` | Stored; a dead run can stay `RUNNING` forever |
-| Query language | `metrics.loss < 0.5 and params.model = "xgb"` | `search_runs` filter strings |
+| Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch >= "2.0"` | `search_runs` filter strings |
+| Environment capture | **Auto** — Python version, platform, packages captured at run create (`env.yml` + summary) | Via system metrics plugin |
+| Dataset / input tracking | `run.log_input(uri, digest, kind)` / `--input uri` on CLI | `mlflow.log_input(mlflow.data.from_*(...))` |
 | Exact source reproduction | **Snapshot of the working tree, dirty included** | Git commit + dirty *flag* |
 | Source diff between two runs | `vmn exp diff` / the Compare page | Not possible — the diff was never stored |
+| Import from MLflow | **`vmn exp import-mlflow`** — FileStore (no deps) or tracking server (`mlflow-skinny`) | — |
 | Multi-repo / dependency versions | Built-in (`deps` in conf.yml, `vmn goto`) | Not available |
 | Backing store | Files: local filesystem or S3 | DB-backed tracking server (a local file store exists, but not for teams) |
 | Server required | No — `vmn ui` is optional and read-mostly | Yes, for any real deployment |
 | Remote logging over HTTP | **No** — clients write to a filesystem or S3 | Yes, the tracking server's REST API |
 | Multi-user / permissions | **One bearer token, all-or-nothing** | Users, experiment permissions, auth plugins |
-| Model registry (versions, stages, aliases) | **Absent** | Yes — a core feature |
+| Model registry (versions, aliases, deprecation) | **Yes** — `vmn model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [docs/models.md](models.md) | Yes — a core feature; also has stages approval workflow |
 | Model serving / packaging | **Absent** | `mlflow models serve`, pyfunc flavors, SageMaker/Docker targets |
 | Artifact rendering in the UI | **Download only** | Inline images, plots, tables, HTML |
 | `evaluate()`, LLM/prompt tracing, Projects | **Absent** | Yes |
@@ -104,13 +108,17 @@ research and shipping, with no separate ids to reconcile.
 
 ## Where MLflow is still the right tool
 
-### The model registry
+### The model registry approval workflow
 
-This is the big one, and it is simply absent from vmn. MLflow gives model
-versions, stage transitions (staging → production), aliases, and an approval
-trail. If your workflow ends in *promoting a model*, that machinery is the reason
-teams stay on MLflow, and nothing in vmn replaces it. `autolog(log_models=True)`
-saves a model in its native format; vmn will not load, version, or promote it.
+vmn has a [model registry](models.md) with versions, aliases, and `active` /
+`deprecated` / `deleted` statuses, but it does not have MLflow's stage-transition
+approval trail or governance integrations.  If your workflow requires formal sign-
+off before a model goes to production, or a plugin that posts Slack notifications
+on stage changes, MLflow's registry is more mature.
+
+`autolog(log_models=True)` saves a model artifact; `run.register_model(...)` links
+it to a named model version.  What vmn cannot do is serve that model or package it
+in a pyfunc flavor.
 
 ### Serving and packaging
 
@@ -153,7 +161,9 @@ MLflow also autologs more frameworks and has a real plugin ecosystem.
 | Want to know when a run died, not just when it finished | vmn |
 | Don't want to operate a tracking server or a database | vmn |
 | Already use vmn for release versioning | vmn |
-| Ship models through staging to production | MLflow |
+| Want to import an existing MLflow history | vmn (`vmn exp import-mlflow`) |
+| Need a model registry without a tracking server | vmn (`vmn model`) |
+| Need formal stage-transition approval workflow for models | MLflow |
 | Need to serve or package a model | MLflow |
 | Log from compute without shared storage or S3 credentials | MLflow |
 | Need per-user permissions | MLflow |
@@ -193,5 +203,7 @@ Differences worth knowing before you port a script:
 
 - [vmn experiment tracking guide](experiments.md)
 - [vmn Python SDK](sdk.md) · [runnable examples](../examples/README.md)
+- [vmn model registry](models.md)
+- [Migrating from MLflow](migrating-from-mlflow.md)
 - [vmn ui](ui.md)
 - [MLflow documentation](https://mlflow.org/docs/latest/index.html)
