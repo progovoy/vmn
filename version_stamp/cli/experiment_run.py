@@ -28,8 +28,7 @@ from version_stamp.core.experiment_writer import (
     get_writer_id,
     save_run_state,
 )
-from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import now_iso
+from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 
 _METRICS_TAIL_INTERVAL = 0.5  # seconds between metrics-file polls during a run
 
@@ -148,7 +147,7 @@ def _detect_python_exe(run_cmd):
 
 def _create_experiment(vcs, storage, args):
     """Create the run's experiment record. Returns ``(app_name, verstr, err)``."""
-    from version_stamp.cli import experiment as cli
+    import version_stamp.cli.experiment as cli
 
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"

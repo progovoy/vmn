@@ -9,7 +9,7 @@ last answer still holds — instead of re-reading and re-parsing every tag.
 import hashlib
 import subprocess
 
-from version_stamp.core.version_math import app_name_to_tag_name
+from version_stamp.api import app_name_to_tag_name
 from version_stamp.ui.memo import LRU
 
 MAX_ENTRIES = 128

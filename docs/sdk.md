@@ -676,6 +676,83 @@ On the command line the same expressions go to `vmn exp list <app> --query
 
 ---
 
+## Model registry
+
+The model registry links named, versioned model identifiers to the experiment
+runs and artifact paths that produced them. The registry lives in the same
+storage root as experiment runs (under the reserved pseudo-app `vmn-registry`),
+so no extra infrastructure is needed.
+
+```python
+from version_stamp.exp import start_run, register_model, get_model_version, download_model
+
+# Register during (or after) a run
+with start_run("my_app") as run:
+    run.log_artifact("weights.pt")
+    run.register_model("resnet50", artifact_path="weights.pt", alias="staging")
+
+# Or register after the run is closed
+meta = register_model("resnet50", run=run, artifact_path="weights.pt")
+print(meta["n"])          # version number, e.g. 1
+print(meta["run_ref"])    # {"app": "my_app", "verstr": "1.6.0-dev.a1b2c3d..."}
+```
+
+### Resolving a model version
+
+Refs have four forms:
+
+| Ref | Resolves to |
+|-----|-------------|
+| `model` | Latest non-deleted version |
+| `model@latest` | Same |
+| `model@3` | Version number 3 |
+| `model@alias` | Version the alias currently points to |
+
+```python
+from version_stamp.exp import get_model_version, set_alias, remove_alias
+
+meta = get_model_version("resnet50@staging")
+meta = get_model_version("resnet50@2")
+meta = get_model_version("resnet50")     # latest
+
+set_alias("resnet50", "production", 2)           # move alias
+set_alias("resnet50", "production", 3, expect=2) # only if currently at v2
+remove_alias("resnet50", "staging")
+```
+
+### Downloading artifacts
+
+```python
+from version_stamp.exp import download_model
+
+path = download_model("resnet50@production")         # returns local path
+path = download_model("resnet50@production", dst="/tmp/models")  # copy to dir
+```
+
+Local storage returns the on-disk path directly. S3 storage downloads the
+artifact to a temporary cache directory.
+
+### Listing models
+
+```python
+from version_stamp.exp import list_models
+
+print(list_models())   # e.g. ["bert-base", "resnet50"]
+```
+
+### Storage resolution
+
+All model registry functions accept an optional keyword argument `storage=` for
+passing an explicit storage object. When omitted, storage is resolved the same
+way as experiment runs:
+
+1. `VMN_SNAPSHOT_METADATA` set → container/snapshot mode
+2. `VMN_EXPERIMENT_DIR` set → that directory
+3. Otherwise → the current git checkout's `.vmn` root (with `VMN_EXPERIMENT_BUCKET`
+   and other env overrides applied)
+
+---
+
 ## Library logging
 
 The SDK emits stdlib `logging` records under the `version_stamp.exp` logger and

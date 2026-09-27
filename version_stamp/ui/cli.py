@@ -6,7 +6,7 @@ as `vmn` CLI subprocesses that acquire it themselves.
 """
 import os
 
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 from version_stamp.ui.security import LOOPBACK_HOSTS
 
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")

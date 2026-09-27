@@ -24,6 +24,9 @@ from __future__ import annotations
 
 import re
 
+# Reserved pseudo-app name for all registry records.
+REGISTRY_APP = "vmn-registry"
+
 # First char must be letter/digit/underscore — dot and hyphen excluded from the
 # lead, which also rejects empty strings (requires at least one character).
 _MODEL_CHARS_RE = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.]*$')

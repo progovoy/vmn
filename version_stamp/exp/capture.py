@@ -23,7 +23,7 @@ from version_stamp.cli.snapshot import (
     gather_create_data,
     untracked_payload,
 )
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 _MEMO = {"key": None, "payloads": None}
 _MEMO_LOCK = threading.Lock()

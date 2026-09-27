@@ -19,8 +19,7 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from version_stamp.core.utils import valid_path_component
-from version_stamp.core.version_math import tag_name_to_app_name
+from version_stamp.api import tag_name_to_app_name, valid_path_component
 
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 # Starlette's TestClient sends ``Host: testserver``. Allowing it is harmless:

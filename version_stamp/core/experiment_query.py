@@ -63,7 +63,7 @@ ROW_FIELDS = frozenset(
     idx verstr code_verstr timestamp note branch base_version user_meta parent
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
-    kind depth tree_status
+    kind depth tree_status imported_from
     """.split()
 )
 
@@ -71,7 +71,8 @@ ROW_FIELDS = frozenset(
 # verbatim (so ``params.model = "xgb"`` and ``params.cache = true`` work);
 # ``metrics`` holds the numeric fold, which is what sorting and charts use;
 # ``tags`` holds the run's current tags, always strings.
-DICT_PREFIXES = ("metrics", "params", "tags")
+# ``env`` holds the environment summary dict (python, packages, …).
+DICT_PREFIXES = ("metrics", "params", "tags", "env")
 
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")
@@ -211,6 +212,19 @@ def _getter(name, pos):
     if len(parts) == 2 and parts[0] in DICT_PREFIXES:
         prefix, key = parts
         return lambda row: (row.get(prefix) or {}).get(key)
+    if len(parts) == 3:
+        p0, p1, p2 = parts
+        if p0 == "inputs":
+            if p2 not in ("uri", "digest", "kind"):
+                _fail(
+                    f"inputs.{p1}.{p2}: sub-field must be uri, digest, or kind", pos
+                )
+            return lambda row: ((row.get("inputs") or {}).get(p1) or {}).get(p2)
+        if p0 == "env" and p1 == "packages":
+            return lambda row: (
+                ((row.get("env") or {}).get("packages")) or {}
+            ).get(p2)
+        _fail(f"unknown field '{name}'", pos)
     _fail(f"unknown field '{name}'", pos)
 
 

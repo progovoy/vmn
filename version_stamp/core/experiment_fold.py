@@ -76,9 +76,12 @@ def _sort_key(entry, writer, position):
 def _keep_latest(values, name, value, key):
     """Keep ``(value, *key)`` as one flat tuple — cheaper, with ~30 fields per
     run, than a value/key pair of two nested containers (see :func:`_sort_key`
-    for *key*'s shape); the comparison takes the key back off its tail."""
+    for *key*'s shape); the comparison takes the key back off its tail.
+    ``tuple()`` normalises the stored slice so JSON-round-tripped lists compare
+    correctly against the tuple *key*.
+    """
     current = values.get(name)
-    if current is None or key >= current[1:]:
+    if current is None or key >= tuple(current[1:]):
         values[name] = (value,) + key
 
 
@@ -91,10 +94,25 @@ def _apply_tags(fold, entry, key):
         _keep_latest(tags, name, None, key)  # a tombstone: removal is a write too
 
 
+def _apply_inputs(fold, entry, key):
+    """Fold one ``input`` entry; latest-(ts, writer, pos)-wins, matching tags."""
+    name = entry.get("name")
+    if not name:
+        return
+    value = {
+        "uri": entry.get("uri"),
+        "digest": entry.get("digest"),
+        "kind": entry.get("kind"),
+    }
+    _keep_latest(fold.setdefault("inputs", {}), name, value, key)
+
+
 def _apply(fold, entry, key):
     etype = entry.get("type")
     if etype in ("tags", "create"):
         _apply_tags(fold, entry, key)
+    elif etype == "input":
+        _apply_inputs(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
@@ -103,10 +121,10 @@ def _apply(fold, entry, key):
     if etype == "metrics":
         for name, value in (entry.get("values") or {}).items():
             _keep_latest(fold["metrics"], name, value, key)
-        if fold["last_metric"] is None or key >= fold["last_metric"][1]:
+        if fold["last_metric"] is None or key >= tuple(fold["last_metric"][1]):
             fold["last_metric"] = (entry.get("timestamp"), key)
     elif etype == "create":
-        if fold["create_note"] is None or key < fold["create_note"][1]:
+        if fold["create_note"] is None or key < tuple(fold["create_note"][1]):
             fold["create_note"] = (entry.get("note"), key)
 
 
@@ -146,6 +164,14 @@ def fold_tags(fold):
     }
 
 
+def fold_inputs_dict(fold):
+    """``{name: {uri, digest, kind}}`` of the inputs a fold holds."""
+    return {
+        name: wrapped[0]  # (value, *provenance) — see _keep_latest.
+        for name, wrapped in fold.get("inputs", {}).items()
+    }
+
+
 def fold_last_metric_at(fold):
     return fold["last_metric"][0] if fold["last_metric"] else None
 
@@ -176,6 +202,9 @@ def fold_row(idx, meta, fold, with_create_note=False):
         "metrics": fold_values(fold, "metrics"),
         "parent": meta.get("parent"),
         "last_metric_at": fold_last_metric_at(fold),
+        "inputs": fold_inputs_dict(fold),
+        "env": meta.get("env"),
+        "imported_from": meta.get("imported_from"),
     }
     if with_create_note:
         row["create_note"] = fold["create_note"][0] if fold["create_note"] else None

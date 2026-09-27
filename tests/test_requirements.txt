@@ -26,3 +26,4 @@ lightning
 pytorch-lightning
 tensorflow
 keras
+optuna

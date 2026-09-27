@@ -27,18 +27,17 @@ from version_stamp.cli.snapshot_storage_local import (  # noqa: F401
     LocalSnapshotStorage,
 )
 from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage  # noqa: F401
-from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import now_iso, sha256_file
-
-# Re-export dev-version helpers that stamping callers already import from here.
-# The actual implementations live in version_stamp.devversion.*
-from version_stamp.devversion.apply import (  # noqa: F401
+from version_stamp.api import (  # noqa: F401
+    VMN_LOGGER,
+    measure_runtime_decorator,
+    now_iso,
+    sha256_file,
+    # dev-version apply
     _apply_dep_patches,
     _apply_patches_to_workdir,
     _apply_snapshot_patches,
     _reset_worktree,
-)
-from version_stamp.devversion.capture import (  # noqa: F401
+    # dev-version capture
     _compute_diff_hash,
     _compute_verstr,
     _DIFF_HASH_LENGTHS,
@@ -48,8 +47,7 @@ from version_stamp.devversion.capture import (  # noqa: F401
     _stored_diff_hash,
     _unique_snapshot_verstr,
     gather_create_data,
-)
-from version_stamp.devversion.materialize import (  # noqa: F401
+    # dev-version materialize
     _clone_at,
     _clone_local_at,
     _commit_exists,
@@ -68,8 +66,7 @@ from version_stamp.devversion.materialize import (  # noqa: F401
     _write_snapshot_to_dir,
     get_git_difftool,
     render_tree_diff,
-)
-from version_stamp.devversion.untracked import (  # noqa: F401
+    # dev-version untracked
     _collect_untracked_tarball,
     _DEFAULT_MAX_FILE_MB,
     _ensure_trailing_newline,

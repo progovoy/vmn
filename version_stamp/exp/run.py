@@ -20,7 +20,7 @@ import socket
 import sys
 import time
 
-from version_stamp.core import logging as vmn_logging
+from version_stamp.api import ensure_logger
 from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
@@ -33,7 +33,7 @@ from version_stamp.core.experiment_writer import (
     get_writer_id,
     save_artifact,
 )
-from version_stamp.core.utils import now_iso
+from version_stamp.api import now_iso
 from version_stamp.exp import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
     context,
@@ -137,7 +137,7 @@ def start_run(
         return NoOpRun(app_name)
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
-    vmn_logging.ensure_logger()
+    ensure_logger()
 
     prior_state = None
     ref = resume.requested_run_id(run_id)
@@ -371,6 +371,36 @@ class Run(RunArtifacts):
             info["path"] = name
         save_artifact(self._storage, self.app_name, self.id, path, name=name)
         self._append(create_log_entry("artifact", **info))
+
+    def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
+        """Register this run as a model version in the registry.
+
+        Convenience wrapper around :func:`~version_stamp.exp.models.register_model`
+        that pre-fills *run*, *app_name* and *storage* from this run.
+
+        Parameters
+        ----------
+        name:
+            Model name.
+        artifact_path:
+            Relative artifact path within this run.
+        alias:
+            If given, immediately point this alias at the new version.
+        description:
+            Human-readable description of this version.
+        storage:
+            Override the storage; defaults to this run's storage.
+        """
+        from version_stamp.exp.models import register_model as _register_model
+
+        return _register_model(
+            name,
+            run=self,
+            artifact_path=artifact_path,
+            alias=alias,
+            description=description,
+            storage=storage,
+        )
 
     # Tags are mutable, and can be set on a finished run: each call appends a
     # `tags` entry, and readers fold them per key, last write wins.

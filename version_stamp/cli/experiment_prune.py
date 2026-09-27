@@ -30,7 +30,7 @@ from version_stamp.core.experiment_status import (
     parse_iso,
     run_state_observed_at,
 )
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 # Remote reads/deletes in flight at once; a delete fans out further inside S3.
 _REMOTE_WORKERS = 4
@@ -122,19 +122,21 @@ def _tag_protected(candidates, protect_tags):
 
 
 def _apply_guards(
-    storage, app_name, metas, candidates, force, protect_tags=None, snapshot=None
+    storage, app_name, metas, candidates, force, protect_tags=None, snapshot=None,
+    reg_protected=None,
 ):
     """Split *candidates* into (delete, {skipped live verstr: status},
-    {skipped tag-protected verstr: tag name})."""
+    {skipped tag-protected verstr: tag name}, {registry-protected verstr: reason})."""
     live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
     protected = {} if force else _tag_protected(candidates, protect_tags)
+    reg = reg_protected or {}
 
-    doomed = {m["verstr"] for m in candidates} - set(live) - set(protected)
+    doomed = {m["verstr"] for m in candidates} - set(live) - set(protected) - set(reg)
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
     for meta in metas:
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
-    return [m for m in candidates if m["verstr"] in doomed], live, protected
+    return [m for m in candidates if m["verstr"] in doomed], live, protected, reg
 
 
 def _skip_message(verstr, status):
@@ -151,6 +153,26 @@ def _tag_skip_message(verstr, tag_name):
         f"Skipping {verstr}: protected by tag '{tag_name}' "
         "(use --force to delete it)"
     )
+
+
+def _registry_protected(storage, app_name, candidates):
+    """Return ``{verstr: reason}`` for candidates referenced by a non-deleted
+    model version.  Never overridable by ``--force``.
+
+    Raises any exception from the registry — callers must catch and fail closed.
+    Only called when *storage* exposes ``list_record_names`` (the registry
+    interface); storages without it are treated as having no registry.
+    """
+    if not candidates or not hasattr(storage, "list_record_names"):
+        return {}
+    import vmn_exp.registry.view as _rv  # lazy: keeps stamping paths clean
+    refs = _rv.registered_runs(storage)
+    _REASON = "registered as a model version; use `vmn model delete` first"
+    return {
+        m["verstr"]: _REASON
+        for m in candidates
+        if (app_name, m["verstr"]) in refs
+    }
 
 
 def _local_view(storage):
@@ -269,7 +291,15 @@ def experiment_prune(vcs, params, storage, args, app_name):
     if candidates is None:
         return 0
 
-    to_delete, live, protected = _apply_guards(
+    try:
+        reg_protected = _registry_protected(storage, app_name, candidates)
+    except Exception as e:
+        VMN_LOGGER.error(
+            f"Cannot read model registry: {e}. Refusing to prune."
+        )
+        return 1
+
+    to_delete, live, protected, reg = _apply_guards(
         storage,
         app_name,
         metas,
@@ -277,11 +307,14 @@ def experiment_prune(vcs, params, storage, args, app_name):
         force=getattr(args, "force", False),
         protect_tags=getattr(args, "protect_tag", None),
         snapshot=snapshot,
+        reg_protected=reg_protected,
     )
     for verstr in sorted(live):
         print(_skip_message(verstr, live[verstr]))
     for verstr in sorted(protected):
         print(_tag_skip_message(verstr, protected[verstr]))
+    for verstr in sorted(reg):
+        print(f"Skipping {verstr}: {reg[verstr]}")
     if not to_delete:
         print("Nothing to prune")
         return 0

@@ -19,7 +19,7 @@ from version_stamp.cli.snapshot_storage_files import (
 )
 from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
 from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 
 class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
@@ -178,7 +178,10 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         return self._remote is not None
 
     def index_cache_path(self, app_name):
-        return self._local.index_cache_path(app_name)
+        if self._local_is_replica:
+            return self._local.index_cache_path(app_name)
+        path_of = getattr(self._remote, "index_cache_path", None)
+        return path_of(app_name) if path_of else None
 
     def cache_identity(self):
         remote = self._remote.cache_identity() if self._remote else None
@@ -274,6 +277,12 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         return path or self._remote_or(
             None, "artifact_local_path", app_name, verstr, name
         )
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable URI for artifact *path*: remote's if configured, else local."""
+        if self._remote is not None:
+            return self._remote.artifact_uri(app_name, verstr, path)
+        return self._local.artifact_uri(app_name, verstr, path)
 
 
 def get_snapshot_storage(

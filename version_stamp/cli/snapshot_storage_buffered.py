@@ -23,8 +23,7 @@ import uuid
 from version_stamp.cli.snapshot_storage_cached import CachedSnapshotStorage
 from version_stamp.cli.snapshot_storage_files import METADATA_FILE
 from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
-from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import parse_record_metadata
+from version_stamp.api import VMN_LOGGER, parse_record_metadata
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
@@ -82,6 +81,10 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         if not self._ensure_local_record(app_name, verstr):
             return False
         return self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable URI for artifact *path*: delegate to the remote backend."""
+        return self._remote.artifact_uri(app_name, verstr, path)
 
     # -- logs -------------------------------------------------------------------
 

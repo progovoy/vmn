@@ -34,7 +34,8 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
-from version_stamp.core import experiment_index, experiment_writer
+import version_stamp.core.experiment_index as experiment_index
+import version_stamp.core.experiment_writer as experiment_writer
 from version_stamp.core.experiment_from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
@@ -70,7 +71,7 @@ from version_stamp.core.experiment_writer import (
     merge_conf_into_params,
     save_artifact,
 )
-from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.api import VMN_LOGGER, measure_runtime_decorator
 
 
 @dataclass
@@ -230,7 +231,7 @@ def _export_conf_writer_id(writer_id):
 
 @measure_runtime_decorator
 def handle_experiment(vmn_ctx):
-    from version_stamp.cli.commands import _get_repo_status, _init_app, handle_init
+    from version_stamp.api import _get_repo_status, _init_app, handle_init
 
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args

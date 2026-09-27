@@ -26,6 +26,8 @@ export type MetricsSchema = Record<string, MetricSpec>;
 
 export interface Meta {
   version: string;
+  /** True when the server was started with --read-only; mutations return 403. */
+  read_only?: boolean;
 }
 
 export interface Job {

@@ -32,7 +32,7 @@ from version_stamp.core.experiment_writer import (
     merge_conf_into_params,
     merge_env_into_params,
 )
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.api import resolve_root_path
 from version_stamp.exp import _resolve_app_name, capture, context
 from version_stamp.exp.coldstart import tracked_vcs
 from version_stamp.exp.context import EXPERIMENT_ID_ENV, current_run
@@ -95,7 +95,7 @@ def _reject_reentry_without_nesting(nested):
 
 
 def stamped_apps():
-    from version_stamp.cli.completion import _complete_apps
+    from version_stamp.api import _complete_apps
 
     return _complete_apps("")
 
