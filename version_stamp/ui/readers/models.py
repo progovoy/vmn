@@ -18,7 +18,13 @@ def _actor_str(actor) -> str:
     return str(actor) if actor else "unknown"
 
 
-def _version_detail(meta: dict, fold: dict, alias_by_version: dict, n: int) -> dict:
+def _artifact_uri(storage, run: dict, artifact_path):
+    if not artifact_path or not run["verstr"]:
+        return None
+    return storage.artifact_uri(run["app"], run["verstr"], artifact_path)
+
+
+def _version_detail(storage, meta: dict, fold: dict, alias_by_version: dict, n: int) -> dict:
     """Build one ModelVersion dict from pre-loaded raw metadata."""
     run_ref = (meta or {}).get("run_ref")
     if isinstance(run_ref, dict):
@@ -35,7 +41,7 @@ def _version_detail(meta: dict, fold: dict, alias_by_version: dict, n: int) -> d
         "status": fold["status"].get(n, "active"),
         "run": run,
         "artifact_path": artifact_path,
-        "artifact_uri": None,
+        "artifact_uri": _artifact_uri(storage, run, artifact_path),
         "aliases": sorted(alias_by_version.get(n, [])),
         "created": (meta or {}).get("timestamp"),
         "description": (meta or {}).get("description"),
@@ -93,7 +99,7 @@ def model_detail_response(storage, model_name: str) -> tuple:
     for alias, ver_n in fold["aliases"].items():
         alias_by_version.setdefault(ver_n, []).append(alias)
 
-    versions = [_version_detail(version_metas[n], fold, alias_by_version, n) for n in ns]
+    versions = [_version_detail(storage, version_metas[n], fold, alias_by_version, n) for n in ns]
     audit = _build_audit(fold["audit"], version_metas)
 
     return {

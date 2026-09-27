@@ -272,3 +272,23 @@ def test_remove_alias(tmp_path):
 
     detail = client.get("/api/v1/workspaces/main/models/rmtest").json()
     assert "prod" not in detail["aliases"]
+
+
+def test_version_with_artifact_path_has_artifact_uri(tmp_path):
+    client = _client(tmp_path)
+    r = client.post(
+        "/api/v1/workspaces/main/models/m1/versions",
+        json={"run": {"app": "myapp", "verstr": "1.0.0-dev.abc"},
+              "artifact_path": "model.pkl"},
+    )
+    assert r.status_code in (200, 201), r.text
+    v = client.get("/api/v1/workspaces/main/models/m1").json()["versions"][0]
+    assert v["artifact_uri"].startswith("file://")
+    assert v["artifact_uri"].endswith("model.pkl")
+
+
+def test_version_without_artifact_path_has_no_artifact_uri(tmp_path):
+    client = _client(tmp_path)
+    _register(client, "m1")
+    v = client.get("/api/v1/workspaces/main/models/m1").json()["versions"][0]
+    assert v["artifact_uri"] is None
