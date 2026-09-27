@@ -52,7 +52,7 @@ def _steady_state(run_state, sig=("s", 1), touched=None):
 
 
 def test_running_may_change_even_with_an_unchanged_sig():
-    sweep, records = _steady_state(RUNNING_RS)
+    sweep, records = _steady_state(dict(RUNNING_RS, heartbeat=_ago_iso(5)))
     assert sweep._may_change(records, "v", ("s", 1), 1000) is True
 
 
