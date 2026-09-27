@@ -11,7 +11,7 @@ import yaml
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.ui import leaderboard_cache
 
 APP = "app"

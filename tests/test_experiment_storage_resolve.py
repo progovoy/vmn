@@ -37,7 +37,7 @@ def _storage_root(storage):
 
 def _is_s3(storage):
     """True if *storage* ultimately talks to S3 (no local root)."""
-    from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
+    from vmn_exp.storage.s3 import S3SnapshotStorage
     if isinstance(storage, S3SnapshotStorage):
         return True
     # BufferedRemoteStorage has a ._remote
@@ -54,7 +54,7 @@ def _make_repo(tmp_path):
 
 
 def _local_storage(path):
-    from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+    from vmn_exp.storage.local import LocalSnapshotStorage
     return LocalSnapshotStorage(path, subdir="experiments")
 
 
@@ -124,7 +124,7 @@ def test_vmn_experiment_dir_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", exp_dir)
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
-    from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+    from vmn_exp.core.storage_resolve import resolve_experiment_storage
     storage = resolve_experiment_storage()
 
     root = _storage_root(storage)
@@ -152,7 +152,7 @@ def test_bucket_env_gives_s3_backend(tmp_path, monkeypatch, _aws_creds):
     with mock_aws():
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
 
-        from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+        from vmn_exp.core.storage_resolve import resolve_experiment_storage
         storage = resolve_experiment_storage()
 
     assert _is_s3(storage), f"Expected S3 backend, got {type(storage).__name__}"
@@ -172,7 +172,7 @@ def test_flags_beat_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", env_dir)
     monkeypatch.delenv("VMN_EXPERIMENT_BUCKET", raising=False)
 
-    from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+    from vmn_exp.core.storage_resolve import resolve_experiment_storage
     storage = resolve_experiment_storage(dir=flag_dir)
 
     root = _storage_root(storage)

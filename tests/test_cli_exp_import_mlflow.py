@@ -23,7 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mlflow_fixtures import MlflowFixtureBuilder
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 
 # ---------------------------------------------------------------------------
 # Constants

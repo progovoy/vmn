@@ -14,7 +14,7 @@ import pytest
 
 def test_snapshot_reexports_are_devversion_objects():
     """snapshot.py re-exports from devversion must be the same objects."""
-    import version_stamp.cli.snapshot as snap
+    import vmn_exp.snapshot as snap
     import version_stamp.devversion.apply as dv_apply
     import version_stamp.devversion.capture as dv_cap
     import version_stamp.devversion.materialize as dv_mat
@@ -58,12 +58,12 @@ import version_stamp.devversion.materialize
 FORBIDDEN_PREFIXES = (
     "version_stamp.exp",
     "version_stamp.ui",
-    "version_stamp.cli.snapshot",
+    "vmn_exp.snapshot",
     "version_stamp.core.experiment_",
-    "version_stamp.core.jsonl_tail",
-    "version_stamp.core.background",
-    "version_stamp.core.best_effort",
-    "version_stamp.core.record_files",
+    "vmn_exp.core.jsonl_tail",
+    "vmn_exp.core.background",
+    "vmn_exp.core.best_effort",
+    "vmn_exp.core.record_files",
 )
 
 bad = [

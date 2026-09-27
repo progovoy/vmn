@@ -4,8 +4,8 @@ import os
 import pytest
 import yaml
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core.experiment_refs import resolve_parent
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core.refs import resolve_parent
 from version_stamp.core.logging import init_stamp_logger
 
 APP = "app"

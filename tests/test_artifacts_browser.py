@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from version_stamp.ui.readers import experiments as exp_reader
 

@@ -1,4 +1,4 @@
-"""Tests for version_stamp.core.experiment_env — stdlib-only env capture.
+"""Tests for vmn_exp.core.env — stdlib-only env capture.
 
 No git, no docker, no storage.  All tests are pure unit/integration tests that
 run without Docker (pytest-xdist compatible).
@@ -21,7 +21,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_capture_has_python_platform_packages():
-    from version_stamp.core.experiment_env import capture_env
+    from vmn_exp.core.env import capture_env
 
     env = capture_env()
     assert "python" in env
@@ -43,7 +43,7 @@ def test_capture_has_python_platform_packages():
 
 def test_packages_match_importlib_metadata():
     """scan_packages() should find at least a subset of importlib.metadata packages."""
-    from version_stamp.core.experiment_env import scan_packages
+    from vmn_exp.core.env import scan_packages
 
     packages, _truncated = scan_packages()
     # importlib.metadata should be available (Python 3.8+)
@@ -73,7 +73,7 @@ def test_packages_match_importlib_metadata():
 
 def test_capture_under_50ms():
     """capture_env() must complete in under 50 ms (take best of 5 runs)."""
-    from version_stamp.core.experiment_env import capture_env
+    from vmn_exp.core.env import capture_env
 
     times = []
     for _ in range(5):
@@ -98,7 +98,7 @@ def test_never_imports_torch():
             "-c",
             (
                 "import sys;"
-                "from version_stamp.core.experiment_env import capture_env;"
+                "from vmn_exp.core.env import capture_env;"
                 "capture_env();"
                 "print('torch' in sys.modules)"
             ),
@@ -117,7 +117,7 @@ def test_never_imports_torch():
 
 def test_torch_cuda_read_without_device_queries():
     """_cuda_info reads torch.version.cuda if torch is already in sys.modules."""
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
 
     fake_version = types.SimpleNamespace(cuda="12.1")
     fake_torch = types.SimpleNamespace(version=fake_version)
@@ -138,7 +138,7 @@ def test_torch_cuda_read_without_device_queries():
 
 def test_cuda_info_absent_when_torch_not_loaded():
     """_cuda_info returns nothing (no torch_cuda key) when torch not in sys.modules."""
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
 
     old = sys.modules.pop("torch", None)
     try:
@@ -157,7 +157,7 @@ def test_cuda_info_absent_when_torch_not_loaded():
 
 def test_pynvml_driver_with_fake_module():
     """_cuda_info uses pynvml driver version when pynvml is importable."""
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
 
     # Build a fake pynvml that returns a known driver version
     fake_pynvml = types.ModuleType("pynvml")
@@ -187,7 +187,7 @@ def test_pynvml_driver_with_fake_module():
 # ---------------------------------------------------------------------------
 
 def test_image_digest_from_env():
-    from version_stamp.core.experiment_env import _container_info
+    from vmn_exp.core.env import _container_info
 
     for var in ("VMN_IMAGE_DIGEST", "IMAGE_DIGEST", "DOCKER_IMAGE_DIGEST",
                 "CONTAINER_IMAGE_DIGEST"):
@@ -211,7 +211,7 @@ def test_image_digest_from_env():
 
 def test_env_vars_not_dumped():
     """capture_env() must not include os.environ values in its output."""
-    from version_stamp.core.experiment_env import capture_env
+    from vmn_exp.core.env import capture_env
 
     # Plant a detectable secret in the environment
     os.environ["VMN_TEST_SECRET_XYZ"] = "super-secret-value-9827364"
@@ -229,7 +229,7 @@ def test_env_vars_not_dumped():
 # ---------------------------------------------------------------------------
 
 def test_summary_small_and_sha_stable():
-    from version_stamp.core.experiment_env import capture_env, env_summary, packages_sha
+    from vmn_exp.core.env import capture_env, env_summary, packages_sha
 
     env = capture_env()
     summary = env_summary(env)
@@ -251,7 +251,7 @@ def test_summary_small_and_sha_stable():
 
 def test_package_list_capped():
     """scan_packages respects the 2000-package cap and sets truncated flag."""
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
 
     orig_cap = experiment_env._PACKAGE_CAP
     try:
@@ -281,7 +281,7 @@ def environment_env_scan_with_many_packages(experiment_env):
 # ---------------------------------------------------------------------------
 
 def test_dist_info_egg_info_parsing():
-    from version_stamp.core.experiment_env import scan_packages
+    from vmn_exp.core.env import scan_packages
 
     with tempfile.TemporaryDirectory() as td:
         # dist-info style
@@ -309,7 +309,7 @@ def test_dist_info_egg_info_parsing():
 # ---------------------------------------------------------------------------
 
 def test_unparseable_dir_falls_back():
-    from version_stamp.core.experiment_env import scan_packages
+    from vmn_exp.core.env import scan_packages
 
     with tempfile.TemporaryDirectory() as td:
         # METADATA with no Name/Version headers
@@ -334,7 +334,7 @@ def test_runs_as_script_isolated():
 
     module_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "version_stamp", "core", "experiment_env.py",
+        "vmn_exp", "core", "env.py",
     )
     assert os.path.isfile(module_file), f"Module not found: {module_file}"
 
@@ -397,7 +397,7 @@ def test_stdlib_only_imports():
     """AST-parse experiment_env.py: every top-level import must be stdlib."""
     module_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "version_stamp", "core", "experiment_env.py",
+        "vmn_exp", "core", "env.py",
     )
     assert os.path.isfile(module_path), f"Module not found: {module_path}"
 

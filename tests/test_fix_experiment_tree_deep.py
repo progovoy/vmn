@@ -2,8 +2,8 @@
 dict lookup when its edges provider is cheap."""
 from collections.abc import Mapping
 
-from version_stamp.core import experiment_status as st
-from version_stamp.core.experiment_tree import annotate_tree, subtree_status
+from vmn_exp.core import status as st
+from vmn_exp.core.tree import annotate_tree, subtree_status
 from version_stamp.ui.readers import experiment_detail
 
 DEPTH = 5000

@@ -4,9 +4,9 @@ import os
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_index import ExperimentIndex
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core import index as experiment_index
+from vmn_exp.core.index import ExperimentIndex
 
 APP = "app"
 FINISHED = "state: finished\nexit_code: 0\n"

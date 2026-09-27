@@ -10,7 +10,7 @@ import yaml
 from moto import mock_aws
 
 from version_stamp.cli.entry import vmn_run
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger, reset_logger
 from helpers import (
     DEV_VERSION_RE,
@@ -716,7 +716,7 @@ def test_s3_snapshot_save():
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket="test-bucket")
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
 
     storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
@@ -759,7 +759,7 @@ def test_s3_snapshot_load():
         Body=b"diff content",
     )
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
 
     storage = S3SnapshotStorage("test-bucket", prefix="test-prefix")
 
@@ -774,7 +774,7 @@ def test_s3_snapshot_load_not_found():
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket="test-bucket")
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
 
     storage = S3SnapshotStorage("test-bucket")
 
@@ -789,7 +789,7 @@ def test_s3_snapshot_list():
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket="test-bucket")
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
 
     storage = S3SnapshotStorage("test-bucket")
 
@@ -808,7 +808,7 @@ def test_s3_snapshot_list():
 def test_s3_snapshot_endpoint_url():
     """Test S3 backend passes endpoint_url to boto3."""
     with mock_patch("boto3.client") as mock_boto:
-        from version_stamp.cli.snapshot import S3SnapshotStorage
+        from vmn_exp.snapshot import S3SnapshotStorage
 
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
         mock_boto.assert_called_once_with("s3", endpoint_url="http://localhost:9000")
@@ -1249,7 +1249,7 @@ def test_untracked_hash_stable_across_touch(app_layout, capfd):
 def test_untracked_hash_cache_hit(app_layout):
     """B1: `_hash_untracked_content` caches by (path, size, mtime); a second call
     with matching stat reuses the cached digest without re-reading content."""
-    from version_stamp.cli.snapshot import _hash_untracked_content
+    from vmn_exp.snapshot import _hash_untracked_content
 
     _run_vmn_init()
     _init_app(app_layout.app_name)

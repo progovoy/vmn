@@ -2,7 +2,7 @@
 ``metrics`` entry ``vmn exp create --metrics`` writes) has no run supervisor
 or SDK heartbeat thread left to flush it to the remote later: the call site
 must flush it itself, right after appending (see
-``version_stamp.core.experiment_writer.flush_log`` and its callers:
+``vmn_exp.core.writer.flush_log`` and its callers:
 ``tag_run``, ``experiment_create``, ``experiment_add``).
 
 A live run's heartbeat loop ships new bytes on its own schedule -- an append
@@ -13,8 +13,8 @@ syncs it.
 import pytest
 from s3_helpers import cached_host, entry, meta, mocked_bucket, s3_storage
 
-from version_stamp.core.experiment_manage import tag_run
-from version_stamp.core.experiment_writer import append_to_log, create_log_entry, flush_log
+from vmn_exp.core.manage import tag_run
+from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
 
 
 @pytest.fixture(autouse=True)

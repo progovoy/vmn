@@ -9,7 +9,7 @@ import time
 import pytest
 from helpers import _bootstrap, _storage
 
-from version_stamp.core.experiment_status import RUNNING, derive_status, load_run_state
+from vmn_exp.core.status import RUNNING, derive_status, load_run_state
 from version_stamp.exp import start_run
 
 

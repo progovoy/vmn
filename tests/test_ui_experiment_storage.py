@@ -8,8 +8,8 @@ import pytest
 import yaml
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, S3SnapshotStorage
-from version_stamp.core.experiment_index import direct_rows
+from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
+from vmn_exp.core.index import direct_rows
 from version_stamp.core.logging import init_stamp_logger
 from version_stamp.ui.index import app_snapshot
 from version_stamp.ui.readers import diffs as diff_reader

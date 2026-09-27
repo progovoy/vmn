@@ -8,7 +8,7 @@ import subprocess
 import pytest
 import yaml
 
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 
 
@@ -97,7 +97,7 @@ def test_atomic_write_leaves_a_normal_umask_shaped_file(tmp_path, umask):
     """A shared NFS storage dir relies on atomic_write producing the same
     permissions a plain open()/write() would under the caller's umask, not
     mkstemp's hardcoded 0600."""
-    from version_stamp.cli.snapshot_storage_files import atomic_write
+    from vmn_exp.storage.files import atomic_write
 
     old_umask = os.umask(umask)
     try:
@@ -174,7 +174,7 @@ def test_yaml_safe_load_uses_the_c_loader_when_available(monkeypatch):
 
 def test_listing_and_run_state_use_the_fast_loader(st, monkeypatch):
     from version_stamp.core import utils
-    from version_stamp.core.experiment_status import load_run_state
+    from vmn_exp.core.status import load_run_state
 
     st.save("app", "v1", _meta("v1"), {})
     st.save_file("app", "v1", "run_state.yml", "state: running\n")

@@ -16,8 +16,8 @@ import time
 
 import pytest
 
-from version_stamp.core.experiment_query import QueryError, compile_query
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.core.query import QueryError, compile_query
+from vmn_exp.core.status import load_run_state
 from version_stamp.exp import start_run, sysmetrics
 from version_stamp.exp.reader import get_run
 from helpers import _PY, _bootstrap, _experiment, _storage, extract_dev_verstr

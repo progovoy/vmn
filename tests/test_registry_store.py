@@ -23,7 +23,7 @@ from vmn_exp.registry.store import (
 # ---------------------------------------------------------------------------
 
 def _local_storage(tmp_path):
-    from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+    from vmn_exp.storage.local import LocalSnapshotStorage
 
     return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
 
@@ -168,7 +168,7 @@ def s3_env(monkeypatch):
 
 
 def _s3_storage():
-    from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
+    from vmn_exp.storage.s3 import S3SnapshotStorage
 
     return S3SnapshotStorage("vmn-test", prefix="reg")
 

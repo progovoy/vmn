@@ -6,8 +6,8 @@ import tarfile
 
 import pytest
 
-from version_stamp.cli import snapshot as snap
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp import snapshot as snap
+from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.version_math import deserialize_vmn_version
 from helpers import _init_app, _run_vmn_init, _snapshot, _stamp_app

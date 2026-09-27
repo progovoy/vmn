@@ -7,7 +7,7 @@ import pytest
 import yaml
 from s3_helpers import cached_host, entry, meta, mocked_bucket, s3_storage
 
-from version_stamp.core.experiment_index import ExperimentIndex, direct_rows
+from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
 

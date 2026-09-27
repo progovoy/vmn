@@ -19,9 +19,9 @@ from helpers import (
 )
 
 from version_stamp.cli import experiment_run as runmod
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.core import experiment_status as st
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.core import status as st
+from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 
 
 def _exp_run(app_name, run_cmd, extra=None):

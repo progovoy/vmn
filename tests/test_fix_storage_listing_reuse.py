@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 
 APP = "app"
 HOUR_NS = 3600 * 10**9

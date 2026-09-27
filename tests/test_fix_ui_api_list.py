@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     LocalSnapshotStorage,
     S3SnapshotStorage,
     get_snapshot_storage,

@@ -12,8 +12,8 @@ from s3_helpers import (
     s3_storage,
 )
 
-from version_stamp.core.experiment_index import ExperimentIndex, direct_rows
-from version_stamp.core.experiment_logfiles import (
+from vmn_exp.core.index import ExperimentIndex, direct_rows
+from vmn_exp.core.logfiles import (
     compacted_log_name,
     group_log_names,
     log_writer_and_seq,

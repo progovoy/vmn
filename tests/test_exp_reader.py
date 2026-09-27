@@ -232,7 +232,7 @@ def test_missing_run_state_reports_created(app_layout):
 
 def test_status_is_derived_on_every_call(app_layout, monkeypatch):
     """A running run whose heartbeat goes stale must report stuck next call."""
-    import version_stamp.core.experiment_status as status_mod
+    import vmn_exp.core.status as status_mod
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     assert _runs(app_layout)[0]["status"] == "running"
@@ -359,7 +359,7 @@ def test_query_filters_before_last_and_sort(app_layout):
 
 
 def test_query_error_propagates_to_the_caller(app_layout):
-    from version_stamp.core.experiment_query import QueryError
+    from vmn_exp.core.query import QueryError
 
     _seed_for_queries(app_layout)
     with pytest.raises(QueryError) as excinfo:

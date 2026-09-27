@@ -132,7 +132,7 @@ def test_show_prints_inputs():
 # ===========================================================================
 
 def test_show_json_has_env_and_inputs():
-    from version_stamp.core.experiment_log import experiment_row
+    from vmn_exp.core.log import experiment_row
 
     env_summary = {"python": "3.11.2", "platform": "Linux/x86_64"}
     meta = {
@@ -161,7 +161,7 @@ def test_show_json_has_env_and_inputs():
 # ===========================================================================
 
 def test_diff_shows_package_change():
-    from version_stamp.core.experiment_provenance import env_diff
+    from vmn_exp.core.provenance import env_diff
 
     env_a = _full_env(packages={"torch": "2.2.1", "numpy": "1.26.0"})
     env_b = _full_env(packages={"torch": "2.3.1", "numpy": "1.26.0"})
@@ -179,7 +179,7 @@ def test_diff_shows_package_change():
 # ===========================================================================
 
 def test_diff_caps_at_30():
-    from version_stamp.core.experiment_provenance import env_diff
+    from vmn_exp.core.provenance import env_diff
 
     pkgs_a = {f"pkg{i}": "1.0" for i in range(50)}
     pkgs_b = {f"pkg{i}": "2.0" for i in range(50)}
@@ -193,7 +193,7 @@ def test_diff_caps_at_30():
 # ===========================================================================
 
 def test_diff_ignores_host():
-    from version_stamp.core.experiment_provenance import env_diff
+    from vmn_exp.core.provenance import env_diff
 
     env_a = _full_env(hostname="machine-alpha")
     env_b = _full_env(hostname="machine-beta")
@@ -208,7 +208,7 @@ def test_diff_ignores_host():
 # ===========================================================================
 
 def test_diff_inputs_change():
-    from version_stamp.core.experiment_provenance import inputs_diff
+    from vmn_exp.core.provenance import inputs_diff
 
     inputs_a = {
         "train": {"uri": "s3://bucket/v1.csv", "digest": None, "kind": None},

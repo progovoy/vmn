@@ -5,7 +5,7 @@ import tempfile
 
 import yaml
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 
 
 def _make_storage(base_dir, app_name, verstr):

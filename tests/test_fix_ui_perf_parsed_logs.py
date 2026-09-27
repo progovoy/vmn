@@ -5,8 +5,8 @@ import os
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, get_snapshot_storage
-from version_stamp.core.experiment_log import (
+from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.core.log import (
     effective_params,
     last_metric_at,
     latest_metrics,

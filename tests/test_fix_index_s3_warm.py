@@ -12,7 +12,7 @@ from s3_helpers import mocked_bucket, op_counts, record_calls, s3_storage
 
 moto = pytest.importorskip("moto")
 
-from version_stamp.core.experiment_index import ExperimentIndex, indexed_snapshot  # noqa: E402
+from vmn_exp.core.index import ExperimentIndex, indexed_snapshot  # noqa: E402
 
 APP = "myapp"
 

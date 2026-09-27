@@ -8,9 +8,9 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core.experiment_index_snapshot import IndexSnapshot
-from version_stamp.core.experiment_log import experiment_row
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core.index_snapshot import IndexSnapshot
+from vmn_exp.core.log import experiment_row
 from version_stamp.ui import leaderboard_cache as lb
 from version_stamp.ui import schema_cache
 from version_stamp.ui.readers import experiments as exp_reader

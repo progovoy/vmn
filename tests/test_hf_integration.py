@@ -360,7 +360,7 @@ def test_real_hf_trainer_autologs(tmp_path, monkeypatch):
         autolog_disable()
 
     # -- read back the recorded run -------------------------------------------
-    from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage  # noqa: E402
+    from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 
     storage = LocalSnapshotStorage(str(exp_dir), subdir="experiments")
     detail = get_run("hf_autolog_test", verstr, storage=storage)
@@ -379,7 +379,7 @@ def test_real_hf_trainer_autologs(tmp_path, monkeypatch):
     )
 
     # Query language: metrics."train/loss" > 0 must match
-    from version_stamp.core.experiment_query import compile_query  # noqa: E402
+    from vmn_exp.core.query import compile_query  # noqa: E402
 
     rows = list_runs("hf_autolog_test", storage=storage)
     assert rows, "no runs returned by list_runs"

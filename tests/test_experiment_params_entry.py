@@ -9,7 +9,7 @@ import os
 
 from helpers import _bootstrap, _experiment, extract_dev_verstr
 
-from version_stamp.core.experiment_log import latest_metrics
+from vmn_exp.core.log import latest_metrics
 
 
 def _append_log_entry(app_layout, verstr, entry, writer="sdk"):

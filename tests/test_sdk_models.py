@@ -189,7 +189,7 @@ def test_download_model_s3(_aws_env):
     with mock_aws():
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
 
-        from version_stamp.cli.snapshot import S3SnapshotStorage
+        from vmn_exp.snapshot import S3SnapshotStorage
         storage = S3SnapshotStorage(BUCKET, prefix=PREFIX)
 
         # Write a fake artifact directly into the S3 run record

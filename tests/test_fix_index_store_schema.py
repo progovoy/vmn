@@ -8,7 +8,7 @@ import sqlite3
 
 import pytest
 
-from version_stamp.core.experiment_index_store import IndexStore
+from vmn_exp.core.index_store import IndexStore
 
 APP = "myapp"
 

@@ -4,7 +4,7 @@ import stat
 
 import pytest
 
-from version_stamp.cli.snapshot_storage_index_cache_dir import (
+from vmn_exp.storage.index_cache_dir import (
     index_cache_root,
     s3_index_cache_path,
 )
@@ -129,8 +129,8 @@ def test_buffered_delegates_to_remote_index_cache_path(monkeypatch, tmp_path):
 
     with moto.mock_aws():
         boto3.client("s3").create_bucket(Bucket="test-bucket")
-        from version_stamp.cli.snapshot_storage_buffered import BufferedRemoteStorage
-        from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
+        from vmn_exp.storage.buffered import BufferedRemoteStorage
+        from vmn_exp.storage.s3 import S3SnapshotStorage
 
         remote = S3SnapshotStorage("test-bucket", prefix="exps")
         buf = BufferedRemoteStorage(remote)

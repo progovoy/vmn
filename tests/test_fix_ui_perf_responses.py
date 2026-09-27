@@ -10,7 +10,7 @@ pytest.importorskip("fastapi")
 from starlette.requests import Request
 from starlette.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import get_snapshot_storage
 from version_stamp.ui import responses
 from version_stamp.ui.responses import SafeJSONResponse, json_response
 

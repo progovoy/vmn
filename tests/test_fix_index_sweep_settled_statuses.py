@@ -3,7 +3,7 @@
 reduced re-listing rate once its directory signature stops moving, instead of
 being re-listed on every fast-tier refresh forever.
 
-See :mod:`version_stamp.core.experiment_index_sweep`'s ``_may_change``.
+See :mod:`vmn_exp.core.index_sweep`'s ``_may_change``.
 """
 import datetime
 import os
@@ -11,10 +11,10 @@ import time
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_index import ExperimentIndex
-from version_stamp.core.experiment_index_sweep import Sweep
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core import index as experiment_index
+from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.index_sweep import Sweep
 
 APP = "app"
 FULL_SWEEP_SEC = 300

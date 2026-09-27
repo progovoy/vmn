@@ -15,7 +15,7 @@ import time
 import pytest
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.core.status import load_run_state
 from version_stamp.exp import start_run
 
 JOIN_TIMEOUT = 120

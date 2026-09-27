@@ -19,18 +19,18 @@ import pytest
 # Globs for EXPERIMENTS modules (all under version_stamp/)
 # Each entry: a module prefix.  Trailing "_" means "startswith(p)" match.
 # No trailing "_" means exact-or-subpackage match (mod == p or mod.startswith(p + ".")).
-# Special: "version_stamp.cli.snapshot" also matches "version_stamp.cli.snapshot_*".
+# Special: "vmn_exp.snapshot" also matches "version_stamp.cli.snapshot_*".
 EXPERIMENTS_GLOBS = (
     "version_stamp.exp",              # exp package and all submodules
     "version_stamp.ui",               # ui package and all submodules
-    "version_stamp.cli.snapshot",     # cli/snapshot.py + cli/snapshot_storage*.py
+    "vmn_exp.snapshot",     # cli/snapshot.py + cli/snapshot_storage*.py
     "version_stamp.cli.experiment",   # cli/experiment.py + cli/experiment_*.py
     "version_stamp.cli._builtin_exp_plugin",  # temporary plugin; moves to vmn_exp in step h4
     "version_stamp.core.experiment_", # core/experiment_*.py (trailing _ = prefix match)
-    "version_stamp.core.jsonl_tail",
-    "version_stamp.core.background",
-    "version_stamp.core.best_effort",
-    "version_stamp.core.record_files",
+    "vmn_exp.core.jsonl_tail",
+    "vmn_exp.core.background",
+    "vmn_exp.core.best_effort",
+    "vmn_exp.core.record_files",
 )
 
 # Modules that are exempt from both sides of the boundary check
@@ -234,14 +234,14 @@ def test_stamping_core_does_not_load_experiments() -> None:
         exp_mods = [m for m in sys.modules if (
             m.startswith("version_stamp.exp")
             or m.startswith("version_stamp.ui")
-            or m.startswith("version_stamp.cli.snapshot")
+            or m.startswith("vmn_exp.snapshot")
             or m.startswith("version_stamp.cli.experiment")
             or (m.startswith("version_stamp.core.experiment_"))
             or m in {
-                "version_stamp.core.jsonl_tail",
-                "version_stamp.core.background",
-                "version_stamp.core.best_effort",
-                "version_stamp.core.record_files",
+                "vmn_exp.core.jsonl_tail",
+                "vmn_exp.core.background",
+                "vmn_exp.core.best_effort",
+                "vmn_exp.core.record_files",
             }
         )]
         if exp_mods:

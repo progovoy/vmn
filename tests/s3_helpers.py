@@ -29,13 +29,13 @@ def mocked_bucket(monkeypatch):
 
 
 def s3_storage():
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
 
     return S3SnapshotStorage(BUCKET, prefix=PREFIX)
 
 
 def cached_host(tmp_path, name):
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     return get_snapshot_storage(
         "local",

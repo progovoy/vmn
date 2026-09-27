@@ -7,15 +7,15 @@ import time
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, _resolve_verstr
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_index import (
+from vmn_exp.snapshot import LocalSnapshotStorage, _resolve_verstr
+from vmn_exp.core import index as experiment_index
+from vmn_exp.core.index import (
     ExperimentIndex,
     direct_rows,
     indexed_snapshot,
     indexed_status_rows,
 )
-from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+from vmn_exp.core.index_snapshot import IndexSnapshot
 
 APP = "app"
 

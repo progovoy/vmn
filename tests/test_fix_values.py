@@ -12,8 +12,8 @@ import math
 import numpy as np
 import pytest
 
-from version_stamp.core.experiment_log import latest_metrics, sort_by_metric
-from version_stamp.core.experiment_writer import append_to_log
+from vmn_exp.core.log import latest_metrics, sort_by_metric
+from vmn_exp.core.writer import append_to_log
 
 
 class _Storage:

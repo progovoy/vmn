@@ -8,7 +8,7 @@ environment, the second asserts it was cleaned.
 """
 import os
 
-from version_stamp.core import experiment_writer
+from vmn_exp.core import writer as experiment_writer
 
 PROBE = "VMN_LEAK_PROBE"
 

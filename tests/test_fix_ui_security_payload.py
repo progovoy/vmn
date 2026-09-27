@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import get_snapshot_storage
 from version_stamp.ui.server import create_app
 from version_stamp.ui.workspaces import WorkspaceManager
 

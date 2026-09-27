@@ -5,8 +5,8 @@ import time
 
 import yaml
 
-from version_stamp.core import experiment_status as st
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
+from vmn_exp.core import status as st
+from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from helpers import (
     extract_dev_verstr,
     _PROJECT_ROOT,
@@ -65,7 +65,7 @@ def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
 
     script = (
         "import os, time, yaml\n"
-        "from version_stamp.cli.snapshot import get_snapshot_storage\n"
+        "from vmn_exp.snapshot import get_snapshot_storage\n"
         "from version_stamp.cli.experiment import load_run_state\n"
         "time.sleep(2.5)\n"
         "storage = get_snapshot_storage('local',"

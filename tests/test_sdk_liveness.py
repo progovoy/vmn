@@ -17,8 +17,8 @@ import time
 import pytest
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.core import experiment_status as st
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.core import status as st
 from version_stamp.exp import start_run
 
 NOW = datetime.datetime(2026, 9, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)

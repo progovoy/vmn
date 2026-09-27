@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
-from version_stamp.cli import snapshot as snap
+from vmn_exp import snapshot as snap
 from version_stamp.exp import start_run
 
 N_WORKERS = 8

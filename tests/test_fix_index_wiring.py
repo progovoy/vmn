@@ -7,7 +7,7 @@ import subprocess
 import pytest
 from helpers import _bootstrap, _exp, _storage
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 
 pytest.importorskip("fastapi")
 
@@ -85,7 +85,7 @@ def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
 
 
 def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkeypatch):
-    from version_stamp.core import experiment_index
+    from vmn_exp.core import index as experiment_index
     from version_stamp.exp.reader import list_runs
 
     _bootstrap(app_layout)
@@ -150,7 +150,7 @@ def test_s3_workspace_listing_is_cached_across_requests(monkeypatch, tmp_path):
     moto = pytest.importorskip("moto")
     import boto3
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
     from version_stamp.ui.index import app_snapshot
 
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")

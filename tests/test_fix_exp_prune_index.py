@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from version_stamp.cli import experiment_prune as prune_mod
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 
 APP = "app"

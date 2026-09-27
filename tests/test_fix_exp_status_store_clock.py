@@ -12,8 +12,8 @@ import yaml
 from helpers import _bootstrap, _exp, _storage
 
 from version_stamp.cli.experiment_prune import experiment_prune
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
-from version_stamp.core import experiment_status as st
+from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core import status as st
 from version_stamp.core.logging import init_stamp_logger
 
 NOW = datetime.datetime(2026, 9, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)

@@ -5,9 +5,9 @@ import subprocess
 import pytest
 import yaml
 
-from version_stamp.cli import snapshot as snap
+from vmn_exp import snapshot as snap
 from version_stamp.core import logging as vmn_logging
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.ui.readers import snapshots as snap_reader
 from helpers import _init_app, _run_vmn_init, _snapshot, _stamp_app, extract_dev_verstr
 

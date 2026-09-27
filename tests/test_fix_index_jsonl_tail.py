@@ -1,7 +1,7 @@
 """read_complete_lines: the one incremental JSONL reader (index and ui)."""
 import pytest
 
-from version_stamp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
+from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 
 
 class _Files:

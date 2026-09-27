@@ -178,20 +178,25 @@ def test_moved_tables_are_initially_empty():
         assert isinstance(mod.TABLE, dict), f"version_stamp._moved.{area}.TABLE is not a dict"
 
 
-def test_real_moved_storage_core_snapshot_aliases():
-    """After h1/h2/h3 moves, old module names are the same object as new names."""
-    pairs = [
-        ("version_stamp.cli.snapshot", "vmn_exp.snapshot"),
-        ("version_stamp.core.experiment_writer", "vmn_exp.core.writer"),
-        ("version_stamp.cli.snapshot_storage_s3", "vmn_exp.storage.s3"),
+def test_old_experiment_paths_are_gone():
+    """After h1/h2/h3 moves, the old module names are no longer importable."""
+    # These are the PRE-MOVE names; they must not exist after the files were moved.
+    old_names = [
+        "version_stamp.cli.snapshot",
+        "version_stamp.core.experiment_writer",
+        "version_stamp.cli.snapshot_storage_s3",
     ]
-    for old_name, new_name in pairs:
-        old = importlib.import_module(old_name)
-        new = importlib.import_module(new_name)
-        assert old is new, f"{old_name!r} is not the same object as {new_name!r}"
-        assert sys.modules[old_name] is sys.modules[new_name], (
-            f"sys.modules[{old_name!r}] is not sys.modules[{new_name!r}]"
-        )
+    for old_name in old_names:
+        # Remove any cached entry so we get a fresh import attempt
+        sys.modules.pop(old_name, None)
+        try:
+            mod = importlib.import_module(old_name)
+            raise AssertionError(
+                f"Expected {old_name!r} to be unimportable after the move, "
+                f"but got: {mod}"
+            )
+        except ModuleNotFoundError:
+            pass  # expected
 
 
 def test_worker_command_imports_new_path():

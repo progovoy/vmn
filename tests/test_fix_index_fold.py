@@ -9,12 +9,12 @@ import random
 
 import pytest
 
-from version_stamp.core.experiment_fold import (
+from vmn_exp.core.fold import (
     apply_entries,
     fold_row,
     new_fold,
 )
-from version_stamp.core.experiment_log import experiment_row
+from vmn_exp.core.log import experiment_row
 
 META = {"verstr": "0.0.1-dev.aaa.bbb", "timestamp": "2026-01-01T00:00:00Z"}
 

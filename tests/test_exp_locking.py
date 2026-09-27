@@ -17,7 +17,7 @@ import time
 import pytest
 from filelock import FileLock, Timeout
 
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.core.status import load_run_state
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 # A held lock blocks for as long as we hold it, so "still running after this

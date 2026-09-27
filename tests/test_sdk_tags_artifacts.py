@@ -10,8 +10,8 @@ import pytest
 import yaml
 from helpers import _bootstrap, _storage
 
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.core.experiment_log import experiment_row
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.core.log import experiment_row
 from version_stamp.exp import manage, reader, start_run
 from version_stamp.exp.run import Run
 

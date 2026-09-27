@@ -5,7 +5,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     S3SnapshotStorage,
     get_snapshot_storage,
 )

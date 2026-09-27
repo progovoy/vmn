@@ -60,7 +60,7 @@ def test_outer_and_inner_run_linkage(container):
     - inner run's metadata.parent == outer run's verstr
     - a second trial also links to the same outer run
     """
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder
 
@@ -108,7 +108,7 @@ def test_result_series_logs_metrics_with_step(container):
 
     Ray bookkeeping keys (time_this_iter_s, done, etc.) are dropped.
     """
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder
 
@@ -204,7 +204,7 @@ def test_config_nested_dict_flattened_to_params(container):
 
 def test_trial_error_marks_run_failed(container):
     """on_trial_error finishes the inner run with exit_code=1 → failed status."""
-    from version_stamp.core.experiment_status import (
+    from vmn_exp.core.status import (
         FAILED,
         derive_status,
         load_run_state,
@@ -269,7 +269,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(image / "vmn_metadata.yml"))
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(store))
 
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder, make_callback
 

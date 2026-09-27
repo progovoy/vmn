@@ -5,7 +5,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import get_snapshot_storage
 
 BUCKET = "vmn-bucket"
 V = "0.0.1-dev.aaa.bbb"

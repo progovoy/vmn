@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import get_snapshot_storage
 from version_stamp.ui import tree_cache
 from version_stamp.ui.readers import diffs as diff_reader
 from version_stamp.ui.readers import tree as tree_reader

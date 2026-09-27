@@ -13,8 +13,8 @@ import time
 
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
-from version_stamp.core import experiment_status as st
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.core import status as st
+from vmn_exp.core.status import load_run_state
 
 TIMEOUT = 90
 

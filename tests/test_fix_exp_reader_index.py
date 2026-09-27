@@ -6,8 +6,8 @@ import pytest
 import yaml
 from helpers import _storage
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.core import experiment_index
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core import index as experiment_index
 from version_stamp.exp.reader import get_run
 
 

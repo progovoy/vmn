@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.registry.log import set_alias
 
@@ -41,7 +41,7 @@ def _run_ref(app="myapp", verstr="1.0.0"):
 
 def _register_run(storage, app_name, verstr):
     """Create a stub experiment record so resolve_experiment can find verstr."""
-    from version_stamp.core.experiment_writer import create_run
+    from vmn_exp.core.writer import create_run
 
     params = {
         "backend": "local",

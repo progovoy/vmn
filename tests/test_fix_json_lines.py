@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from version_stamp.core.experiment_logfiles import parse_json_line
+from vmn_exp.core.logfiles import parse_json_line
 
 
 def _reference(line):

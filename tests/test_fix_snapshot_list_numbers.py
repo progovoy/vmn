@@ -6,7 +6,7 @@ import re
 import yaml
 from helpers import _bootstrap, _snapshot, _storage
 
-from version_stamp.cli.snapshot import _resolve_verstr
+from vmn_exp.snapshot import _resolve_verstr
 
 _ROW_RE = re.compile(r"^\[(\d+)\]\s+(\S+)")
 RUNS = [("0.0.1-dev.aaaa111", "a"), ("0.0.1-dev.bbbb222", "b"), ("0.0.1-dev.cccc333", "a")]

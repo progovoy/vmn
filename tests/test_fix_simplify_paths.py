@@ -5,8 +5,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, S3SnapshotStorage
-from version_stamp.cli.snapshot_storage_files import valid_artifact_path
+from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
+from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.core.utils import parse_record_metadata, valid_path_component
 from version_stamp.ui.security import safe_segment
 
@@ -98,7 +98,7 @@ def _run_meta(verstr, diff_hash):
 
 
 def test_same_diff_hash_links_patches_without_comparing_bytes(local, monkeypatch):
-    from version_stamp.cli import snapshot_storage_files as files
+    from vmn_exp.storage import files
 
     def no_byte_compare(*a, **k):
         raise AssertionError("compared bytes despite a matching diff_hash")
@@ -115,7 +115,7 @@ def test_same_diff_hash_links_patches_without_comparing_bytes(local, monkeypatch
 
 
 def test_different_diff_hash_never_links_or_compares(local, monkeypatch):
-    from version_stamp.cli import snapshot_storage_files as files
+    from vmn_exp.storage import files
 
     local.save("app", "c", _run_meta("c", "h1"), {"working_tree": "same\n"})
     monkeypatch.setattr(files, "_same_bytes", lambda *a, **k: 1 / 0)

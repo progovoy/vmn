@@ -7,7 +7,7 @@ Three tests:
 """
 import pytest
 
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.registry.log import set_alias, set_version_status
 from vmn_exp.registry.view import model_state, resolve_ref, registered_runs

@@ -7,10 +7,10 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_log import sort_by_metric
-from version_stamp.core.experiment_tree import subtree_status
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core import index as experiment_index
+from vmn_exp.core.log import sort_by_metric
+from vmn_exp.core.tree import subtree_status
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -256,7 +256,7 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
 def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):
     import tempfile
 
-    from version_stamp.cli.snapshot import S3SnapshotStorage
+    from vmn_exp.snapshot import S3SnapshotStorage
     from version_stamp.ui.server import create_app
 
     storage = S3SnapshotStorage("vmn-bucket", prefix="exps")

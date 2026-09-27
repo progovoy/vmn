@@ -9,10 +9,10 @@ import sys
 import pytest
 import yaml
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, get_snapshot_storage
-from version_stamp.core import experiment_index_store, experiment_index_workers
+from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.core import index_store as experiment_index_store, index_workers as experiment_index_workers
 from version_stamp.core import logging as vmn_logging
-from version_stamp.core.experiment_index import ExperimentIndex, direct_rows
+from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
 TS = "2026-01-01T00:00:{:02d}Z"

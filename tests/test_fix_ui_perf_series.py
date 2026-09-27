@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import get_snapshot_storage
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"

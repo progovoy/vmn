@@ -6,10 +6,10 @@ import pytest
 import yaml
 from s3_helpers import entry, meta, mocked_bucket, raw_keys, record_calls, s3_storage
 
-from version_stamp.cli import snapshot_storage_buffered
+from vmn_exp.storage import buffered as snapshot_storage_buffered
 from version_stamp.cli.experiment import _get_experiment_storage
-from version_stamp.core.experiment_logfiles import compacted_log_name
-from version_stamp.core.experiment_writer import append_entries_to_log
+from vmn_exp.core.logfiles import compacted_log_name
+from vmn_exp.core.writer import append_entries_to_log
 from version_stamp.exp import log_buffer
 from version_stamp.exp.log_buffer import LogBuffer
 

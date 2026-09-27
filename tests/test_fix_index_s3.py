@@ -6,8 +6,8 @@ import pytest
 moto = pytest.importorskip("moto")
 import boto3  # noqa: E402
 
-from version_stamp.cli.snapshot import S3SnapshotStorage  # noqa: E402
-from version_stamp.core.experiment_index import (  # noqa: E402
+from vmn_exp.snapshot import S3SnapshotStorage  # noqa: E402
+from vmn_exp.core.index import (  # noqa: E402
     ExperimentIndex,
     direct_rows,
 )

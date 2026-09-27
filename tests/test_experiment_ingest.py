@@ -18,7 +18,7 @@ from helpers import (
 
 
 def _log(app_layout, verstr):
-    from version_stamp.core.experiment_log import load_log
+    from vmn_exp.core.log import load_log
 
     return load_log(_storage(app_layout), app_layout.app_name, verstr)
 

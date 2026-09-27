@@ -5,7 +5,7 @@ import os
 import pytest
 from test_fix_exp_status_store_clock import _running, _write_run
 
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
@@ -64,7 +64,7 @@ def test_leaderboard_rederive_keeps_using_the_store_time(app_layout, monkeypatch
 
 
 def test_detail_uses_the_snapshot_store_time_with_a_refresher():
-    from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+    from vmn_exp.core.index_snapshot import IndexSnapshot
     from version_stamp.ui.experiment_source import ExperimentSource
 
     observed = object()

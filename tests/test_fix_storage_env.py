@@ -12,8 +12,8 @@ import pytest
 import yaml
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core.experiment_writer import (
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core.writer import (
     merge_conf_into_params,
     merge_env_into_params,
 )

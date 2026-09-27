@@ -10,8 +10,8 @@ import os
 import pytest
 import yaml
 
-from version_stamp.core.experiment_status import RUN_STATE_FILE
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.writer import (
     allocate_run_verstr,
     append_to_log,
     attach_parent,
@@ -61,7 +61,7 @@ class _FakeStorage:
 @pytest.fixture(autouse=True)
 def _clean_writer_id(monkeypatch):
     """The writer id is a process-lifetime cache; no test may inherit it."""
-    from version_stamp.core import experiment_writer
+    from vmn_exp.core import writer as experiment_writer
 
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
@@ -436,9 +436,9 @@ def test_experiment_writer_does_not_import_upward():
 
     source = (
         pathlib.Path(__file__).resolve().parent.parent
-        / "version_stamp"
+        / "vmn_exp"
         / "core"
-        / "experiment_writer.py"
+        / "writer.py"
     ).read_text()
 
     offenders = [

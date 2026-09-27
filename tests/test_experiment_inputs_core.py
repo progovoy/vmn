@@ -1,7 +1,7 @@
 """Pure-function tests for experiment_inputs.py — entry shapes, validation, defaults."""
 import pytest
 
-from version_stamp.core.experiment_inputs import (
+from vmn_exp.core.inputs import (
     create_input_entry,
     default_input_name,
     fold_inputs,

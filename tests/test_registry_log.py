@@ -7,7 +7,7 @@ test_delete_version_with_alias_refused.
 """
 import pytest
 
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import (
     REGISTRY_APP,
@@ -75,7 +75,7 @@ def test_remove_alias(tmp_path):
 
 def test_second_host_sees_alias_move(tmp_path, monkeypatch):
     """Two storages sharing the same directory: host2 sees host1's alias write."""
-    import version_stamp.core.experiment_writer as ew
+    import vmn_exp.core.writer as ew
 
     st1 = _local(tmp_path)
     _make_model(st1, "bert")

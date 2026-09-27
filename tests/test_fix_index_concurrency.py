@@ -4,9 +4,9 @@ import sqlite3
 
 import pytest
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index_store
-from version_stamp.core.experiment_index import ExperimentIndex, direct_rows
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core import index_store as experiment_index_store
+from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
 

@@ -1,7 +1,7 @@
 """Tests for inputs/env query extensions in experiment_query.py."""
 import pytest
 
-from version_stamp.core.experiment_query import QueryError, compile_query, filter_rows
+from vmn_exp.core.query import QueryError, compile_query, filter_rows
 
 
 def _row(**kw):

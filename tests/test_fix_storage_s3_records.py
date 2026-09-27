@@ -67,7 +67,7 @@ def test_delete_clears_the_claim_marker_too():
 
 
 def test_delete_removes_large_records_in_concurrent_batches(monkeypatch):
-    import version_stamp.cli.snapshot_storage_s3_records as records
+    import vmn_exp.storage.s3_records as records
 
     monkeypatch.setattr(records, "_DELETE_BATCH", 2)
     s3 = s3_storage()

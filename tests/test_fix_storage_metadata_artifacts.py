@@ -10,8 +10,8 @@ import os
 import pytest
 from s3_helpers import cached_host, meta, mocked_bucket, record_calls, s3_storage
 
-from version_stamp.cli.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.cli.snapshot_storage_files import valid_artifact_path
+from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.core.logging import init_stamp_logger
 
 V = "1.0.0-dev.aaa.bbb"

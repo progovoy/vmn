@@ -18,7 +18,7 @@ import warnings
 import pytest
 from helpers import _bootstrap, _storage
 
-from version_stamp.core.experiment_log import metric_series
+from vmn_exp.core.log import metric_series
 from version_stamp.exp import autolog, autolog_disable, start_run
 from version_stamp.exp import run as run_module
 from version_stamp.exp.reader import get_run
@@ -98,7 +98,7 @@ def test_keras_epochs_carry_their_own_timestamps(app_layout):
         verstr = run.id
         model.fit(x, y, epochs=3, verbose=0, callbacks=[Slow()])
 
-    from version_stamp.core.experiment_status import parse_iso
+    from vmn_exp.core.status import parse_iso
 
     series = _row(app_layout, verstr)["series"]["keras_loss"]
     stamps = [parse_iso(p["ts"]) for p in series]

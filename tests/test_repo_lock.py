@@ -24,7 +24,7 @@ def test_default_lock_path(monkeypatch, tmp_path):
 
 def test_writer_reexport_is_same_object():
     """experiment_writer.get_repo_lock is the same object as repo_lock.get_repo_lock."""
-    from version_stamp.core.experiment_writer import get_repo_lock as ew_lock
+    from vmn_exp.core.writer import get_repo_lock as ew_lock
     from version_stamp.core.repo_lock import get_repo_lock as rl_lock
 
     assert ew_lock is rl_lock

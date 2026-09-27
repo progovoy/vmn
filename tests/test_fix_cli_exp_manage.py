@@ -3,7 +3,7 @@ import re
 
 from helpers import _bootstrap, _exp, _storage
 
-from version_stamp.core.experiment_log import experiment_row
+from vmn_exp.core.log import experiment_row
 
 _ROW_RE = re.compile(r"^\s*\[(\d+)\]\s+(\S+)")
 

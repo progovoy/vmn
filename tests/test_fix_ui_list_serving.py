@@ -9,12 +9,12 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     LocalSnapshotStorage,
     S3SnapshotStorage,
     get_snapshot_storage,
 )
-from version_stamp.core import experiment_index
+from vmn_exp.core import index as experiment_index
 from version_stamp.ui import leaderboard_cache
 from version_stamp.ui.readers import experiments as exp_reader
 
@@ -254,7 +254,7 @@ def test_a_failing_background_listing_keeps_the_last_snapshot(background, monkey
 
 
 def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
-    from version_stamp.core.experiment_index_snapshot import IndexSnapshot
+    from vmn_exp.core.index_snapshot import IndexSnapshot
     from version_stamp.ui.experiment_source import ExperimentSource
     from version_stamp.ui.workspaces import Workspace
 

@@ -66,8 +66,8 @@ def test_index_experiments_parity(app_layout, capfd):
 
 def test_index_serves_from_cache(app_layout, capfd, monkeypatch):
     """After a warm read, unchanged data is served without re-reading storage."""
-    from version_stamp.cli.snapshot import LocalSnapshotStorage
-    from version_stamp.core import experiment_index
+    from vmn_exp.snapshot import LocalSnapshotStorage
+    from vmn_exp.core import index as experiment_index
 
     _seed(app_layout, capfd, n=2)
     idx = _index(app_layout)

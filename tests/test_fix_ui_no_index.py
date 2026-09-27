@@ -2,8 +2,8 @@
 no on-disk cache."""
 import os
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.cli.snapshot_storage_files import INDEX_CACHE_FILE
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.files import INDEX_CACHE_FILE
 from version_stamp.ui.experiment_source import ExperimentSource
 from version_stamp.ui.workspaces import Workspace
 

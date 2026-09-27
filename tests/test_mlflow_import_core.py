@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mlflow_fixtures import MlflowFixtureBuilder
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.importers.import_records import import_run, run_verstr
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ def test_partial_import_resume(tmp_path):
     storage = _storage(tmp_path)
 
     # Simulate a partial import: manually write the metadata without a log
-    from version_stamp.core.experiment_writer import claim_record
+    from vmn_exp.core.writer import claim_record
     verstr = run_verstr(RUN_ID_A)
     metadata = {
         "verstr": verstr,
@@ -222,7 +222,7 @@ def test_nan_kept_in_metrics(tmp_path):
 
 def _get_run_state(storage, app_name, verstr):
     import yaml
-    from version_stamp.core.experiment_status import RUN_STATE_FILE
+    from vmn_exp.core.status import RUN_STATE_FILE
     snap_dir = storage._snapshot_dir(app_name, verstr)
     path = os.path.join(snap_dir, RUN_STATE_FILE)
     if not os.path.isfile(path):

@@ -585,7 +585,7 @@ def vmn_env_guard():
     ``app_layout``, which sets ``VMN_WORKING_DIR``) and restored after they are
     all torn down, so it cleans up after them instead of fighting them.
     """
-    from version_stamp.core import experiment_writer
+    from vmn_exp.core import writer as experiment_writer
 
     saved = {k: v for k, v in os.environ.items() if k.startswith("VMN_")}
 

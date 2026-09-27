@@ -11,7 +11,7 @@ import yaml
 from filelock import FileLock
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _exp, _storage
 
-from version_stamp.cli.snapshot import _resolve_verstr
+from vmn_exp.snapshot import _resolve_verstr
 
 BLOCKED_WINDOW = 3.0
 JOIN_TIMEOUT = 120
@@ -224,7 +224,7 @@ def test_compare_does_not_load_patches(app_layout, capfd, monkeypatch):
     a = _create(app_layout, "--metrics", "loss=1")
     b = _create(app_layout, "--metrics", "loss=2")
 
-    from version_stamp.cli import snapshot
+    from vmn_exp import snapshot
 
     def _no_patches(*args, **kwargs):
         raise AssertionError("compare loaded patches")

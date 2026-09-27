@@ -9,7 +9,7 @@ import os
 
 from helpers import _bootstrap, _experiment, _storage, extract_dev_verstr
 
-from version_stamp.core.experiment_log import effective_params
+from vmn_exp.core.log import effective_params
 
 
 def _append(app_layout, verstr, entry):

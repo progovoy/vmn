@@ -279,7 +279,7 @@ def test_storage_backed_reader_filters_too(app_layout, tmp_path):
 
 
 def test_storage_backed_reader_raises_on_a_bad_query(app_layout, tmp_path):
-    from version_stamp.core.experiment_query import QueryError
+    from vmn_exp.core.query import QueryError
 
     _seed(app_layout)
     with pytest.raises(QueryError):

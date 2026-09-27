@@ -57,7 +57,7 @@ class _FakeStorage:
 
 @pytest.fixture(autouse=True)
 def _clean_writer_id(monkeypatch):
-    from version_stamp.core import experiment_writer
+    from vmn_exp.core import writer as experiment_writer
 
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
@@ -70,8 +70,8 @@ def _clean_writer_id(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_writes_env_yml_and_summary():
-    from version_stamp.core.experiment_env import capture_env
-    from version_stamp.core.experiment_writer import create_run
+    from vmn_exp.core.env import capture_env
+    from vmn_exp.core.writer import create_run
 
     env = capture_env()
     storage = _FakeStorage()
@@ -106,8 +106,8 @@ def test_capture_failure_never_fails_create(monkeypatch):
     Also verifies that when capture_env() itself raises in the create flow,
     the run is still created (tested via _capture_env_safe in exp/create.py).
     """
-    from version_stamp.core.experiment_env import capture_env
-    from version_stamp.core.experiment_writer import create_run
+    from vmn_exp.core.env import capture_env
+    from vmn_exp.core.writer import create_run
 
     env = capture_env()
     storage = _FakeStorage()
@@ -281,7 +281,7 @@ def test_cli_no_env(app_layout):
 
 def test_run_probes_child_python(app_layout, monkeypatch, tmp_path):
     from helpers import _bootstrap, _storage
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
 
     _bootstrap(app_layout)
 
@@ -335,9 +335,9 @@ def test_run_probes_child_python(app_layout, monkeypatch, tmp_path):
 
 def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
     """git-free (VMN_SNAPSHOT_METADATA) mode still captures env."""
-    from version_stamp.core.experiment_env import capture_env
-    from version_stamp.core.experiment_from_snapshot import create_from_snapshot
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.core.env import capture_env
+    from vmn_exp.core.from_snapshot import create_from_snapshot
+    from vmn_exp.snapshot import get_snapshot_storage
 
     # Build minimal vmn_metadata.yml
     meta_path = tmp_path / "vmn_metadata.yml"
@@ -369,7 +369,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
 
 def test_resume_keeps_env(app_layout, monkeypatch):
     from helpers import _bootstrap, _storage
-    from version_stamp.core import experiment_env
+    from vmn_exp.core import env as experiment_env
     from version_stamp.exp import start_run
 
     _bootstrap(app_layout)
@@ -404,7 +404,8 @@ def test_resume_keeps_env(app_layout, monkeypatch):
 def test_capture_outside_lock(app_layout, monkeypatch):
     """env capture must complete before the repo lock is acquired."""
     from helpers import _bootstrap
-    from version_stamp.core import experiment_env, repo_lock as _repo_lock_mod
+    from vmn_exp.core import env as experiment_env
+    from version_stamp.core import repo_lock as _repo_lock_mod
     from version_stamp.exp import start_run
 
     _bootstrap(app_layout)

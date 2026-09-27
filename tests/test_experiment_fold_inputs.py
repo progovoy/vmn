@@ -1,7 +1,7 @@
 """Tests for input-entry folding in experiment_fold.py and fold_row provenance fields."""
 import pytest
 
-from version_stamp.core.experiment_fold import (
+from vmn_exp.core.fold import (
     apply_entries,
     fold_log,
     fold_row,

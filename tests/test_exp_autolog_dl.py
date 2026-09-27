@@ -18,7 +18,7 @@ import warnings
 
 import pytest
 
-from version_stamp.core.experiment_log import metric_series
+from vmn_exp.core.log import metric_series
 from version_stamp.exp import autolog, autolog_disable, start_run
 from version_stamp.exp import run as run_module
 from version_stamp.exp.autolog import _PATCH_MARKER, SUPPORTED_FRAMEWORKS

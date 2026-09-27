@@ -6,9 +6,9 @@ import pytest
 import yaml
 from helpers import _storage
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage, _resolve_verstr
-from version_stamp.core import experiment_index
-from version_stamp.core.experiment_refs import resolve_experiment
+from vmn_exp.snapshot import LocalSnapshotStorage, _resolve_verstr
+from vmn_exp.core import index as experiment_index
+from vmn_exp.core.refs import resolve_experiment
 
 APP_RUNS = [
     ("0.0.1-dev.aaaa111.bbbb222", "2026-09-21T12:00:01Z"),

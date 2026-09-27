@@ -17,7 +17,7 @@ import pytest
 
 sklearn = pytest.importorskip("sklearn")
 
-from version_stamp.core.experiment_query import compile_query  # noqa: E402
+from vmn_exp.core.query import compile_query  # noqa: E402
 from version_stamp.exp import autolog, autolog_disable, start_run  # noqa: E402
 from version_stamp.exp import run as run_module  # noqa: E402
 from version_stamp.exp.reader import get_run  # noqa: E402

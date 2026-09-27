@@ -6,8 +6,8 @@ import threading
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.core.experiment_index import ExperimentIndex
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.index import ExperimentIndex
 
 
 @pytest.fixture

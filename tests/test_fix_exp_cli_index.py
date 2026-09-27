@@ -6,7 +6,7 @@ import re
 import pytest
 from helpers import _bootstrap, _exp, _storage
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
 
 _ROW_RE = re.compile(r"^\s*\[(\d+)\]\s+(\S+)")
 

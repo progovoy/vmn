@@ -1,7 +1,7 @@
 """The pure log-folding core shared by the CLI, the ui readers and the SDK."""
 import pytest
 
-from version_stamp.core.experiment_log import (
+from vmn_exp.core.log import (
     effective_params,
     entry_params,
     experiment_row,

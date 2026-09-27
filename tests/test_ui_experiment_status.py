@@ -311,8 +311,8 @@ def test_last_metric_at_tracks_newest_metrics_entry(app_layout):
 
 def test_status_is_recomputed_on_a_cache_hit(app_layout, monkeypatch):
     """A cached row must not freeze `running`: status is derived per request."""
-    import version_stamp.core.experiment_index as index_mod
-    import version_stamp.core.experiment_status as status_mod
+    import vmn_exp.core.index as index_mod
+    import vmn_exp.core.status as status_mod
 
     _write_experiment(app_layout, "0.0.1", run_state=_running_state())
     idx = _index(app_layout)
@@ -353,7 +353,7 @@ def test_heartbeat_rewrite_skips_the_expensive_fetch(app_layout, monkeypatch):
     A rewritten ``run_state.yml`` must serve a new status without re-reading
     every experiment's metadata and logs.
     """
-    import version_stamp.core.experiment_index as index_mod
+    import vmn_exp.core.index as index_mod
 
     _write_experiment(
         app_layout,

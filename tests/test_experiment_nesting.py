@@ -2,7 +2,7 @@
 import os
 
 from version_stamp.cli.entry import vmn_run
-from version_stamp.core.experiment_tree import INNER, OUTER, annotate_tree
+from vmn_exp.core.tree import INNER, OUTER, annotate_tree
 from version_stamp.core.logging import reset_logger
 from helpers import (
     DEV_VERSION_RE,
@@ -207,7 +207,7 @@ def test_show_skips_tree_reads_for_a_lone_experiment(app_layout, capfd, monkeypa
 
 
 def test_experiment_is_never_its_own_parent():
-    from version_stamp.core.experiment_writer import attach_parent
+    from vmn_exp.core.writer import attach_parent
 
     meta = {"verstr": "v1"}
     attach_parent(meta, "v1")
@@ -221,7 +221,7 @@ def test_experiment_is_never_its_own_parent():
 
 
 def test_children_by_parent_indexes_edges_and_drops_self_parents():
-    from version_stamp.core.experiment_tree import children_by_parent
+    from vmn_exp.core.tree import children_by_parent
 
     nodes = [
         {"verstr": "a", "parent": None},
@@ -233,7 +233,7 @@ def test_children_by_parent_indexes_edges_and_drops_self_parents():
 
 
 def test_subtree_verstrs_walks_down_and_survives_a_cycle():
-    from version_stamp.core.experiment_tree import subtree_verstrs
+    from vmn_exp.core.tree import subtree_verstrs
 
     children_of = {"a": ["b"], "b": ["c"], "c": ["a"]}
     assert sorted(subtree_verstrs("a", children_of)) == ["a", "b", "c"]

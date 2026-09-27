@@ -10,12 +10,12 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     S3SnapshotStorage,
     get_snapshot_storage,
 )
-from version_stamp.core.experiment_status import derive_status, load_run_state
-from version_stamp.core.experiment_writer import allocate_run_verstr
+from vmn_exp.core.status import derive_status, load_run_state
+from vmn_exp.core.writer import allocate_run_verstr
 from version_stamp.core.logging import init_stamp_logger
 
 BUCKET = "vmn-bucket"
@@ -245,7 +245,7 @@ def test_s3_artifact_upload_uses_upload_file(tmp_path):
 
 
 def test_core_list_artifacts_delegates_to_storage():
-    from version_stamp.core.experiment_log import list_artifacts
+    from vmn_exp.core.log import list_artifacts
 
     class _St:
         def list_artifacts(self, app, verstr):

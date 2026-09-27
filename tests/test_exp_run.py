@@ -22,9 +22,9 @@ from helpers import (
     extract_dev_verstr,
 )
 
-from version_stamp.core import experiment_status as st
+from vmn_exp.core import status as st
 from version_stamp.core.constants import VMN_USER_NAME
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
+from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from version_stamp.exp import Run, start_run
 
 _RUN_STATE_KEYS = {
@@ -250,7 +250,7 @@ def test_metrics_notes_and_artifacts_land_in_the_log(app_layout):
     assert artifacts[0]["path"] == "weights.bin"
     assert artifacts[0]["size"] == 10
 
-    from version_stamp.core.experiment_log import latest_metrics
+    from vmn_exp.core.log import latest_metrics
 
     assert latest_metrics(log)["loss"] == 0.25
 
@@ -265,7 +265,7 @@ def test_creation_params_ride_the_create_entry_like_the_cli_file_path(app_layout
     create = next(e for e in log if e.get("type") == "create")
     assert create["params"] == {"lr": 0.001, "batch": 32}
 
-    from version_stamp.core.experiment_log import effective_params, latest_metrics
+    from vmn_exp.core.log import effective_params, latest_metrics
 
     assert effective_params(log) == {"lr": 0.001, "batch": 32}
     assert latest_metrics(log)["lr"] == 0.001
@@ -362,7 +362,7 @@ def test_sdk_and_cli_records_share_one_schema(app_layout, capfd):
 def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
     _bootstrap(app_layout)
 
-    from version_stamp.core.experiment_writer import get_writer_id
+    from vmn_exp.core.writer import get_writer_id
 
     with start_run(app_layout.app_name) as run:
         run.log_metric("loss", 1.0)

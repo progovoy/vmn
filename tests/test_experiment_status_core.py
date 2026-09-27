@@ -7,8 +7,8 @@ import datetime
 
 import pytest
 
-from version_stamp.core import experiment_status as st
-from version_stamp.core import experiment_tree as tr
+from vmn_exp.core import status as st
+from vmn_exp.core import tree as tr
 
 
 def _iso(dt):

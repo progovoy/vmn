@@ -69,7 +69,7 @@ def _bootstrap(app_layout):
 
 
 def _storage(app_layout, subdir="experiments"):
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     return get_snapshot_storage(
         "local", vmn_root_path=app_layout.repo_path, subdir=subdir

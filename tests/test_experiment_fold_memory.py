@@ -13,7 +13,7 @@ walk, and pins a ceiling well below the pre-fix, list-of-list cost.
 """
 import sys
 
-from version_stamp.core.experiment_fold import apply_entries, fold_values, new_fold
+from vmn_exp.core.fold import apply_entries, fold_values, new_fold
 
 N_METRICS = 20
 N_PARAMS = 10

@@ -9,12 +9,12 @@ import os
 
 import pytest
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.core.experiment_fold import apply_entries, fold_row, new_fold
-from version_stamp.core.experiment_index import ExperimentIndex
-from version_stamp.core.experiment_log import experiment_row, filter_archived
-from version_stamp.core.experiment_query import QueryError, filter_rows
-from version_stamp.core.experiment_writer import create_tags_entry
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.fold import apply_entries, fold_row, new_fold
+from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.log import experiment_row, filter_archived
+from vmn_exp.core.query import QueryError, filter_rows
+from vmn_exp.core.writer import create_tags_entry
 
 META = {"verstr": "0.0.1-dev.a", "timestamp": "2026-01-01T00:00:00Z"}
 

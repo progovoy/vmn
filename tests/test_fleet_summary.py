@@ -5,14 +5,14 @@ UI detail API serves for outer runs.
 """
 import datetime
 
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.status import (
     CREATED,
     FAILED,
     RUNNING,
     STUCK,
     SUCCEEDED,
 )
-from version_stamp.core.experiment_tree import fleet_summary
+from vmn_exp.core.tree import fleet_summary
 from version_stamp.ui.readers.experiment_detail import _DETAIL_STATUS_KEYS
 
 
@@ -215,7 +215,7 @@ def test_fleet_summary_progress_non_numeric():
 
 def test_fleet_summary_cap_children_detail():
     """More than 50 children -> only first 50 in detail, but counts cover all."""
-    from version_stamp.core.experiment_tree import FLEET_MAX_CHILDREN_DETAIL
+    from vmn_exp.core.tree import FLEET_MAX_CHILDREN_DETAIL
 
     n = FLEET_MAX_CHILDREN_DETAIL + 10
     child_names = [f"child{i}" for i in range(n)]

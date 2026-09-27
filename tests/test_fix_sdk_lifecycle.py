@@ -13,8 +13,8 @@ import pytest
 import yaml
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core.status import load_run_state
 from version_stamp.exp import run as run_module
 from version_stamp.exp import start_run
 

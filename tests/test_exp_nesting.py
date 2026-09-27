@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from version_stamp.core.experiment_tree import INNER, OUTER, annotate_tree
+from vmn_exp.core.tree import INNER, OUTER, annotate_tree
 from version_stamp.exp import start_run
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 

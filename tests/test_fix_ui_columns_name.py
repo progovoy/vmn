@@ -3,7 +3,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from version_stamp.core.experiment_log import experiment_row
+from vmn_exp.core.log import experiment_row
 from version_stamp.ui.leaderboard_columns import columns_payload
 
 
