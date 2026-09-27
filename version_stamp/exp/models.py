@@ -34,23 +34,8 @@ def _resolve_storage(storage=None):
     """Resolve experiment storage from env or the current checkout."""
     if storage is not None:
         return storage
-    from version_stamp.exp.create import SNAPSHOT_METADATA_ENV, snapshot_mode_storage
-
-    # Container/env-only mode: no git checkout available.
-    if os.environ.get(SNAPSHOT_METADATA_ENV) or os.environ.get("VMN_EXPERIMENT_DIR"):
-        return snapshot_mode_storage()
-
-    # Checkout mode: find the .vmn root, then pick the backend the same way the
-    # CLI does (env vars override defaults; VMN_EXPERIMENT_BUCKET + local root
-    # gives a buffered local+S3 store, not a pure-S3 store).
-    from version_stamp.api import resolve_root_path
-    from version_stamp.cli.experiment import _get_experiment_storage
-    from version_stamp.core.experiment_writer import merge_env_into_params
-
-    root_path = resolve_root_path()
-    params = {"backend": "local", "prefix": "vmn-experiments", "experiment_dir": root_path}
-    merge_env_into_params(params)
-    return _get_experiment_storage(None, params)
+    from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+    return resolve_experiment_storage()
 
 
 def _run_to_ref(run, app_name):

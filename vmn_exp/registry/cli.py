@@ -8,7 +8,8 @@ the CommandSpec so every action short-circuits before the repo lock.
 Storage resolution order (same as ``vmn exp``):
   1. ``--dir`` flag
   2. ``VMN_EXPERIMENT_DIR`` environment variable
-  3. ``--bucket`` / ``VMN_EXPERIMENT_BUCKET`` → S3 backend
+  3. repo root auto-detected from cwd (fixes visibility of SDK-registered models)
+  4. ``--bucket`` / ``VMN_EXPERIMENT_BUCKET`` → S3 backend
 
 Boundary: this module is EXPERIMENTS side; may only reach stamping via
 ``version_stamp.api``.
@@ -17,9 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
-from version_stamp.cli.snapshot import get_snapshot_storage
+from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
 from vmn_exp.registry.log import set_alias as _set_alias
 from vmn_exp.registry.log import remove_alias as _remove_alias
 from vmn_exp.registry.log import set_version_status
@@ -36,31 +36,11 @@ _LOG = logging.getLogger(__name__)
 
 def _get_storage(args):
     """Build experiment storage for registry operations from args / env."""
-    exp_dir = getattr(args, "dir", None) or os.environ.get("VMN_EXPERIMENT_DIR")
-    bucket = (
-        getattr(args, "bucket", None)
-        or os.environ.get("VMN_EXPERIMENT_BUCKET")
-    )
-    # prefix: argparse already defaults to "vmn-experiments"; env var is a
-    # fallback for callers that bypass argparse (e.g. SDK).
-    prefix = getattr(args, "prefix", None) or os.environ.get("VMN_EXPERIMENT_PREFIX") or "vmn-experiments"
-    endpoint_url = (
-        getattr(args, "endpoint_url", None)
-        or os.environ.get("VMN_EXPERIMENT_ENDPOINT_URL")
-    )
-
-    backend = "local"
-    if not exp_dir and bucket:
-        backend = "s3"
-
-    return get_snapshot_storage(
-        backend,
-        vmn_root_path=exp_dir,
-        bucket=bucket,
-        prefix=prefix,
-        endpoint_url=endpoint_url,
-        subdir="experiments",
-        buffer_logs=True,
+    return resolve_experiment_storage(
+        dir=getattr(args, "dir", None),
+        bucket=getattr(args, "bucket", None),
+        prefix=getattr(args, "prefix", None),
+        endpoint_url=getattr(args, "endpoint_url", None),
     )
 
 

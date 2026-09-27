@@ -12,7 +12,6 @@ Boundary: this module is EXPERIMENTS side.  May import from:
 from __future__ import annotations
 
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -25,33 +24,13 @@ _LOG = logging.getLogger(__name__)
 
 def _get_storage(args):
     """Resolve experiment storage from args / environment variables."""
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
 
-    exp_dir = getattr(args, "experiment_dir", None) or os.environ.get(
-        "VMN_EXPERIMENT_DIR"
-    )
-    bucket = getattr(args, "bucket", None) or os.environ.get("VMN_EXPERIMENT_BUCKET")
-    prefix = (
-        getattr(args, "prefix", None)
-        or os.environ.get("VMN_EXPERIMENT_PREFIX")
-        or "vmn-experiments"
-    )
-    endpoint_url = getattr(args, "endpoint_url", None) or os.environ.get(
-        "VMN_EXPERIMENT_ENDPOINT_URL"
-    )
-
-    backend = getattr(args, "backend", "local") or "local"
-    if not exp_dir and bucket:
-        backend = "s3"
-
-    return get_snapshot_storage(
-        backend,
-        vmn_root_path=exp_dir,
-        bucket=bucket,
-        prefix=prefix,
-        endpoint_url=endpoint_url,
-        subdir="experiments",
-        buffer_logs=True,
+    return resolve_experiment_storage(
+        dir=getattr(args, "experiment_dir", None),
+        bucket=getattr(args, "bucket", None),
+        prefix=getattr(args, "prefix", None),
+        endpoint_url=getattr(args, "endpoint_url", None),
     )
 
 
