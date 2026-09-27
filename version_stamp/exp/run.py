@@ -369,6 +369,36 @@ class Run(RunArtifacts):
         save_artifact(self._storage, self.app_name, self.id, path, name=name)
         self._append(create_log_entry("artifact", **info))
 
+    def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
+        """Register this run as a model version in the registry.
+
+        Convenience wrapper around :func:`~version_stamp.exp.models.register_model`
+        that pre-fills *run*, *app_name* and *storage* from this run.
+
+        Parameters
+        ----------
+        name:
+            Model name.
+        artifact_path:
+            Relative artifact path within this run.
+        alias:
+            If given, immediately point this alias at the new version.
+        description:
+            Human-readable description of this version.
+        storage:
+            Override the storage; defaults to this run's storage.
+        """
+        from version_stamp.exp.models import register_model as _register_model
+
+        return _register_model(
+            name,
+            run=self,
+            artifact_path=artifact_path,
+            alias=alias,
+            description=description,
+            storage=storage,
+        )
+
     # Tags are mutable, and can be set on a finished run: each call appends a
     # `tags` entry, and readers fold them per key, last write wins.
     def set_tag(self, key, value):

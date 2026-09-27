@@ -38,6 +38,14 @@ def _resolve_app_name(app_name, candidates):
 
 from version_stamp.exp.autolog import autolog, autolog_disable  # noqa: E402
 from version_stamp.exp.context import current_run  # noqa: E402
+from version_stamp.exp.models import (  # noqa: E402
+    download_model,
+    get_model_version,
+    list_models,
+    register_model,
+    remove_alias,
+    set_alias,
+)
 from version_stamp.exp.ranks import NoOpRun  # noqa: E402
 from version_stamp.exp.run import Run, start_run  # noqa: E402  (needs the helper above)
 
@@ -47,5 +55,11 @@ __all__ = [
     "autolog",
     "autolog_disable",
     "current_run",
+    "download_model",
+    "get_model_version",
+    "list_models",
+    "register_model",
+    "remove_alias",
+    "set_alias",
     "start_run",
 ]
