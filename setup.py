@@ -49,6 +49,7 @@ setuptools.setup(
         "version_stamp.backends",
         "version_stamp.stamping",
         "version_stamp.cli",
+        "version_stamp.devversion",
         "version_stamp.exp",
         "version_stamp.ui",
         "version_stamp.ui.readers",

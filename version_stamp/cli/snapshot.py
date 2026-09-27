@@ -86,8 +86,17 @@ from version_stamp.devversion.untracked import (  # noqa: F401
     _untracked_caps,
     _within_caps,
     copy_untracked_files,
-    untracked_payload,
+    payload_from_tarball,
 )
+
+
+
+def untracked_payload(repo_path):
+    """devversion's ``untracked_payload``, collecting through this module's
+    ``_collect_untracked_tarball`` so experiment code (and its tests) can
+    still patch the collector here."""
+    return payload_from_tarball(*_collect_untracked_tarball(repo_path))
+
 
 # These two are pure helpers that the core write path needs as well, so they
 # live in core.utils now. The old private names stay importable from here.

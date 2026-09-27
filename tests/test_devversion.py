@@ -30,7 +30,6 @@ def test_snapshot_reexports_are_devversion_objects():
     assert snap._unique_snapshot_verstr is dv_cap._unique_snapshot_verstr
 
     # untracked
-    assert snap.untracked_payload is dv_unt.untracked_payload
     assert snap.copy_untracked_files is dv_unt.copy_untracked_files
     assert snap._hash_untracked_content is dv_unt._hash_untracked_content
 

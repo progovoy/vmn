@@ -226,8 +226,12 @@ def _list_tarball_members(tarball_bytes):
 
 def untracked_payload(repo_path):
     """The stored untracked part of a snapshot: the tarball and what it skipped."""
+    return payload_from_tarball(*_collect_untracked_tarball(repo_path))
+
+
+def payload_from_tarball(untracked_tar, skipped):
+    """The payload dict for an already collected ``(tarball, skipped)`` pair."""
     payload = {}
-    untracked_tar, skipped = _collect_untracked_tarball(repo_path)
     if untracked_tar:
         payload["untracked_files"] = untracked_tar
     if skipped:
