@@ -16,8 +16,7 @@ the writer's heartbeat timestamp and, when known, the store's write time of
 """
 import datetime
 
-from version_stamp.core import utils as core_utils
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER, core_utils
 
 CREATED = "created"  # experiment exists, no run was ever started
 RUNNING = "running"  # heartbeat is fresh

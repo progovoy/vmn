@@ -1,200 +1,149 @@
-"""Registry read side: model state and ref resolution.
+"""Registry read views: model state, ref resolution, and registered-run enumeration.
 
-Combines version records (from store) and the alias/status log (from log) into
-the shapes the UI and CLI expect.
+Public surface
+--------------
+model_state(storage, model) -> dict
+    Full model snapshot: header, per-version rows with status and aliases,
+    top-level alias map, and ordered audit log.
+
+resolve_ref(storage, ref) -> dict
+    Resolve ``model@alias``, ``model@N``, ``model@latest``, or bare ``model``
+    to its version metadata dict.  Raises ``KeyError`` for deleted versions
+    or unknown aliases (error message lists available aliases).
+
+registered_runs(storage) -> set[tuple[str, str]]
+    Set of ``(app, verstr)`` pairs referenced by any non-deleted version of
+    any model — used by prune to refuse deletion of registered runs.
 """
 from __future__ import annotations
 
 from vmn_exp.registry.fold import fold_registry
-from vmn_exp.registry.log import LOG_FILE, _read_log
-from vmn_exp.registry.names import parse_ref, parse_version_record
-from vmn_exp.registry.store import REGISTRY_APP, list_models, list_versions
+from vmn_exp.registry.log import read_entries
+from vmn_exp.registry.names import REGISTRY_APP, parse_ref
+from vmn_exp.registry.store import get_version, list_models, list_versions
 
 
-def model_state(storage, model_name: str) -> dict | None:
-    """Return the full model detail dict, or None when the model doesn't exist.
+def model_state(storage, model: str) -> dict:
+    """Return a full snapshot of *model* in *storage*.
 
-    Shape matches the TypeScript ``ModelDetail`` interface::
+    Returns::
 
         {
-            "name": str,
-            "description": str | None,
-            "versions": [ModelVersion ...],
-            "aliases": {alias: version_number},
-            "audit": [AuditEntry ...],
+            "header":   metadata dict from ensure_model,
+            "versions": [
+                {"n": int, "run_ref": ..., "artifact_path": ...,
+                 "status": str, "aliases": [str]},
+                ...
+            ],
+            "aliases":  {alias: version_number},
+            "audit":    [entries ordered by (ts, writer, pos)],
         }
     """
-    header = storage.load_metadata(REGISTRY_APP, model_name)
-    if header is None:
-        return None
+    header, _ = storage.load(REGISTRY_APP, model)
 
-    version_metas = list_versions(storage, model_name)
-    entries = _read_log(storage, model_name)
-    folded = fold_registry(entries)
+    entries = read_entries(storage, model)
+    fold = fold_registry(entries)
 
-    aliases = folded.get("aliases", {})  # {alias: version_number}
-    status_overrides = folded.get("status", {})  # {version_number: status}
-
-    # Build reverse map: version → [alias, ...]
-    aliases_for: dict[int, list[str]] = {}
-    for alias, ver in aliases.items():
-        aliases_for.setdefault(ver, []).append(alias)
+    # Reverse alias map: version_number -> [alias, ...]
+    alias_by_version: dict = {}
+    for alias, n in fold["aliases"].items():
+        alias_by_version.setdefault(n, []).append(alias)
 
     versions = []
-    for meta in version_metas:
-        n = meta.get("version")
-        status = status_overrides.get(n, meta.get("status", "active"))
+    for n in list_versions(storage, model):
+        meta = get_version(storage, model, n)
         versions.append({
-            "version": n,
-            "status": status,
-            "run": meta.get("run", {}),
-            "artifact_path": meta.get("artifact_path"),
-            "artifact_uri": meta.get("artifact_uri"),
-            "aliases": sorted(aliases_for.get(n, [])),
-            "created": meta.get("created"),
-            "description": meta.get("description"),
+            "n": n,
+            "run_ref": meta.get("run_ref") if meta else None,
+            "artifact_path": meta.get("artifact_path") if meta else None,
+            "status": fold["status"].get(n, "active"),
+            "aliases": sorted(alias_by_version.get(n, [])),
         })
 
-    audit = _build_audit(entries, version_metas)
-
     return {
-        "name": model_name,
-        "description": header.get("description"),
+        "header": header,
         "versions": versions,
-        "aliases": aliases,
-        "audit": audit,
+        "aliases": fold["aliases"],
+        "audit": fold["audit"],
     }
 
 
-def list_model_rows(storage) -> list[dict]:
-    """Return a list of ``ModelRow`` dicts for every registered model.
+def resolve_ref(storage, ref: str) -> dict:
+    """Resolve *ref* to a version metadata dict.
 
-    Shape matches the TypeScript ``ModelRow`` interface.
+    Supported forms: ``model@alias``, ``model@3``, ``model@latest``, ``model``.
+
+    Raises ``KeyError`` when:
+    - the alias does not exist (message lists available aliases);
+    - the resolved version is deleted;
+    - the version number does not exist.
     """
-    model_names = list_models(storage)
-    rows = []
-    for name in sorted(model_names):
-        header = storage.load_metadata(REGISTRY_APP, name)
-        if header is None:
-            continue
-        version_metas = list_versions(storage, name)
-        entries = _read_log(storage, name)
-        folded = fold_registry(entries)
-        aliases = folded.get("aliases", {})
+    model, kind, value = parse_ref(ref)
 
-        latest = max((m.get("version", 0) for m in version_metas), default=None)
-        if not version_metas:
-            latest = None
+    entries = read_entries(storage, model)
+    fold = fold_registry(entries)
 
-        # Most recent timestamp from versions or header
-        updated = max(
-            [m.get("created") for m in version_metas if m.get("created")]
-            + [header.get("created")]
-            or [None],
-            default=None,
-        )
-        if updated is None and version_metas:
-            updated = version_metas[-1].get("created")
-
-        rows.append({
-            "name": name,
-            "description": header.get("description"),
-            "latest_version": latest,
-            "aliases": aliases,
-            "versions_count": len(version_metas),
-            "updated": updated,
-        })
-    return rows
-
-
-def resolve_ref(storage, ref: str) -> dict | None:
-    """Resolve a model reference (``model``, ``model@alias``, ``model@N``,
-    ``model@latest``) to a ``ModelVersion`` dict, or None when not found.
-    """
-    model_name, kind, value = parse_ref(ref)
-    state = model_state(storage, model_name)
-    if state is None:
-        return None
-    versions = state["versions"]
-    if not versions:
-        return None
+    if kind == "alias":
+        alias = value
+        if alias not in fold["aliases"]:
+            available = sorted(fold["aliases"].keys())
+            raise KeyError(
+                f"Alias {alias!r} not found for model {model!r}. "
+                f"Available aliases: {available}"
+            )
+        n = fold["aliases"][alias]
+        return _version_or_raise(storage, model, n, fold, ref)
 
     if kind == "version":
-        return next((v for v in versions if v["version"] == value), None)
-    if kind == "alias":
-        ver_n = state["aliases"].get(value)
-        if ver_n is None:
-            return None
-        return next((v for v in versions if v["version"] == ver_n), None)
-    # kind == "latest"
-    return versions[-1] if versions else None
+        return _version_or_raise(storage, model, value, fold, ref)
+
+    # kind == "latest": highest non-deleted version number
+    non_deleted = [
+        n for n in list_versions(storage, model)
+        if fold["status"].get(n) != "deleted"
+    ]
+    if not non_deleted:
+        raise KeyError(f"No non-deleted versions found for model {model!r}")
+    return _version_or_raise(storage, model, max(non_deleted), fold, ref)
 
 
-def registered_runs(storage) -> set[tuple[str, str]]:
-    """Return the set of ``(app_name, verstr)`` pairs for all registered versions."""
-    try:
-        all_verstrs = storage.list_verstrs(REGISTRY_APP)
-    except Exception:
-        return set()
-    result = set()
-    for verstr in all_verstrs:
-        parsed = parse_version_record(verstr)
-        if parsed is None:
-            continue
-        meta = storage.load_metadata(REGISTRY_APP, verstr)
-        if meta and isinstance(meta.get("run"), dict):
-            run = meta["run"]
-            app = run.get("app")
-            vs = run.get("verstr")
-            if app and vs:
-                result.add((app, vs))
+def registered_runs(storage) -> set:
+    """Return ``{(app, verstr), ...}`` for all non-deleted registered versions.
+
+    The prune command uses this to prevent deleting experiment runs that a
+    model version still references.
+    """
+    result: set = set()
+    for model in list_models(storage):
+        entries = read_entries(storage, model)
+        fold = fold_registry(entries)
+        for n in list_versions(storage, model):
+            if fold["status"].get(n) == "deleted":
+                continue
+            meta = get_version(storage, model, n)
+            if not meta:
+                continue
+            run_ref = meta.get("run_ref")
+            if isinstance(run_ref, dict):
+                app = run_ref.get("app")
+                verstr = run_ref.get("verstr")
+                if app and verstr:
+                    result.add((app, verstr))
     return result
 
 
 # ---------------------------------------------------------------------------
-# private helpers
+# Internal helpers
 # ---------------------------------------------------------------------------
 
-def _build_audit(log_entries: list[dict], version_metas: list[dict]) -> list[dict]:
-    """Build audit trail from version records and log entries.
-
-    Shape matches the TypeScript ``AuditEntry`` interface.
-    """
-    audit = []
-
-    # Add a "register" entry for each version in creation order
-    for meta in version_metas:
-        actor_info = meta.get("actor") or {}
-        actor_str = (
-            actor_info.get("writer") if isinstance(actor_info, dict)
-            else str(actor_info)
-        ) or "unknown"
-        audit.append({
-            "ts": meta.get("created") or "",
-            "actor": actor_str,
-            "type": "register",
-            "alias": None,
-            "version": meta.get("version"),
-            "status": None,
-        })
-
-    # Add log entries (alias moves and status changes)
-    for entry in log_entries:
-        etype = entry.get("type", "")
-        actor_info = entry.get("actor") or {}
-        actor_str = (
-            actor_info.get("writer") if isinstance(actor_info, dict)
-            else str(actor_info)
-        ) or entry.get("writer") or "unknown"
-        audit.append({
-            "ts": entry.get("ts") or "",
-            "actor": actor_str,
-            "type": etype,
-            "alias": entry.get("alias"),
-            "version": entry.get("version"),
-            "status": entry.get("status"),
-        })
-
-    # Sort by timestamp
-    audit.sort(key=lambda e: e.get("ts") or "")
-    return audit
+def _version_or_raise(storage, model: str, n: int, fold: dict, ref: str) -> dict:
+    if fold["status"].get(n) == "deleted":
+        raise KeyError(
+            f"Version {n} of model {model!r} is deleted (ref={ref!r})"
+        )
+    meta = get_version(storage, model, n)
+    if meta is None:
+        raise KeyError(
+            f"Version {n} of model {model!r} does not exist (ref={ref!r})"
+        )
+    return meta

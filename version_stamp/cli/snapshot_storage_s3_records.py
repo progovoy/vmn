@@ -21,7 +21,7 @@ from version_stamp.cli.snapshot_storage_s3_base import (
     is_taken,
     parallel_map,
 )
-from version_stamp.core import utils as core_utils
+from version_stamp.api import core_utils
 
 CLAIM_FILE = ".claim"
 _DELETE_BATCH = 1000  # the most keys one DeleteObjects takes

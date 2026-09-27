@@ -15,6 +15,7 @@ import os
 import tempfile
 
 from version_stamp.cli.snapshot_storage import SnapshotStorage
+from version_stamp.cli.snapshot_storage_index_cache_dir import s3_index_cache_path
 from version_stamp.cli.snapshot_storage_files import (
     METADATA_FILE,
     PATCH_FILES,
@@ -31,8 +32,7 @@ from version_stamp.cli.snapshot_storage_s3_base import (  # noqa: F401  (re-expo
 from version_stamp.cli.snapshot_storage_s3_listing import S3Listing
 from version_stamp.cli.snapshot_storage_s3_logs import S3Logs
 from version_stamp.cli.snapshot_storage_s3_records import S3Records
-from version_stamp.core import utils as core_utils
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER, core_utils
 
 _ARTIFACT_CHUNK = 1 << 20
 
@@ -103,6 +103,9 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
     def cache_identity(self):
         return ("s3", self.endpoint_url, self.bucket, self.prefix)
 
+    def index_cache_path(self, app_name):
+        return s3_index_cache_path(self.endpoint_url, self.bucket, self.prefix, app_name)
+
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)
         return True
@@ -163,3 +166,8 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
                 return None
             raise
         return resp["Body"].iter_chunks(_ARTIFACT_CHUNK), resp["ContentLength"]
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable ``s3://`` URI referencing artifact *path* for this record."""
+        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{path}"
+        return f"s3://{self.bucket}/{key}"

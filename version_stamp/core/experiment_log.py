@@ -24,7 +24,7 @@ from version_stamp.core.experiment_fold import (  # noqa: F401  (re-exported)
     fold_row,
     fold_values,
 )
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 # ---------------------------------------------------------------------------
 # Params

@@ -1,155 +1,194 @@
-"""Registry log: alias moves and version status changes.
+"""Registry log writes: actor identity, alias moves, version status changes.
 
-Entries are written as JSON lines to a single ``registry.log.jsonl`` auxiliary
-file inside the model header record directory.  The fold logic (from
-``vmn_exp.registry.fold``) resolves aliases and statuses from the raw entries.
+Each write appends one entry to the model record's per-writer JSONL log (the
+same segments mechanism used by the experiment log) and flushes to the remote
+immediately, so a second host that calls read_entries after a write sees it.
+
+fold_registry (vmn_exp.registry.fold) is chunking-invariant, so concurrent
+writers on the same model never corrupt state.
 """
 from __future__ import annotations
 
-import json
 import os
-import socket
+import subprocess
 
-from vmn_exp.registry.fold import fold_registry, next_ts
-from vmn_exp.registry.names import valid_alias_name
-from vmn_exp.registry.store import REGISTRY_APP
-
-LOG_FILE = "registry.log.jsonl"
+from version_stamp.core.experiment_writer import flush_log, get_writer_id
+from vmn_exp.registry.fold import fold_registry, now_iso as _reg_ts, next_ts
+from vmn_exp.registry.names import REGISTRY_APP
 
 
-class AliasConflict(Exception):
-    """Raised when a ``set_alias`` call's ``expect`` does not match reality."""
-
+# ---------------------------------------------------------------------------
+# Actor identity
+# ---------------------------------------------------------------------------
 
 def actor_identity() -> dict:
-    """A best-effort identity dict for the current writer."""
-    writer = os.environ.get("VMN_WRITER_ID") or _hostname()
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-    return {"writer": writer, "user": user}
+    """Return a plain dict identifying the writer.
+
+    Fields:
+      writer         — experiment-log writer id (VMN_WRITER_ID / HOSTNAME)
+      git_user_email — git config user.email, best-effort (empty on failure)
+      os_user        — $USER / $LOGNAME / os.getlogin(), best-effort
+    """
+    return {
+        "writer": get_writer_id(),
+        "git_user_email": _git_user_email(),
+        "os_user": _os_user(),
+    }
 
 
-def _hostname() -> str:
+def _git_user_email() -> str:
     try:
-        return socket.gethostname()
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
     except Exception:
-        return "unknown"
+        return ""
 
 
-def _read_log(storage, model_name: str) -> list[dict]:
-    """Return all raw log entries for *model_name*."""
-    raw = storage.load_file(REGISTRY_APP, model_name, LOG_FILE)
-    if not raw:
-        return []
-    text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
-    entries = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entries.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return entries
+def _os_user() -> str:
+    for key in ("USER", "LOGNAME", "USERNAME"):
+        val = os.environ.get(key)
+        if val:
+            return val
+    try:
+        return os.getlogin()
+    except Exception:
+        return ""
 
 
-def _append_entry(storage, model_name: str, entry: dict) -> None:
-    """Append one JSON line to the model's log."""
-    existing = storage.load_file(REGISTRY_APP, model_name, LOG_FILE) or b""
-    if isinstance(existing, str):
-        existing = existing.encode("utf-8")
-    line = json.dumps(entry, separators=(",", ":")) + "\n"
-    storage.save_file(REGISTRY_APP, model_name, LOG_FILE, existing + line.encode())
+# ---------------------------------------------------------------------------
+# Reading entries
+# ---------------------------------------------------------------------------
+
+def read_entries(storage, model: str) -> list:
+    """Return all registry log entries for *model*, merged across all writers."""
+    return storage.load_merged_log(REGISTRY_APP, model)
 
 
-def _last_ts(entries: list[dict]) -> str | None:
-    """Return the latest timestamp seen in *entries*, or None."""
-    ts_values = [e.get("ts") for e in entries if e.get("ts")]
-    return max(ts_values) if ts_values else None
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _max_ts(entries: list) -> str | None:
+    """Greatest 'ts' value across all entries, or None when there are none."""
+    return max(
+        (e["ts"] for e in entries if isinstance(e.get("ts"), str)), default=None
+    )
 
 
-def _now_iso() -> str:
-    import datetime
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
+def _writer_pos(entries: list, writer_id: str) -> int:
+    """Number of entries already written by *writer_id* — used as the next pos."""
+    return sum(1 for e in entries if e.get("writer") == writer_id)
 
+
+def _build_entry(
+    entries: list,
+    entry_type: str,
+    actor: dict | None,
+    **fields,
+) -> dict:
+    writer_id = get_writer_id()
+    pos = _writer_pos(entries, writer_id)
+    ts = next_ts(_max_ts(entries), _reg_ts())
+    return {
+        "type": entry_type,
+        "ts": ts,
+        "writer": writer_id,
+        "pos": pos,
+        "actor": actor if actor is not None else actor_identity(),
+        **fields,
+    }
+
+
+def _append_entry(storage, model: str, entry: dict) -> None:
+    """Append *entry* to model's log and flush to remote so readers see it."""
+    storage.append_log_entry(REGISTRY_APP, model, entry["writer"], entry)
+    flush_log(storage, REGISTRY_APP, model)
+
+
+# ---------------------------------------------------------------------------
+# Public write API
+# ---------------------------------------------------------------------------
 
 def set_alias(
     storage,
-    model_name: str,
+    model: str,
     alias: str,
-    version: int,
-    expect: int | None = None,
+    version,
+    *,
+    expect=None,
+    actor: dict | None = None,
 ) -> None:
-    """Move *alias* to point to *version*.
+    """Point *alias* at *version* in *model*'s registry log.
 
-    Raises :class:`AliasConflict` when *expect* is given and the alias
-    currently points to a different version.
+    *version* is an int (point) or None (tombstone / removal).
+    *expect* is the version the caller believes the alias currently holds, or
+    the string ``"none"`` if it expects the alias to be absent.  A mismatch
+    raises ``ValueError`` before any write.
     """
-    if not valid_alias_name(alias):
-        raise ValueError(f"Invalid alias name {alias!r}")
-
-    entries = _read_log(storage, model_name)
+    entries = read_entries(storage, model)
     if expect is not None:
-        folded = fold_registry(entries)
-        current = folded["aliases"].get(alias)
-        if current != expect:
-            raise AliasConflict(
-                f"Alias {alias!r} points to {current!r}, not {expect!r}"
-            )
-
-    actor = actor_identity()
-    ts = next_ts(_last_ts(entries), _now_iso())
-    pos = len(entries)
-    entry = {
-        "type": "alias",
-        "alias": alias,
-        "version": version,
-        "ts": ts,
-        "writer": actor["writer"],
-        "pos": pos,
-        "actor": actor,
-    }
-    _append_entry(storage, model_name, entry)
+        _check_expect(alias, expect, fold_registry(entries))
+    entry = _build_entry(entries, "alias", actor, alias=alias, version=version)
+    _append_entry(storage, model, entry)
 
 
-def remove_alias(storage, model_name: str, alias: str) -> None:
-    """Tombstone *alias* (set its version to None)."""
-    if not valid_alias_name(alias):
-        raise ValueError(f"Invalid alias name {alias!r}")
-    entries = _read_log(storage, model_name)
-    actor = actor_identity()
-    ts = next_ts(_last_ts(entries), _now_iso())
-    pos = len(entries)
-    entry = {
-        "type": "alias",
-        "alias": alias,
-        "version": None,
-        "ts": ts,
-        "writer": actor["writer"],
-        "pos": pos,
-        "actor": actor,
-    }
-    _append_entry(storage, model_name, entry)
+def remove_alias(
+    storage,
+    model: str,
+    alias: str,
+    *,
+    expect=None,
+    actor: dict | None = None,
+) -> None:
+    """Tombstone *alias* in *model*'s registry log (version → None)."""
+    set_alias(storage, model, alias, None, expect=expect, actor=actor)
 
 
 def set_version_status(
-    storage, model_name: str, version: int, status: str
+    storage,
+    model: str,
+    version: int,
+    status: str,
+    *,
+    actor: dict | None = None,
 ) -> None:
-    """Record a status change for *version*."""
-    valid_statuses = {"active", "deprecated", "deleted"}
-    if status not in valid_statuses:
-        raise ValueError(f"Invalid status {status!r}; must be one of {valid_statuses}")
-    entries = _read_log(storage, model_name)
-    actor = actor_identity()
-    ts = next_ts(_last_ts(entries), _now_iso())
-    pos = len(entries)
-    entry = {
-        "type": "status",
-        "version": version,
-        "status": status,
-        "ts": ts,
-        "writer": actor["writer"],
-        "pos": pos,
-        "actor": actor,
-    }
-    _append_entry(storage, model_name, entry)
+    """Record a status change for *version* of *model*.
+
+    *status* is one of ``"active"``, ``"deprecated"``, ``"deleted"``.
+    Deleting a version that an alias still points to raises ``ValueError``;
+    remove the alias first.
+    """
+    entries = read_entries(storage, model)
+    if status == "deleted":
+        fold = fold_registry(entries)
+        pointing = [a for a, v in fold["aliases"].items() if v == version]
+        if pointing:
+            raise ValueError(
+                f"Cannot delete version {version} of model {model!r}: "
+                f"aliases {pointing!r} still point to it — remove them first."
+            )
+    entry = _build_entry(entries, "status", actor, version=version, status=status)
+    _append_entry(storage, model, entry)
+
+
+# ---------------------------------------------------------------------------
+# expect check (extracted for clarity)
+# ---------------------------------------------------------------------------
+
+def _check_expect(alias: str, expect, fold: dict) -> None:
+    current = fold["aliases"].get(alias)
+    if expect == "none" and current is not None:
+        raise ValueError(
+            f"Expected alias {alias!r} to be absent, "
+            f"but it currently points to version {current}."
+        )
+    if expect != "none" and current != expect:
+        raise ValueError(
+            f"Expected alias {alias!r} to point to version {expect!r}, "
+            f"but it is {current!r}."
+        )

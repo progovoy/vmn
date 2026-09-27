@@ -8,12 +8,13 @@ own with — so the web leaderboard and the CLI always agree.
 import os
 
 from version_stamp.cli.snapshot import get_snapshot_storage
+from version_stamp.core.experiment_reserved import is_reserved_app
 from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_query import filter_rows
 from version_stamp.core.experiment_status import load_run_state
 from version_stamp.core.experiment_tree import annotate_rows
-from version_stamp.core.version_math import tag_name_to_app_name
+from version_stamp.api import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.experiment_detail import experiment_detail
 from version_stamp.ui.readers.versions import version_counts
@@ -42,11 +43,15 @@ def list_apps(root_path):
             if "branch_conf" in parts:
                 continue
             if parts[-1] in ("snapshots", "experiments", "root_snapshots"):
-                apps.add(os.sep.join(parts[:-1]).replace(os.sep, "/"))
+                name = os.sep.join(parts[:-1]).replace(os.sep, "/")
+                if not is_reserved_app(name):
+                    apps.add(name)
                 dirnames[:] = []
                 continue
             if "conf.yml" in filenames:
-                apps.add(rel.replace(os.sep, "/"))
+                name = rel.replace(os.sep, "/")
+                if not is_reserved_app(name):
+                    apps.add(name)
 
     rows = []
     storage = experiment_storage(root_path)
@@ -179,6 +184,8 @@ def list_apps_from_storage(storage):
         try:
             for cp in storage._common_prefixes(storage.prefix + "/"):
                 app_key = cp[len(storage.prefix) + 1 :].rstrip("/")
+                if is_reserved_app(app_key):
+                    continue
                 apps.add(tag_name_to_app_name(app_key))
         except Exception:
             pass

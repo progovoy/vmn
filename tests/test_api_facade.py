@@ -70,6 +70,7 @@ _EXPECTED_ALL = [
     "_write_snapshot_to_dir",
     "app_name_to_tag_name",
     "copy_untracked_files",
+    "core_utils",
     "deserialize_tag_name",
     "ensure_logger",
     "gather_create_data",

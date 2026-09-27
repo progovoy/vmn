@@ -35,6 +35,14 @@ function NavIcon({ name }: { name: string }) {
           <circle cx="11.5" cy="10.5" r="1.9" fill="currentColor" />
         </svg>
       );
+    case "models":
+      return (
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <rect x="2" y="2" width="11" height="3" rx="1" fill="currentColor" />
+          <rect x="2" y="6.5" width="11" height="3" rx="1" fill="currentColor" opacity="0.7" />
+          <rect x="2" y="11" width="11" height="2" rx="1" fill="currentColor" opacity="0.4" />
+        </svg>
+      );
     default:
       return (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -122,6 +130,14 @@ export default function App() {
               </div>
             </div>
           </>
+        )}
+
+        {ws && (
+          <nav className="sb-nav">
+            <NavLink to={`/ws/${ws}/models`}>
+              <NavIcon name="models" /> Models
+            </NavLink>
+          </nav>
         )}
 
         {appBase && (

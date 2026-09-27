@@ -18,17 +18,37 @@ from version_stamp.core.constants import (
 from version_stamp.core.logging import VMN_LOGGER
 
 
+def _should_split_double_dash(cl: list) -> bool:
+    """Return True if *cl* contains ``--`` after a command with split_after_double_dash."""
+    from version_stamp.cli import plugin_api
+
+    if "--" not in cl:
+        return False
+    sep = cl.index("--")
+    for tok in cl[:sep]:
+        spec = plugin_api.find(tok)
+        if spec is not None and spec.split_after_double_dash:
+            return True
+    return False
+
+
 def parse_user_commands(command_line):
+    # Load experiment plugin specs so their subparsers and flags are available.
+    # Idempotent: safe to call multiple times (handles registry resets in tests).
+    from version_stamp.cli.plugins import load_builtin_plugins
+    from version_stamp.cli import plugin_api
+
+    load_builtin_plugins()
+
     # `vmn exp run <app> -- <command...>` : everything after the first `--`
     # is the child command. Split it off before argparse (which would otherwise
     # treat it as positionals) and attach it as args.run_cmd.
     cl = list(command_line) if command_line is not None else list(sys.argv[1:])
     run_cmd = None
-    if "--" in cl:
+    if _should_split_double_dash(cl):
         sep = cl.index("--")
-        if any(tok in ("exp", "experiment") for tok in cl[:sep]):
-            run_cmd = cl[sep + 1 :]
-            cl = cl[:sep]
+        run_cmd = cl[sep + 1:]
+        cl = cl[:sep]
 
     parser = argparse.ArgumentParser("vmn")
     parser.add_argument(
@@ -68,9 +88,19 @@ def parse_user_commands(command_line):
     )
     subprasers = parser.add_subparsers(dest="command")
 
+    # Add subparsers in VMN_ARGS order. Plugin-managed commands are added via
+    # their spec's add_parser callable (called once per unique spec object).
+    _added_plugin_ids: set = set()
     for arg in VMN_ARGS.keys():
-        arg = arg.replace("-", "_")
-        getattr(sys.modules[__name__], f"add_arg_{arg}")(subprasers)
+        spec = plugin_api.find(arg)
+        if spec is not None:
+            spec_id = id(spec)
+            if spec_id not in _added_plugin_ids:
+                spec.add_parser(subprasers)
+                _added_plugin_ids.add(spec_id)
+            continue
+        clean_arg = arg.replace("-", "_")
+        getattr(sys.modules[__name__], f"add_arg_{clean_arg}")(subprasers)
 
     from version_stamp.cli.completion import setup_completion
 
@@ -448,410 +478,6 @@ def add_arg_config(subprasers):
         "checked out on",
     )
     pconfig.set_defaults(sync_dep_branches=False)
-
-
-def add_arg_snapshot(subprasers):
-    psnap = subprasers.add_parser(
-        "snapshot",
-        help="Create and manage local snapshots of uncommitted/unpushed changes",
-    )
-    psnap.set_defaults(strict_version=False)
-    psnap.add_argument(
-        "action",
-        nargs="?",
-        default="create",
-        choices=["create", "list", "show", "note", "diff", "export", "restore"],
-        help="Snapshot action: create (default), list, show, note, diff, export, restore",
-    )
-    psnap.add_argument("name", help="The application's name")
-    psnap.add_argument(
-        "-v",
-        "--version",
-        default=None,
-        required=False,
-        help="The dev version string (for show/note/diff/export actions)",
-    )
-    psnap.add_argument(
-        "--note",
-        default=None,
-        required=False,
-        help="A description note for the snapshot",
-    )
-    psnap.add_argument(
-        "--backend",
-        default="local",
-        choices=["local", "s3"],
-        help="Storage backend for snapshots (default: local)",
-    )
-    psnap.add_argument(
-        "--bucket",
-        default=None,
-        required=False,
-        help="S3 bucket name (required for s3 backend)",
-    )
-    psnap.add_argument(
-        "--endpoint-url",
-        default=None,
-        required=False,
-        help="Custom S3 endpoint URL (for MinIO, DigitalOcean Spaces, etc.)",
-    )
-    psnap.add_argument(
-        "--prefix",
-        default="vmn-snapshots",
-        required=False,
-        help="S3 key prefix for snapshot storage (default: vmn-snapshots)",
-    )
-    psnap.add_argument(
-        "--to",
-        default=None,
-        required=False,
-        help="Second version for diff comparison (or 'current' for working state)",
-    )
-    psnap.add_argument(
-        "--tool",
-        default=None,
-        required=False,
-        help="External diff tool (e.g., bcompare, meld, vimdiff). Falls back to git config diff.tool",
-    )
-    psnap.add_argument(
-        "-o",
-        "--output",
-        default=None,
-        required=False,
-        help="Output path for export (default: {verstr}.tar.gz)",
-    )
-    psnap.add_argument(
-        "--meta",
-        action="append",
-        default=None,
-        required=False,
-        help="Key=value metadata pair (can be specified multiple times)",
-    )
-    psnap.add_argument(
-        "--meta-file",
-        default=None,
-        required=False,
-        help="Path to YAML file containing metadata key-value pairs",
-    )
-    psnap.add_argument(
-        "--filter",
-        action="append",
-        default=None,
-        required=False,
-        help="Filter snapshots by key=value metadata (for list action, can be repeated)",
-    )
-    psnap.add_argument(
-        "--verbose",
-        action="store_true",
-        default=False,
-        help="Show full ISO timestamps in list output",
-    )
-    psnap.add_argument(
-        "--latest",
-        action="store_true",
-        default=False,
-        help="Use the most recent snapshot (for show/note/diff/export)",
-    )
-    psnap.add_argument(
-        "--last",
-        type=int,
-        default=None,
-        help="Show only the N most recent snapshots (for list)",
-    )
-
-
-def _add_experiment_parser(subprasers, name):
-    pexp = subprasers.add_parser(
-        name, help="Experiment tracking for reproducible research"
-    )
-    pexp.set_defaults(strict_version=False)
-    pexp.add_argument(
-        "action",
-        nargs="?",
-        default="create",
-        choices=[
-            "create",
-            "run",
-            "add",
-            "list",
-            "show",
-            "compare",
-            "diff",
-            "restore",
-            "export",
-            "prune",
-            "tag",
-            "archive",
-            "unarchive",
-        ],
-        help="Experiment action (default: create)",
-    )
-    pexp.add_argument("name", help="The application's name")
-    pexp.add_argument(
-        "refs",
-        nargs="*",
-        default=None,
-        help="tag/archive/unarchive: run refs (verstr, prefix, @N, latest); "
-        "tag also takes key=value pairs",
-    )
-    pexp.add_argument(
-        "--name",
-        dest="run_name",
-        default=None,
-        help="create/run: a human-readable name for the run",
-    )
-    pexp.add_argument(
-        "--new-app",
-        action="store_true",
-        default=False,
-        help="create/run: confirm that this app name is genuinely new when "
-        "other vmn apps already exist in this repo (guards against a typo'd "
-        "app name silently creating one)",
-    )
-    pexp.add_argument(
-        "--remove",
-        action="append",
-        default=None,
-        help="tag: remove this tag key (repeatable)",
-    )
-    pexp.add_argument(
-        "--archived",
-        action="store_true",
-        default=False,
-        help="list: include archived runs",
-    )
-    pexp.add_argument(
-        "-v",
-        "--version",
-        action="append",
-        default=None,
-        help="Version string(s). Repeatable for compare; prune deletes exactly "
-        "the named run(s) instead of applying --keep/--older-than.",
-    )
-    pexp.add_argument("--note", default=None, help="Note or description")
-    pexp.add_argument(
-        "-f",
-        "--file",
-        default=None,
-        help="YAML file with structured notes/params",
-    )
-    pexp.add_argument(
-        "--metrics",
-        nargs="*",
-        default=None,
-        help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)",
-    )
-    pexp.add_argument("--attach", default=None, help="File to attach as artifact")
-    pexp.add_argument("--sort", default=None, help="Sort list by metric name")
-    pexp.add_argument(
-        "--top", type=int, default=None, help="Show top N results in list"
-    )
-    pexp.add_argument(
-        "--last",
-        type=int,
-        default=None,
-        help="Use the N most recent experiments (for list/compare)",
-    )
-    pexp.add_argument(
-        "--latest",
-        action="store_true",
-        default=False,
-        help="Use the most recent experiment (for show/compare/restore/export)",
-    )
-    pexp.add_argument(
-        "--tool",
-        default=None,
-        help="External diff tool for compare. Falls back to git config diff.tool",
-    )
-    pexp.add_argument("-o", "--output", default=None, help="Output path for export")
-    pexp.add_argument(
-        "--keep", type=int, default=None, help="Keep latest N experiments (for prune)"
-    )
-    pexp.add_argument(
-        "--older-than",
-        default=None,
-        help="Prune experiments older than duration (e.g., 30d)",
-    )
-    pexp.add_argument(
-        "--dry-run",
-        dest="dry_run",
-        action="store_true",
-        default=False,
-        help="prune: print what would be deleted, delete nothing",
-    )
-    pexp.add_argument(
-        "--force",
-        action="store_true",
-        default=False,
-        help="prune: also delete runs that are still running",
-    )
-    pexp.add_argument(
-        "--local-only",
-        action="store_true",
-        default=False,
-        help="prune: delete local copies only, keep the remote (S3) ones",
-    )
-    pexp.add_argument(
-        "--protect-tag",
-        dest="protect_tag",
-        action="append",
-        default=None,
-        help="prune: never delete a run carrying this tag key (repeatable)",
-    )
-    pexp.add_argument(
-        "--full-log",
-        action="store_true",
-        default=False,
-        help="show: print every log entry (default: the last 50)",
-    )
-    pexp.add_argument(
-        "--query",
-        default=None,
-        help=(
-            "list: filter rows by query (e.g. 'metrics.loss < 0.5'); "
-            "prune: select candidates by query (dry-run unless --yes/-y)"
-        ),
-    )
-    pexp.add_argument(
-        "--yes",
-        "-y",
-        action="store_true",
-        default=False,
-        help="prune --query: confirm deletion (omitting this flag defaults to a preview)",
-    )
-    pexp.add_argument(
-        "--json",
-        action="store_true",
-        default=False,
-        help="list/show: print machine-readable JSON",
-    )
-    pexp.add_argument(
-        "--from-snapshot",
-        default=None,
-        help="Path to vmn_metadata.yml or directory containing it. "
-        "Creates experiment from exported snapshot (no git required). "
-        "Falls back to VMN_SNAPSHOT_METADATA env var.",
-    )
-    pexp.add_argument(
-        "--experiment-dir",
-        default=None,
-        help="Write experiments to this directory instead of local .vmn/. "
-        "For shared NFS/FSx mounts. Falls back to VMN_EXPERIMENT_DIR env var.",
-    )
-    pexp.add_argument(
-        "--writer-id",
-        default=None,
-        help="Unique writer ID for this process (default: VMN_WRITER_ID or hostname). "
-        "Used for per-writer log files and pod-unique experiment IDs.",
-    )
-    pexp.add_argument(
-        "--sync-interval",
-        type=int,
-        default=30,
-        help="Seconds between S3 metric syncs during 'run' (default: 30). "
-        "Set to 0 to disable periodic sync.",
-    )
-    pexp.add_argument(
-        "--heartbeat-interval",
-        type=int,
-        default=30,
-        help="Seconds between run-state heartbeats during 'run' (default: 30). "
-        "A run whose heartbeat goes stale is reported as stuck.",
-    )
-    pexp.add_argument(
-        "--kill-grace-sec",
-        type=float,
-        default=None,
-        help="Seconds a child gets to exit after a forwarded SIGTERM/SIGINT/SIGHUP "
-        "before it is killed during 'run' (default: VMN_EXP_KILL_GRACE_SEC or 30).",
-    )
-    pexp.add_argument(
-        "--system-metrics",
-        action="store_true",
-        default=False,
-        help="Record the child process tree's CPU/memory (and GPU, with pynvml) as "
-        "sys_* metrics on every heartbeat during 'run'. Needs "
-        "'pip install vmn[sysmetrics]'; without it, nothing is recorded.",
-    )
-    pexp.add_argument(
-        "--parent",
-        default=None,
-        help="Parent experiment for a nested run (verstr, unique prefix, @N or "
-        "latest). Defaults to the VMN_EXPERIMENT_ID of the launching run.",
-    )
-    pexp.add_argument(
-        "--backend",
-        default="local",
-        choices=["local", "s3"],
-        help="Storage backend (default: local)",
-    )
-    pexp.add_argument("--bucket", default=None, help="S3 bucket name")
-    pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
-    pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
-
-
-def add_arg_ui(subprasers):
-    pui = subprasers.add_parser(
-        "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
-    )
-    pui.add_argument("--host", default="127.0.0.1", help="Bind address")
-    pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
-    pui.add_argument(
-        "--allowed-host",
-        action="append",
-        default=None,
-        help="Extra hostname clients may reach the server by (repeatable). "
-        "Without --token, requests for any other Host are refused, which "
-        "blocks DNS rebinding; pages on these hosts may also send mutations",
-    )
-    pui.add_argument(
-        "--token",
-        default=None,
-        help="Bearer token required for API access (or VMN_UI_TOKEN env)",
-    )
-    pui.add_argument(
-        "--data-dir",
-        default=None,
-        help="Server data dir for the workspace registry and index "
-        "(default: ~/.vmn-ui)",
-    )
-    pui.add_argument(
-        "--repo",
-        action="append",
-        default=None,
-        help="Attach a local checkout as a workspace (repeatable)",
-    )
-    pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
-    pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
-    pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
-    pui.add_argument(
-        "--read-only",
-        action="store_true",
-        default=False,
-        help="Disable all mutation endpoints",
-    )
-    pui.add_argument(
-        "--no-browser",
-        action="store_true",
-        default=False,
-        help="Do not open a browser on start",
-    )
-    pui.add_argument(
-        "--no-index",
-        action="store_true",
-        default=False,
-        help="Keep no on-disk read cache (the index lives in memory only)",
-    )
-
-
-def add_arg_experiment(subprasers):
-    _add_experiment_parser(subprasers, "experiment")
-
-
-def add_arg_exp(subprasers):
-    _add_experiment_parser(subprasers, "exp")
-
-
 def add_arg_worktrees(subprasers):
     pwt = subprasers.add_parser(
         "worktrees",

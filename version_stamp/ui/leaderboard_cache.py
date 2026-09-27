@@ -22,7 +22,7 @@ import json
 import os
 import threading
 
-from version_stamp.core import experiment_status
+import version_stamp.core.experiment_status as experiment_status
 from version_stamp.core.experiment_log import primary_metric
 from version_stamp.core.experiment_status import status_fields
 from version_stamp.core.experiment_tree import annotate_rows

@@ -408,42 +408,10 @@ def get_dirty_states(optional_status, status):
 
 
 def _goto_dev_version(vcs, params, version):
-    """Handle goto for dev versions: checkout base commit + apply snapshot patches."""
-    from version_stamp.cli.snapshot import (
-        LocalSnapshotStorage,
-        _restore_with_safety_net,
-        get_snapshot_storage,
-    )
+    """Handle goto for dev versions: delegate to the registered snapshot loader."""
+    from version_stamp.cli.plugin_api import load_dev_version
 
-    storage = LocalSnapshotStorage(vcs.vmn_root_path)
-    metadata, patches = storage.load(vcs.name, version)
-
-    if metadata is None:
-        # Experiments live in a parallel tree; a run-suffixed id resolves here.
-        exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
-        metadata, patches = exp_storage.load(vcs.name, version)
-
-    if metadata is None:
-        conf_storage = getattr(vcs, "snapshot_storage", None) or {}
-        if conf_storage.get("bucket"):
-            try:
-                s3_storage = get_snapshot_storage(
-                    "s3",
-                    bucket=conf_storage["bucket"],
-                    prefix=conf_storage.get("prefix", "vmn-snapshots"),
-                    endpoint_url=conf_storage.get("endpoint_url"),
-                )
-                metadata, patches = s3_storage.load(vcs.name, version)
-            except Exception:
-                VMN_LOGGER.debug("S3 snapshot load failed", exc_info=True)
-
-    if metadata is None:
-        VMN_LOGGER.error(
-            f"Snapshot {version} not found locally or in configured storage"
-        )
-        return 1
-
-    return _restore_with_safety_net(vcs, params, metadata, patches)
+    return load_dev_version(vcs, params, version)
 
 
 @measure_runtime_decorator

@@ -18,7 +18,6 @@ from version_stamp.cli.commands import (  # noqa: F401
     handle_init_app,
     handle_release,
     handle_show,
-    handle_snapshot,
     handle_stamp,
 )
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
@@ -26,7 +25,6 @@ from version_stamp.cli.constants import (
     LOG_FILENAME,
     VMN_ARGS,
 )
-from version_stamp.cli.experiment import handle_experiment
 from version_stamp.cli.worktree_git import git_current_branch
 from version_stamp.core.utils import is_island_branch
 from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
@@ -37,7 +35,6 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_GIT,
     VMN_BE_TYPE_LOCAL_FILE,
 )
-from version_stamp.core.experiment_writer import merge_env_into_params
 from version_stamp.core.repo_lock import get_repo_lock
 from version_stamp.core.logging import (
     VMN_LOGGER,
@@ -48,72 +45,37 @@ from version_stamp.core.logging import (
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.stamping.publisher import VersionControlStamper
 
-handle_exp = handle_experiment  # alias
-
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
 
 def _run_experiment_from_snapshot(args):
-    """Run experiment commands without a git repo (from-snapshot mode)."""
-    from version_stamp.cli.experiment import (
-        _get_experiment_storage,
-        experiment_add,
-        experiment_compare,
-        experiment_create,
-        experiment_list,
-        experiment_prune,
-        experiment_run,
-        experiment_show,
-    )
+    """Run an experiment command without a git repo (from-snapshot mode).
 
-    if getattr(args, "writer_id", None):
-        os.environ["VMN_WRITER_ID"] = args.writer_id
+    The experiments plugin owns this now; the name stays importable here for
+    existing callers.
+    """
+    from version_stamp.cli.plugin_api import find as _find_plugin_spec
+    from version_stamp.cli.plugins import load_builtin_plugins
 
-    params = {
-        "backend": getattr(args, "backend", "local"),
-        "bucket": getattr(args, "bucket", None),
-        "prefix": getattr(args, "prefix", "vmn-experiments"),
-        "endpoint_url": getattr(args, "endpoint_url", None),
-        "experiment_dir": getattr(args, "experiment_dir", None),
-    }
-    merge_env_into_params(params)
-
-    storage = _get_experiment_storage(None, params)
-    action = args.action
-
-    dispatch = {
-        "create": experiment_create,
-        "run": experiment_run,
-        "add": experiment_add,
-        "list": experiment_list,
-        "show": experiment_show,
-        "compare": experiment_compare,
-        "prune": experiment_prune,
-    }
-
-    handler = dispatch.get(action)
-    if handler is not None:
-        return handler(None, params, storage, args)
-
-    VMN_LOGGER.error(
-        "Action '%s' requires a git repository "
-        "(not available in --from-snapshot mode)",
-        action,
-    )
-    return 1
-
-
-_READ_ONLY_ACTIONS = {
-    "experiment": {"list", "show", "compare", "diff", "export"},
-    "exp": {"list", "show", "compare", "diff", "export"},
-    "snapshot": {"list", "show", "diff", "export"},
-}
+    load_builtin_plugins()
+    args = copy.copy(args)
+    args.command = "experiment"
+    return _find_plugin_spec("experiment").run_without_repo(args)
 
 
 def _takes_repo_lock(args):
-    """False for the read-only experiment/snapshot actions, which are lock-free."""
-    read_only = _READ_ONLY_ACTIONS.get(args.command, ())
-    return getattr(args, "action", None) not in read_only
+    """False for the read-only experiment/snapshot actions, which are lock-free.
+
+    Reads lock semantics from the plugin registry so new commands can declare
+    their read-only actions without editing this file.
+    """
+    from version_stamp.cli.plugin_api import find as _find_plugin_spec
+
+    spec = _find_plugin_spec(getattr(args, "command", None) or "")
+    if spec is not None:
+        return getattr(args, "action", None) not in spec.read_only_actions
+    # Non-plugin commands always take the lock.
+    return True
 
 
 def _reject_island_version_creation(args, root_path):
@@ -246,20 +208,18 @@ def vmn_run(command_line=None):
             return install_skill(args.target, methodology, args.force), None
         return print_skill(methodology), None
 
-    # `vmn ui` is a long-running server over N workspaces: it must not resolve
-    # a single root path, take the repo lock, or build a VMNContainer.
-    if args.command == "ui":
-        from version_stamp.ui.cli import handle_ui
+    # Commands that need no git repo are handled via the plugin's run_without_repo.
+    # This covers: vmn ui (long-running server) and vmn exp --from-snapshot mode.
+    from version_stamp.cli.plugin_api import find as _find_plugin_spec
 
-        init_stamp_logger(debug=args.debug)
-        return handle_ui(args), None
-
-    # Git-free experiment mode: --from-snapshot doesn't need a git repo
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
-    if args.command in ("experiment", "exp") and from_snapshot:
-        return _run_experiment_from_snapshot(args), None
+    _spec = _find_plugin_spec(args.command)
+    if _spec is not None and _spec.run_without_repo is not None:
+        # ui is a long-running server — init logger with debug flag before dispatch
+        if args.command == "ui":
+            init_stamp_logger(debug=args.debug)
+        _result = _spec.run_without_repo(args)
+        if _result is not None:
+            return _result, None
 
     try:
         if args.command == "show":
@@ -414,8 +374,15 @@ def _vmn_run(args, root_path, lock=None):
                 dep_be.prepare_for_remote_operation()
                 del dep_be
 
-    cmd = vmnc.args.command.replace("-", "_")
-    err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
+    # Plugin-managed commands (snapshot, experiment/exp) dispatch via the registry.
+    from version_stamp.cli.plugin_api import find as _find_plugin_spec_vmn
+
+    _spec = _find_plugin_spec_vmn(vmnc.args.command)
+    if _spec is not None:
+        err = _spec.handle(vmnc)
+    else:
+        cmd = vmnc.args.command.replace("-", "_")
+        err = getattr(sys.modules[__name__], f"handle_{cmd}")(vmnc)
 
     return err, vmnc
 

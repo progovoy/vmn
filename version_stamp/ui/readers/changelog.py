@@ -8,8 +8,7 @@ import os
 
 import git
 
-from version_stamp.core.changelog import group_commits
-from version_stamp.core.constants import VMN_USER_NAME
+from version_stamp.api import VMN_USER_NAME, group_commits
 from version_stamp.ui.readers.versions import list_versions
 
 

@@ -30,10 +30,8 @@ from version_stamp.cli.snapshot_storage_files import (
     write_patches_to_dir,
 )
 from version_stamp.cli.snapshot_storage_listing import RecordListings, files_in
-from version_stamp.core import utils as core_utils
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER, core_utils, parse_record_metadata
 from version_stamp.core.record_files import read_file, read_file_from
-from version_stamp.core.utils import parse_record_metadata
 
 
 def _has_patch_content(patches):
@@ -329,6 +327,12 @@ class LocalSnapshotStorage(SnapshotStorage):
         if os.path.isdir(art_dir):
             return art_dir
         return None
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable ``file://`` URI referencing artifact *path* for this record."""
+        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
+        abs_path = artifact_file_path(art_dir, path)
+        return f"file://{abs_path}"
 
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""

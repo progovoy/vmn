@@ -147,11 +147,16 @@ def autolog(frameworks=None, log_models=False, training_score="auto"):
         if name not in SUPPORTED_FRAMEWORKS:
             _LOGGER.debug("vmn autolog has no adapter for %r", name)
             continue
-        module = sys.modules.get(name)
-        if module is not None:
-            _patch_framework(name, module)
-        else:
-            import_hooks.when_imported(name, functools.partial(_patch_framework, name))
+        adapter = SUPPORTED_FRAMEWORKS[name]
+        watch_names = adapter.watch if adapter.watch else (name,)
+        for watch_name in watch_names:
+            module = sys.modules.get(watch_name)
+            if module is not None:
+                _patch_framework(name, module)
+            else:
+                import_hooks.when_imported(
+                    watch_name, functools.partial(_patch_framework, name)
+                )
 
 
 def autolog_disable():
@@ -173,7 +178,10 @@ def autolog_disable():
 def _patch_framework(name, module):
     adapter = SUPPORTED_FRAMEWORKS[name]
     try:
-        targets = adapter.discover(module)
+        if adapter.method_owners is not None:
+            targets = adapter.method_owners(module)
+        else:
+            targets = adapter.discover(module)
     except Exception:
         _LOGGER.debug("vmn autolog could not discover %r", name, exc_info=True)
         return
