@@ -84,7 +84,7 @@ def resolve_experiment_storage(
 def _try_repo_root() -> "str | None":
     """Return the .vmn / .git root for the current working directory, or None."""
     try:
-        from version_stamp.core.utils import resolve_root_path
+        from version_stamp.api import resolve_root_path
         return resolve_root_path()
     except (RuntimeError, OSError):
         # RuntimeError: no .git/.vmn found walking up to filesystem root.
