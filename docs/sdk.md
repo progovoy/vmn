@@ -873,3 +873,65 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 ```
+
+---
+
+## Slim install
+
+For recording-only environments (container images, CI workers, air-gapped
+inference servers) that do not need the full stamping toolchain or the web UI,
+a dedicated `vmn-exp` wheel is available.  It contains only the experiment
+SDK, storage, registry, and snapshot helpers together with the minimal
+`version_stamp` slice they need (`api.py`, `core/`).  GitPython, argcomplete,
+rich, and the rest of the stamping stack are **not included**.
+
+### Install_requires
+
+| Dependency | Why |
+|---|---|
+| `PyYAML>=5.4.1` | YAML metadata files |
+| `filelock>=3.2.0` | Local concurrency lock |
+
+Optional extras: `s3` (boto3), `sysmetrics` (psutil), `hf` (transformers),
+`optuna`, `ray`.
+
+### Building the slim wheel
+
+```sh
+VMN_DIST=exp pip wheel --no-deps --no-build-isolation -w dist .
+# Produces: dist/vmn_exp-<version>-py3-none-any.whl
+```
+
+Or with `python setup.py`:
+
+```sh
+VMN_DIST=exp python setup.py bdist_wheel
+```
+
+### Git-free recording
+
+With `VMN_SNAPSHOT_METADATA` pointing to a snapshot metadata file (produced
+by `vmn snapshot export` and baked into your image) and `VMN_EXPERIMENT_DIR`
+pointing to a writable directory, `start_run()` works with no git checkout and
+no GitPython installed:
+
+```python
+import os
+
+os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/metadata.yml"
+os.environ["VMN_EXPERIMENT_DIR"]    = "/mnt/experiments"
+
+from vmn_exp.sdk import start_run
+
+with start_run(app_name="my_model") as run:
+    run.log_metric("accuracy", 0.91)
+```
+
+Reads work the same way:
+
+```python
+from vmn_exp.sdk.reader import list_runs
+
+runs = list_runs("my_model")
+print(runs[0]["verstr"], runs[0]["metrics"])
+```

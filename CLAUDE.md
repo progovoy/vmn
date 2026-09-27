@@ -71,6 +71,17 @@ pip install -e ./
 vmn --version  # Should see 0.0.0 if installed successfully
 ```
 
+### Slim build (vmn-exp)
+
+To build the opt-in slim wheel (SDK + storage + registry only, no GitPython):
+
+```sh
+VMN_DIST=exp pip wheel --no-deps --no-build-isolation -w dist .
+```
+
+See docs/sdk.md ("Slim install") for usage. The default `pip install -e .` is
+always the full distribution.
+
 ## Running Tests
 
 Tests require Docker. Activate the test venv first — the suite runs through the
