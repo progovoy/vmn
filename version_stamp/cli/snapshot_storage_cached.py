@@ -178,7 +178,10 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         return self._remote is not None
 
     def index_cache_path(self, app_name):
-        return self._local.index_cache_path(app_name)
+        if self._local_is_replica:
+            return self._local.index_cache_path(app_name)
+        path_of = getattr(self._remote, "index_cache_path", None)
+        return path_of(app_name) if path_of else None
 
     def cache_identity(self):
         remote = self._remote.cache_identity() if self._remote else None
