@@ -275,6 +275,12 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
             None, "artifact_local_path", app_name, verstr, name
         )
 
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable URI for artifact *path*: remote's if configured, else local."""
+        if self._remote is not None:
+            return self._remote.artifact_uri(app_name, verstr, path)
+        return self._local.artifact_uri(app_name, verstr, path)
+
 
 def get_snapshot_storage(
     backend,

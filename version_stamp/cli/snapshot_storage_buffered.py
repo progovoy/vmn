@@ -83,6 +83,10 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
             return False
         return self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
 
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable URI for artifact *path*: delegate to the remote backend."""
+        return self._remote.artifact_uri(app_name, verstr, path)
+
     # -- logs -------------------------------------------------------------------
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):

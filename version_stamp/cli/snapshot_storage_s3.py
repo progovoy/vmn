@@ -163,3 +163,8 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
                 return None
             raise
         return resp["Body"].iter_chunks(_ARTIFACT_CHUNK), resp["ContentLength"]
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable ``s3://`` URI referencing artifact *path* for this record."""
+        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{path}"
+        return f"s3://{self.bucket}/{key}"
