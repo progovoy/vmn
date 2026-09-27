@@ -27,7 +27,7 @@ import os
 import yaml
 
 from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core import experiment_index
+import version_stamp.core.experiment_index as experiment_index
 from version_stamp.core.experiment_log import (
     experiment_row,
     filter_archived,
@@ -45,7 +45,7 @@ from version_stamp.core.experiment_status import (
     run_state_observed_at,
 )
 from version_stamp.core.experiment_tree import annotate_rows, run_status
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.api import resolve_root_path
 from version_stamp.exp import _resolve_app_name
 
 EXPERIMENTS_DIR = "experiments"

@@ -20,7 +20,7 @@ import socket
 import sys
 import time
 
-from version_stamp.core import logging as vmn_logging
+from version_stamp.api import ensure_logger
 from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
@@ -33,7 +33,7 @@ from version_stamp.core.experiment_writer import (
     get_writer_id,
     save_artifact,
 )
-from version_stamp.core.utils import now_iso
+from version_stamp.api import now_iso
 from version_stamp.exp import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
     context,
@@ -136,7 +136,7 @@ def start_run(
         return NoOpRun(app_name)
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
-    vmn_logging.ensure_logger()
+    ensure_logger()
 
     prior_state = None
     ref = resume.requested_run_id(run_id)

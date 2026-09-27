@@ -12,10 +12,8 @@ import contextlib
 import os
 from types import SimpleNamespace
 
-from version_stamp.cli.constants import INIT_FILENAME
-from version_stamp.core.constants import VMN_BE_TYPE_GIT
+from version_stamp.api import INIT_FILENAME, VMN_BE_TYPE_GIT, resolve_root_path
 from version_stamp.core.experiment_writer import get_repo_lock
-from version_stamp.core.utils import resolve_root_path
 
 # The repo state `vmn exp create` demands, and what it tolerates — the SDK
 # cold-starts on exactly the same terms.
@@ -34,7 +32,7 @@ _PUSHING_METHODS = ("push",)
 
 
 def build_vcs(app_name):
-    from version_stamp.stamping.publisher import VersionControlStamper
+    from version_stamp.api import VersionControlStamper
 
     return VersionControlStamper(
         {
@@ -68,7 +66,7 @@ def tracked_vcs(app_name, root_path):
 
 def repo_status(vcs):
     """The repo status `vmn exp create` checks, untracked repo/app included."""
-    from version_stamp.cli.commands import _get_repo_status
+    from version_stamp.api import _get_repo_status
 
     # An untracked repo or app is the cold-start case this module exists to
     # handle, so it must not be announced as an error first — that made a
@@ -83,7 +81,7 @@ def repo_status(vcs):
 
 def cold_start(vcs, status):
     """Init vmn tracking and a 0.0.0 baseline for *vcs*, as ``vmn exp`` does."""
-    from version_stamp.cli.commands import _init_app, handle_init
+    from version_stamp.api import _init_app, handle_init
 
     if not status.error:
         return
