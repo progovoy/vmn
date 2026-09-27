@@ -328,6 +328,12 @@ class LocalSnapshotStorage(SnapshotStorage):
             return art_dir
         return None
 
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable ``file://`` URI referencing artifact *path* for this record."""
+        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
+        abs_path = artifact_file_path(art_dir, path)
+        return f"file://{abs_path}"
+
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""
         try:

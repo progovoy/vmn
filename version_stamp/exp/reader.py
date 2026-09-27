@@ -46,6 +46,7 @@ from version_stamp.core.experiment_status import (
 )
 from version_stamp.core.experiment_tree import annotate_rows, run_status
 from version_stamp.api import resolve_root_path
+from version_stamp.core.experiment_reserved import is_reserved_app
 from version_stamp.exp import _resolve_app_name
 
 EXPERIMENTS_DIR = "experiments"
@@ -72,7 +73,9 @@ def _apps_with_experiments(root_path):
             continue
         dirnames[:] = []  # experiment dirs, nothing to look for inside
         rel = os.path.relpath(os.path.dirname(dirpath), vmn_dir)
-        apps.append(rel.replace(os.sep, "/"))
+        name = rel.replace(os.sep, "/")
+        if not is_reserved_app(name):
+            apps.append(name)
     return sorted(apps)
 
 
