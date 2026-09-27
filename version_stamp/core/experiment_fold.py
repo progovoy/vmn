@@ -76,9 +76,12 @@ def _sort_key(entry, writer, position):
 def _keep_latest(values, name, value, key):
     """Keep ``(value, *key)`` as one flat tuple — cheaper, with ~30 fields per
     run, than a value/key pair of two nested containers (see :func:`_sort_key`
-    for *key*'s shape); the comparison takes the key back off its tail."""
+    for *key*'s shape); the comparison takes the key back off its tail.
+    ``tuple()`` normalises the stored slice so JSON-round-tripped lists compare
+    correctly against the tuple *key*.
+    """
     current = values.get(name)
-    if current is None or key >= current[1:]:
+    if current is None or key >= tuple(current[1:]):
         values[name] = (value,) + key
 
 
@@ -118,10 +121,10 @@ def _apply(fold, entry, key):
     if etype == "metrics":
         for name, value in (entry.get("values") or {}).items():
             _keep_latest(fold["metrics"], name, value, key)
-        if fold["last_metric"] is None or key >= fold["last_metric"][1]:
+        if fold["last_metric"] is None or key >= tuple(fold["last_metric"][1]):
             fold["last_metric"] = (entry.get("timestamp"), key)
     elif etype == "create":
-        if fold["create_note"] is None or key < fold["create_note"][1]:
+        if fold["create_note"] is None or key < tuple(fold["create_note"][1]):
             fold["create_note"] = (entry.get("note"), key)
 
 
