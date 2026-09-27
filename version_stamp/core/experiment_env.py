@@ -266,6 +266,64 @@ def env_from_interpreter(python_exe: str, timeout: int = 5) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Capture-decision helpers
+# ---------------------------------------------------------------------------
+
+#: Environment variable that opts out of env capture when set to ``0`` or
+#: a falsy string (``false``, ``no``, ``off``).
+CAPTURE_ENV_ENV = "VMN_CAPTURE_ENV"
+
+_OPT_OUT_VALS = frozenset(("0", "false", "False", "no", "off"))
+
+
+def should_capture(explicit, exp_conf=None):
+    """Return True if the environment should be captured.
+
+    Precedence: explicit arg > ``VMN_CAPTURE_ENV`` > conf > True.
+
+    *explicit* controls the override:
+
+    * ``False`` — always skip (overrides env-var and conf).
+    * ``True``  — override conf, but still respect ``VMN_CAPTURE_ENV``.
+    * ``None``  — full opt-out chain (env-var → conf → default True).
+
+    *exp_conf* is the ``experiment:`` section of the app's conf.yml, as a dict.
+    """
+    if explicit is False:
+        return False
+    env_val = os.environ.get(CAPTURE_ENV_ENV)
+    if env_val in _OPT_OUT_VALS:
+        return False
+    if explicit is True:
+        return True  # explicit True overrides conf but env-var already checked
+    # explicit is None: also check conf
+    if exp_conf:
+        conf_val = exp_conf.get("capture_env")
+        if conf_val is not None:
+            return bool(conf_val)
+    return True
+
+
+def capture_env_safe(python_exe=None):
+    """Capture the environment dict; return ``None`` on any failure (never raises).
+
+    When *python_exe* is given the child interpreter is probed via
+    ``env_from_interpreter``; otherwise the current interpreter is captured.
+    """
+    try:
+        if python_exe:
+            return env_from_interpreter(python_exe, timeout=5)
+        return capture_env()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "vmn: could not capture environment for this run"
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # __main__: print JSON for env_from_interpreter / manual use
 # ---------------------------------------------------------------------------
 

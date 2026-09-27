@@ -65,10 +65,14 @@ def create_from_snapshot(
     extra_create_data=None,
     parent=None,
     name=None,
+    env=None,
 ):
     """Create an experiment from an exported snapshot directory or metadata file.
 
     Returns ``(verstr, error_code)``; *error_code* is None on success.
+
+    *env* is a pre-captured environment dict; when given it is embedded as a
+    summary in the metadata and written as ``env.yml`` (best-effort).
     """
     snap_meta = _load_snapshot_meta(snapshot_meta_path)
     if snap_meta is None:
@@ -93,5 +97,6 @@ def create_from_snapshot(
         create_data=extra_create_data,
         parent=parent,
         name=name,
+        env=env,
     )
     return verstr, None

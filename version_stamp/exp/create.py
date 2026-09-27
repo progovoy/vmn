@@ -19,6 +19,11 @@ import yaml
 # distribution needs these to move into core next.
 from version_stamp.cli.experiment import _get_experiment_storage
 from version_stamp.cli.snapshot import _build_snapshot_metadata, _format_dev_verstr
+from version_stamp.core.experiment_env import (
+    CAPTURE_ENV_ENV,
+    capture_env_safe,
+    should_capture,
+)
 from version_stamp.core.experiment_from_snapshot import create_from_snapshot
 from version_stamp.core.experiment_refs import resolve_parent
 from version_stamp.core.experiment_writer import (
@@ -36,7 +41,8 @@ SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 
 
 def create_record(
-    app_name, note, params, parent, nested, storage, snapshot, name=None
+    app_name, note, params, parent, nested, storage, snapshot, name=None,
+    capture_env=None, python_exe=None,
 ):
     """Create a new run's record; ``(app_name, storage, verstr)``."""
     _reject_reentry_without_nesting(nested)
@@ -46,11 +52,13 @@ def create_record(
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
     if meta_path:
         app_name, storage, verstr, err = create_from_snapshot_meta(
-            app_name, meta_path, note, create_data, parent, nested, storage, name
+            app_name, meta_path, note, create_data, parent, nested, storage, name,
+            capture_env=capture_env,
         )
     else:
         app_name, storage, verstr, err = create_in_checkout(
-            app_name, note, create_data, parent, nested, storage, snapshot, name
+            app_name, note, create_data, parent, nested, storage, snapshot, name,
+            capture_env=capture_env, python_exe=python_exe,
         )
     if err:
         raise RuntimeError(
@@ -154,12 +162,17 @@ def pick_parent(storage, app_name, parent, nested):
 
 
 def create_from_snapshot_meta(
-    app_name, meta_path, note, create_data, parent, nested, storage, name=None
+    app_name, meta_path, note, create_data, parent, nested, storage, name=None,
+    capture_env=None,
 ):
     """Container mode: record against an exported snapshot, no git needed."""
     app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
     if storage is None:
         storage = snapshot_mode_storage()
+
+    # Capture env OUTSIDE the lock.
+    env = _maybe_capture_env(None, capture_env)
+
     # A shared VMN_EXPERIMENT_DIR is the only thing concurrent git-less workers
     # have in common: serialize verstr allocation on it, like a checkout's lock.
     lock_root = os.environ.get("VMN_EXPERIMENT_DIR")
@@ -174,12 +187,14 @@ def create_from_snapshot_meta(
             extra_create_data=create_data,
             parent=pick_parent(storage, app_name, parent, nested),
             name=name,
+            env=env,
         )
     return app_name, storage, verstr, err
 
 
 def create_in_checkout(
-    app_name, note, create_data, parent, nested, storage, snapshot=True, name=None
+    app_name, note, create_data, parent, nested, storage, snapshot=True, name=None,
+    capture_env=None, python_exe=None,
 ):
     """The normal mode: cold-start if needed, capture, then claim under the lock."""
     app_name = _resolve_app_name(app_name, stamped_apps)
@@ -194,14 +209,27 @@ def create_in_checkout(
         storage = build_storage(vcs)
     parent = pick_parent(storage, app_name, parent, nested)
 
+    # Capture env OUTSIDE the repo lock (it is read-only and may block on
+    # subprocess probing).
+    env = _maybe_capture_env(vcs, capture_env, python_exe=python_exe)
+
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     with get_repo_lock(root_path):
-        verstr = _record(vcs, storage, captured, note, create_data, parent, name)
+        verstr = _record(vcs, storage, captured, note, create_data, parent, name,
+                         env=env)
     return app_name, storage, verstr, None
 
 
-def _record(vcs, storage, captured, note, create_data, parent, name=None):
+def _maybe_capture_env(vcs, capture_env_param, python_exe=None):
+    """Return the captured env dict, or None when opted out or capture fails."""
+    exp_conf = getattr(vcs, "experiment", None) or {}
+    if not should_capture(capture_env_param, exp_conf):
+        return None
+    return capture_env_safe(python_exe)
+
+
+def _record(vcs, storage, captured, note, create_data, parent, name=None, env=None):
     """Claim a verstr for *captured* and write the record and its create entry."""
     code_verstr = _format_dev_verstr(
         captured.base_version, captured.commit_hash, captured.diff_hash
@@ -232,4 +260,5 @@ def _record(vcs, storage, captured, note, create_data, parent, name=None):
         create_data=create_data,
         parent=parent,
         name=name,
+        env=env,
     )

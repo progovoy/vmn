@@ -123,6 +123,28 @@ def _kill_grace_sec(args):
         return DEFAULT_KILL_GRACE_SEC
 
 
+def _detect_python_exe(run_cmd):
+    """Return a Python executable to probe if *run_cmd* is a Python process.
+
+    Covers two cases:
+    * ``python[3][.x]`` or ``pythonX.Y`` as the interpreter (argv[0]).
+    * A ``.py`` script run directly — use ``sys.executable`` as best proxy.
+    """
+    import sys
+
+    if not run_cmd:
+        return None
+    exe = run_cmd[0]
+    import re
+
+    basename = os.path.basename(exe)
+    if re.match(r"^python[\d.]*$", basename):
+        return exe  # e.g. python, python3, python3.10
+    if exe.endswith(".py"):
+        return sys.executable  # script invoked directly; use our interpreter
+    return None
+
+
 def _create_experiment(vcs, storage, args):
     """Create the run's experiment record. Returns ``(app_name, verstr, err)``."""
     import version_stamp.cli.experiment as cli
@@ -142,6 +164,10 @@ def _create_experiment(vcs, storage, args):
     if err is not None:
         return app_name, None, err
 
+    run_cmd = getattr(args, "run_cmd", None)
+    python_exe = _detect_python_exe(run_cmd) if run_cmd else None
+    capture_env = getattr(args, "capture_env", None)
+
     verstr, err = cli._experiment_create_core(
         vcs,
         storage,
@@ -150,6 +176,8 @@ def _create_experiment(vcs, storage, args):
         extra_create_data=extra or None,
         parent=parent,
         name=getattr(args, "run_name", None),
+        capture_env=capture_env,
+        python_exe=python_exe,
     )
     return app_name, verstr, err
 

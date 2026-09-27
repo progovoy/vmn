@@ -478,6 +478,7 @@ def add_arg_config(subprasers):
         "checked out on",
     )
     pconfig.set_defaults(sync_dep_branches=False)
+
 def add_arg_worktrees(subprasers):
     pwt = subprasers.add_parser(
         "worktrees",

@@ -102,6 +102,7 @@ def start_run(
     all_ranks=False,
     name=None,
     tags=None,
+    capture_env=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -141,10 +142,12 @@ def start_run(
     prior_state = None
     ref = resume.requested_run_id(run_id)
     if ref:
+        # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state = resume.locate(app_name, ref, storage)
     else:
         app_name, storage, verstr = create_record(
-            app_name, note, params, parent, nested, storage, snapshot, name
+            app_name, note, params, parent, nested, storage, snapshot, name,
+            capture_env=capture_env,
         )
 
     run = Run(
