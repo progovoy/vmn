@@ -2,10 +2,6 @@
 # Shrinks as Phase 1 migration steps land. Never grows.
 KNOWN_VIOLATIONS: frozenset = frozenset(
     {
-        ("version_stamp.cli.commands", "version_stamp.cli.snapshot"),
-        ("version_stamp.cli.entry", "version_stamp.cli.experiment"),
-        ("version_stamp.cli.entry", "version_stamp.core.experiment_writer"),
-        ("version_stamp.cli.entry", "version_stamp.ui.cli"),
         ("version_stamp.cli.experiment", "version_stamp.cli.commands"),
         ("version_stamp.cli.experiment", "version_stamp.core"),
         ("version_stamp.cli.experiment", "version_stamp.core.logging"),
@@ -15,7 +11,6 @@ KNOWN_VIOLATIONS: frozenset = frozenset(
         ("version_stamp.cli.experiment_run", "version_stamp.core.logging"),
         ("version_stamp.cli.experiment_run", "version_stamp.core.utils"),
         ("version_stamp.cli.experiment_supervisor", "version_stamp.core.logging"),
-        ("version_stamp.cli.output", "version_stamp.cli.snapshot"),
         ("version_stamp.cli.snapshot", "version_stamp.core.logging"),
         ("version_stamp.cli.snapshot", "version_stamp.core.utils"),
         ("version_stamp.cli.snapshot", "version_stamp.devversion.apply"),

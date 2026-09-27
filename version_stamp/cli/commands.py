@@ -775,133 +775,14 @@ def handle_goto(vmn_ctx):
 
 @measure_runtime_decorator
 def handle_snapshot(vmn_ctx):
-    from version_stamp.cli.snapshot import (
-        _build_user_meta,
-        snapshot_create,
-        snapshot_diff,
-        snapshot_export,
-        snapshot_list,
-        snapshot_note,
-        snapshot_restore,
-        snapshot_show,
-    )
+    """Delegate to the snapshot plugin spec (registered by _builtin_exp_plugin)."""
+    from version_stamp.cli.plugin_api import find as _find_spec
 
-    vmn_ctx.params["backend"] = vmn_ctx.args.backend
-    vmn_ctx.params["bucket"] = getattr(vmn_ctx.args, "bucket", None)
-    vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
-    vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
-    vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
-    vmn_ctx.params["verbose"] = getattr(vmn_ctx.args, "verbose", False)
-    vmn_ctx.params["last"] = getattr(vmn_ctx.args, "last", None)
-
-    # Read snapshot_storage from app conf, CLI args override
-    conf_storage = getattr(vmn_ctx.vcs, "snapshot_storage", None) or {}
-    if not vmn_ctx.params.get("bucket") and conf_storage.get("bucket"):
-        vmn_ctx.params["bucket"] = conf_storage["bucket"]
-    if vmn_ctx.params.get("backend") == "local" and conf_storage.get("backend"):
-        vmn_ctx.params["backend"] = conf_storage["backend"]
-    if not vmn_ctx.params.get("prefix") or vmn_ctx.params["prefix"] == "vmn-snapshots":
-        vmn_ctx.params["prefix"] = conf_storage.get("prefix", "vmn-snapshots")
-    if not vmn_ctx.params.get("endpoint_url") and conf_storage.get("endpoint_url"):
-        vmn_ctx.params["endpoint_url"] = conf_storage["endpoint_url"]
-
-    # Guard: all snapshot actions require repo_tracked + app_tracked
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally",
-        "detached",
-        "pending",
-        "outgoing",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        app_name = vmn_ctx.vcs.name
-        if "repo_tracked" not in status.state:
-            VMN_LOGGER.error(
-                "Repository not initialized. Run:\n\n"
-                "  vmn init\n"
-                f"  vmn stamp -r patch {app_name}\n"
-            )
-        elif "app_tracked" not in status.state:
-            VMN_LOGGER.error(
-                f"App '{app_name}' not initialized. Run:\n\n"
-                f"  vmn stamp -r patch {app_name}\n"
-            )
+    spec = _find_spec("snapshot")
+    if spec is None:
+        VMN_LOGGER.error("snapshot plugin not loaded")
         return 1
-
-    action = vmn_ctx.args.action
-
-    # Resolve --latest / @N / prefix for actions that take a version.
-    # When no version is given, default to the most recent snapshot; for diff,
-    # default the second side to the live working state ("current").
-    if action in ("show", "note", "diff", "export", "restore"):
-        from version_stamp.cli.snapshot import _get_storage, _resolve_verstr
-
-        latest = getattr(vmn_ctx.args, "latest", False)
-        verstr = vmn_ctx.args.version
-        to_ver = getattr(vmn_ctx.args, "to", None) if action == "diff" else None
-
-        if verstr is None and not latest:
-            latest = True
-        if action == "diff" and to_ver is None:
-            to_ver = "current"
-            vmn_ctx.args.to = to_ver
-
-        storage = _get_storage(vmn_ctx.vcs, vmn_ctx.params)
-
-        resolved, err_msg = _resolve_verstr(
-            storage, vmn_ctx.vcs.name, verstr, latest=latest
-        )
-        if err_msg:
-            VMN_LOGGER.error(err_msg)
-            return 1
-        vmn_ctx.args.version = resolved
-
-        if to_ver and to_ver != "current":
-            resolved_to, err_msg = _resolve_verstr(storage, vmn_ctx.vcs.name, to_ver)
-            if err_msg:
-                VMN_LOGGER.error(err_msg)
-                return 1
-            vmn_ctx.args.to = resolved_to
-
-    if action == "create":
-        user_meta = _build_user_meta(
-            vmn_ctx.args.meta, getattr(vmn_ctx.args, "meta_file", None)
-        )
-        return snapshot_create(
-            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.note, user_meta=user_meta
-        )
-    elif action == "list":
-        return snapshot_list(vmn_ctx.vcs, vmn_ctx.params)
-    elif action == "show":
-        return snapshot_show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    elif action == "note":
-        return snapshot_note(
-            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.note
-        )
-    elif action == "diff":
-        return snapshot_diff(
-            vmn_ctx.vcs,
-            vmn_ctx.params,
-            vmn_ctx.args.version,
-            getattr(vmn_ctx.args, "to", None),
-            getattr(vmn_ctx.args, "tool", None),
-        )
-    elif action == "export":
-        return snapshot_export(
-            vmn_ctx.vcs,
-            vmn_ctx.params,
-            vmn_ctx.args.version,
-            getattr(vmn_ctx.args, "output", None),
-        )
-    elif action == "restore":
-        return snapshot_restore(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    else:
-        VMN_LOGGER.error(f"Unknown snapshot action: {action}")
-        return 1
+    return spec.handle(vmn_ctx)
 
 
 def _on_configured_branch(path, branch_name, configured_branch):
