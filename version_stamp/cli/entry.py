@@ -48,6 +48,21 @@ from version_stamp.stamping.publisher import VersionControlStamper
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
 
+def _run_experiment_from_snapshot(args):
+    """Run an experiment command without a git repo (from-snapshot mode).
+
+    The experiments plugin owns this now; the name stays importable here for
+    existing callers.
+    """
+    from version_stamp.cli.plugin_api import find as _find_plugin_spec
+    from version_stamp.cli.plugins import load_builtin_plugins
+
+    load_builtin_plugins()
+    args = copy.copy(args)
+    args.command = "experiment"
+    return _find_plugin_spec("experiment").run_without_repo(args)
+
+
 def _takes_repo_lock(args):
     """False for the read-only experiment/snapshot actions, which are lock-free.
 
