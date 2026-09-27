@@ -210,3 +210,18 @@ def test_a_forked_child_writes_straight_through(storage, monkeypatch):
 
     assert _logged_steps(storage) == [42]
     run.finish()
+
+
+def test_the_log_flusher_thread_is_not_named_like_the_run_heartbeat():
+    # Code (and tests) that look for a run's liveness thread by name must not
+    # mistake a log buffer's periodic flusher for one.
+    import threading
+
+    buf = log_buffer.LogBuffer(lambda batch: None)
+    buf.append({"type": "metrics", "step": 0})
+    try:
+        names = {t.name for t in threading.enumerate()}
+        assert "vmn-log-flush" in names
+        assert "vmn-heartbeat" not in names
+    finally:
+        buf.close()

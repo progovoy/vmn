@@ -25,11 +25,12 @@ _LOGGER = logging.getLogger(__name__)
 class Heartbeat:
     """Call ``publish`` every ``interval_sec`` on a daemon thread."""
 
-    def __init__(self, publish, interval_sec):
+    def __init__(self, publish, interval_sec, name="vmn-heartbeat"):
         if not interval_sec or interval_sec <= 0:
             raise ValueError(f"heartbeat interval must be positive, got {interval_sec}")
         self._publish = publish
         self._interval_sec = interval_sec
+        self._name = name
         self._stop = threading.Event()
         self._thread = None
 
@@ -44,7 +45,7 @@ class Heartbeat:
         self._stop.clear()
         # Daemon: a forgotten run must never wedge interpreter exit.
         self._thread = threading.Thread(
-            target=self._loop, name="vmn-heartbeat", daemon=True
+            target=self._loop, name=self._name, daemon=True
         )
         self._thread.start()
 

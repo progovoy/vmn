@@ -87,7 +87,9 @@ class LogBuffer:
         with self._start_lock:
             if self._flusher is not None or self._closed:
                 return
-            self._flusher = Heartbeat(self._flush_quietly, FLUSH_INTERVAL_SEC)
+            self._flusher = Heartbeat(
+                self._flush_quietly, FLUSH_INTERVAL_SEC, name="vmn-log-flush"
+            )
             self._flusher.start()
 
     def _flush_quietly(self):
