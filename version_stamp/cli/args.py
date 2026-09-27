@@ -733,6 +733,14 @@ def _add_experiment_parser(subprasers, name):
         "Falls back to VMN_SNAPSHOT_METADATA env var.",
     )
     pexp.add_argument(
+        "--no-env",
+        dest="capture_env",
+        action="store_false",
+        default=None,
+        help="create/run: skip environment capture (packages, python, platform). "
+        "Overrides VMN_CAPTURE_ENV and conf capture_env settings.",
+    )
+    pexp.add_argument(
         "--experiment-dir",
         default=None,
         help="Write experiments to this directory instead of local .vmn/. "

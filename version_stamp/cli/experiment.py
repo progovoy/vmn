@@ -382,6 +382,7 @@ def experiment_create(vcs, params, storage, args):
         extra_create_data=extra or None,
         parent=parent,
         name=getattr(args, "run_name", None),
+        capture_env=getattr(args, "capture_env", None),
     )
     if err is not None:
         return err
@@ -409,14 +410,28 @@ def _experiment_create_core(
     extra_create_data=None,
     parent=None,
     name=None,
+    capture_env=None,
+    python_exe=None,
 ):
     """Create the experiment record (snapshot + initial log entry).
 
     Returns (verstr, error_code). error_code is None on success.
     When from_snapshot is set, reads identity from vmn_metadata.yml (no git needed).
+
+    *capture_env* follows the same precedence as ``start_run(capture_env=...)``:
+    ``None`` = check opt-out chain, ``True`` = force on, ``False`` = force off.
+    *python_exe*, when given, is probed instead of the current interpreter.
     """
+    from version_stamp.core.experiment_env import (
+        capture_env_safe,
+        should_capture,
+    )
+
+    exp_conf = getattr(vcs, "experiment", None) or {}
+
     if from_snapshot:
         app_name = _app_name(vcs)
+        env = capture_env_safe() if should_capture(capture_env, exp_conf) else None
         return _experiment_create_from_snapshot(
             storage,
             app_name,
@@ -425,6 +440,7 @@ def _experiment_create_core(
             extra_create_data=extra_create_data,
             parent=parent,
             name=name,
+            env=env,
         )
 
     (
@@ -437,6 +453,11 @@ def _experiment_create_core(
     ) = gather_create_data(vcs, allow_clean=True)
     if err is not None:
         return None, err
+
+    # Capture env before create_run (env capture is read-only).
+    env = (
+        capture_env_safe(python_exe) if should_capture(capture_env, exp_conf) else None
+    )
 
     code_verstr = _compute_verstr(base_version, commit_hash, patches)
     template = _build_snapshot_metadata(
@@ -459,6 +480,7 @@ def _experiment_create_core(
         create_data=extra_create_data,
         parent=parent,
         name=name,
+        env=env,
     )
     return verstr, None
 

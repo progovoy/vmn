@@ -308,20 +308,52 @@ def create_run(
     create_data=None,
     parent=None,
     name=None,
+    env=None,
 ):
     """Claim a run verstr for *template* and write the record and its create entry.
 
     *template* is the record's metadata minus its identity: each claim attempt
     stamps a copy with the candidate verstr, ``code_verstr``, parent and name.
+
+    *env* is a full environment dict (from ``capture_env()`` or
+    ``env_from_interpreter()``).  When provided, a compact summary is embedded
+    in the metadata under ``"env"`` and the full dict is written to ``env.yml``
+    next to the record.  All env-related failures are best-effort: a write
+    error never prevents the run from being created.
     """
+    effective_template = template
+    if env is not None:
+        try:
+            from version_stamp.core.experiment_env import env_summary
+
+            effective_template = dict(template, env=env_summary(env))
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "vmn: could not compute env summary — env key omitted from metadata"
+            )
 
     def make_record(verstr):
-        metadata = dict(template, verstr=verstr, code_verstr=code_verstr)
+        metadata = dict(effective_template, verstr=verstr, code_verstr=code_verstr)
         attach_parent(metadata, parent)
         attach_name(metadata, name)
         return metadata, patches
 
     verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
+
+    if env is not None:
+        try:
+            storage.save_file(
+                app_name, verstr, "env.yml", yaml.dump(env, sort_keys=False)
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                f"vmn: could not write env.yml for run {verstr}"
+            )
+
     entry = create_log_entry("create", note=note)
     if create_data:
         entry.update(create_data)
