@@ -15,29 +15,20 @@ list_versions(storage, model) -> [int]
 list_models(storage) -> [str]
 get_version(storage, model, n) -> metadata dict | None
 
-Note: ``_now_iso`` is intentionally a local copy; vmn_exp modules may not
-import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
+Timestamps come from ``vmn_exp.registry.fold.now_iso``; vmn_exp modules may
+not import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
 """
 from __future__ import annotations
 
-import datetime
-
+from vmn_exp.registry.fold import now_iso
 from vmn_exp.registry.names import (
+    REGISTRY_APP,
     parse_version_record,
     valid_model_name,
     version_record_name,
 )
 
-REGISTRY_APP = "vmn-registry"
 _MAX_REGISTER_RETRIES = 200
-
-
-def _now_iso() -> str:
-    return (
-        datetime.datetime.now(datetime.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
 
 
 def ensure_model(storage, model, description=None, actor=None):
@@ -46,7 +37,7 @@ def ensure_model(storage, model, description=None, actor=None):
     ``create_exclusive`` is atomic: concurrent callers both succeed — the
     second one gets False and does nothing.
     """
-    metadata = {"model": model, "type": "model_header", "timestamp": _now_iso()}
+    metadata = {"model": model, "type": "model_header", "timestamp": now_iso()}
     if description is not None:
         metadata["description"] = description
     if actor is not None:
@@ -80,7 +71,7 @@ def register_version(
     all_names = list(storage.list_record_names(REGISTRY_APP))
     n = max(_taken_version_numbers(all_names, model), default=0) + 1
 
-    metadata_base = {"model": model, "run_ref": run_ref, "timestamp": _now_iso()}
+    metadata_base = {"model": model, "run_ref": run_ref, "timestamp": now_iso()}
     if artifact_path is not None:
         metadata_base["artifact_path"] = artifact_path
     if description is not None:

@@ -9,26 +9,12 @@ writers on the same model never corrupt state.
 """
 from __future__ import annotations
 
-import datetime
 import os
 import subprocess
 
 from version_stamp.core.experiment_writer import flush_log, get_writer_id
-from vmn_exp.registry.fold import fold_registry, next_ts
-
-# Reserved pseudo-app that holds all registry records.
-REGISTRY_APP = "vmn-registry"
-
-
-# ---------------------------------------------------------------------------
-# Timestamps
-# ---------------------------------------------------------------------------
-
-def _reg_ts() -> str:
-    """UTC now in %Y-%m-%dT%H:%M:%S.%f — always parseable by fold.py's _parse_ts."""
-    return datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%S.%f"
-    )
+from vmn_exp.registry.fold import fold_registry, now_iso as _reg_ts, next_ts
+from vmn_exp.registry.names import REGISTRY_APP
 
 
 # ---------------------------------------------------------------------------

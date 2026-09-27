@@ -25,6 +25,7 @@ Pure: no storage, no clock.
 """
 from __future__ import annotations
 
+import datetime as _dt
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -103,6 +104,11 @@ def _parse_ts(ts: str) -> datetime | None:
         return datetime.fromisoformat(ts)
     except ValueError:
         return None
+
+
+def now_iso() -> str:
+    """Return UTC now as ``%Y-%m-%dT%H:%M:%S.%f`` — always parseable by ``_parse_ts``."""
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 
 def next_ts(prev_ts: str | None, now: str) -> str:
