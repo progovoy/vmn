@@ -361,6 +361,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 - [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
 - [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)
+- [Model registry](https://github.com/progovoy/vmn/blob/master/docs/models.md)
 - [Web UI](https://github.com/progovoy/vmn/blob/master/docs/ui.md)
 - [vmn vs MLflow](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-mlflow.md)
 - [vmn vs semantic-release](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-semantic-release.md)
@@ -368,6 +369,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 - [vmn vs setuptools-scm](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-setuptools-scm.md)
 - [Migrating from standard-version](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-standard-version.md)
 - [Migrating from bump2version](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-bump2version.md)
+- [Migrating from MLflow](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-mlflow.md)
 
 ## Project
 

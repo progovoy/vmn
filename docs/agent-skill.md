@@ -81,6 +81,37 @@ vmn snapshot restore <app_name> --latest
 vmn snapshot diff <app_name>  # compare snapshot to current state
 ```
 
+## Model registry
+
+Link trained models to the experiment runs that produced them:
+
+```sh
+# Register a model version pointing at a run
+vmn model register resnet50 -v <verstr> --app my_app --artifact weights.pt --alias staging
+
+# Move an alias (e.g., promote to production)
+vmn model alias resnet50 production 2
+vmn model alias resnet50 production 3 --expect 2   # CAS guard
+
+# Inspect and list
+vmn model list
+vmn model show resnet50
+vmn model resolve resnet50@production   # print version metadata
+```
+
+SDK:
+
+```python
+from version_stamp.exp.models import (
+    register_model, set_alias, get_model_version, download_model
+)
+# or on a run object:
+run.register_model("resnet50", artifact_path="weights.pt", alias="staging")
+path = download_model("resnet50@production")
+```
+
+`vmn model` is git-free. Prune refuses registered runs even with `--force`; delete the version first.
+
 ## Worktree islands (app + dependencies side by side)
 
 ```sh

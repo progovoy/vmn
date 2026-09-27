@@ -40,6 +40,12 @@ setuptools.setup(
         "xgboost": ["xgboost"],
         "torch": ["torch", "lightning"],
         "keras": ["keras"],
+        # Optional integrations — install the framework you already use, then
+        # add the matching extra so vmn's helpers are available.
+        "mlflow": ["mlflow-skinny"],
+        "hf": ["transformers"],
+        "optuna": ["optuna"],
+        "ray": ["ray[tune]"],
     },
     package_dir={"version_stamp": "version_stamp"},
     packages=[
