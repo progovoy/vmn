@@ -15,6 +15,7 @@ import os
 import tempfile
 
 from version_stamp.cli.snapshot_storage import SnapshotStorage
+from version_stamp.cli.snapshot_storage_index_cache_dir import s3_index_cache_path
 from version_stamp.cli.snapshot_storage_files import (
     METADATA_FILE,
     PATCH_FILES,
@@ -101,6 +102,9 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
 
     def cache_identity(self):
         return ("s3", self.endpoint_url, self.bucket, self.prefix)
+
+    def index_cache_path(self, app_name):
+        return s3_index_cache_path(self.endpoint_url, self.bucket, self.prefix, app_name)
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)
