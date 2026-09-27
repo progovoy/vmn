@@ -299,6 +299,7 @@ model from the real library:
 | `tensorflow` | the same method | `tensorflow.keras.Model` *is* `keras.Model` |
 | `lightning` | `lightning.pytorch.Trainer.fit` | |
 | `pytorch_lightning` | `pytorch_lightning.Trainer.fit` | a separate mirror package, so a separate patch |
+| `transformers` | `Trainer.train` (via injected `VmnCallback`) | patches `transformers.trainer` lazily — `import transformers` alone never triggers it; records `params.*` on `on_train_begin` and `metrics.train/<name>` / `metrics.eval/<name>` per step on `on_log` |
 
 Naming an unsupported — or simply uninstalled — framework is a silent no-op, so
 `autolog()` is safe to call at import time in code that may run without any ML

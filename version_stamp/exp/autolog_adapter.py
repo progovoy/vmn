@@ -63,7 +63,7 @@ _Adapter = collections.namedtuple(
 
 def _adapter(
     label,
-    discover,
+    discover=None,
     params=None,
     metrics=None,
     subject=None,
@@ -74,10 +74,14 @@ def _adapter(
     watch=(),
     method_owners=None,
 ):
-    """An :data:`_Adapter` with the scikit-learn-shaped defaults filled in."""
+    """An :data:`_Adapter` with the scikit-learn-shaped defaults filled in.
+
+    *discover* may be ``None`` when *method_owners* is provided — the adapter
+    will use *method_owners* exclusively and *discover* is never called.
+    """
     return _Adapter(
         label=label,
-        discover=discover,
+        discover=discover if discover is not None else (lambda m: []),
         subject=subject or _fit_self,
         params=params or _get_params,
         metrics=metrics or _score_metric,
@@ -155,6 +159,11 @@ def _no_series(call):
 
 def _no_metrics(call):
     return {}
+
+
+def _no_save(call, subject, base):
+    """No-op save — for adapters that handle persistence themselves."""
+    return None
 
 
 def _pickle_model(call, subject, base):
