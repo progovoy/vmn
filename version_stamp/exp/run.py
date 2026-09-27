@@ -25,6 +25,7 @@ from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_values import sanitize_entry
+from version_stamp.core.experiment_inputs import create_input_entry
 from version_stamp.core.experiment_writer import (
     append_entries_to_log,
     compute_artifact_info,
@@ -371,10 +372,7 @@ class Run(RunArtifacts):
         ``"dataset"``). Multiple calls are independent log entries; fold logic
         merges them latest-write-wins by name.
         """
-        from version_stamp.core.experiment_inputs import create_input_entry
-        from version_stamp.api import now_iso as _now_iso
-        entry = create_input_entry(uri, name=name, digest=digest, kind=kind, ts=_now_iso())
-        self._append(entry)
+        self._append(create_input_entry(uri, name=name, digest=digest, kind=kind, ts=now_iso()))
 
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``

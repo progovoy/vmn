@@ -17,9 +17,9 @@ def parse_input_arg(s):
 
     *name* is extracted only when the token before the first ``=`` is an
     identifier-like string (alphanumeric/underscore/dash, starting with alpha
-    or underscore) **and** no ``://`` appears before that ``=``.  This prevents
-    a URI such as ``s3://bucket/path?key=value`` from being mis-read as
-    ``name="s3://bucket/path?key"``.
+    or underscore).  Because ``_IDENT_RE`` rejects any token containing ``:``
+    or ``/``, URIs such as ``s3://bucket/path?key=value`` are never mis-read
+    as ``name="s3://bucket/path?key"``.
 
     The *last* ``#`` in the URI portion splits off a digest, so
     ``s3://bucket/data#sha256:abc`` yields digest ``"sha256:abc"``.
@@ -28,14 +28,9 @@ def parse_input_arg(s):
     """
     name = None
     eq_idx = s.find("=")
-    if eq_idx != -1:
-        scheme_idx = s.find("://")
-        # name= only when :// doesn't appear before the first =
-        before_eq = s[:eq_idx]
-        no_scheme_before_eq = scheme_idx == -1 or scheme_idx >= eq_idx
-        if no_scheme_before_eq and _IDENT_RE.match(before_eq):
-            name = before_eq
-            s = s[eq_idx + 1:]
+    if eq_idx != -1 and _IDENT_RE.match(s[:eq_idx]):
+        name = s[:eq_idx]
+        s = s[eq_idx + 1:]
 
     # Last '#' splits digest
     hash_idx = s.rfind("#")
