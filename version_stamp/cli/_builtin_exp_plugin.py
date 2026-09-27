@@ -151,6 +151,10 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--no-env", dest="capture_env", action="store_false", default=None,
                       help="create/run: skip environment capture (packages, python, platform). "
                            "Overrides VMN_CAPTURE_ENV and conf capture_env settings.")
+    pexp.add_argument("--input", action="append", dest="inputs", default=None,
+                      metavar="[NAME=]URI[#DIGEST]",
+                      help="create/run/add: record a dataset or artifact input. "
+                           "Optional name= prefix and #digest suffix. Repeatable.")
     pexp.add_argument("--experiment-dir", default=None,
                       help="Write experiments to this directory instead of local .vmn/. "
                            "Falls back to VMN_EXPERIMENT_DIR env var.")

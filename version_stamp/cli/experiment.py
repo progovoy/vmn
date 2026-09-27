@@ -71,7 +71,20 @@ from version_stamp.core.experiment_writer import (
     merge_conf_into_params,
     save_artifact,
 )
-from version_stamp.api import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
+from version_stamp.cli.experiment_inputs_arg import parse_input_arg
+from version_stamp.core.experiment_inputs import create_input_entry
+
+
+def _append_inputs(storage, app_name, verstr, inputs_list):
+    """Append one input log entry per ``--input`` argument."""
+    if not inputs_list:
+        return
+    ts = now_iso()
+    for raw in inputs_list:
+        name, uri, digest = parse_input_arg(raw)
+        entry = create_input_entry(uri, name=name, digest=digest, ts=ts)
+        append_to_log(storage, app_name, verstr, entry)
 
 
 @dataclass
@@ -396,6 +409,8 @@ def experiment_create(vcs, params, storage, args):
             create_log_entry("metrics", values=_parse_metrics(args.metrics)),
         )
 
+    _append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
 
@@ -525,6 +540,8 @@ def experiment_add(vcs, params, storage, args):
         entry = create_log_entry("structured", **notes_data)
         append_to_log(storage, app_name, verstr, entry)
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
+
+    _append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
 
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)

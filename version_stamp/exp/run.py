@@ -25,6 +25,7 @@ from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort, quiet
 from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from version_stamp.core.experiment_values import sanitize_entry
+from version_stamp.core.experiment_inputs import create_input_entry
 from version_stamp.core.experiment_writer import (
     append_entries_to_log,
     compute_artifact_info,
@@ -362,6 +363,16 @@ class Run(RunArtifacts):
 
     def log_note(self, text):
         self._append(create_log_entry("note", text=text))
+
+    def log_input(self, uri, name=None, digest=None, kind=None):
+        """Record that this run consumed the artifact at *uri*.
+
+        *name* defaults to the URI basename (without extension). *digest* and
+        *kind* are optional provenance hints (e.g. ``"sha256:..."`` and
+        ``"dataset"``). Multiple calls are independent log entries; fold logic
+        merges them latest-write-wins by name.
+        """
+        self._append(create_input_entry(uri, name=name, digest=digest, kind=kind, ts=now_iso()))
 
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``

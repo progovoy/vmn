@@ -73,6 +73,9 @@ class NoOpRun:
     def log_artifact(self, path, name=None):
         return None
 
+    def log_input(self, uri, name=None, digest=None, kind=None):
+        return None
+
     def _ignore(self, *args, **kwargs):
         return None
 
