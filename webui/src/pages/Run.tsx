@@ -16,6 +16,7 @@ import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import TrainingCurves from "../components/TrainingCurves";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
+import RunProvenanceSection from "./RunProvenance";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
 function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
@@ -61,6 +62,11 @@ function RunBody({ ws, app, appName, detail }: {
           <RegisterModelButton ws={ws} app={appName} verstr={verstr} />
         </>
       )}
+      <RunProvenanceSection
+        env={detail.env}
+        inputs={detail.inputs}
+        importedFrom={detail.imported_from}
+      />
     </>
   );
 }

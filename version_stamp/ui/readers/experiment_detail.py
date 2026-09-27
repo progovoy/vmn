@@ -11,7 +11,10 @@ new bytes (:mod:`~version_stamp.ui.readers.parsed_logs`).
 """
 from collections import ChainMap
 
+import yaml
+
 from version_stamp.cli.snapshot import _resolve_verstr
+from version_stamp.core.experiment_fold import fold_inputs_dict
 from version_stamp.core.experiment_log import last_metric_at, list_artifacts
 from version_stamp.core.experiment_log import load_log as _load_log
 from version_stamp.core.experiment_refs import placement_snapshot
@@ -26,7 +29,30 @@ from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 from version_stamp.ui.readers.snapshots import _load_metadata, _patch_presence
 
+_ENV_SIZE_CAP = 256 * 1024  # 256 KB
+
 LOG_TAIL = 200
+
+
+def _load_env(storage, app_name, verstr, metadata):
+    """``env`` payload for the detail: full dict when env.yml fits, else summary.
+
+    Returns the full env dict when env.yml is present and at most
+    ``_ENV_SIZE_CAP`` bytes.  When the file is larger, returns the compact
+    summary from *metadata* with ``truncated: True`` added.  Returns ``None``
+    when neither env.yml nor a summary is available.
+    """
+    raw = storage.load_file(app_name, verstr, "env.yml")  # bytes or None
+    if raw is not None:
+        if len(raw) <= _ENV_SIZE_CAP:
+            try:
+                return yaml.safe_load(raw)
+            except Exception:
+                pass
+        summary = metadata.get("env")
+        return dict(summary, truncated=True) if summary else None
+    return metadata.get("env") or None
+
 
 _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "parent",
@@ -188,6 +214,9 @@ def experiment_detail(
             read_child_row=read_child_row,
         ),
         "patches": _patch_presence(storage, app_name, verstr, metadata),
+        "env": _load_env(storage, app_name, verstr, metadata),
+        "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
+        "imported_from": metadata.get("imported_from"),
     }, None
 
 

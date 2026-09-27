@@ -141,6 +141,34 @@ export interface LogEntry {
   [key: string]: unknown;
 }
 
+/** Python/platform/packages information captured at run creation. */
+export interface EnvData {
+  /** Python version string or object. */
+  python?: string | { version?: string; implementation?: string; executable?: string };
+  /** Platform info: a string "System/Machine" or a struct. */
+  platform?:
+    | string
+    | { system?: string; machine?: string; release?: string };
+  /** Package name → version (only present when env.yml was small enough). */
+  packages?: Record<string, string>;
+  /** Key ML packages (always present in the summary). */
+  key_packages?: Record<string, string>;
+  packages_count?: number;
+  packages_sha?: string;
+  cuda?: Record<string, string>;
+  hostname?: string;
+  /** True when the file exceeded the size cap and packages is omitted. */
+  truncated?: boolean;
+  [key: string]: unknown;
+}
+
+/** A single dataset or artefact input logged via `run.log_input`. */
+export interface InputEntry {
+  uri: string;
+  digest: string | null;
+  kind?: string | null;
+}
+
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
   /** The newest log entries — the whole log only when requested with
@@ -161,6 +189,12 @@ export interface ExperimentDetail {
   /** Names may be nested paths (`plots/loss.png`). */
   artifacts?: { name: string; size: number }[];
   status?: RunStatus;
+  /** Python/platform/package environment captured at run creation. */
+  env?: EnvData | null;
+  /** Named inputs (datasets/artefacts) logged during the run. */
+  inputs?: Record<string, InputEntry> | null;
+  /** Source identifier when the run was imported from an external system. */
+  imported_from?: string | null;
 }
 
 export interface VersionRow {
