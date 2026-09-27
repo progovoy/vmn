@@ -82,6 +82,7 @@ start_run(
     all_ranks=False,
     name=None,
     tags=None,
+    capture_env=None,
 )
 ```
 
@@ -101,6 +102,7 @@ start_run(
 | `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
 | `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
+| `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
 
 The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn exp
 run`, which measures the child's process tree instead):

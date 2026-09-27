@@ -433,8 +433,11 @@ def test_capture_outside_lock(app_layout, monkeypatch):
 
         return _SpyCtx()
 
+    import version_stamp.exp.create as _exp_create
+
     monkeypatch.setattr(experiment_env, "capture_env", _spy_capture)
     monkeypatch.setattr(_repo_lock_mod, "get_repo_lock", _spy_lock)
+    monkeypatch.setattr(_exp_create, "get_repo_lock", _spy_lock)
 
     with start_run(app_layout.app_name) as run:
         pass

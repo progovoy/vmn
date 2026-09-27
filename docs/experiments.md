@@ -499,6 +499,23 @@ vmn exp run my_app --parent latest -- python train.py --lr 0.1
 | `--kill-grace-sec <sec>` | `30` (`$VMN_EXP_KILL_GRACE_SEC`) | How long a [signalled](#preemption-and-signals) command may take to exit before it is killed |
 | `--sync-interval <sec>` | `30` | How often the log syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
+| `--no-env` | *(capture enabled)* | Skip environment capture for this run |
+
+### Environment capture
+
+Both `create` and `run` automatically record a snapshot of the runtime environment into the experiment: Python version, platform, and installed packages (the full `pip freeze` output). The summary (≤ 2 KB) is embedded in `metadata.yml` under `"env"`, and the full package list is written to `env.yml` next to it. These writes are best-effort — a failure never prevents the run from being created.
+
+When the command passed to `vmn exp run` is a Python interpreter (`python`, `python3`, `python3.x`) or a `.py` script, vmn probes that interpreter's own package list instead of the current one (5-second timeout; falls back to the current env on failure).
+
+**Opt-out:**
+
+| Method | Example |
+|---|---|
+| CLI flag | `vmn exp create my_app --no-env` |
+| Environment variable | `VMN_CAPTURE_ENV=0 vmn exp run my_app -- train.py` |
+| Per-app config | `experiment.capture_env: false` in `.vmn/my_app/conf.yml` |
+
+The precedence is CLI flag > `VMN_CAPTURE_ENV` > conf.yml (default: capture enabled).
 
 ### `add`
 
