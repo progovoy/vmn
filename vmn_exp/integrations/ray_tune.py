@@ -1,9 +1,8 @@
 """Driver-side Ray Tune integration for vmn experiment tracking.
 
-``import vmn_exp.integrations.ray_tune`` never imports ray itself.  The
-:class:`VmnTuneCallback` subclass (which inherits from ``ray.tune.Callback``)
-is built lazily — call :func:`make_callback` from code that already has ray
-available, or access the module attribute ``VmnTuneCallback`` the same way.
+``import vmn_exp.integrations.ray_tune`` never imports ray itself.  Call
+:func:`make_callback` from code that already has ray available to get a
+``ray.tune.Callback`` instance.
 
 Typical driver-side usage::
 
@@ -28,13 +27,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from version_stamp.exp import start_run
-
 _LOGGER = logging.getLogger(__name__)
 
 # Ray injects these keys into every result dict.  They are timing / bookkeeping
-# values, not the user's objective metrics, so they are dropped before the
-# remaining values are forwarded to the SDK (which handles its own coercion).
+# values, not objective metrics, so they are stripped before logging.
 _RAY_BOOKKEEPING_KEYS = frozenset(
     {
         "config",
@@ -56,13 +52,10 @@ _RAY_BOOKKEEPING_KEYS = frozenset(
         "timestamp",
         "timesteps_since_restore",
         "trial_id",
-        "training_iteration",  # used as step counter, not a metric
+        "training_iteration",  # used as step, not logged as a metric
         "warmup_time",
     }
 )
-
-# Cached ray.tune.Callback subclass; built once on first make_callback() call.
-_callback_class: Any = None
 
 
 def _flatten_dict(d: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
@@ -82,45 +75,12 @@ def _flatten_dict(d: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
 
 
 def _filter_bookkeeping(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Drop Ray bookkeeping keys; the SDK coerces and validates the rest."""
+    """Return *result* with Ray bookkeeping keys removed.
+
+    Numeric coercion and bool/non-numeric dropping are left to the SDK's
+    ``log_metrics`` → ``sanitize_entry`` path, which already handles them.
+    """
     return {k: v for k, v in result.items() if k not in _RAY_BOOKKEEPING_KEYS}
-
-
-def _make_callback_class() -> Any:
-    """Import ray.tune and build (or return the cached) VmnTuneCallback class."""
-    global _callback_class
-    if _callback_class is None:
-        import ray.tune  # noqa: PLC0415 — intentionally deferred
-
-        class VmnTuneCallback(ray.tune.Callback):
-            """Bridges Ray Tune driver callback hooks to a :class:`TuneRecorder`.
-
-            Construct with a recorder::
-
-                recorder = TuneRecorder(app_name="my_app")
-                tune.run(..., callbacks=[VmnTuneCallback(recorder)])
-            """
-
-            def __init__(self, rec: "TuneRecorder") -> None:
-                self._recorder = rec
-
-            def on_trial_start(self, iteration, trials, trial, **info):
-                self._recorder.on_trial_start(trial.trial_id, trial.config)
-
-            def on_trial_result(self, iteration, trials, trial, result, **info):
-                self._recorder.on_trial_result(trial.trial_id, result)
-
-            def on_trial_complete(self, iteration, trials, trial, **info):
-                self._recorder.on_trial_complete(trial.trial_id)
-
-            def on_trial_error(self, iteration, trials, trial, **info):
-                self._recorder.on_trial_error(trial.trial_id)
-
-            def on_experiment_end(self, trials, **info):
-                self._recorder.finish()
-
-        _callback_class = VmnTuneCallback
-    return _callback_class
 
 
 class TuneRecorder:
@@ -157,6 +117,8 @@ class TuneRecorder:
     def _ensure_outer(self) -> Any:
         """Return the outer run, creating it now if it has not been yet."""
         if self._outer_run is None:
+            from version_stamp.exp import start_run
+
             self._outer_run = start_run(
                 app_name=self._app_name,
                 name=self._experiment_name,
@@ -174,12 +136,13 @@ class TuneRecorder:
         *config* is flattened (nested dicts joined with '.') and recorded as
         the trial run's params.
         """
+        from version_stamp.exp import start_run
+
         outer = self._ensure_outer()
         flat_params = _flatten_dict(config) if config else None
-
         inner = start_run(
             app_name=self._app_name,
-            params=flat_params,
+            params=flat_params or None,
             parent=outer.id,
             nested=True,
             name=trial_id,
@@ -188,11 +151,10 @@ class TuneRecorder:
         self._trial_runs[trial_id] = inner
 
     def on_trial_result(self, trial_id: str, result: Dict[str, Any]) -> None:
-        """Log metrics from a Ray result dict to the trial's inner run.
+        """Log numeric metrics from a Ray result dict to the trial's inner run.
 
         ``training_iteration`` (when present) is used as the step counter.
-        Ray bookkeeping keys are silently dropped; the SDK handles coercion and
-        drops booleans / non-numeric values.
+        Ray bookkeeping keys are silently dropped.
         """
         inner = self._trial_runs.get(trial_id)
         if inner is None:
@@ -200,43 +162,42 @@ class TuneRecorder:
             return
 
         step = result.get("training_iteration")
-        filtered = _filter_bookkeeping(result)
-        if filtered:
-            inner.log_metrics(filtered, step=step)
+        metrics = _filter_bookkeeping(result)
+        if metrics:
+            inner.log_metrics(metrics, step=step)
 
     def on_trial_complete(self, trial_id: str) -> None:
         """Mark *trial_id*'s inner run as succeeded (exit_code=0)."""
-        inner = self._trial_runs.pop(trial_id, None)
-        if inner is None:
-            _LOGGER.debug("on_trial_complete: trial %r not tracked — skipped", trial_id)
-            return
-        inner.finish(exit_code=0)
+        self._finish_trial(trial_id, exit_code=0)
 
     def on_trial_error(self, trial_id: str) -> None:
         """Mark *trial_id*'s inner run as failed (exit_code=1)."""
+        self._finish_trial(trial_id, exit_code=1)
+
+    def _finish_trial(self, trial_id: str, exit_code: int) -> None:
         inner = self._trial_runs.pop(trial_id, None)
         if inner is None:
-            _LOGGER.debug("on_trial_error: trial %r not tracked — skipped", trial_id)
+            _LOGGER.debug("_finish_trial: trial %r not tracked — skipped", trial_id)
             return
-        inner.finish(exit_code=1)
+        inner.finish(exit_code=exit_code)
+
+    def finish(self) -> None:
+        """Finish any open trial runs and the outer run.
+
+        Idempotent: safe to call more than once.
+        """
+        self._close_all(exit_code=0)
 
     def _close_all(self, exit_code: int) -> None:
-        """Finish all open trial runs with *exit_code* and clear the registry."""
+        """Finish every open trial run with *exit_code*, then the outer run."""
         for tid, inner in list(self._trial_runs.items()):
             if exit_code == 0:
                 _LOGGER.warning("finish(): trial %r still open — closing as succeeded", tid)
             inner.finish(exit_code=exit_code)
         self._trial_runs.clear()
 
-    def finish(self) -> None:
-        """Finish any open trial runs and the outer run.
-
-        Idempotent: safe to call more than once (already-finished runs are
-        no-ops inside ``Run.finish``).
-        """
-        self._close_all(exit_code=0)
         if self._outer_run is not None:
-            self._outer_run.finish(exit_code=0)
+            self._outer_run.finish(exit_code=exit_code)
             self._outer_run = None
 
     # ------------------------------------------------------------------
@@ -247,13 +208,7 @@ class TuneRecorder:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        if exc_type is not None:
-            self._close_all(exit_code=1)
-            if self._outer_run is not None:
-                self._outer_run.finish(exit_code=1)
-                self._outer_run = None
-        else:
-            self.finish()
+        self._close_all(exit_code=1 if exc_type is not None else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -261,25 +216,56 @@ class TuneRecorder:
 # ---------------------------------------------------------------------------
 
 
+def _build_callback_class() -> Any:
+    """Import ray.tune and return the VmnTuneCallback class (cached on module)."""
+    cached = globals().get("_VmnTuneCallbackClass")
+    if cached is not None:
+        return cached
+
+    import ray.tune  # noqa: PLC0415  — intentionally deferred
+
+    class VmnTuneCallback(ray.tune.Callback):
+        """Bridges Ray Tune driver callback hooks to :class:`TuneRecorder`.
+
+        Construct with a recorder and pass to ``tune.run``::
+
+            recorder = TuneRecorder(app_name="my_app")
+            tune.run(..., callbacks=[make_callback(recorder)])
+        """
+
+        def __init__(self, rec: "TuneRecorder") -> None:
+            self._rec = rec
+
+        def on_trial_start(self, iteration, trials, trial, **info):
+            self._rec.on_trial_start(trial.trial_id, trial.config)
+
+        def on_trial_result(self, iteration, trials, trial, result, **info):
+            self._rec.on_trial_result(trial.trial_id, result)
+
+        def on_trial_complete(self, iteration, trials, trial, **info):
+            self._rec.on_trial_complete(trial.trial_id)
+
+        def on_trial_error(self, iteration, trials, trial, **info):
+            self._rec.on_trial_error(trial.trial_id)
+
+        def on_experiment_end(self, trials, **info):
+            self._rec.finish()
+
+    globals()["_VmnTuneCallbackClass"] = VmnTuneCallback
+    return VmnTuneCallback
+
+
 def make_callback(recorder: TuneRecorder) -> Any:
     """Return a ``ray.tune.Callback`` instance that drives *recorder*.
 
     Importing this module does **not** import ray.  Calling ``make_callback``
     will import ``ray.tune`` and raise ``ImportError`` if ray is not installed.
-
-    The returned callback maps Ray's five driver-side hooks to the recorder::
-
-        on_trial_start   → recorder.on_trial_start(trial_id, config)
-        on_trial_result  → recorder.on_trial_result(trial_id, result)
-        on_trial_complete→ recorder.on_trial_complete(trial_id)
-        on_trial_error   → recorder.on_trial_error(trial_id)
-        on_experiment_end→ recorder.finish()
     """
-    return _make_callback_class()(recorder)
+    return _build_callback_class()(recorder)
 
 
 def __getattr__(name: str) -> Any:
-    """Lazy module attribute: ``VmnTuneCallback`` builds the class on demand."""
+    """Lazy module attribute: ``VmnTuneCallback`` is the callback class."""
     if name == "VmnTuneCallback":
-        return _make_callback_class()
+        return _build_callback_class()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -7,8 +7,6 @@ git checkout.  No app_layout fixture means no Docker dependency.
 Test 5 requires ray (pytest.importorskip) and is expected to skip in environments
 where ray is not installed.
 """
-import os
-
 import pytest
 import yaml
 
