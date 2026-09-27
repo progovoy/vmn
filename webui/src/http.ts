@@ -39,6 +39,11 @@ export async function post<T>(path: string, body: unknown, signal = currentSigna
   return parse<T>(res);
 }
 
+export async function del(path: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers: authHeaders() });
+  return parse<void>(res);
+}
+
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));

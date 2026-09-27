@@ -13,6 +13,8 @@ const Overlay = lazy(() => import("./pages/Overlay"));
 const Snapshots = lazy(() => import("./pages/Snapshots"));
 const StampTree = lazy(() => import("./pages/StampTree"));
 const Actions = lazy(() => import("./pages/Actions"));
+const Models = lazy(() => import("./pages/Models"));
+const ModelDetail = lazy(() => import("./pages/ModelDetail"));
 
 function PageFallback() {
   return <div className="route-fallback" aria-label="loading page" />;
@@ -39,6 +41,8 @@ export const routes: RouteObject[] = [
       { path: "ws/:ws/app/:app/snapshots", element: page(Snapshots), handle: { page: "snapshots" } },
       { path: "ws/:ws/app/:app/tree", element: page(StampTree), handle: { page: "stamp tree" } },
       { path: "ws/:ws/app/:app/actions", element: page(Actions), handle: { page: "actions" } },
+      { path: "ws/:ws/models", element: page(Models), handle: { page: "models" } },
+      { path: "ws/:ws/models/:modelName", element: page(ModelDetail), handle: { page: "model" } },
     ],
   },
 ];
