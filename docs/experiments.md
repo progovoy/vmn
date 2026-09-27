@@ -466,6 +466,8 @@ vmn exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
 vmn exp create my_app -f params.yml --attach initial_weights.pt
 vmn exp create my_app --parent @2 --metrics acc=0.91
 vmn exp create my_app --name baseline-v1
+vmn exp create my_app --input s3://bucket/train.csv --input s3://bucket/eval.csv
+vmn exp create my_app --input "train=s3://bucket/train.csv#sha256:abc123"
 ```
 
 An experiment created with no run has status `created`. `--parent <ref>` attaches
@@ -500,6 +502,33 @@ vmn exp run my_app --parent latest -- python train.py --lr 0.1
 | `--sync-interval <sec>` | `30` | How often the log syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
 | `--no-env` | *(capture enabled)* | Skip environment capture for this run |
+| `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
+
+### Input tracking
+
+`--input [name=]uri[#digest]` records a dataset, model checkpoint, or any other artifact the run consumed. It is repeatable; each call appends an independent log entry:
+
+```sh
+vmn exp create my_app --input s3://bucket/train.csv
+vmn exp run my_app --input "train=s3://bucket/train.csv#sha256:abc" -- python train.py
+vmn exp add my_app -v @3 --input s3://bucket/labels.json
+```
+
+* **`name`**: a label for the input, so queries can use `inputs.train.uri`. Defaults to the URI basename without extension (`train.csv` → `train`).
+* **`digest`**: optional checksum for reproducibility, e.g. `sha256:abc123`.
+* **URIs with `=` inside** (like `s3://bucket/path?key=value`) are not mistaken for `name=uri` — only a token before the first `=` AND before `://` counts as a name.
+
+In the Python SDK, use `run.log_input(uri, name=None, digest=None, kind=None)`:
+
+```python
+from version_stamp.exp import start_run
+
+with start_run("my_app") as run:
+    run.log_input("s3://bucket/train.csv", name="train", digest="sha256:abc")
+```
+
+Inputs are visible in `vmn exp show` and queryable as three-part paths:
+`inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind`.
 
 ### Environment capture
 
@@ -526,6 +555,7 @@ Append metrics, a note, an artifact, or a structured entry to an experiment
 vmn exp add my_app --metrics val_loss=0.29 val_acc=0.93
 vmn exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
 vmn exp add my_app -f extra_notes.yml
+vmn exp add my_app --input train=s3://bucket/train.csv#sha256:abc123
 ```
 
 ### `list`

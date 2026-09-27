@@ -207,6 +207,9 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if err is not None:
         return err
 
+    import version_stamp.cli.experiment as cli
+    cli._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+
     # The mutating phase is over: everything below writes only inside this run's
     # own experiment directory. Hand the repo back to other vmn commands - the
     # child's included.

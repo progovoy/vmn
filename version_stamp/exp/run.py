@@ -363,6 +363,19 @@ class Run(RunArtifacts):
     def log_note(self, text):
         self._append(create_log_entry("note", text=text))
 
+    def log_input(self, uri, name=None, digest=None, kind=None):
+        """Record that this run consumed the artifact at *uri*.
+
+        *name* defaults to the URI basename (without extension). *digest* and
+        *kind* are optional provenance hints (e.g. ``"sha256:..."`` and
+        ``"dataset"``). Multiple calls are independent log entries; fold logic
+        merges them latest-write-wins by name.
+        """
+        from version_stamp.core.experiment_inputs import create_input_entry
+        from version_stamp.api import now_iso as _now_iso
+        entry = create_input_entry(uri, name=name, digest=digest, kind=kind, ts=_now_iso())
+        self._append(entry)
+
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``
         path; default: its basename)."""
