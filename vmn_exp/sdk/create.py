@@ -6,7 +6,7 @@ tree) and a container built from ``vmn snapshot export`` (no git; record against
 the exported snapshot's identity).
 
 In a checkout, the repo lock is held only to claim the verstr. The snapshot is
-captured before that (see :mod:`version_stamp.exp.capture`) and the cold start
+captured before that (see :mod:`vmn_exp.sdk.capture`) and the cold start
 takes the lock on its own, only when there is something to initialize.
 """
 import contextlib
@@ -33,9 +33,9 @@ from vmn_exp.core.writer import (
     merge_env_into_params,
 )
 from version_stamp.api import resolve_root_path
-from version_stamp.exp import _resolve_app_name, capture, context
-from version_stamp.exp.coldstart import tracked_vcs
-from version_stamp.exp.context import EXPERIMENT_ID_ENV, current_run
+from vmn_exp.sdk import _resolve_app_name, capture, context
+from vmn_exp.sdk.coldstart import tracked_vcs
+from vmn_exp.sdk.context import EXPERIMENT_ID_ENV, current_run
 
 SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 

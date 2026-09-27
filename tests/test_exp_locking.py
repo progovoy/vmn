@@ -293,7 +293,7 @@ def test_create_phase_waits_for_the_repo_lock(app_layout):
 
 _SDK_OPEN_RUN = """
 import os, sys, time
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 open_marker = sys.argv[1] if len(sys.argv) > 1 else os.environ["OPEN_MARKER"]
 go_marker = os.environ["GO_MARKER"]
@@ -390,7 +390,7 @@ def test_sdk_cold_start_still_works_in_a_fresh_repo(app_layout):
     mutating thing the SDK does, and now the thing the lock protects."""
     script = (
         "import os\n"
-        "from version_stamp.exp import start_run\n"
+        "from vmn_exp.sdk import start_run\n"
         "with start_run(os.environ['APP']) as run:\n"
         "    run.log_metric('acc', 1.0)\n"
         "print(run.id)\n"

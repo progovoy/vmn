@@ -18,8 +18,8 @@ import pytest
 
 from vmn_exp.core.query import QueryError, compile_query
 from vmn_exp.core.status import load_run_state
-from version_stamp.exp import start_run, sysmetrics
-from version_stamp.exp.reader import get_run
+from vmn_exp.sdk import start_run, sysmetrics
+from vmn_exp.sdk.reader import get_run
 from helpers import _PY, _bootstrap, _experiment, _storage, extract_dev_verstr
 
 _FAKE_SAMPLE = {"sys_cpu_percent": 12.5, "sys_rss_mb": 64.0}

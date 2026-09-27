@@ -1,4 +1,4 @@
-"""Tests that ``import version_stamp.exp`` does not pull in the CLI's heavy deps.
+"""Tests that ``import vmn_exp.sdk`` does not pull in the CLI's heavy deps.
 
 The SDK should be importable without dragging in git, rich, prompt_toolkit, jinja2,
 tomlkit, questionary, argcomplete, version_stamp.backends, version_stamp.stamping,
@@ -36,7 +36,7 @@ _HEAVY_MODULES = [
 
 _CHECK_SCRIPT = """\
 import sys
-import version_stamp.exp
+import vmn_exp.sdk
 
 loaded = []
 for heavy in {heavy!r}:
@@ -51,7 +51,7 @@ else:
 
 
 def test_sdk_import_skips_heavy_deps():
-    """``import version_stamp.exp`` must not load CLI / git / rich / etc."""
+    """``import vmn_exp.sdk`` must not load CLI / git / rich / etc."""
     result = subprocess.run(
         [_PY, "-c", _CHECK_SCRIPT.format(heavy=_HEAVY_MODULES)],
         capture_output=True,
@@ -63,7 +63,7 @@ def test_sdk_import_skips_heavy_deps():
     )
     output = result.stdout.strip()
     assert output == "CLEAN", (
-        f"Heavy modules were loaded when importing version_stamp.exp: "
+        f"Heavy modules were loaded when importing vmn_exp.sdk: "
         f"{output.removeprefix('HEAVY_LOADED:')}"
     )
 

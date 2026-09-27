@@ -9,7 +9,7 @@ from vmn_exp.snapshot import (
     S3SnapshotStorage,
     get_snapshot_storage,
 )
-from version_stamp.exp.reader import _apps_with_experiments
+from vmn_exp.sdk.reader import _apps_with_experiments
 from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
 
 BUCKET = "vmn-test-bucket"

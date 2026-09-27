@@ -29,7 +29,7 @@ def _make_dirty(repo_path, name, content="x"):
 
 
 def seed(tmpdir):
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     layout = FSAppLayoutFixture(tmpdir, "git")
     layout.app_name = APP

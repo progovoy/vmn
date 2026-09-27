@@ -56,7 +56,7 @@ import version_stamp.devversion.apply
 import version_stamp.devversion.materialize
 
 FORBIDDEN_PREFIXES = (
-    "version_stamp.exp",
+    "vmn_exp.sdk",
     "vmn_exp.ui",
     "vmn_exp.snapshot",
     "version_stamp.core.experiment_",

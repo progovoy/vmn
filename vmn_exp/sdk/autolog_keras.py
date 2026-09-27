@@ -6,7 +6,7 @@ model is saved in its native ``.keras`` format.
 import importlib
 
 from vmn_exp.core.values import metric_number
-from version_stamp.exp.autolog_adapter import (
+from vmn_exp.sdk.autolog_adapter import (
     _adapter,
     _fit_owners,
     _guarded,

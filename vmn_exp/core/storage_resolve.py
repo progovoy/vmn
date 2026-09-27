@@ -4,7 +4,7 @@ Single source of truth for the resolution order shared by:
 - ``vmn exp``  (vmn_exp.cli.experiment._get_experiment_storage)
 - ``vmn model`` (vmn_exp.registry.cli._get_storage)
 - ``vmn exp import-mlflow`` (vmn_exp.importers.cli._get_storage)
-- SDK (version_stamp.exp.models._resolve_storage)
+- SDK (vmn_exp.sdk.models._resolve_storage)
 
 Resolution order (highest wins):
 1. Explicit ``dir`` argument (the --dir flag)

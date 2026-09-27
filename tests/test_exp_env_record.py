@@ -139,7 +139,7 @@ def test_capture_failure_never_fails_create(monkeypatch):
 
 def test_captures_by_default(app_layout):
     from helpers import _bootstrap, _storage
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
     with start_run(app_layout.app_name) as run:
@@ -160,7 +160,7 @@ def test_captures_by_default(app_layout):
 
 def test_capture_env_false(app_layout):
     from helpers import _bootstrap, _storage
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
     with start_run(app_layout.app_name, capture_env=False) as run:
@@ -179,7 +179,7 @@ def test_capture_env_false(app_layout):
 
 def test_conf_opt_out(app_layout):
     from helpers import _bootstrap, _storage
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
 
@@ -210,7 +210,7 @@ def test_conf_opt_out(app_layout):
 
 def test_env_var_opt_out(app_layout, monkeypatch):
     from helpers import _bootstrap, _storage
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
     monkeypatch.setenv("VMN_CAPTURE_ENV", "0")
@@ -230,7 +230,7 @@ def test_env_var_opt_out(app_layout, monkeypatch):
 
 def test_arg_overrides_conf(app_layout):
     from helpers import _bootstrap, _storage
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
 
@@ -370,7 +370,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
 def test_resume_keeps_env(app_layout, monkeypatch):
     from helpers import _bootstrap, _storage
     from vmn_exp.core import env as experiment_env
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
 
@@ -406,7 +406,7 @@ def test_capture_outside_lock(app_layout, monkeypatch):
     from helpers import _bootstrap
     from vmn_exp.core import env as experiment_env
     from version_stamp.core import repo_lock as _repo_lock_mod
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
 
@@ -434,7 +434,7 @@ def test_capture_outside_lock(app_layout, monkeypatch):
 
         return _SpyCtx()
 
-    import version_stamp.exp.create as _exp_create
+    import vmn_exp.sdk.create as _exp_create
 
     monkeypatch.setattr(experiment_env, "capture_env", _spy_capture)
     monkeypatch.setattr(_repo_lock_mod, "get_repo_lock", _spy_lock)

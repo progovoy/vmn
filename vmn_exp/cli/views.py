@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rows and machine-readable payloads for ``vmn exp list`` / ``vmn exp show``.
 
-A list row is exactly what ``version_stamp.exp.reader.list_runs`` returns: the
+A list row is exactly what ``vmn_exp.sdk.reader.list_runs`` returns: the
 index row, its derived status fields and its place in the run tree. ``show
 --json`` adds the run's metadata, patch sizes and (the tail of) its log.
 Non-finite metrics are written as ``null`` so the output is strict JSON.

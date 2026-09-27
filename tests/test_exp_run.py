@@ -1,4 +1,4 @@
-"""The in-process experiment SDK: ``from version_stamp.exp import start_run``.
+"""The in-process experiment SDK: ``from vmn_exp.sdk import start_run``.
 
 An SDK run must be indistinguishable on disk from a ``vmn exp run`` run — same
 verstr scheme, same ``metadata.yml``, same per-writer log, same
@@ -25,7 +25,7 @@ from helpers import (
 from vmn_exp.core import status as st
 from version_stamp.core.constants import VMN_USER_NAME
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
-from version_stamp.exp import Run, start_run
+from vmn_exp.sdk import Run, start_run
 
 _RUN_STATE_KEYS = {
     "state",
@@ -57,7 +57,7 @@ def _meta(app_layout, verstr):
 
 def _sdk_script(app_name, body):
     """A python -c program that drives the SDK with no vmn CLI involvement."""
-    return "from version_stamp.exp import start_run\nAPP = %r\n%s" % (app_name, body)
+    return "from vmn_exp.sdk import start_run\nAPP = %r\n%s" % (app_name, body)
 
 
 def _run_python(app_layout, script):
@@ -406,16 +406,16 @@ def test_app_name_env_var_is_honoured(app_layout):
 
 def test_the_write_and_read_sides_share_one_resolver():
     """One rule, one implementation — two copies would drift apart."""
-    import version_stamp.exp as exp_pkg
-    import version_stamp.exp.reader as reader_mod
-    import version_stamp.exp.run as run_mod
+    import vmn_exp.sdk as exp_pkg
+    import vmn_exp.sdk.reader as reader_mod
+    import vmn_exp.sdk.run as run_mod
 
     assert run_mod._resolve_app_name is exp_pkg._resolve_app_name
     assert reader_mod._resolve_app_name is exp_pkg._resolve_app_name
 
 
 def test_ambiguous_app_name_error_names_the_candidates():
-    from version_stamp.exp import _resolve_app_name
+    from vmn_exp.sdk import _resolve_app_name
 
     os.environ.pop("VMN_APP_NAME", None)
     with pytest.raises(ValueError) as exc:

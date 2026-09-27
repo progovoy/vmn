@@ -14,7 +14,7 @@ Usage (manual)::
 
 Usage (via autolog)::
 
-    from version_stamp.exp import autolog, start_run
+    from vmn_exp.sdk import autolog, start_run
     autolog()  # registers HF patch; transformers not imported yet
     with start_run("my_app") as run:
         Trainer(...).train()  # VmnCallback added automatically
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import transformers  # noqa: F401 — type-checking only
 
-_LOGGER = logging.getLogger("version_stamp.exp.autolog")
+_LOGGER = logging.getLogger("vmn_exp.sdk.autolog")
 
 # Cached class object so we build it once.
 _vmn_callback_class = None
@@ -48,9 +48,9 @@ def _build_vmn_callback():
     )
 
     # Import the context module once; call its attribute dynamically so that
-    # mock.patch("version_stamp.exp.context.current_run", ...) works in tests.
+    # mock.patch("vmn_exp.sdk.context.current_run", ...) works in tests.
     try:
-        import version_stamp.exp.context as _context_mod
+        import vmn_exp.sdk.context as _context_mod
 
         def _get_current_run():
             return _context_mod.current_run()

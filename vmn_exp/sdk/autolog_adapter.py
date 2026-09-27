@@ -14,8 +14,8 @@ import re
 from vmn_exp.core.values import _unwrap_scalar
 
 # One logger for every autolog module, so a caller silencing (or capturing)
-# ``version_stamp.exp.autolog`` sees all of it.
-_LOGGER = logging.getLogger("version_stamp.exp.autolog")
+# ``vmn_exp.sdk.autolog`` sees all of it.
+_LOGGER = logging.getLogger("vmn_exp.sdk.autolog")
 
 # Read by every wrapper at call time, so a second ``autolog()`` reconfigures the
 # wrappers the first one installed instead of being ignored.

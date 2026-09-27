@@ -117,7 +117,7 @@ class TuneRecorder:
     def _ensure_outer(self) -> Any:
         """Return the outer run, creating it now if it has not been yet."""
         if self._outer_run is None:
-            from version_stamp.exp import start_run
+            from vmn_exp.sdk import start_run
 
             self._outer_run = start_run(
                 app_name=self._app_name,
@@ -136,7 +136,7 @@ class TuneRecorder:
         *config* is flattened (nested dicts joined with '.') and recorded as
         the trial run's params.
         """
-        from version_stamp.exp import start_run
+        from vmn_exp.sdk import start_run
 
         outer = self._ensure_outer()
         flat_params = _flatten_dict(config) if config else None

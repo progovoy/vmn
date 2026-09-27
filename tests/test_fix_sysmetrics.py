@@ -14,7 +14,7 @@ import types
 
 import pytest
 
-from version_stamp.exp import sysmetrics
+from vmn_exp.sdk import sysmetrics
 
 _MB = 1024 * 1024
 

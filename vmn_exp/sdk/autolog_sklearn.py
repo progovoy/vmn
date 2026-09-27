@@ -3,7 +3,7 @@
 Both use the adapter defaults (``get_params()``, ``score()``, a pickle), so all
 they add is where ``fit`` lives.
 """
-from version_stamp.exp.autolog_adapter import _adapter, _fit_owners, _import
+from vmn_exp.sdk.autolog_adapter import _adapter, _fit_owners, _import
 
 
 def _discover_sklearn(module):

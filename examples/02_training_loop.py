@@ -13,7 +13,7 @@ import os
 import tempfile
 import time
 
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 APP_NAME = "vmn_examples"
 EPOCHS = 10

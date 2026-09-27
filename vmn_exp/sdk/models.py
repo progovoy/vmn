@@ -6,8 +6,8 @@ for registering model versions, managing aliases, and downloading artifacts.
 
 Usage::
 
-    from version_stamp.exp import start_run
-    from version_stamp.exp.models import register_model, download_model
+    from vmn_exp.sdk import start_run
+    from vmn_exp.sdk.models import register_model, download_model
 
     with start_run("my_app") as run:
         # ... training ...
@@ -42,12 +42,12 @@ def _run_to_ref(run, app_name):
     """Extract *(app_name, verstr, storage_or_None)* from a run reference.
 
     *run* may be:
-    - a :class:`~version_stamp.exp.run.Run` instance
+    - a :class:`~vmn_exp.sdk.run.Run` instance
     - a verstr string (requires *app_name* to be provided)
-    - ``None`` — the currently active run from :func:`~version_stamp.exp.current_run`
+    - ``None`` — the currently active run from :func:`~vmn_exp.sdk.current_run`
     """
     if run is None:
-        from version_stamp.exp.context import current_run
+        from vmn_exp.sdk.context import current_run
 
         run = current_run()
         if run is None:
@@ -93,7 +93,7 @@ def register_model(
         Model name (letters, digits, ``_``, ``.``; no hyphens; no ``.vN`` suffix).
     run:
         The experiment run that produced this model.  Accepts a
-        :class:`~version_stamp.exp.run.Run` instance, a verstr string, or
+        :class:`~vmn_exp.sdk.run.Run` instance, a verstr string, or
         ``None`` (defaults to the active run from :func:`current_run`).
     app_name:
         VMN app name — required when *run* is a verstr string.

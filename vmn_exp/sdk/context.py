@@ -18,7 +18,7 @@ import contextvars
 import os
 import threading
 
-from version_stamp.exp import APP_NAME_ENV
+from vmn_exp.sdk import APP_NAME_ENV
 
 EXPERIMENT_ID_ENV = "VMN_EXPERIMENT_ID"
 _ENV_KEYS = (EXPERIMENT_ID_ENV, APP_NAME_ENV)

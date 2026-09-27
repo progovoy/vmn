@@ -143,7 +143,7 @@ produced it is still referenced by an active version) cannot be deleted via
 ## SDK
 
 ```python
-from version_stamp.exp import (
+from vmn_exp.sdk import (
     start_run,
     register_model,
     set_alias,

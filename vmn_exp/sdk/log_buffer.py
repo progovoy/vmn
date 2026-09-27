@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 
-from version_stamp.exp.heartbeat import Heartbeat
+from vmn_exp.sdk.heartbeat import Heartbeat
 
 _LOGGER = logging.getLogger(__name__)
 

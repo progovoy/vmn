@@ -12,16 +12,16 @@ import os
 
 from vmn_exp.snapshot import _resolve_verstr
 from vmn_exp.core.status import load_run_state, parse_iso
-from version_stamp.exp import _resolve_app_name
-from version_stamp.exp.coldstart import build_vcs
-from version_stamp.exp.create import (
+from vmn_exp.sdk import _resolve_app_name
+from vmn_exp.sdk.coldstart import build_vcs
+from vmn_exp.sdk.create import (
     SNAPSHOT_METADATA_ENV,
     build_storage,
     snapshot_app_names,
     snapshot_mode_storage,
     stamped_apps,
 )
-from version_stamp.exp.ranks import as_int
+from vmn_exp.sdk.ranks import as_int
 
 RESUME_ENV = "VMN_RESUME_RUN_ID"
 

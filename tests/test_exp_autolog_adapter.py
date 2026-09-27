@@ -14,11 +14,11 @@ import types
 
 import pytest
 
-from version_stamp.exp import autolog as autolog_fn
-from version_stamp.exp import autolog_disable
-from version_stamp.exp import run as run_module
-from version_stamp.exp.autolog import SUPPORTED_FRAMEWORKS, _PATCH_MARKER
-from version_stamp.exp.autolog_adapter import _adapter
+from vmn_exp.sdk import autolog as autolog_fn
+from vmn_exp.sdk import autolog_disable
+from vmn_exp.sdk import run as run_module
+from vmn_exp.sdk.autolog import SUPPORTED_FRAMEWORKS, _PATCH_MARKER
+from vmn_exp.sdk.autolog_adapter import _adapter
 
 
 # ---------------------------------------------------------------------------

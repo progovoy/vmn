@@ -19,7 +19,7 @@ from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.core import status as st
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 NOW = datetime.datetime(2026, 9, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
 

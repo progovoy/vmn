@@ -10,7 +10,7 @@ import subprocess
 import pytest
 from helpers import _storage
 
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 
 @pytest.fixture(autouse=True)

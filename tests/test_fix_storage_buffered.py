@@ -10,8 +10,8 @@ from vmn_exp.storage import buffered as snapshot_storage_buffered
 from vmn_exp.cli.experiment import _get_experiment_storage
 from vmn_exp.core.logfiles import compacted_log_name
 from vmn_exp.core.writer import append_entries_to_log
-from version_stamp.exp import log_buffer
-from version_stamp.exp.log_buffer import LogBuffer
+from vmn_exp.sdk import log_buffer
+from vmn_exp.sdk.log_buffer import LogBuffer
 
 V = "v"
 PARAMS = {"bucket": "vmn-bucket", "prefix": "exps"}

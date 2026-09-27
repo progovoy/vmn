@@ -10,7 +10,7 @@ import pytest
 from helpers import _bootstrap, _storage
 
 from vmn_exp.core.status import RUNNING, derive_status, load_run_state
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 
 @pytest.fixture(autouse=True)

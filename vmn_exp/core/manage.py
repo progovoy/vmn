@@ -7,7 +7,7 @@ ETag on S3 by the backend's ``update_metadata``); listings hide archived runs
 unless asked, and nothing else treats them differently — prune included. Tags
 are ``tags`` log entries, folded per key, last write wins.
 
-Shared by ``vmn exp tag/archive/unarchive`` and ``version_stamp.exp.manage``.
+Shared by ``vmn exp tag/archive/unarchive`` and ``vmn_exp.sdk.manage``.
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
 """

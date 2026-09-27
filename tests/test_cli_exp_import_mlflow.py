@@ -120,7 +120,7 @@ def test_end_to_end_import_and_list(tmp_path, capsys):
     assert len(verstrs) == 2
 
     # List via the reader
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows = list_runs("myapp", storage=storage, use_index=False)
     assert len(rows) == 2
     run_ids = {r["imported_from"]["run_id"] for r in rows}
@@ -135,7 +135,7 @@ def test_query_imported_from(tmp_path):
     rc = _call(_make_args(mlruns=mlruns, experiment_dir=exp_dir))
     assert rc == 0
 
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     storage = _storage(exp_dir)
 
     # All imported runs have a non-null imported_from field
@@ -160,7 +160,7 @@ def test_show_imported_run(tmp_path):
     assert rc == 0
 
     storage = _storage(exp_dir)
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows = list_runs("myapp", storage=storage, use_index=False)
     row_a = next(r for r in rows if r["imported_from"]["run_id"] == RUN_A)
 
@@ -208,7 +208,7 @@ def test_experiment_filter_by_name(tmp_path):
     verstrs = storage.list_verstrs("myapp")
     assert len(verstrs) == 1
 
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows = list_runs("myapp", storage=storage, use_index=False)
     assert rows[0]["imported_from"]["run_id"] == RUN_A
 

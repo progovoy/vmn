@@ -111,7 +111,7 @@ mechanical substitutions.
 
 | MLflow | vmn |
 |---|---|
-| `import mlflow` | `from version_stamp.exp import start_run` |
+| `import mlflow` | `from vmn_exp.sdk import start_run` |
 | `mlflow.start_run()` | `start_run("my_app")` |
 | `mlflow.log_param(k, v)` | `run.log_params({k: v})` |
 | `mlflow.log_params(d)` | `run.log_params(d)` |
@@ -142,7 +142,7 @@ with mlflow.start_run():
 
 ```python
 # vmn
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 with start_run("my_app") as run:
     run.log_params({"lr": 3e-4, "batch": 32})
@@ -165,7 +165,7 @@ and `vmn goto` take.  It encodes HEAD + the uncommitted patch set.
 stamp a version from inside `fit()`.  Start a run first:
 
 ```python
-from version_stamp.exp import autolog, start_run
+from vmn_exp.sdk import autolog, start_run
 
 autolog()   # call once, before any fit
 with start_run("my_app") as run:
@@ -188,7 +188,7 @@ path or to an S3 bucket.  If your workers need credentials for S3, set
 mlflow.sklearn.autolog()
 
 # vmn — all supported frameworks at once
-from version_stamp.exp import autolog
+from vmn_exp.sdk import autolog
 autolog()
 
 # or name them explicitly:

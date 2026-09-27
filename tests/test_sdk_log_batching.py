@@ -16,8 +16,8 @@ import pytest
 from helpers import _PROJECT_ROOT, _PY
 
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.exp import log_buffer
-from version_stamp.exp.run import Run
+from vmn_exp.sdk import log_buffer
+from vmn_exp.sdk.run import Run
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -125,8 +125,8 @@ def test_a_finished_run_still_accepts_writes(storage):
 _SCRIPT = """
 import os, sys, time
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
-from version_stamp.exp import log_buffer
-from version_stamp.exp.run import Run
+from vmn_exp.sdk import log_buffer
+from vmn_exp.sdk.run import Run
 log_buffer.FLUSH_INTERVAL_SEC = 3600
 st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], subdir="experiments"))
 run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600)

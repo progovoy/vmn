@@ -1,11 +1,11 @@
 # Python SDK
 
-`version_stamp.exp` is the in-process Python API for [experiment
+`vmn_exp.sdk` is the in-process Python API for [experiment
 tracking](experiments.md). It records the same runs the CLI does — same
 snapshot, same verstr, same files — without a wrapper command or a metrics file.
 
 ```python
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
     run.log_params({"batch": 32})
@@ -249,7 +249,7 @@ Rows carry them as `tags` (`{key: value}`), and the query language reads
 ### Changing stored runs: archive, unarchive, tags
 
 ```python
-from version_stamp.exp import manage
+from vmn_exp.sdk import manage
 
 manage.archive_run("my_app", "@3")          # hidden from list_runs by default
 manage.unarchive_run("my_app", "@3")
@@ -274,7 +274,7 @@ records the estimator's hyperparameters, its training score and (optionally) the
 fitted model — with no logging calls in your training code:
 
 ```python
-from version_stamp.exp import autolog, autolog_disable, start_run
+from vmn_exp.sdk import autolog, autolog_disable, start_run
 
 autolog()                                          # every supported framework
 autolog(frameworks=["sklearn"], log_models=True)   # or name them, and opt in to saving models
@@ -406,7 +406,7 @@ Three guarantees worth relying on:
   the exact originals back and drops any pending import hooks.
 
 Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`, in
-`version_stamp/exp/autolog.py`. An adapter answers the five questions the shared
+`vmn_exp/sdk/autolog.py`. An adapter answers the five questions the shared
 recording path asks, and everything but the first defaults to the scikit-learn
 answer:
 
@@ -538,7 +538,7 @@ produces.
 
 ### Threads, forks and `current_run()`
 
-`from version_stamp.exp.run import current_run` returns the run the calling code
+`from vmn_exp.sdk.run import current_run` returns the run the calling code
 should record into, or `None`:
 
 1. the run the calling context (thread) opened, if it is still open;
@@ -567,7 +567,7 @@ That is what keeps concurrent runs in one process apart:
 ## Reading runs back
 
 ```python
-from version_stamp.exp.reader import get_run, list_runs
+from vmn_exp.sdk.reader import get_run, list_runs
 
 for run in list_runs("my_app", last=10, status="succeeded"):
     print(run["verstr"], run["metrics"])
@@ -675,7 +675,7 @@ true for a run that has no `x` at all.
 An invalid query raises `QueryError` with the offending character offset
 (`unknown field 'statuz' at offset 0`). Over HTTP the same message comes back as
 a 400. Nothing is ever `eval`'d: the implementation is a hand-written lexer plus
-recursive-descent parser in `version_stamp/core/experiment_query.py`.
+recursive-descent parser in `vmn_exp/core/query.py`.
 
 On the command line the same expressions go to `vmn exp list <app> --query
 '<expr>'` (see [experiments.md](experiments.md#list)).
@@ -690,7 +690,7 @@ storage root as experiment runs (under the reserved pseudo-app `vmn-registry`),
 so no extra infrastructure is needed.
 
 ```python
-from version_stamp.exp import start_run, register_model, get_model_version, download_model
+from vmn_exp.sdk import start_run, register_model, get_model_version, download_model
 
 # Register during (or after) a run
 with start_run("my_app") as run:
@@ -715,7 +715,7 @@ Refs have four forms:
 | `model@alias` | Version the alias currently points to |
 
 ```python
-from version_stamp.exp import get_model_version, set_alias, remove_alias
+from vmn_exp.sdk import get_model_version, set_alias, remove_alias
 
 meta = get_model_version("resnet50@staging")
 meta = get_model_version("resnet50@2")
@@ -729,7 +729,7 @@ remove_alias("resnet50", "staging")
 ### Downloading artifacts
 
 ```python
-from version_stamp.exp import download_model
+from vmn_exp.sdk import download_model
 
 path = download_model("resnet50@production")         # returns local path
 path = download_model("resnet50@production", dst="/tmp/models")  # copy to dir
@@ -741,7 +741,7 @@ artifact to a temporary cache directory.
 ### Listing models
 
 ```python
-from version_stamp.exp import list_models
+from vmn_exp.sdk import list_models
 
 print(list_models())   # e.g. ["bert-base", "resnet50"]
 ```
@@ -779,7 +779,7 @@ from vmn_exp.integrations.hf import VmnCallback
 # VmnCallback is assembled lazily — transformers is NOT imported by this line
 
 from transformers import Trainer, TrainingArguments
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 with start_run("my_app") as run:
     trainer = Trainer(
@@ -808,7 +808,7 @@ nested under it.
 ```python
 import optuna
 from vmn_exp.integrations.optuna_study import start_study_run
-from version_stamp.exp import autolog
+from vmn_exp.sdk import autolog
 
 autolog()   # autolog records into whatever run is active on each thread
 
@@ -841,7 +841,7 @@ from the driver process that calls `tune.run`.  Worker-side autolog is deferred.
 ```python
 from vmn_exp.integrations.ray_tune import TuneRecorder, make_callback
 import ray.tune as tune
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 recorder = TuneRecorder(app_name="my_app", experiment_name="lr_sweep")
 
@@ -864,7 +864,7 @@ See also: [docs/models.md](models.md) for registering the model after a sweep.
 
 ## Library logging
 
-The SDK emits stdlib `logging` records under the `version_stamp.exp` logger and
+The SDK emits stdlib `logging` records under the `vmn_exp.sdk` logger and
 never configures handlers — it is a library, so what happens to the records is
 your application's call. To see its debug output:
 

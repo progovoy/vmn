@@ -1,6 +1,6 @@
 # Runnable examples
 
-Five small scripts for the `version_stamp.exp` experiment-tracking SDK. Each one
+Five small scripts for the `vmn_exp.sdk` experiment-tracking SDK. Each one
 is standalone, takes no arguments, needs no network, and finishes in seconds.
 They all record to the vmn app **`vmn_examples`**, so they never collide with a
 real app in your repo.

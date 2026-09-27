@@ -56,14 +56,14 @@ import threading
 import weakref
 
 from vmn_exp.core.values import metric_number
-from version_stamp.exp import (
+from vmn_exp.sdk import (
     autolog_hf,
     autolog_keras,
     autolog_lightning,
     autolog_sklearn,
     import_hooks,
 )
-from version_stamp.exp.autolog_adapter import (  # noqa: F401 - the extension API
+from vmn_exp.sdk.autolog_adapter import (  # noqa: F401 - the extension API
     _CONFIG,
     _LOGGER,
     TRAINING_SCORE_MAX_ROWS,
@@ -241,7 +241,7 @@ def _recording_target(estimator):
     in progress, in which case it is that fit's worker. A forked child sees no
     open run at all: only runs created by this pid count.
     """
-    from version_stamp.exp import context
+    from vmn_exp.sdk import context
 
     own = context.context_run()
     if own is not None:

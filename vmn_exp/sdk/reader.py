@@ -3,7 +3,7 @@
 
 ::
 
-    from version_stamp.exp.reader import get_run, list_runs
+    from vmn_exp.sdk.reader import get_run, list_runs
 
     for run in list_runs(status="failed"):
         print(run["verstr"], run["metrics"])
@@ -47,7 +47,7 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import annotate_rows, run_status
 from version_stamp.api import resolve_root_path
 from vmn_exp.core.reserved import is_reserved_app
-from version_stamp.exp import _resolve_app_name
+from vmn_exp.sdk import _resolve_app_name
 
 EXPERIMENTS_DIR = "experiments"
 
@@ -169,7 +169,7 @@ def list_runs(
             still derived per call. On by default; ``use_index=False`` reads
             every run straight from storage (and writes no index file).
         include_archived: also return archived runs (hidden by default; see
-            :mod:`version_stamp.exp.manage`).
+            :mod:`vmn_exp.sdk.manage`).
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     rows = _all_rows(app_name, storage, use_index=use_index)

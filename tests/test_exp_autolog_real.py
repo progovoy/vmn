@@ -9,7 +9,7 @@ genuine libraries, where discovery has to cope with estimators that inherit
 estimators' ``fit`` from inside their own.
 
 Every test drives a real SDK ``start_run`` and reads the result back through
-``version_stamp.exp.reader``, so what is asserted is what landed on disk.
+``vmn_exp.sdk.reader``, so what is asserted is what landed on disk.
 """
 import warnings
 
@@ -18,9 +18,9 @@ import pytest
 sklearn = pytest.importorskip("sklearn")
 
 from vmn_exp.core.query import compile_query  # noqa: E402
-from version_stamp.exp import autolog, autolog_disable, start_run  # noqa: E402
-from version_stamp.exp import run as run_module  # noqa: E402
-from version_stamp.exp.reader import get_run  # noqa: E402
+from vmn_exp.sdk import autolog, autolog_disable, start_run  # noqa: E402
+from vmn_exp.sdk import run as run_module  # noqa: E402
+from vmn_exp.sdk.reader import get_run  # noqa: E402
 
 from helpers import _bootstrap, _storage  # noqa: E402
 
@@ -255,7 +255,7 @@ def test_a_real_fit_outside_a_run_records_nothing(app_layout):
 
 
 def test_xgboost_is_registered_as_a_supported_framework():
-    from version_stamp.exp.autolog import SUPPORTED_FRAMEWORKS
+    from vmn_exp.sdk.autolog import SUPPORTED_FRAMEWORKS
 
     assert "xgboost" in SUPPORTED_FRAMEWORKS
 

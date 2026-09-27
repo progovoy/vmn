@@ -310,7 +310,7 @@ class Sampler:
     """Records one metrics entry per :meth:`tick`, and never raises.
 
     Callers tick from a timer they already own — ``vmn exp run``'s poll loop and
-    the SDK's :class:`~version_stamp.exp.heartbeat.Heartbeat` thread — so the
+    the SDK's :class:`~vmn_exp.sdk.heartbeat.Heartbeat` thread — so the
     cadence is the heartbeat's and no second thread leaks. (Should those two ever
     share one heartbeat mechanism, ticking belongs inside it.)
 

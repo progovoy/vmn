@@ -21,12 +21,11 @@ import pytest
 # No trailing "_" means exact-or-subpackage match (mod == p or mod.startswith(p + ".")).
 # Special: "vmn_exp.snapshot" also matches "version_stamp.cli.snapshot_*".
 EXPERIMENTS_GLOBS = (
-    "version_stamp.exp",              # exp package and all submodules
+    "vmn_exp.sdk",              # exp package and all submodules
     "vmn_exp.ui",               # ui package and all submodules
     "vmn_exp.snapshot",     # cli/snapshot.py + cli/snapshot_storage*.py
     "vmn_exp.cli.experiment",   # cli/experiment.py + cli/experiment_*.py
-    "vmn_exp.cli.plugin",  # temporary plugin; moves to vmn_exp in step h4
-    "version_stamp.core.experiment_", # core/experiment_*.py (trailing _ = prefix match)
+    "vmn_exp.cli.plugin",  # permanent plugin home
     "vmn_exp.core.jsonl_tail",
     "vmn_exp.core.background",
     "vmn_exp.core.best_effort",
@@ -229,7 +228,7 @@ def test_stamping_core_does_not_load_experiments() -> None:
         import version_stamp.stamping
         import version_stamp.backends
         exp_mods = [m for m in sys.modules if (
-            m.startswith("version_stamp.exp")
+            m.startswith("vmn_exp.sdk")
             or m.startswith("vmn_exp.ui")
             or m.startswith("vmn_exp.snapshot")
             or m.startswith("vmn_exp.cli.experiment")

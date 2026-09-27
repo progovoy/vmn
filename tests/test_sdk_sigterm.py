@@ -16,7 +16,7 @@ import pytest
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 from vmn_exp.core.status import load_run_state
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 JOIN_TIMEOUT = 120
 
@@ -69,7 +69,7 @@ def _terminate(proc):
 
 _OPEN_AND_WAIT = """
 import os, time
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 {prelude}
 run = start_run(os.environ["APP"], heartbeat_interval_sec=60)
 run.log_metric("loss", 0.5)
@@ -129,7 +129,7 @@ def test_a_previous_sigterm_handler_is_chained(app_layout):
 
 _HANDLER_LIFETIME = """
 import os, signal
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 before = signal.getsignal(signal.SIGTERM)
 run = start_run(os.environ["APP"])
 during = signal.getsignal(signal.SIGTERM)

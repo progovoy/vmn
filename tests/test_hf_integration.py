@@ -38,7 +38,7 @@ def test_import_vmn_exp_integrations_hf_does_not_import_transformers():
 def test_autolog_import_does_not_import_transformers():
     """Importing autolog must not import transformers."""
     code = (
-        "from version_stamp.exp import autolog; "
+        "from vmn_exp.sdk import autolog; "
         "import sys; "
         "assert 'transformers' not in sys.modules, "
         "'transformers pulled in by autolog import'"
@@ -54,7 +54,7 @@ def test_autolog_import_does_not_import_transformers():
 
 def test_autolog_call_without_transformers_does_not_crash():
     """autolog() called when transformers is absent is a silent no-op."""
-    from version_stamp.exp import autolog, autolog_disable
+    from vmn_exp.sdk import autolog, autolog_disable
     try:
         autolog(frameworks=["transformers"])  # should not raise
     finally:
@@ -104,7 +104,7 @@ def test_vmn_callback_no_run_is_noop(tmp_path):
         ctrl = _make_stub_control()
 
         # None of these should raise even with no active run
-        with mock.patch("version_stamp.exp.context.current_run", return_value=None):
+        with mock.patch("vmn_exp.sdk.context.current_run", return_value=None):
             cb.on_train_begin(args, state, ctrl)
             cb.on_log(args, state, ctrl, logs={"loss": 0.5})
             cb.on_save(args, state, ctrl)
@@ -134,7 +134,7 @@ def test_vmn_callback_logs_params_on_train_begin(tmp_path):
         ctrl = _make_stub_control()
 
         fake_run = mock.MagicMock()
-        with mock.patch("version_stamp.exp.context.current_run", return_value=fake_run):
+        with mock.patch("vmn_exp.sdk.context.current_run", return_value=fake_run):
             cb.on_train_begin(args, state, ctrl)
 
         params_call_kwargs = fake_run.log_params.call_args
@@ -168,7 +168,7 @@ def test_vmn_callback_logs_metrics_on_log():
         ctrl = _make_stub_control()
 
         fake_run = mock.MagicMock()
-        with mock.patch("version_stamp.exp.context.current_run", return_value=fake_run):
+        with mock.patch("vmn_exp.sdk.context.current_run", return_value=fake_run):
             cb.on_log(args, state, ctrl, logs={"loss": 0.3, "eval_loss": 0.5})
 
         fake_run.log_metrics.assert_called_once()
@@ -221,8 +221,8 @@ def test_callback_not_doubled_on_autolog():
         import vmn_exp.integrations.hf as hf_mod
         hf_mod._vmn_callback_class = None
 
-        from version_stamp.exp import autolog, autolog_disable
-        from version_stamp.exp.autolog_hf import _maybe_add_callback
+        from vmn_exp.sdk import autolog, autolog_disable
+        from vmn_exp.sdk.autolog_hf import _maybe_add_callback
 
         # Simulate patching by applying _discover_hf and then calling _maybe_add_callback
         trainer = FakeTrainer()
@@ -254,13 +254,13 @@ def test_callback_not_doubled_on_autolog():
 
 def test_autolog_transformers_in_supported_frameworks():
     """'transformers' must appear in SUPPORTED_FRAMEWORKS."""
-    from version_stamp.exp.autolog import SUPPORTED_FRAMEWORKS
+    from vmn_exp.sdk.autolog import SUPPORTED_FRAMEWORKS
     assert "transformers" in SUPPORTED_FRAMEWORKS
 
 
 def test_transformers_adapter_has_watch():
     """The transformers adapter must declare a watch= submodule."""
-    from version_stamp.exp.autolog import SUPPORTED_FRAMEWORKS
+    from vmn_exp.sdk.autolog import SUPPORTED_FRAMEWORKS
     adapter = SUPPORTED_FRAMEWORKS["transformers"]
     assert hasattr(adapter, "watch"), "adapter has no watch field"
     assert "transformers.trainer" in adapter.watch
@@ -294,8 +294,8 @@ def test_real_hf_trainer_autologs(tmp_path, monkeypatch):
         TrainingArguments,
     )
 
-    from version_stamp.exp import autolog, autolog_disable, start_run  # noqa: E402
-    from version_stamp.exp.reader import get_run, list_runs  # noqa: E402
+    from vmn_exp.sdk import autolog, autolog_disable, start_run  # noqa: E402
+    from vmn_exp.sdk.reader import get_run, list_runs  # noqa: E402
 
     # -- git-free setup -------------------------------------------------------
     image = tmp_path / "image"

@@ -2,7 +2,7 @@
 
 ``start_run(name=..., tags=...)``, ``run.set_tag``/``set_tags`` (also on a
 finished run), ``log_dict``/``log_text``/``log_figure``/``log_artifacts``, and
-``version_stamp.exp.manage.archive_run`` which ``list_runs`` honours.
+``vmn_exp.sdk.manage.archive_run`` which ``list_runs`` honours.
 """
 import json
 
@@ -12,8 +12,8 @@ from helpers import _bootstrap, _storage
 
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.core.log import experiment_row
-from version_stamp.exp import manage, reader, start_run
-from version_stamp.exp.run import Run
+from vmn_exp.sdk import manage, reader, start_run
+from vmn_exp.sdk.run import Run
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"

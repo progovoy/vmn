@@ -3,7 +3,7 @@
 
 ``vmn snapshot export`` writes a ``vmn_metadata.yml`` next to the code it
 exports; a container built from that tree can record experiments against it.
-Both ``vmn exp create/run --from-snapshot`` and ``version_stamp.exp.start_run``
+Both ``vmn exp create/run --from-snapshot`` and ``vmn_exp.sdk.start_run``
 do, so the record is shaped here in core rather than in either entry point.
 """
 import os

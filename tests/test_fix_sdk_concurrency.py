@@ -12,9 +12,9 @@ import pytest
 from helpers import _bootstrap, _storage
 
 from vmn_exp.core.status import load_run_state
-from version_stamp.exp import run as run_module
-from version_stamp.exp import start_run
-from version_stamp.exp.run import current_run
+from vmn_exp.sdk import run as run_module
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.run import current_run
 
 
 @pytest.fixture(autouse=True)

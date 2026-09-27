@@ -49,8 +49,8 @@ Replace the plain `<table>` in Leaderboard with a virtualized container using `@
 
 Add `offset` + `limit` query params to the experiments list endpoint. Default: `limit=200`, no offset. Frontend fetches page 1 immediately, then background-fetches remaining pages.
 
-- **Modify:** `version_stamp/ui/server.py` `list_experiments()` — accept `offset: int = 0`, `limit: int = 200`; apply after sort
-- **Modify:** `version_stamp/ui/readers/experiments.py` `sort_rows()` — return `{ rows, total }` when pagination params present
+- **Modify:** `vmn_exp/ui/server.py` `list_experiments()` — accept `offset: int = 0`, `limit: int = 200`; apply after sort
+- **Modify:** `vmn_exp/ui/readers/experiments.py` `sort_rows()` — return `{ rows, total }` when pagination params present
 - **Modify:** `webui/src/api.ts` — new `api.experimentsPaged(ws, app, { sort, offset, limit })` returning `{ rows: ExperimentRow[], total: number }`
 - **Tests:** offset=0 limit=10 returns first 10; offset=10 limit=10 returns next 10; total is always full count
 
@@ -189,7 +189,7 @@ Inject `_writer` field into merged log entries so the UI shows which pod/person 
 
 List and download experiment artifact files.
 
-- **Modify:** `version_stamp/ui/readers/experiments.py` — replace `artifacts_dir` path with structured `artifacts` list `[{name, size}]`
+- **Modify:** `vmn_exp/ui/readers/experiments.py` — replace `artifacts_dir` path with structured `artifacts` list `[{name, size}]`
 - **New endpoint:** `GET /experiments/{verstr}/artifacts/{filename}` — `FileResponse` for download
 - **New:** `components/ArtifactsList.tsx` (~60 lines) — file list with download links
 - **Modify:** `Run.tsx` — add artifacts card when non-empty

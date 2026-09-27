@@ -10,7 +10,7 @@ import threading
 import pytest
 from helpers import _bootstrap, _storage
 
-from version_stamp.exp import NoOpRun, Run, current_run, start_run
+from vmn_exp.sdk import NoOpRun, Run, current_run, start_run
 
 _RANK_KEYS = ("RANK", "LOCAL_RANK", "WORLD_SIZE", "SLURM_PROCID")
 

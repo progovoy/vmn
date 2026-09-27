@@ -1,6 +1,6 @@
 """Autolog records into the right run, exactly once, and imports nothing extra.
 
-Regression tests for the review findings on ``version_stamp/exp/autolog.py``:
+Regression tests for the review findings on ``vmn_exp/sdk/autolog.py``:
 
 * four threaded trials, each under its own ``start_run()``, all recorded into
   whichever run opened last (the process-global ``_OPEN_RUNS[-1]``);
@@ -30,9 +30,9 @@ from sklearn.ensemble import IsolationForest  # noqa: E402
 from sklearn.linear_model import LogisticRegression  # noqa: E402
 from sklearn.model_selection import GridSearchCV  # noqa: E402
 
-from version_stamp.exp import autolog, autolog_disable, start_run  # noqa: E402
-from version_stamp.exp import run as run_module  # noqa: E402
-from version_stamp.exp.reader import get_run  # noqa: E402
+from vmn_exp.sdk import autolog, autolog_disable, start_run  # noqa: E402
+from vmn_exp.sdk import run as run_module  # noqa: E402
+from vmn_exp.sdk.reader import get_run  # noqa: E402
 
 X = [[0.0], [1.0], [2.0], [3.0], [10.0], [11.0], [12.0], [13.0]]
 Y = [0, 0, 0, 0, 1, 1, 1, 1]
@@ -203,8 +203,8 @@ _HEAVY = ("tensorflow", "torch", "lightning", "pytorch_lightning", "xgboost", "k
 
 _PROBE = """
 import sys
-from version_stamp.exp import autolog
-from version_stamp.exp.autolog import _PATCH_MARKER
+from vmn_exp.sdk import autolog
+from vmn_exp.sdk.autolog import _PATCH_MARKER
 autolog()
 heavy = sorted(m for m in {heavy!r} if m in sys.modules)
 from sklearn.linear_model import LogisticRegression

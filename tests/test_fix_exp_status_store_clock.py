@@ -115,7 +115,7 @@ def no_store_mtime(monkeypatch):
 
 @pytest.mark.parametrize("use_index", [True, False])
 def test_sdk_rows_trust_a_fresh_store_write(app_layout, use_index):
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
 
     _write_run(app_layout, "0.0.1", _running(600))
     _write_run(app_layout, "0.0.2", _running(600), store_age_sec=900)
@@ -128,7 +128,7 @@ def test_sdk_rows_trust_a_fresh_store_write(app_layout, use_index):
 
 
 def test_sdk_rows_without_a_store_time_use_the_heartbeat(app_layout, no_store_mtime):
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
 
     _write_run(app_layout, "0.0.1", _running(600))
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
@@ -136,7 +136,7 @@ def test_sdk_rows_without_a_store_time_use_the_heartbeat(app_layout, no_store_mt
 
 
 def test_sdk_get_run_trusts_a_fresh_store_write(app_layout):
-    from version_stamp.exp.reader import get_run
+    from vmn_exp.sdk.reader import get_run
 
     _write_run(app_layout, "0.0.1", _running(600))
     assert get_run(app_layout.app_name, "0.0.1",

@@ -1,4 +1,4 @@
-"""Framework autologging: ``from version_stamp.exp import autolog``.
+"""Framework autologging: ``from vmn_exp.sdk import autolog``.
 
 Fast unit coverage of the patching machinery — target discovery, param capture,
 idempotency, restoration, error containment — against a minimal fake
@@ -18,11 +18,11 @@ import types
 
 import pytest
 
-from version_stamp.exp import autolog, autolog_disable
-from version_stamp.exp import run as run_module
+from vmn_exp.sdk import autolog, autolog_disable
+from vmn_exp.sdk import run as run_module
 from helpers import _bootstrap, _storage
 
-_AUTOLOG_LOGGER = "version_stamp.exp.autolog"
+_AUTOLOG_LOGGER = "vmn_exp.sdk.autolog"
 
 
 # --- the fake framework ----------------------------------------------------
@@ -381,7 +381,7 @@ def test_autolog_logs_into_the_open_sdk_run(app_layout):
     _install_fake_sklearn()
     autolog(log_models=False)
 
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     with start_run(app_layout.app_name) as run:
         verstr = run.id

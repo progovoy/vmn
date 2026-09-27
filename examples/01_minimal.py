@@ -6,7 +6,7 @@ Run:    python examples/01_minimal.py   (from inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   vmn exp list vmn_examples
 """
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 APP_NAME = "vmn_examples"
 

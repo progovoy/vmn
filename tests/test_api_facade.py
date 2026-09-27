@@ -129,7 +129,7 @@ def test_import_loads_no_experiment_modules():
         "import version_stamp.api\n"
         "\n"
         "FORBIDDEN_PREFIXES = (\n"
-        "    'version_stamp.exp',\n"
+        "    'vmn_exp.sdk',\n"
         "    'vmn_exp.ui',\n"
         "    'vmn_exp.snapshot',\n"
         "    'vmn_exp.cli.experiment',\n"

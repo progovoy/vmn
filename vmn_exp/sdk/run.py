@@ -35,24 +35,24 @@ from vmn_exp.core.writer import (
     save_artifact,
 )
 from version_stamp.api import now_iso
-from version_stamp.exp import (
+from vmn_exp.sdk import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
     context,
     resume,
     signals,
     sysmetrics,
 )
-from version_stamp.exp.context import (  # noqa: F401  (re-exported API)
+from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
     _OPEN_RUNS,
     EXPERIMENT_ID_ENV,
     current_run,
 )
-from version_stamp.exp.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
-from version_stamp.exp.heartbeat import Heartbeat
-from version_stamp.exp.log_buffer import LogBuffer
-from version_stamp.exp.ranks import NoOpRun, is_secondary_rank
-from version_stamp.exp.run_artifacts import RunArtifacts
-from version_stamp.exp.state_publisher import RunStatePublisher
+from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
+from vmn_exp.sdk.heartbeat import Heartbeat
+from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
+from vmn_exp.sdk.run_artifacts import RunArtifacts
+from vmn_exp.sdk.state_publisher import RunStatePublisher
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
 # a library emits records rather than configuring handlers.
@@ -386,7 +386,7 @@ class Run(RunArtifacts):
     def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
         """Register this run as a model version in the registry.
 
-        Convenience wrapper around :func:`~version_stamp.exp.models.register_model`
+        Convenience wrapper around :func:`~vmn_exp.sdk.models.register_model`
         that pre-fills *run*, *app_name* and *storage* from this run.
 
         Parameters
@@ -402,7 +402,7 @@ class Run(RunArtifacts):
         storage:
             Override the storage; defaults to this run's storage.
         """
-        from version_stamp.exp.models import register_model as _register_model
+        from vmn_exp.sdk.models import register_model as _register_model
 
         return _register_model(
             name,

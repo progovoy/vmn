@@ -1,4 +1,4 @@
-"""The programmatic read side of the experiment SDK: version_stamp.exp.reader."""
+"""The programmatic read side of the experiment SDK: vmn_exp.sdk.reader."""
 import datetime
 import itertools
 import json
@@ -8,7 +8,7 @@ import pytest
 import yaml
 from helpers import _storage
 
-from version_stamp.exp.reader import get_run, list_runs
+from vmn_exp.sdk.reader import get_run, list_runs
 
 
 def _iso(dt):
@@ -423,7 +423,7 @@ def test_get_run_returns_log_series_and_artifacts(app_layout):
 
 def _count_reads(monkeypatch):
     """Count the per-experiment file reads get_run/list_runs perform."""
-    from version_stamp.exp import reader
+    from vmn_exp.sdk import reader
 
     counts = {"run_state": 0, "log": 0}
     real_state, real_log = reader.load_run_state, reader._load_log

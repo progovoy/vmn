@@ -3,7 +3,7 @@
 
 ::
 
-    from version_stamp.exp import manage
+    from vmn_exp.sdk import manage
 
     manage.archive_run("my_app", "@3")
     manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
@@ -11,11 +11,11 @@
 *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N`` or
 ``latest`` — and each call returns the verstr it changed, or raises ValueError
 when *ref* resolves to no run. Archived runs are hidden by
-:func:`version_stamp.exp.reader.list_runs` unless ``include_archived=True``.
+:func:`vmn_exp.sdk.reader.list_runs` unless ``include_archived=True``.
 """
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.refs import resolve_experiment
-from version_stamp.exp.reader import _resolve
+from vmn_exp.sdk.reader import _resolve
 
 
 def _target(app_name, ref, storage):

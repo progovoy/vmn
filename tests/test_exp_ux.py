@@ -66,7 +66,7 @@ def test_sdk_cold_start_says_nothing_scary(app_layout):
     script = _exec_script(
         app_layout,
         "sdk_cold.py",
-        "from version_stamp.exp import start_run\n"
+        "from vmn_exp.sdk import start_run\n"
         "with start_run('sdk_quiet_app') as run:\n"
         "    run.log_metric('loss', 0.1)\n"
         "    print('OK', run.id)\n",

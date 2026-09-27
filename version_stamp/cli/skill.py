@@ -112,7 +112,7 @@ vmn model resolve resnet50@production   # print version metadata
 SDK:
 
 ```python
-from version_stamp.exp.models import (
+from vmn_exp.sdk.models import (
     register_model, set_alias, get_model_version, download_model
 )
 # or on a run object:

@@ -6,10 +6,10 @@ image. Everything here knows the *shape* of an experiment record — the log ent
 the per-writer JSONL, ``run_state.yml``, the artifact digest, the ``.rN`` verstr
 suffix — and nothing about git, argparse or a storage implementation. Storage is
 duck-typed (``save_file``/``append_log_entry``/``save_artifact_file``/``exists``/
-``list_snapshots``), so the CLI, the ``version_stamp.exp`` SDK and a test double
+``list_snapshots``), so the CLI, the ``vmn_exp.sdk`` SDK and a test double
 all drive the same code.
 
-That is what lets ``version_stamp/exp/`` be lifted into its own distribution:
+That is what lets ``vmn_exp/sdk/`` be lifted into its own distribution:
 it shares these primitives with ``version_stamp/cli/experiment.py`` instead of
 importing them upward out of it.
 """

@@ -293,7 +293,7 @@ class _Supervision:
         }
         self._publish("run state")
 
-        from version_stamp.exp import sysmetrics  # exp's __init__ imports the CLI
+        from vmn_exp.sdk import sysmetrics  # exp's __init__ imports the CLI
 
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(

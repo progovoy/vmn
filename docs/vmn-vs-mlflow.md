@@ -1,7 +1,7 @@
 # vmn vs MLflow
 
 > [vmn](https://github.com/progovoy/vmn)'s experiment tracking (`vmn exp`, the
-> `version_stamp.exp` Python SDK, and the `vmn ui` dashboard) overlaps with
+> `vmn_exp.sdk` Python SDK, and the `vmn ui` dashboard) overlaps with
 > [MLflow](https://mlflow.org/). This page is an honest comparison — including
 > what MLflow does that vmn does not.
 

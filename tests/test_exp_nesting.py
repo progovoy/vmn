@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from vmn_exp.core.tree import INNER, OUTER, annotate_tree
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 
@@ -193,7 +193,7 @@ def test_stale_env_warning_survives_a_bare_python_process(app_layout):
         [
             _PY,
             "-c",
-            "from version_stamp.exp import start_run\n"
+            "from vmn_exp.sdk import start_run\n"
             "with start_run(%r) as run:\n"
             "    pass\n"
             "print(run.id)\n" % app_layout.app_name,

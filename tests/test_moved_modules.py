@@ -10,6 +10,8 @@ def test_old_experiment_paths_are_gone():
         "version_stamp.cli.snapshot",
         "version_stamp.core.experiment_writer",
         "version_stamp.cli.snapshot_storage_s3",
+        "version_stamp.exp",
+        "version_stamp.exp.run",
     ]
     for old_name in old_names:
         # Remove any cached entry so we get a fresh import attempt

@@ -44,7 +44,7 @@ def log_reads(monkeypatch):
 
 
 def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log_reads):
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
 
     _bootstrap(app_layout)
     first = _create(app_layout, "--metrics", "loss=0.4")
@@ -69,7 +69,7 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
 
 
 def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
 
     _bootstrap(app_layout)
     _create(app_layout, "--metrics", "loss=0.4")
@@ -86,7 +86,7 @@ def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
 
 def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkeypatch):
     from vmn_exp.core import index as experiment_index
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
 
     _bootstrap(app_layout)
     _create(app_layout, "--metrics", "loss=0.4")

@@ -5,7 +5,7 @@ reports metrics on the trainer; the model is saved as a Lightning checkpoint.
 """
 import weakref
 
-from version_stamp.exp.autolog_adapter import (
+from vmn_exp.sdk.autolog_adapter import (
     _LOGGER,
     _adapter,
     _fit_owners,

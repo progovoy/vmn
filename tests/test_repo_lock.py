@@ -38,7 +38,7 @@ def test_repo_lock_module_imports_no_experiment_modules():
         "bad = [m for m in sys.modules if any("
         "    m.startswith(p) for p in ("
         "        'version_stamp.core.experiment_',"
-        "        'version_stamp.exp',"
+        "        'vmn_exp.sdk',"
         "        'vmn_exp.ui',"
         "        'vmn_exp',"
         "    )"

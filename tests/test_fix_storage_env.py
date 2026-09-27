@@ -17,7 +17,7 @@ from vmn_exp.core.writer import (
     merge_conf_into_params,
     merge_env_into_params,
 )
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 BUCKET = "ml-exps"
 ENV_KEYS = (

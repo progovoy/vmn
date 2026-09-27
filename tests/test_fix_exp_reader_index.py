@@ -8,7 +8,7 @@ from helpers import _storage
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.core import index as experiment_index
-from version_stamp.exp.reader import get_run
+from vmn_exp.sdk.reader import get_run
 
 
 def _write(app_layout, verstr, second, parent=None):

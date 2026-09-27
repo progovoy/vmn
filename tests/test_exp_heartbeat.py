@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from version_stamp.exp.heartbeat import Heartbeat
+from vmn_exp.sdk.heartbeat import Heartbeat
 
 TICK = 0.02
 

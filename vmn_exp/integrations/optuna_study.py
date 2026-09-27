@@ -59,7 +59,7 @@ def start_study_run(study, app_name: Optional[str] = None, **start_run_kwargs):
             "optuna is required: pip install optuna"
         ) from exc
 
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     params = _study_params(study)
     name = start_run_kwargs.pop("name", study.study_name or "optuna-study")
@@ -91,7 +91,7 @@ class StudyTracker:
         * records pruned trials as succeeded, failed trials as failed.
         """
         import optuna as _optuna
-        from version_stamp.exp import start_run as _sr
+        from vmn_exp.sdk import start_run as _sr
 
         TrialPruned = _optuna.TrialPruned
         outer_id = self._outer.id

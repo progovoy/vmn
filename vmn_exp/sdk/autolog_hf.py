@@ -11,7 +11,7 @@ params/metrics hooks are disabled (``_no_params`` / ``_no_metrics``).
 """
 from __future__ import annotations
 
-from version_stamp.exp.autolog_adapter import (
+from vmn_exp.sdk.autolog_adapter import (
     _LOGGER,
     _adapter,
     _no_metrics,

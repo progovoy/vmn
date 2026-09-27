@@ -1,8 +1,8 @@
-"""vmn exp — experiment tracking: the CLI-facing SDK and its storage helpers.
+"""vmn exp — experiment tracking SDK.
 
-Self-contained on purpose: this package depends on version_stamp.core and the
-snapshot/storage helpers, never on vmn_exp.ui, so the experiment feature
-can be lifted out as its own distribution later.
+Self-contained on purpose: this package depends on vmn_exp.core, vmn_exp.storage,
+vmn_exp.snapshot, and version_stamp.api — never on vmn_exp.ui or vmn_exp.cli —
+so the SDK can be lifted out as its own distribution later.
 """
 import os
 
@@ -36,9 +36,9 @@ def _resolve_app_name(app_name, candidates):
     )
 
 
-from version_stamp.exp.autolog import autolog, autolog_disable  # noqa: E402
-from version_stamp.exp.context import current_run  # noqa: E402
-from version_stamp.exp.models import (  # noqa: E402
+from vmn_exp.sdk.autolog import autolog, autolog_disable  # noqa: E402
+from vmn_exp.sdk.context import current_run  # noqa: E402
+from vmn_exp.sdk.models import (  # noqa: E402
     download_model,
     get_model_version,
     list_models,
@@ -46,8 +46,8 @@ from version_stamp.exp.models import (  # noqa: E402
     remove_alias,
     set_alias,
 )
-from version_stamp.exp.ranks import NoOpRun  # noqa: E402
-from version_stamp.exp.run import Run, start_run  # noqa: E402  (needs the helper above)
+from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
+from vmn_exp.sdk.run import Run, start_run  # noqa: E402  (needs the helper above)
 
 __all__ = [
     "NoOpRun",

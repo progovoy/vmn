@@ -49,7 +49,7 @@ def _write_text(path, write):
 
 
 class RunArtifacts:
-    """Mixed into :class:`~version_stamp.exp.run.Run`; needs ``log_artifact``."""
+    """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``log_artifact``."""
 
     def _log_produced(self, name, produce):
         """Log the file *produce(path)* writes, stored as artifact *name*."""

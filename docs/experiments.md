@@ -234,7 +234,7 @@ When the workload is already Python, you don't need `exp run` or a metrics file
 at all — open the run in-process:
 
 ```python
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
     for step, loss in enumerate(train()):
@@ -521,7 +521,7 @@ vmn exp add my_app -v @3 --input s3://bucket/labels.json
 In the Python SDK, use `run.log_input(uri, name=None, digest=None, kind=None)`:
 
 ```python
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 with start_run("my_app") as run:
     run.log_input("s3://bucket/train.csv", name="train", digest="sha256:abc")
@@ -762,7 +762,7 @@ Archiving writes `archived: true` into the run's `metadata.yml` (atomically on
 disk, under the ETag on S3); unarchiving removes it. `vmn exp list` and the SDK's
 `list_runs` hide archived runs by default (`--archived` / `include_archived=True`
 shows them), as does the web UI unless asked with `archived=1`; the query language
-matches `archived = true`. From Python: `version_stamp.exp.manage.archive_run` /
+matches `archived = true`. From Python: `vmn_exp.sdk.manage.archive_run` /
 `unarchive_run` (see [sdk.md](sdk.md#changing-stored-runs-archive-unarchive-tags)).
 
 ---

@@ -24,7 +24,7 @@ def _bucket(monkeypatch):
 
 
 def test_tag_run_reaches_the_remote_with_no_heartbeat(tmp_path):
-    """``vmn exp tag``/``version_stamp.exp.manage.set_tags`` on a run with no
+    """``vmn exp tag``/``vmn_exp.sdk.manage.set_tags`` on a run with no
     live supervisor -- the tag must not be stranded in the local cache."""
     host = cached_host(tmp_path, "a")
     host.save("app", "v1", meta("v1"), {})

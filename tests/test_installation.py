@@ -89,7 +89,7 @@ def test_the_wheel_ships_every_subpackage(wheel_path):
     with zipfile.ZipFile(wheel_path) as zf:
         names = set(zf.namelist())
 
-    for package in ("version_stamp/exp", "vmn_exp/ui", "vmn_exp/ui/readers"):
+    for package in ("vmn_exp/sdk", "vmn_exp/ui", "vmn_exp/ui/readers"):
         assert f"{package}/__init__.py" in names, f"{package} is not in the wheel"
 
 
@@ -117,11 +117,11 @@ def test_the_installed_cli_runs(installed_venv, tmp_path):
 
 
 def test_the_exp_sdk_imports_from_the_installed_package(installed_venv, tmp_path):
-    """`pip install vmn[exp]` has to give a working `from version_stamp.exp import ...`."""
+    """`pip install vmn[exp]` has to give a working `from vmn_exp.sdk import ...`."""
     python, _ = installed_venv
     proc = _in_venv(
         python,
-        "import version_stamp.exp as exp, version_stamp.exp.reader as reader\n"
+        "import vmn_exp.sdk as exp, vmn_exp.sdk.reader as reader\n"
         "assert exp.start_run and exp.autolog and reader.list_runs\n"
         "print(exp.__file__)\n",
         cwd=str(tmp_path),

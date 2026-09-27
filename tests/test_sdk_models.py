@@ -1,4 +1,4 @@
-"""Tests for C8: SDK model registry helpers in version_stamp/exp/models.py.
+"""Tests for C8: SDK model registry helpers in vmn_exp/sdk/models.py.
 
 Coverage:
 - register_model from a finished run returns v1 with run_ref + artifact_uri
@@ -16,8 +16,8 @@ from moto import mock_aws
 
 from helpers import _bootstrap, _storage
 
-from version_stamp.exp import start_run
-from version_stamp.exp.models import (
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.models import (
     download_model,
     get_model_version,
     list_models,

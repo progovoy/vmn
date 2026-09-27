@@ -131,7 +131,7 @@ def test_index_orders_by_start_time(tmp_path):
     for r in iter_runs(mlruns):
         import_run(storage, "myapp", r)
 
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows = list_runs("myapp", storage=storage, use_index=False)
     # ordered by start_time ascending
     assert rows[0]["verstr"] == run_verstr(RUN_ID_A)
@@ -434,7 +434,7 @@ def test_list_runs_shows_imported_from(tmp_path):
     storage = _storage(tmp_path)
     import_run(storage, "myapp", run)
 
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows = list_runs("myapp", storage=storage, use_index=False)
     assert len(rows) == 1
     row = rows[0]
@@ -448,7 +448,7 @@ def test_list_runs_query_imported_from(tmp_path):
     storage = _storage(tmp_path)
     import_run(storage, "myapp", run)
 
-    from version_stamp.exp.reader import list_runs
+    from vmn_exp.sdk.reader import list_runs
     rows_match = list_runs(
         "myapp", storage=storage, use_index=False,
         query="imported_from = null"

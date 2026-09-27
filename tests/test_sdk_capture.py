@@ -13,7 +13,7 @@ import pytest
 from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 from vmn_exp import snapshot as snap
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 
 N_WORKERS = 8
 JOIN_TIMEOUT = 240
@@ -43,7 +43,7 @@ def _record(app_layout, verstr):
 # capture no two workers can ever be inside at once, so seeing one is proof.
 _WORKER = """
 import os, sys, time
-from version_stamp.exp import capture
+from vmn_exp.sdk import capture
 
 inside = os.environ["INSIDE_DIR"]
 real = capture.capture_snapshot
@@ -66,7 +66,7 @@ def instrumented(*args, **kwargs):
 
 capture.capture_snapshot = instrumented
 
-from version_stamp.exp import start_run
+from vmn_exp.sdk import start_run
 with start_run(os.environ["APP"]) as run:
     pass
 print("RUN", run.id)

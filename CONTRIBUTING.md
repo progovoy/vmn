@@ -43,7 +43,7 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 - `version_stamp/stamping/` — IVersionsStamper, VersionControlStamper, Jinja2 template generation
 - `version_stamp/backends/` — VCS abstraction (Git/LocalFile backends)
 - `version_stamp/core/` — Constants, models, logging, utilities, version math
-- `version_stamp/ui/` — `vmn ui` FastAPI server, readers, subprocess job runner, and the built SPA under `static/`
+- `vmn_exp/ui/` — `vmn ui` FastAPI server, readers, subprocess job runner, and the built SPA under `static/`
 - `webui/` — React/Vite source for the UI; `npm run build` writes into `vmn_exp/ui/static/`
 - `version_stamp/version.py` — vmn's own version string
 - `tests/` — Test suite with Docker-based isolated git environments
@@ -55,7 +55,7 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 pip install -e ".[ui]"
 vmn ui --no-browser        # leave running
 
-# Python changes under version_stamp/ui/ → just refresh the browser
+# Python changes under vmn_exp/ui/ → just refresh the browser
 # Changes under webui/src/ → rebuild, then refresh (no server restart needed)
 cd webui && npm run build
 ```

@@ -1,4 +1,4 @@
-"""The write-side experiment core shared by the CLI and the ``version_stamp.exp`` SDK.
+"""The write-side experiment core shared by the CLI and the ``vmn_exp.sdk`` SDK.
 
 Everything here is exercised against a fake, duck-typed storage: the point of
 ``core.experiment_writer`` is that it knows how to shape an experiment record
@@ -463,7 +463,7 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
     import ast
     import pathlib
 
-    exp_dir = pathlib.Path(__file__).resolve().parent.parent / "version_stamp" / "exp"
+    exp_dir = pathlib.Path(__file__).resolve().parent.parent / "vmn_exp" / "sdk"
     from_cli = {
         alias.name
         for path in exp_dir.glob("*.py")

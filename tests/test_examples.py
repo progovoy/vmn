@@ -11,7 +11,7 @@ import subprocess
 import pytest
 from helpers import _PROJECT_ROOT, _PY, _storage
 
-from version_stamp.exp.reader import get_run, list_runs
+from vmn_exp.sdk.reader import get_run, list_runs
 
 EXAMPLES_DIR = os.path.join(_PROJECT_ROOT, "examples")
 

@@ -98,7 +98,7 @@ def _log(app_layout, verstr):
 
 def test_log_input_appends_input_entry(app_layout):
     _bootstrap(app_layout)
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     with start_run(app_layout.app_name) as run:
         run.log_input("s3://bucket/data.csv")
@@ -112,7 +112,7 @@ def test_log_input_appends_input_entry(app_layout):
 
 def test_log_input_with_name_digest_kind(app_layout):
     _bootstrap(app_layout)
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     with start_run(app_layout.app_name) as run:
         run.log_input("s3://bucket/train.csv", name="train", digest="sha256:abc", kind="dataset")
@@ -129,7 +129,7 @@ def test_log_input_with_name_digest_kind(app_layout):
 
 def test_log_input_repeatable(app_layout):
     _bootstrap(app_layout)
-    from version_stamp.exp import start_run
+    from vmn_exp.sdk import start_run
 
     with start_run(app_layout.app_name) as run:
         run.log_input("s3://bucket/a.csv", name="a")
@@ -143,7 +143,7 @@ def test_log_input_repeatable(app_layout):
 
 
 def test_noop_run_log_input_does_nothing():
-    from version_stamp.exp.ranks import NoOpRun
+    from vmn_exp.sdk.ranks import NoOpRun
 
     run = NoOpRun("test_app")
     # Should not raise and should return None

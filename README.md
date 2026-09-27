@@ -303,7 +303,7 @@ Snapshots extend the same state-recovery model as `goto` to uncommitted work.
 Local-first experiment tracking (`vmn exp`) builds on snapshots to capture
 metrics alongside code state; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
 Python workloads can log in-process instead of shelling out — `from
-version_stamp.exp import start_run`, plus `autolog()` for scikit-learn
+vmn_exp.sdk import start_run`, plus `autolog()` for scikit-learn
 hyperparameters and scores, and a query language for filtering runs on metrics
 and params; see
 [docs/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/sdk.md).

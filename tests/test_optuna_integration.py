@@ -12,7 +12,7 @@ optuna = pytest.importorskip("optuna")
 
 from helpers import _bootstrap, _storage  # noqa: E402
 from vmn_exp.integrations.optuna_study import start_study_run  # noqa: E402
-from version_stamp.exp.reader import list_runs  # noqa: E402
+from vmn_exp.sdk.reader import list_runs  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -240,7 +240,7 @@ def test_autolog_in_objective_lands_in_trial(app_layout):
     sklearn = pytest.importorskip("sklearn")
     from sklearn.linear_model import LinearRegression
     import numpy as np
-    from version_stamp.exp import autolog, autolog_disable, current_run
+    from vmn_exp.sdk import autolog, autolog_disable, current_run
 
     _bootstrap(app_layout)
 

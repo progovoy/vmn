@@ -7,8 +7,8 @@ App:    writes runs to the vmn app "vmn_examples"
 Next:   re-run it — every query is scoped to params.example, so the counts grow
         by the same four runs each time.
 """
-from version_stamp.exp import start_run
-from version_stamp.exp.reader import list_runs
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.reader import list_runs
 
 APP_NAME = "vmn_examples"
 

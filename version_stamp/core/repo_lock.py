@@ -14,7 +14,7 @@ def get_repo_lock(vmn_root_path):
     """Return a FileLock for the given repo root.
 
     One definition for every entry point: the CLI holds it around a command,
-    and ``version_stamp.exp.start_run`` holds it around the mutating create
+    and ``vmn_exp.sdk.start_run`` holds it around the mutating create
     phase.  ``$VMN_LOCK_FILE_PATH`` overrides the path for the whole process,
     which is what a user pointing vmn at a shared lock expects.
     """

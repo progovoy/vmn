@@ -5,7 +5,7 @@
 compiles to a plain predicate over the rows that
 :func:`version_stamp.core.experiment_log.experiment_row` (plus ``status_fields``
 and ``annotate_tree``) already built, so the CLI, the REST API, the web ui and
-the ``version_stamp.exp`` SDK filter identically.
+the ``vmn_exp.sdk`` SDK filter identically.
 
 Grammar::
 

@@ -5,7 +5,7 @@ An experiment log is an append-only list of entries (``create``, ``params``,
 ``metrics``, ``note``, ...). Everything that turns such a list into a row — the
 latest value of each metric, the per-metric series, the effective params, the
 leaderboard row itself — lives here, so the CLI (``vmn exp``), the ui readers
-and the ``version_stamp.exp`` SDK all agree by construction instead of by
+and the ``vmn_exp.sdk`` SDK all agree by construction instead of by
 copy-paste.
 
 Pure functions over plain data, plus the two reads that only need a duck-typed

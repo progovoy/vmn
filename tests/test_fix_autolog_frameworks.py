@@ -19,12 +19,12 @@ import pytest
 from helpers import _bootstrap, _storage
 
 from vmn_exp.core.log import metric_series
-from version_stamp.exp import autolog, autolog_disable, start_run
-from version_stamp.exp import run as run_module
-from version_stamp.exp.reader import get_run
+from vmn_exp.sdk import autolog, autolog_disable, start_run
+from vmn_exp.sdk import run as run_module
+from vmn_exp.sdk.reader import get_run
 
 # The package re-exports the autolog() *function* under the module's name.
-autolog_module = importlib.import_module("version_stamp.exp.autolog")
+autolog_module = importlib.import_module("vmn_exp.sdk.autolog")
 
 
 @pytest.fixture(autouse=True)
@@ -236,7 +236,7 @@ def test_lightning_never_checkpoints_from_a_single_rank_under_ddp(caplog):
     adapter = autolog_module.SUPPORTED_FRAMEWORKS["lightning"]
     trainer, run = _FakeTrainer(world_size=2), _FakeRun()
 
-    with caplog.at_level(logging.WARNING, logger="version_stamp.exp.autolog"):
+    with caplog.at_level(logging.WARNING, logger="vmn_exp.sdk.autolog"):
         autolog_module._log_model(run, adapter, _lightning_call(trainer))
         autolog_module._log_model(run, adapter, _lightning_call(trainer))
 

@@ -15,8 +15,8 @@ from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
 
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.core.status import load_run_state
-from version_stamp.exp import run as run_module
-from version_stamp.exp import start_run
+from vmn_exp.sdk import run as run_module
+from vmn_exp.sdk import start_run
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +48,7 @@ def _child_env(**extra):
 def test_parallel_cold_start_every_worker_succeeds(app_layout):
     # A fresh repo: no vmn init, no app, no baseline — four workers at once.
     code = (
-        "from version_stamp.exp import start_run\n"
+        "from vmn_exp.sdk import start_run\n"
         f"with start_run({app_layout.app_name!r}) as run:\n"
         "    run.log_metric('acc', 0.5)\n"
         "print('RUN', run.id)\n"
