@@ -31,9 +31,10 @@ Malformed files emit a logging.WARNING and are skipped; they never raise.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set
+
+import yaml
 
 # MLflow RunStatus int → str mapping (from mlflow.entities.RunStatus source)
 _INT_STATUS: Dict[int, str] = {
@@ -48,100 +49,22 @@ _VALID_STATUSES: Set[str] = set(_INT_STATUS.values())
 log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# YAML parsing (minimal; avoids PyYAML to stay zero-dependency for this file)
-# ---------------------------------------------------------------------------
-
-def _load_yaml_simple(text: str) -> Dict[str, Any]:
-    """
-    Parse a flat YAML file as produced by MLflow: ``key: value`` lines.
-
-    Supports:
-    - Quoted strings: ``key: "value"``
-    - Unquoted strings: ``key: value``
-    - Integers: ``key: 1234``
-    - null: ``key: null``
-    - Nested mappings (one level) via indentation (for datasets meta.yaml)
-    - No sequences, no multi-line values (not needed for MLflow meta.yaml)
-    """
-    result: Dict[str, Any] = {}
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if not line.strip() or line.strip().startswith("#"):
-            i += 1
-            continue
-        if line.startswith(" ") or line.startswith("\t"):
-            i += 1
-            continue
-        if ":" not in line:
-            i += 1
-            continue
-        key, _, rest = line.partition(":")
-        key = key.strip()
-        rest = rest.strip()
-        if not key:
-            i += 1
-            continue
-
-        # Check for a nested mapping (next lines are indented)
-        nested: Dict[str, Any] = {}
-        j = i + 1
-        while j < len(lines) and (
-            lines[j].startswith("  ") or lines[j].startswith("\t")
-        ):
-            sub = lines[j].strip()
-            if ":" in sub:
-                sk, _, sv = sub.partition(":")
-                nested[sk.strip()] = _parse_scalar(sv.strip())
-            j += 1
-
-        if nested and not rest:
-            result[key] = nested
-            i = j
-            continue
-
-        result[key] = _parse_scalar(rest)
-        i += 1
-    return result
-
-
-def _parse_scalar(s: str) -> Any:
-    """Convert a YAML scalar string to Python value."""
-    if s == "null" or s == "~":
-        return None
-    if s == "true":
-        return True
-    if s == "false":
-        return False
-    if s.startswith('"') and s.endswith('"'):
-        return s[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-    if s.startswith("'") and s.endswith("'"):
-        return s[1:-1]
-    try:
-        return int(s)
-    except ValueError:
-        pass
-    try:
-        return float(s)
-    except ValueError:
-        pass
-    return s
-
-
 def _read_yaml(path: Path) -> Optional[Dict[str, Any]]:
-    """Read and parse a YAML file; return None on any error."""
+    """Read and parse a YAML file with yaml.safe_load; return None on any error."""
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         log.warning("mlflow_filestore: cannot read %s: %s", path, exc)
         return None
     try:
-        return _load_yaml_simple(text)
-    except Exception as exc:  # noqa: BLE001
+        result = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
         log.warning("mlflow_filestore: malformed YAML %s: %s", path, exc)
         return None
+    if not isinstance(result, dict):
+        log.warning("mlflow_filestore: unexpected YAML structure in %s", path)
+        return None
+    return result
 
 
 # ---------------------------------------------------------------------------
