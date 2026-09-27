@@ -55,7 +55,7 @@ import tempfile
 import threading
 import weakref
 
-from version_stamp.core.experiment_values import metric_number
+from vmn_exp.core.values import metric_number
 from version_stamp.exp import (
     autolog_hf,
     autolog_keras,

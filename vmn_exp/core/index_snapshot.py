@@ -9,8 +9,8 @@ dicts here) as read-only and copy before changing anything.
 """
 from dataclasses import dataclass, field
 
-from version_stamp.core.experiment_fold import fold_row
-from version_stamp.core.experiment_status import observed_at_from_mtime
+from vmn_exp.core.fold import fold_row
+from vmn_exp.core.status import observed_at_from_mtime
 
 
 @dataclass(frozen=True, eq=False)

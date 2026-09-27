@@ -22,7 +22,7 @@ The fast tier is opt-in: ``full_sweep_sec`` defaults to 0, where every refresh
 is a full listing and an in-place write by anyone shows up at once. A server
 that refreshes often sets it (a mutable attribute) and sweeps in the background.
 """
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.status import (
     RUNNING,
     derive_status,
     observed_at_from_mtime,

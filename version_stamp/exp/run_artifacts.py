@@ -13,7 +13,7 @@ import tempfile
 
 import yaml
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     artifact_file_path,
     list_artifact_tree,
     valid_artifact_path,

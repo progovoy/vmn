@@ -18,15 +18,15 @@ import yaml
 # record builders live in version_stamp/cli. Lifting exp/ into its own
 # distribution needs these to move into core next.
 from version_stamp.cli.experiment import _get_experiment_storage
-from version_stamp.cli.snapshot import _build_snapshot_metadata, _format_dev_verstr
-from version_stamp.core.experiment_env import (
+from vmn_exp.snapshot import _build_snapshot_metadata, _format_dev_verstr
+from vmn_exp.core.env import (
     CAPTURE_ENV_ENV,
     capture_env_safe,
     should_capture,
 )
-from version_stamp.core.experiment_from_snapshot import create_from_snapshot
-from version_stamp.core.experiment_refs import resolve_parent
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.from_snapshot import create_from_snapshot
+from vmn_exp.core.refs import resolve_parent
+from vmn_exp.core.writer import (
     create_run,
     get_repo_lock,
     merge_conf_into_params,

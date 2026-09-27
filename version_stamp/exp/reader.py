@@ -14,21 +14,21 @@ value of every metric, the derived status fields and its place in the run tree.
 Status is *derived* on every call — a run whose heartbeat went stale reports
 ``stuck`` the next time it is read, never the ``running`` it last claimed. What
 is cached is the folded files: :func:`list_runs` reads through the experiment
-index (:mod:`version_stamp.core.experiment_index`, persisted as
+index (:mod:`vmn_exp.core.index`, persisted as
 ``.index.sqlite`` beside the records), which re-reads only what changed.
 
 Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
 on ``version_stamp.ui``, so the experiment feature can be lifted out later. The
 log folding it shares with the CLI and the ui lives in
-:mod:`version_stamp.core.experiment_log`.
+:mod:`vmn_exp.core.log`.
 """
 import os
 
 import yaml
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-import version_stamp.core.experiment_index as experiment_index
-from version_stamp.core.experiment_log import (
+from vmn_exp.snapshot import get_snapshot_storage
+import vmn_exp.core.index as experiment_index
+from vmn_exp.core.log import (
     experiment_row,
     filter_archived,
     filter_by_status,
@@ -36,17 +36,17 @@ from version_stamp.core.experiment_log import (
     metric_series,
     sort_by_metric,
 )
-from version_stamp.core.experiment_log import load_log as _load_log
-from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_refs import placement_snapshot, resolve_experiment
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.query import filter_rows
+from vmn_exp.core.refs import placement_snapshot, resolve_experiment
+from vmn_exp.core.status import (
     load_run_state,
     observed_at_by_verstr,
     run_state_observed_at,
 )
-from version_stamp.core.experiment_tree import annotate_rows, run_status
+from vmn_exp.core.tree import annotate_rows, run_status
 from version_stamp.api import resolve_root_path
-from version_stamp.core.experiment_reserved import is_reserved_app
+from vmn_exp.core.reserved import is_reserved_app
 from version_stamp.exp import _resolve_app_name
 
 EXPERIMENTS_DIR = "experiments"

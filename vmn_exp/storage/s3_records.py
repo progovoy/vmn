@@ -10,13 +10,13 @@ leftovers — never a listed record with half its files.
 
 import yaml
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
     apply_metadata_updates,
     safe_dep_name,
 )
-from version_stamp.cli.snapshot_storage_s3_base import (
+from vmn_exp.storage.s3_base import (
     app_keys,
     is_taken,
     parallel_map,

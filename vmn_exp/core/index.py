@@ -31,17 +31,17 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.core.experiment_index_record import refresh_record, update_record
-from version_stamp.core.experiment_index_snapshot import IndexSnapshot, RowCache
-from version_stamp.core.experiment_index_store import IndexStore
-from version_stamp.core.experiment_index_sweep import (
+from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
+from vmn_exp.core.index_store import IndexStore
+from vmn_exp.core.index_sweep import (
     DEFAULT_FULL_SWEEP_SEC,
     METADATA_FILE,
     Sweep,
 )
-from version_stamp.core.experiment_index_workers import load_new_records
-from version_stamp.core.experiment_log import experiment_row, load_log
-from version_stamp.core.experiment_status import load_run_state, observed_at_by_verstr
+from vmn_exp.core.index_workers import load_new_records
+from vmn_exp.core.log import experiment_row, load_log
+from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 
 _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).

@@ -227,7 +227,7 @@ def _add_ui_parser(subprasers):  # noqa: N802
 
 def _handle_snapshot(vmn_ctx):
     """Handle the ``vmn snapshot`` command. Moved from cli/commands.py."""
-    from version_stamp.cli.snapshot import (
+    from vmn_exp.snapshot import (
         _build_user_meta,
         _get_storage,
         _resolve_verstr,
@@ -384,7 +384,7 @@ def _exp_run_without_repo(args):
         experiment_run,
         experiment_show,
     )
-    from version_stamp.core.experiment_writer import merge_env_into_params
+    from vmn_exp.core.writer import merge_env_into_params
 
     if getattr(args, "writer_id", None):
         os.environ["VMN_WRITER_ID"] = args.writer_id
@@ -429,7 +429,7 @@ def _exp_run_without_repo(args):
 
 def _dev_version_loader(vcs, params, version):
     """Restore repo to state captured in a dev-version snapshot."""
-    from version_stamp.cli.snapshot import (
+    from vmn_exp.snapshot import (
         LocalSnapshotStorage,
         _restore_with_safety_net,
         get_snapshot_storage,

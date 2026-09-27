@@ -15,13 +15,13 @@ page slice costs O(page + changed).
 """
 import bisect
 
-from version_stamp.core.experiment_log import (
+from vmn_exp.core.log import (
     TIMESTAMP_SORT,
     _sortable,
     metric_sort_descending,
     primary_metric,
 )
-from version_stamp.core.experiment_tree import (
+from vmn_exp.core.tree import (
     children_by_parent,
     rollup_status,
     subtree_verstrs,

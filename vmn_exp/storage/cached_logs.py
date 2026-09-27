@@ -11,7 +11,7 @@ files always equals a full re-read.
 
 import threading
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     LEGACY_LOG_FILE,
     flatten_logs,
     is_log_file,
@@ -19,7 +19,7 @@ from version_stamp.cli.snapshot_storage_files import (
     log_sizes_of,
     log_writer_and_seq,
 )
-from version_stamp.core.experiment_status import load_run_state
+from vmn_exp.core.status import load_run_state
 from version_stamp.api import VMN_LOGGER
 
 LOCAL, REMOTE = "local", "remote"

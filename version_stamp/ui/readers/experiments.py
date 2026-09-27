@@ -2,18 +2,18 @@
 """Read-side access to experiments for the vmn ui API.
 
 Pure, lock-free reads over the same storage layer the CLI uses. Rows are folded
-by :mod:`version_stamp.core.experiment_log` — the module ``vmn exp`` folds its
+by :mod:`vmn_exp.core.log` — the module ``vmn exp`` folds its
 own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.core.experiment_reserved import is_reserved_app
-from version_stamp.core.experiment_log import filter_by_status, sort_by_metric
-from version_stamp.core.experiment_log import load_log as _load_log
-from version_stamp.core.experiment_query import filter_rows
-from version_stamp.core.experiment_status import load_run_state
-from version_stamp.core.experiment_tree import annotate_rows
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.core.reserved import is_reserved_app
+from vmn_exp.core.log import filter_by_status, sort_by_metric
+from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.query import filter_rows
+from vmn_exp.core.status import load_run_state
+from vmn_exp.core.tree import annotate_rows
 from version_stamp.api import tag_name_to_app_name
 from version_stamp.ui.readers.config import read_app_conf as _read_app_conf
 from version_stamp.ui.readers.experiment_detail import experiment_detail

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SQLite persistence for :mod:`version_stamp.core.experiment_index`.
+"""SQLite persistence for :mod:`vmn_exp.core.index`.
 
 The index is a derived cache: losing it costs one rebuild, never data. So this
 store never raises. A database that will not open, is corrupt, or stays locked

@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 
 import yaml
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
     artifact_file_path,

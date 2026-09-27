@@ -11,8 +11,8 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from version_stamp.cli.snapshot import get_snapshot_storage
-from version_stamp.cli.snapshot_storage_files import valid_artifact_path
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.ui import routes_leaderboard, routes_models, routes_series, routes_tree
 from version_stamp.ui.experiment_source import ExperimentSource
 from version_stamp.ui.http_params import attachment, clamp_page, key_list

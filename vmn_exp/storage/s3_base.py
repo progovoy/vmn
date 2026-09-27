@@ -4,7 +4,7 @@ log halves (:mod:`snapshot_storage_s3`)."""
 
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     METADATA_FILE,
     checked_app_path,
     safe_verstr,

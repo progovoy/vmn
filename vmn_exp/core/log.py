@@ -16,7 +16,7 @@ or ``exp``.
 import math
 import os
 
-from version_stamp.core.experiment_fold import (  # noqa: F401  (re-exported)
+from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
     entry_params,
     fold_last_metric_at,
@@ -92,7 +92,7 @@ def metric_sort_descending(schema, key):
 def experiment_row(idx, meta, log):
     """One leaderboard row: an experiment's metadata, params and folded metrics.
 
-    The fold rules live in :mod:`version_stamp.core.experiment_fold`, which the
+    The fold rules live in :mod:`vmn_exp.core.fold`, which the
     experiment index folds incrementally with — so both agree by construction.
     """
     return fold_row(idx, meta, fold_log(log))

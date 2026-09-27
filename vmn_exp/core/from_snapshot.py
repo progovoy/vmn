@@ -10,7 +10,7 @@ import os
 
 import yaml
 
-from version_stamp.core.experiment_writer import create_run
+from vmn_exp.core.writer import create_run
 from version_stamp.api import VMN_LOGGER, now_iso
 
 SNAPSHOT_METADATA_FILE = "vmn_metadata.yml"

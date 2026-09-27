@@ -19,10 +19,10 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.cli.experiment_prune_query import print_preview, query_candidates
-from version_stamp.core.experiment_index import indexed_snapshot
-from version_stamp.core.experiment_query import QueryError
-from version_stamp.core.experiment_refs import resolve_experiment
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.index import indexed_snapshot
+from vmn_exp.core.query import QueryError
+from vmn_exp.core.refs import resolve_experiment
+from vmn_exp.core.status import (
     RUNNING,
     STUCK,
     derive_status,

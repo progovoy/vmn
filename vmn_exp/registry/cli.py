@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 
-from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.registry.log import set_alias as _set_alias
 from vmn_exp.registry.log import remove_alias as _remove_alias
 from vmn_exp.registry.log import set_version_status
@@ -360,7 +360,7 @@ def _resolve_run_ref(storage, app_name, ref):
     """
     if not ref:
         return None
-    from version_stamp.core.experiment_refs import _needs_listing, resolve_experiment
+    from vmn_exp.core.refs import _needs_listing, resolve_experiment
     if not _needs_listing(storage, app_name, ref, False):
         return ref
     if not app_name:

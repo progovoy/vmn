@@ -22,7 +22,7 @@ from version_stamp.cli.experiment_run import (  # noqa: F401
     experiment_run,
 )
 from version_stamp.cli.experiment_views import dumps, show_payload
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     _build_snapshot_metadata,
     _compute_verstr,
     _diff_real_tree,
@@ -34,21 +34,21 @@ from version_stamp.cli.snapshot import (
     get_git_difftool,
     get_snapshot_storage,
 )
-import version_stamp.core.experiment_index as experiment_index
-import version_stamp.core.experiment_writer as experiment_writer
-from version_stamp.core.experiment_from_snapshot import (
+import vmn_exp.core.index as experiment_index
+import vmn_exp.core.writer as experiment_writer
+from vmn_exp.core.from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
-from version_stamp.core.experiment_fold import fold_inputs_dict, fold_log, fold_values
-from version_stamp.core.experiment_log import (
+from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_values
+from vmn_exp.core.log import (
     effective_params,
     filter_archived,
     latest_metrics,
     load_log,
     sort_by_metric,
 )
-from version_stamp.core.experiment_query import QueryError, filter_rows
-from version_stamp.core.experiment_refs import (
+from vmn_exp.core.query import QueryError, filter_rows
+from vmn_exp.core.refs import (
     parent_edges,
     placement_snapshot,
     recent_verstrs,
@@ -56,14 +56,14 @@ from version_stamp.core.experiment_refs import (
     resolve_parent,
     storage_index,
 )
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.status import (
     STUCK,
     load_run_state,
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import annotate_rows, subtree_status
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.tree import annotate_rows, subtree_status
+from vmn_exp.core.writer import (
     append_to_log,
     compute_artifact_info,
     create_log_entry,
@@ -80,7 +80,7 @@ from version_stamp.cli.experiment_provenance import (
     print_provenance_diff_section,
     refuse_no_code,
 )
-from version_stamp.core.experiment_inputs import create_input_entry
+from vmn_exp.core.inputs import create_input_entry
 
 
 def _append_inputs(storage, app_name, verstr, inputs_list):
@@ -445,7 +445,7 @@ def _experiment_create_core(
     ``None`` = check opt-out chain, ``True`` = force on, ``False`` = force off.
     *python_exe*, when given, is probed instead of the current interpreter.
     """
-    from version_stamp.core.experiment_env import (
+    from vmn_exp.core.env import (
         capture_env_safe,
         should_capture,
     )
@@ -1046,7 +1046,7 @@ def experiment_export(vcs, params, storage, args):
         dest = output_path
 
     try:
-        from version_stamp.cli.snapshot import _materialize_workdir
+        from vmn_exp.snapshot import _materialize_workdir
 
         err = _materialize_workdir(vcs, metadata, patches, dest)
         if err:

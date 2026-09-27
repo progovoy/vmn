@@ -6,7 +6,7 @@ import shutil
 import tempfile
 
 # Log file naming and parsing live in core, shared with the experiment index.
-from version_stamp.core.experiment_logfiles import (  # noqa: F401  (re-exported)
+from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     LEGACY_LOG_FILE,
     group_log_names,
     is_log_file,

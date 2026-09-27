@@ -61,9 +61,12 @@ setuptools.setup(
         "version_stamp.ui.readers",
         "version_stamp._moved",
         "vmn_exp",
+        "vmn_exp.core",
         "vmn_exp.importers",
         "vmn_exp.integrations",
         "vmn_exp.registry",
+        "vmn_exp.snapshot",
+        "vmn_exp.storage",
     ],
     package_data={
         "version_stamp.ui": ["static/*", "static/assets/*"],

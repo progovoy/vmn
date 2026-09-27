@@ -11,7 +11,7 @@ Shared by ``vmn exp tag/archive/unarchive`` and ``version_stamp.exp.manage``.
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
 """
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.writer import (
     create_tags_entry,
     flush_log,
     get_writer_id,

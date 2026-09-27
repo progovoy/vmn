@@ -11,7 +11,7 @@ listing it next to not-yet-deleted segments never count an entry twice.
 
 import json
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     LEGACY_LOG_FILE,
     flatten_logs,
     group_log_names,
@@ -20,9 +20,9 @@ from version_stamp.cli.snapshot_storage_files import (
     log_writer_and_seq,
     parse_jsonl,
 )
-from version_stamp.cli.snapshot_storage_s3_base import is_taken, parallel_map
+from vmn_exp.storage.s3_base import is_taken, parallel_map
 from version_stamp.api import VMN_LOGGER, core_utils
-from version_stamp.core.experiment_logfiles import compacted_log_name
+from vmn_exp.core.logfiles import compacted_log_name
 
 _APPEND_ATTEMPTS = 20
 

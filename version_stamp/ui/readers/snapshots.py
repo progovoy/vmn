@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Snapshot browsing for the vmn ui API (the ``snapshots/`` storage subdir)."""
 
-from version_stamp.cli.snapshot import _resolve_verstr, get_snapshot_storage
+from vmn_exp.snapshot import _resolve_verstr, get_snapshot_storage
 
 # Patch kind -> the metadata flag recording whether the snapshot holds it.
 _PATCH_FLAGS = {

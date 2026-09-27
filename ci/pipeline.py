@@ -64,7 +64,7 @@ REQUIRES = [
 def lint(ctx):
     # ctx.run defaults to check=True: ruff finding lint errors (exit 1) fails the
     # stage so the pipeline goes red instead of reporting green on a broken lint.
-    ctx.run(["ruff", "check", "version_stamp", "--output-format", "concise"])
+    ctx.run(["ruff", "check", "version_stamp", "vmn_exp", "--output-format", "concise"])
 
 
 # deterministic=True + declared inputs make this content-addressable: the key is
@@ -101,7 +101,7 @@ def run_tests(ctx):
 @stage(requires=REQUIRES)
 def typecheck(ctx):
     # report-only.
-    ctx.run(["mypy", "version_stamp", "--ignore-missing-imports"], check=False)
+    ctx.run(["mypy", "version_stamp", "vmn_exp", "--ignore-missing-imports"], check=False)
 
 
 # --- optional release lane -------------------------------------------------

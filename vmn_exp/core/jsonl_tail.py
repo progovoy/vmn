@@ -9,7 +9,7 @@ parsed-log cache both read logs this way.
 *files* is duck-typed: anything with ``read_file_from(app, verstr, name,
 offset)`` returning bytes or None.
 """
-from version_stamp.core.experiment_logfiles import parse_json_line
+from vmn_exp.core.logfiles import parse_json_line
 
 
 class UnterminatedEntry(Exception):

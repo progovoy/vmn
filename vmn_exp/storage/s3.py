@@ -14,24 +14,24 @@ import hashlib
 import os
 import tempfile
 
-from version_stamp.cli.snapshot_storage import SnapshotStorage
-from version_stamp.cli.snapshot_storage_index_cache_dir import s3_index_cache_path
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.index_cache_dir import s3_index_cache_path
+from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
     artifact_file_path,
     artifact_name_for,
     valid_artifact_path,
 )
-from version_stamp.cli.snapshot_storage_s3_base import (  # noqa: F401  (re-exported)
+from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
     S3Base,
     app_keys,
     error_code,
     is_missing,
 )
-from version_stamp.cli.snapshot_storage_s3_listing import S3Listing
-from version_stamp.cli.snapshot_storage_s3_logs import S3Logs
-from version_stamp.cli.snapshot_storage_s3_records import S3Records
+from vmn_exp.storage.s3_listing import S3Listing
+from vmn_exp.storage.s3_logs import S3Logs
+from vmn_exp.storage.s3_records import S3Records
 from version_stamp.api import VMN_LOGGER, core_utils
 
 _ARTIFACT_CHUNK = 1 << 20

@@ -10,8 +10,8 @@ spans every attempt; ``resume_count`` says how many there were.
 import datetime
 import os
 
-from version_stamp.cli.snapshot import _resolve_verstr
-from version_stamp.core.experiment_status import load_run_state, parse_iso
+from vmn_exp.snapshot import _resolve_verstr
+from vmn_exp.core.status import load_run_state, parse_iso
 from version_stamp.exp import _resolve_app_name
 from version_stamp.exp.coldstart import build_vcs
 from version_stamp.exp.create import (

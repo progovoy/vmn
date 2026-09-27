@@ -14,15 +14,15 @@ reads that same copy, so only new local bytes and new remote segments are read.
 A file that vanishes mid-read refolds the record through the storage's
 ``load_logs_by_writer``.
 """
-from version_stamp.core.experiment_fold import apply_entries, new_fold
-from version_stamp.core.experiment_logfiles import (
+from vmn_exp.core.fold import apply_entries, new_fold
+from vmn_exp.core.logfiles import (
     LEGACY_LOG_FILE as LEGACY_LOG,
 )
-from version_stamp.core.experiment_logfiles import (
+from vmn_exp.core.logfiles import (
     group_log_names,
     log_writer_and_seq,
 )
-from version_stamp.core.jsonl_tail import read_complete_lines
+from vmn_exp.core.jsonl_tail import read_complete_lines
 from version_stamp.api import yaml_safe_load
 
 

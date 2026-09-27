@@ -20,9 +20,9 @@ import tempfile
 import time
 import uuid
 
-from version_stamp.cli.snapshot_storage_cached import CachedSnapshotStorage
-from version_stamp.cli.snapshot_storage_files import METADATA_FILE
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.api import VMN_LOGGER, parse_record_metadata
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5

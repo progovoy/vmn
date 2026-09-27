@@ -5,10 +5,10 @@ A record is plain data — its metadata, its folded log, its run state and the
 file signatures they were read at — so a worker process can load it with the
 same code as the index (:mod:`experiment_index_workers`) and hand it back.
 """
-from version_stamp.core.experiment_fold import new_fold
-from version_stamp.core.experiment_index_logs import log_signatures, update_logs
-from version_stamp.core.experiment_index_sweep import METADATA_FILE
-from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
+from vmn_exp.core.fold import new_fold
+from vmn_exp.core.index_logs import log_signatures, update_logs
+from vmn_exp.core.index_sweep import METADATA_FILE
+from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from version_stamp.api import parse_record_metadata
 
 

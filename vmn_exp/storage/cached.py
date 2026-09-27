@@ -11,14 +11,14 @@ merge missing its remote half reads as "those records are gone" — and the
 index would forget them, prune would miscount what it keeps.
 """
 
-from version_stamp.cli.snapshot_storage import SnapshotStorage
-from version_stamp.cli.snapshot_storage_cached_logs import CachedLogs
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.cached_logs import CachedLogs
+from vmn_exp.storage.files import (
     METADATA_FILE,
     is_volatile_file,
 )
-from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
-from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from version_stamp.api import VMN_LOGGER
 
 
@@ -316,7 +316,7 @@ def get_snapshot_storage(
         if local:
             return CachedSnapshotStorage(local, remote)
         if buffer_logs:
-            from version_stamp.cli.snapshot_storage_buffered import (
+            from vmn_exp.storage.buffered import (
                 BufferedRemoteStorage,
             )
 

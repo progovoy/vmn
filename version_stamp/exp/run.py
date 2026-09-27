@@ -21,12 +21,12 @@ import sys
 import time
 
 from version_stamp.api import ensure_logger
-from version_stamp.core.background import Coalescing
-from version_stamp.core.best_effort import BestEffort, quiet
-from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
-from version_stamp.core.experiment_values import sanitize_entry
-from version_stamp.core.experiment_inputs import create_input_entry
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.background import Coalescing
+from vmn_exp.core.best_effort import BestEffort, quiet
+from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC
+from vmn_exp.core.values import sanitize_entry
+from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.writer import (
     append_entries_to_log,
     compute_artifact_info,
     create_log_entry,

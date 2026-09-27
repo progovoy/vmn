@@ -22,9 +22,9 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from version_stamp.core.experiment_index_record import refresh_record, update_record
+from vmn_exp.core.index_record import refresh_record, update_record
 from version_stamp.api import ensure_logger
-from version_stamp.core.record_files import RecordFiles
+from vmn_exp.core.record_files import RecordFiles
 
 MIN_RECORDS = 1000  # below this, starting processes costs more than it saves
 RECORDS_PER_WORKER = 500
@@ -80,7 +80,7 @@ def _worker_command():
         sys.executable,
         "-c",
         f"import sys; sys.path.insert(0, {_PACKAGE_ROOT!r}); "
-        "from version_stamp.core.experiment_index_workers import main; main()",
+        "from vmn_exp.core.index_workers import main; main()",
     ]
 
 

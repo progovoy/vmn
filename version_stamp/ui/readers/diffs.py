@@ -9,8 +9,8 @@ again), lets at most two diffs run at once, and the text is capped.
 import threading
 from types import SimpleNamespace
 
-from version_stamp.cli.snapshot import _resolve_verstr, render_tree_diff
-from version_stamp.core.experiment_log import latest_metrics, load_log
+from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
+from vmn_exp.core.log import latest_metrics, load_log
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.experiments import experiment_storage
 from version_stamp.ui.readers.snapshots import _load_metadata

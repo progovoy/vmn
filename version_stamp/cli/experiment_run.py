@@ -21,8 +21,8 @@ from version_stamp.cli.experiment_supervisor import (
     signal_name,
     supervision_guard,
 )
-from version_stamp.core.experiment_status import DEFAULT_HEARTBEAT_INTERVAL_SEC
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC
+from vmn_exp.core.writer import (
     append_to_log,
     create_log_entry,
     get_writer_id,

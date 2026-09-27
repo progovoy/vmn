@@ -11,7 +11,7 @@ import logging
 import pickle
 import re
 
-from version_stamp.core.experiment_values import _unwrap_scalar
+from vmn_exp.core.values import _unwrap_scalar
 
 # One logger for every autolog module, so a caller silencing (or capturing)
 # ``version_stamp.exp.autolog`` sees all of it.

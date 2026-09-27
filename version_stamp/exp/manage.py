@@ -13,8 +13,8 @@
 when *ref* resolves to no run. Archived runs are hidden by
 :func:`version_stamp.exp.reader.list_runs` unless ``include_archived=True``.
 """
-from version_stamp.core.experiment_manage import set_archived, tag_run
-from version_stamp.core.experiment_refs import resolve_experiment
+from vmn_exp.core.manage import set_archived, tag_run
+from vmn_exp.core.refs import resolve_experiment
 from version_stamp.exp.reader import _resolve
 
 

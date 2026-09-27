@@ -7,8 +7,8 @@ from pathlib import Path
 
 import yaml
 
-from version_stamp.cli.snapshot_storage import SnapshotStorage
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.files import (
     INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
@@ -29,9 +29,9 @@ from version_stamp.cli.snapshot_storage_files import (
     unsafe_verstr,
     write_patches_to_dir,
 )
-from version_stamp.cli.snapshot_storage_listing import RecordListings, files_in
+from vmn_exp.storage.listing import RecordListings, files_in
 from version_stamp.api import VMN_LOGGER, core_utils, parse_record_metadata
-from version_stamp.core.record_files import read_file, read_file_from
+from vmn_exp.core.record_files import read_file, read_file_from
 
 
 def _has_patch_content(patches):

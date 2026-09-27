@@ -43,7 +43,7 @@ def resolve_experiment_storage(
         ``False`` to suppress auto-detect entirely (useful in tests or when
         the caller is certain there is no git checkout).
     """
-    from version_stamp.cli.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import get_snapshot_storage
 
     # --- Step 1: determine the local root ---
     root = dir or os.environ.get("VMN_EXPERIMENT_DIR")
@@ -53,7 +53,7 @@ def resolve_experiment_storage(
 
     # --- Step 2: resolve bucket / prefix / endpoint from env fallbacks ---
     # merge_env_into_params fills unset keys from VMN_EXPERIMENT_{BUCKET,PREFIX,ENDPOINT_URL}
-    from version_stamp.core.experiment_writer import merge_env_into_params
+    from vmn_exp.core.writer import merge_env_into_params
 
     params = {
         "bucket": bucket,

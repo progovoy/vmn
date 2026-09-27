@@ -12,7 +12,7 @@ Archived rows are left out of all three unless the request passes
 """
 from fastapi import HTTPException, Request
 
-from version_stamp.core.experiment_query import QueryError
+from vmn_exp.core.query import QueryError
 from version_stamp.ui.http_params import clamp_page, key_list
 from version_stamp.ui.readers.experiments import ORDERS
 from version_stamp.ui.responses import json_response, not_modified

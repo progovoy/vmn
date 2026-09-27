@@ -13,17 +13,17 @@ from collections import ChainMap
 
 import yaml
 
-from version_stamp.cli.snapshot import _resolve_verstr
-from version_stamp.core.experiment_fold import fold_inputs_dict
-from version_stamp.core.experiment_log import last_metric_at, list_artifacts
-from version_stamp.core.experiment_log import load_log as _load_log
-from version_stamp.core.experiment_refs import placement_snapshot
-from version_stamp.core.experiment_status import (
+from vmn_exp.snapshot import _resolve_verstr
+from vmn_exp.core.fold import fold_inputs_dict
+from vmn_exp.core.log import last_metric_at, list_artifacts
+from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.refs import placement_snapshot
+from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
     status_fields,
 )
-from version_stamp.core.experiment_tree import children_by_parent, fleet_summary, run_status
+from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from version_stamp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric

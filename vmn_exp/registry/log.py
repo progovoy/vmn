@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from version_stamp.core.experiment_writer import flush_log, get_writer_id
+from vmn_exp.core.writer import flush_log, get_writer_id
 from vmn_exp.registry.fold import fold_registry, now_iso as _reg_ts, next_ts
 from vmn_exp.registry.names import REGISTRY_APP
 

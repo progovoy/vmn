@@ -18,13 +18,13 @@ under its current key: the rule reads used to follow).
 
 import time
 
-from version_stamp.cli.snapshot_storage_files import (
+from vmn_exp.storage.files import (
     METADATA_FILE,
     checked_app_path,
     safe_verstr,
     unsafe_verstr,
 )
-from version_stamp.cli.snapshot_storage_s3_base import app_keys, parallel_map
+from vmn_exp.storage.s3_base import app_keys, parallel_map
 from version_stamp.api import VMN_LOGGER, core_utils
 
 _PROBE_TTL_SEC = 300

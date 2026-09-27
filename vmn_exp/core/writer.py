@@ -18,8 +18,8 @@ import socket
 
 import yaml
 
-from version_stamp.core.experiment_status import RUN_STATE_FILE
-from version_stamp.core.experiment_values import sanitize_entry
+from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.values import sanitize_entry
 from version_stamp.api import get_repo_lock, now_iso, sha256_file  # noqa: F401
 
 # Storage conf keys that an app's conf.yml may supply, and the CLI defaults that
@@ -128,7 +128,7 @@ def append_to_log(storage, app_name, verstr, entry):
 
     Metric values are coerced to floats first (numpy/torch scalars, numeric
     strings); non-numeric ones are dropped, and an entry left with nothing to
-    record is skipped. See :mod:`version_stamp.core.experiment_values`.
+    record is skipped. See :mod:`vmn_exp.core.values`.
     """
     entry = sanitize_entry(entry)
     if entry is not None:
@@ -333,7 +333,7 @@ def create_run(
     effective_template = template
     if env is not None:
         try:
-            from version_stamp.core.experiment_env import env_summary
+            from vmn_exp.core.env import env_summary
 
             effective_template = dict(template, env=env_summary(env))
         except Exception:

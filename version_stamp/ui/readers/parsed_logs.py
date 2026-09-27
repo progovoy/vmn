@@ -16,16 +16,16 @@ The cache is bounded by the log bytes it holds, not by a count of records.
 import threading
 from collections import OrderedDict
 
-from version_stamp.cli.snapshot import LocalSnapshotStorage
-from version_stamp.cli.snapshot_storage_files import flatten_logs
-from version_stamp.core.experiment_fold import (
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.files import flatten_logs
+from vmn_exp.core.fold import (
     fold_last_metric_at,
     fold_log,
     fold_values,
 )
-from version_stamp.core.experiment_log import load_log, metric_series
-from version_stamp.core.experiment_logfiles import LEGACY_LOG_FILE, group_log_names
-from version_stamp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
+from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
+from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from version_stamp.ui.readers.series import SeriesThinner
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024

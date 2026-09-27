@@ -152,7 +152,7 @@ def test_gitpython_not_exact_pinned():
 
 def test_s3_import_error_suggests_vmn_s3():
     """The boto3 ImportError must direct users to `pip install 'vmn[s3]'`."""
-    s3_base = ROOT / "version_stamp" / "cli" / "snapshot_storage_s3_base.py"
+    s3_base = ROOT / "vmn_exp" / "storage" / "s3_base.py"
     text = s3_base.read_text()
     assert "vmn[s3]" in text, (
         "snapshot_storage_s3_base.py's ImportError should say "

@@ -26,8 +26,8 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
-from version_stamp.core.experiment_inputs import create_input_entry
-from version_stamp.core.experiment_writer import (
+from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.writer import (
     claim_record,
     create_tags_entry,
     flush_log,

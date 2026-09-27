@@ -11,10 +11,10 @@ Positionals after the app name are run refs (a verstr, a unique prefix, ``@N``
 or ``latest``) and, for ``tag``, ``key=value`` pairs — a verstr never contains
 ``=``, so the two cannot be confused. ``-v``/``--latest`` name a run too.
 Neither ever touches a run's results (metrics, log history, artifacts):
-see :mod:`version_stamp.core.experiment_manage`.
+see :mod:`vmn_exp.core.manage`.
 """
-from version_stamp.core.experiment_manage import set_archived, tag_run
-from version_stamp.core.experiment_refs import resolve_experiment
+from vmn_exp.core.manage import set_archived, tag_run
+from vmn_exp.core.refs import resolve_experiment
 from version_stamp.api import VMN_LOGGER
 
 MANAGE_ACTIONS = ("tag", "archive", "unarchive")

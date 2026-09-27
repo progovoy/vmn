@@ -4,7 +4,7 @@ Used by ``vmn exp show``, ``vmn exp diff``, and ``vmn exp compare``.
 """
 import yaml
 
-from version_stamp.core.experiment_provenance import env_diff, inputs_diff, no_code_reason
+from vmn_exp.core.provenance import env_diff, inputs_diff, no_code_reason
 
 
 # ---------------------------------------------------------------------------

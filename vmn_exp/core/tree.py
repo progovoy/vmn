@@ -10,7 +10,7 @@ once its whole subtree is taken into account.
 Pure: rows in, new rows out, no storage. :func:`subtree_status` reads run
 states only through the reader its caller passes in.
 """
-from version_stamp.core.experiment_status import (
+from vmn_exp.core.status import (
     CREATED,
     FAILED,
     RUNNING,

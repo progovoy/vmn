@@ -5,7 +5,7 @@ and writes them into vmn experiment storage.
 
 Boundary: this module is EXPERIMENTS side.  May import from:
   - stdlib
-  - version_stamp.cli.snapshot (experiments side)
+  - vmn_exp.snapshot (experiments side)
   - vmn_exp.importers.*
   - version_stamp.api (facade for any stamping helpers — none needed here)
 """
@@ -24,7 +24,7 @@ _LOG = logging.getLogger(__name__)
 
 def _get_storage(args):
     """Resolve experiment storage from args / environment variables."""
-    from version_stamp.core.experiment_storage_resolve import resolve_experiment_storage
+    from vmn_exp.core.storage_resolve import resolve_experiment_storage
 
     return resolve_experiment_storage(
         dir=getattr(args, "experiment_dir", None),

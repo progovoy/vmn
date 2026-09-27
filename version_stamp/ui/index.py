@@ -16,7 +16,7 @@ import os
 import sqlite3
 import threading
 
-import version_stamp.core.experiment_index as experiment_index
+import vmn_exp.core.index as experiment_index
 from version_stamp.ui.readers import experiments as exp_reader
 from version_stamp.ui.readers import versions as ver_reader
 from version_stamp.ui.refresher import InlineRefresher

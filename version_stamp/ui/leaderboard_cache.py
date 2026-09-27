@@ -22,10 +22,10 @@ import json
 import os
 import threading
 
-import version_stamp.core.experiment_status as experiment_status
-from version_stamp.core.experiment_log import primary_metric
-from version_stamp.core.experiment_status import status_fields
-from version_stamp.core.experiment_tree import annotate_rows
+import vmn_exp.core.status as experiment_status
+from vmn_exp.core.log import primary_metric
+from vmn_exp.core.status import status_fields
+from vmn_exp.core.tree import annotate_rows
 from version_stamp.ui.http_params import MAX_PAGE
 from version_stamp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from version_stamp.ui.leaderboard_live import LivePatch, MergedRows, order_key

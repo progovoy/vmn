@@ -13,7 +13,7 @@ import os
 from types import SimpleNamespace
 
 from version_stamp.api import INIT_FILENAME, VMN_BE_TYPE_GIT, resolve_root_path
-from version_stamp.core.experiment_writer import get_repo_lock
+from vmn_exp.core.writer import get_repo_lock
 
 # The repo state `vmn exp create` demands, and what it tolerates — the SDK
 # cold-starts on exactly the same terms.

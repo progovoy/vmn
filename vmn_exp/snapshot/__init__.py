@@ -12,21 +12,21 @@ import yaml
 
 # The storage backends live in their own modules; these names stay importable
 # from here for existing callers.
-from version_stamp.cli.snapshot_storage import SnapshotStorage  # noqa: F401
-from version_stamp.cli.snapshot_storage_cached import (  # noqa: F401
+from vmn_exp.storage.base import SnapshotStorage  # noqa: F401
+from vmn_exp.storage.cached import (  # noqa: F401
     CachedSnapshotStorage,
     get_snapshot_storage,
 )
-from version_stamp.cli.snapshot_storage_files import (  # noqa: F401
+from vmn_exp.storage.files import (  # noqa: F401
     read_patches_from_dir as _read_patches_from_dir,
 )
-from version_stamp.cli.snapshot_storage_files import (  # noqa: F401
+from vmn_exp.storage.files import (  # noqa: F401
     write_patches_to_dir as _write_patches_to_dir,
 )
-from version_stamp.cli.snapshot_storage_local import (  # noqa: F401
+from vmn_exp.storage.local import (  # noqa: F401
     LocalSnapshotStorage,
 )
-from version_stamp.cli.snapshot_storage_s3 import S3SnapshotStorage  # noqa: F401
+from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
     VMN_LOGGER,
     measure_runtime_decorator,

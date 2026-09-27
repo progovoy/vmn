@@ -17,7 +17,7 @@ import os
 import threading
 from dataclasses import dataclass
 
-from version_stamp.cli.snapshot import (
+from vmn_exp.snapshot import (
     _compute_diff_hash,
     _untracked_caps,
     gather_create_data,

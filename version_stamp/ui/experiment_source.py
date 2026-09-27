@@ -12,7 +12,7 @@ either way.
 import os
 import threading
 
-from version_stamp.core.experiment_status import run_state_observed_at
+from vmn_exp.core.status import run_state_observed_at
 from version_stamp.ui import index as ui_index
 from version_stamp.ui.memo import LRU
 from version_stamp.ui.readers import experiments as exp_reader

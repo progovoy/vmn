@@ -5,7 +5,7 @@ A chart of every filtered run needs a few values per run, not whole rows, so
 ``.../experiments-columns`` answers ``{verstrs, idx, columns, total}`` with
 each column aligned to ``verstrs``.
 """
-from version_stamp.core.experiment_log import _sortable
+from vmn_exp.core.log import _sortable
 
 COLUMNS_LIMIT = 20000
 MAX_COLUMNS_LIMIT = 50000

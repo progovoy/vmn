@@ -5,9 +5,9 @@
 so the query language sees the same fields as ``vmn exp list --query``.
 :func:`print_preview` renders the dry-run summary, capped at 20 entries.
 """
-from version_stamp.core.experiment_index import indexed_status_rows
-from version_stamp.core.experiment_query import compile_query
-from version_stamp.core.experiment_tree import annotate_rows
+from vmn_exp.core.index import indexed_status_rows
+from vmn_exp.core.query import compile_query
+from vmn_exp.core.tree import annotate_rows
 
 _PREVIEW_CAP = 20
 

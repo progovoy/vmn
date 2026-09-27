@@ -9,8 +9,8 @@ Non-finite metrics are written as ``null`` so the output is strict JSON.
 import json
 import math
 
-from version_stamp.core.experiment_log import experiment_row
-from version_stamp.core.experiment_status import status_fields
+from vmn_exp.core.log import experiment_row
+from vmn_exp.core.status import status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
 

@@ -176,3 +176,32 @@ def test_moved_tables_are_initially_empty():
     for area in ("storage", "core", "snapshot", "cli", "ui", "sdk"):
         mod = importlib.import_module(f"version_stamp._moved.{area}")
         assert isinstance(mod.TABLE, dict), f"version_stamp._moved.{area}.TABLE is not a dict"
+
+
+def test_real_moved_storage_core_snapshot_aliases():
+    """After h1/h2/h3 moves, old module names are the same object as new names."""
+    pairs = [
+        ("version_stamp.cli.snapshot", "vmn_exp.snapshot"),
+        ("version_stamp.core.experiment_writer", "vmn_exp.core.writer"),
+        ("version_stamp.cli.snapshot_storage_s3", "vmn_exp.storage.s3"),
+    ]
+    for old_name, new_name in pairs:
+        old = importlib.import_module(old_name)
+        new = importlib.import_module(new_name)
+        assert old is new, f"{old_name!r} is not the same object as {new_name!r}"
+        assert sys.modules[old_name] is sys.modules[new_name], (
+            f"sys.modules[{old_name!r}] is not sys.modules[{new_name!r}]"
+        )
+
+
+def test_worker_command_imports_new_path():
+    """The index worker subprocess command uses vmn_exp.core.index_workers, not the old path."""
+    workers = importlib.import_module("vmn_exp.core.index_workers")
+    cmd = workers._worker_command()
+    cmd_str = " ".join(cmd)
+    assert "vmn_exp.core.index_workers" in cmd_str, (
+        f"worker command does not reference vmn_exp.core.index_workers: {cmd}"
+    )
+    assert "version_stamp.core.experiment_index_workers" not in cmd_str, (
+        f"worker command still references old path version_stamp.core.experiment_index_workers: {cmd}"
+    )
