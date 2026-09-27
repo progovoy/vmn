@@ -468,6 +468,17 @@ def _register_all() -> None:
             access="local",
         ))
 
+    if find("model") is None:
+        from vmn_exp.registry.cli import add_model_parser, model_run_without_repo
+        register(CommandSpec(
+            names=("model",),
+            add_parser=add_model_parser,
+            handle=lambda ctx: model_run_without_repo(ctx.args),
+            access="local",
+            read_only_actions=frozenset({"list", "show", "resolve"}),
+            run_without_repo=model_run_without_repo,
+        ))
+
     register_dev_version_loader(_dev_version_loader)
 
 
