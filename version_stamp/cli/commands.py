@@ -773,18 +773,6 @@ def handle_goto(vmn_ctx):
     )
 
 
-@measure_runtime_decorator
-def handle_snapshot(vmn_ctx):
-    """Delegate to the snapshot plugin spec (registered by _builtin_exp_plugin)."""
-    from version_stamp.cli.plugin_api import find as _find_spec
-
-    spec = _find_spec("snapshot")
-    if spec is None:
-        VMN_LOGGER.error("snapshot plugin not loaded")
-        return 1
-    return spec.handle(vmn_ctx)
-
-
 def _on_configured_branch(path, branch_name, configured_branch):
     """A dep is on its configured branch, or on a local branch that tracks it
     and has no commits of its own (so the recorded hash is reachable).
