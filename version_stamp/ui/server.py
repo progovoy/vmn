@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from version_stamp.cli.snapshot import get_snapshot_storage
 from version_stamp.cli.snapshot_storage_files import valid_artifact_path
-from version_stamp.ui import routes_leaderboard, routes_series, routes_tree
+from version_stamp.ui import routes_leaderboard, routes_models, routes_series, routes_tree
 from version_stamp.ui.experiment_source import ExperimentSource
 from version_stamp.ui.http_params import attachment, clamp_page, key_list
 from version_stamp.ui.leaderboard_cache import LeaderboardCache
@@ -164,7 +164,7 @@ def create_app(
     def meta():
         from version_stamp import version as version_mod
 
-        return {"version": version_mod.version}
+        return {"version": version_mod.version, "read_only": read_only}
 
     @app.get(f"{API_PREFIX}/workspaces")
     def list_workspaces():
@@ -432,6 +432,10 @@ def create_app(
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
+    routes_models.register(
+        app, API_PREFIX,
+        lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),
+    )
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
