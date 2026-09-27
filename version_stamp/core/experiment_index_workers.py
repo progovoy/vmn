@@ -23,7 +23,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from version_stamp.core.experiment_index_record import refresh_record, update_record
-from version_stamp.core.logging import ensure_logger
+from version_stamp.api import ensure_logger
 from version_stamp.core.record_files import RecordFiles
 
 MIN_RECORDS = 1000  # below this, starting processes costs more than it saves

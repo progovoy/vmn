@@ -30,7 +30,7 @@ from version_stamp.core.experiment_status import (
     parse_iso,
     run_state_observed_at,
 )
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 # Remote reads/deletes in flight at once; a delete fans out further inside S3.
 _REMOTE_WORKERS = 4

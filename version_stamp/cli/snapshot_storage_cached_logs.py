@@ -20,7 +20,7 @@ from version_stamp.cli.snapshot_storage_files import (
     log_writer_and_seq,
 )
 from version_stamp.core.experiment_status import load_run_state
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 LOCAL, REMOTE = "local", "remote"
 

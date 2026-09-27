@@ -48,6 +48,8 @@ _LAZY_REGISTRY: dict[str, str] = {
     "deserialize_tag_name":        "version_stamp.core.version_math:deserialize_tag_name",
     "get_base_vmn_version":        "version_stamp.core.version_math:get_base_vmn_version",
     "tag_name_to_app_name":        "version_stamp.core.version_math:tag_name_to_app_name",
+    # --- version_stamp.core (module accessor for call-time patching) -------
+    "core_utils":                  "version_stamp.core:utils",
     # --- version_stamp.core.changelog --------------------------------------
     "group_commits":               "version_stamp.core.changelog:group_commits",
     # --- version (version_stamp.version module re-exported as a module) ----

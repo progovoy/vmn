@@ -16,7 +16,7 @@ import time
 
 from version_stamp.core.background import Coalescing
 from version_stamp.core.best_effort import BestEffort
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 # Signals a scheduler, a terminal or an operator uses to stop a job.
 FORWARDED_SIGNALS = ("SIGTERM", "SIGINT", "SIGHUP")
