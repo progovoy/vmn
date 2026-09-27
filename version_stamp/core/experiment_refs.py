@@ -14,9 +14,9 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
 """
 
-from version_stamp.core import experiment_index
+import version_stamp.core.experiment_index as experiment_index
+from version_stamp.api import VMN_LOGGER
 from version_stamp.core.experiment_index_snapshot import IndexSnapshot
-from version_stamp.core.logging import VMN_LOGGER
 
 KIND = "experiment"
 _LATEST_WORDS = ("latest", "@latest")

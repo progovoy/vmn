@@ -9,7 +9,7 @@ from version_stamp.cli.snapshot_storage_files import (
     checked_app_path,
     safe_verstr,
 )
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs,
 # few enough to fit boto3's default connection pool (10 per client).

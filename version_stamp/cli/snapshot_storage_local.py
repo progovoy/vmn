@@ -30,10 +30,8 @@ from version_stamp.cli.snapshot_storage_files import (
     write_patches_to_dir,
 )
 from version_stamp.cli.snapshot_storage_listing import RecordListings, files_in
-from version_stamp.core import utils as core_utils
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER, core_utils, parse_record_metadata
 from version_stamp.core.record_files import read_file, read_file_from
-from version_stamp.core.utils import parse_record_metadata
 
 
 def _has_patch_content(patches):

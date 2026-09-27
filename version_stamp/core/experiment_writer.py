@@ -20,8 +20,7 @@ import yaml
 
 from version_stamp.core.experiment_status import RUN_STATE_FILE
 from version_stamp.core.experiment_values import sanitize_entry
-from version_stamp.core.repo_lock import get_repo_lock  # noqa: F401
-from version_stamp.core.utils import now_iso, sha256_file
+from version_stamp.api import get_repo_lock, now_iso, sha256_file  # noqa: F401
 
 # Storage conf keys that an app's conf.yml may supply, and the CLI defaults that
 # count as "unset" for merging purposes.

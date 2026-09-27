@@ -9,7 +9,7 @@ from version_stamp.core.experiment_fold import new_fold
 from version_stamp.core.experiment_index_logs import log_signatures, update_logs
 from version_stamp.core.experiment_index_sweep import METADATA_FILE
 from version_stamp.core.experiment_status import RUN_STATE_FILE, load_run_state
-from version_stamp.core.utils import parse_record_metadata
+from version_stamp.api import parse_record_metadata
 
 
 def new_record():

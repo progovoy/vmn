@@ -14,7 +14,7 @@ from version_stamp.core.experiment_logfiles import (  # noqa: F401  (re-exported
     log_writer_and_seq,
     parse_jsonl,
 )
-from version_stamp.core.utils import valid_app_path, valid_path_component
+from version_stamp.api import valid_app_path, valid_path_component
 
 METADATA_FILE = "metadata.yml"
 # The derived experiment-index cache, beside the records it summarizes.

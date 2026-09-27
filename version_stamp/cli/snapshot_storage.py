@@ -23,7 +23,7 @@ from version_stamp.cli.snapshot_storage_files import (
     list_artifact_tree,
     valid_artifact_path,
 )
-from version_stamp.core.utils import parse_record_metadata
+from version_stamp.api import parse_record_metadata
 
 
 class SnapshotStorage(ABC):

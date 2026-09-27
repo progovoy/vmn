@@ -21,9 +21,8 @@ from version_stamp.cli.snapshot_storage_files import (
     parse_jsonl,
 )
 from version_stamp.cli.snapshot_storage_s3_base import is_taken, parallel_map
-from version_stamp.core import utils as core_utils
+from version_stamp.api import VMN_LOGGER, core_utils
 from version_stamp.core.experiment_logfiles import compacted_log_name
-from version_stamp.core.logging import VMN_LOGGER
 
 _APPEND_ATTEMPTS = 20
 

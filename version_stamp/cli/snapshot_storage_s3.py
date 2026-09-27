@@ -31,8 +31,7 @@ from version_stamp.cli.snapshot_storage_s3_base import (  # noqa: F401  (re-expo
 from version_stamp.cli.snapshot_storage_s3_listing import S3Listing
 from version_stamp.cli.snapshot_storage_s3_logs import S3Logs
 from version_stamp.cli.snapshot_storage_s3_records import S3Records
-from version_stamp.core import utils as core_utils
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER, core_utils
 
 _ARTIFACT_CHUNK = 1 << 20
 

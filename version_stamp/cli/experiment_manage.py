@@ -15,7 +15,7 @@ see :mod:`version_stamp.core.experiment_manage`.
 """
 from version_stamp.core.experiment_manage import set_archived, tag_run
 from version_stamp.core.experiment_refs import resolve_experiment
-from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.api import VMN_LOGGER
 
 MANAGE_ACTIONS = ("tag", "archive", "unarchive")
 

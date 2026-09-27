@@ -23,8 +23,7 @@ import uuid
 from version_stamp.cli.snapshot_storage_cached import CachedSnapshotStorage
 from version_stamp.cli.snapshot_storage_files import METADATA_FILE
 from version_stamp.cli.snapshot_storage_local import LocalSnapshotStorage
-from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import parse_record_metadata
+from version_stamp.api import VMN_LOGGER, parse_record_metadata
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 

@@ -23,7 +23,7 @@ from version_stamp.core.experiment_logfiles import (
     log_writer_and_seq,
 )
 from version_stamp.core.jsonl_tail import read_complete_lines
-from version_stamp.core.utils import yaml_safe_load
+from version_stamp.api import yaml_safe_load
 
 
 def log_signatures(names):
