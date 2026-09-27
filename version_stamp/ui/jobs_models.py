@@ -1,10 +1,11 @@
 """Validation helpers for model registry mutations.
-from __future__ import annotations
 
 Analogous to :mod:`version_stamp.ui.jobs_exp_meta`.  Mutations are executed
 in-process (the registry is git-free and needs no repo lock) rather than as
 CLI subprocesses.
 """
+from __future__ import annotations
+
 from vmn_exp.registry.names import valid_alias_name, valid_model_name
 
 MAX_DESCRIPTION_LEN = 512

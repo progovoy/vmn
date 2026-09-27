@@ -22,12 +22,13 @@ def _client(tmp_path, read_only=False):
 
     # attach_path requires .git or .vmn
     vmn_dir = tmp_path / ".vmn"
-    vmn_dir.mkdir()
+    vmn_dir.mkdir(exist_ok=True)
 
     data_dir = tmp_path / "ui_data"
-    data_dir.mkdir()
+    data_dir.mkdir(exist_ok=True)
     manager = WorkspaceManager(str(data_dir))
-    manager.attach_path("main", str(tmp_path))
+    if manager.get("main") is None:
+        manager.attach_path("main", str(tmp_path))
     return TestClient(create_app(manager, read_only=read_only))
 
 

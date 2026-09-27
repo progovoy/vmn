@@ -361,6 +361,25 @@ staged on the server's disk); with a token set the request needs the
 (never gzipped by the server) with an RFC 5987 `filename*` so any file name
 survives.
 
+### Model registry API
+
+Under `/api/v1/workspaces/{ws}/models/`:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `.../models` | List all registered models (`{"models": [ModelRow...]}`) |
+| `GET` | `.../models/{name}` | Full model detail: versions, aliases, audit log |
+| `POST` | `.../models/{name}/versions` | Register a new version; body `{"run": {"app", "verstr"}, "artifact_path"?, "alias"?, "description"?}`; returns `{"version": N}` (201) |
+| `POST` | `.../models/{name}/aliases` | Move alias; body `{"alias", "version", "expect"?}`; 409 on expect mismatch |
+| `DELETE` | `.../models/{name}/aliases/{alias}` | Remove an alias |
+| `POST` | `.../models/{name}/versions/{n}/status` | Set version status; body `{"status": "active"\|"deprecated"\|"deleted"}` |
+
+All mutations return 403 in `--read-only` mode.  The complete TypeScript
+contract (types and fetch helpers) is in `webui/src/apiModels.ts`.
+
+The `/api/v1/meta` response now includes `"read_only": bool` so the web UI
+can hide write controls when the server is started with `--read-only`.
+
 ### Caching and compression
 
 JSON responses are rendered with `orjson` (part of the `ui` extra) and gzipped
