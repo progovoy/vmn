@@ -277,6 +277,16 @@ def _claim(storage, app_name, verstr, metadata, patches):
     return True
 
 
+def claim_record(storage, app_name, verstr, metadata):
+    """Atomically claim a specific *verstr* by writing *metadata* under it.
+
+    Returns ``True`` when the record was newly created, ``False`` when *verstr*
+    was already taken.  Use this when the verstr is known in advance
+    (importers, registry) — normal experiment runs use :func:`create_run`.
+    """
+    return _claim(storage, app_name, verstr, metadata, {})
+
+
 def allocate_run_verstr(storage, app_name, code_verstr, make_record=None):
     """Return the verstr for a new experiment run.
 
