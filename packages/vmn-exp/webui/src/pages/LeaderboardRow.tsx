@@ -4,35 +4,45 @@ import type { ExperimentRow } from "../types";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { tagLabel } from "../util/tags";
-import type { ColMeta, ColumnCell } from "./leaderboardColumns";
+import {
+  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, fleetCounts, type ColMeta, type ColumnCell, type FleetCol,
+} from "./leaderboardColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
 const HOVER_INTENT_MS = 120;
+export const ROW_HEIGHT = 48;
 
 export interface RowLayout {
+  /** One style per entry of *ids*. */
   styles: CSSProperties[];
+  /** Column widths (px), per entry of *ids*. */
+  widths?: number[];
   total: number;
-  /** Metric and param columns in rendered order (pinned first, then unpinned).
-   *  Falls back to metricCols + paramCols when absent (legacy callers). */
+  /** Column ids in display order (see `defaultColumnIds`); the default
+   *  order of the visible columns when omitted. */
+  ids?: readonly string[];
+  /** Metric and param columns in rendered order, used when *ids* is absent.
+   *  Falls back to metricCols + paramCols. */
   cells?: readonly ColumnCell[];
+  /** Outer-run management columns (none when omitted). */
+  fleetCols?: readonly FleetCol[];
   /** Metric keys in cells order — kept for chart/toolbar consumers. */
   metricCols: string[];
   /** Param keys in cells order — kept for chart/toolbar consumers. */
   paramCols: string[];
-  /** Index of the first param column (for tags/note index arithmetic). */
-  paramBase: number;
-  /** Index of the tags column (null: no tags column). */
-  tagsIdx: number | null;
-  noteIdx: number;
+  /** Whether the tags column is shown (non-null: shown). */
+  tagsIdx?: number | null;
+  paramBase?: number;
+  noteIdx?: number;
   colMeta: Record<string, ColMeta>;
   /** Highlight column bests only when there is something to beat. */
   showBest: boolean;
   runBase: string;
 }
 
-function MetricCell({ v, col, style, showBest }: {
-  v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
+function MetricCell({ id, v, col, style, showBest }: {
+  id: string; v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
 }) {
   const isBest = showBest && typeof v === "number" && v === col.best;
   const isBar = col.isBar && typeof v === "number";
@@ -43,11 +53,37 @@ function MetricCell({ v, col, style, showBest }: {
     if (col.goal === "min") frac = 1 - frac;
   }
   return (
-    <td className={isBar ? "bar-cell" : ""} style={style}>
+    <td data-col-id={id} className={isBar ? "bar-cell" : ""} style={style}>
       {isBar && <span className="bar" style={{ width: `${8 + frac * 62}px` }} />}
       <span className={`metric${isBest ? " best" : ""}`}>{fmtVal(v)}</span>
     </td>
   );
+}
+
+const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const shortDate = (iso: string | null | undefined) => (iso ? SHORT_DATE.format(new Date(iso)) : "—");
+
+function FleetCell({ r, c, counts, style }: {
+  r: ExperimentRow; c: string; counts: ReturnType<typeof fleetCounts>; style: CSSProperties;
+}) {
+  const field = DATE_SORT_OF[`c:${c}`];
+  const date = field ? r[field] : undefined;
+  const text = date !== undefined ? shortDate(date) : counts ? String(counts[c as keyof typeof counts]) : "—";
+  return (
+    <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
+      {text}
+    </td>
+  );
+}
+
+/** The layout's column ids, in display order. */
+export function layoutIds(layout: RowLayout): readonly string[] {
+  if (layout.ids) return layout.ids;
+  const fleet = layout.fleetCols ?? [];
+  const tags = layout.tagsIdx != null;
+  return layout.cells
+    ? columnIds(fleet, layout.cells.map(cellId), tags)
+    : defaultColumnIds(fleet, layout.metricCols, layout.paramCols, tags);
 }
 
 function FoldToggle({ r, collapsed, onFold }: {
@@ -71,11 +107,14 @@ function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold }: {
   onFold: (r: ExperimentRow) => void;
 }) {
   return (
-    <td style={style} className="exp-cell">
+    <td style={style} className="exp-cell" data-col-id="experiment">
       <div className="nest" style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
         {collapsed !== null && <FoldToggle r={r} collapsed={collapsed} onFold={onFold} />}
         {(r.depth ?? 0) > 0 && <span className="nest-mark" title="inner run">⤷</span>}
-        <Link className={`run-link${r.name ? " run-name" : " mono"}`} to={href} onFocus={() => onPrefetch(r.verstr)}>
+        <Link
+          className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
+          onFocus={() => onPrefetch(r.verstr)}
+        >
           {r.name || r.verstr}
         </Link>
         {r.children && r.children.length > 0 && (
@@ -105,13 +144,11 @@ export function TagChips({ tags }: { tags: Record<string, string> | undefined })
 }
 
 function Row({
-  row: r, index, start, size, isSelected, isFlash, isActive, collapsed, layout,
+  row: r, index, isSelected, isFlash, isActive, collapsed, layout,
   onToggle, onPrefetch, onFold,
 }: {
   row: ExperimentRow;
   index: number;
-  start: number;
-  size: number;
   isSelected: boolean;
   isFlash: boolean;
   /** The table's one tab stop (roving tabindex). */
@@ -128,14 +165,10 @@ function Row({
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
   const onLeave = () => clearTimeout(hover.current);
-  const { styles, colMeta, tagsIdx, noteIdx } = layout;
-  // Derive the fallback once per render so the per-cell loop stays O(1) per cell.
-  const cells: readonly ColumnCell[] = layout.cells ?? [
-    ...layout.metricCols.map((k): ColumnCell => ({ kind: "metric", key: k })),
-    ...layout.paramCols.map((k): ColumnCell => ({ kind: "param", key: k })),
-  ];
+  const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr);
   const params = layout.paramCols.length ? rowParams(r) : {};
+  const counts = fleetCounts(r);
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
   const onClick = (e: MouseEvent) => {
@@ -143,12 +176,67 @@ function Row({
     navigate(href);
   };
 
+  const cell = (id: string, style: CSSProperties) => {
+    const name = id.slice(2);
+    switch (id) {
+      case "check":
+        return (
+          <td key={id} data-col-id={id} style={style} className="check-cell">
+            <input
+              type="checkbox" checked={isSelected} aria-label={`Select ${r.verstr}`}
+              onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
+            />
+          </td>
+        );
+      case "idx":
+        return <td key={id} data-col-id={id} className="idx-cell" style={style}>@{r.idx}</td>;
+      case "status":
+        return (
+          <td key={id} data-col-id={id} className="status-cell" style={style}>
+            {r.status && (
+              <StatusPill
+                status={r.status} exitCode={r.exit_code}
+                durationSec={r.duration_sec} staleSec={r.stale_sec}
+              />
+            )}
+          </td>
+        );
+      case "experiment":
+        return (
+          <ExperimentCell
+            key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
+          />
+        );
+      case "c:tags":
+        return <td key={id} data-col-id={id} className="tags-cell" style={style}><TagChips tags={r.tags} /></td>;
+      case "note":
+        return <td key={id} data-col-id={id} className="note-cell" style={style}>{r.note}</td>;
+      case "when":
+        return (
+          <td key={id} data-col-id={id} className="when-cell" style={style} title={r.timestamp ?? ""}>
+            {relTime(r.timestamp)}
+          </td>
+        );
+    }
+    if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} counts={counts} style={style} />;
+    if (id.startsWith("m:")) {
+      return (
+        <MetricCell key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest} />
+      );
+    }
+    return (
+      <td
+        key={id} data-col-id={id} className="mono param-cell" style={style}
+        title={params[name] != null ? String(params[name]) : undefined}
+      >
+        {params[name] != null ? fmtParam(params[name]) : "—"}
+      </td>
+    );
+  };
+
   return (
     <tr
-      style={{
-        position: "absolute", top: 0, left: 0, width: layout.total, height: size,
-        transform: `translateY(${start}px)`, display: "table", tableLayout: "fixed",
-      }}
+      style={{ height: ROW_HEIGHT }}
       className={`row${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index}
       data-href={href}
@@ -157,50 +245,7 @@ function Row({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <td style={styles[0]} className="check-cell">
-        <input
-          type="checkbox" checked={isSelected} aria-label={`Select ${r.verstr}`}
-          onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
-        />
-      </td>
-      <td className="idx-cell" style={styles[1]}>@{r.idx}</td>
-      <td className="status-cell" style={styles[2]}>
-        {r.status && (
-          <StatusPill
-            status={r.status} exitCode={r.exit_code}
-            durationSec={r.duration_sec} staleSec={r.stale_sec}
-          />
-        )}
-      </td>
-      <ExperimentCell
-        r={r} href={href} style={styles[3]} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
-      />
-      {cells.map((cell, i) => {
-        const style = styles[4 + i];
-        if (cell.kind === "metric") {
-          return (
-            <MetricCell
-              key={`m:${cell.key}`}
-              v={r.metrics[cell.key]} col={colMeta[cell.key]} style={style} showBest={layout.showBest}
-            />
-          );
-        }
-        return (
-          <td
-            key={`p:${cell.key}`} className="mono param-cell" style={style}
-            title={params[cell.key] != null ? String(params[cell.key]) : undefined}
-          >
-            {params[cell.key] != null ? fmtParam(params[cell.key]) : "—"}
-          </td>
-        );
-      })}
-      {tagsIdx !== null && (
-        <td className="tags-cell" style={styles[tagsIdx]}><TagChips tags={r.tags} /></td>
-      )}
-      <td className="note-cell" style={styles[noteIdx]}>{r.note}</td>
-      <td className="when-cell" style={styles[noteIdx + 1]} title={r.timestamp ?? ""}>
-        {relTime(r.timestamp)}
-      </td>
+      {layoutIds(layout).map((id, i) => cell(id, styles[i]))}
     </tr>
   );
 }

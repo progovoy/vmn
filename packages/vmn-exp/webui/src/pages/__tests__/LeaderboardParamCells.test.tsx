@@ -17,7 +17,7 @@ function renderRow(params: Record<string, unknown>) {
     <MemoryRouter>
       <table><tbody>
         <Row
-          row={row(1, { params })} index={0} start={0} size={40} isSelected={false} isFlash={false}
+          row={row(1, { params })} index={0} isSelected={false} isFlash={false}
           isActive={false} collapsed={null} layout={layout} onToggle={noop} onPrefetch={noop} onFold={noop}
         />
       </tbody></table>

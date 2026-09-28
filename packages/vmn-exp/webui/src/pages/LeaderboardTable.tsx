@@ -1,19 +1,29 @@
-import { useLayoutEffect, useRef, type CSSProperties, type MutableRefObject } from "react";
+import {
+  useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent,
+  type MutableRefObject, type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
-import { STICKY_BG } from "./leaderboardColumns";
-import type { ColumnCell } from "./leaderboardColumns";
-import Row, { type RowLayout } from "./LeaderboardRow";
+import {
+  DATE_SORT_OF, EXPERIMENT_COL_INDEX, MIN_COL_WIDTH, STICKY_BG, isPinned,
+} from "./leaderboardColumns";
+import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 
-const ROW_HEIGHT = 48;
 /** Rows from the end at which the next page is requested. */
 const NEAR_END_ROWS = 20;
 const SKELETON_ROWS = 8;
 
 export const TIMESTAMP_SORT = "timestamp";
+export const IDX_SORT = "idx";
+
+/** What the header can change about the columns: widths and order. */
+export interface ColumnEdits {
+  onResize: (id: string, width: number) => void;
+  onMove: (from: string, to: string) => void;
+}
 
 export interface SortState {
   sort: string | null;
@@ -26,7 +36,7 @@ export interface SortState {
  *  body style already has `position: "sticky"` (experiment + pinned metric/
  *  param columns) sit at zIndex 3 so they aren't overlapped by other headers
  *  when both axes scroll simultaneously. */
-function headStyle(style: CSSProperties): CSSProperties {
+function headStyle(style: CSSProperties, index: number): CSSProperties {
   const base: CSSProperties = {
     ...style,
     position: "sticky",
@@ -34,58 +44,118 @@ function headStyle(style: CSSProperties): CSSProperties {
     zIndex: 2,
     background: STICKY_BG,
   };
+  if (index === EXPERIMENT_COL_INDEX) return { ...base, zIndex: 4 };
   return style.position === "sticky" ? { ...base, zIndex: 3 } : base;
 }
 
-function Head({ layout, sort: s }: { layout: RowLayout; sort: SortState }) {
-  const { styles, colMeta, tagsIdx, noteIdx } = layout;
-  const cells: readonly ColumnCell[] = layout.cells ?? [
-    ...layout.metricCols.map((k): ColumnCell => ({ kind: "metric", key: k })),
-    ...layout.paramCols.map((k): ColumnCell => ({ kind: "param", key: k })),
-  ];
-  const headStyles = styles.map(headStyle);
+/** A drag grip on a header's right edge: dragging it resizes the column.
+ *  The drag moves only the header's `<col>`; the width is kept (and the rows
+ *  re-laid out) once, on release. */
+function ResizeGrip({ width, onResize }: { width: number; onResize: (w: number) => void }) {
+  const onMouseDown = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.currentTarget as HTMLElement).closest("th")!;
+    const col = th.closest("table")?.querySelectorAll("colgroup col")[th.cellIndex] as HTMLElement | undefined;
+    const x0 = e.clientX;
+    const widthAt = (ev: MouseEvent) => Math.max(MIN_COL_WIDTH, Math.round(width + ev.clientX - x0));
+    const move = (ev: MouseEvent) => {
+      const w = `${widthAt(ev)}px`;
+      th.style.width = w;
+      if (col) col.style.width = w;
+    };
+    const up = (ev: MouseEvent) => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      onResize(widthAt(ev));
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+  return (
+    <span
+      className="col-resize" role="separator" aria-orientation="vertical" aria-label="resize column"
+      onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} draggable={false}
+      onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    />
+  );
+}
+
+/** Header label and sort key per column id (null: not sortable). */
+function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: string | null; title?: string } {
+  const name = id.slice(2);
+  if (id === "idx") return { label: "#", sort: IDX_SORT, title: "sort by run number (newest first)" };
+  if (id === "when") return { label: "when", sort: TIMESTAMP_SORT, title: "sort by time (newest first)" };
+  if (id in DATE_SORT_OF) return { label: name, sort: DATE_SORT_OF[id], title: `sort by ${name} time (newest first)` };
+  if (id.startsWith("m:")) {
+    const meta = layout.colMeta[name];
+    return {
+      label: (
+        <>
+          {name}{" "}
+          {meta && meta.best !== null && <span className="goal">{meta.goal === "min" ? "↓" : "↑"}</span>}
+        </>
+      ),
+      sort: name, title: `sort by ${name} (best first)`,
+    };
+  }
+  if (id === "check") return { label: "", sort: null };
+  if (id === "c:tags") return { label: "tags", sort: null };
+  return { label: id.includes(":") ? name : id, sort: null };
+}
+
+const HEAD_CLASS: Record<string, string> = {
+  check: "check-cell", idx: "num", experiment: "exp-head", when: "num when-head",
+};
+const headClass = (id: string) =>
+  HEAD_CLASS[id] ?? (id.startsWith("c:") && id !== "c:tags" ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
+
+function Head({ layout, sort: s, edits }: { layout: RowLayout; sort: SortState; edits?: ColumnEdits }) {
+  const headStyles = layout.styles.map(headStyle);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
       <tr>
-        <th style={headStyles[0]} className="check-cell"></th>
-        <th style={headStyles[1]}>#</th>
-        <th style={headStyles[2]}>status</th>
-        <th style={headStyles[3]} className="exp-head">experiment</th>
-        {cells.map((cell, i) => {
-          const style = headStyles[4 + i];
-          if (cell.kind === "metric") {
-            const m = cell.key;
-            return (
-              <th
-                key={`m:${m}`}
-                style={style}
-                className={`sortable${s.sort === m ? " sorted" : ""}`}
-                onClick={() => s.onSort(m)}
-                title={`sort by ${m} (best first)`}
-              >
-                {m}{" "}
-                {colMeta[m].best !== null && (
-                  <span className="goal">{colMeta[m].goal === "min" ? "↓" : "↑"}</span>
-                )}
-                {arrow(m)}
-              </th>
-            );
-          }
+        {layoutIds(layout).map((id, i) => {
+          const { label, sort, title } = headInfo(id, layout);
+          const movable = Boolean(edits) && !isPinned(id);
+          const cls = [
+            headClass(id), sort && "sortable", sort && s.sort === sort && "sorted",
+            dragging === id && "col-dragging", over === id && dragging !== id && "col-drop",
+          ].filter(Boolean).join(" ");
           return (
-            <th key={`p:${cell.key}`} className="param-head" style={style}>{cell.key}</th>
+            <th
+              key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined} title={title}
+              onClick={sort ? () => s.onSort(sort) : undefined}
+              draggable={movable}
+              onDragStart={movable ? (e) => {
+                setDragging(id);
+                e.dataTransfer?.setData("text/plain", id);
+                if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+              } : undefined}
+              onDragOver={(e) => {
+                if (!dragging || !movable) return;
+                e.preventDefault();
+                setOver(id);
+              }}
+              onDragLeave={() => setOver((o) => (o === id ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragging && movable) edits?.onMove(dragging, id);
+                setDragging(null);
+                setOver(null);
+              }}
+              onDragEnd={() => { setDragging(null); setOver(null); }}
+            >
+              {label}{sort && arrow(sort)}
+              {edits && (
+                <ResizeGrip width={layout.widths?.[i] ?? 0} onResize={(w) => edits.onResize(id, w)} />
+              )}
+            </th>
           );
         })}
-        {tagsIdx !== null && <th style={headStyles[tagsIdx]}>tags</th>}
-        <th style={headStyles[noteIdx]}>note</th>
-        <th
-          className={`num sortable when-head${s.sort === TIMESTAMP_SORT ? " sorted" : ""}`}
-          style={headStyles[noteIdx + 1]}
-          onClick={() => s.onSort(TIMESTAMP_SORT)}
-          title="sort by time (newest first)"
-        >
-          when{arrow(TIMESTAMP_SORT)}
-        </th>
       </tr>
     </thead>
   );
@@ -107,7 +177,7 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
 
 export default function LeaderboardTable({
   rows, layout, sort, selected, flash, onToggle, onPrefetch, hasMore, onNearEnd, visibleRef,
-  collapsedOf, onFold,
+  collapsedOf, onFold, edits, onFit,
 }: {
   /** Undefined while the first page loads: skeleton rows under a live header. */
   rows: ExperimentRow[] | undefined;
@@ -123,6 +193,10 @@ export default function LeaderboardTable({
   hasMore: boolean;
   onNearEnd: () => void;
   visibleRef: MutableRefObject<() => string[]>;
+  /** Column resizing/reordering; the header is fixed when omitted. */
+  edits?: ColumnEdits;
+  /** Told the width (px) the table has to fill, and again when it changes. */
+  onFit?: (width: number) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMemory();
@@ -147,6 +221,14 @@ export default function LeaderboardTable({
     if (scroll.initial) parentRef.current.scrollTop = scroll.initial;
   }, [rows, scroll.initial]);
 
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el || !onFit) return;
+    const ro = new ResizeObserver((entries) => onFit(Math.floor(entries[0].contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onFit]);
+
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
@@ -164,12 +246,19 @@ export default function LeaderboardTable({
         onKeyDown={keys.onKeyDown}
         style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
-        <table role="grid" aria-label="experiments" style={{ tableLayout: "fixed", width: layout.total }}>
-          <Head layout={layout} sort={sort} />
+        <table
+          role="grid" aria-label="experiments" className="lb-table"
+          style={{ tableLayout: "fixed", width: layout.total }}
+        >
+          <colgroup>{layout.styles.map((st, i) => <col key={i} style={{ width: st.width }} />)}</colgroup>
+          <Head layout={layout} sort={sort} edits={edits} />
           {rows === undefined ? (
             <tbody><SkeletonRows layout={layout} /></tbody>
           ) : (
-            <tbody style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+            <tbody>
+              {items.length > 0 && items[0].start > 0 && (
+                <tr aria-hidden style={{ height: items[0].start }} />
+              )}
               {items.map((it) => {
                 const r = list[it.index];
                 return (
@@ -180,8 +269,6 @@ export default function LeaderboardTable({
                     isActive={it.index === keys.active}
                     collapsed={collapsedOf(r)}
                     onFold={onFold}
-                    start={it.start}
-                    size={it.size}
                     isSelected={selected.has(r.verstr)}
                     isFlash={flash === r.verstr}
                     layout={layout}
@@ -190,6 +277,9 @@ export default function LeaderboardTable({
                   />
                 );
               })}
+              {items.length > 0 && virtualizer.getTotalSize() > items[items.length - 1].end && (
+                <tr aria-hidden style={{ height: virtualizer.getTotalSize() - items[items.length - 1].end }} />
+              )}
             </tbody>
           )}
         </table>

@@ -3,19 +3,45 @@ import type { ExperimentRow, MetricsSchema } from "../types";
 import { metricGoal, rowParams } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
 
-/** Fixed column widths (px). The virtualized rows are absolutely positioned,
- *  which takes each <tr> out of the table's layout — so header and rows only
- *  line up when every cell gets the same explicit width under
- *  `table-layout: fixed`. */
+/** Default column widths (px) under `table-layout: fixed`, so a long value
+ *  is clipped with an ellipsis instead of stretching its column. */
 const W = {
-  check: 34, idx: 56, status: 110, experiment: 300,
+  check: 34, idx: 56, status: 110, experiment: 300, fleet: 76, date: 150,
   metric: 110, param: 120, tags: 180, note: 200, when: 90,
 };
+/** Narrowest a column can be dragged to. */
+export const MIN_COL_WIDTH = 40;
+
+/** The outer-run management columns, right after the experiment column:
+ *  the inner-run tally and the run's own start/end. */
+export const FLEET_COLS = ["total", "waiting", "running", "done", "failed", "started", "ended"] as const;
+export type FleetCol = (typeof FLEET_COLS)[number];
+
+/** The server sort key behind each sortable date column. */
+export const DATE_SORT_OF: Readonly<Record<string, "started_at" | "finished_at">> = {
+  "c:started": "started_at", "c:ended": "finished_at",
+};
+
+/** Inner runs of *r* per management column (null: not an outer run). */
+export function fleetCounts(r: ExperimentRow): Record<Exclude<FleetCol, "started" | "ended">, number> | null {
+  if (!r.children?.length) return null;
+  const c = r.child_counts ?? {};
+  const n = (k: string) => c[k] ?? 0;
+  return {
+    total: r.fleet?.expected ?? r.children.length,
+    waiting: n("created"), running: n("running"), done: n("succeeded"), failed: n("failed") + n("stuck"),
+  };
+}
 const MIN_TABLE_WIDTH = 760;
+
+/** The columns that always lead the table, in this order, and never move. */
+export const PINNED_COLS = ["check", "idx", "status", "experiment"] as const;
+const PINNED = new Set<string>(PINNED_COLS);
+export const isPinned = (id: string) => PINNED.has(id);
 
 /** Index of the "experiment" column — the run identifier that stays pinned
  *  to the left edge while scrolling horizontally (see columnStyles). */
-export const EXPERIMENT_COL_INDEX = 3;
+export const EXPERIMENT_COL_INDEX = PINNED_COLS.indexOf("experiment");
 
 /** Solid theme background for every sticky header/pinned-column cell, so
  *  scrolled-under content never shows through. Shared with LeaderboardTable's
@@ -34,51 +60,96 @@ export interface ColumnCell {
   key: string;
 }
 
-/** Columns in order: check, #, status, experiment, cells…, [tags], note, when.
- *  Each cell contributes its own width (metric = 110, param = 120). */
+/** The column id of *cell* (`m:<metric>` / `p:<param>`). */
+export const cellId = (cell: ColumnCell) => `${cell.kind === "metric" ? "m" : "p"}:${cell.key}`;
+
+/** Column ids in order: check, #, status, experiment, fleet…, *cells*
+ *  (metric/param ids), [tags], note, when. Ids use the `hide=` prefixes
+ *  (`c:`, `m:`, `p:`), so `c:tags` is the tags column. */
+export function columnIds(fleet: readonly string[], cells: readonly string[], tags: boolean): string[] {
+  return [...PINNED_COLS, ...fleet.map((c) => `c:${c}`), ...cells, ...(tags ? ["c:tags"] : []), "note", "when"];
+}
+
+/** Column ids in their default order: metrics before params. */
+export function defaultColumnIds(
+  fleet: readonly string[], metrics: readonly string[], params: readonly string[], tags: boolean,
+): string[] {
+  return columnIds(fleet, [...metrics.map((c) => `m:${c}`), ...params.map((c) => `p:${c}`)], tags);
+}
+
+/** Default widths for check, #, status, experiment, *cells*…, [tags], note, when. */
 export function columnLayout(cells: readonly ColumnCell[], tags = false): ColumnLayout {
-  const cellsWidth = cells.reduce((s, c) => s + (c.kind === "metric" ? W.metric : W.param), 0);
-  const fixed = W.check + W.idx + W.status + W.note + W.when + cellsWidth + (tags ? W.tags : 0);
-  const experiment = Math.max(W.experiment, MIN_TABLE_WIDTH - fixed);
-  const widths = [
-    W.check, W.idx, W.status, experiment,
-    ...cells.map((c) => (c.kind === "metric" ? W.metric : W.param)),
-    ...(tags ? [W.tags] : []),
-    W.note, W.when,
-  ];
-  return { widths, total: fixed + experiment };
+  return idLayout(columnIds([], cells.map(cellId), tags));
+}
+
+export function defaultWidth(id: string): number {
+  if (id in DATE_SORT_OF) return W.date;
+  if (id === "c:tags") return W.tags;
+  const prefix = id.slice(0, 2);
+  if (prefix === "c:") return W.fleet;
+  if (prefix === "m:") return W.metric;
+  if (prefix === "p:") return W.param;
+  return W[id as keyof typeof W] ?? W.metric;
+}
+
+/** *ids* (default order) rearranged to follow *saved*: saved columns keep
+ *  their saved order, and a column the saved order doesn't know lands right
+ *  after the column it follows by default. Pinned columns never move. */
+export function orderColumns(ids: readonly string[], saved: readonly string[]): string[] {
+  const pinned = ids.filter(isPinned);
+  const rest = ids.filter((id) => !isPinned(id));
+  if (!saved.length) return [...pinned, ...rest];
+  const known = new Set(rest);
+  const out = saved.filter((id) => known.has(id));
+  const placed = new Set(out);
+  rest.forEach((id, i) => {
+    if (placed.has(id)) return;
+    const prev = i > 0 ? out.indexOf(rest[i - 1]) : -1;
+    out.splice(prev + 1, 0, id);
+  });
+  return [...pinned, ...out];
+}
+
+/** *order* with *from* moved in front of *to* (pinned columns stay put). */
+export function moveColumn(order: readonly string[], from: string, to: string): readonly string[] {
+  if (from === to || isPinned(from) || isPinned(to)) return order;
+  const out = order.filter((id) => id !== from);
+  out.splice(out.indexOf(to), 0, from);
+  return out;
+}
+
+/** Widths for *ids*: the user's where set, else the default — with an
+ *  untouched experiment column growing so the table fills *fill* px (at
+ *  least its minimum). */
+export function idLayout(
+  ids: readonly string[], custom: Readonly<Record<string, number>> = {}, fill = 0,
+): ColumnLayout {
+  const widths = ids.map((id) => custom[id] ?? defaultWidth(id));
+  const exp = ids.indexOf("experiment");
+  if (exp >= 0 && custom.experiment === undefined) {
+    const others = widths.reduce((a, b) => a + b, 0) - widths[exp];
+    widths[exp] = Math.max(widths[exp], Math.max(MIN_TABLE_WIDTH, fill) - others);
+  }
+  return { widths, total: widths.reduce((a, b) => a + b, 0) };
 }
 
 /** One shared style object per column: every cell of a column gets the same
  *  object, so a re-render allocates nothing per cell and React skips the
  *  style diff entirely.
  *
- *  The experiment column and the first `pinnedCount` metric/param cells pin
- *  themselves to the left edge with cumulative `left` offsets so they stay
- *  visible while scrolling sideways. */
+ *  The columns up to and including the experiment column pin themselves to
+ *  the left edge as one block, so the run identifier and its status stay
+ *  visible while scrolling sideways; the next `pinnedCount` columns (the
+ *  URL-pinned cells) stick right after them with cumulative offsets. */
 export function columnStyles(layout: ColumnLayout, pinnedCount = 0): CSSProperties[] {
-  const FIRST_CELL = EXPERIMENT_COL_INDEX + 1;
-  const stickyLeft = layout.widths
-    .slice(0, EXPERIMENT_COL_INDEX)
-    .reduce((sum, w) => sum + w, 0);
-
-  // Pre-compute the left offset for each pinned metric/param cell.
-  const pinnedLefts: number[] = [];
-  let acc = stickyLeft + layout.widths[EXPERIMENT_COL_INDEX];
-  for (let i = 0; i < pinnedCount; i++) {
-    pinnedLefts.push(acc);
-    acc += layout.widths[FIRST_CELL + i] ?? 0;
-  }
-
+  let left = 0;
   return layout.widths.map((w, i) => {
-    if (i === EXPERIMENT_COL_INDEX) {
-      return { width: `${w}px`, position: "sticky", left: stickyLeft, zIndex: 1, background: STICKY_BG };
-    }
-    const cellIdx = i - FIRST_CELL;
-    if (cellIdx >= 0 && cellIdx < pinnedCount) {
-      return { width: `${w}px`, position: "sticky", left: pinnedLefts[cellIdx], zIndex: 1, background: STICKY_BG };
-    }
-    return { width: `${w}px` };
+    if (i > EXPERIMENT_COL_INDEX + pinnedCount) return { width: `${w}px` };
+    const style: CSSProperties = {
+      width: `${w}px`, position: "sticky", left, zIndex: 1, background: STICKY_BG,
+    };
+    left += w;
+    return style;
   });
 }
 

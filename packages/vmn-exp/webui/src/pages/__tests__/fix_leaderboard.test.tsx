@@ -208,7 +208,7 @@ describe("Leaderboard create refetch", () => {
     fireEvent.click(screen.getByRole("button", { name: "running" }));
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", "timestamp", "running"
+        "test", "my-app", "idx", "running"
       )
     );
     fireEvent.click(screen.getByText("fake-create"));
@@ -239,7 +239,7 @@ describe("Leaderboard column alignment", () => {
     bodyRows.forEach((tr) => {
       const cells = [...tr.querySelectorAll("td")] as HTMLElement[];
       expect(cells.map((c) => c.style.width)).toEqual(widths);
-      expect(tr.style.tableLayout).toBe("fixed");
+      expect(tr.style.position).not.toBe("absolute");
     });
   });
 });

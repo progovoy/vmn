@@ -276,8 +276,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 `GET .../apps/{app}/experiments` takes `offset` and `limit` (capped at 1000
 rows per response) and answers `{"rows": [...], "total": N}` when `limit` is
 given — the dashboard always pages. Without `limit` it answers a plain list of
-at most 1000 rows from `offset`. `sort` is a metric name or `timestamp`
-(newest first); `order=asc|desc` overrides the direction the metric's schema
+at most 1000 rows from `offset`. `sort` is a metric name, `timestamp`, or
+the run's own `started_at`/`finished_at` (dates sort newest first); `order=asc|desc` overrides the direction the metric's schema
 goal implies. Runs without the metric stay last in either direction.
 
 ```sh

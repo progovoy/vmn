@@ -63,7 +63,7 @@ export default function App() {
   const { ws, app: appTag } = (deepest?.params ?? {}) as {
     ws?: string; app?: string;
   };
-  const pageLabel = (deepest?.handle as { page?: string } | undefined)?.page;
+  const { page: pageLabel, wide } = (deepest?.handle ?? {}) as { page?: string; wide?: boolean };
   const appName = appTag ? toAppName(appTag) : undefined;
   const appBase = ws && appTag ? `/ws/${ws}/app/${appTag}` : null;
   const workspaces = useWorkspaces().data ?? [];
@@ -198,7 +198,7 @@ export default function App() {
         </header>
 
         <div className="content">
-          <div className="content-inner">
+          <div className={`content-inner${wide ? " wide" : ""}`}>
             {/* Pages stay mounted across param changes (their caches paint
                 at once); only a render error is reset by navigating. */}
             <ErrorBoundary resetKey={location.pathname}>

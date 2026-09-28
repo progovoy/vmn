@@ -345,6 +345,10 @@ opinionated development rules — pick only what applies to your team:
 `--tdd`, `--testability`, `--boyscout`, `--worktrees`, `--communication`,
 `--minimal-diffs`, `--errors`.
 
+Agents that run sweeps and want the `vmn-exp ui` leaderboard's fleet columns
+(total / waiting / running / done / failed) to track them: see
+[docs/ai-fleet-tracking.md](docs/ai-fleet-tracking.md) for which call moves each column.
+
 The legacy `vmn skill` command remains as an alias for `vmn ai skill`.
 Re-running `--install` updates vmn's section and leaves the rest of your
 instructions untouched.
@@ -371,6 +375,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 ## Documentation
 
 - [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
+- [Driving the UI fleet columns (for AI agents)](https://github.com/progovoy/vmn/blob/master/docs/ai-fleet-tracking.md)
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
 - [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)
 - [Model registry](https://github.com/progovoy/vmn/blob/master/docs/models.md)

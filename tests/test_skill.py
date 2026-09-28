@@ -200,3 +200,12 @@ def test_install_skill_rejects_non_directory_root(tmp_path, caplog):
     assert ret == 1
     assert root.read_text() == "content"
     assert "not a directory" in caplog.text.lower()
+
+
+def test_skill_explains_how_to_drive_the_ui_fleet_columns(capfd):
+    assert vmn_run(["skill"])[0] == 0
+    out = capfd.readouterr().out
+    assert "total / waiting / running / done / failed" in out
+    assert "--parent" in out
+    assert "start_run(" in out and "run_id=" in out
+    assert "docs/ai-fleet-tracking.md" in out

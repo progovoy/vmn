@@ -87,6 +87,30 @@ describe("App shell", () => {
   });
 });
 
+describe("page width", () => {
+  const tree = (handle: object): RouteObject[] => [{
+    path: "/", element: <App />,
+    children: [{ path: "ws/:ws/app/:app/run/:verstr", element: <Probe />, handle }],
+  }];
+
+  it("lets a wide page span the whole content area", async () => {
+    renderShell(tree({ page: "run", wide: true }), "/ws/w/app/a/run/v1");
+    await screen.findByText("probe v1");
+    expect(document.querySelector(".content-inner")).toHaveClass("wide");
+  });
+
+  it("keeps other pages in a readable column", async () => {
+    renderShell(tree({ page: "run" }), "/ws/w/app/a/run/v1");
+    await screen.findByText("probe v1");
+    expect(document.querySelector(".content-inner")).not.toHaveClass("wide");
+  });
+
+  it("makes the experiments leaderboard a wide page", () => {
+    const board = routes[0].children?.find((r) => r.path === "ws/:ws/app/:app");
+    expect(board?.handle).toMatchObject({ wide: true });
+  });
+});
+
 describe("routes", () => {
   it("lazy-loads a page behind a small fallback", async () => {
     m.experimentsDiff.mockResolvedValue({ from_verstr: "a", to_verstr: "b", metrics_delta: {}, diff: "" });

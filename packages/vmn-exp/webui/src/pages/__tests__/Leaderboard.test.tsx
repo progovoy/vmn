@@ -81,7 +81,7 @@ describe("Leaderboard virtualization", () => {
     expect(scrollContainer.style.overflow).toBe("auto");
   });
 
-  it("sets up virtualized tbody with relative positioning and height", async () => {
+  it("keeps the virtualized rows in normal table flow", async () => {
     mockedApi.experiments.mockResolvedValue(makeRows(100));
     mockedApi.metricsSchema.mockResolvedValue({});
 
@@ -93,14 +93,11 @@ describe("Leaderboard virtualization", () => {
 
     const tbody = document.querySelector("tbody") as HTMLElement;
     expect(tbody).not.toBeNull();
-    // Virtualized tbody has a height from getTotalSize() = 100 * 48 = 4800
-    expect(tbody.style.position).toBe("relative");
-    expect(parseInt(tbody.style.height, 10)).toBe(4800);
-
-    // In jsdom the scroll container has 0 height so the virtualizer renders
-    // zero visible rows. We verify the structure is correct (tbody height +
-    // relative positioning) which proves the virtualizer is wired up.
-    // In a real browser the rows would appear as absolutely-positioned <tr>s.
+    // Rows flow as ordinary table rows; spacer rows stand in for the rest.
+    expect(tbody.style.position).not.toBe("absolute");
+    tbody.querySelectorAll("tr.row").forEach((tr) => {
+      expect((tr as HTMLElement).style.position).not.toBe("absolute");
+    });
   });
 
   it("renders zero rows when experiment list is empty", async () => {

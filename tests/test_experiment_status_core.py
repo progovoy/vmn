@@ -306,3 +306,47 @@ def test_run_status_weighs_the_store_write_time():
     fresh = datetime.datetime.now(datetime.timezone.utc)
     status = tr.run_status("a", {"a": None}, lambda v: stale, observed_at=lambda v: fresh)
     assert status["status"] == st.RUNNING and status["tree_status"] == st.RUNNING
+
+
+def test_outer_counts_its_direct_children_by_status():
+    rows = tr.annotate_tree(
+        [
+            _row("sweep", status=st.RUNNING),
+            _row("t1", parent="sweep", status=st.SUCCEEDED),
+            _row("t2", parent="sweep", status=st.FAILED),
+            _row("t3", parent="sweep", status=st.RUNNING),
+            _row("t4", parent="sweep", status=st.SUCCEEDED),
+        ]
+    )
+    by_v = {r["verstr"]: r for r in rows}
+    assert by_v["sweep"]["child_counts"] == {st.SUCCEEDED: 2, st.FAILED: 1, st.RUNNING: 1}
+    assert by_v["t1"]["child_counts"] == {}
+
+
+def test_run_status_counts_direct_children_by_status():
+    parent_of = {"t1": "s", "t2": "s"}
+    states = {"s": None, "t1": None, "t2": None}
+    status = tr.run_status("s", parent_of, states.get)
+    assert sum(status["child_counts"].values()) == 2
+
+
+def test_sort_by_idx_is_newest_run_number_first():
+    from vmn_exp.core.log import sort_by_metric
+
+    rows = [{"idx": i, "metrics": {"idx": 0}} for i in (1, 3, 2)]
+    assert [r["idx"] for r in sort_by_metric(rows, {}, sort="idx")] == [3, 2, 1]
+    assert [r["idx"] for r in sort_by_metric(rows, {}, sort="idx", descending=False)] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("field", ["started_at", "finished_at"])
+def test_sort_by_run_date_is_newest_first_with_undated_rows_last(field):
+    from vmn_exp.core.log import sort_by_metric
+
+    rows = [
+        {"idx": 1, "metrics": {}, field: "2026-01-02T00:00:00Z"},
+        {"idx": 2, "metrics": {}, field: None},
+        {"idx": 3, "metrics": {}, field: "2026-01-03T00:00:00Z"},
+        {"idx": 4, "metrics": {}, field: "2026-01-01T00:00:00Z"},
+    ]
+    assert [r["idx"] for r in sort_by_metric(rows, {}, sort=field)] == [3, 1, 4, 2]
+    assert [r["idx"] for r in sort_by_metric(rows, {}, sort=field, descending=False)] == [4, 1, 3, 2]

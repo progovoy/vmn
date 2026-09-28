@@ -120,6 +120,10 @@ def primary_metric(schema):
 
 
 TIMESTAMP_SORT = "timestamp"
+IDX_SORT = "idx"
+# Row fields that sort chronologically, like ``timestamp``: the run's own
+# start and end, from its run_state.
+DATE_SORTS = (TIMESTAMP_SORT, "started_at", "finished_at")
 
 
 def sort_by_metric(rows, schema, sort=None, descending=None):
@@ -129,11 +133,15 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
     the schema sorts ascending. *descending* forces the direction. Rows whose
     value is missing, None, non-finite or non-numeric sort last in either
     direction, in their original order. ``sort="timestamp"`` orders by creation
-    time, newest first unless *descending* is False. When the metric is not
+    time, ``started_at``/``finished_at`` by the run's start/end (undated rows
+    last) and ``sort="idx"`` by run number,
+    newest first unless *descending* is False. When the metric is not
     present anywhere, rows keep storage order (reversed if *descending*).
     """
-    if sort == TIMESTAMP_SORT:
-        return _by_timestamp(rows, newest_first=descending is not False)
+    if sort in DATE_SORTS:
+        return _by_date(rows, sort, newest_first=descending is not False)
+    if sort == IDX_SORT:
+        return sorted(rows, key=lambda r: r["idx"], reverse=descending is not False)
 
     keys = set()
     for row in rows:
@@ -151,11 +159,11 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
     return ranked + unranked
 
 
-def _by_timestamp(rows, newest_first):
-    """Creation order; rows without a timestamp go last either way."""
-    stamped = [r for r in rows if r.get("timestamp")]
-    stamped.sort(key=lambda r: r["timestamp"], reverse=newest_first)
-    return stamped + [r for r in rows if not r.get("timestamp")]
+def _by_date(rows, field, newest_first):
+    """Chronological order on *field*; rows without it go last either way."""
+    stamped = [r for r in rows if r.get(field)]
+    stamped.sort(key=lambda r: r[field], reverse=newest_first)
+    return stamped + [r for r in rows if not r.get(field)]
 
 
 def _sortable(value):

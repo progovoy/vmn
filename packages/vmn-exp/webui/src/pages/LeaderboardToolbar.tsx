@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import LiveToggle from "../components/LiveToggle";
 import SavedViews from "../components/SavedViews";
-import { TAGS_COLUMN, type useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
+import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { useBoardSelection } from "../hooks/useBoardSelection";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
@@ -11,7 +11,7 @@ import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 /** The bar above the leaderboard: live toggle, selection actions, saved
  *  views, the create button and the column picker. */
 export default function LeaderboardToolbar({
-  ws, app, base, view, cols, selection, total, live, onLive, onViewApplied,
+  ws, app, base, view, cols, selection, total, live, onLive, onViewApplied, onResetColumns,
 }: {
   ws: string;
   app: string;
@@ -24,6 +24,8 @@ export default function LeaderboardToolbar({
   onLive: () => void;
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
+  /** Drop the dragged widths and column order; omitted while there are none. */
+  onResetColumns?: () => void;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,13 +55,18 @@ export default function LeaderboardToolbar({
         ws={ws} app={app} search={location.search}
         onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}
       />
+      {onResetColumns && (
+        <button onClick={onResetColumns} title="restore the default column widths and order">
+          Reset columns
+        </button>
+      )}
       <ColumnPicker
         columns={cols.paramCols} visible={cols.visibleParams}
         onToggle={(c) => view.toggleHidden(`p:${c}`)}
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
         onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
-        onToggleOther={() => view.toggleHidden(TAGS_COLUMN)}
+        onToggleOther={(c) => view.toggleHidden(`c:${c}`)}
         orderedCells={cols.cells}
         pinnedCols={view.pinned}
         onMoveColumn={onMoveColumn}

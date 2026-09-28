@@ -69,6 +69,8 @@ export interface RunStatus {
   depth: number;
   /** Rollup over this run and its whole subtree. */
   tree_status: string | null;
+  /** Direct inner runs per own status. */
+  child_counts?: Record<string, number>;
   last_metric_at: string | null;
   fleet?: Fleet | null;
 }

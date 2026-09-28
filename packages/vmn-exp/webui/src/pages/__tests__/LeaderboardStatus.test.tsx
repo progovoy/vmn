@@ -190,7 +190,7 @@ describe("Leaderboard status filter", () => {
 
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
-        "test", "my-app", "timestamp", "running"
+        "test", "my-app", "idx", "running"
       )
     );
   });

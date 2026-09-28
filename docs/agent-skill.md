@@ -70,6 +70,33 @@ vmn-exp restore <app_name> --latest
 # vmn-exp restore <app_name> -v <version>
 ```
 
+### Driving the UI's fleet columns (total / waiting / running / done / failed)
+
+The `vmn-exp ui` leaderboard shows these on an outer run (a run with inner runs).
+They are derived from the inner runs' states, never written directly:
+
+- **total**: the number of inner runs (register every pod up front so it is right from the start)
+- **waiting**: inner runs registered but not started (`created`)
+- **running**: inner runs with a live heartbeat
+- **done**: inner runs that exited 0
+- **failed**: inner runs that exited non-zero, plus `stuck` ones (heartbeat went stale)
+
+```python
+from vmn_exp.sdk import start_run
+
+outer = start_run("<app_name>", name="sweep", params={"expected_pods": 8})
+# register each pod up front (total +1, waiting +1):
+#   vmn-exp create <app_name> --name pod3 --parent <outer.id>
+pod = start_run("<app_name>", run_id="<pod verstr>")  # waiting -> running
+pod.finish()               # running -> done    (exit_code=0)
+# or pod.finish(exit_code=1)  running -> failed (any non-zero)
+```
+
+`start_run("<app_name>", nested=True)` inside the outer run (or
+`vmn-exp run <app_name> --parent <ref> -- <cmd>`) starts a pod straight in
+`running`. Use `with start_run(...) as pod:` so a crash records `failed`.
+Full guide: docs/ai-fleet-tracking.md
+
 ## Snapshots (uncommitted work)
 
 Save and restore work-in-progress without committing:

@@ -28,11 +28,14 @@ def _state(rng):
     if kind == "none":
         return None
     if kind in ("ok", "fail"):
+        start = T0 - datetime.timedelta(seconds=rng.randrange(4))
         return {"state": "finished", "exit_code": 0 if kind == "ok" else 2,
-                "started_at": _iso(T0), "heartbeat": _iso(T0)}
+                "started_at": _iso(start), "heartbeat": _iso(T0),
+                "finished_at": rng.choice([None, _iso(T0 + datetime.timedelta(seconds=rng.randrange(4)))])}
     # Live: the heartbeat's age decides when it turns stuck as time moves.
     age = rng.choice([0, 20, 50, 80, 200]) if kind == "running" else 5000
-    return {"state": "running", "exit_code": None, "started_at": _iso(T0),
+    return {"state": "running", "exit_code": None,
+            "started_at": _iso(T0 - datetime.timedelta(seconds=rng.randrange(4))),
             "heartbeat": _iso(T0 - datetime.timedelta(seconds=age)),
             "heartbeat_interval_sec": 10}
 
@@ -70,7 +73,7 @@ QUERIES = [None, 'status = "running"', 'tree_status = "stuck"',
            "metrics.loss < 2", 'params.opt = "adam" or status != "failed"',
            'kind = "outer" and not tree_status = "succeeded"']
 STATUSES = [None, "running", "stuck,failed", "succeeded,created"]
-SORTS = [None, "loss", "acc", "timestamp", "live_only", "nope"]
+SORTS = [None, "loss", "acc", "timestamp", "idx", "started_at", "finished_at", "live_only", "nope"]
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}}, {"acc": {"goal": "max"}}]
 
 

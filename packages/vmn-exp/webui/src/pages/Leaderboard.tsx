@@ -13,16 +13,20 @@ import { usePolling } from "../hooks/usePolling";
 import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
+import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useChartRows } from "../hooks/useChartRows";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { collapsedByDefault, foldState, visibleRows } from "../util/sweepTree";
 import LeaderboardCharts from "./LeaderboardCharts";
-import LeaderboardTable, { TIMESTAMP_SORT } from "./LeaderboardTable";
+import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
+import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
+
+const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
 /** A column's best-first direction: newest first for time, else its goal's. */
 const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
-  col !== TIMESTAMP_SORT && metricGoal(schema, col) === "min" ? "asc" : "desc";
+  !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
 
 
 /** One app's board: switching app starts from a clean slate (filters, brush,
@@ -49,7 +53,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     combineQueries(view.query, searchClause(view.search)), branchClause(view.branch),
   );
   const filter = useMemo(() => ({
-    sort: view.sort ?? "timestamp",
+    sort: view.sort ?? IDX_SORT,
     order: view.sort ? view.order : undefined,
     status: view.status || undefined,
     query: serverQuery || undefined,
@@ -73,7 +77,18 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   usePolling(data.refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
 
   const base = `/ws/${ws}/app/${app}`;
-  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets, view.colOrder, view.pinned);
+  const colPrefs = useColumnPrefs(`${ws}/${app}`);
+  const [tableWidth, setTableWidth] = useState(0);
+  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth);
+  const { setWidth, setOrder } = colPrefs;
+  const ids = cols.layout.ids;
+  const columnEdits = useMemo<ColumnEdits>(() => ({
+    onResize: setWidth,
+    onMove: (from, to) => {
+      const next = moveColumn(ids ?? [], from, to);
+      if (next !== ids) setOrder(next);
+    },
+  }), [setWidth, setOrder, ids]);
 
   const all = useMemo(() => rows ?? [], [rows]);
   const chart = useChartRows(
@@ -168,6 +183,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             ws={ws} app={app} base={base} view={view} cols={cols} selection={selection}
             total={data.total} live={live} onLive={() => setLive((v) => !v)}
             onViewApplied={() => setFilterGen((g) => g + 1)}
+            onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
           />
 
           <LeaderboardFilter
@@ -203,6 +219,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             hasMore={all.length < data.total}
             onNearEnd={data.loadMore}
             visibleRef={data.visibleRef}
+            edits={columnEdits}
+            onFit={setTableWidth}
           />
           {rows !== undefined && all.length < data.total && (
             <div className="load-more">

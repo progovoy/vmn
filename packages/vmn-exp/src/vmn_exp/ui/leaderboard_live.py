@@ -17,9 +17,11 @@ cached order of the others by bisection: O(changed · log N) per bucket, and a
 page slice costs O(page + changed).
 """
 import bisect
+from collections import Counter
 
 from vmn_exp.core.log import (
-    TIMESTAMP_SORT,
+    DATE_SORTS,
+    IDX_SORT,
     _sortable,
     metric_sort_descending,
     primary_metric,
@@ -108,22 +110,27 @@ class LivePatch:
         for i in affected:
             members = [position[v] for v in subtree_verstrs(rows[i]["verstr"], children_of)
                        if v in position]
+            kids = [position[v] for v in children_of.get(rows[i]["verstr"], []) if v in position]
             parts[i] = (
                 frozenset(rows[m]["status"] for m in members if m not in live),
                 tuple(m for m in members if m in live),
+                Counter(rows[k]["status"] for k in kids if k not in live),
+                tuple(k for k in kids if k in live),
             )
         return parts
 
     def rolled_up(self, rows, fresh):
         """The changed rows (storage order) with *fresh* ``{i: live row}``
-        swapped in and their ancestors' ``tree_status`` rolled up again."""
+        swapped in and their ancestors' ``tree_status`` and ``child_counts``
+        rolled up again."""
         out = []
         for i in self.changed:
             row = fresh.get(i, rows[i])
-            terminal, under = self._rollups[i]
+            terminal, under, kids_done, kids_live = self._rollups[i]
             status = rollup_status(terminal | {fresh[j]["status"] for j in under})
-            if row["tree_status"] != status:
-                row = {**row, "tree_status": status}
+            counts = dict(kids_done + Counter(fresh[k]["status"] for k in kids_live))
+            if row["tree_status"] != status or row["child_counts"] != counts:
+                row = {**row, "tree_status": status, "child_counts": counts}
             out.append(row)
         return out
 
@@ -165,9 +172,9 @@ def _metric_value(metric, descending):
     return value_of
 
 
-def _timestamp_value(newest_first):
+def _date_value(field, newest_first):
     def value_of(row):
-        stamp = row.get("timestamp")
+        stamp = row.get(field)
         if not stamp:
             return None
         return _Desc(stamp) if newest_first else stamp
@@ -178,8 +185,11 @@ def _timestamp_value(newest_first):
 def order_key(schema, sort, descending, metric_present, position):
     """``(key, ranked)``: the sort key ``sort_rows`` orders by, and whether it
     ranks by a metric (*metric_present*: some filtered row carries it)."""
-    if sort == TIMESTAMP_SORT:
-        return _ranked(_timestamp_value(descending is not False), position), False
+    if sort in DATE_SORTS:
+        return _ranked(_date_value(sort, descending is not False), position), False
+    if sort == IDX_SORT:
+        sign = 1 if descending is False else -1
+        return (lambda row: sign * row["idx"]), False
     metric = sort or primary_metric(schema)
     if not metric or not metric_present(metric):
         sign = -1 if descending else 1

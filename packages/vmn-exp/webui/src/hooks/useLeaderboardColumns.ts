@@ -1,11 +1,13 @@
 import { useMemo, useRef } from "react";
 import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
-  anyTags, columnLayout, columnStyles, computeColMeta, metricColumns, paramKey,
+  FLEET_COLS, PINNED_COLS, anyTags, columnIds, columnStyles, computeColMeta, idLayout, metricColumns,
+  orderColumns, paramKey,
 } from "../pages/leaderboardColumns";
-import type { ColumnCell, ColumnLayout } from "../pages/leaderboardColumns";
+import type { ColumnCell } from "../pages/leaderboardColumns";
 import type { RowLayout } from "../pages/LeaderboardRow";
 import { sameValue } from "../util/stableRows";
+import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { orderedKeys } from "../util/columnOrder";
 
@@ -40,6 +42,10 @@ export function useLeaderboardColumns(
   facets: ExperimentFacets | null,
   order: readonly string[] = EMPTY,
   pinned: readonly string[] = EMPTY,
+  /** The user's column arrangement (see useColumnPrefs). */
+  prefs: ColumnPrefs = EMPTY_PREFS,
+  /** Width (px) the table has to fill. */
+  fill = 0,
 ) {
   const list = rows ?? [];
   const primary = useMemo(
@@ -97,31 +103,34 @@ export function useLeaderboardColumns(
   const showBest = list.length > 1;
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && !hidden.has(TAGS_COLUMN);
+  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => !hidden.has(`c:${c}`)), [hidden]);
 
+  const { widths, order: savedOrder } = prefs;
   const layout = useMemo((): RowLayout => {
-    const cl: ColumnLayout = columnLayout(cells, showTags);
-    const metricCols: string[] = [];
-    const paramCols: string[] = [];
-    for (const c of cells) (c.kind === "metric" ? metricCols : paramCols).push(c.key);
-    const tagsIdx = showTags ? 4 + cells.length : null;
-    const noteIdx = 4 + cells.length + (showTags ? 1 : 0);
+    // URL-pinned cells stick right after the experiment column, so they lead
+    // the movable columns whatever the saved drag order says.
+    const pinnedIds = orderedCellKeys.slice(0, pinnedCount);
+    const moved = orderColumns(columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags), savedOrder);
+    const ids = [...PINNED_COLS, ...pinnedIds, ...moved.slice(PINNED_COLS.length)];
+    const cl = idLayout(ids, widths, fill);
     return {
-      styles: columnStyles(cl, pinnedCount),
-      total: cl.total,
-      metricCols, paramCols, cells,
-      paramBase: 4 + metricCols.length,
-      tagsIdx, noteIdx,
+      styles: columnStyles(cl, pinnedCount), widths: cl.widths, total: cl.total, ids, cells,
+      fleetCols: visibleFleet, metricCols: visibleMetrics, paramCols: visibleParams,
+      tagsIdx: showTags ? ids.indexOf("c:tags") : null,
       colMeta, showBest, runBase,
     };
-  }, [cells, showTags, pinnedCount, colMeta, showBest, runBase]);
+  }, [
+    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags,
+    colMeta, showBest, runBase, widths, savedOrder, fill,
+  ]);
 
   const suggestFacets = useMemo((): SuggestFacets => ({
     metric_keys: facets?.metric_keys ?? metricCols,
     param_keys: facets?.param_keys ?? paramCols,
   }), [facets, metricCols, paramCols]);
 
-  const otherCols = hasTags ? ["tags"] : [];
-  const visibleOther = showTags ? ["tags"] : [];
+  const otherCols = [...FLEET_COLS, ...(hasTags ? ["tags"] : [])];
+  const visibleOther = [...visibleFleet, ...(showTags ? ["tags"] : [])];
   return {
     primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout,
     suggestFacets, otherCols, visibleOther,

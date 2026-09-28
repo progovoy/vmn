@@ -10,6 +10,8 @@ once its whole subtree is taken into account.
 Pure: rows in, new rows out, no storage. :func:`subtree_status` reads run
 states only through the reader its caller passes in.
 """
+from collections import Counter
+
 from vmn_exp.core.status import (
     CREATED,
     FAILED,
@@ -165,10 +167,18 @@ def _annotate_tree_in_place(rows):
             row["kind"] = SINGLE
         row["depth"] = _depth(verstr, parent_of)
         row["tree_status"] = tree_statuses[verstr]
+        row["child_counts"] = count_statuses(
+            (by_verstr.get(c) or {}).get("status") for c in children
+        )
     return rows
 
 
-TREE_FIELDS = ("children", "kind", "depth", "tree_status")
+def count_statuses(statuses):
+    """``{status: n}`` over *statuses* — an outer run's inner-run tally."""
+    return dict(Counter(statuses))
+
+
+TREE_FIELDS = ("children", "kind", "depth", "tree_status", "child_counts")
 
 
 def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=None):
@@ -189,14 +199,16 @@ def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=
     states = {v: read_state(v) for v in subtree_verstrs(verstr, children_of)}
     children = list(children_of.get(verstr, []))
     parent = parent_of.get(verstr)
+
+    def status_of(v):
+        return derive_status(states[v], observed_at=observed_at(v) if observed_at else None)
+
     tree = {
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
         "depth": _depth(verstr, parent_of),
-        "tree_status": rollup_status(
-            derive_status(s, observed_at=observed_at(v) if observed_at else None)
-            for v, s in states.items()
-        ),
+        "tree_status": rollup_status(status_of(v) for v in states),
+        "child_counts": count_statuses(status_of(c) for c in children),
     }
     return states[verstr], tree
 
@@ -231,12 +243,12 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
         return None
 
     child_details = []
-    counts = {}
+    statuses = []
     for child in children:
         state = read_state(child)
         obs = observed_at(child) if observed_at else None
         status = derive_status(state, observed_at=obs)
-        counts[status] = counts.get(status, 0) + 1
+        statuses.append(status)
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:
             progress = None
@@ -268,6 +280,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     else:
         expected = max(expected, len(children))
 
+    counts = count_statuses(statuses)
     known = sum(counts.values())
     waiting = max(0, expected - known)
 
