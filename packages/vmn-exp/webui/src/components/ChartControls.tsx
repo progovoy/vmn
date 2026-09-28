@@ -1,4 +1,5 @@
 import type { XMode } from "../util/chartData";
+import { AUTO_X, NO_X } from "../util/xMetric";
 
 const X_MODES: { mode: XMode; label: string }[] = [
   { mode: "step", label: "Step" },
@@ -30,6 +31,30 @@ export function XModeToggle({ value, onChange, timeEnabled }: {
         </button>
       ))}
     </div>
+  );
+}
+
+/** Which metric the step axis is replaced by: each chart's declared step
+ *  metric (`auto`), none, or one metric for every chart. */
+export function XMetricSelect({ value, onChange, metrics, enabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  metrics: string[];
+  enabled: boolean;
+}) {
+  return (
+    <select
+      aria-label="x axis metric"
+      title="plot against another metric logged at the same step"
+      value={value}
+      disabled={!enabled}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ fontSize: 11, padding: "1px 4px" }}
+    >
+      <option value={AUTO_X}>x: declared</option>
+      <option value={NO_X}>x: step</option>
+      {metrics.map((m) => <option key={m} value={m}>x: {m}</option>)}
+    </select>
   );
 }
 

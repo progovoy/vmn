@@ -371,6 +371,63 @@ vmn-exp list my_app
 vmn-exp show my_app --latest
 ```
 
+### Alerts
+
+A run can notify you — a webhook, Slack, or any shell command — when it
+fails, goes stuck, or calls `run.alert()` from the SDK (see
+[docs/sdk.md](sdk.md#alerts)). Configure sinks and opt into triggers in the
+app's `conf.yml`:
+
+```yaml
+conf:
+  experiment:
+    alerts:
+      on: [failed, stuck, alert]   # default: [alert]
+      wait_sec: 60                 # run.alert(): drop repeats of one title within this
+      timeout_sec: 5               # per-sink delivery timeout
+      sinks:
+        - {type: webhook, url: "https://example.com/hook"}               # JSON POST
+        - {type: slack, url: "https://hooks.slack.com/services/T/B/X"}   # incoming webhook
+        - {type: command, command: "./notify.sh"}                        # shell hook
+```
+
+A pod without a checkout uses env vars instead: `VMN_EXP_ALERT_WEBHOOK_URL`,
+`VMN_EXP_ALERT_SLACK_URL` and `VMN_EXP_ALERT_COMMAND` each add a sink (next to
+any from conf.yml), and `VMN_EXP_ALERT_ON=failed,stuck` replaces the trigger list.
+
+| Trigger | Fired by |
+|---------|----------|
+| `alert` | `run.alert(title, text, level)` in the SDK |
+| `failed` | the process that saw the run end non-zero: `vmn-exp run`'s supervisor (child exit, signal) or the SDK's finish (exception, `finish(exit_code=N)`, SIGTERM) |
+| `stuck` | `vmn-exp watch <app>` — a dead process cannot report itself |
+
+`stuck` needs an outside observer. Run the watcher from cron, or leave it
+looping:
+
+```sh
+vmn-exp watch my_app                 # one pass: alert new failed/stuck runs, exit
+vmn-exp watch my_app --interval 60   # keep checking every minute
+vmn-exp watch my_app --within 6h     # ignore transitions older than 6h (default 1d)
+```
+
+It prints `<verstr> <status>` per alert it delivered, never takes the repo
+lock, and exits 1 when no sink is configured for `failed` or `stuck`. Each run alerts once per transition: a delivered alert is recorded in the
+run's `alerts_sent.yml` (through the storage, so local and S3 alike), keyed by
+the run's `finished_at` (failed) or last heartbeat (stuck) — a run that
+recovers and stalls again alerts again, and a `failed` alert the supervisor
+already sent is not repeated by the watcher. An alert no sink accepted is not
+recorded, so the next pass retries it.
+
+Payloads: the webhook POSTs the alert as JSON — `trigger`, `title`, `text`,
+`level` (`info`/`warn`/`error`), `app_name`, `run_id`, `run_name`, `status`,
+`timestamp`, `host`, `pid`, `exit_code`, `signal`, `heartbeat`, `finished_at`.
+Slack gets a message with a colored attachment. The command runs through the
+shell with `VMN_ALERT_TRIGGER`, `VMN_ALERT_TITLE`, `VMN_ALERT_TEXT`,
+`VMN_ALERT_LEVEL`, `VMN_ALERT_APP`, `VMN_ALERT_RUN_ID`, `VMN_ALERT_STATUS` and
+`VMN_ALERT_JSON` (the whole payload) in its environment; a non-zero exit counts
+as a failed delivery. Delivery is best-effort: an unreachable endpoint is
+logged, never raised into the run, and never changes its exit code.
+
 ---
 
 ## Outer & inner jobs (sweeps)
@@ -559,6 +616,11 @@ vmn-exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
 vmn-exp add my_app -f extra_notes.yml
 vmn-exp add my_app --input train=s3://bucket/train.csv#sha256:abc123
 ```
+
+### `watch`
+
+`vmn-exp watch <app> [--interval SEC] [--within 1d]` delivers `failed`/`stuck`
+alerts for runs that have not alerted them yet — see [Alerts](#alerts).
 
 ### `list`
 
@@ -813,6 +875,9 @@ experiment:
   A metric with no declared goal in the schema sorts as a plain ascending
   value sort — declare a `goal` to get goal-aware (best-first) ordering.
 - `primary: true` marks the metric used to sort `list` when `--sort` is omitted.
+- `step_metric: epoch` charts the metric (a name or a glob such as `val_*`)
+  against `epoch` logged at the same step instead of the step itself — see
+  [sdk.md](sdk.md#custom-x-axis-step_metric).
 - Schema columns also fix the column order in `list`/`compare`; any extra
   metrics you logged appear after them, alphabetically.
 

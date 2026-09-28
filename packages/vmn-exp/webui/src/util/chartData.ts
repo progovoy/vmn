@@ -6,7 +6,8 @@
  *  typed per-curve arrays from these in seriesArrays.ts. */
 import type { SeriesPoint } from "../types";
 
-export type XMode = "step" | "wall" | "relative";
+/** `metric`: another metric's value, joined server-side (`point.x`). */
+export type XMode = "step" | "wall" | "relative" | "metric";
 type Series = Record<string, SeriesPoint[]>;
 
 const SYS_PREFIX = "sys_";
@@ -42,6 +43,7 @@ export function runOrigin(series: Series, startedAt?: string | null): number {
 /** x for one point. Step-less samples (system metrics) are placed by time,
  *  never by their array index, which would pile them onto steps 0..N. */
 export function xOf(p: SeriesPoint, i: number, mode: XMode, origin: number): number | null {
+  if (mode === "metric") return p.x ?? null;
   const t = tsMs(p);
   if (mode === "wall") return Number.isFinite(t) ? t : null;
   if (mode === "relative" || p.step == null) {

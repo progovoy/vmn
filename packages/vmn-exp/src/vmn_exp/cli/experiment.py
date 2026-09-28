@@ -352,6 +352,10 @@ def handle_experiment(vmn_ctx):
         return experiment_export(vcs, params, storage, args)
     elif action == "prune":
         return experiment_prune(vcs, params, storage, args)
+    elif action == "watch":
+        from vmn_exp.cli.watch import experiment_watch
+
+        return experiment_watch(vcs, storage, _app_name(vcs, args), args)
     else:
         VMN_LOGGER.error(f"Unknown experiment action: {action}")
         return 1
@@ -772,6 +776,10 @@ def _describe_log_entry(entry):
         return f"error: {entry.get('exception', '?')}: {entry.get('message', '')}"
     if etype == "note":
         return f"note: {entry.get('text', '')}"
+    if etype == "alert":
+        text = entry.get("text")
+        head = f"alert [{entry.get('level', 'info')}]: {entry.get('title', '')}"
+        return f"{head}: {text}" if text else head
     if etype == "artifact":
         return f"artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
     if etype == "create":

@@ -358,6 +358,7 @@ Every list is sorted; `metric_keys` includes numeric params (they fold into
 | `log` | same as `log_tail`; pass `include_log=1` to get the whole log |
 | `series` | each metric thinned independently to at most `max_points` points (default 2000, max 20000) with min/max buckets, so spikes survive; first and last point always kept. `keys=loss,acc` returns only those metrics, `series=0` none. A response carries at most 200,000 points in all: with many metrics, `max_points` is lowered for each |
 | `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
+| `step_metrics` | `{metric: x metric}` for every metric that declares one (`run.define_metric(..., step_metric=)` or `step_metric:` in the conf.yml metrics schema) |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
 
 Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
@@ -379,10 +380,27 @@ curl -X POST -H "Content-Type: application/json" \
 ```
 
 → `{"series": {verstr: {metric: [{"step", "ts", "value"}]}}, "series_total":
-{verstr: {metric: n}}, "missing": [verstr, ...]}`. At most 200 runs per request;
+{verstr: {metric: n}}, "step_metrics": {verstr: {metric: x metric}}, "missing":
+[verstr, ...]}`. At most 200 runs per request;
 `keys: null` means every metric. The runs share the 200,000-point cap. It is a
 read, so `--read-only` servers answer it, but as a POST it needs
 `Content-Type: application/json` and a same-site `Origin` like any other.
+
+### Custom x axis
+
+Both series endpoints can key a metric by another metric's value. The run
+detail takes `?x=epoch` (every other metric joined on `epoch`); the batch body
+takes `"x": "epoch"` or a per-metric map `"x": {"val_loss": "epoch"}` (unmapped
+metrics come back plain). A joined point is `{"step", "ts", "value", "x"}`,
+where `x` is the x metric's value at the same step (step-less points: the same
+`log_metrics` call); points without a finite x are dropped. The join happens
+before thinning, so downsampling still applies and `series_total` counts the
+joined points.
+
+In the dashboard, the Run page and the overlay have an `x:` picker next to the
+Step / Wall / Relative toggle: `x: declared` (the default) plots each metric
+against its declared `step_metric`, `x: step` ignores declarations, and any
+metric name plots every other chart against it. It applies in Step mode.
 
 ### Diffs
 
