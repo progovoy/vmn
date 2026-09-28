@@ -22,7 +22,7 @@ import threading
 _HANDLED = signal.SIGTERM
 # Only ever touched from the main thread (Python delivers signals there too),
 # so there is no lock: the one "concurrent" caller is the handler itself.
-_STATE = {"previous": None, "finalize": None, "timeout": None}
+_STATE = {"previous": None, "finalize": None, "timeout": None, "finalizing": False}
 
 
 def _on_main_thread():
@@ -44,10 +44,16 @@ def install(finalize, timeout):
 
 
 def _handle(signum, frame):
+    if _STATE["finalizing"]:
+        # A repeat signal interrupting the wait below: the first one's
+        # finalizer is already running, and that handler hands the signal on.
+        return
+    _STATE["finalizing"] = True
     previous = _STATE["previous"]
     try:
         _run_bounded(_STATE["finalize"], signum, _STATE["timeout"]())
     finally:
+        _STATE["finalizing"] = False
         if signal.getsignal(_HANDLED) is _handle:
             signal.signal(_HANDLED, previous)
         _chain(previous, signum, frame)

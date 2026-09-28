@@ -6,6 +6,7 @@ open runs and a hung remote store, each run waiting that long for its own
 uploads would spend the whole budget on the first run: the others would never
 write their final state and would later derive as ``stuck``.
 """
+import os
 import signal
 import threading
 import time
@@ -147,3 +148,23 @@ def test_the_sigterm_handler_waits_at_most_the_env_timeout(monkeypatch, sigterm_
 
     assert chained == [signal.SIGTERM]
     assert elapsed < 5, f"the handler waited {elapsed:.2f}s"
+
+
+def test_a_second_sigterm_during_finalization_starts_no_second_finalizer(sigterm_restored):
+    calls = []
+
+    def finalize(signum):
+        calls.append(signum)
+        if len(calls) == 1:
+            # Arrives while the first handler still waits for this finalizer.
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.5)
+
+    chained = []
+    signal.signal(signal.SIGTERM, lambda signum, frame: chained.append(signum))
+    signals.install(finalize, timeout=lambda: 5)
+
+    signal.raise_signal(signal.SIGTERM)
+
+    assert calls == [signal.SIGTERM]
+    assert chained == [signal.SIGTERM]
