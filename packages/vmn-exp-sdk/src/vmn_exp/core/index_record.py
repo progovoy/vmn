@@ -9,6 +9,7 @@ from vmn_exp._base import parse_record_metadata
 from vmn_exp.core.fold import new_fold
 from vmn_exp.core.index_logs import log_signatures, update_logs
 from vmn_exp.core.index_sweep import METADATA_FILE
+from vmn_exp.core.record_format import readable
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 
 
@@ -76,4 +77,6 @@ def _update_run_state(storage, app_name, key, names, record):
 
 def _load_meta(storage, app_name, key):
     # The same rule list_snapshots applies: legacy verinfo files share the tree.
-    return parse_record_metadata(storage.load_file(app_name, key, METADATA_FILE))
+    # A newer record format is left out, as if the record were not there.
+    meta = parse_record_metadata(storage.load_file(app_name, key, METADATA_FILE))
+    return readable(meta, key)

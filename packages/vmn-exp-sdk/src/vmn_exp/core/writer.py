@@ -19,6 +19,7 @@ import socket
 import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
+from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
 
@@ -268,6 +269,7 @@ def _run_verstr_candidates(code_verstr, taken):
 
 
 def _claim(storage, app_name, verstr, metadata, patches):
+    metadata = stamped(metadata)
     if hasattr(storage, "create_exclusive"):
         return storage.create_exclusive(app_name, verstr, metadata, patches)
     if storage.exists(app_name, verstr):

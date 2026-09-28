@@ -10,6 +10,7 @@ import os
 import pytest
 import yaml
 
+from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import (
     allocate_run_verstr,
@@ -413,6 +414,7 @@ def test_create_run_claims_the_verstr_and_writes_the_create_entry():
         "code_verstr": "0.0.1-dev.aaa.bbb",
         "parent": "0.0.1-dev.aaa.bbb",
         "name": "sweep",
+        "format_version": RECORD_FORMAT_VERSION,
     }
     assert patches == {"working_tree": b"diff"}
     assert template["verstr"] == "placeholder"

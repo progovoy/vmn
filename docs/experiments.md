@@ -869,6 +869,13 @@ there is no local dir.
 - **Batched appends**: `append_log_entries` writes a batch of entries as one
   write of whole lines (one PUT on S3); the SDK flushes its buffered log that
   way, so readers never see a partial line.
+- **Format version**: every new run (and model registry record) stores
+  `format_version` in its `metadata.yml`. It versions the whole record —
+  metadata, log lines and `run_state.yml` — so log lines carry none of their
+  own. A record without it reads as version 1. `list`, `show`, the ui and the
+  SDK reader skip a record whose version is newer than the installed vmn-exp
+  supports, with a warning to upgrade, rather than mis-read it. `show --json`
+  prints the field.
 
 ---
 
