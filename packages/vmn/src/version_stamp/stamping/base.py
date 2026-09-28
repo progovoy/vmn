@@ -729,74 +729,83 @@ class IVersionsStamper:
 
                 regex_sub = selector["regex_sub"]
 
-                jinja_backend_conf = []
                 temporary_jinja_template_paths = []
-                for file_section in item["paths_section"]:
-                    input_file_path = os.path.join(
-                        self.vmn_root_path, file_section["input_file_path"]
+                try:
+                    self._write_selector_through_jinja(
+                        verstr, item, regex_selector, regex_sub,
+                        temporary_jinja_template_paths,
                     )
-                    with open(input_file_path) as file:
-                        content = file.read()
+                finally:
+                    for t, c in temporary_jinja_template_paths:
+                        os.remove(t)
+                        VMN_LOGGER.debug(f"Removed {t} with content:\n" f"{c}")
 
-                        content = comment_out_jinja(content)
+    def _write_selector_through_jinja(
+        self, verstr, item, regex_selector, regex_sub, temporary_jinja_template_paths
+    ):
+        jinja_backend_conf = []
+        for file_section in item["paths_section"]:
+            input_file_path = os.path.join(
+                self.vmn_root_path, file_section["input_file_path"]
+            )
+            with open(input_file_path) as file:
+                content = file.read()
 
-                    # Replace the matched version strings with regex_sub
-                    content = re.sub(regex_selector, regex_sub, content)
+                content = comment_out_jinja(content)
 
-                    raw_temporary_jinja_template_path = (
-                        f'{file_section["input_file_path"]}.tmp.jinja2'
-                    )
-                    temporary_jinja_template_path = os.path.join(
-                        self.vmn_root_path, raw_temporary_jinja_template_path
-                    )
+            # Replace the matched version strings with regex_sub
+            content = re.sub(regex_selector, regex_sub, content)
 
-                    if self.dry_run:
-                        VMN_LOGGER.info(
-                            "Would have written to a version backend file:\n"
-                            f"backend: generic_selectors\n"
-                            f"version: {verstr}\n"
-                            f"file: {temporary_jinja_template_path}\n"
-                            f"with content:\n{content}"
-                        )
+            raw_temporary_jinja_template_path = (
+                f'{file_section["input_file_path"]}.tmp.jinja2'
+            )
+            temporary_jinja_template_path = os.path.join(
+                self.vmn_root_path, raw_temporary_jinja_template_path
+            )
 
-                        continue
+            if self.dry_run:
+                VMN_LOGGER.info(
+                    "Would have written to a version backend file:\n"
+                    f"backend: generic_selectors\n"
+                    f"version: {verstr}\n"
+                    f"file: {temporary_jinja_template_path}\n"
+                    f"with content:\n{content}"
+                )
 
-                    with open(temporary_jinja_template_path, "w") as file:
-                        file.write(content)
+                continue
 
-                    temporary_jinja_template_paths.append(
-                        (temporary_jinja_template_path, content)
-                    )
+            with open(temporary_jinja_template_path, "w") as file:
+                file.write(content)
 
-                    d = {
-                        "input_file_path": raw_temporary_jinja_template_path,
-                        "output_file_path": raw_temporary_jinja_template_path,
-                        "_output_file_path": file_section["output_file_path"],
-                    }
-                    if "custom_keys_path" in file_section:
-                        d["custom_keys_path"] = file_section["custom_keys_path"]
+            temporary_jinja_template_paths.append(
+                (temporary_jinja_template_path, content)
+            )
 
-                    jinja_backend_conf.append(d)
+            d = {
+                "input_file_path": raw_temporary_jinja_template_path,
+                "output_file_path": raw_temporary_jinja_template_path,
+                "_output_file_path": file_section["output_file_path"],
+            }
+            if "custom_keys_path" in file_section:
+                d["custom_keys_path"] = file_section["custom_keys_path"]
 
-                self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
+            jinja_backend_conf.append(d)
 
-                for jinja_backend_conf_item in jinja_backend_conf:
-                    tmp_path = (
-                        Path(self.vmn_root_path)
-                        / jinja_backend_conf_item["output_file_path"]
-                    )
-                    final_path = (
-                        Path(self.vmn_root_path)
-                        / jinja_backend_conf_item["_output_file_path"]
-                    )
+        self._write_version_to_generic_jinja(verstr, jinja_backend_conf)
 
-                    final_path.parent.mkdir(parents=True, exist_ok=True)
+        for jinja_backend_conf_item in jinja_backend_conf:
+            tmp_path = (
+                Path(self.vmn_root_path)
+                / jinja_backend_conf_item["output_file_path"]
+            )
+            final_path = (
+                Path(self.vmn_root_path)
+                / jinja_backend_conf_item["_output_file_path"]
+            )
 
-                    shutil.copy2(tmp_path, final_path)
+            final_path.parent.mkdir(parents=True, exist_ok=True)
 
-                for t, c in temporary_jinja_template_paths:
-                    os.remove(t)
-                    VMN_LOGGER.debug(f"Removed {t} with content:\n" f"{c}")
+            shutil.copy2(tmp_path, final_path)
 
     def _write_version_to_vmn_version_file(self, verstr):
         file_path = self.version_file_path
