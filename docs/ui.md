@@ -121,8 +121,8 @@ Mutations are asynchronous jobs:
 Each job runs `vmn <cmd>` as a subprocess in the workspace, so it acquires the
 per-repo lock (serializing correctly against terminal use) and at most one
 mutation runs per workspace at a time. Restores/gotos over a dirty tree
-auto-snapshot your work first (the safety net) — the job log tells you the
-recovery command.
+auto-save your work first (the safety net) — the job log tells you the
+`vmn goto` that recovers it.
 
 ## The index
 
@@ -222,7 +222,7 @@ statuses are derived.
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
 `.../experiments/{verstr}`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
-`.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
+`.../tree/root`, `.../deps`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
 

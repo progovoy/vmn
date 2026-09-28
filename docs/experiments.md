@@ -582,8 +582,7 @@ The `[N]` in front of each row is the run's storage index — the same number
 `vmn-exp list my_app --sort loss` showing `[7]` first means `vmn-exp show my_app
 -v @7` opens that run.
 
-`list`, `show`, `compare`, `diff` and `export` (and `vmn snapshot
-list|show|diff|export`) are read-only and take no repo lock, so they never wait
+`list`, `show`, `compare`, `diff` and `export` are read-only and take no repo lock, so they never wait
 for — or hold up — a `create`/`run` in the same checkout.
 
 `--query '<expr>'` keeps the runs matching [the query
@@ -654,8 +653,10 @@ vmn-exp diff my_app --tool delta
 ### `restore`
 
 Check out the exact code state of an experiment and retrieve its artifacts. If
-the working tree is dirty, that work is **auto-snapshotted first** (and the
-recovery command is printed) — you never lose uncommitted changes.
+the working tree is dirty, that work is **auto-saved first** as a dev version
+(and the `vmn goto -v <saved> my_app` that brings it back is printed) — you
+never lose uncommitted changes. `vmn goto -v <dev-version> my_app` restores a
+run's code the same way.
 
 ```sh
 vmn-exp restore my_app --latest
@@ -670,7 +671,13 @@ directory or a `.tar.gz`.
 ```sh
 vmn-exp export my_app                        # latest -> <verstr>.tar.gz
 vmn-exp export my_app --latest -o best.tar.gz
+vmn-exp export my_app --latest -o /mnt/code  # a plain directory
 ```
+
+The exported tree carries a `vmn_metadata.yml`, so a container built from it
+records runs without git: `vmn-exp create my_app --from-snapshot /mnt/code
+--experiment-dir /mnt/runs` (or `VMN_SNAPSHOT_METADATA` for [`start_run()`](sdk.md)). See the
+[tracking guide](experiment-tracking-guide.md) for the cluster flow.
 
 ### `prune`
 

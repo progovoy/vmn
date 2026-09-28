@@ -148,10 +148,10 @@ subprocess you launch can use vmn freely.
 
 ### Runs without a git checkout (containers)
 
-A training image built from [`vmn snapshot export`](experiments.md) has no `.git`.
+A training image built from [`vmn-exp export`](experiments.md#export) has no `.git`.
 Set `VMN_SNAPSHOT_METADATA` to the exported `vmn_metadata.yml` (or its directory)
 and `VMN_EXPERIMENT_DIR` to where runs should be recorded, and `start_run()`
-records against that snapshot — the same git-free mode the CLI's `--from-snapshot`
+records against that exported code — the same git-free mode the CLI's `--from-snapshot`
 uses:
 
 ```python
@@ -261,7 +261,7 @@ manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
 remove=None, storage=None)` take any [addressing form](experiments.md#addressing-experiments),
 return the verstr they changed and raise `ValueError` for a ref that names no
 run. Archiving writes `archived: true` into `metadata.yml` (atomically on disk,
-under the ETag on S3 — the same path as `vmn snapshot note`); unarchiving
+under the ETag on S3); unarchiving
 removes it. Nothing is deleted, and nothing but listings treats an archived run
 differently — `vmn-exp prune` counts and deletes it like any finished run.
 
@@ -904,15 +904,15 @@ packages split.
 
 ### Git-free recording
 
-With `VMN_SNAPSHOT_METADATA` pointing to a snapshot metadata file (produced
-by `vmn snapshot export` and baked into your image) and `VMN_EXPERIMENT_DIR`
+With `VMN_SNAPSHOT_METADATA` pointing to the `vmn_metadata.yml` that
+`vmn-exp export` writes (baked into your image) and `VMN_EXPERIMENT_DIR`
 pointing to a writable directory, `start_run()` works with no git checkout and
 no GitPython installed:
 
 ```python
 import os
 
-os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/metadata.yml"
+os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/vmn_metadata.yml"
 os.environ["VMN_EXPERIMENT_DIR"]    = "/mnt/experiments"
 
 from vmn_exp.sdk import start_run

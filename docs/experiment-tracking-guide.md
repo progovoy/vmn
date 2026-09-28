@@ -210,7 +210,7 @@ vmn-exp ui --repo /mnt/shared
 
 ## Workflow 3: K8s at Scale
 
-You're running a hyperparameter sweep: 100–1000 pods, each with a different config. No pod has git installed — they're running from an exported snapshot. Two sub-modes: shared NFS mount (simpler) or S3 (no shared filesystem needed).
+You're running a hyperparameter sweep: 100–1000 pods, each with a different config. No pod has git installed — they're running from code exported with `vmn-exp export`. Two sub-modes: shared NFS mount (simpler) or S3 (no shared filesystem needed).
 
 ### Mode A: K8s + Shared NFS / FSx
 
@@ -219,8 +219,8 @@ You're running a hyperparameter sweep: 100–1000 pods, each with a different co
 ```mermaid
 flowchart TD
     subgraph cp["Control Plane (your machine / CI)"]
-        step1["1. vmn snapshot export my_app"]
-        step2["2. tar xzf → /mnt/fsx/code/"]
+        step1["1. vmn-exp create my_app"]
+        step2["2. vmn-exp export my_app -o /mnt/fsx/code"]
         step3["3. kubectl apply -f sweep-job.yaml"]
         step1 --> step2 --> step3
     end
@@ -253,12 +253,12 @@ flowchart TD
 
 > Each pod: **no git**, **no locks**, **no coordination**.
 
-#### Step 1: Export a Snapshot (Control Plane)
+#### Step 1: Record and Export the Code (Control Plane)
 
 ```sh
 # On your machine (has git)
-vmn snapshot export my_app --latest -o /mnt/fsx/snapshot.tar.gz
-tar xzf /mnt/fsx/snapshot.tar.gz -C /mnt/fsx/code/
+vmn-exp create my_app --note "sweep base"     # records the exact working tree
+vmn-exp export my_app --latest -o /mnt/fsx/code
 
 # /mnt/fsx/code/ now contains:
 #   vmn_metadata.yml   <- vmn reads this instead of git
@@ -267,7 +267,7 @@ tar xzf /mnt/fsx/snapshot.tar.gz -C /mnt/fsx/code/
 
 #### Step 2: Configure Once (in conf.yml or per-pod flags)
 
-If your snapshot includes `.vmn/my_app/conf.yml`, set it there:
+If your exported tree includes `.vmn/my_app/conf.yml`, set it there:
 
 ```yaml
 experiment:
@@ -347,22 +347,24 @@ flowchart TD
     style ui fill:#fff9c4,stroke:#f9a825
 ```
 
-#### Step 1: Export Snapshot to S3 or Embed in Image
+#### Step 1: Export the Code to S3 or Embed in Image
 
 ```sh
 # Option A: Export to S3
-vmn snapshot export my_app --latest -o snapshot.tar.gz
-aws s3 cp snapshot.tar.gz s3://my-experiments/snapshots/
+vmn-exp create my_app --note "sweep base"
+vmn-exp export my_app --latest -o code.tar.gz   # one <verstr>/ directory inside
+aws s3 cp code.tar.gz s3://my-experiments/code/
 
 # Option B: Bake into Docker image (simpler)
+vmn-exp export my_app --latest -o ./code
 # Dockerfile:
-#   COPY snapshot/ /workspace/
+#   COPY code/ /workspace/
 #   RUN pip install vmn-exp   # or vmn-exp-sdk if the job only calls start_run()
 ```
 
 #### Step 2: Configure Once or Pass Flags
 
-Config approach (in `conf.yml` baked into the snapshot):
+Config approach (in `conf.yml` baked into the exported tree):
 
 ```yaml
 experiment:
@@ -433,12 +435,12 @@ vmn-exp ui --s3-bucket my-experiments --s3-prefix vmn-experiments
 
 |  | Single Dev | Multi-Dev Team | K8s at Scale |
 |--|-----------|--------------|--------------|
-| Git needed? | Yes | Yes | No (snapshot) |
+| Git needed? | Yes | Yes | No (exported tree) |
 | Shared FS? | No | Optional (NFS/FSx) | Optional (NFS or S3) |
 | Concurrent? | No | Yes | Yes (1000+ pods) |
 | Writer ID? | Optional | Recommended | Required |
 | S3 support? | Yes | Yes | Yes |
-| Setup | None | Mount or S3 bucket | Snapshot export |
+| Setup | None | Mount or S3 bucket | `vmn-exp export` |
 
 ```mermaid
 flowchart TD
@@ -741,17 +743,18 @@ Here's the full lifecycle, from setup to viewing results:
 
 ```sh
 vmn stamp -r patch my_app
-vmn snapshot export my_app --latest -o snapshot.tar.gz
+vmn-exp create my_app --note "sweep base"
+vmn-exp export my_app --latest -o code.tar.gz
 ```
 
 **2. Upload to shared storage:**
 
 ```sh
-# NFS: extract to the mount
-tar xzf snapshot.tar.gz -C /mnt/fsx/code/
+# NFS: extract to the mount (the tarball holds one <verstr>/ directory)
+mkdir -p /mnt/fsx/code && tar xzf code.tar.gz -C /mnt/fsx/code/ --strip-components=1
 
 # S3: upload and bake into image
-aws s3 cp snapshot.tar.gz s3://my-experiments/snapshots/
+aws s3 cp code.tar.gz s3://my-experiments/code/
 ```
 
 **3. Launch the sweep:**
