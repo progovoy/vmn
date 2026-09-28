@@ -38,6 +38,7 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.status import (
@@ -202,13 +203,19 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     return {"idx": row["idx"], "meta": meta}, status
 
 
-def get_run(app_name=None, ref="latest", *, storage=None):
-    """One run: a :func:`list_runs` row plus its ``log``, ``series`` and ``artifacts``.
+def get_run(app_name=None, ref="latest", *, storage=None, x=None):
+    """One run: a :func:`list_runs` row plus its ``log``, ``series``,
+    ``step_metrics`` and ``artifacts``.
 
     *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N``
     or ``latest``. Raises ValueError when it resolves to nothing.
+
+    ``step_metrics`` maps each metric that declares one (``define_metric`` or
+    the conf.yml schema) to its x metric. With *x* (a metric name), ``series``
+    holds every other metric joined on it: each point carries ``x``, the x
+    metric's value at the same step, and points without one are dropped.
     """
-    app_name, storage, _ = _resolve(app_name, storage)
+    app_name, storage, root_path = _resolve(app_name, storage)
     snapshot = placement_snapshot(storage, app_name)
     verstr, err = resolve_experiment(
         storage, app_name, ref or "latest", snapshot=snapshot
@@ -224,6 +231,10 @@ def get_run(app_name=None, ref="latest", *, storage=None):
     row = experiment_row(target["idx"], target["meta"], log)
     row.update(status)
     row["log"] = log
-    row["series"] = metric_series(log)
+    series = metric_series(log)
+    row["series"] = series if x is None else join_all(series, x)
+    row["step_metrics"] = step_metrics(
+        series, metric_definitions(log), _metrics_schema(root_path, app_name)
+    )
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     return row

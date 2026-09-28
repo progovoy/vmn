@@ -49,6 +49,7 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_artifacts import RunArtifacts
 from vmn_exp.sdk.state_publisher import RunStatePublisher
@@ -178,7 +179,7 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-class Run(RunArtifacts):
+class Run(MetricDefinitions, RunArtifacts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     def __init__(
