@@ -20,13 +20,6 @@ function NavIcon({ name }: { name: string }) {
           <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor" />
         </svg>
       );
-    case "snap":
-      return (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.6" />
-          <circle cx="7.5" cy="7.5" r="1.8" fill="currentColor" />
-        </svg>
-      );
     case "tree":
       return (
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -144,9 +137,6 @@ export default function App() {
           <nav className="sb-nav">
             <NavLink to={appBase} end>
               <NavIcon name="exp" /> Experiments
-            </NavLink>
-            <NavLink to={`${appBase}/snapshots`}>
-              <NavIcon name="snap" /> Snapshots
             </NavLink>
             <NavLink to={`${appBase}/tree`}>
               <NavIcon name="tree" /> Stamp tree

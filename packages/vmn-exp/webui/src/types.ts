@@ -36,7 +36,7 @@ export interface Job {
   status: string;
   exit_code: number | null;
   log: string;
-  /** Ran fine but did nothing (e.g. snapshot create on a clean tree). */
+  /** Ran fine but did nothing. */
   noop: boolean;
 }
 
@@ -250,12 +250,4 @@ export interface DiffResult {
   to_verstr: string;
   metrics_delta: Record<string, { from: number | null; to: number | null }>;
   diff: string;
-}
-
-export interface SnapshotRow {
-  verstr: string;
-  timestamp: string | null;
-  note: string | null;
-  branch: string | null;
-  base_version: string | null;
 }

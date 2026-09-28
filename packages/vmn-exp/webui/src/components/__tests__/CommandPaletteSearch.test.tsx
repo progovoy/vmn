@@ -53,4 +53,11 @@ describe("CommandPalette", () => {
     );
     expect(await screen.findByText("0.0.9-dev.abc")).toBeInTheDocument();
   });
+
+  it("offers no Snapshots page", async () => {
+    open(createQueryClient());
+    await screen.findByText("recent-run");
+    expect(screen.getByText("Stamp tree")).toBeInTheDocument();
+    expect(screen.queryByText("Snapshots")).toBeNull();
+  });
 });

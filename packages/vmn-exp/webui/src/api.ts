@@ -1,6 +1,6 @@
 import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentColumns, ExperimentDetail,
-  ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema, SnapshotRow, VersionRow,
+  ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema, VersionRow,
   Workspace,
 } from "./types";
 import { appTag, BASE, get, post } from "./http";
@@ -115,6 +115,4 @@ export const api = {
       `/workspaces/${ws}/apps/${appTag(app)}/changelog?v=${encodeURIComponent(v)}` +
         (from ? `&from=${encodeURIComponent(from)}` : "")
     ),
-  snapshots: (ws: string, app: string) =>
-    get<SnapshotRow[]>(`/workspaces/${ws}/apps/${appTag(app)}/snapshots`),
 };

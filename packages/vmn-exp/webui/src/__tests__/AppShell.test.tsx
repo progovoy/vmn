@@ -121,3 +121,17 @@ describe("routes", () => {
     expect(await screen.findByText("Code diff")).toBeInTheDocument();
   });
 });
+
+describe("removed snapshots page", () => {
+  it("has no /snapshots route", () => {
+    const paths = routes[0].children?.map((r) => r.path) ?? [];
+    expect(paths.some((p) => p?.includes("snapshots"))).toBe(false);
+  });
+
+  it("has no Snapshots entry in the app nav", async () => {
+    renderShell(shellTree, "/ws/w/app/a/run/v1");
+    await screen.findByText("probe v1");
+    expect(screen.getByRole("link", { name: /stamp tree/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /snapshots/i })).toBeNull();
+  });
+});

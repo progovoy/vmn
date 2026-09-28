@@ -44,7 +44,6 @@ function usePaletteRuns(ws: string | undefined, app: string | undefined, needle:
 
 const PAGES: [string, string][] = [
   ["Experiments", ""],
-  ["Snapshots", "/snapshots"],
   ["Stamp tree", "/tree"],
   ["Actions", "/actions"],
 ];

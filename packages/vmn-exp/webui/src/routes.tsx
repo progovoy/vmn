@@ -10,7 +10,6 @@ const Run = lazy(() => import("./pages/Run"));
 const Compare = lazy(() => import("./pages/Compare"));
 const CompareRuns = lazy(() => import("./pages/CompareRuns"));
 const Overlay = lazy(() => import("./pages/Overlay"));
-const Snapshots = lazy(() => import("./pages/Snapshots"));
 const StampTree = lazy(() => import("./pages/StampTree"));
 const Actions = lazy(() => import("./pages/Actions"));
 const Models = lazy(() => import("./pages/Models"));
@@ -38,7 +37,6 @@ export const routes: RouteObject[] = [
       { path: "ws/:ws/app/:app/compare", element: page(Compare), handle: { page: "code diff" } },
       { path: "ws/:ws/app/:app/compare-runs", element: page(CompareRuns), handle: { page: "compare runs" } },
       { path: "ws/:ws/app/:app/overlay", element: page(Overlay), handle: { page: "overlay" } },
-      { path: "ws/:ws/app/:app/snapshots", element: page(Snapshots), handle: { page: "snapshots" } },
       { path: "ws/:ws/app/:app/tree", element: page(StampTree), handle: { page: "stamp tree" } },
       { path: "ws/:ws/app/:app/actions", element: page(Actions), handle: { page: "actions" } },
       { path: "ws/:ws/models", element: page(Models), handle: { page: "models" } },
