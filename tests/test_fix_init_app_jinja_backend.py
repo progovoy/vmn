@@ -8,10 +8,8 @@ import shutil
 
 import pytest
 import yaml
-
-from version_stamp.core.constants import _VMN_VERSION_REGEX
-
 from helpers import _init_app, _run_vmn_init, _stamp_app
+from version_stamp.core.constants import _VMN_VERSION_REGEX
 
 
 def _backend(path):

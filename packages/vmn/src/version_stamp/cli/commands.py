@@ -21,6 +21,7 @@ from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.constants import (
     INIT_COMMIT_MESSAGE,
     RELATIVE_TO_GLOBAL_TYPE,
+    VER_FILE_NAME,
     VMN_USER_NAME,
     VMN_VERSION_FORMAT,
 )
@@ -66,9 +67,7 @@ def handle_init(vmn_ctx, extra_optional=None):
     vmn_init_path = os.path.join(vmn_path, INIT_FILENAME)
     Path(vmn_init_path).touch()
     git_ignore_path = os.path.join(vmn_path, ".gitignore")
-
-    with open(git_ignore_path, "w+") as f:
-        f.writelines(f"{ignored_file}{os.linesep}" for ignored_file in IGNORED_FILES)
+    _add_ignored_files(git_ignore_path)
 
     # TODO:: revert in case of failure. Use the publish_commit function
     be.commit(
@@ -81,6 +80,37 @@ def handle_init(vmn_ctx, extra_optional=None):
     VMN_LOGGER.info(f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}")
 
     return 0
+
+
+def _add_ignored_files(git_ignore_path):
+    """Append vmn's ignore entries missing from *git_ignore_path*, keeping
+    whatever the user put there."""
+    existing = ""
+    if os.path.exists(git_ignore_path):
+        with open(git_ignore_path) as f:
+            existing = f.read()
+    present = set(existing.splitlines())
+    missing = [entry for entry in IGNORED_FILES if entry not in present]
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    with open(git_ignore_path, "w") as f:
+        f.write(existing + "".join(f"{entry}\n" for entry in missing))
+
+
+def _repo_initialized(be, vmn_root_path):
+    """`vmn init` ran here: its conf.yml or .gitignore is committed (repos
+    initialized before the conf.yml existed have only the .gitignore)."""
+    vmn_path = os.path.join(vmn_root_path, ".vmn")
+    return any(
+        be.is_path_tracked(os.path.join(vmn_path, name))
+        for name in (INIT_FILENAME, ".gitignore")
+    )
+
+
+def _app_initialized(be, app_dir_path):
+    """`vmn init-app` ran for the app: its version file is committed (a
+    committed conf.yml alone does not make an initialized app)."""
+    return be.is_path_tracked(os.path.join(app_dir_path, VER_FILE_NAME))
 
 
 @measure_runtime_decorator
@@ -286,10 +316,10 @@ def handle_stamp(vmn_ctx):
         # to distinguish "never initialized" from "initialized but tags removed"
         auto_initialized = False
         be = vmn_ctx.vcs.backend
-        vmn_path = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn")
-        vmn_init_file = os.path.join(vmn_path, INIT_FILENAME)
 
-        if "repo_tracked" not in status.state and not be.is_path_tracked(vmn_init_file):
+        if "repo_tracked" not in status.state and not _repo_initialized(
+            be, vmn_ctx.vcs.vmn_root_path
+        ):
             VMN_LOGGER.info(
                 "vmn tracking not initialized. Auto-initializing repository..."
             )
@@ -299,8 +329,8 @@ def handle_stamp(vmn_ctx):
                 return 1
             auto_initialized = True
 
-        if "app_tracked" not in status.state and not be.is_path_tracked(
-            vmn_ctx.vcs.app_dir_path
+        if "app_tracked" not in status.state and not _app_initialized(
+            be, vmn_ctx.vcs.app_dir_path
         ):
             VMN_LOGGER.info(
                 f"App '{vmn_ctx.vcs.name}' not tracked. Auto-initializing app..."
@@ -812,14 +842,12 @@ def _get_repo_status(
         },
     )
 
-    vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
-    vmn_init_file = os.path.join(vmn_path, INIT_FILENAME)
     if not vcs.tracked:
         status.app_tracked = False
         status.err_msgs["app_tracked"] = "Untracked app. Run vmn init-app first"
         status.state.remove("app_tracked")
 
-        if not vcs.backend.is_path_tracked(vmn_init_file):
+        if not _repo_initialized(vcs.backend, vcs.vmn_root_path):
             status.repo_tracked = False
             status.err_msgs[
                 "repo_tracked"
