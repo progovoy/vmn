@@ -47,6 +47,7 @@ from vmn_exp.core.log import (
     load_log,
     sort_by_metric,
 )
+from vmn_exp.core.output_log import OUTPUT_LOG_NAME
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
     parent_edges,
@@ -675,6 +676,12 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
 
 
 @measure_runtime_decorator
+def _print_output_log(storage, app_name, verstr):
+    for artifact in storage.list_artifacts(app_name, verstr):
+        if artifact["name"] == OUTPUT_LOG_NAME:
+            print(f"  Output:    {OUTPUT_LOG_NAME} ({artifact['size']} bytes)")
+
+
 def experiment_show(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
     snapshot = placement_snapshot(storage, app_name)
@@ -708,6 +715,7 @@ def experiment_show(vcs, params, storage, args):
     env_summary = metadata.get("env")
     if env_summary:
         print(f"  Env:       {format_env_oneliner(env_summary)}")
+    _print_output_log(storage, app_name, verstr)
     _print_status_block(storage, app_name, verstr, metadata, snapshot)
 
     # Patch stats

@@ -154,8 +154,9 @@ moved between two runs.
 
 `exp run` snapshots the tree, runs **any** command (a shell script, `hyperfine`,
 `wrk`, `pytest-benchmark`, `python train.py` — anything), and records the exit
-code and duration. The command inherits your terminal, so its output streams
-live.
+code and duration. The command's output streams live to your terminal
+(stdout to stdout, stderr to stderr) and is also kept as the run's
+[`output.log`](#console-output-outputlog) artifact.
 
 ```sh
 vmn-exp run my_app --note "batch=64" -- ./perf_test.sh
@@ -168,6 +169,32 @@ command's own exit code, so CI can tell a failed run from a passing one — or
 The command runs in the directory you invoked `vmn` from (or
 `$VMN_WORKING_DIR` when set), not the repo root, so
 `cd src && vmn-exp run my_app -- python train.py` finds `src/train.py`.
+
+### Console output: `output.log`
+
+`vmn-exp run` tees the command's stdout and stderr: every byte still reaches
+your terminal as it is written, and a combined copy is stored as the run's
+`output.log` artifact (next to any other artifact, locally or on S3), with an
+`artifact` log entry. `vmn-exp show` prints an `Output:` line for it and the
+web UI's run page shows it in an **output** card.
+
+- **Size cap**: `--output-cap-mb` (default 10, or `$VMN_EXP_OUTPUT_CAP_MB`).
+  Past the cap the first and last halves are kept around a
+  `[vmn: N bytes of output omitted]` marker — the start has the config the job
+  printed, the end has the traceback it died with. The terminal is never capped.
+- **Uploaded while it runs**: every `--sync-interval` seconds (only when it
+  changed) and once more at the end — whatever ended it, a forwarded SIGTERM
+  included — so a preempted or hung job still has its latest output stored.
+  Only a SIGKILL of `vmn-exp run` itself loses what came after the last upload.
+- **Bytes, not text**: output is stored verbatim; non-UTF-8 bytes and control
+  codes never break capture. A failing capture never stops supervision.
+- **Pipes, not a TTY**: the command writes to pipes, so `isatty()` is false —
+  tools may drop colours and progress bars switch to their non-interactive
+  mode. `PYTHONUNBUFFERED=1` is set (unless you set it) so a Python command
+  still streams line by line. A pty was not used: it merges the two streams,
+  rewrites line endings, is POSIX-only and paints redraws into the log.
+  `--no-capture-output` gives the command your terminal back and stores
+  nothing.
 
 ### The metrics-file protocol
 
@@ -501,7 +528,9 @@ vmn-exp run my_app --parent latest -- python train.py --lr 0.1
 |---|---|---|
 | `--heartbeat-interval <sec>` | `30` | How often the run refreshes its heartbeat |
 | `--kill-grace-sec <sec>` | `30` (`$VMN_EXP_KILL_GRACE_SEC`) | How long a [signalled](#preemption-and-signals) command may take to exit before it is killed |
-| `--sync-interval <sec>` | `30` | How often the log syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
+| `--sync-interval <sec>` | `30` | How often the log (and `output.log`) syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
+| `--output-cap-mb <mb>` | `10` (`$VMN_EXP_OUTPUT_CAP_MB`) | Size cap of the [`output.log`](#console-output-outputlog) artifact; past it the first and last halves are kept |
+| `--no-capture-output` | *(capture enabled)* | Don't keep the command's output as `output.log`; the command inherits the terminal |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
 | `--no-env` | *(capture enabled)* | Skip environment capture for this run |
 | `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
