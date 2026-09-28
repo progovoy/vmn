@@ -21,7 +21,7 @@ from vmn_exp.core.refs import resolve_parent
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
 from vmn_exp.sdk import _resolve_app_name, context
-from vmn_exp.sdk.context import EXPERIMENT_ID_ENV, current_run
+from vmn_exp.sdk.context import current_run
 
 SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
 GIT_MODE_MISSING = (
@@ -129,9 +129,9 @@ def pick_parent(storage, app_name, parent, nested):
     stale one is warned about and dropped — the outer run may have been pruned,
     which is no reason to fail this one).
 
-    ``VMN_EXPERIMENT_ID`` naming a run another thread of this process has open is
-    a sibling's export, not a launcher: it is skipped in favour of the value the
-    process was started with.
+    While this process has runs open, ``VMN_EXPERIMENT_ID`` is their own export,
+    never a launcher: the value the process was started with is used instead,
+    read atomically so a sibling closing mid-pick cannot leak through.
     """
     if parent:
         resolved, err = resolve_parent(storage, app_name, parent)
@@ -143,9 +143,7 @@ def pick_parent(storage, app_name, parent, nested):
     if enclosing is not None:
         return enclosing.id
 
-    ref = os.environ.get(EXPERIMENT_ID_ENV)
-    if ref and context.is_foreign_sibling(ref):
-        ref = context.launcher_experiment_id()
+    ref = context.launcher_experiment_id()
     return resolve_parent(storage, app_name, env_ref=ref)[0]
 
 

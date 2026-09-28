@@ -216,3 +216,39 @@ def test_run_started_in_a_forked_child_is_an_inner_run(app_layout):
 
     assert not child_id.startswith("error"), child_id
     assert _parents(app_layout)[child_id] == outer.id
+
+
+def test_sibling_closing_mid_pick_is_not_taken_for_a_launcher(app_layout, monkeypatch):
+    # VMN_EXPERIMENT_ID names the open sibling when the new run reads it; the
+    # sibling then closes before the "is it a sibling?" check runs.
+    from vmn_exp.sdk import context
+
+    _bootstrap(app_layout)
+    sibling_open, close_sibling, sibling_closed = (threading.Event() for _ in range(3))
+    result = {}
+
+    def sibling():
+        with start_run(app_layout.app_name, note="sibling") as run:
+            result["sibling"] = run.id
+            sibling_open.set()
+            close_sibling.wait(timeout=60)
+        sibling_closed.set()
+
+    def close_sibling_first(verstr):
+        close_sibling.set()
+        sibling_closed.wait(timeout=60)
+        return False
+
+    # The old pick_parent's sibling check; gone once the pick is atomic.
+    monkeypatch.setattr(context, "is_foreign_sibling", close_sibling_first, raising=False)
+    thread = threading.Thread(target=sibling)
+    thread.start()
+    sibling_open.wait(timeout=60)
+    try:
+        with start_run(app_layout.app_name, note="independent") as run:
+            result["independent"] = run.id
+    finally:
+        close_sibling.set()
+        thread.join()
+
+    assert _parents(app_layout)[result["independent"]] is None

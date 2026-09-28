@@ -93,18 +93,6 @@ def unregister(run):
             _restore_baseline()
 
 
-def is_foreign_sibling(verstr):
-    """Whether *verstr* is a run this process has open outside this context.
-
-    Such an id reached ``VMN_EXPERIMENT_ID`` only because another thread's run
-    exported it — it is a sibling, never an enclosing launcher.
-    """
-    ctx = context_run()
-    return any(r.id == verstr for r in open_runs()) and (
-        ctx is None or ctx.id != verstr
-    )
-
-
 def launcher_experiment_id():
     """``VMN_EXPERIMENT_ID`` as the process received it, before any run of ours."""
     with _LOCK:
