@@ -693,7 +693,7 @@ def test_run_experiment_from_snapshot_create(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    from version_stamp.cli.entry import _run_experiment_from_snapshot
+    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
 
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(
@@ -734,7 +734,7 @@ def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
-    from version_stamp.cli.entry import _run_experiment_from_snapshot
+    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
 
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(
@@ -778,7 +778,7 @@ def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
 
     experiment_writer._WRITER_ID = None
 
-    from version_stamp.cli.entry import _run_experiment_from_snapshot
+    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
 
     args = SimpleNamespace(
         action="diff",

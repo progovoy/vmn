@@ -8,7 +8,7 @@ import importlib
 import os
 import sys
 
-SRC_ROOT = "/src"
+SRC_ROOT = "/src/packages/vmn/src"
 PKG_ROOT = os.path.join(SRC_ROOT, "version_stamp")
 
 problems = []
@@ -30,18 +30,7 @@ for dirpath, _dirnames, filenames in os.walk(PKG_ROOT):
             "{}: resolved to the source tree, not the install".format(module)
         )
 
-# package_data is easy to declare and easy to forget; verify it landed.
-import vmn_exp.ui  # noqa: E402
-
-installed_static = os.path.join(os.path.dirname(vmn_exp.ui.__file__), "static")
-source_static = os.path.join(SRC_ROOT, "vmn_exp", "ui", "static")
-if os.path.isdir(source_static) and os.listdir(source_static):
-    if not os.path.isdir(installed_static) or not os.listdir(installed_static):
-        problems.append(
-            "vmn_exp/ui/static: package_data missing from the install"
-        )
-
 if problems:
     sys.exit("Installed distribution is incomplete:\n  " + "\n  ".join(problems))
 
-print("OK: every source subpackage and package_data file is present in the install")
+print("OK: every source subpackage is present in the install")

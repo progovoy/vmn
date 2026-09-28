@@ -50,24 +50,24 @@ Track code changes, metrics, and artifacts without a server:
 
 ```sh
 # Run an experiment (captures code state + metrics + duration automatically)
-vmn exp run <app_name> --note "description" -- <your command>
+vmn-exp run <app_name> --note "description" -- <your command>
 
 # Your script writes metrics to $VMN_METRICS_FILE as key=value lines
 # vmn ingests them automatically when the run finishes.
 
 # Manual experiment (no command to run)
-vmn exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
+vmn-exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
 
 # List experiments sorted by a metric
-vmn exp list <app_name> --sort loss --top 5
+vmn-exp list <app_name> --sort loss --top 5
 
 # Compare two experiments (shows metric delta + code diff)
-vmn exp diff <app_name>
+vmn-exp diff <app_name>
 
 # Restore the most recent experiment's code state
-vmn exp restore <app_name> --latest
-# For the best run instead: find it with `exp list --sort <metric>`, then
-# vmn exp restore <app_name> -v <version>
+vmn-exp restore <app_name> --latest
+# For the best run instead: find it with `vmn-exp list --sort <metric>`, then
+# vmn-exp restore <app_name> -v <version>
 ```
 
 ## Snapshots (uncommitted work)
@@ -87,16 +87,16 @@ Link trained models to the experiment runs that produced them:
 
 ```sh
 # Register a model version pointing at a run
-vmn model register resnet50 -v <verstr> --app my_app --artifact weights.pt --alias staging
+vmn-exp model register resnet50 -v <verstr> --app my_app --artifact weights.pt --alias staging
 
 # Move an alias (e.g., promote to production)
-vmn model alias resnet50 production 2
-vmn model alias resnet50 production 3 --expect 2   # CAS guard
+vmn-exp model alias resnet50 production 2
+vmn-exp model alias resnet50 production 3 --expect 2   # CAS guard
 
 # Inspect and list
-vmn model list
-vmn model show resnet50
-vmn model resolve resnet50@production   # print version metadata
+vmn-exp model list
+vmn-exp model show resnet50
+vmn-exp model resolve resnet50@production   # print version metadata
 ```
 
 SDK:
@@ -110,7 +110,7 @@ run.register_model("resnet50", artifact_path="weights.pt", alias="staging")
 path = download_model("resnet50@production")
 ```
 
-`vmn model` is git-free. Prune refuses registered runs even with `--force`; delete the version first.
+`vmn-exp model` is git-free. Prune refuses registered runs even with `--force`; delete the version first.
 
 ## Worktree islands (app + dependencies side by side)
 

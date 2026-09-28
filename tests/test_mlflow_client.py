@@ -384,7 +384,7 @@ def test_missing_mlflow_raises_import_error_with_hint(monkeypatch):
             del sys.modules[key]
 
     mod = importlib.import_module(MODULE)
-    with pytest.raises(ImportError, match=r'pip install.*vmn\[mlflow\]'):
+    with pytest.raises(ImportError, match=r'pip install.*vmn-exp\[mlflow\]'):
         list(mod.iter_runs("fake://uri"))
 
 

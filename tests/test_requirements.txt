@@ -10,7 +10,7 @@ toml
 filelock
 ruff; python_version >= "3.7"
 mypy
-setuptools
+setuptools>=64
 git-cliff
 boto3
 moto[s3]
@@ -27,3 +27,4 @@ pytorch-lightning
 tensorflow
 keras
 optuna
+pip

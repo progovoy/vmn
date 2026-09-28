@@ -14,7 +14,7 @@ import time
 import pytest
 import yaml
 from helpers import (
-    _PROJECT_ROOT,
+    _SRC_PATH,
     _PY,
     _bootstrap,
     _experiment,
@@ -63,7 +63,7 @@ def _sdk_script(app_name, body):
 def _run_python(app_layout, script):
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     env.pop("VMN_EXPERIMENT_ID", None)
     return subprocess.run(
         [_PY, "-c", script],

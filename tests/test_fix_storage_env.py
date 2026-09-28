@@ -126,11 +126,11 @@ def test_start_run_with_a_scratch_dir_also_syncs_to_the_bucket(tmp_path, monkeyp
 
 
 def test_git_less_cli_create_records_to_the_env_bucket(tmp_path, monkeypatch, s3):
-    from version_stamp.cli.entry import vmn_run
+    from vmn_exp.cli.main import vmn_exp_run
 
     _container(tmp_path, monkeypatch)
 
-    err, _ = vmn_run(["exp", "create", "trainer", "--note", "cli pod"])
+    err, _ = vmn_exp_run(["exp", "create", "trainer", "--note", "cli pod"])
 
     assert err == 0
     assert len(_bucket_runs()) == 1

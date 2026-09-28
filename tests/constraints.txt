@@ -1,7 +1,7 @@
 # CI-exact version pins.  Use with:
 #   pip install -r tests/requirements.txt -c tests/constraints.txt
 #
-# install_requires in setup.py (via tests/requirements.txt) carries a range so
+# The dependencies in packages/*/pyproject.toml carry a range so
 # it does not fight other tools' resolvers (e.g. mlflow, dvc).  This file locks
 # the exact version used in CI and the Docker tester image.
 

@@ -11,7 +11,7 @@ import time
 
 import pytest
 import yaml
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.core.status import load_run_state
@@ -34,7 +34,7 @@ def _child_env(**extra):
     # Keep the caller's PYTHONPATH too: it may carry the import shim that makes
     # this checkout's version_stamp win over an editable install.
     env["PYTHONPATH"] = os.pathsep.join(
-        p for p in (_PROJECT_ROOT, os.environ.get("PYTHONPATH")) if p
+        p for p in (_SRC_PATH, os.environ.get("PYTHONPATH")) if p
     )
     env.update(extra)
     return env

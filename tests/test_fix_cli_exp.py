@@ -9,7 +9,7 @@ import time
 import pytest
 import yaml
 from filelock import FileLock
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _exp, _storage
+from helpers import cli_module, _SRC_PATH, _PY, _bootstrap, _exp, _storage
 
 from vmn_exp.snapshot import _resolve_verstr
 
@@ -20,7 +20,7 @@ JOIN_TIMEOUT = 120
 def _env(app_layout):
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_LOCK_FILE_PATH"):
         env.pop(key, None)
     env.pop("VMN_WRITER_ID", None)
@@ -29,7 +29,7 @@ def _env(app_layout):
 
 def _popen(app_layout, argv):
     return subprocess.Popen(
-        [_PY, "-m", "version_stamp.cli.entry"] + list(argv),
+        [_PY, "-m", cli_module(argv)] + list(argv),
         cwd=app_layout.repo_path,
         env=_env(app_layout),
         stdout=subprocess.PIPE,

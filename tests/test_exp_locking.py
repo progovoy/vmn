@@ -18,7 +18,7 @@ import pytest
 from filelock import FileLock, Timeout
 
 from vmn_exp.core.status import load_run_state
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import cli_module, _SRC_PATH, _PY, _bootstrap, _storage
 
 # A held lock blocks for as long as we hold it, so "still running after this
 # window" is a deterministic observation, not a race.
@@ -36,7 +36,7 @@ def _lock_path(app_layout):
 def _env(app_layout, extra=None):
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     env.pop("VMN_EXPERIMENT_ID", None)
     env.pop("VMN_APP_NAME", None)
     env.pop("VMN_LOCK_FILE_PATH", None)
@@ -47,7 +47,7 @@ def _env(app_layout, extra=None):
 
 def _vmn_popen(app_layout, argv, env=None):
     return subprocess.Popen(
-        [_PY, "-m", "version_stamp.cli.entry"] + list(argv),
+        [_PY, "-m", cli_module(argv)] + list(argv),
         cwd=app_layout.repo_path,
         env=env or _env(app_layout),
         stdout=subprocess.PIPE,
@@ -125,7 +125,7 @@ def test_nested_exp_run_completes_without_a_lock_redirect(app_layout):
             "--",
             _PY,
             "-m",
-            "version_stamp.cli.entry",
+            "vmn_exp.cli",
             "exp",
             "run",
             app_layout.app_name,
@@ -424,7 +424,7 @@ def test_no_temp_run_lock_files_are_created(app_layout):
             "--",
             _PY,
             "-m",
-            "version_stamp.cli.entry",
+            "vmn_exp.cli",
             "exp",
             "create",
             app_layout.app_name,

@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import runpy
 from types import SimpleNamespace
 
 import pytest
@@ -69,19 +68,14 @@ def test_tcsh_helper_executes_vmn_with_argcomplete_environment(monkeypatch):
     assert calls["dup2"] == [(17, 8), (23, 1), (23, 2)]
 
 
-def test_setup_exposes_tcsh_helper_entry_point(monkeypatch):
-    setuptools = pytest.importorskip("setuptools")
-
-    captured = {}
-    monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
+def test_pyproject_exposes_tcsh_helper_entry_point():
+    toml = pytest.importorskip("toml")
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    monkeypatch.chdir(repo_root)
-    runpy.run_path("setup.py")
-
-    assert (
-        "vmn-argcomplete-tcsh = " "version_stamp.cli.completion:tcsh_completion_main"
-    ) in captured["entry_points"]["console_scripts"]
+    project = toml.load(os.path.join(repo_root, "packages", "vmn", "pyproject.toml"))
+    assert project["project"]["scripts"]["vmn-argcomplete-tcsh"] == (
+        "version_stamp.cli.completion:tcsh_completion_main"
+    )
 
 
 @pytest.mark.parametrize("shell", ["fish", "tcsh"])

@@ -68,7 +68,7 @@ string. The same model supports releases, working snapshots, and measured runs:
 | --- | --- | --- |
 | Release | `vmn stamp` → `vmn goto` | Committed application and dependency revisions |
 | Working | `vmn snapshot` | Release state plus local commits, tracked changes, and untracked files |
-| Measured | `vmn exp` | Working state plus metrics, parameters, artifacts, and run history |
+| Measured | `vmn-exp` | Working state plus metrics, parameters, artifacts, and run history |
 
 > **Scope:** vmn restores recorded source revisions. It does not rebuild
 > artifacts, capture toolchains or runtime infrastructure, sign tags, or deploy
@@ -91,6 +91,16 @@ pipx install vmn
 
 vmn --completion-install   # bash/zsh/fish/tcsh; auto-detects shell
 ```
+
+vmn ships as three packages; install only what you need:
+
+| Package | What you get |
+|---|---|
+| `vmn` | Versioning: `stamp`, `release`, `show`, `goto`, … |
+| `vmn-exp` | Experiment tracking on top of vmn: the `vmn-exp` CLI, model registry, snapshots, and the dashboard (`vmn-exp[ui]`) |
+| `vmn-exp-sdk` | Just the metrics writer for training jobs: `start_run()`, no git needed |
+
+See [docs/packaging.md](https://github.com/progovoy/vmn/blob/master/docs/packaging.md).
 
 Inside any Git repository:
 
@@ -300,7 +310,7 @@ vmn snapshot restore my_app --latest
 ```
 
 Snapshots extend the same state-recovery model as `goto` to uncommitted work.
-Local-first experiment tracking (`vmn exp`) builds on snapshots to capture
+Local-first experiment tracking (`vmn-exp`) builds on snapshots to capture
 metrics alongside code state; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
 Python workloads can log in-process instead of shelling out — `from
 vmn_exp.sdk import start_run`, plus `autolog()` for scikit-learn
@@ -311,8 +321,8 @@ Five runnable scripts — a minimal run, a training loop, a nested sweep, querie
 and autologging — live in
 [examples/](https://github.com/progovoy/vmn/blob/master/examples/README.md).
 
-Install `vmn[ui]` for a local web dashboard with stamp-tree views and snapshot
-comparison.
+`vmn snapshot` comes with `vmn-exp`. Install `vmn-exp[ui]` for a local web
+dashboard with stamp-tree views and snapshot comparison.
 
 ## AI agent integration
 
@@ -346,13 +356,13 @@ instructions untouched.
 | `vmn show` | Read version, status, or effective configuration |
 | `vmn goto` | Restore recorded application and dependency revisions |
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
-| `vmn exp` | Track experiments built on working-state snapshots |
+| `vmn-exp` | Track experiments built on working-state snapshots |
 | `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps on private branches (create, pull, freeze, remove) |
 | `vmn ai` | Output or install AI agent skill blocks and methodology rules |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
 | `vmn config` | List or edit global, app, root-app, and branch configuration |
-| `vmn ui` | Run the optional web dashboard |
+| `vmn-exp ui` | Run the optional web dashboard |
 
 Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 

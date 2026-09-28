@@ -153,10 +153,13 @@ def test_double_dash_split_only_for_flagged_spec():
 # ---------------------------------------------------------------------------
 
 def test_missing_plugin_module_keeps_stamping_working(monkeypatch):
-    """When BUILTIN_PLUGINS lists a missing module, the parser still builds."""
+    """When an installed plugin's module is missing, the parser still builds."""
+    from importlib.metadata import EntryPoint
+
     import version_stamp.cli.plugins as _plugins
 
-    monkeypatch.setattr(_plugins, "BUILTIN_PLUGINS", ("nonexistent.module.xyz",))
+    broken = EntryPoint("broken", "nonexistent.module.xyz:register", "vmn.plugins")
+    monkeypatch.setattr(_plugins, "_plugin_entry_points", lambda: [broken])
 
     # Should NOT raise — ImportError is swallowed
     _plugins.load_builtin_plugins()

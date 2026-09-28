@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vmn"
+version = "0.0.0"  # written by `vmn stamp` (version_backends in .vmn/vmn/conf.yml)
+description = "Stamping utility"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "argcomplete>=3.1.1",
+    "filelock>=3.2.0",
+    "GitPython>=3.1.41,<3.2",
+    "packaging>=21.0",
+    "PyYAML>=5.4.1",
+    "tomlkit>0.7.2",
+    "Jinja2>=3.0.3",
+    "questionary>=2.0.0",
+    "rich>=12.0.0",
+]
+
+[project.optional-dependencies]
+changelog = ["git-cliff==2.5.0"]
+
+[project.scripts]
+vmn = "version_stamp.cli:main"
+vmn-argcomplete-tcsh = "version_stamp.cli.completion:tcsh_completion_main"
+
+[project.urls]
+Homepage = "https://github.com/progovoy/vmn"
+
+[tool.setuptools.packages.find]
+where = ["src"]

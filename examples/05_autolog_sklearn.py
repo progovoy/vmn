@@ -5,7 +5,7 @@ Shows:  autolog() patches the framework's fit(), so hyperparameters, the trainin
         records only while a run is open and never opens one for you.
 Run:    python examples/05_autolog_sklearn.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
-Next:   vmn exp show vmn_examples --latest   (the sklearn_* params and artifact)
+Next:   vmn-exp show vmn_examples --latest   (the sklearn_* params and artifact)
 """
 from vmn_exp.sdk import autolog, start_run
 from vmn_exp.sdk.reader import get_run

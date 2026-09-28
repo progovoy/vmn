@@ -334,7 +334,7 @@ def test_runs_as_script_isolated():
 
     module_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "vmn_exp", "core", "env.py",
+        "packages", "vmn-exp-sdk", "src", "vmn_exp", "core", "env.py",
     )
     assert os.path.isfile(module_file), f"Module not found: {module_file}"
 
@@ -397,7 +397,7 @@ def test_stdlib_only_imports():
     """AST-parse experiment_env.py: every top-level import must be stdlib."""
     module_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "vmn_exp", "core", "env.py",
+        "packages", "vmn-exp-sdk", "src", "vmn_exp", "core", "env.py",
     )
     assert os.path.isfile(module_path), f"Module not found: {module_path}"
 

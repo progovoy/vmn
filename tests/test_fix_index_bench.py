@@ -1,17 +1,15 @@
-"""Scale guard: after a cold build, a metric append or a heartbeat must cost a
-small fraction of it — they touch one file, not every experiment.
+"""Scale guard: after a cold build, a metric append or a heartbeat must re-read
+only the touched experiment's files, not every experiment.
 
-Loose, relative bounds (a quarter of the cold build) so a loaded CI box does
-not flake; the incremental paths measure around a few percent.
+Tracks which records are read instead of timing it, so a loaded CI box cannot flake it.
 """
 import json
 import os
-import time
 
 import yaml
 
-from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.snapshot import get_snapshot_storage
 
 APP = "app"
 RUNS = 3000
@@ -43,44 +41,71 @@ def _seed(root):
     return base
 
 
-def _timed(index):
-    start = time.perf_counter()
+# Every per-record read the index can do; each takes (app_name, verstr, ...).
+RECORD_READS = ("load_file", "load_logs_by_writer", "load_merged_log",
+                "read_file_from", "plain_record_dir")
+
+
+def _track_record_reads(storage):
+    touched = set()
+    for target in (storage, storage.direct_files()):
+        for name in RECORD_READS:
+            original = getattr(target, name, None)
+            if original is None:
+                continue
+
+            def tracked(app_name, verstr, *args, _original=original, **kwargs):
+                touched.add(verstr)
+                return _original(app_name, verstr, *args, **kwargs)
+
+            setattr(target, name, tracked)
+    return touched
+
+
+def _refresh(index, touched):
+    touched.clear()
     index.refresh()
-    rows, states = index.rows(), index.run_states()
-    return time.perf_counter() - start, rows, states
+    return set(touched), index.rows(), index.run_states()
+
+
+def _storage(tmp_path):
+    storage = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    return storage, _track_record_reads(storage)
 
 
 def test_append_and_heartbeat_cost_a_fraction_of_the_cold_build(tmp_path):
     base = _seed(str(tmp_path))
-    storage = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    storage, counter = _storage(tmp_path)
     index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "bench.sqlite"))
 
-    cold, rows, _ = _timed(index)
+    cold, rows, _ = _refresh(index, counter)
     assert len(rows) == RUNS
 
     target = rows[RUNS // 2]["verstr"]
     with open(os.path.join(base, target, "log.w.jsonl"), "a") as f:
         f.write(json.dumps({"timestamp": "2027-01-01T00:00:00Z", "type": "metrics",
                             "values": {"loss": 0.0001}}) + "\n")
-    append, rows, _ = _timed(index)
+    append, rows, _ = _refresh(index, counter)
     assert rows[RUNS // 2]["metrics"]["loss"] == 0.0001
 
     state_path = os.path.join(base, rows[7]["verstr"], "run_state.yml")
     with open(state_path, "w") as f:
         f.write("state: finished\nexit_code: 9\nheartbeat: '2026-01-01T00:00:09Z'\n")
-    heartbeat, _, states = _timed(index)
+    heartbeat, _, states = _refresh(index, counter)
     assert states[rows[7]["verstr"]]["exit_code"] == 9
 
-    assert append < 0.25 * cold, (append, cold)
-    assert heartbeat < 0.25 * cold, (heartbeat, cold)
+    assert len(cold) == RUNS
+    assert append == {target}
+    assert heartbeat == {rows[7]["verstr"]}
 
 
 def test_a_new_process_starts_warm_from_the_persisted_index(tmp_path):
     _seed(str(tmp_path))
-    storage = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    storage, counter = _storage(tmp_path)
     cache = str(tmp_path / "bench.sqlite")
-    cold, rows, _ = _timed(ExperimentIndex(storage, APP, cache_path=cache))
+    cold, rows, _ = _refresh(ExperimentIndex(storage, APP, cache_path=cache), counter)
 
-    warm, warm_rows, _ = _timed(ExperimentIndex(storage, APP, cache_path=cache))
+    warm, warm_rows, _ = _refresh(ExperimentIndex(storage, APP, cache_path=cache), counter)
     assert warm_rows == rows
-    assert warm < 0.5 * cold, (warm, cold)
+    assert len(cold) == RUNS
+    assert warm == set()

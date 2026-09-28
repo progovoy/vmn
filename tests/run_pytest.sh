@@ -94,7 +94,7 @@ if ! ${PYTHON} -c 'import coverage, pytest' 2>/dev/null; then
 fi
 
 echo "Will run:"
-PYTHONPATH=${CUR_DIR}:${CUR_DIR}../ \
+export PYTHONPATH=${CUR_DIR}/../packages/vmn/src:${CUR_DIR}/../packages/vmn-exp-sdk/src:${CUR_DIR}/../packages/vmn-exp/src
 cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
 
 echo "${cmd}"

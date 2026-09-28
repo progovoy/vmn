@@ -10,7 +10,7 @@ import os
 import subprocess
 
 import pytest
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp import snapshot as snap
 from vmn_exp.sdk import start_run
@@ -43,7 +43,7 @@ def _record(app_layout, verstr):
 # capture no two workers can ever be inside at once, so seeing one is proof.
 _WORKER = """
 import os, sys, time
-from vmn_exp.sdk import capture
+from vmn_exp.gitmode import capture
 
 inside = os.environ["INSIDE_DIR"]
 real = capture.capture_snapshot
@@ -81,7 +81,7 @@ def test_concurrent_start_runs_capture_in_parallel(app_layout):
     env = dict(os.environ)
     env.update(
         PYTHONPATH=os.pathsep.join(
-            p for p in (_PROJECT_ROOT, os.environ.get("PYTHONPATH")) if p
+            p for p in (_SRC_PATH, os.environ.get("PYTHONPATH")) if p
         ),
         VMN_WORKING_DIR=app_layout.repo_path,
         APP=app_layout.app_name,

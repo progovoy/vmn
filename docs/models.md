@@ -1,4 +1,4 @@
-# vmn model registry
+# vmn-exp model registry
 
 The model registry links named, versioned model identifiers to the experiment runs and
 artifact paths that produced them. It lives in the same storage root as experiment runs
@@ -54,19 +54,19 @@ If `model` has no non-deleted versions, bare `model` and `model@latest` raise a
 
 ## CLI
 
-All `vmn model` sub-commands are git-free: they read/write experiment storage directly
+All `vmn-exp model` sub-commands are git-free: they read/write experiment storage directly
 and never take the repo lock.  Pass `--dir`, `--bucket`, `--prefix`, `--endpoint-url` to
-select a non-default storage root (same flags as `vmn exp`).
+select a non-default storage root (same flags as `vmn-exp`).
 
-### `vmn model register <model> -v <run-ref>`
+### `vmn-exp model register <model> -v <run-ref>`
 
 Register a new version of `<model>` pointing at the experiment run `<run-ref>`.
 
 ```sh
-vmn model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h
-vmn model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h --app my_app
-vmn model register resnet50 -v latest --artifact weights/model.pt --alias staging
-vmn model register resnet50 -v latest --description "fine-tuned on v2 data"
+vmn-exp model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h
+vmn-exp model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h --app my_app
+vmn-exp model register resnet50 -v latest --artifact weights/model.pt --alias staging
+vmn-exp model register resnet50 -v latest --description "fine-tuned on v2 data"
 ```
 
 Flags:
@@ -76,67 +76,67 @@ Flags:
 - `--description`: human-readable description
 - `--alias`: immediately point this alias at the new version
 
-### `vmn model alias <model> <alias> <version-number>`
+### `vmn-exp model alias <model> <alias> <version-number>`
 
 Point `<alias>` at `<version-number>`.
 
 ```sh
-vmn model alias resnet50 production 3
-vmn model alias resnet50 production 4 --expect 3   # only if currently at 3
+vmn-exp model alias resnet50 production 3
+vmn-exp model alias resnet50 production 4 --expect 3   # only if currently at 3
 ```
 
 `--expect` takes a version number or `none` (meaning "alias must be absent").  A
 mismatch exits non-zero — use this to guard against concurrent alias moves.
 
-### `vmn model list`
+### `vmn-exp model list`
 
 List all model names in the registry.
 
 ```sh
-vmn model list
-vmn model list --json
+vmn-exp model list
+vmn-exp model list --json
 ```
 
-### `vmn model show <model>`
+### `vmn-exp model show <model>`
 
 Show all versions and their current status and aliases.
 
 ```sh
-vmn model show resnet50
-vmn model show resnet50 --json
+vmn-exp model show resnet50
+vmn-exp model show resnet50 --json
 ```
 
-### `vmn model resolve <ref>`
+### `vmn-exp model resolve <ref>`
 
 Print the resolved version metadata for a ref (useful in scripts).
 
 ```sh
-vmn model resolve resnet50@production
-vmn model resolve "resnet50@latest"
+vmn-exp model resolve resnet50@production
+vmn-exp model resolve "resnet50@latest"
 ```
 
-### `vmn model deprecate <model> <version-number>`
+### `vmn-exp model deprecate <model> <version-number>`
 
 Mark a version as deprecated.  It remains resolvable.
 
 ```sh
-vmn model deprecate resnet50 1
+vmn-exp model deprecate resnet50 1
 ```
 
-### `vmn model delete <model> <version-number>`
+### `vmn-exp model delete <model> <version-number>`
 
 Mark a version as deleted.  Aliases pointing to it are removed first (errors if
 any alias would be left dangling — remove them explicitly beforehand, or use
 `--force` to remove aliases automatically).
 
 ```sh
-vmn model delete resnet50 1
-vmn model delete resnet50 1 --force   # also removes aliases pointing at v1
+vmn-exp model delete resnet50 1
+vmn-exp model delete resnet50 1 --force   # also removes aliases pointing at v1
 ```
 
 A version that is protected by the registry prune guard (i.e., the run that
 produced it is still referenced by an active version) cannot be deleted via
-`vmn exp prune --force`; you must call `vmn model delete` first.
+`vmn-exp prune --force`; you must call `vmn-exp model delete` first.
 
 ---
 
@@ -226,14 +226,14 @@ as `start_run`).
 
 ## UI
 
-The `vmn ui` dashboard has a **Models** page listing all registered models and
+The `vmn-exp ui` dashboard has a **Models** page listing all registered models and
 their current aliases and statuses.  Clicking a model opens a detail page that
 shows all versions with links to the originating experiment runs.
 
 A **Register** button on the Artifacts panel of any run detail page lets you
 register a new model version directly from the UI without leaving the browser.
 
-The Models page and its API are read-only when `vmn ui --read-only` is set.
+The Models page and its API are read-only when `vmn-exp ui --read-only` is set.
 
 ---
 
@@ -242,7 +242,7 @@ The Models page and its API are read-only when `vmn ui --read-only` is set.
 The registry uses the same storage root as experiments.  One registry per storage
 root: models registered in a local `.vmn` directory are not visible to a separate
 S3 bucket root.  The pseudo-app `vmn-registry` is hidden from all experiment app
-listings (`vmn exp list`, the UI apps dropdown, `list_runs`).
+listings (`vmn-exp list`, the UI apps dropdown, `list_runs`).
 
 Artifact files are **referenced, not copied**: the registry stores the run ref
 and a relative artifact path; the actual bytes live in the experiment run's
@@ -253,13 +253,13 @@ by the prune guard.
 
 ## Prune protection
 
-`vmn exp prune` (and `vmn exp prune --query`) refuses to delete any run that has
+`vmn-exp prune` (and `vmn-exp prune --query`) refuses to delete any run that has
 at least one active (non-deleted) model version pointing to it, even with
 `--force`.  To free storage, delete the model version first:
 
 ```sh
-vmn model delete resnet50 3
-vmn exp prune my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h
+vmn-exp model delete resnet50 3
+vmn-exp prune my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h
 ```
 
 ---
@@ -274,7 +274,7 @@ turn the move into a compare-and-swap: the operation fails if the alias is not
 currently pointing at the expected version.
 
 ```sh
-vmn model alias resnet50 production 4 --expect 3
+vmn-exp model alias resnet50 production 4 --expect 3
 ```
 
 The `--expect none` form asserts that the alias does not yet exist.

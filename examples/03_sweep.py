@@ -1,11 +1,11 @@
 """A hyperparameter sweep as one outer run over several inner runs.
 
 Shows:  nested=True — every run opened inside an open run becomes its child, so
-        `vmn exp list` shows a tree and the outer run's tree_status rolls up the
+        `vmn-exp list` shows a tree and the outer run's tree_status rolls up the
         whole sweep (failed > stuck > running > created > succeeded).
 Run:    python examples/03_sweep.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
-Next:   vmn exp list vmn_examples   (one outer job, three inner ones)
+Next:   vmn-exp list vmn_examples   (one outer job, three inner ones)
 """
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import get_run
@@ -35,7 +35,7 @@ def main():
     outer = get_run(APP_NAME, ref=sweep.id)
     print(f"kind={outer['kind']} children={len(outer['children'])} "
           f"tree_status={outer['tree_status']}")
-    print(f"see the tree with: vmn exp list {APP_NAME}")
+    print(f"see the tree with: vmn-exp list {APP_NAME}")
 
 
 if __name__ == "__main__":

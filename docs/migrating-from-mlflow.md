@@ -7,7 +7,7 @@ This guide covers three use cases:
 2. **[Porting Python scripts](#porting-python-scripts)** — swap out `mlflow.*`
    calls for the vmn SDK.
 3. **[Registry mapping](#registry-mapping)** — translate MLflow model registry
-   concepts to `vmn model`.
+   concepts to `vmn-exp model`.
 
 For a side-by-side feature comparison see [vmn vs MLflow](vmn-vs-mlflow.md).
 
@@ -15,36 +15,36 @@ For a side-by-side feature comparison see [vmn vs MLflow](vmn-vs-mlflow.md).
 
 ## Importing existing MLflow runs
 
-`vmn exp import-mlflow` reads an MLflow FileStore or a live tracking server and
-writes the runs into your vmn experiment storage.  No git checkout is required;
+`vmn-exp import-mlflow` reads an MLflow FileStore or a live tracking server and
+writes the runs into your vmn-exp storage.  No git checkout is required;
 the command never takes the repo lock.
 
 ### From a local `mlruns/` directory
 
 ```sh
 # Import all experiments in mlruns/ into the vmn app "my_app"
-vmn exp import-mlflow --mlruns ./mlruns my_app
+vmn-exp import-mlflow --mlruns ./mlruns my_app
 
 # Import only one experiment (by name or numeric id)
-vmn exp import-mlflow --mlruns ./mlruns --experiment "Baseline" my_app
+vmn-exp import-mlflow --mlruns ./mlruns --experiment "Baseline" my_app
 
 # Preview without writing anything
-vmn exp import-mlflow --mlruns ./mlruns --dry-run my_app
+vmn-exp import-mlflow --mlruns ./mlruns --dry-run my_app
 
 # Skip artifact files (metadata and metrics only)
-vmn exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
+vmn-exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
 
 # Include runs MLflow marked DELETED
-vmn exp import-mlflow --mlruns ./mlruns --include-deleted my_app
+vmn-exp import-mlflow --mlruns ./mlruns --include-deleted my_app
 ```
 
 ### From a tracking server
 
 ```sh
-pip install mlflow-skinny   # or vmn[mlflow]
+pip install mlflow-skinny   # or vmn-exp[mlflow]
 
-vmn exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
-vmn exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
+vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
+vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
     --experiment "Production" --workers 16 my_app
 ```
 
@@ -82,19 +82,19 @@ resumed — the run log is appended to, not duplicated.
 
 ### No code snapshot
 
-Imported runs have no code snapshot and no git ref.  `vmn exp restore` and `vmn
+Imported runs have no code snapshot and no git ref.  `vmn-exp restore` and `vmn
 exp diff` will refuse with a message explaining that the run has no associated
-code.  `vmn exp show` displays `imported_from: mlflow/<run_id>` to make this
+code.  `vmn-exp show` displays `imported_from: mlflow/<run_id>` to make this
 clear.
 
 ### Registry
 
 MLflow's model registry is not automatically imported.  After importing runs,
 you can register model versions manually using the verstr from
-`vmn exp show my_app --query "imported_from ~ mlflow"`:
+`vmn-exp show my_app --query "imported_from ~ mlflow"`:
 
 ```sh
-vmn model register my_model \
+vmn-exp model register my_model \
     -v 0.0.0-mlflow.abc123def456 --app my_app \
     --artifact model/model.pkl \
     --alias production
@@ -158,7 +158,7 @@ means a git-level write.  Set `user.name` and `user.email` in containers or via
 `GIT_AUTHOR_*` / `GIT_COMMITTER_*` environment variables.  There is no
 equivalent of `mlflow.set_tracking_uri("http://...")` — clients write to files.
 
-**`run.id` is a verstr, not a UUID.**  It is the same string `vmn exp restore`
+**`run.id` is a verstr, not a UUID.**  It is the same string `vmn-exp restore`
 and `vmn goto` take.  It encodes HEAD + the uncommitted patch set.
 
 **`autolog()` requires an open run.**  It never opens one implicitly; that would
@@ -214,23 +214,23 @@ trainer = Trainer(..., callbacks=[VmnCallback()])
 
 | MLflow registry concept | vmn equivalent |
 |---|---|
-| Registered model | `vmn model register <name> ...` |
+| Registered model | `vmn-exp model register <name> ...` |
 | Model version | Version number (immutable, atomically assigned) |
 | Stage (Staging / Production / Archived) | Alias (any string: `staging`, `production`, …) |
 | Version status (READY / FAILED_REGISTRATION) | Version status (`active` / `deprecated` / `deleted`) |
-| `client.transition_model_version_stage(...)` | `vmn model alias <model> <alias> <n>` or `set_alias(...)` |
-| `client.search_registered_models()` | `vmn model list` / `list_models()` |
-| `client.get_model_version(name, n)` | `vmn model resolve name@n` / `get_model_version("name@n")` |
+| `client.transition_model_version_stage(...)` | `vmn-exp model alias <model> <alias> <n>` or `set_alias(...)` |
+| `client.search_registered_models()` | `vmn-exp model list` / `list_models()` |
+| `client.get_model_version(name, n)` | `vmn-exp model resolve name@n` / `get_model_version("name@n")` |
 | `mlflow.pyfunc.load_model("models:/name/Production")` | `download_model("name@production")` returns a local path |
 
-See [docs/models.md](models.md) for the full vmn model registry reference.
+See [docs/models.md](models.md) for the full vmn-exp model registry reference.
 
 ---
 
 ## Further reading
 
-- [vmn experiment tracking guide](experiments.md)
+- [vmn-exp tracking guide](experiments.md)
 - [vmn Python SDK](sdk.md)
-- [vmn model registry](models.md)
+- [vmn-exp model registry](models.md)
 - [vmn vs MLflow](vmn-vs-mlflow.md)
-- [vmn ui](ui.md)
+- [vmn-exp ui](ui.md)

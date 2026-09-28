@@ -1,0 +1,17 @@
+# vmn-exp and vmn-exp-sdk share this app's version (see docs/packaging.md)
+conf:
+  default_release_mode: patch
+  extra_info: false
+  release_mode_policy: optional
+  version_backends:
+    generic_selectors:
+    - paths_section:
+      - input_file_path: packages/vmn-exp-sdk/pyproject.toml
+        output_file_path: packages/vmn-exp-sdk/pyproject.toml
+      - input_file_path: packages/vmn-exp/pyproject.toml
+        output_file_path: packages/vmn-exp/pyproject.toml
+      selectors_section:
+      - regex_selector: (version = ")[^"]*(")
+        regex_sub: \g<1>{{version}}\g<2>
+      - regex_selector: ("vmn-exp-sdk==)[^"]*(")
+        regex_sub: \g<1>{{version}}\g<2>

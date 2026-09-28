@@ -285,7 +285,7 @@ Phase 0: Scalability foundation (sequential — everything else depends on this)
 After each phase:
 1. `cd webui && npm test` — all frontend tests pass
 2. `cd .. && python -m pytest tests/test_k8s_experiment.py tests/test_ui_experiment_storage.py` — backend tests pass
-3. `vmn ui` — launch dev server, visually verify each feature on the leaderboard with real experiment data
+3. `vmn-exp ui` — launch dev server, visually verify each feature on the leaderboard with real experiment data
 4. **Scale testing**: generate synthetic data (script in `tests/gen_experiments.py`) with 5000 experiments, 20 metrics each, 1000-step training curves. Verify:
    - (a) 0 experiments — empty state renders correctly
    - (b) 1 experiment — all features work at minimum

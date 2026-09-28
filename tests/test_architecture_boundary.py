@@ -54,7 +54,8 @@ VMN_EXP_PACKAGE = "vmn_exp"
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).parent.parent
-_VS_ROOT = _REPO_ROOT / "version_stamp"
+_SRC_ROOTS = [_REPO_ROOT / "packages" / d / "src" for d in ("vmn", "vmn-exp-sdk", "vmn-exp")]
+_VS_ROOT = _SRC_ROOTS[0] / "version_stamp"
 
 
 def _is_exp(mod: str) -> bool:
@@ -84,7 +85,8 @@ def _is_stamping(mod: str) -> bool:
 
 
 def _module_name(path: Path) -> str:
-    rel = path.relative_to(_REPO_ROOT)
+    src = next(root for root in _SRC_ROOTS if root in path.parents)
+    rel = path.relative_to(src)
     return str(rel.with_suffix("")).replace(os.sep, ".")
 
 
@@ -171,8 +173,7 @@ def _scan_violations() -> frozenset:
                 violations.add((mod_name, imp))
 
     # Also scan vmn_exp/ if it exists (future package)
-    vmn_exp_root = _REPO_ROOT / "vmn_exp"
-    if vmn_exp_root.exists():
+    for vmn_exp_root in (root / "vmn_exp" for root in _SRC_ROOTS[1:]):
         for py_file in sorted(vmn_exp_root.rglob("*.py")):
             mod_name = _module_name(py_file)
             source = py_file.read_text()

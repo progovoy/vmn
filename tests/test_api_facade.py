@@ -17,6 +17,12 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _EXPECTED_ALL = [
+    "CommandSpec",
+    "register_command",
+    "find_command",
+    "register_dev_version_loader",
+    "VMN_ARGS",
+    "vmn_run",
     "INIT_FILENAME",
     "VMN_BE_TYPE_GIT",
     "VMN_LOGGER",

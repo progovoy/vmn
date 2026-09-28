@@ -9,6 +9,12 @@ import uuid
 
 import git
 import pytest
+
+# Import the tree under test (a worktree's, say), not whatever the venv has
+# installed editable. Mirrors helpers.SRC_DIRS for subprocesses.
+_REPO = pathlib.Path(__file__).resolve().parent.parent
+for _dist in ("vmn-exp", "vmn-exp-sdk", "vmn"):
+    sys.path.insert(0, str(_REPO / "packages" / _dist / "src"))
 import yaml
 from git import Repo
 
@@ -615,3 +621,13 @@ def app_layout(request, tmpdir):
 
     if "VMN_TESTS_CUSTOM_DIR" not in os.environ:
         shutil.rmtree(str(tmpdir.absolute()))
+
+
+@pytest.fixture(autouse=True)
+def _vmn_exp_commands_registered():
+    """In-process tests parse `ui`/`exp`/`model` with vmn's parser, as `vmn-exp`
+    does; register vmn-exp's commands the way its entry point would. (`vmn`
+    itself refusing them is checked in a subprocess, in test_vmn_exp_cli.py.)"""
+    from vmn_exp.cli.plugin import register_all
+
+    register_all()

@@ -32,7 +32,7 @@ You're on your laptop. You have a git repo with vmn set up (`vmn stamp -r patch 
 flowchart TD
     subgraph laptop["Your Laptop"]
         code["Your code\n(committed + uncommitted)"]
-        cmd["vmn exp create / vmn exp run"]
+        cmd["vmn-exp create / vmn-exp run"]
         subgraph store[".vmn/my_app/experiments/"]
             e1["1.0.0-dev.a1b/\nmetadata.yml\nlog.local.jsonl\npatches/"]
             e2["1.0.0-dev.a1b.r2/\n(same code = .r2 suffix)"]
@@ -49,16 +49,16 @@ Tweak your config, run your test yourself, then record:
 
 ```sh
 # Experiment 1: try batch=64
-vmn exp create my_app --note "batch=64" \
+vmn-exp create my_app --note "batch=64" \
     --metrics latency_ms=12.3 throughput=8100
 
 # Experiment 2: try batch=128
-vmn exp create my_app --note "batch=128" \
+vmn-exp create my_app --note "batch=128" \
     --metrics latency_ms=15.1 throughput=9400
 
 # Compare results
-vmn exp list my_app --sort latency_ms
-vmn exp diff my_app    # code diff + metric delta
+vmn-exp list my_app --sort latency_ms
+vmn-exp diff my_app    # code diff + metric delta
 ```
 
 Each experiment snapshots your entire working tree (committed + uncommitted). If the code hasn't changed between runs, vmn appends `.r2`, `.r3`, etc. Nothing is overwritten.
@@ -66,7 +66,7 @@ Each experiment snapshots your entire working tree (committed + uncommitted). If
 ### Option B: Let vmn Run Your Command
 
 ```sh
-vmn exp run my_app --note "lr=0.01" -- python train.py --lr 0.01
+vmn-exp run my_app --note "lr=0.01" -- python train.py --lr 0.01
 ```
 
 What happens step by step:
@@ -100,12 +100,12 @@ log_metric("final_acc", acc)                 # -> scalar metric
 ### Browsing & Comparing
 
 ```sh
-vmn exp list my_app              # table of all experiments
-vmn exp list my_app --sort loss  # sorted by a metric
-vmn exp show my_app --latest     # full detail of most recent
-vmn exp diff my_app              # code diff + metric delta
-vmn exp restore my_app --latest  # checkout that code state
-vmn ui                           # web dashboard with charts
+vmn-exp list my_app              # table of all experiments
+vmn-exp list my_app --sort loss  # sorted by a metric
+vmn-exp show my_app --latest     # full detail of most recent
+vmn-exp diff my_app              # code diff + metric delta
+vmn-exp restore my_app --latest  # checkout that code state
+vmn-exp ui                           # web dashboard with charts
 ```
 
 ---
@@ -175,16 +175,16 @@ experiment:
 
 ```sh
 # That's it — experiment_dir comes from config, writer_id from hostname
-vmn exp run my_app \
+vmn-exp run my_app \
     --note "lr=0.01, batch=64" \
     -- python train.py --lr 0.01
 
 # Or with manual metrics
-vmn exp create my_app \
+vmn-exp create my_app \
     --metrics loss=0.34 acc=0.91 --note "new optimizer"
 
 # CLI flags still work as overrides:
-vmn exp run my_app --experiment-dir /other/mount -- python train.py
+vmn-exp run my_app --experiment-dir /other/mount -- python train.py
 ```
 
 ### Why This Is Safe for Concurrent Writes
@@ -197,11 +197,11 @@ vmn exp run my_app --experiment-dir /other/mount -- python train.py
 
 ```sh
 # Anyone on the team can see all experiments:
-vmn exp list my_app --experiment-dir /mnt/shared
-vmn exp diff my_app --experiment-dir /mnt/shared
+vmn-exp list my_app --experiment-dir /mnt/shared
+vmn-exp diff my_app --experiment-dir /mnt/shared
 
 # Or launch the web UI for a dashboard + charts:
-vmn ui --repo /mnt/shared
+vmn-exp ui --repo /mnt/shared
 ```
 
 > vmn merges all `log.*.jsonl` files sorted by timestamp — one unified leaderboard.
@@ -242,7 +242,7 @@ flowchart TD
         pN_write["writes: log.podN.jsonl"]
     end
 
-    pod1 & pod2 & podN --> ui["vmn ui --repo /mnt/fsx\nLeaderboard + live curves"]
+    pod1 & pod2 & podN --> ui["vmn-exp ui --repo /mnt/fsx\nLeaderboard + live curves"]
 
     style cp fill:#f0f4ff,stroke:#1e4682
     style pod1 fill:#e8f5e9,stroke:#388e3c
@@ -279,7 +279,7 @@ experiment:
 Then each pod's entrypoint is just:
 
 ```sh
-vmn exp run my_app \
+vmn-exp run my_app \
     --from-snapshot /mnt/fsx/code/vmn_metadata.yml \
     -- python train.py --lr $LR --batch $BATCH
 ```
@@ -287,7 +287,7 @@ vmn exp run my_app \
 Or pass flags explicitly (overrides config):
 
 ```sh
-vmn exp run my_app \
+vmn-exp run my_app \
     --from-snapshot /mnt/fsx/code/vmn_metadata.yml \
     --experiment-dir /mnt/fsx \
     --writer-id $HOSTNAME \
@@ -308,10 +308,10 @@ The experiment verstr includes the pod ID: `1.0.0-dev.abc.def.pod-xyz-123`. Zero
 
 ```sh
 # From your machine or a dashboard server:
-vmn ui --repo /mnt/fsx
+vmn-exp ui --repo /mnt/fsx
 
 # CLI quick check:
-vmn exp list my_app --experiment-dir /mnt/fsx --sort loss --top 10
+vmn-exp list my_app --experiment-dir /mnt/fsx --sort loss --top 10
 ```
 
 ### Mode B: K8s + S3 (No Shared Filesystem)
@@ -338,7 +338,7 @@ flowchart TD
         s3a["vmn-experiments/my_app/\n├── verstr.pod1/ log.pod1.jsonl\n├── verstr.pod2/ log.pod2.jsonl\n└── verstr.podN/ log.podN.jsonl"]
     end
 
-    s3 --> ui["vmn ui --s3-bucket my-experiments\nLeaderboard + live curves"]
+    s3 --> ui["vmn-exp ui --s3-bucket my-experiments\nLeaderboard + live curves"]
 
     style pod1 fill:#e8f5e9,stroke:#388e3c
     style pod2 fill:#fff3e0,stroke:#f57c00
@@ -376,7 +376,7 @@ experiment:
 Then each pod just runs:
 
 ```sh
-vmn exp run my_app \
+vmn-exp run my_app \
     --from-snapshot /workspace/vmn_metadata.yml \
     --sync-interval 30 \
     -- python train.py --lr $LR
@@ -385,7 +385,7 @@ vmn exp run my_app \
 Or pass everything as flags:
 
 ```sh
-vmn exp run my_app \
+vmn-exp run my_app \
     --from-snapshot /workspace/vmn_metadata.yml \
     --experiment-dir /tmp/exp \
     --writer-id $HOSTNAME \
@@ -422,7 +422,7 @@ sequenceDiagram
 #### Step 3: View Results
 
 ```sh
-vmn ui --s3-bucket my-experiments --s3-prefix vmn-experiments
+vmn-exp ui --s3-bucket my-experiments --s3-prefix vmn-experiments
 
 # Same UI as local mode: leaderboard, training curves,
 # side-by-side comparison, code diffs
@@ -473,7 +473,7 @@ is reclaimed, the OOM killer fires, the spot instance is taken back. Nothing
 writes "I failed" anywhere, and a naive tracker shows that run as still running
 forever.
 
-vmn solves this with a **heartbeat**. `vmn exp run` writes a `run_state.yml`
+vmn solves this with a **heartbeat**. `vmn-exp run` writes a `run_state.yml`
 alongside `metadata.yml` and keeps refreshing it while the child process lives:
 
 ```yaml
@@ -493,7 +493,7 @@ Because this file lives next to the metrics, it rides the same storage you
 already configured — the shared NFS mount, or the S3 prefix.
 
 ```sh
-vmn exp run my_app --heartbeat-interval 10 -- python train.py
+vmn-exp run my_app --heartbeat-interval 10 -- python train.py
 ```
 
 ### Status Is Derived, Never Stored
@@ -503,7 +503,7 @@ mark a dead run as dead:
 
 | Status | Means | Typical cause |
 |--------|-------|---------------|
-| `created` | experiment exists, no command ever started | made with `vmn exp create` |
+| `created` | experiment exists, no command ever started | made with `vmn-exp create` |
 | `running` | heartbeat is fresh | healthy |
 | `stuck` | says running, heartbeat went stale, no exit code | node lost, OOM-killed, pod evicted |
 | `succeeded` | finished, exit code 0 | happy path |
@@ -522,14 +522,14 @@ filesystem or a couple of missed beats never produces a false `stuck`.
 
 ```sh
 # 1. What's still supposedly alive?
-vmn exp list my_app --experiment-dir /mnt/fsx
+vmn-exp list my_app --experiment-dir /mnt/fsx
 
 # 2. Anything flagged stuck? Get the details.
-vmn exp show my_app -v <verstr> --experiment-dir /mnt/fsx
+vmn-exp show my_app -v <verstr> --experiment-dir /mnt/fsx
 #    -> Status: stuck (no heartbeat for 14m, pid 12345 on pod-xyz-123)
 
 # 3. Reproduce the dead run's exact code state and try again locally
-vmn exp restore my_app -v <verstr>
+vmn-exp restore my_app -v <verstr>
 ```
 
 In the web UI the same thing is one glance: each run carries a color-coded
@@ -543,20 +543,20 @@ while anything is unfinished.
 A sweep is naturally two levels: one job that launches trials, and the trials.
 vmn reconstructs that shape for free.
 
-`vmn exp run` exports `VMN_EXPERIMENT_ID` to its child. **Any experiment created
+`vmn-exp run` exports `VMN_EXPERIMENT_ID` to its child. **Any experiment created
 while that variable is set records it as its `parent`.** So if your sweep driver
-is itself wrapped in `vmn exp run`, every trial it launches lands underneath it:
+is itself wrapped in `vmn-exp run`, every trial it launches lands underneath it:
 
 ```sh
 #!/usr/bin/env bash
 # sweep.sh
 for lr in 0.001 0.01 0.1; do
-    vmn exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
+    vmn-exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
 done
 ```
 
 ```sh
-vmn exp run my_app --note "lr sweep" -- ./sweep.sh
+vmn-exp run my_app --note "lr sweep" -- ./sweep.sh
 ```
 
 When the trials run somewhere that doesn't inherit your environment — a K8s pod,
@@ -564,11 +564,11 @@ a Slurm step, a remote worker — pass the parent explicitly instead. Plumb the
 driver's verstr through as an env var or arg and use `--parent`:
 
 ```sh
-vmn exp run my_app --parent "$SWEEP_ID" -- python train.py --lr "$LR"
+vmn-exp run my_app --parent "$SWEEP_ID" -- python train.py --lr "$LR"
 ```
 
 `--parent` accepts the same references as everything else: a full verstr, a
-unique prefix, `@N`, or `latest`. It works on `vmn exp create` too.
+unique prefix, `@N`, or `latest`. It works on `vmn-exp create` too.
 
 ### Rollup: One Bad Trial Fails the Sweep
 
@@ -585,7 +585,7 @@ So a 200-trial sweep reads `running` until every trial is done, then
 `stuck` at the top; one non-zero exit shows up as `failed`. You don't scroll the
 list to find out whether the sweep was clean.
 
-`vmn exp list` indents inner runs under their outer run:
+`vmn-exp list` indents inner runs under their outer run:
 
 ```
     VERSION                             STATUS      NOTE
@@ -595,7 +595,7 @@ list to find out whether the sweep was clean.
 [4]   1.6.0-dev.a1b2c3d.5566778         failed      lr=0.1
 ```
 
-`vmn exp show` prints `Parent:` on a trial and `Children:` on the driver, and
+`vmn-exp show` prints `Parent:` on a trial and `Children:` on the driver, and
 the web UI nests the trials under their sweep row.
 
 ---
@@ -624,7 +624,7 @@ Every command that takes an experiment reference supports these forms:
 | `VMN_EXPERIMENT_DIR` | Shared mount path (or use `--experiment-dir` flag) |
 | `VMN_SNAPSHOT_METADATA` | Path to `vmn_metadata.yml` (or use `--from-snapshot`) |
 | `VMN_EXPERIMENT_BUCKET` | S3 bucket runs are recorded to (or use `--bucket`); the job creates its own records |
-| `VMN_EXPERIMENT_PREFIX` | Key prefix inside the bucket (default `vmn-experiments`, matching `vmn ui --s3-bucket`) |
+| `VMN_EXPERIMENT_PREFIX` | Key prefix inside the bucket (default `vmn-experiments`, matching `vmn-exp ui --s3-bucket`) |
 | `VMN_EXPERIMENT_ENDPOINT_URL` | Custom S3 endpoint, e.g. MinIO (or use `--endpoint-url`) |
 
 ### Variables Set BY vmn (for your training script)
@@ -761,13 +761,13 @@ aws s3 cp snapshot.tar.gz s3://my-experiments/snapshots/
 
 **3. Launch the sweep:**
 
-Your Kubernetes Job template runs `vmn exp run` per pod (see pod specs above).
+Your Kubernetes Job template runs `vmn-exp run` per pod (see pod specs above).
 
 **4. Watch live results:**
 
 ```sh
-vmn ui --repo /mnt/fsx           # NFS mode
-vmn ui --s3-bucket my-experiments # S3 mode
+vmn-exp ui --repo /mnt/fsx           # NFS mode
+vmn-exp ui --s3-bucket my-experiments # S3 mode
 
 # Open http://localhost:8265 — leaderboard + training curves
 ```
@@ -775,7 +775,7 @@ vmn ui --s3-bucket my-experiments # S3 mode
 **5. Pick the winner:**
 
 ```sh
-vmn exp list my_app --experiment-dir /mnt/fsx --sort loss --top 5
-vmn exp show my_app -v <best-verstr> --experiment-dir /mnt/fsx   # incl. Status:
-vmn exp restore my_app -v <best-verstr>  # checkout that code
+vmn-exp list my_app --experiment-dir /mnt/fsx --sort loss --top 5
+vmn-exp show my_app -v <best-verstr> --experiment-dir /mnt/fsx   # incl. Status:
+vmn-exp restore my_app -v <best-verstr>  # checkout that code
 ```

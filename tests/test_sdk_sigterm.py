@@ -13,7 +13,7 @@ import threading
 import time
 
 import pytest
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import start_run
@@ -24,7 +24,7 @@ JOIN_TIMEOUT = 120
 def _env(app_layout, **extra):
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
-        p for p in (_PROJECT_ROOT, os.environ.get("PYTHONPATH")) if p
+        p for p in (_SRC_PATH, os.environ.get("PYTHONPATH")) if p
     )
     env["VMN_WORKING_DIR"] = app_layout.repo_path
     env.pop("VMN_EXPERIMENT_ID", None)

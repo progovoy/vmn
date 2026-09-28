@@ -16,7 +16,7 @@ source ./venv/bin/activate
 # Install dependencies
 pip install -r ./tests/requirements.txt
 pip install -r ./tests/test_requirements.txt
-pip install -e ./
+pip install -e packages/vmn -e packages/vmn-exp-sdk -e "packages/vmn-exp[ui]"
 
 # Verify installation
 vmn --version  # Should print 0.0.0
@@ -39,12 +39,13 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 
 ## Code Structure
 
+- The code lives in three packages under `packages/` (see [docs/packaging.md](docs/packaging.md)); paths below are relative to each package's `src/`.
 - `version_stamp/cli/` — CLI entry point, arg parsing, command handlers, config TUI, output/display
 - `version_stamp/stamping/` — IVersionsStamper, VersionControlStamper, Jinja2 template generation
 - `version_stamp/backends/` — VCS abstraction (Git/LocalFile backends)
 - `version_stamp/core/` — Constants, models, logging, utilities, version math
-- `vmn_exp/ui/` — `vmn ui` FastAPI server, readers, subprocess job runner, and the built SPA under `static/`
-- `webui/` — React/Vite source for the UI; `npm run build` writes into `vmn_exp/ui/static/`
+- `vmn_exp/ui/` — `vmn-exp ui` FastAPI server, readers, subprocess job runner, and the built SPA under `static/`
+- `packages/vmn-exp/webui/` — React/Vite source for the UI; `npm run build` writes into `vmn_exp/ui/static/`
 - `version_stamp/version.py` — vmn's own version string
 - `tests/` — Test suite with Docker-based isolated git environments
 - `docs/` — Long-form guides (`experiments.md`, `ui.md`) and migration guides
@@ -52,12 +53,12 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 ## Working on the Web UI
 
 ```sh
-pip install -e ".[ui]"
-vmn ui --no-browser        # leave running
+pip install -e "packages/vmn-exp[ui]"
+vmn-exp ui --no-browser        # leave running
 
-# Python changes under vmn_exp/ui/ → just refresh the browser
-# Changes under webui/src/ → rebuild, then refresh (no server restart needed)
-cd webui && npm run build
+# Python changes under packages/vmn-exp/src/vmn_exp/ui/ → just refresh the browser
+# Changes under packages/vmn-exp/webui/src/ → rebuild, then refresh (no server restart needed)
+cd packages/vmn-exp/webui && npm run build
 ```
 
 The built assets under `vmn_exp/ui/static/` are committed, so rebuild and

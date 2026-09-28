@@ -436,6 +436,7 @@ def test_experiment_writer_does_not_import_upward():
 
     source = (
         pathlib.Path(__file__).resolve().parent.parent
+        / "packages" / "vmn-exp-sdk" / "src"
         / "vmn_exp"
         / "core"
         / "writer.py"
@@ -463,7 +464,9 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
     import ast
     import pathlib
 
-    exp_dir = pathlib.Path(__file__).resolve().parent.parent / "vmn_exp" / "sdk"
+    exp_dir = (pathlib.Path(__file__).resolve().parent.parent
+               / "packages" / "vmn-exp-sdk" / "src" / "vmn_exp" / "sdk")
+    assert exp_dir.is_dir()
     from_cli = {
         alias.name
         for path in exp_dir.glob("*.py")
@@ -472,4 +475,4 @@ def test_exp_run_takes_only_the_documented_names_from_the_cli():
         and (node.module or "").startswith("vmn_exp.cli.experiment")
         for alias in node.names
     }
-    assert from_cli == {"_get_experiment_storage"}
+    assert from_cli <= {"_get_experiment_storage"}

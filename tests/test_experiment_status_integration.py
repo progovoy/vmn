@@ -13,7 +13,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _exec_script, _exp
+from helpers import _SRC_PATH, _PY, _bootstrap, _exec_script, _exp
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -109,9 +109,9 @@ def test_nested_sweep_is_outer_and_inner_through_the_api(app_layout, capfd):
         app_layout,
         "sweep.sh",
         "#!/bin/sh\nset -e\n"
-        f'export PYTHONPATH="{_PROJECT_ROOT}:{env_path}"\n'
+        f'export PYTHONPATH="{_SRC_PATH}:{env_path}"\n'
         f"for i in 1 2; do\n"
-        f'  "{_PY}" -m version_stamp.cli.entry exp run '
+        f'  "{_PY}" -m vmn_exp.cli exp run '
         f'{app_layout.app_name} -- "{_PY}" "{trial}"\n'
         "done\n",
     )
@@ -145,8 +145,8 @@ def test_failed_inner_makes_the_sweep_read_as_failed(app_layout, capfd):
         app_layout,
         "sweep.sh",
         "#!/bin/sh\n"
-        f'export PYTHONPATH="{_PROJECT_ROOT}:{env_path}"\n'
-        f'"{_PY}" -m version_stamp.cli.entry exp run '
+        f'export PYTHONPATH="{_SRC_PATH}:{env_path}"\n'
+        f'"{_PY}" -m vmn_exp.cli exp run '
         f'{app_layout.app_name} -- "{_PY}" "{trial}" || true\n',
     )
     capfd.readouterr()

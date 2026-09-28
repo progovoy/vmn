@@ -6,7 +6,7 @@ __pycache__/
 *$py.class
 *.exe
 venv/
-vmn.egg-info/
+*.egg-info/
 
 .coverage
 
@@ -15,11 +15,11 @@ build
 dist
 
 *.html
-!webui/index.html
+!packages/vmn-exp/webui/index.html
 
 .mcp.json
-webui/node_modules/
-webui/tsconfig.tsbuildinfo
+packages/vmn-exp/webui/node_modules/
+packages/vmn-exp/webui/tsconfig.tsbuildinfo
 
 .claude/
 .mtd/
@@ -31,3 +31,4 @@ webui/tsconfig.tsbuildinfo
 
 # generated CI reports (pipeline output)
 reports/
+packages/*/src/*.egg-info/

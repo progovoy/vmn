@@ -3,3 +3,13 @@ conf:
   default_release_mode: patch
   extra_info: false
   release_mode_policy: optional
+  version_backends:
+    generic_selectors:
+    - paths_section:
+      - input_file_path: packages/vmn/pyproject.toml
+        output_file_path: packages/vmn/pyproject.toml
+      - input_file_path: packages/vmn/src/version_stamp/version.py
+        output_file_path: packages/vmn/src/version_stamp/version.py
+      selectors_section:
+      - regex_selector: (version = ")[^"]*(")
+        regex_sub: \g<1>{{version}}\g<2>

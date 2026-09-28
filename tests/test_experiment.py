@@ -5,7 +5,7 @@ import tarfile
 import pytest
 import yaml
 
-from version_stamp.cli.entry import vmn_run
+from vmn_exp.cli.main import vmn_exp_run
 from version_stamp.core.logging import reset_logger
 from helpers import (
     DEV_VERSION_RE,
@@ -497,7 +497,7 @@ def test_experiment_show_latest_before_name(app_layout, capfd):
     assert verstr is not None
 
     reset_logger()
-    ret = vmn_run(["experiment", "show", app_layout.app_name, "--latest"])[0]
+    ret = vmn_exp_run(["experiment", "show", app_layout.app_name, "--latest"])[0]
     assert ret == 0, f"show <name> --latest failed with exit code {ret}"
 
 

@@ -6,7 +6,7 @@ import pytest
 
 from vmn_exp.core.tree import INNER, OUTER, annotate_tree
 from vmn_exp.sdk import start_run
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 
 def _meta(app_layout, verstr):
@@ -187,7 +187,7 @@ def test_stale_env_warning_survives_a_bare_python_process(app_layout):
 
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     env["VMN_EXPERIMENT_ID"] = "0.0.1-dev.deadbeef.deadbeef"
     proc = subprocess.run(
         [
@@ -218,12 +218,12 @@ def test_subprocess_vmn_exp_run_auto_links_as_an_inner_run(app_layout):
         # exported, exactly as a training script's subprocess would.
         child_env = dict(os.environ)
         child_env["VMN_WORKING_DIR"] = app_layout.repo_path
-        child_env["PYTHONPATH"] = _PROJECT_ROOT
+        child_env["PYTHONPATH"] = _SRC_PATH
         proc = subprocess.run(
             [
                 _PY,
                 "-m",
-                "version_stamp.cli.entry",
+                "vmn_exp.cli",
                 "exp",
                 "run",
                 app_layout.app_name,

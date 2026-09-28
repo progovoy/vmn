@@ -13,7 +13,7 @@ import sys
 import time
 
 import pytest
-from helpers import _PROJECT_ROOT, _PY
+from helpers import _SRC_PATH, _PY
 
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.sdk import log_buffer
@@ -142,7 +142,7 @@ time.sleep(120)
 
 def _spawn(storage, tmp_path, mode):
     marker = str(tmp_path / "marker")
-    env = dict(os.environ, PYTHONPATH=_PROJECT_ROOT)
+    env = dict(os.environ, PYTHONPATH=_SRC_PATH)
     proc = subprocess.Popen(
         [_PY, "-c", _SCRIPT, storage._local.vmn_root_path, marker, mode],
         env=env,

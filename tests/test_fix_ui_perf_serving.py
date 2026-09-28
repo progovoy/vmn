@@ -18,7 +18,7 @@ V = "1.0.0-dev.a"
 ART = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}/artifacts"
 STATIC = os.path.join(os.path.dirname(server_mod.__file__), "static")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VITE_CONFIG = os.path.join(REPO_ROOT, "webui", "vite.config.ts")
+VITE_CONFIG = os.path.join(REPO_ROOT, "packages", "vmn-exp", "webui", "vite.config.ts")
 
 
 @pytest.fixture

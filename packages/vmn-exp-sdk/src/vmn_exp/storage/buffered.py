@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Direct-to-remote experiment storage whose logs are buffered locally.
+
+A pod with a bucket and no scratch dir used to append each log entry by
+reading the writer's whole log object back and rewriting it: quadratic in the
+log's length. Here appends land in a private temp dir and ship as segments
+(the local-first backend's machinery): the first append at once, later ones at
+most every ``flush_interval_sec`` (a sooner sync — the run's heartbeat, its
+finish, process exit — ships them earlier).
+
+The buffer is not a replica: it holds only what this process appended, plus
+the metadata that makes appends legal. Every read goes to the remote, and the
+remote stays the only copy of a record's body.
+"""
+
+import atexit
+import os
+import shutil
+import tempfile
+import time
+import uuid
+
+from vmn_exp._base import VMN_LOGGER, parse_record_metadata
+from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp.storage.local import LocalSnapshotStorage
+
+DEFAULT_FLUSH_INTERVAL_SEC = 5
+
+# Storages holding lines not yet shipped. Only those are kept alive for the
+# exit flush; one with nothing pending is freed like any other object.
+_PENDING = set()
+
+
+def close_all():
+    """Ship every storage's buffered lines (run at interpreter exit)."""
+    for storage in list(_PENDING):
+        storage.close()
+
+
+atexit.register(close_all)
+
+
+class BufferedRemoteStorage(CachedSnapshotStorage):
+    _local_is_replica = False
+
+    def __init__(
+        self,
+        remote,
+        subdir="experiments",
+        flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
+    ):
+        # Created on the first write, so a read-only command leaves nothing behind.
+        self._buffer_root = os.path.join(
+            tempfile.gettempdir(), f"vmn-log-buffer-{uuid.uuid4().hex}"
+        )
+        super().__init__(LocalSnapshotStorage(self._buffer_root, subdir=subdir), remote)
+        self._flush_interval_sec = flush_interval_sec
+        self._flushed_at = {}
+        self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
+
+    def load(self, app_name, verstr):
+        return self._remote.load(app_name, verstr)
+
+    def load_file(self, app_name, verstr, filename):
+        return self._remote.load_file(app_name, verstr, filename)
+
+    def _ensure_local_record(self, app_name, verstr):
+        """A home for appends: the record's metadata, never its body."""
+        if self._local.exists(app_name, verstr):
+            return True
+        raw = self._remote.load_file(app_name, verstr, METADATA_FILE)
+        metadata = parse_record_metadata(raw) if raw else None
+        if metadata is None:
+            return False
+        self._local.save(app_name, verstr, metadata, {})
+        return True
+
+    def save_artifact_file(self, app_name, verstr, src_path, name=None):
+        # Straight up: a multi-GB checkpoint must not be copied to /tmp first.
+        if not self._ensure_local_record(app_name, verstr):
+            return False
+        return self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
+
+    def artifact_uri(self, app_name, verstr, path):
+        """Stable URI for artifact *path*: delegate to the remote backend."""
+        return self._remote.artifact_uri(app_name, verstr, path)
+
+    # -- logs -------------------------------------------------------------------
+
+    def append_log_entry(self, app_name, verstr, writer_id, entry):
+        if not super().append_log_entry(app_name, verstr, writer_id, entry):
+            return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        if not super().append_log_entries(app_name, verstr, writer_id, entries):
+            return False
+        return self._ship_if_due(app_name, verstr, writer_id)
+
+    def _ship_if_due(self, app_name, verstr, writer_id):
+        # The append above is already durable: a shipping failure here (a
+        # network blip) must not look like a failed write to the caller — the
+        # SDK's LogBuffer retries a failed write by resubmitting the whole
+        # batch, which would append these entries a second time. Leave them
+        # unshipped instead; close() (or a later due check) retries them.
+        key = (app_name, verstr, writer_id)
+        last = self._flushed_at.get(key)
+        if last is not None and time.monotonic() - last < self._flush_interval_sec:
+            self._mark_unshipped(key)
+            return True
+        try:
+            self.sync_log_to_remote(app_name, verstr, writer_id)
+        except Exception:
+            VMN_LOGGER.debug("Eager log ship failed; retrying later", exc_info=True)
+            self._mark_unshipped(key)
+        return True
+
+    def _mark_unshipped(self, key):
+        self._unshipped.add(key)
+        _PENDING.add(self)
+
+    def sync_log_to_remote(self, app_name, verstr, writer_id):
+        key = (app_name, verstr, writer_id)
+        self._flushed_at[key] = time.monotonic()
+        super().sync_log_to_remote(app_name, verstr, writer_id)
+        self._unshipped.discard(key)
+        if self._unshipped:
+            return
+        _PENDING.discard(self)
+        # Nothing left to ship, and the run is done: no atexit safety net is
+        # coming, so the buffer dir must go now or it never will.
+        if self._run_finished(app_name, verstr):
+            self._cleanup_buffer()
+
+    def _cleanup_buffer(self):
+        """Drop the buffer dir. Idempotent: ``rmtree`` on an already-gone
+        directory is a safe no-op, so a later call (``close()``, or another
+        writer's sync) costs nothing."""
+        shutil.rmtree(self._buffer_root, ignore_errors=True)
+
+    def _initial_sync_state(self, app_name, verstr, writer_id):
+        # The buffer starts empty: ship all of it, after what the remote holds
+        # (another process of this host may have logged under the same writer).
+        _, seq = self._remote_log_state(app_name, verstr, writer_id)
+        return 0, seq
+
+    def _ship(self, app_name, verstr, writer_id, seq, chunk):
+        return self._remote.put_log_segment(app_name, verstr, writer_id, seq, chunk)
+
+    def close(self):
+        """Ship whatever is still buffered and drop the buffer."""
+        for app_name, verstr, writer_id in list(self._flushed_at):
+            try:
+                self.sync_log_to_remote(app_name, verstr, writer_id)
+            except Exception:
+                VMN_LOGGER.warning(
+                    f"Experiment {verstr}: could not ship the last log lines"
+                )
+                VMN_LOGGER.debug("Final log flush failed", exc_info=True)
+        # A later append starts a fresh buffer, shipped from its first byte.
+        self._flushed_at.clear()
+        self._unshipped.clear()
+        _PENDING.discard(self)
+        self._synced.clear()
+        self._cleanup_buffer()

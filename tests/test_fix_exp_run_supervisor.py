@@ -10,7 +10,7 @@ import subprocess
 import time
 
 from helpers import (
-    _PROJECT_ROOT,
+    _SRC_PATH,
     _PY,
     _bootstrap,
     _experiment,
@@ -169,7 +169,7 @@ def _env_without_working_dir(app_layout):
     env.pop("VMN_WORKING_DIR", None)
     env.pop("VMN_EXPERIMENT_ID", None)
     env.pop("VMN_APP_NAME", None)
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     return env
 
 
@@ -184,7 +184,7 @@ def test_child_runs_in_the_invocation_directory(app_layout):
         [
             _PY,
             "-m",
-            "version_stamp.cli.entry",
+            "vmn_exp.cli",
             "exp",
             "run",
             app_layout.app_name,

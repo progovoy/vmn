@@ -9,7 +9,7 @@ from vmn_exp.core import status as st
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from helpers import (
     extract_dev_verstr,
-    _PROJECT_ROOT,
+    _SRC_PATH,
     _PY,
     _bootstrap,
     _experiment,
@@ -75,7 +75,7 @@ def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
         "open('probe.yml', 'w').write(yaml.dump(state))\n"
     )
     capfd.readouterr()
-    os.environ["PYTHONPATH"] = _PROJECT_ROOT
+    os.environ["PYTHONPATH"] = _SRC_PATH
     try:
         assert (
             _exp_run(
@@ -105,12 +105,12 @@ def test_sigkilled_runner_leaves_running_state_that_goes_stuck(app_layout):
 
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     runner = subprocess.Popen(
         [
             _PY,
             "-m",
-            "version_stamp.cli.entry",
+            "vmn_exp.cli",
             "exp",
             "run",
             app_layout.app_name,

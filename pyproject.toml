@@ -1,0 +1,15 @@
+# Workspace root: not a package. The three distributions live in packages/
+# (see docs/packaging.md); `uv sync` installs all of them editable.
+[tool.uv.workspace]
+members = ["packages/vmn", "packages/vmn-exp-sdk", "packages/vmn-exp"]
+
+[tool.uv.sources]
+vmn = { workspace = true }
+vmn-exp-sdk = { workspace = true }
+vmn-exp = { workspace = true }
+
+[tool.mypy]
+# vmn_exp is a namespace package spread over two source roots.
+mypy_path = "packages/vmn/src:packages/vmn-exp-sdk/src:packages/vmn-exp/src"
+namespace_packages = true
+explicit_package_bases = true

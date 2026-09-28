@@ -1,0 +1,153 @@
+# Packaging
+
+Status: **implemented.** This replaced the single `setup.py` and its
+`VMN_DIST=exp` switch. Where the implementation differs from the original
+design, the section says so under "Differs from the design".
+
+## Goals
+
+- Three independent installs from one repo:
+  - `vmn`: stamping only.
+  - `vmn-exp`: the experiment platform (CLI, UI, capture).
+  - `vmn-exp-sdk`: the metrics writer for jobs.
+- No file is shipped by more than one distribution.
+- `vmn-exp` can later move to its own repository and build on `vmn` as a normal
+  dependency, with no code changes.
+
+## Problems with the current setup
+
+1. Both wheels ship `version_stamp`, so installing `vmn` and the slim
+   `vmn-exp` overwrites files, and uninstalling either breaks the other.
+2. One `setup.py` builds two products, switched by an environment variable, and
+   the package lists are written out twice.
+3. Runtime dependencies are read from `tests/requirements.txt`.
+4. The slim wheel includes `version_stamp.cli` and `vmn_exp.cli` only because of
+   incidental module-level imports.
+5. Releases rewrite `version.py` with `gen_ver.py`, then revert it. The build uses
+   the deprecated `setup.py bdist_wheel`, and there is no `pyproject.toml`.
+6. Loose extras: an empty `exp` extra, and extras that only pin framework versions.
+
+## Distributions
+
+| Install | Import packages | Commands | Depends on |
+|---|---|---|---|
+| `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, … (as today); extra `changelog` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `sysmetrics`, `mlflow` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock; extras `s3`, `sysmetrics` |
+
+`vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
+subpackage belongs to exactly one distribution.
+
+### vmn
+
+- Knows nothing about experiments: the `exp`/`experiment`, `model` and `ui`
+  commands are gone, and no module names `vmn_exp`.
+- **`vmn snapshot`** is a `vmn` command, provided by `vmn-exp` through the
+  `vmn.plugins` entry point group (along with `vmn goto <dev-version>`).
+  `vmn` loads whatever that group lists.
+
+  *Differs from the design,* which kept snapshots inside `vmn`. Their storage
+  and record format live in `vmn_exp` (the SDK needs them), so `vmn` alone has
+  no `snapshot` command; installing `vmn-exp` adds it. The plugin hook replaced
+  the hardcoded `BUILTIN_PLUGINS` list rather than being removed.
+- `version_stamp.api` becomes vmn's public, versioned contract:
+  - documented;
+  - covered by contract tests;
+  - names are deprecated before they are removed.
+- `import version_stamp.api` loads no `git` module (its names resolve lazily),
+  so no change to the GitPython imports was needed.
+
+### vmn-exp
+
+- The full experiment platform: the `vmn-exp` command (experiment actions
+  directly — `vmn-exp run app -- cmd` — plus `model`, `ui` and `snapshot`),
+  the dashboard, and the MLflow importer.
+- *Differs from the design:* `vmn skill` still carries the experiment section
+  (now with `vmn-exp` commands); there is no separate `vmn-exp skill`.
+- `vmn_exp.gitmode` holds the git-dependent parts of the SDK: cold start
+  (`_init_app`, `handle_init`) and snapshot capture. `start_run()` loads it only
+  when needed.
+- Reaches `version_stamp` only through `version_stamp.api`.
+
+### vmn-exp-sdk
+
+- Meant for job images: `start_run()` in git-free mode, using
+  `VMN_EXPERIMENT_DIR` or a bucket, plus `VMN_SNAPSHOT_METADATA` or resuming a
+  run id. Covers logging metrics, params and artifacts, autolog, the framework
+  integrations, the reader API and the model registry.
+- If `start_run()` would need git (a cold start or a snapshot capture), it fails
+  with "install vmn-exp for git mode".
+- `vmn_exp._base` holds the few helpers the SDK used to take from
+  `version_stamp` (logger, `now_iso`, path validation, `yaml_safe_load`,
+  `sha256_file`, `resolve_root_path`, the repo lock); tests/test_exp_base.py
+  keeps each copy behaving like the original. They are copied, not shared, so the SDK has no dependency on
+  `vmn`. `parse_record_metadata` moves here, since the record format belongs to
+  experiments.
+
+## Import rules (enforced by tests)
+
+1. `version_stamp.*` never imports `vmn_exp` (tests/test_packaging_split.py).
+2. `vmn-exp-sdk` subpackages import neither `version_stamp` nor the `vmn-exp`
+   subpackages, except a lazy `vmn_exp.gitmode` import (same file).
+3. `vmn-exp` subpackages import `version_stamp` only through `version_stamp.api`
+   (same file).
+4. No path appears in two built wheels, and the SDK wheel alone records a run
+   with no `git` or `version_stamp` installed (tests/test_installation.py).
+
+## Repository layout
+
+One uv workspace:
+
+```
+pyproject.toml   workspace root (uv workspace, mypy config); not a package
+packages/
+  vmn/          pyproject.toml  src/version_stamp/
+  vmn-exp-sdk/  pyproject.toml  src/vmn_exp/{sdk,storage,core,registry,integrations,_base}
+  vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode}  webui/
+tests/           one suite for all three
+```
+
+- For development, `uv sync` (or `pip install -e` of each package) installs all
+  three editable. tests/conftest.py puts the three `src/` folders first on
+  `sys.path`, and `helpers._SRC_PATH` is the matching `PYTHONPATH` for
+  subprocesses, so a worktree tests its own tree.
+- `uv build --all-packages` builds the three wheels.
+- `setup.py`, `VMN_DIST`, `gen_ver.py` and `MANIFEST.in` are deleted.
+- Runtime dependencies live in each `pyproject.toml`; `tests/requirements.txt`
+  and `tests/constraints.txt` are dev-only pins.
+- *Differs from the design:* the tests were not split per package; they stay
+  in one `tests/` folder. Split them when `vmn-exp` moves out.
+
+Moving `vmn-exp` to its own repository later: run `git filter-repo` on
+`packages/vmn-exp*`, then change its `vmn` dependency from the workspace copy to
+the PyPI release.
+
+## Versioning and release
+
+- Two vmn apps: `vmn` (for the `vmn` distribution) and `vmn_exp` (a shared
+  version for `vmn-exp` and `vmn-exp-sdk`, so the dashboard and the job writer
+  always agree on the record format).
+- Each app's `version_backends` (`generic_selectors` in
+  `.vmn/vmn/conf.yml` and `.vmn/vmn_exp/conf.yml`) writes the new version into
+  `project.version`, into `version_stamp/version.py` (vmn), and into vmn-exp's
+  `vmn-exp-sdk==` pin, as part of `vmn stamp`. That replaces `gen_ver.py` and
+  the checkout revert. tests/test_workspace.py checks the selectors against the
+  real files and through a real `vmn stamp`.
+- `make patch` releases vmn; `make patch NAME=vmn_exp` releases vmn-exp and
+  vmn-exp-sdk. `_build` runs `uv build` for the matching packages (and builds
+  the web UI for vmn_exp). In `ci/pipeline.py` the `app` param (`vmn` or
+  `vmn_exp`) picks which.
+
+### PyPI
+
+- `vmn` already exists. `vmn-exp` and `vmn-exp-sdk` were free as of
+  2026-09-28; placeholder `0.0.1` releases to claim them were built but not yet
+  uploaded.
+- A project is created by its first upload, which needs an account-wide token.
+  After that, switch to per-project tokens.
+
+## Migration
+
+Done in six steps, each test-first: the import-rule tests; `vmn_exp._base`;
+`vmn_exp.gitmode`; the `vmn-exp` command; the workspace layout; release
+versioning through `version_backends`.

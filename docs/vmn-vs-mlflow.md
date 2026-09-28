@@ -1,7 +1,7 @@
 # vmn vs MLflow
 
-> [vmn](https://github.com/progovoy/vmn)'s experiment tracking (`vmn exp`, the
-> `vmn_exp.sdk` Python SDK, and the `vmn ui` dashboard) overlaps with
+> [vmn](https://github.com/progovoy/vmn)'s experiment tracking (`vmn-exp`, the
+> `vmn_exp.sdk` Python SDK, and the `vmn-exp ui` dashboard) overlaps with
 > [MLflow](https://mlflow.org/). This page is an honest comparison — including
 > what MLflow does that vmn does not.
 
@@ -17,7 +17,7 @@ backed by a database, with artifacts in blob storage.
 *snapshot* plus an append-only log: vmn captures the exact working tree the run
 executed against — committed or not — assigns it a deterministic version string,
 and records metrics against that. There is no server and no database; storage is
-files, locally or in S3. `vmn ui` is a reader you start when you want to look at
+files, locally or in S3. `vmn-exp ui` is a reader you start when you want to look at
 them.
 
 That difference in origin explains most of what follows. vmn is stronger on
@@ -34,21 +34,21 @@ stronger on everything downstream of a finished run.
 | Per-step metric series + charts | Yes | Yes |
 | Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. spark, statsmodels, prophet, LLM libs) |
 | Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
-| System metrics (CPU/mem/GPU) | Yes, on the heartbeat (`vmn[sysmetrics]`) | Yes |
+| System metrics (CPU/mem/GPU) | Yes, on the heartbeat (`vmn-exp-sdk[sysmetrics]`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
 | Run status | **Derived** — `created`/`running`/`stuck`/`succeeded`/`failed` | Stored; a dead run can stay `RUNNING` forever |
 | Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch >= "2.0"` | `search_runs` filter strings |
 | Environment capture | **Auto** — Python version, platform, packages captured at run create (`env.yml` + summary) | Via system metrics plugin |
 | Dataset / input tracking | `run.log_input(uri, digest, kind)` / `--input uri` on CLI | `mlflow.log_input(mlflow.data.from_*(...))` |
 | Exact source reproduction | **Snapshot of the working tree, dirty included** | Git commit + dirty *flag* |
-| Source diff between two runs | `vmn exp diff` / the Compare page | Not possible — the diff was never stored |
-| Import from MLflow | **`vmn exp import-mlflow`** — FileStore (no deps) or tracking server (`mlflow-skinny`) | — |
+| Source diff between two runs | `vmn-exp diff` / the Compare page | Not possible — the diff was never stored |
+| Import from MLflow | **`vmn-exp import-mlflow`** — FileStore (no deps) or tracking server (`mlflow-skinny`) | — |
 | Multi-repo / dependency versions | Built-in (`deps` in conf.yml, `vmn goto`) | Not available |
 | Backing store | Files: local filesystem or S3 | DB-backed tracking server (a local file store exists, but not for teams) |
-| Server required | No — `vmn ui` is optional and read-mostly | Yes, for any real deployment |
+| Server required | No — `vmn-exp ui` is optional and read-mostly | Yes, for any real deployment |
 | Remote logging over HTTP | **No** — clients write to a filesystem or S3 | Yes, the tracking server's REST API |
 | Multi-user / permissions | **One bearer token, all-or-nothing** | Users, experiment permissions, auth plugins |
-| Model registry (versions, aliases, deprecation) | **Yes** — `vmn model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [docs/models.md](models.md) | Yes — a core feature; also has stages approval workflow |
+| Model registry (versions, aliases, deprecation) | **Yes** — `vmn-exp model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [docs/models.md](models.md) | Yes — a core feature; also has stages approval workflow |
 | Model serving / packaging | **Absent** | `mlflow models serve`, pyfunc flavors, SageMaker/Docker targets |
 | Artifact rendering in the UI | **Download only** | Inline images, plots, tables, HTML |
 | `evaluate()`, LLM/prompt tracing, Projects | **Absent** | Yes |
@@ -71,8 +71,8 @@ addressed: the same tree always yields the same base version string. That makes
 two things possible that MLflow cannot offer:
 
 ```sh
-vmn exp restore my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h   # the tree, exactly
-vmn exp diff my_app -v <run_a> -v <run_b>             # why they differ
+vmn-exp restore my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h   # the tree, exactly
+vmn-exp diff my_app -v <run_a> -v <run_b>             # why they differ
 ```
 
 `vmn goto` extends the same guarantee across every tracked dependency
@@ -80,7 +80,7 @@ repository, which has no MLflow equivalent at all.
 
 ### A dead run does not read as a live one
 
-Status in vmn is derived, never stored. `vmn exp run` and the SDK publish a
+Status in vmn is derived, never stored. `vmn-exp run` and the SDK publish a
 heartbeat into `run_state.yml`; a run that claims to be running but has not beaten
 in `max(3 × interval, 60s)` and has no exit code is reported as **`stuck`**. Kill
 the node, pull the power, `kill -9` the trainer — the dashboard says stuck.
@@ -92,8 +92,8 @@ so one row tells you a sweep has a problem.
 
 ### No infrastructure to stand up or keep alive
 
-`pip install "vmn[exp]"` adds no third-party dependency and needs no server, no
-database, and no daemon. Runs are files; point `vmn ui` at them when you want to
+`pip install vmn-exp-sdk` adds only PyYAML and filelock and needs no server, no
+database, and no daemon. Runs are files; point `vmn-exp ui` at them when you want to
 look, or don't. Airgapped, laptop-only, and shared-S3 setups are all the same
 code path. MLflow's local file store covers a single user on one machine; anything
 shared means running a server plus a database.
@@ -134,13 +134,13 @@ externally-managed compute.
 
 ### More than one kind of user
 
-`vmn ui --token` is a single shared bearer token: everyone who has it can do
+`vmn-exp ui --token` is a single shared bearer token: everyone who has it can do
 everything (unless the whole server is `--read-only`). There are no users and no
 per-experiment permissions. MLflow has both.
 
 ### Seeing artifacts without downloading them
 
-`vmn ui` lists artifacts as download links. A run that plots a confusion matrix
+`vmn-exp ui` lists artifacts as download links. A run that plots a confusion matrix
 makes you download the PNG to look at it; MLflow renders images, plots, tables,
 and HTML inline.
 
@@ -161,8 +161,8 @@ MLflow also autologs more frameworks and has a real plugin ecosystem.
 | Want to know when a run died, not just when it finished | vmn |
 | Don't want to operate a tracking server or a database | vmn |
 | Already use vmn for release versioning | vmn |
-| Want to import an existing MLflow history | vmn (`vmn exp import-mlflow`) |
-| Need a model registry without a tracking server | vmn (`vmn model`) |
+| Want to import an existing MLflow history | vmn (`vmn-exp import-mlflow`) |
+| Need a model registry without a tracking server | vmn (`vmn-exp model`) |
 | Need formal stage-transition approval workflow for models | MLflow |
 | Need to serve or package a model | MLflow |
 | Log from compute without shared storage or S3 credentials | MLflow |
@@ -196,14 +196,14 @@ Differences worth knowing before you port a script:
   implicitly: that would stamp a version from inside `fit()`.
 - **Metric keys from autolog are prefixed** `<framework>_<name>`, so the query
   language's two-part paths resolve them.
-- **`run.id` is a verstr**, not a uuid — and it is the same string `vmn exp
+- **`run.id` is a verstr**, not a uuid — and it is the same string `vmn-exp
   restore` and `vmn goto` take.
 
 ## Further reading
 
-- [vmn experiment tracking guide](experiments.md)
+- [vmn-exp tracking guide](experiments.md)
 - [vmn Python SDK](sdk.md) · [runnable examples](../examples/README.md)
-- [vmn model registry](models.md)
+- [vmn-exp model registry](models.md)
 - [Migrating from MLflow](migrating-from-mlflow.md)
-- [vmn ui](ui.md)
+- [vmn-exp ui](ui.md)
 - [MLflow documentation](https://mlflow.org/docs/latest/index.html)

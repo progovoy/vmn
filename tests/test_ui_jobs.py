@@ -154,7 +154,7 @@ def test_ui_exp_create_build_command():
     )
     assert err is None
     assert cmd == [
-        "vmn",
+        "vmn-exp",
         "experiment",
         "create",
         "my_app",
@@ -167,7 +167,7 @@ def test_ui_exp_create_build_command():
 
     cmd, err = build_command("exp_create", "my_app", {})
     assert err is None
-    assert cmd == ["vmn", "experiment", "create", "my_app"]
+    assert cmd == ["vmn-exp", "experiment", "create", "my_app"]
 
     cmd, err = build_command("exp_create", "my_app", {"metrics": {"bad key": 1}})
     assert cmd is None and err
@@ -187,7 +187,7 @@ def test_ui_exp_add_build_command():
     )
     assert err is None
     assert cmd == [
-        "vmn",
+        "vmn-exp",
         "experiment",
         "add",
         "my_app",

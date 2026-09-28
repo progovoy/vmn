@@ -213,7 +213,8 @@ def test_core_does_not_import_upward():
     """core/ may never import cli/, ui/ or exp/ — that is the layering rule."""
     import pathlib
 
-    core = pathlib.Path(__file__).resolve().parent.parent / "version_stamp" / "core"
+    core = (pathlib.Path(__file__).resolve().parent.parent
+            / "packages" / "vmn" / "src" / "version_stamp" / "core")
     offenders = [
         path.name
         for path in core.glob("*.py")

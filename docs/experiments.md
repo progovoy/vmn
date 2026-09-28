@@ -1,11 +1,11 @@
 # Experiments
 
-`vmn experiment` (alias: `vmn exp`) is local-first experiment tracking for any
+`vmn-exp` (alias: `vmn-exp`) is local-first experiment tracking for any
 versioned app. An "experiment" is a **snapshot of your working tree plus a log of
 metrics and notes** — nothing more. There is no required training script, no
 server, and no database. Experiments are plain files under
 `.vmn/{app}/experiments/` (git-ignored, never committed or pushed), each anchored
-to an exact version and commit so reproducing a result is one `vmn exp restore`
+to an exact version and commit so reproducing a result is one `vmn-exp restore`
 away.
 
 Machine-learning training is the headline use case, but the mechanism is
@@ -96,14 +96,14 @@ measured:
 
 ```sh
 # edit config.yml (uncommitted is fine — it's captured either way)
-vmn exp create my_app --note "batch=64, cache on" --metrics latency_ms=12.3 throughput=8100
+vmn-exp create my_app --note "batch=64, cache on" --metrics latency_ms=12.3 throughput=8100
 ```
 
 `exp create` snapshots the tree and prints the new verstr. Add more numbers to it
 in as many passes as you like:
 
 ```sh
-vmn exp add my_app --latest --metrics p99_ms=41 --note "warm run"
+vmn-exp add my_app --latest --metrics p99_ms=41 --note "warm run"
 ```
 
 Change the config and capture again. Repeated identical states get `.rN`
@@ -111,7 +111,7 @@ suffixes, so nothing is clobbered:
 
 ```sh
 # tweak config.yml ...
-vmn exp create my_app --note "batch=128" --metrics latency_ms=15.1 throughput=9400
+vmn-exp create my_app --note "batch=128" --metrics latency_ms=15.1 throughput=9400
 ```
 
 ### Compare the sweep
@@ -119,9 +119,9 @@ vmn exp create my_app --note "batch=128" --metrics latency_ms=15.1 throughput=94
 Because each snapshot captures the config diff, you can line the variants up:
 
 ```sh
-vmn exp list my_app                  # table of runs + their latest metrics
-vmn exp compare my_app --last 3      # metrics side-by-side across the last 3
-vmn exp diff my_app -v @1 -v @2      # real config/code diff + metric delta
+vmn-exp list my_app                  # table of runs + their latest metrics
+vmn-exp compare my_app --last 3      # metrics side-by-side across the last 3
+vmn-exp diff my_app -v @1 -v @2      # real config/code diff + metric delta
 ```
 
 ### Record which knobs you set
@@ -140,7 +140,7 @@ tags: [perf, batch-sweep]
 ```
 
 ```sh
-vmn exp create my_app -f variant.yml --metrics latency_ms=15.1 throughput=9400
+vmn-exp create my_app -f variant.yml --metrics latency_ms=15.1 throughput=9400
 ```
 
 `--metrics` records outputs; `-f variant.yml` records inputs (`params`,
@@ -158,16 +158,16 @@ code and duration. The command inherits your terminal, so its output streams
 live.
 
 ```sh
-vmn exp run my_app --note "batch=64" -- ./perf_test.sh
+vmn-exp run my_app --note "batch=64" -- ./perf_test.sh
 ```
 
-Everything after the first `--` is the command. `vmn exp run` returns the
+Everything after the first `--` is the command. `vmn-exp run` returns the
 command's own exit code, so CI can tell a failed run from a passing one — or
 `128 + N` when signal N ended it, the way a shell reports it.
 
 The command runs in the directory you invoked `vmn` from (or
 `$VMN_WORKING_DIR` when set), not the repo root, so
-`cd src && vmn exp run my_app -- python train.py` finds `src/train.py`.
+`cd src && vmn-exp run my_app -- python train.py` finds `src/train.py`.
 
 ### The metrics-file protocol
 
@@ -284,7 +284,7 @@ duration_sec: null
 The beat interval defaults to 30 seconds and is tunable:
 
 ```sh
-vmn exp run my_app --heartbeat-interval 10 -- python train.py
+vmn-exp run my_app --heartbeat-interval 10 -- python train.py
 ```
 
 An [SDK](sdk.md) run has no supervising process, so it beats from its own daemon
@@ -310,7 +310,7 @@ before vmn calls a run stuck — the staleness window is
 `max(3 × heartbeat_interval_sec, 60s)`.
 
 The writer's `heartbeat` timestamp comes from the writer's clock, which may be
-off from the reader's. So every reader — `vmn exp list`/`show`, `prune`'s live
+off from the reader's. So every reader — `vmn-exp list`/`show`, `prune`'s live
 guard, the ui and the SDK reader — also weighs the *store's* write time of
 `run_state.yml` (the file mtime locally, `LastModified` on S3): a run is `stuck`
 only when **both** the heartbeat timestamp **and** that write time are older than
@@ -327,7 +327,7 @@ every beat, for readers that poll and want a clock-free "it moved" signal.
 ### Preemption and signals
 
 A scheduler stopping the job (Slurm `scancel`, Kubernetes eviction, a spot
-reclaim) sends `SIGTERM` to `vmn exp run`. vmn forwards it to the command, gives
+reclaim) sends `SIGTERM` to `vmn-exp run`. vmn forwards it to the command, gives
 the command `--kill-grace-sec` (default 30, or `$VMN_EXP_KILL_GRACE_SEC`) to exit
 cleanly, kills it if it is still alive after that, and then **always** records
 the final state — so a preempted run reads `failed`, never `stuck`, and the
@@ -365,8 +365,8 @@ exit code, duration, and pid/host — plus the heartbeat age when the run is
 `stuck`:
 
 ```sh
-vmn exp list my_app
-vmn exp show my_app --latest
+vmn-exp list my_app
+vmn-exp show my_app --latest
 ```
 
 ---
@@ -375,27 +375,27 @@ vmn exp show my_app --latest
 
 `exp run` exports `VMN_EXPERIMENT_ID` to its child. Any experiment created
 **while that variable is set** records it as its `parent`. So a sweep script
-that itself calls `vmn exp run` per trial automatically produces one **outer**
+that itself calls `vmn-exp run` per trial automatically produces one **outer**
 job containing **inner** jobs — no wiring required.
 
 ```sh
 #!/usr/bin/env bash
 # sweep.sh — each trial becomes an inner job of the run that launched this script
 for lr in 0.001 0.01 0.1; do
-    vmn exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
+    vmn-exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
 done
 ```
 
 ```sh
-vmn exp run my_app --note "lr sweep" -- ./sweep.sh
+vmn-exp run my_app --note "lr sweep" -- ./sweep.sh
 ```
 
 You can also parent explicitly, which is handy when the trials are launched from
 somewhere that does not inherit the environment:
 
 ```sh
-vmn exp run my_app --parent @3 -- python train.py --lr 0.01
-vmn exp create my_app --parent latest --metrics acc=0.91
+vmn-exp run my_app --parent @3 -- python train.py --lr 0.01
+vmn-exp create my_app --parent latest --metrics acc=0.91
 ```
 
 `--parent` takes any of the [addressing forms](#addressing-experiments): a full
@@ -441,14 +441,14 @@ Every subcommand that takes a version accepts, in place of a full verstr:
 |---|---|
 | *(omitted)* | the latest experiment (for `add`/`show`/`restore`/`export`; `compare`/`diff` default to the latest two) |
 | `--latest` | the most recent experiment, explicitly |
-| `@N` | the N-th row shown by `vmn exp list` (1-indexed, oldest-first) |
+| `@N` | the N-th row shown by `vmn-exp list` (1-indexed, oldest-first) |
 | a unique prefix | e.g. `-v 1.6.0-dev.a1b` if it uniquely identifies one run |
 | full verstr | exact, e.g. `-v 1.6.0-dev.a1b2c3d.e4f5g6h` |
 
 ```sh
-vmn exp show my_app                 # latest
-vmn exp show my_app -v @2           # the [2] row from list
-vmn exp diff my_app -v @1 -v @3     # two specific runs
+vmn-exp show my_app                 # latest
+vmn-exp show my_app -v @2           # the [2] row from list
+vmn-exp diff my_app -v @1 -v @3     # two specific runs
 ```
 
 ---
@@ -462,18 +462,18 @@ clean or dirty tree (a clean tree zeroes the diff hash). Re-running over an
 identical state starts a new `.rN` run instead of overwriting.
 
 ```sh
-vmn exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
-vmn exp create my_app -f params.yml --attach initial_weights.pt
-vmn exp create my_app --parent @2 --metrics acc=0.91
-vmn exp create my_app --name baseline-v1
-vmn exp create my_app --input s3://bucket/train.csv --input s3://bucket/eval.csv
-vmn exp create my_app --input "train=s3://bucket/train.csv#sha256:abc123"
+vmn-exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
+vmn-exp create my_app -f params.yml --attach initial_weights.pt
+vmn-exp create my_app --parent @2 --metrics acc=0.91
+vmn-exp create my_app --name baseline-v1
+vmn-exp create my_app --input s3://bucket/train.csv --input s3://bucket/eval.csv
+vmn-exp create my_app --input "train=s3://bucket/train.csv#sha256:abc123"
 ```
 
 An experiment created with no run has status `created`. `--parent <ref>` attaches
 it as an [inner job](#outer--inner-jobs-sweeps) of another experiment.
 `--name <text>` (also on `run`) gives the run a human-readable name, stored as
-`name` in `metadata.yml`: `vmn exp list` shows it quoted after the verstr, rows
+`name` in `metadata.yml`: `vmn-exp list` shows it quoted after the verstr, rows
 carry it as `name`, and queries match it (`name ~ "baseline"`).
 
 ### `run`
@@ -486,13 +486,13 @@ is alive.
 Only creating the experiment takes the per-repo vmn lock; it is released before
 the command starts. So a run that trains for hours leaves the repo usable — other
 `vmn` commands, including ones the command itself runs, are unaffected, and
-nesting `vmn exp run` inside `vmn exp run` works.
+nesting `vmn-exp run` inside `vmn-exp run` works.
 
 ```sh
-vmn exp run my_app --note "lr 0.01" -- python train.py --lr 0.01
-vmn exp run my_app -- ./perf_test.sh
-vmn exp run my_app --heartbeat-interval 10 -- python train.py
-vmn exp run my_app --parent latest -- python train.py --lr 0.1
+vmn-exp run my_app --note "lr 0.01" -- python train.py --lr 0.01
+vmn-exp run my_app -- ./perf_test.sh
+vmn-exp run my_app --heartbeat-interval 10 -- python train.py
+vmn-exp run my_app --parent latest -- python train.py --lr 0.1
 ```
 
 | Flag | Default | Description |
@@ -509,9 +509,9 @@ vmn exp run my_app --parent latest -- python train.py --lr 0.1
 `--input [name=]uri[#digest]` records a dataset, model checkpoint, or any other artifact the run consumed. It is repeatable; each call appends an independent log entry:
 
 ```sh
-vmn exp create my_app --input s3://bucket/train.csv
-vmn exp run my_app --input "train=s3://bucket/train.csv#sha256:abc" -- python train.py
-vmn exp add my_app -v @3 --input s3://bucket/labels.json
+vmn-exp create my_app --input s3://bucket/train.csv
+vmn-exp run my_app --input "train=s3://bucket/train.csv#sha256:abc" -- python train.py
+vmn-exp add my_app -v @3 --input s3://bucket/labels.json
 ```
 
 * **`name`**: a label for the input, so queries can use `inputs.train.uri`. Defaults to the URI basename without extension (`train.csv` → `train`).
@@ -527,21 +527,21 @@ with start_run("my_app") as run:
     run.log_input("s3://bucket/train.csv", name="train", digest="sha256:abc")
 ```
 
-Inputs are visible in `vmn exp show` and queryable as three-part paths:
+Inputs are visible in `vmn-exp show` and queryable as three-part paths:
 `inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind`.
 
 ### Environment capture
 
 Both `create` and `run` automatically record a snapshot of the runtime environment into the experiment: Python version, platform, and installed packages (the full `pip freeze` output). The summary (≤ 2 KB) is embedded in `metadata.yml` under `"env"`, and the full package list is written to `env.yml` next to it. These writes are best-effort — a failure never prevents the run from being created.
 
-When the command passed to `vmn exp run` is a Python interpreter (`python`, `python3`, `python3.x`) or a `.py` script, vmn probes that interpreter's own package list instead of the current one (5-second timeout; falls back to the current env on failure).
+When the command passed to `vmn-exp run` is a Python interpreter (`python`, `python3`, `python3.x`) or a `.py` script, vmn probes that interpreter's own package list instead of the current one (5-second timeout; falls back to the current env on failure).
 
 **Opt-out:**
 
 | Method | Example |
 |---|---|
-| CLI flag | `vmn exp create my_app --no-env` |
-| Environment variable | `VMN_CAPTURE_ENV=0 vmn exp run my_app -- train.py` |
+| CLI flag | `vmn-exp create my_app --no-env` |
+| Environment variable | `VMN_CAPTURE_ENV=0 vmn-exp run my_app -- train.py` |
 | Per-app config | `experiment.capture_env: false` in `.vmn/my_app/conf.yml` |
 
 The precedence is CLI flag > `VMN_CAPTURE_ENV` > conf.yml (default: capture enabled).
@@ -552,10 +552,10 @@ Append metrics, a note, an artifact, or a structured entry to an experiment
 (defaults to the latest). The log is append-only — nothing is overwritten.
 
 ```sh
-vmn exp add my_app --metrics val_loss=0.29 val_acc=0.93
-vmn exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
-vmn exp add my_app -f extra_notes.yml
-vmn exp add my_app --input train=s3://bucket/train.csv#sha256:abc123
+vmn-exp add my_app --metrics val_loss=0.29 val_acc=0.93
+vmn-exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
+vmn-exp add my_app -f extra_notes.yml
+vmn-exp add my_app --input train=s3://bucket/train.csv#sha256:abc123
 ```
 
 ### `list`
@@ -564,12 +564,12 @@ List experiments with a [status](#run-status-did-my-job-die) per row, optionally
 sorted by a metric. Inner runs are indented under their outer run.
 
 ```sh
-vmn exp list my_app                        # all
-vmn exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
-vmn exp list my_app --last 10              # most recent 10
-vmn exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
-vmn exp list my_app --json                 # machine-readable
-vmn exp list my_app --archived             # include archived runs
+vmn-exp list my_app                        # all
+vmn-exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
+vmn-exp list my_app --last 10              # most recent 10
+vmn-exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
+vmn-exp list my_app --json                 # machine-readable
+vmn-exp list my_app --archived             # include archived runs
 ```
 
 [Archived](#archive--unarchive) runs are left out unless `--archived` is given;
@@ -577,7 +577,7 @@ then they are marked `[archived]`.
 
 The `[N]` in front of each row is the run's storage index — the same number
 `-v @N` resolves — so it never changes with `--sort`, `--top`, `--last` or `--query`:
-`vmn exp list my_app --sort loss` showing `[7]` first means `vmn exp show my_app
+`vmn-exp list my_app --sort loss` showing `[7]` first means `vmn-exp show my_app
 -v @7` opens that run.
 
 `list`, `show`, `compare`, `diff` and `export` (and `vmn snapshot
@@ -617,10 +617,10 @@ lines, latest metrics, and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
 ```sh
-vmn exp show my_app          # latest
-vmn exp show my_app -v @1
-vmn exp show my_app -v @1 --full-log
-vmn exp show my_app -v @1 --json
+vmn-exp show my_app          # latest
+vmn-exp show my_app -v @1
+vmn-exp show my_app -v @1 --full-log
+vmn-exp show my_app -v @1 --json
 ```
 
 `--json` prints one object: the `list --json` row keys plus `base_commit`,
@@ -634,8 +634,8 @@ that). Needs at least two. It reads only each run's metadata and log, never its
 patches or untracked-file tarball, so comparing many runs stays cheap.
 
 ```sh
-vmn exp compare my_app --last 3
-vmn exp compare my_app -v @1 -v @4
+vmn-exp compare my_app --last 3
+vmn-exp compare my_app -v @1 -v @4
 ```
 
 ### `diff`
@@ -644,9 +644,9 @@ Metric/param delta **plus a real source diff** between two experiments (defaults
 to the latest two). Uses your git `diff.tool` if configured, or `--tool`.
 
 ```sh
-vmn exp diff my_app                 # latest two
-vmn exp diff my_app -v @1 -v @3
-vmn exp diff my_app --tool delta
+vmn-exp diff my_app                 # latest two
+vmn-exp diff my_app -v @1 -v @3
+vmn-exp diff my_app --tool delta
 ```
 
 ### `restore`
@@ -656,8 +656,8 @@ the working tree is dirty, that work is **auto-snapshotted first** (and the
 recovery command is printed) — you never lose uncommitted changes.
 
 ```sh
-vmn exp restore my_app --latest
-vmn exp restore my_app -v @2
+vmn-exp restore my_app --latest
+vmn-exp restore my_app -v @2
 ```
 
 ### `export`
@@ -666,8 +666,8 @@ Package an experiment (materialized code, metadata, metrics, artifacts) into a
 directory or a `.tar.gz`.
 
 ```sh
-vmn exp export my_app                        # latest -> <verstr>.tar.gz
-vmn exp export my_app --latest -o best.tar.gz
+vmn-exp export my_app                        # latest -> <verstr>.tar.gz
+vmn-exp export my_app --latest -o best.tar.gz
 ```
 
 ### `prune`
@@ -676,21 +676,21 @@ Delete old experiments by count, age, query, or exact ref. Each deleted verstr
 is printed.
 
 ```sh
-vmn exp prune my_app --keep 10              # keep the 10 most recent
-vmn exp prune my_app --older-than 30d       # remove anything older than 30 days (Nd/Nw/Nh)
-vmn exp prune my_app --keep 10 --dry-run    # print what would go, delete nothing
-vmn exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
-vmn exp prune my_app -v @4                  # delete exactly that one run
-vmn exp prune my_app --keep 5 --protect-tag stage  # never prune a run tagged stage=...
+vmn-exp prune my_app --keep 10              # keep the 10 most recent
+vmn-exp prune my_app --older-than 30d       # remove anything older than 30 days (Nd/Nw/Nh)
+vmn-exp prune my_app --keep 10 --dry-run    # print what would go, delete nothing
+vmn-exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
+vmn-exp prune my_app -v @4                  # delete exactly that one run
+vmn-exp prune my_app --keep 5 --protect-tag stage  # never prune a run tagged stage=...
 
-# Query-based selection (uses the same query language as vmn exp list --query):
-vmn exp prune my_app --query 'status = "failed"'          # preview (dry-run by default)
-vmn exp prune my_app --query 'status = "failed"' --yes    # actually delete
-vmn exp prune my_app --query 'tags.env = "test"' --keep 1 --yes  # keep newest match
+# Query-based selection (uses the same query language as vmn-exp list --query):
+vmn-exp prune my_app --query 'status = "failed"'          # preview (dry-run by default)
+vmn-exp prune my_app --query 'status = "failed"' --yes    # actually delete
+vmn-exp prune my_app --query 'tags.env = "test"' --keep 1 --yes  # keep newest match
 ```
 
 `--query <expr>` selects candidates via the same query language as
-`vmn exp list --query` — it sees full rows including `status`, `metrics`, and
+`vmn-exp list --query` — it sees full rows including `status`, `metrics`, and
 `tags`.  Because a typo in a `<`/`>` comparison could delete far more than
 intended, **`--query` is a dry-run preview by default**; pass `--yes`/`-y` to
 confirm deletion.  `--dry-run` always wins over `--yes`.  An empty or invalid
@@ -739,14 +739,14 @@ run. The first positional without `=` (or `-v`/`--latest`) is the run; every
 (repeatable) drops one.
 
 ```sh
-vmn exp tag my_app @3 stage=prod owner=ann
-vmn exp tag my_app @3 --remove owner
-vmn exp tag my_app stage=candidate --latest
+vmn-exp tag my_app @3 stage=prod owner=ann
+vmn-exp tag my_app @3 --remove owner
+vmn-exp tag my_app stage=candidate --latest
 ```
 
 Each call appends a `tags` entry to the log; readers fold them per key, last
 write wins. Rows carry the result as `tags` and the query language reads
-`tags.<key>` (`vmn exp list my_app --query 'tags.stage = "prod"'`). Positionals
+`tags.<key>` (`vmn-exp list my_app --query 'tags.stage = "prod"'`). Positionals
 go before the flags: argparse binds them before the first option.
 
 ### `archive` / `unarchive`
@@ -754,12 +754,12 @@ go before the flags: argparse binds them before the first option.
 Hide runs from listings without deleting anything:
 
 ```sh
-vmn exp archive my_app @1 @2 0.0.3-dev.abc1234.def5678
-vmn exp unarchive my_app @2
+vmn-exp archive my_app @1 @2 0.0.3-dev.abc1234.def5678
+vmn-exp unarchive my_app @2
 ```
 
 Archiving writes `archived: true` into the run's `metadata.yml` (atomically on
-disk, under the ETag on S3); unarchiving removes it. `vmn exp list` and the SDK's
+disk, under the ETag on S3); unarchiving removes it. `vmn-exp list` and the SDK's
 `list_runs` hide archived runs by default (`--archived` / `include_archived=True`
 shows them), as does the web UI unless asked with `archived=1`; the query language
 matches `archived = true`. From Python: `vmn_exp.sdk.manage.archive_run` /
@@ -784,7 +784,7 @@ tags: [baseline, transformer-v2]
 ```
 
 ```sh
-vmn exp create my_app -f params.yml --metrics loss=0.38
+vmn-exp create my_app -f params.yml --metrics loss=0.38
 ```
 
 `exp diff` prints a `params:` line showing which inputs changed between two runs,
@@ -823,7 +823,7 @@ never pushed. To share across a team, point any subcommand at an S3-compatible
 backend:
 
 ```sh
-vmn exp run my_app --backend s3 --bucket my-experiments \
+vmn-exp run my_app --backend s3 --bucket my-experiments \
     --endpoint-url http://minio:9000 --prefix team/ml -- ./perf_test.sh
 ```
 
@@ -871,7 +871,7 @@ so you don't repeat them on every command; CLI flags override the config.
 
 ## Web UI
 
-`vmn ui` (from `pip install "vmn[ui]"`) serves a dashboard over the same files:
+`vmn-exp ui` (from `pip install "vmn-exp[ui]"`) serves a dashboard over the same files:
 a sortable experiment leaderboard, per-run detail with **live training/perf
 curves** (from `step=` series), side-by-side compare with a real code diff, and
 an artifact browser. Each run gets a color-coded
@@ -887,31 +887,31 @@ updates in the browser *while the command is still executing*.
 
 ## Importing from MLflow
 
-`vmn exp import-mlflow` reads runs from an existing MLflow store and writes
-them into vmn experiment storage.  The imported runs appear in `vmn exp list`,
+`vmn-exp import-mlflow` reads runs from an existing MLflow store and writes
+them into vmn-exp storage.  The imported runs appear in `vmn-exp list`,
 the web UI, and are queryable with `--query 'imported_from != null'`.
 
 ```sh
 # From a local mlruns/ directory (no mlflow package needed)
-vmn exp import-mlflow --mlruns ./mlruns my_app
+vmn-exp import-mlflow --mlruns ./mlruns my_app
 
 # From a tracking server (requires pip install mlflow-skinny)
-vmn exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
+vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
 
 # Limit to specific experiments (repeatable, by name or numeric ID)
-vmn exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 my_app
+vmn-exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 my_app
 
 # Preview without writing (dry-run)
-vmn exp import-mlflow --mlruns ./mlruns --dry-run my_app
+vmn-exp import-mlflow --mlruns ./mlruns --dry-run my_app
 
 # Skip copying local artifact files
-vmn exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
+vmn-exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
 
 # Include deleted/trashed runs
-vmn exp import-mlflow --mlruns ./mlruns --include-deleted my_app
+vmn-exp import-mlflow --mlruns ./mlruns --include-deleted my_app
 
 # Tune parallelism (default: 8 workers)
-vmn exp import-mlflow --mlruns ./mlruns --workers 16 my_app
+vmn-exp import-mlflow --mlruns ./mlruns --workers 16 my_app
 ```
 
 **Re-import is safe**: running the command a second time skips already-imported

@@ -15,7 +15,7 @@ import os
 import subprocess
 
 from helpers import (
-    _PROJECT_ROOT,
+    _SRC_PATH,
     _PY,
     _exec_script,
     _experiment,
@@ -73,7 +73,7 @@ def test_sdk_cold_start_says_nothing_scary(app_layout):
     )
     env = dict(
         os.environ,
-        PYTHONPATH=_PROJECT_ROOT,
+        PYTHONPATH=_SRC_PATH,
         VMN_WORKING_DIR=app_layout.repo_path,
     )
     proc = subprocess.run(

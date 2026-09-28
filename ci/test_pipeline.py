@@ -136,23 +136,24 @@ def test_build_runs_make_build_when_enabled(mod):
     assert ctx.calls == [(["make", "_build"], {})]
 
 
-def test_build_passes_prerelease_template_for_rc(mod):
-    # `make rc` relies on _rc's $(eval) surviving into _build within one make
-    # process; the pipeline splits stamp/build across processes, so the rc
-    # template must be passed to _build explicitly or the wheel drops the -rc.N.
+def test_build_needs_no_template_for_rc(mod):
+    # `vmn stamp` writes the rc version into pyproject.toml, so the build reads
+    # it from there; nothing has to be passed from stamp to build any more.
     ctx = FakeCtx(build=True, stamp="rc")
     mod.build(ctx)
-    assert ctx.calls == [
-        (
-            [
-                "make",
-                "_build",
-                "EXTRA_SHOW_ARGS=--template "
-                "[{major}][.{minor}][.{patch}][{prerelease}]",
-            ],
-            {},
-        )
-    ]
+    assert ctx.calls == [(["make", "_build"], {})]
+
+
+@pytest.mark.parametrize("stage,params,target", [
+    ("stamp", {"stamp": "patch"}, "_patch"),
+    ("build", {"build": True}, "_build"),
+    ("upload", {"upload": True}, "upload"),
+])
+def test_the_app_param_releases_vmn_exp(mod, stage, params, target):
+    # app=vmn_exp releases vmn-exp and vmn-exp-sdk (Makefile NAME=vmn_exp).
+    ctx = FakeCtx(app="vmn_exp", **params)
+    getattr(mod, stage)(ctx)
+    assert ctx.calls == [(["make", target, "NAME=vmn_exp"], {})]
 
 
 def test_build_no_template_for_non_rc_stamp(mod):
@@ -218,7 +219,7 @@ def test_run_tests_is_cached_on_the_sources_it_reads(mod):
     # an unchanged repo restores the JUnit/HTML reports instead of re-running.
     spec = mod.pipeline.get_stage("run_tests")
     assert spec.deterministic is True
-    assert set(spec.inputs) == {"version_stamp", "tests", "setup.py"}
+    assert set(spec.inputs) == {"packages", "tests", "pyproject.toml"}
     assert spec.outputs  # a cache hit must restore the reports the UI renders
 
 
@@ -244,7 +245,9 @@ def test_pipeline_declares_release_params(mod):
     # The release lane's params are declared so the trigger UI can render them
     # as typed fields (a stamp-mode dropdown, build/upload checkboxes).
     spec = {p.name: p for p in mod.pipeline.param_spec}
-    assert set(spec) == {"stamp", "build", "upload"}
+    assert set(spec) == {"stamp", "build", "upload", "app"}
+    assert spec["app"].choices == ["vmn", "vmn_exp"]
+    assert spec["app"].default == "vmn"
     assert spec["stamp"].choices == ["major", "minor", "patch", "rc"]
     assert not spec["stamp"].required  # unset = skip
     assert spec["build"].type == "bool"

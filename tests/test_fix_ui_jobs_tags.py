@@ -13,7 +13,7 @@ def test_exp_tag_sets_and_removes():
     )
     assert err is None
     assert cmd == [
-        "vmn", "experiment", "tag", "my_app", V1,
+        "vmn-exp", "experiment", "tag", "my_app", V1,
         "team=vision", "lr=3e-4", "--remove", "old",
     ]
 
@@ -21,7 +21,7 @@ def test_exp_tag_sets_and_removes():
 def test_exp_tag_remove_only_repeats_the_flag():
     cmd, err = build_command("exp_tag", "my_app", {"verstr": V1, "remove": ["a", "b"]})
     assert err is None
-    assert cmd == ["vmn", "experiment", "tag", "my_app", V1, "--remove", "a", "--remove", "b"]
+    assert cmd == ["vmn-exp", "experiment", "tag", "my_app", V1, "--remove", "a", "--remove", "b"]
 
 
 def test_exp_tag_needs_something_to_do():
@@ -75,7 +75,7 @@ def test_exp_tag_bounds_the_number_of_tags():
 def test_exp_archive_commands(action):
     cmd, err = build_command(action, "root/svc", {"verstrs": [V1, V2]})
     assert err is None
-    assert cmd == ["vmn", "experiment", action.split("_")[1], "root/svc", V1, V2]
+    assert cmd == ["vmn-exp", "experiment", action.split("_")[1], "root/svc", V1, V2]
 
 
 @pytest.mark.parametrize("action", ["exp_archive", "exp_unarchive"])

@@ -1,6 +1,6 @@
-# vmn ui
+# vmn-exp ui
 
-`vmn ui` serves a web dashboard and REST API over your vmn repos and experiment
+`vmn-exp ui` serves a web dashboard and REST API over your vmn repos and experiment
 stores. Reads go straight to git tags and `.vmn/` files (or S3) — lock-free and
 always consistent with the CLI. Mutations run as real `vmn` subprocesses.
 
@@ -10,17 +10,17 @@ The UI ships inside the wheel but pulls in a couple of extra runtime deps, so it
 lives behind an extra:
 
 ```sh
-pip install "vmn[ui]"
+pip install "vmn-exp[ui]"
 ```
 
-Without the extra, `vmn ui` prints an install hint and exits.
+Without the extra, `vmn-exp ui` prints an install hint and exits.
 
 ## Localhost
 
 ```sh
 cd your-project
-vmn ui                     # 127.0.0.1:8265, auto-attaches this repo, opens a browser
-vmn ui --port 9000 --no-browser
+vmn-exp ui                     # 127.0.0.1:8265, auto-attaches this repo, opens a browser
+vmn-exp ui --port 9000 --no-browser
 ```
 
 The current repo becomes an implicit workspace. Open the printed URL.
@@ -39,7 +39,7 @@ another's working tree.
 Register sources at startup:
 
 ```sh
-vmn ui --data-dir /srv/vmn-ui \
+vmn-exp ui --data-dir /srv/vmn-ui \
        --repo /srv/checkouts/model-a \
        --repo /srv/checkouts/model-b \
        --s3-bucket team-experiments --s3-prefix ml --endpoint-url http://minio:9000
@@ -51,7 +51,7 @@ The registry persists in `<data-dir>/workspaces.yml` (default `~/.vmn-ui`).
 ### S3-only (no git repo)
 
 ```sh
-vmn ui --s3-bucket team-experiments --s3-prefix ml
+vmn-exp ui --s3-bucket team-experiments --s3-prefix ml
 ```
 
 Experiment browsing (leaderboards, run detail, artifacts) works with no local
@@ -60,7 +60,7 @@ checkout. Repo actions (stamp/goto) are naturally unavailable for S3 sources.
 ## Remote deployment
 
 ```sh
-vmn ui --host 0.0.0.0 --port 8265 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
+vmn-exp ui --host 0.0.0.0 --port 8265 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
 ```
 
 - **Auth**: a single shared bearer token (`--token` or the `VMN_UI_TOKEN` env).
@@ -97,7 +97,7 @@ Behind a proxy that rewrites `Host`, or when users reach the server by a name
 other than `--host`, list that name:
 
 ```sh
-vmn ui --host 0.0.0.0 --allowed-host vmn.example.com --token "$VMN_UI_TOKEN"
+vmn-exp ui --host 0.0.0.0 --allowed-host vmn.example.com --token "$VMN_UI_TOKEN"
 ```
 
 Example nginx:

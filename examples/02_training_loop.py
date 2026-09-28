@@ -6,7 +6,7 @@ Shows:  params up front, a per-step metric curve, a note, an artifact, and
         Plain Python — no ML library needed.
 Run:    python examples/02_training_loop.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
-Next:   vmn exp show vmn_examples --latest   (the loss curve and sys_* metrics)
+Next:   vmn-exp show vmn_examples --latest   (the loss curve and sys_* metrics)
 """
 import json
 import os
@@ -60,7 +60,7 @@ def main():
 
     print(f"logged: {EPOCHS} steps of loss/accuracy, a note, metrics.json")
     print("sampled: sys_cpu_percent, sys_rss_mb (one point per heartbeat)")
-    print(f"see it with: vmn exp show {APP_NAME} {run.id}")
+    print(f"see it with: vmn-exp show {APP_NAME} {run.id}")
 
 
 if __name__ == "__main__":

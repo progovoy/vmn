@@ -173,7 +173,7 @@ def test_yaml_safe_load_uses_the_c_loader_when_available(monkeypatch):
 
 
 def test_listing_and_run_state_use_the_fast_loader(st, monkeypatch):
-    from version_stamp.core import utils
+    from vmn_exp import _base as utils
     from vmn_exp.core.status import load_run_state
 
     st.save("app", "v1", _meta("v1"), {})

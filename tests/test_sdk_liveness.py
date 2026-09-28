@@ -15,7 +15,7 @@ import threading
 import time
 
 import pytest
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
 from vmn_exp.core import status as st
@@ -208,12 +208,12 @@ def test_cli_exp_run_publishes_heartbeat_seq(app_layout):
         os.environ,
         VMN_WORKING_DIR=app_layout.repo_path,
         PYTHONPATH=os.pathsep.join(
-            p for p in (_PROJECT_ROOT, os.environ.get("PYTHONPATH")) if p
+            p for p in (_SRC_PATH, os.environ.get("PYTHONPATH")) if p
         ),
     )
     proc = subprocess.run(
         [
-            _PY, "-m", "version_stamp.cli.entry", "exp", "run",
+            _PY, "-m", "vmn_exp.cli", "exp", "run",
             app_layout.app_name, "--heartbeat-interval", "1", "--",
             _PY, "-c", "import time; time.sleep(3.5)",
         ],

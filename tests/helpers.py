@@ -9,6 +9,7 @@ from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
 )
 from version_stamp.core.logging import reset_logger
+from vmn_exp.cli.main import vmn_exp_run
 
 DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}(?:\.r\d+)?$")
 
@@ -16,6 +17,12 @@ _PY = sys.executable or "python3"
 # Subprocesses must import the version_stamp under test, not the one the venv
 # has installed editable from the main checkout.
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The three distributions' source roots (see docs/packaging.md), as a PYTHONPATH.
+SRC_DIRS = [
+    os.path.join(_PROJECT_ROOT, "packages", dist, "src")
+    for dist in ("vmn", "vmn-exp-sdk", "vmn-exp")
+]
+_SRC_PATH = os.pathsep.join(SRC_DIRS)
 
 
 def extract_dev_verstr(output):
@@ -425,7 +432,7 @@ def _experiment(
         args_list.extend(run_cmd)
 
     reset_logger()
-    return vmn_run(args_list)[0]
+    return vmn_exp_run(args_list)[0]
 
 
 def _exp(app_name, **kwargs):
@@ -437,3 +444,10 @@ def _configure_empty_conf(app_layout, params):
     app_layout.write_conf(params["app_conf_path"], **conf)
 
     return conf
+
+
+def cli_module(argv):
+    """The ``-m`` module that runs *argv*: vmn-exp's commands, or vmn's."""
+    if argv and argv[0] in ("exp", "experiment", "model", "ui"):
+        return "vmn_exp.cli"
+    return "version_stamp.cli.entry"

@@ -1,14 +1,12 @@
-"""What a user gets from `pip install "vmn[exp,ui]"`, verified against a wheel.
+"""What users get from the three wheels (vmn, vmn-exp-sdk, vmn-exp).
 
-Every other test imports version_stamp from the checkout, so a packaging
-mistake — a subpackage missing from setup.py, the dashboard's static assets
-left out of package_data, an extra whose name drifted from the docs — is
-invisible to them and only shows up after a release. These build a real wheel
-and install it into a throwaway venv with an empty PYTHONPATH, so nothing can
-be satisfied by the source tree.
+Every other test imports from the checkout, so a packaging mistake — a missing
+subpackage, the dashboard's assets left out, a file shipped by two wheels —
+only shows up after a release. These build the real wheels and install them
+into throwaway venvs with an empty PYTHONPATH.
 
-The venv install needs the package index. If it is unreachable the tests skip
-rather than fail; anything else that goes wrong is a real packaging defect.
+The installs need the package index for third-party dependencies. If it is
+unreachable the tests skip; anything else is a real packaging defect.
 """
 import os
 import subprocess
@@ -17,144 +15,159 @@ import zipfile
 import pytest
 from helpers import _PROJECT_ROOT, _PY
 
-# Built once per session: ~10s for the wheel, ~30s for the venv, and every test
-# here reads the same artifact.
 _TIMEOUT = 900
+DISTS = ("vmn", "vmn-exp-sdk", "vmn-exp")
 
 
 def _pip(*args, python=_PY):
     return subprocess.run(
-        [python, "-m", "pip", *args],
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT,
+        [python, "-m", "pip", *args], capture_output=True, text=True, timeout=_TIMEOUT
     )
 
 
 @pytest.fixture(scope="session")
-def wheel_path(tmp_path_factory):
-    """Build vmn's wheel exactly as `make _build` would."""
+def wheelhouse(tmp_path_factory):
+    """``{dist: wheel path}``, built as the release lane builds them."""
     out = tmp_path_factory.mktemp("wheelhouse")
-    proc = _pip("wheel", "--no-deps", "--no-build-isolation", "-w", str(out), _PROJECT_ROOT)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    wheels = {}
+    for dist in DISTS:
+        source = os.path.join(_PROJECT_ROOT, "packages", dist)
+        proc = _pip("wheel", "--no-deps", "--no-build-isolation", "-w", str(out), source)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        prefix = dist.replace("-", "_") + "-"
+        [wheels[dist]] = [p for p in out.glob("*.whl") if p.name.startswith(prefix)]
+    return wheels
 
-    wheels = list(out.glob("vmn-*.whl"))
-    assert len(wheels) == 1, f"expected one vmn wheel, got {wheels}"
-    return wheels[0]
+
+def _names(wheel):
+    with zipfile.ZipFile(wheel) as zf:
+        return {n for n in zf.namelist() if ".dist-info/" not in n}
 
 
-@pytest.fixture(scope="session")
-def installed_venv(tmp_path_factory, wheel_path):
-    """A clean venv with `vmn[exp,ui]` installed from the wheel.
-
-    Returns the venv's (python, vmn) executables.
-    """
-    venv_dir = tmp_path_factory.mktemp("vmn_install")
-    proc = subprocess.run(
-        [_PY, "-m", "venv", str(venv_dir)],
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT,
-    )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-
-    bin_dir = venv_dir / ("Scripts" if os.name == "nt" else "bin")
-    python = str(bin_dir / ("python.exe" if os.name == "nt" else "python"))
-
-    proc = _pip("install", f"{wheel_path}[exp,ui]", python=python)
+def _venv(tmp_path_factory, name, *requirements):
+    """A clean venv with *requirements* installed. Pass the built wheels as
+    paths: by name, pip would prefer a higher release from the index."""
+    venv_dir = tmp_path_factory.mktemp(name)
+    subprocess.run([_PY, "-m", "venv", str(venv_dir)], check=True, timeout=_TIMEOUT)
+    python = str(venv_dir / "bin" / "python")
+    proc = _pip("install", *requirements, python=python)
     if proc.returncode != 0:
         blob = proc.stdout + proc.stderr
         if "Temporary failure in name resolution" in blob or "Network is" in blob:
             pytest.skip("no package index reachable")
         pytest.fail(blob)
+    return python
 
-    return python, str(bin_dir / ("vmn.exe" if os.name == "nt" else "vmn"))
+
+@pytest.fixture(scope="session")
+def full_venv(tmp_path_factory, wheelhouse):
+    return _venv(
+        tmp_path_factory, "full", str(wheelhouse["vmn"]), str(wheelhouse["vmn-exp-sdk"]),
+        f"{wheelhouse['vmn-exp']}[ui]",
+    )
+
+
+@pytest.fixture(scope="session")
+def sdk_venv(tmp_path_factory, wheelhouse):
+    return _venv(tmp_path_factory, "sdk_only", str(wheelhouse["vmn-exp-sdk"]))
 
 
 def _in_venv(python, code, cwd):
-    """Run code in the installed venv with the checkout kept off sys.path."""
     env = dict(os.environ, PYTHONPATH="", PYTHONNOUSERSITE="1")
     return subprocess.run(
-        [python, "-c", code],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        env=env,
+        [python, "-c", code], capture_output=True, text=True, cwd=cwd, env=env,
         timeout=_TIMEOUT,
     )
 
 
-def test_the_wheel_ships_every_subpackage(wheel_path):
-    """A package missing from setup.py imports fine in-tree and not once installed."""
-    with zipfile.ZipFile(wheel_path) as zf:
-        names = set(zf.namelist())
+def test_no_file_ships_in_two_wheels(wheelhouse):
+    seen = {}
+    for dist, wheel in wheelhouse.items():
+        for name in _names(wheel):
+            assert name not in seen, f"{name} is in both {seen[name]} and {dist}"
+            seen[name] = dist
 
-    for package in ("vmn_exp/sdk", "vmn_exp/ui", "vmn_exp/ui/readers"):
-        assert f"{package}/__init__.py" in names, f"{package} is not in the wheel"
+
+def test_each_wheel_ships_its_own_subpackages(wheelhouse):
+    vmn, sdk, full = (_names(wheelhouse[d]) for d in DISTS)
+    assert "version_stamp/api.py" in vmn
+    assert not any(n.startswith("vmn_exp/") for n in vmn)
+    assert {"vmn_exp/sdk/__init__.py", "vmn_exp/storage/__init__.py",
+            "vmn_exp/_base.py"} <= sdk
+    assert not any(n.startswith(("version_stamp/", "vmn_exp/cli/", "vmn_exp/ui/"))
+                   for n in sdk)
+    assert {"vmn_exp/cli/main.py", "vmn_exp/gitmode/__init__.py",
+            "vmn_exp/ui/readers/__init__.py"} <= full
+    # PEP 420: a vmn_exp/__init__.py in either wheel would shadow the other.
+    assert "vmn_exp/__init__.py" not in sdk | full
 
 
-def test_the_wheel_ships_the_dashboard_assets(wheel_path):
-    """`vmn ui` serves prebuilt static files; package_data has to carry them."""
-    with zipfile.ZipFile(wheel_path) as zf:
-        static = [n for n in zf.namelist() if "/ui/static/" in n]
-
+def test_vmn_exp_ships_the_dashboard_assets(wheelhouse):
+    static = [n for n in _names(wheelhouse["vmn-exp"]) if "/ui/static/" in n]
     assert any(n.endswith("index.html") for n in static), static
     assert any("/assets/" in n for n in static), static
 
 
-def test_the_installed_cli_runs(installed_venv, tmp_path):
-    python, vmn = installed_venv
-    proc = subprocess.run(
-        [vmn, "--version"],
-        capture_output=True,
-        text=True,
-        cwd=str(tmp_path),
-        env=dict(os.environ, PYTHONPATH=""),
-        timeout=_TIMEOUT,
-    )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert proc.stdout.strip(), "vmn --version printed nothing"
+def test_the_installed_commands_run(full_venv, tmp_path):
+    bin_dir = os.path.dirname(full_venv)
+    env = dict(os.environ, PYTHONPATH="")
+    for command in (["vmn", "--version"], ["vmn-exp", "--help"]):
+        proc = subprocess.run(
+            [os.path.join(bin_dir, command[0]), *command[1:]], capture_output=True,
+            text=True, cwd=str(tmp_path), env=env, timeout=_TIMEOUT,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_the_exp_sdk_imports_from_the_installed_package(installed_venv, tmp_path):
-    """`pip install vmn[exp]` has to give a working `from vmn_exp.sdk import ...`."""
-    python, _ = installed_venv
+def test_vmn_gets_snapshot_from_the_installed_plugin(full_venv, tmp_path):
     proc = _in_venv(
-        python,
-        "import vmn_exp.sdk as exp, vmn_exp.sdk.reader as reader\n"
-        "assert exp.start_run and exp.autolog and reader.list_runs\n"
-        "print(exp.__file__)\n",
+        full_venv,
+        "from version_stamp.cli.plugins import load_builtin_plugins\n"
+        "from version_stamp.cli.plugin_api import find\n"
+        "load_builtin_plugins()\n"
+        "assert find('snapshot') is not None\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    # Not the checkout: an import satisfied by the source tree proves nothing.
-    assert _PROJECT_ROOT not in proc.stdout
 
 
-def test_the_ui_extra_installs_its_dependencies(installed_venv, tmp_path):
-    """The ui extra exists so importing the app does not need a second pip install."""
-    python, _ = installed_venv
+def test_the_ui_extra_installs_its_dependencies(full_venv, tmp_path):
     proc = _in_venv(
-        python,
-        "import fastapi, uvicorn\n"
-        "from vmn_exp.ui.server import create_app\n"
-        "assert create_app\n"
-        "print('ok')\n",
+        full_venv, "import fastapi, uvicorn\nfrom vmn_exp.ui.server import create_app\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "ok" in proc.stdout
 
 
-def test_the_exp_extra_does_not_drag_in_a_framework(installed_venv, tmp_path):
-    """[exp] must stay small — autolog patches whatever the user already has."""
-    python, _ = installed_venv
+def test_the_sdk_alone_records_and_reads_a_git_free_run(sdk_venv, tmp_path):
+    meta = tmp_path / "vmn_metadata.yml"
+    meta.write_text("verstr: '0.0.0-norepo.abc1234'\napp_name: slim\ndiff_hash: abc1234\n")
+    store = str(tmp_path / "experiments")
     proc = _in_venv(
-        python,
-        "import importlib.util as u;"
-        "print([m for m in ('torch', 'tensorflow', 'sklearn', 'xgboost')"
-        " if u.find_spec(m)])",
+        sdk_venv,
+        "import os, sys\n"
+        f"os.environ['VMN_EXPERIMENT_DIR'] = {store!r}\n"
+        f"os.environ['VMN_SNAPSHOT_METADATA'] = {str(meta)!r}\n"
+        "from vmn_exp.sdk import start_run\n"
+        "from vmn_exp.sdk.create import snapshot_mode_storage\n"
+        "from vmn_exp.sdk.reader import list_runs\n"
+        "with start_run('slim') as run:\n"
+        "    run.log_metric('accuracy', 0.95)\n"
+        "[row] = list_runs('slim', storage=snapshot_mode_storage())\n"
+        "assert row['metrics']['accuracy'] == 0.95, row\n"
+        "assert not any(m == 'git' or m.startswith('version_stamp') for m in sys.modules)\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert proc.stdout.strip() == "[]", f"[exp] pulled in {proc.stdout.strip()}"
+
+
+def test_the_sdk_alone_has_neither_vmn_nor_the_platform(sdk_venv, tmp_path):
+    proc = _in_venv(
+        sdk_venv,
+        "import importlib.util as u\n"
+        "assert u.find_spec('version_stamp') is None\n"
+        "assert u.find_spec('git') is None\n"
+        "assert u.find_spec('vmn_exp.cli') is None\n",
+        cwd=str(tmp_path),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr

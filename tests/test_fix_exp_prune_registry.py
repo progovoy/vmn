@@ -63,7 +63,7 @@ def test_registered_run_survives_bulk_prune(app_layout, capfd):
     remaining = _verstrs(app_layout)
     assert run1 in remaining, "registered run must survive"
     assert run2 not in remaining, "unregistered run must be deleted"
-    assert "vmn model delete" in out
+    assert "vmn-exp model delete" in out
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def test_registered_run_survives_force(app_layout, capfd):
     assert err == 0, out
     remaining = _verstrs(app_layout)
     assert run in remaining
-    assert "vmn model delete" in out
+    assert "vmn-exp model delete" in out
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ def test_registered_run_survives_targeted_prune_with_force(app_layout, capfd):
     out = capfd.readouterr().out
     assert err == 0, out
     assert run in _verstrs(app_layout)
-    assert "vmn model delete" in out
+    assert "vmn-exp model delete" in out
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def test_registered_run_survives_query_prune_with_yes(app_layout, capfd):
     remaining = _verstrs(app_layout)
     assert run1 in remaining, "registered run must survive"
     assert run2 not in remaining, "unregistered run must be deleted"
-    assert "vmn model delete" in out
+    assert "vmn-exp model delete" in out
 
 
 # ---------------------------------------------------------------------------

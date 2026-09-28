@@ -15,7 +15,7 @@ for pyver in ${PYTHON_VERSIONS}; do
     docker run --init -t \
         -v ${REPO_ROOT}:${REPO_ROOT} \
         vmn_tester:python_${pyver} \
-        bash -c "pip install --no-cache-dir ${REPO_ROOT} && ${CUR_DIR}/run_pytest.sh $*" || exit 1
+        bash -c "pip install --no-cache-dir ${REPO_ROOT}/packages/vmn ${REPO_ROOT}/packages/vmn-exp-sdk \"${REPO_ROOT}/packages/vmn-exp[ui]\" && ${CUR_DIR}/run_pytest.sh $*" || exit 1
 
     echo "  Python ${pyver}: PASSED"
     echo ""

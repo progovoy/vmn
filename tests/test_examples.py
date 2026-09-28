@@ -9,7 +9,7 @@ import os
 import subprocess
 
 import pytest
-from helpers import _PROJECT_ROOT, _PY, _storage
+from helpers import _PROJECT_ROOT, _PY, _SRC_PATH, _storage
 
 from vmn_exp.sdk.reader import get_run, list_runs
 
@@ -32,7 +32,7 @@ def _run_example(app_layout, name):
     env["VMN_WORKING_DIR"] = app_layout.repo_path
     # Import the version_stamp under test, not the venv's editable install of
     # the main checkout.
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME"):
         env.pop(key, None)
 

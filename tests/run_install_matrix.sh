@@ -70,7 +70,7 @@ docker run --rm --network=host \
             --exclude=./venv --exclude=./.git --exclude=./dist \
             --exclude=./build --exclude=./node_modules \
             -cf - . | tar -C /tmp/src -xf -
-        cd /tmp/src
+        cd /tmp/src/packages/vmn
         python -m build --outdir /dist
     ' || { echo "Failed to build distributions"; exit 1; }
 

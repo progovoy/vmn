@@ -40,10 +40,10 @@ needed, and nothing to undo — deleting `.vmn/` removes it all.
 ## Afterwards
 
 ```sh
-vmn exp list vmn_examples            # every run, with the sweep as a tree
-vmn exp show vmn_examples --latest   # one run: params, metrics, curves, artifacts
-vmn exp compare vmn_examples         # runs side by side
-vmn ui                               # the dashboard, at http://127.0.0.1:8265
+vmn-exp list vmn_examples            # every run, with the sweep as a tree
+vmn-exp show vmn_examples --latest   # one run: params, metrics, curves, artifacts
+vmn-exp compare vmn_examples         # runs side by side
+vmn-exp ui                               # the dashboard, at http://127.0.0.1:8265
 ```
 
 Re-running any script is safe: it appends new runs and never rewrites old ones.

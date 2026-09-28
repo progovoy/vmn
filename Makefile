@@ -1,4 +1,13 @@
+# NAME=vmn releases the vmn distribution; NAME=vmn_exp releases vmn-exp and
+# vmn-exp-sdk together (one version). `vmn stamp` writes the new version into
+# the packages' pyproject.toml files (version_backends in .vmn/<NAME>/conf.yml).
 NAME=vmn
+
+ifeq (${NAME},vmn_exp)
+PACKAGES=packages/vmn-exp-sdk packages/vmn-exp
+else
+PACKAGES=packages/vmn
+endif
 
 .PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _run_black
 
@@ -6,15 +15,12 @@ build: check _build
 
 _build_ui:
 	@echo "Building web UI"
-	npm install --prefix ${PWD}/webui
-	npm run build --prefix ${PWD}/webui
+	npm install --prefix ${PWD}/packages/vmn-exp/webui
+	npm run build --prefix ${PWD}/packages/vmn-exp/webui
 
-_build: clean _build_ui
-	@echo "Publishing"
-	vmn show ${EXTRA_SHOW_ARGS} --verbose vmn > .vmn/vmn/ver.yml
-	python3 ${PWD}/gen_ver.py
-	python3 setup.py bdist_wheel
-	git checkout -- ${PWD}/version_stamp/version.py
+_build: clean $(if $(filter vmn_exp,${NAME}),_build_ui)
+	@echo "Building ${PACKAGES}"
+	for pkg in ${PACKAGES}; do uv build --out-dir ${PWD}/dist $${pkg} || exit 1; done
 
 upload:
 	twine upload --verbose ${PWD}/dist/*
@@ -42,7 +48,6 @@ rc: check _rc _build
 _rc:
 	@echo "RC Release"
 	vmn stamp ${NAME}
-	$(eval EXTRA_SHOW_ARGS := --template [{major}][.{minor}][.{patch}][{prerelease}])
 
 _run_black:
 	@echo "-~      Run Black                              --"
@@ -62,10 +67,8 @@ check: _run_black
 	@echo "-------------------------------------------------------------"
 
 clean:
-	git checkout -- ${PWD}/version_stamp/version.py
 	rm -rf ${PWD}/dist
 	rm -rf ${PWD}/build
-	rm -rf ~/Library/Caches/com.apple.python/*/version_stamp/version.*.pyc 2>/dev/null || true
 
 package: _package
 _package: 

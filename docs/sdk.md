@@ -52,16 +52,16 @@ one.
 
 | Situation | Use |
 |---|---|
-| Wrapping a script you don't want to modify | `vmn exp run my_app -- python train.py` |
-| A non-Python workload (a shell benchmark, `wrk`, a compiler flag sweep) | `vmn exp run` + `$VMN_METRICS_FILE` |
+| Wrapping a script you don't want to modify | `vmn-exp run my_app -- python train.py` |
+| A non-Python workload (a shell benchmark, `wrk`, a compiler flag sweep) | `vmn-exp run` + `$VMN_METRICS_FILE` |
 | You're already inside Python and want per-step metrics without a metrics file | `start_run(...)` |
-| Metrics you measured by hand | `vmn exp create … --metrics k=v` |
+| Metrics you measured by hand | `vmn-exp create … --metrics k=v` |
 
 **An SDK run is indistinguishable from a CLI run on disk.** Same verstr scheme,
 same `metadata.yml`, same per-writer JSONL log, same `run_state.yml`. So
-`vmn exp list`, `vmn exp show`, `vmn exp compare`, the web dashboard, and S3 sync
+`vmn-exp list`, `vmn-exp show`, `vmn-exp compare`, the web dashboard, and S3 sync
 all work on SDK runs with no extra steps, and mixing the CLI and the SDK in one
-project is fine — `vmn exp add` a hand-measured number to a run your training
+project is fine — `vmn-exp add` a hand-measured number to a run your training
 script opened.
 
 ---
@@ -97,16 +97,16 @@ start_run(
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
-| `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn[sysmetrics]"` |
+| `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn-exp-sdk[sysmetrics]"` |
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 | `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
 | `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
-| `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
+| `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn-exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 | `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
 
-The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn exp
+The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn-exp
 run`, which measures the child's process tree instead):
 
 | Metric | Meaning |
@@ -129,7 +129,7 @@ cold-start one fresh checkout at the same moment: they serialize on the repo
 lock, and each builds its view of the repo only once it holds the lock, so the
 ones that wait see the initialization the first one did.
 
-**An SDK cold start is local-only.** Unlike `vmn exp`/`vmn stamp`, it never
+**An SDK cold start is local-only.** Unlike `vmn-exp`/`vmn stamp`, it never
 pushes: the init commit and the `<app>_0.0.0` tag stay in your checkout, so a
 training script neither publishes refs as a side effect nor fails in a checkout
 that has no remote. Push them when you want to share them
@@ -168,7 +168,7 @@ default `vmn-experiments`, and `VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the l
 With `VMN_EXPERIMENT_DIR` too, entries are appended to that local scratch dir and the
 new lines are synced to the bucket every `sync_interval_sec`; with the bucket alone
 the run writes straight to S3. The job creates its own record — no prefix needs to
-exist beforehand — and `vmn ui --s3-bucket <bucket>` reads it. `storage=` still
+exist beforehand — and `vmn-exp ui --s3-bucket <bucket>` reads it. `storage=` still
 overrides all of this. With neither a dir nor a bucket, `start_run()` raises a
 `ValueError` naming `VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_BUCKET`.
 
@@ -183,7 +183,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metric(key, value, step=None)` | one metric. With `step`, it joins a **per-step series** — the curve `exp show` and the UI plot |
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
-| `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn exp list`. |
+| `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
 | `run.log_note(text)` | a note entry |
 | `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
 | `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |
@@ -196,7 +196,7 @@ Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
 checks every name before uploading any). Each helper stores a real file, so the
 log entry (`path` = the name, `size`, `sha256`) and the backends are exactly those
-of `log_artifact`, and `vmn ui` downloads nested ones at
+of `log_artifact`, and `vmn-exp ui` downloads nested ones at
 `.../artifacts/<a/b/c.txt>`.
 
 **Writes are batched.** Log calls queue in memory and reach the store as one
@@ -213,7 +213,7 @@ straight to the store. Storage backends take the batch through
 one record-signature bump locally, one PUT on S3; the base class loops over
 `append_log_entry`).
 
-Metrics land in the store within about a second of being logged, so `vmn exp
+Metrics land in the store within about a second of being logged, so `vmn-exp
 show` and the web UI see the curve **while training is still running**.
 
 Metric values are stored as floats, whatever you pass:
@@ -263,7 +263,7 @@ return the verstr they changed and raise `ValueError` for a ref that names no
 run. Archiving writes `archived: true` into `metadata.yml` (atomically on disk,
 under the ETag on S3 — the same path as `vmn snapshot note`); unarchiving
 removes it. Nothing is deleted, and nothing but listings treats an archived run
-differently — `vmn exp prune` counts and deletes it like any finished run.
+differently — `vmn-exp prune` counts and deletes it like any finished run.
 
 ---
 
@@ -444,7 +444,7 @@ An exception raised inside the `with` block finalizes the run as **failed** and
 then **re-raises** — the SDK never swallows your error, and a crashed training
 job reads as `failed` rather than as a run that just stopped logging.
 
-**The run heartbeats itself.** `vmn exp run` refreshes the heartbeat from the
+**The run heartbeats itself.** `vmn-exp run` refreshes the heartbeat from the
 process supervising the child; an SDK run has no supervisor — it *is* the
 workload — so it carries its own daemon thread. That is what makes
 [`stuck`](experiments.md#run-status-did-my-job-die) work for SDK runs: a job
@@ -551,7 +551,7 @@ That is what keeps concurrent runs in one process apart:
   each call `start_run()` in their own thread are independent siblings. The
   exported `VMN_EXPERIMENT_ID` names whichever run opened last, but a run another
   thread of this process has open is never taken as a parent — only the value the
-  process was *launched* with (an enclosing `vmn exp run`) is. Once every run has
+  process was *launched* with (an enclosing `vmn-exp run`) is. Once every run has
   finished, in whatever order, the environment is exactly what it was before the
   first one opened. To nest a trial under an outer run opened by another thread,
   pass `parent=outer.id`.
@@ -595,7 +595,7 @@ A `list_runs` row carries the latest value of each metric, the run's `name`
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
-`vmn exp list`, the ui and `list_runs()` read through an incremental index
+`vmn-exp list`, the ui and `list_runs()` read through an incremental index
 (`list_runs(..., use_index=False)` reads storage directly and writes no index
 file): the folded
 rows persist in `.vmn/<app>/experiments/.index.sqlite`, next to the records
@@ -677,7 +677,7 @@ An invalid query raises `QueryError` with the offending character offset
 a 400. Nothing is ever `eval`'d: the implementation is a hand-written lexer plus
 recursive-descent parser in `vmn_exp/core/query.py`.
 
-On the command line the same expressions go to `vmn exp list <app> --query
+On the command line the same expressions go to `vmn-exp list <app> --query
 '<expr>'` (see [experiments.md](experiments.md#list)).
 
 ---
@@ -765,8 +765,8 @@ Higher-level wrappers for specific ML frameworks and experiment-management
 libraries.  Each integration lives in `vmn_exp.integrations.*` and is separate
 from autologging: autolog patches the framework's training entrypoint
 automatically; integrations are explicit helpers you call when you need more
-control.  Install the matching extra if you want pip to manage the dependency:
-`pip install "vmn[hf]"`, `vmn[optuna]`, `vmn[ray]`.
+control.  They need the library they wrap (`transformers`, `optuna`,
+`ray[tune]`), which you install yourself; vmn never pulls in a framework.
 
 ### Hugging Face Transformers — `VmnCallback`
 
@@ -802,7 +802,7 @@ section above.
 
 `start_study_run` opens an outer run for an Optuna study and returns a
 `StudyTracker`.  Each trial maps to an inner run with the study's run as its
-parent, so the tree view in `vmn ui` shows one row per sweep with all trials
+parent, so the tree view in `vmn-exp ui` shows one row per sweep with all trials
 nested under it.
 
 ```python
@@ -879,34 +879,19 @@ logging.basicConfig(level=logging.DEBUG)
 ## Slim install
 
 For recording-only environments (container images, CI workers, air-gapped
-inference servers) that do not need the full stamping toolchain or the web UI,
-a dedicated `vmn-exp` wheel is available.  It contains only the experiment
-SDK, storage, registry, and snapshot helpers together with the minimal
-`version_stamp` slice they need (`api.py`, `core/`).  GitPython, argcomplete,
-rich, and the rest of the stamping stack are **not included**.
-
-### Install_requires
-
-| Dependency | Why |
-|---|---|
-| `PyYAML>=5.4.1` | YAML metadata files |
-| `filelock>=3.2.0` | Local concurrency lock |
-
-Optional extras: `s3` (boto3), `sysmetrics` (psutil), `hf` (transformers),
-`optuna`, `ray`.
-
-### Building the slim wheel
+training jobs), install just the metrics writer:
 
 ```sh
-VMN_DIST=exp pip wheel --no-deps --no-build-isolation -w dist .
-# Produces: dist/vmn_exp-<version>-py3-none-any.whl
+pip install vmn-exp-sdk           # + [s3] to record to a bucket, [sysmetrics] for sys_* metrics
 ```
 
-Or with `python setup.py`:
-
-```sh
-VMN_DIST=exp python setup.py bdist_wheel
-```
+`vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
+needs. It depends only on `PyYAML` and `filelock`: no vmn, no GitPython, no git
+binary. Creating a run from a git checkout (cold start, snapshot capture), the
+`vmn-exp` CLI and the dashboard live in `vmn-exp`, which depends on this
+package; in a slim install, `start_run()` in a checkout fails with a pointer to
+`pip install vmn-exp`. See [packaging.md](packaging.md) for how the three
+packages split.
 
 ### Git-free recording
 

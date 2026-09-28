@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vmn-exp-sdk"
+version = "0.0.0"  # written by `vmn stamp vmn_exp`, shared with vmn-exp
+description = "vmn experiment SDK: record runs and metrics from jobs, git-free"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "PyYAML>=5.4.1",
+    "filelock>=3.2.0",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3"]
+# GPU metrics also need pynvml, which stays out of every extra: it is useless
+# without a driver and would break installs on CPU-only hosts.
+sysmetrics = ["psutil>=5.9"]
+
+[project.urls]
+Homepage = "https://github.com/progovoy/vmn"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true  # vmn_exp is shared with vmn-exp (PEP 420)

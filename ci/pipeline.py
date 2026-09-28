@@ -56,7 +56,11 @@ REQUIRES = [
     "-r",
     "tests/test_requirements.txt",
     "-e",
-    ".",
+    "packages/vmn",
+    "-e",
+    "packages/vmn-exp-sdk",
+    "-e",
+    "packages/vmn-exp[ui]",
 ]
 
 
@@ -64,19 +68,20 @@ REQUIRES = [
 def lint(ctx):
     # ctx.run defaults to check=True: ruff finding lint errors (exit 1) fails the
     # stage so the pipeline goes red instead of reporting green on a broken lint.
-    ctx.run(["ruff", "check", "version_stamp", "vmn_exp", "--output-format", "concise"])
+    ctx.run(["ruff", "check", "packages", "--output-format", "concise"])
 
 
 # deterministic=True + declared inputs make this content-addressable: the key is
 # the stage's source closure, the hash of the trees below, the venv
 # fingerprint (interpreter + the requirements files' contents) and the platform
 # (so a macOS laptop's result is never served to Linux CI). An unchanged repo
-# restores reports/ from the cache instead of re-running the suite; setup.py is an input because `-e .` decides what the tests import, and
+# restores reports/ from the cache instead of re-running the suite; the root
+# pyproject.toml is an input because it declares the workspace, and
 # muster's tree hashing ignores __pycache__ so bytecode never churns the key.
 @stage(
     requires=REQUIRES,
     deterministic=True,
-    inputs=["version_stamp", "tests", "setup.py"],
+    inputs=["packages", "tests", "pyproject.toml"],
     outputs=["reports/tests.xml", "reports/tests.html"],
 )
 def run_tests(ctx):
@@ -101,7 +106,8 @@ def run_tests(ctx):
 @stage(requires=REQUIRES)
 def typecheck(ctx):
     # report-only.
-    ctx.run(["mypy", "version_stamp", "vmn_exp", "--ignore-missing-imports"], check=False)
+    ctx.run(["mypy", "-p", "version_stamp", "-p", "vmn_exp", "--ignore-missing-imports"],
+            check=False)
 
 
 # --- optional release lane -------------------------------------------------
@@ -118,10 +124,16 @@ def typecheck(ctx):
 # side-effecting, so they stay non-deterministic (never cached). Trigger e.g.:
 #   muster run ci/pipeline.py --param stamp=patch --param build=1 --param upload=1
 STAMP_MODES = ["major", "minor", "patch", "rc"]
-# Makefile `_rc` sets this via $(eval), which only survives into `_build` within
-# one make process. stamp and build are separate `make` calls here, so pass it
-# through explicitly for rc — else the wheel embeds 0.10.2 instead of 0.10.2-rc.N.
-_RC_BUILD_ARG = "EXTRA_SHOW_ARGS=--template [{major}][.{minor}][.{patch}][{prerelease}]"
+# Which vmn app to release: vmn (the vmn package) or vmn_exp (vmn-exp and
+# vmn-exp-sdk, one version). The Makefile's NAME picks the packages to build.
+RELEASE_APPS = ["vmn", "vmn_exp"]
+
+
+def _make(ctx, target):
+    cmd = ["make", target]
+    if ctx.params.get("app", "vmn") != "vmn":
+        cmd.append(f"NAME={ctx.params['app']}")
+    return cmd
 
 
 @stage(
@@ -133,11 +145,17 @@ _RC_BUILD_ARG = "EXTRA_SHOW_ARGS=--template [{major}][.{minor}][.{patch}][{prere
             "stamp",
             choices=STAMP_MODES,
             help="Stamp a version (make _<mode>); leave unset to skip",
-        )
+        ),
+        Param(
+            "app",
+            default="vmn",
+            choices=RELEASE_APPS,
+            help="What to release: vmn, or vmn_exp (vmn-exp + vmn-exp-sdk)",
+        ),
     ],
 )
 def stamp(ctx):
-    ctx.run(["make", f"_{ctx.params['stamp']}"])
+    ctx.run(_make(ctx, f"_{ctx.params['stamp']}"))
 
 
 @stage(
@@ -147,10 +165,7 @@ def stamp(ctx):
     params=[Param("build", default=False, help="Build the wheel (make _build)")],
 )
 def build(ctx):
-    cmd = ["make", "_build"]
-    if ctx.params.get("stamp") == "rc":
-        cmd.append(_RC_BUILD_ARG)
-    ctx.run(cmd)
+    ctx.run(_make(ctx, "_build"))
 
 
 @stage(
@@ -160,7 +175,7 @@ def build(ctx):
     params=[Param("upload", default=False, help="Upload the wheel (make upload)")],
 )
 def upload(ctx):
-    ctx.run(["make", "upload"])
+    ctx.run(_make(ctx, "upload"))
 
 
 pipeline = Pipeline(

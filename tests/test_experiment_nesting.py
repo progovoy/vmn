@@ -1,13 +1,13 @@
 """Outer/inner experiment nesting: `vmn exp run` links the runs it spawns."""
 import os
 
-from version_stamp.cli.entry import vmn_run
+from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.tree import INNER, OUTER, annotate_tree
 from version_stamp.core.logging import reset_logger
 from helpers import (
     DEV_VERSION_RE,
     extract_dev_verstr,
-    _PROJECT_ROOT,
+    _SRC_PATH,
     _PY,
     _bootstrap,
     _exec_script,
@@ -19,7 +19,7 @@ from helpers import (
 def _exp_argv(*argv):
     """Raw `vmn exp ...` argv — for flag combinations helpers don't model."""
     reset_logger()
-    return vmn_run(["exp"] + list(argv))[0]
+    return vmn_exp_run(["exp"] + list(argv))[0]
 
 
 def _last_dev_verstr(output):
@@ -244,13 +244,13 @@ def test_nested_exp_run_produces_one_outer_and_two_inner(app_layout, capfd):
     _bootstrap(app_layout)
 
     inner_cmd = (
-        f'"{_PY}" -m version_stamp.cli.entry exp run {app_layout.app_name}'
+        f'"{_PY}" -m vmn_exp.cli exp run {app_layout.app_name}'
         f' -- "{_PY}" -c "print(1)"'
     )
     _write_sweep_script(app_layout, "#!/bin/sh\nset -e\n" + inner_cmd + "\n" + inner_cmd + "\n")
 
     capfd.readouterr()
-    os.environ["PYTHONPATH"] = _PROJECT_ROOT
+    os.environ["PYTHONPATH"] = _SRC_PATH
     try:
         assert _exp_run(app_layout.app_name, ["/bin/sh", "sweep.sh"]) == 0
     finally:

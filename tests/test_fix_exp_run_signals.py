@@ -11,7 +11,7 @@ import signal
 import subprocess
 import time
 
-from helpers import _PROJECT_ROOT, _PY, _bootstrap, _storage
+from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.core import status as st
 from vmn_exp.core.status import load_run_state
@@ -22,7 +22,7 @@ TIMEOUT = 90
 def _env(app_layout, extra=None):
     env = dict(os.environ)
     env["VMN_WORKING_DIR"] = app_layout.repo_path
-    env["PYTHONPATH"] = _PROJECT_ROOT
+    env["PYTHONPATH"] = _SRC_PATH
     for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_LOCK_FILE_PATH"):
         env.pop(key, None)
     env.update(extra or {})
@@ -36,7 +36,7 @@ def _start_supervisor(app_layout, child_script, env_extra=None):
         [
             _PY,
             "-m",
-            "version_stamp.cli",
+            "vmn_exp.cli",
             "exp",
             "run",
             app_layout.app_name,
