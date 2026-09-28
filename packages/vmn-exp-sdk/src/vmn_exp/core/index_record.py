@@ -55,6 +55,16 @@ def update_record(storage, direct, app_name, key, names, record):
     return dirty, meta_changed, _update_run_state(storage, app_name, key, names, record)
 
 
+def listed_unchanged(record, names):
+    """Whether *names* are exactly the files *record* was last read at, so
+    :func:`update_record` would find nothing to do."""
+    return (
+        record["meta_sig"] == _sig(names[METADATA_FILE])
+        and record["rs_sig"] == _sig(names.get(RUN_STATE_FILE))
+        and {n: state["sig"] for n, state in record["logs"].items()} == log_signatures(names)
+    )
+
+
 def _update_run_state(storage, app_name, key, names, record):
     rs_sig = _sig(names.get(RUN_STATE_FILE))
     if record["rs_sig"] == rs_sig:

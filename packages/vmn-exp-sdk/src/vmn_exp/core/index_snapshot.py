@@ -92,12 +92,24 @@ class IndexSnapshot:
 
 
 class RowCache:
-    """Materialized rows shared by successive snapshots: a row is re-folded
-    only when its record changed and re-numbered (a shallow copy) when it
-    moved, so a heartbeat-only generation reuses every row object."""
+    """Materialized snapshot parts shared by successive snapshots.
+
+    A row is re-folded only when its record changed and re-numbered (a
+    shallow copy) when it moved, so a heartbeat-only generation reuses every
+    row object. The per-verstr maps a snapshot carries are patched for the
+    keys that changed and copied (C-level) into each snapshot, so while the
+    order only grows at its end a generation costs O(changed) — at 100k
+    records re-deriving every row's maps took ~0.4s per generation. Any other
+    reorder rebuilds them from the cached rows.
+    """
 
     def __init__(self):
         self._rows = {}  # key -> (row with idx, create note)
+        self._observed = {}  # key -> (rs_sig, store write time it encodes)
+        self._order = []  # the keys of the last snapshot, in order
+        self._pos = {}  # key -> its position in _order
+        self._list = []  # their rows
+        self._maps = _Maps()
 
     def pop(self, key, default=None):
         return self._rows.pop(key, default)
@@ -111,16 +123,71 @@ class RowCache:
             cached = self._rows[key] = (dict(cached[0], idx=idx), cached[1])
         return cached
 
-    def snapshot(self, app_name, generation, order, records):
-        """The :class:`IndexSnapshot` of *records* (``{key: record}``) in *order*."""
-        rows, notes, states, observed = [], {}, {}, {}
-        for idx, key in enumerate(order, 1):
-            row, note = self._row(key, idx, records[key])
-            rows.append(row)
-            notes[row["verstr"]] = note
-            states[row["verstr"]] = records[key]["run_state"]
-            observed[row["verstr"]] = _observed_at(records[key]["rs_sig"])
-        return IndexSnapshot.build(app_name, generation, rows, states, notes, observed)
+    def _observed_of(self, key, rs_sig):
+        cached = self._observed.get(key)
+        if cached is None or cached[0] != rs_sig:
+            cached = self._observed[key] = (rs_sig, _observed_at(rs_sig))
+        return cached[1]
+
+    def snapshot(self, app_name, generation, order, records, touched=None):
+        """The :class:`IndexSnapshot` of *records* (``{key: record}``) in
+        *order*. *touched*: the keys whose record changed since the last
+        call; None (unknown) rebuilds every map."""
+        grown = touched is not None and order[: len(self._order)] == self._order
+        if not (grown and self._patch(touched, records)):
+            self._rebuild(order, records)
+        for key in order[len(self._list):]:
+            self._put(key, len(self._list), records[key])
+        self._order = list(order)
+        m = self._maps
+        return IndexSnapshot(
+            app_name=app_name, generation=generation, rows=tuple(self._list),
+            run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
+            run_state_observed_at=dict(m.observed), _by_verstr=dict(m.rows),
+        )
+
+    def _patch(self, touched, records):
+        """Swap in the touched rows already in the order; False when one of
+        them no longer maps to the same verstr (a rebuild is due)."""
+        for key in touched:
+            pos = self._pos.get(key)
+            if pos is None:
+                continue  # new: appended after
+            if records[key]["meta"]["verstr"] != self._list[pos]["verstr"]:
+                return False
+            self._put(key, pos, records[key])
+        return True
+
+    def _rebuild(self, order, records):
+        self._pos, self._list, self._maps = {}, [], _Maps()
+        live = set(order)
+        self._observed = {k: v for k, v in self._observed.items() if k in live}
+        for pos, key in enumerate(order):
+            self._put(key, pos, records[key])
+
+    def _put(self, key, pos, record):
+        row, note = self._row(key, pos + 1, record)
+        if pos == len(self._list):
+            self._list.append(row)
+        else:
+            self._list[pos] = row
+        self._pos[key] = pos
+        self._maps.put(row, note, record["run_state"], self._observed_of(key, record["rs_sig"]))
+
+
+class _Maps:
+    """What a snapshot keys by verstr, kept current between snapshots."""
+
+    def __init__(self):
+        self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
+
+    def put(self, row, note, state, observed):
+        verstr = row["verstr"]
+        self.rows[verstr] = row
+        self.notes[verstr] = note
+        self.states[verstr] = state
+        self.observed[verstr] = observed
+        self.edges[verstr] = row.get("parent")
 
 
 def _observed_at(rs_sig):

@@ -28,7 +28,7 @@ from vmn_exp.core.record_files import RecordFiles
 
 MIN_RECORDS = 1000  # below this, starting processes costs more than it saves
 RECORDS_PER_WORKER = 500
-MAX_WORKERS = 8
+MAX_WORKERS = 32  # a worker per CPU up to this
 _PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 

@@ -9,6 +9,11 @@ so an app no one looks at costs nothing; the next request starts it again.
 Only the very first request of an index waits (for its initial load, which
 the persisted SQLite store makes fast). A refresh that fails is logged and
 the last snapshot keeps being served.
+
+A watched index does its filesystem work in an I/O helper process
+(``use_io_process``): each stat/open on this process's threads would wait for
+the GIL behind busy request threads, which starved refreshes under load.
+:meth:`Refresher.stop` stops the helpers.
 """
 import logging
 import threading
@@ -67,14 +72,23 @@ class Refresher:
         return bool(watch and watch.thread and watch.thread.is_alive())
 
     def stop(self):
-        """End every refresh thread (for tests and shutdown)."""
+        """End every refresh thread and I/O helper (for tests and shutdown)."""
         self._stopped.set()
         with self._lock:
             threads = [w.thread for w in self._watches.values() if w.thread]
+            indexes = list(self._watches)
         for thread in threads:
             thread.join()
+        for index in indexes:
+            close = getattr(index, "close", None)
+            if close:
+                close()
 
     def _watch(self, index):
+        if index not in self._watches:
+            use_io_process = getattr(index, "use_io_process", None)
+            if use_io_process:
+                use_io_process()
         with self._lock:
             watch = self._watches.setdefault(index, _Watch())
             watch.touched_at = time.monotonic()

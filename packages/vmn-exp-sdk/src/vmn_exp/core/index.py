@@ -19,18 +19,26 @@ from its run states on every read, since it depends on the clock.
 
 A cold build's many new local records load in worker processes
 (:mod:`experiment_index_workers`), when the direct files expose
-``plain_record_dir``.
+``plain_record_dir``. A server refreshing under load moves all of it —
+listings, reads, persistence — to a helper process with
+:meth:`ExperimentIndex.use_io_process` (:mod:`experiment_index_io_process`):
+each filesystem call hands the GIL to a busy request thread and waits up to a
+switch interval to get it back, which at 100k records made one refresh take
+minutes. A refresh then costs O(what changed) in the index's process.
 
 Storage is duck-typed (``list_files``, ``load_file``, and optionally
 ``list_record_names``/``list_files(keys=)``/``direct_files``/``read_file_from``/
 ``plain_record_dir``/``index_cache_path``/``cache_identity``); like the rest of
 ``core`` this imports nothing from ``cli``, ``ui`` or ``exp``.
 """
+import bisect
 import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
+from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
 from vmn_exp.core.index_store import IndexStore
@@ -62,10 +70,14 @@ class ExperimentIndex:
     ):
         self._storage = storage
         self.app_name = app_name
+        self._cache_path = cache_path
         self._store = IndexStore(cache_path)
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
+        self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
-        self._order = None  # record keys in storage order, rebuilt on change
+        self._order = None  # record keys in storage order
+        self._stamps = None  # their timestamps, for bisecting new keys in
+        self._reorder = ((), False)  # (new keys, whether one was re-described)
         self._rows = RowCache()
         self._snapshot = None
         self._lock = threading.Lock()
@@ -114,13 +126,41 @@ class ExperimentIndex:
                 self._refresh_locked()
             return self._snapshot
 
+    def use_io_process(self):
+        """Do this index's filesystem work in a helper process from now on;
+        False when the storage is not a plain local store, the index already
+        loaded in-process, or no helper could start. :meth:`close` stops it."""
+        with self._lock:
+            if self._io is None and self._records is None:
+                self._io = start_io_process(self._storage, self.app_name, self._cache_path)
+                if self._io is not None:
+                    self._sweep.watch = self._io.watch
+            return self._io is not None
+
+    def close(self):
+        """Stop the I/O helper process, if any; later refreshes run in-process
+        from a full listing."""
+        with self._lock:
+            if self._io is not None:
+                self._io.close()
+                self._io = None
+                self._sweep.watch = ListingWatch(self._storage, self.app_name)
+                self._sweep.reset()
+
     def _refresh_locked(self):
         started = _monotonic()
+        try:
+            self._refresh_from_storage(started)
+        except Exception:
+            # A listing's changes may have been taken but not applied.
+            self._sweep.reset()
+            raise
+        self.last_refresh_at = started
+
+    def _refresh_from_storage(self, started):
         if self._records is None:
-            self._records = self._store.load(self.app_name)
-        direct_files = getattr(self._storage, "direct_files", None)
-        direct = direct_files() if direct_files else self._storage
-        listing, present = self._sweep.listing(self._records, started)
+            self._records = self._load_records()
+        listing, removed = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.
         work = [
@@ -128,29 +168,54 @@ class ExperimentIndex:
             for key, names in listing.items()
             if METADATA_FILE in names
         ]
-        changed, states, reorder = {}, {}, self._order is None
-        for key, record, dirty, moved, state_moved in self._refresh_records(work, direct):
-            if (dirty or state_moved) and key in self._records:
+        touched, new, redescribed = set(), [], False
+        for key, record, dirty, moved, state_moved in self._refresh_and_persist(work, removed):
+            old = self._records.get(key)
+            if old is not None and (dirty or state_moved):
                 self._sweep.touch(key, started)
+            if record is None:
+                continue  # the helper found nothing to change
+            if old is None:
+                new.append(key)
+            elif moved:
+                redescribed = True
+            if old is None or dirty or state_moved:
+                touched.add(key)
+                self._sweep.track(key)
             if dirty:
-                self._records[key] = changed[key] = record
                 self._rows.pop(key, None)
-            if state_moved:
-                self._records[key] = states[key] = record
-            reorder = reorder or moved
-        removed = [key for key in self._records if key not in present]
+            self._records[key] = _adopted(old, record, state_moved)
         for key in removed:
             del self._records[key]
             self._rows.pop(key, None)
             self._sweep.forget(key)
         # Only a new, removed or re-described record can move in the order.
-        if reorder or removed:
+        if new or removed or redescribed or self._order is None:
+            self._reorder = (new, redescribed or bool(removed))
             self._order = self._sorted_keys()
-        self._store.save(self.app_name, changed, removed, states)
-        if changed or states or removed or self._snapshot is None:
+        if touched or removed or self._snapshot is None:
             self.generation += 1
-            self._snapshot = self._build_snapshot()
-        self.last_refresh_at = started
+            self._snapshot = self._build_snapshot(None if removed else touched)
+
+    def _load_records(self):
+        return self._io.load() if self._io else self._store.load(self.app_name)
+
+    def _refresh_and_persist(self, work, removed):
+        """``(key, record or None, dirty, moved, state moved)`` per item of
+        *work*, persisted with *removed*. The helper process answers None for
+        a record it found unchanged."""
+        if self._io is not None:
+            return self._io.refresh(work, removed)
+        direct_files = getattr(self._storage, "direct_files", None)
+        direct = direct_files() if direct_files else self._storage
+        results = self._refresh_records(work, direct)
+        self._store.save(
+            self.app_name,
+            {key: record for key, record, dirty, _, _ in results if dirty},
+            removed,
+            {key: record for key, record, _, _, state_moved in results if state_moved},
+        )
+        return results
 
     def _refresh_records(self, work, direct):
         """``(key, record, dirty, moved, state moved)`` per ``(key, names,
@@ -181,14 +246,32 @@ class ExperimentIndex:
         return update_record(self._storage, direct, self.app_name, key, names, record)
 
     def _sorted_keys(self):
-        keys = [k for k, r in self._records.items() if r["meta"] is not None]
-        return sorted(keys, key=lambda k: _timestamp(self._records[k]["meta"]))
+        """Record keys in storage order (by timestamp, stably). New records
+        are bisected into the current order; a first build, a re-described
+        record (its timestamp may have moved) or a removal sorts them all."""
+        new, resort = self._reorder
+        if self._order is None or resort:
+            keys = [k for k, r in self._records.items() if r["meta"] is not None]
+            pairs = sorted(((_timestamp(self._records[k]["meta"]), k) for k in keys),
+                           key=lambda pair: pair[0])
+            self._stamps = [stamp for stamp, _ in pairs]
+            return [key for _, key in pairs]
+        order = list(self._order)
+        for key in new:
+            meta = self._records[key]["meta"]
+            if meta is None:
+                continue  # not an experiment
+            stamp = _timestamp(meta)
+            at = bisect.bisect_right(self._stamps, stamp)
+            self._stamps.insert(at, stamp)
+            order.insert(at, key)
+        return order
 
     # -- snapshots -----------------------------------------------------------
 
-    def _build_snapshot(self):
+    def _build_snapshot(self, touched=None):
         return self._rows.snapshot(
-            self.app_name, self.generation, self._order or [], self._records
+            self.app_name, self.generation, self._order or [], self._records, touched
         )
 
     def snapshot(self):
@@ -210,6 +293,15 @@ class ExperimentIndex:
         """``{verstr: raw run state or None}`` for the rows' experiments."""
         snap = self._snapshot
         return dict(snap.run_states) if snap is not None else {}
+
+
+def _adopted(old, record, state_moved):
+    """*record* as refreshed. A copy back from the helper process keeps
+    *old*'s run state object unless it moved: readers diff generations by
+    identity."""
+    if old is not None and record is not old and not state_moved:
+        record["run_state"] = old["run_state"]
+    return record
 
 
 def _row_copies(snap, with_create_note):

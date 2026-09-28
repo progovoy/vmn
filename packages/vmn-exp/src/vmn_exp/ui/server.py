@@ -158,7 +158,7 @@ def create_app(
 
     def _any_exp_storage(ws):
         """The workspace's experiment storage, local checkout or S3."""
-        return _exp_storage_for(ws) or exp_reader.experiment_storage(ws.path)
+        return _exp_storage_for(ws) or source.workspace_index(ws).storage
 
     @app.get(f"{API_PREFIX}/meta")
     def meta():

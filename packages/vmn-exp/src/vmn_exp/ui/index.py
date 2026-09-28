@@ -88,6 +88,11 @@ class WorkspaceIndex:
         self._conn.commit()
         self._storage = exp_reader.experiment_storage(root_path)
 
+    @property
+    def storage(self):
+        """The workspace's experiment storage, shared by every request."""
+        return self._storage
+
     def _get(self, scope, fingerprint):
         with self._lock:
             row = self._conn.execute(

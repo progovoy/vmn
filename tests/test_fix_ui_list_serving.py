@@ -232,25 +232,29 @@ def test_the_s3_index_persists_under_the_data_dir(s3_workspace, monkeypatch):
     assert gets == []
 
 
-def test_a_failing_background_listing_keeps_the_last_snapshot(background, monkeypatch, caplog):
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads through permissions")
+def test_a_failing_background_listing_keeps_the_last_snapshot(background, caplog):
     client, storage = background
-    _run(storage, 0, loss=0.1)
+    verstr = _run(storage, 0, loss=0.1)
     assert client.get(f"{BASE}/experiments?limit=10").json()["total"] == 1
 
-    def unreachable(*a, **kw):
-        raise OSError("remote listing failed")
+    # Break the store itself: the listing runs in the index's I/O helper
+    # process, out of reach of a monkeypatch in this one.
+    base = os.path.dirname(storage.direct_files().plain_record_dir(APP, verstr))
+    mode = os.stat(base).st_mode
+    os.chmod(base, 0)
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not any(
+            "refresh failed" in r.getMessage() for r in caplog.records
+        ):
+            time.sleep(0.05)
 
-    monkeypatch.setattr(LocalSnapshotStorage, "list_files", unreachable)
-    monkeypatch.setattr(LocalSnapshotStorage, "list_record_names", unreachable)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline and not any(
-        "refresh failed" in r.getMessage() for r in caplog.records
-    ):
-        time.sleep(0.05)
-
-    assert any("refresh failed" in r.getMessage() for r in caplog.records)
-    r = client.get(f"{BASE}/experiments?limit=10")
-    assert r.status_code == 200 and r.json()["total"] == 1
+        assert any("refresh failed" in r.getMessage() for r in caplog.records)
+        r = client.get(f"{BASE}/experiments?limit=10")
+        assert r.status_code == 200 and r.json()["total"] == 1
+    finally:
+        os.chmod(base, mode)
 
 
 def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):

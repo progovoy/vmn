@@ -32,7 +32,7 @@ from vmn_exp.storage.files import (
     unsafe_verstr,
     write_patches_to_dir,
 )
-from vmn_exp.storage.listing import RecordListings, files_in
+from vmn_exp.storage.listing import RecordListings, files_in, map_dirs
 
 
 def _has_patch_content(patches):
@@ -54,11 +54,17 @@ def _append_bytes(path, text):
         os.close(fd)
 
 
+def _dir_sig(entry):
+    """A record directory's ``(mtime_ns, inode)``: every atomic write bumps it."""
+    return (entry.stat().st_mtime_ns, entry.inode())
+
+
 class LocalSnapshotStorage(SnapshotStorage):
     def __init__(self, vmn_root_path, subdir="snapshots"):
         self.vmn_root_path = vmn_root_path
         self._subdir = subdir
         self._listings = RecordListings()
+        self._identity = None
 
     def _snapshot_base_dir(self, app_name):
         app_dir = checked_app_path(app_name).replace("/", os.sep)
@@ -225,23 +231,18 @@ class LocalSnapshotStorage(SnapshotStorage):
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
             return {}
-        return {
-            unsafe_verstr(entry.name): (entry.stat().st_mtime_ns, entry.inode())
-            for entry in os.scandir(base)
-            if entry.is_dir() and not entry.name.startswith(".")
-        }
+        entries = [e for e in os.scandir(base) if e.is_dir() and not e.name.startswith(".")]
+        sigs = map_dirs(_dir_sig, entries)
+        return {unsafe_verstr(entry.name): sig for entry, sig in zip(entries, sigs)}
 
     def list_files(self, app_name, keys=None):
         """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
         (a key without a record is left out)."""
         if keys is None:
             return self._list_all_files(app_name)
-        files = {}
-        for key in keys:
-            names = self.record_files(app_name, key)
-            if METADATA_FILE in names:
-                files[key] = names
-        return files
+        keys = list(keys)
+        found = map_dirs(lambda key: self.record_files(app_name, key), keys)
+        return {key: names for key, names in zip(keys, found) if METADATA_FILE in names}
 
     def _list_all_files(self, app_name):
         # The same records as _record_dirs, without stat-ing metadata.yml twice.
@@ -270,8 +271,20 @@ class LocalSnapshotStorage(SnapshotStorage):
             return None
         return self._snapshot_dir(app_name, verstr)
 
+    def io_process_args(self):
+        """``LocalSnapshotStorage(*args)`` in another process reads the same
+        records (an index's I/O helper); None from a subclass, which may read
+        its files some other way."""
+        if type(self) is not LocalSnapshotStorage:
+            return None
+        return (self.vmn_root_path, self._subdir)
+
     def cache_identity(self):
-        return ("local", os.path.realpath(self.vmn_root_path), self._subdir)
+        # Resolved once: every index lookup asks, and realpath lstat-s each
+        # path component.
+        if self._identity is None:
+            self._identity = ("local", os.path.realpath(self.vmn_root_path), self._subdir)
+        return self._identity
 
     def index_cache_path(self, app_name):
         """Inside the base dir, which ignores itself; None before any record."""
