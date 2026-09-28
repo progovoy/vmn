@@ -26,13 +26,12 @@ from vmn_exp.core.values import sanitize_entry
 # count as "unset" for merging purposes.
 _STORAGE_CONF_KEYS = (
     "bucket",
-    "backend",
     "prefix",
     "endpoint_url",
     "experiment_dir",
     "writer_id",
 )
-_DEFAULT_PARAM_VALUES = ("local", "vmn-experiments")
+_DEFAULT_PARAM_VALUES = ("vmn-experiments",)
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
 

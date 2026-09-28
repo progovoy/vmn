@@ -223,12 +223,21 @@ class _Vcs:
 
 
 def test_merge_conf_into_params_fills_unset_and_default_valued_keys():
-    vcs = _Vcs(experiment={"storage": {"backend": "s3", "bucket": "b", "prefix": "p"}})
-    params = {"backend": "local", "bucket": None, "prefix": "vmn-experiments"}
+    vcs = _Vcs(experiment={"storage": {"bucket": "b", "prefix": "p"}})
+    params = {"bucket": None, "prefix": "vmn-experiments"}
 
     merge_conf_into_params(vcs, params)
 
-    assert params == {"backend": "s3", "bucket": "b", "prefix": "p"}
+    assert params == {"bucket": "b", "prefix": "p"}
+
+
+def test_merge_conf_into_params_ignores_a_backend_key():
+    vcs = _Vcs(experiment={"storage": {"backend": "s3", "bucket": "b"}})
+    params = {"bucket": None}
+
+    merge_conf_into_params(vcs, params)
+
+    assert params == {"bucket": "b"}
 
 
 def test_merge_conf_into_params_lets_explicit_cli_values_win():
@@ -241,20 +250,20 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
 
 
 def test_merge_conf_into_params_falls_back_to_snapshot_storage_conf():
-    vcs = _Vcs(snapshot_storage={"backend": "s3", "bucket": "snap-bucket"})
-    params = {"backend": "local", "bucket": None}
+    vcs = _Vcs(snapshot_storage={"bucket": "snap-bucket"})
+    params = {"bucket": None}
 
     merge_conf_into_params(vcs, params)
 
-    assert params == {"backend": "s3", "bucket": "snap-bucket"}
+    assert params == {"bucket": "snap-bucket"}
 
 
 def test_merge_conf_into_params_tolerates_a_vcs_without_conf():
-    params = {"backend": "local"}
+    params = {"bucket": "b"}
 
     merge_conf_into_params(None, params)
 
-    assert params == {"backend": "local"}
+    assert params == {"bucket": "b"}
 
 
 # ---------------------------------------------------------------------------

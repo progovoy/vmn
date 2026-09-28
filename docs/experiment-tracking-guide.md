@@ -367,7 +367,6 @@ Config approach (in `conf.yml` baked into the snapshot):
 ```yaml
 experiment:
   storage:
-    backend: s3
     bucket: my-experiments
     experiment_dir: /tmp/exp
     # writer_id: defaults to hostname (= pod name)
@@ -389,7 +388,7 @@ vmn-exp run my_app \
     --from-snapshot /workspace/vmn_metadata.yml \
     --experiment-dir /tmp/exp \
     --writer-id $HOSTNAME \
-    --backend s3 --bucket my-experiments \
+    --bucket my-experiments \
     --sync-interval 30 \
     -- python train.py --lr $LR
 ```
@@ -649,7 +648,6 @@ All storage flags can also be set in `conf.yml` under `experiment.storage` — C
 | `--sync-interval <sec>` | — | Seconds between S3 metric syncs (default: 30) |
 | `--heartbeat-interval <sec>` | — | Seconds between heartbeat refreshes (default: 30) |
 | `--parent <ref>` | — | Attach the run as an inner job of another experiment |
-| `--backend s3` | `backend` | Use S3 storage backend |
 | `--bucket <name>` | `bucket` | S3 bucket name |
 | `--endpoint-url <url>` | `endpoint_url` | Custom S3 endpoint (MinIO, LocalStack) |
 | `--prefix <prefix>` | `prefix` | Key prefix in bucket (default: `vmn-experiments`) |
@@ -660,7 +658,6 @@ Example `conf.yml`:
 experiment:
   storage:
     experiment_dir: /mnt/shared
-    backend: s3               # optional — only for S3 mode
     bucket: my-experiments    # optional — only for S3 mode
 ```
 
@@ -717,8 +714,6 @@ containers:
       - /tmp/exp
       - --writer-id
       - $(HOSTNAME)
-      - --backend
-      - s3
       - --bucket
       - my-experiments
       - --sync-interval
