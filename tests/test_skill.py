@@ -24,12 +24,30 @@ def test_skill_default_excludes_methodology(capfd):
     assert METHODOLOGY_MARKER not in out
 
 
-def test_skill_methodology_flag_includes_it(capfd):
-    ret = vmn_run(["skill", "--methodology"])[0]
-    assert ret == 0
-    out = capfd.readouterr().out
-    assert VMN_MARKER in out
-    assert METHODOLOGY_MARKER in out
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["ai"],
+        ["ai", "skill"],
+        ["ai", "methodology", "--tdd"],
+        ["skill", "--methodology"],
+    ],
+)
+def test_removed_ai_commands_are_rejected(argv):
+    with pytest.raises(SystemExit) as exc:
+        vmn_run(argv)
+    assert exc.value.code != 0
+
+
+def test_skill_has_no_snapshot_usage(capfd):
+    assert vmn_run(["skill"])[0] == 0
+    assert "vmn snapshot" not in capfd.readouterr().out
+
+
+def test_skill_help_is_not_described_as_an_alias(capfd):
+    with pytest.raises(SystemExit):
+        vmn_run(["--help"])
+    assert "vmn ai skill" not in capfd.readouterr().out
 
 
 def test_install_claude_creates_skill_file(tmp_path):
@@ -43,12 +61,6 @@ def test_install_claude_creates_skill_file(tmp_path):
     assert "description:" in content
     assert VMN_MARKER in content
     assert METHODOLOGY_MARKER not in content
-
-
-def test_install_claude_methodology(tmp_path):
-    install_skill("claude", methodology=True, root=str(tmp_path))
-    content = (tmp_path / ".claude" / "skills" / "vmn" / "SKILL.md").read_text()
-    assert METHODOLOGY_MARKER in content
 
 
 def test_install_claude_refuses_overwrite_without_force(tmp_path):

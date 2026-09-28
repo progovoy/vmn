@@ -530,7 +530,7 @@ def add_arg_worktrees(subprasers):
 
 
 def _add_install_args(parser):
-    """Shared --install, --target, --force args for ai subcommands."""
+    """--install, --target, --force args for `vmn skill`."""
     parser.add_argument(
         "--install",
         dest="install",
@@ -555,91 +555,11 @@ def _add_install_args(parser):
     parser.set_defaults(force=False)
 
 
-def add_arg_ai(subprasers):
-    pai = subprasers.add_parser(
-        "ai",
-        help="AI agent integration (skill block and methodology rules)",
-    )
-    pai.set_defaults(strict_version=False, validate_app_name=False)
-    ai_sub = pai.add_subparsers(dest="ai_action")
-
-    # --- vmn ai skill ---
-    pskill = ai_sub.add_parser(
-        "skill",
-        help="Print vmn CLI usage instructions for AI agents",
-    )
-    pskill.add_argument(
-        "--methodology",
-        dest="methodology",
-        action="store_true",
-        help="Also append all methodology rules",
-    )
-    pskill.set_defaults(methodology=False)
-    _add_install_args(pskill)
-
-    # --- vmn ai methodology ---
-    pmeth = ai_sub.add_parser(
-        "methodology",
-        help="Print opinionated development rules for AI agents",
-    )
-    pmeth.add_argument(
-        "--tdd",
-        dest="meth_tdd",
-        action="store_true",
-        help="Include strict TDD rules",
-    )
-    pmeth.add_argument(
-        "--testability",
-        dest="meth_testability",
-        action="store_true",
-        help="Include testability-by-design (I/O injection) rules",
-    )
-    pmeth.add_argument(
-        "--boyscout",
-        dest="meth_boyscout",
-        action="store_true",
-        help="Include the boy scout rule (improve what you touch)",
-    )
-    pmeth.add_argument(
-        "--worktrees",
-        dest="meth_worktrees",
-        action="store_true",
-        help="Include parallel worktree workflow and hygiene rules",
-    )
-    pmeth.add_argument(
-        "--communication",
-        dest="meth_communication",
-        action="store_true",
-        help="Include communication rules (ask when ambiguous, push back)",
-    )
-    pmeth.add_argument(
-        "--minimal-diffs",
-        dest="meth_minimal_diffs",
-        action="store_true",
-        help="Include minimal-diffs rules (one thing per commit, no dead code)",
-    )
-    pmeth.add_argument(
-        "--errors",
-        dest="meth_errors",
-        action="store_true",
-        help="Include error-handling rules (fail fast, actionable messages)",
-    )
-    _add_install_args(pmeth)
-
-
 def add_arg_skill(subprasers):
-    """Legacy alias: `vmn skill` → `vmn ai skill`."""
     pskill = subprasers.add_parser(
         "skill",
-        help="(alias for `vmn ai skill`) Print vmn skill block for AI agents",
+        help="Print vmn usage instructions (skill block) for AI agents",
     )
-    pskill.add_argument(
-        "--methodology",
-        dest="methodology",
-        action="store_true",
-        help="Also append all methodology rules",
-    )
-    pskill.set_defaults(methodology=False, ai_action="skill")
     _add_install_args(pskill)
 
 

@@ -825,19 +825,20 @@ never pushed. To share across a team, point any subcommand at an S3-compatible
 backend:
 
 ```sh
-vmn-exp run my_app --backend s3 --bucket my-experiments \
+vmn-exp run my_app --bucket my-experiments \
     --endpoint-url http://minio:9000 --prefix team/ml -- ./perf_test.sh
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--backend` | `local` | `local` or `s3` |
-| `--bucket` | — | S3 bucket name |
+| `--bucket` | — | S3 bucket name (setting it is what enables S3) |
 | `--endpoint-url` | — | Custom endpoint (MinIO, LocalStack, …) |
 | `--prefix` | `vmn-experiments` | Key prefix inside the bucket |
 
 These can also be set once under `experiment.storage` in `.vmn/{app}/conf.yml`
 so you don't repeat them on every command; CLI flags override the config.
+With a bucket, runs record locally and sync to it, or go straight to S3 when
+there is no local dir.
 
 ### How records are stored
 

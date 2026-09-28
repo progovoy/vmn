@@ -65,13 +65,8 @@ def resolve_experiment_storage(
     eff_prefix = params["prefix"]
     eff_endpoint = params["endpoint_url"]
 
-    # --- Step 3: pick backend ---
-    # Pure-S3 only when there is no local root AND a bucket is configured.
-    # (no root + no bucket → get_snapshot_storage raises a clear ValueError)
-    backend = "s3" if (not root and eff_bucket) else "local"
-
     return get_snapshot_storage(
-        backend,
+        _pick_backend(root, eff_bucket),
         vmn_root_path=root,
         bucket=eff_bucket,
         prefix=eff_prefix,
@@ -79,6 +74,12 @@ def resolve_experiment_storage(
         subdir="experiments",
         buffer_logs=True,
     )
+
+
+def _pick_backend(root, bucket):
+    """Pure-S3 only when there is no local root AND a bucket is configured.
+    (no root + no bucket → get_snapshot_storage raises a clear ValueError)"""
+    return "s3" if (not root and bucket) else "local"
 
 
 def _try_repo_root() -> "str | None":
@@ -97,13 +98,10 @@ def _get_experiment_storage(vcs, params):
         "VMN_EXPERIMENT_DIR"
     )
     vmn_root = experiment_dir or (vcs.vmn_root_path if vcs else None)
-    backend = params.get("backend", "local")
-    if backend == "local" and not vmn_root and params.get("bucket"):
-        backend = "s3"  # a pod with a bucket and no scratch dir records to S3 directly
     from vmn_exp.storage.cached import get_snapshot_storage
 
     return get_snapshot_storage(
-        backend,
+        _pick_backend(vmn_root, params.get("bucket")),
         vmn_root_path=vmn_root,
         bucket=params.get("bucket"),
         prefix=params.get("prefix", "vmn-experiments"),

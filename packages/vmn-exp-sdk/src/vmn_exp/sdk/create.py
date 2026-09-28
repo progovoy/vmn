@@ -97,7 +97,7 @@ def _reject_reentry_without_nesting(nested):
 def snapshot_mode_storage():
     """Where a git-less run records, as the CLI does: ``VMN_EXPERIMENT_DIR``
     and/or the ``VMN_EXPERIMENT_BUCKET`` it syncs to."""
-    params = {"backend": "local", "prefix": "vmn-experiments"}
+    params = {"prefix": "vmn-experiments"}
     merge_env_into_params(params)
     try:
         return _get_experiment_storage(None, params)

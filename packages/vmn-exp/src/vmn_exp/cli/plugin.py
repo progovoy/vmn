@@ -174,8 +174,6 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
-    pexp.add_argument("--backend", default="local", choices=["local", "s3"],
-                      help="Storage backend (default: local)")
     pexp.add_argument("--bucket", default=None, help="S3 bucket name")
     pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
@@ -392,7 +390,6 @@ def _exp_run_without_repo(args):
         os.environ["VMN_WRITER_ID"] = args.writer_id
 
     params = {
-        "backend": getattr(args, "backend", "local"),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
