@@ -51,6 +51,7 @@ from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
 from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
+from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 
@@ -63,6 +64,8 @@ DEFAULT_SYNC_INTERVAL_SEC = 30
 # unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
 FINAL_UPLOAD_TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
+# How long finish() waits for run.alert() deliveries still in flight.
+ALERT_DRAIN_SEC = 5
 
 # A run that reached interpreter exit still open was abandoned. Most of the
 # time that is just an mlflow-style "forgot to call finish()" — the process
@@ -179,7 +182,7 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-class Run(MetricDefinitions, RunArtifacts):
+class Run(MetricDefinitions, RunArtifacts, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     def __init__(
@@ -314,6 +317,7 @@ class Run(MetricDefinitions, RunArtifacts):
                 **final_state,
             )
             self._log_sync.submit(get_writer_id())
+            self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
         finally:
             context.unregister(self)
         return True

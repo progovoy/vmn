@@ -280,6 +280,34 @@ Rows carry them as `tags` (`{key: value}`), and the query language reads
 `tags.<key>` (`tags.stage = "prod"`). A `tags:` mapping (or list of labels) in a
 `-f` notes file seeds them at creation.
 
+### Alerts
+
+`run.alert()` is `wandb.alert()`: flag something from inside the loop and get
+told about it.
+
+```python
+if math.isnan(loss):
+    run.alert("loss is NaN", text=f"step {step}, lr {lr}", level="error")
+```
+
+- `level` is `"info"` (default), `"warn"` or `"error"`; anything else raises
+  `ValueError`.
+- It appends an `alert` log entry (`{"type": "alert", "title", "text",
+  "level"}`), rendered by `vmn-exp show` and listed in the dashboard's run log.
+- Repeats of one title within `wait_sec` seconds (default: conf
+  `experiment.alerts.wait_sec`, 60) are dropped — neither logged nor sent — so a
+  check inside a loop cannot spam a channel. `wait_sec=0` sends every call. The
+  return value says whether this one went through.
+- It is sent to the configured sinks when the `alert` trigger is on (the
+  default); delivery runs off-thread, never raises, and `finish()` waits up to
+  5s for it.
+- With the `failed` trigger opted in, the run also alerts when it finishes
+  failed (an exception, `finish(exit_code=N)` with N != 0, SIGTERM).
+
+Sinks (webhook, Slack, shell command), triggers and the env-var fallbacks are
+configured as described in [docs/experiments.md](experiments.md#alerts). A
+`NoOpRun` (non-zero rank) ignores `alert()`.
+
 ### Changing stored runs: archive, unarchive, tags
 
 ```python
