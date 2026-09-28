@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName, artifactUrl } from "../api";
+import { fetchSeriesBatch } from "../apiSeries";
 import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useMeta } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { pollIntervalMs, runHref } from "../util";
@@ -37,15 +38,26 @@ function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; ver
   );
 }
 
+/** Points per joined metric, as many as the detail's own series carry. */
+const RUN_POINTS = 2000;
+
 function RunBody({ ws, app, appName, detail }: {
   ws: string; app: string; appName: string; detail: ExperimentDetail;
 }) {
   const verstr = detail.metadata.verstr;
+  const fetchJoined = useCallback(
+    (x: Record<string, string>) => fetchSeriesBatch(ws, app, [verstr], Object.keys(x), RUN_POINTS, x)
+      .then((b) => b.series[verstr] ?? {}),
+    [ws, app, verstr],
+  );
   const logTail = detail.log_tail ?? detail.log ?? [];
   const logTotal = detail.log_total ?? logTail.length;
   return (
     <>
-      <TrainingCurves series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at} />
+      <TrainingCurves
+        series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at}
+        stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
+      />
       <div className="card-grid-wide">
         <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />
         <div className="card">
