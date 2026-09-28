@@ -275,8 +275,14 @@ class Run(RunArtifacts):
         self._finish(exit_code)
 
     def _finish(self, exit_code, **final_state):
+        if self._record_final(exit_code, **final_state):
+            self._close_remote_writers(_final_upload_deadline())
+
+    def _record_final(self, exit_code, **final_state):
+        """Write the run's last log entries and final state locally, queue their
+        upload and close the run. False if it was finished already."""
         if self._finished:
-            return
+            return False
         self._finished = True
 
         try:
@@ -305,14 +311,13 @@ class Run(RunArtifacts):
                 **final_state,
             )
             self._log_sync.submit(get_writer_id())
-            self._close_remote_writers()
         finally:
             context.unregister(self)
+        return True
 
-    def _close_remote_writers(self):
+    def _close_remote_writers(self, deadline):
         # One deadline for both: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        deadline = time.monotonic() + FINAL_REMOTE_TIMEOUT_SEC
         for what, writer in (("log", self._log_sync), ("state", self._state_publisher)):
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
@@ -469,11 +474,28 @@ def _finalize_open_runs(exit_code=None, **final_state):
     """
     if exit_code is None:
         exit_code = ABANDONED_EXIT_CODE if _uncaught_exception_seen else 0
-    for run in list(reversed(context.open_runs())):
-        try:
-            run._finish(exit_code, **final_state)
-        except Exception:
-            _LOGGER.debug("Failed to finalize an abandoned run", exc_info=True)
+    # Every run's final state first, then one shared wait for all the uploads:
+    # a hung remote must not spend the whole budget on the first run.
+    recorded = [
+        run
+        for run in reversed(context.open_runs())
+        if _quietly(run._record_final, exit_code, **final_state)
+    ]
+    deadline = _final_upload_deadline()
+    for run in recorded:
+        _quietly(run._close_remote_writers, deadline)
+
+
+def _quietly(step, *args, **kwargs):
+    try:
+        return step(*args, **kwargs)
+    except Exception:
+        _LOGGER.debug("Failed to finalize an abandoned run", exc_info=True)
+        return False
+
+
+def _final_upload_deadline():
+    return time.monotonic() + FINAL_REMOTE_TIMEOUT_SEC
 
 
 def _system_exit_code(exc):
