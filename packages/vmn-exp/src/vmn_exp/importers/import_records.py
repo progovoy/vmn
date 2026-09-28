@@ -221,7 +221,7 @@ def import_run(
     Parameters
     ----------
     storage:
-        A vmn snapshot storage backend (local or S3).
+        A vmn-exp storage backend (local or S3).
     app_name:
         The vmn app name to import into.
     run:

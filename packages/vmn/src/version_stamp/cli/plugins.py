@@ -1,5 +1,5 @@
 """Load the plugins installed packages declare under the ``vmn.plugins`` entry
-point group (vmn-exp registers ``snapshot`` there). vmn names no plugin itself.
+point group (vmn-exp registers its dev-version loader there). vmn names no plugin itself.
 
 A plugin that fails to import is tolerated with a debug log so that a broken or
 partial install keeps stamping working.

@@ -131,13 +131,14 @@ def test_the_installed_commands_run(full_venv, tmp_path):
         assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_vmn_gets_snapshot_from_the_installed_plugin(full_venv, tmp_path):
+def test_vmn_gets_dev_version_goto_from_the_installed_plugin(full_venv, tmp_path):
     proc = _in_venv(
         full_venv,
+        "from version_stamp.cli import plugin_api\n"
         "from version_stamp.cli.plugins import load_builtin_plugins\n"
-        "from version_stamp.cli.plugin_api import find\n"
         "load_builtin_plugins()\n"
-        "assert find('snapshot') is not None\n",
+        "assert plugin_api._dev_version_loader is not None\n"
+        "assert plugin_api.find('snapshot') is None\n",
         cwd=str(tmp_path),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr

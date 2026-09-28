@@ -111,7 +111,7 @@ def start_run(
     ``app_name=None`` resolves the app from the current checkout. Use the result
     as a context manager, or call ``finish()`` yourself.
 
-    With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn snapshot
+    With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn-exp
     export``) no git checkout is needed: the run records against that snapshot
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
 

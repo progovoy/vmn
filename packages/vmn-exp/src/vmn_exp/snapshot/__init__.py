@@ -1,92 +1,47 @@
 #!/usr/bin/env python3
-"""Snapshot storage and operations for dev versions."""
+"""Dev-version capture and restore: the building block behind experiments
+and ``vmn goto -v <dev-version>``."""
 import datetime
-import os
-import shutil
-import subprocess  # kept so tests can patch snap.subprocess.run
-import sys
-import tarfile
-import tempfile
 
-import yaml
-
-# The storage backends live in their own modules; these names stay importable
-# from here for existing callers.
+# The storage backends and the dev-version helpers live in their own modules;
+# these names stay importable from here for experiment code.
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
-from vmn_exp.storage.base import SnapshotStorage  # noqa: F401
 from vmn_exp.storage.cached import (  # noqa: F401
     CachedSnapshotStorage,
     get_snapshot_storage,
 )
-from vmn_exp.storage.files import (  # noqa: F401
-    read_patches_from_dir as _read_patches_from_dir,
-)
-from vmn_exp.storage.files import (  # noqa: F401
-    write_patches_to_dir as _write_patches_to_dir,
-)
-from vmn_exp.storage.local import (  # noqa: F401
-    LocalSnapshotStorage,
-)
+from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: F401
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
     VMN_LOGGER,
-    measure_runtime_decorator,
     now_iso,
-    sha256_file,
     # dev-version apply
-    _apply_dep_patches,
     _apply_patches_to_workdir,
     _apply_snapshot_patches,
     _reset_worktree,
     # dev-version capture
     _compute_diff_hash,
     _compute_verstr,
-    _DIFF_HASH_LENGTHS,
     _format_dev_verstr,
     _generate_dep_patches,
     _generate_patches,
-    _stored_diff_hash,
     _unique_snapshot_verstr,
     gather_create_data,
     # dev-version materialize
-    _clone_at,
-    _clone_local_at,
-    _commit_exists,
     _diff_real_tree,
     _diff_with_external_tool,
-    _git,
-    _git_ok,
-    _LOCAL_GIT_TIMEOUT_SEC,
-    _materialize_for_diff,
     _materialize_workdir,
-    _NETWORK_GIT_TIMEOUT_SEC,
-    _predates_untracked_capture,
-    _resolve_remote,
     _shallow_clone_at,
     _strip_git_dirs,
-    _write_snapshot_to_dir,
     get_git_difftool,
     render_tree_diff,
     # dev-version untracked
     _collect_untracked_tarball,
-    _DEFAULT_MAX_FILE_MB,
-    _ensure_trailing_newline,
-    _DEFAULT_MAX_TOTAL_MB,
-    _extract_untracked_tarball,
-    _fmt_size,
     _hash_untracked_content,
-    _list_tarball_members,
-    _load_untracked_cache,
-    _mb_from_env,
-    _store_untracked_cache,
-    _UNTRACKED_CACHE_FILE,
-    _untracked_candidates,
     _untracked_caps,
-    _within_caps,
     copy_untracked_files,
     payload_from_tarball,
 )
-
 
 
 def untracked_payload(repo_path):
@@ -94,12 +49,6 @@ def untracked_payload(repo_path):
     ``_collect_untracked_tarball`` so experiment code (and its tests) can
     still patch the collector here."""
     return payload_from_tarball(*_collect_untracked_tarball(repo_path))
-
-
-# These two are pure helpers that the core write path needs as well, so they
-# live in core.utils now. The old private names stay importable from here.
-_now_iso = now_iso
-_sha256_file = sha256_file
 
 
 def _relative_timestamp(iso_ts):
@@ -133,38 +82,6 @@ def _get_storage(vcs, params):
     )
 
 
-def _parse_meta_args(meta_list):
-    """Parse ['key=val', ...] into a dict."""
-    if not meta_list:
-        return {}
-    result = {}
-    for item in meta_list:
-        if "=" not in item:
-            VMN_LOGGER.error(f"Invalid --meta format: {item}. Expected key=value")
-            raise ValueError(f"Invalid meta format: {item}")
-        key, value = item.split("=", 1)
-        result[key.strip()] = value.strip()
-    return result
-
-
-def _build_user_meta(meta_args, meta_file):
-    """Build user_meta dict from CLI --meta args and/or --meta-file."""
-    result = {}
-    if meta_file:
-        with open(meta_file) as f:
-            file_meta = yaml.safe_load(f)
-        if isinstance(file_meta, dict):
-            result.update(file_meta)
-        else:
-            VMN_LOGGER.error(
-                f"--meta-file must contain a YAML mapping, got {type(file_meta).__name__}"
-            )
-            raise ValueError("Invalid meta file format")
-    if meta_args:
-        result.update(_parse_meta_args(meta_args))
-    return result or None
-
-
 def _skipped_untracked(patches):
     """Untracked paths left out by the size caps, deps prefixed by their path."""
     skipped = list(patches.get("untracked_skipped", []))
@@ -196,7 +113,7 @@ def _build_snapshot_metadata(
         "base_commit": commit_hash,
         "branch": be.active_branch,
         "remote": remote_url,
-        "timestamp": _now_iso(),
+        "timestamp": now_iso(),
         "note": note,
         "app_name": vcs.name,
         "dirty_states": dirty_states,
@@ -218,41 +135,6 @@ def _build_snapshot_metadata(
     if changesets:
         metadata["changesets"] = changesets
     return metadata
-
-
-@measure_runtime_decorator
-def snapshot_create(vcs, params, note=None, user_meta=None):
-    (
-        base_version,
-        commit_hash,
-        patches,
-        dirty_states,
-        ver_info,
-        err,
-    ) = gather_create_data(vcs)
-    if err is not None:
-        return err
-
-    storage = _get_storage(vcs, params)
-    verstr = _unique_snapshot_verstr(
-        storage, vcs.name, base_version, commit_hash, _compute_diff_hash(patches)
-    )
-    metadata = _build_snapshot_metadata(
-        vcs,
-        verstr,
-        base_version,
-        commit_hash,
-        dirty_states,
-        patches,
-        ver_info,
-        note=note,
-        user_meta=user_meta,
-    )
-    storage.save(vcs.name, verstr, metadata, patches)
-
-    VMN_LOGGER.info(f"Created snapshot: {verstr}")
-    print(verstr)
-    return 0
 
 
 def _save_safety_snapshot(vcs, params, target_verstr):
@@ -295,245 +177,8 @@ def _restore_with_safety_net(vcs, params, metadata, patches):
     if saved:
         VMN_LOGGER.info(
             f"Current work saved as {saved} — restore it anytime with: "
-            f"vmn snapshot restore {vcs.name} -v {saved}"
+            f"vmn goto -v {saved} {vcs.name}"
         )
     if not params.get("deps_only"):
         _reset_worktree(vcs)
     return _apply_snapshot_patches(vcs, params, metadata, patches)
-
-
-@measure_runtime_decorator
-def snapshot_restore(vcs, params, verstr):
-    storage = _get_storage(vcs, params)
-    metadata, patches = storage.load(vcs.name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Snapshot {verstr} not found")
-        return 1
-    ret = _restore_with_safety_net(vcs, params, metadata, patches)
-    if ret == 0:
-        VMN_LOGGER.info(f"Restored snapshot {verstr}")
-    return ret
-
-
-@measure_runtime_decorator
-def snapshot_list(vcs, params):
-    storage = _get_storage(vcs, params)
-    snapshots = storage.list_snapshots(vcs.name)
-    if not snapshots:
-        VMN_LOGGER.info(f"No snapshots found for {vcs.name}")
-        return 0
-
-    numbered = list(enumerate(snapshots, 1))
-    last = params.get("last")
-    if last:
-        numbered = numbered[-last:]
-
-    filters = _parse_meta_args(params.get("filter")) if params.get("filter") else None
-
-    for idx, meta in numbered:
-        if filters:
-            user_meta = meta.get("user_meta", {})
-            if not all(str(user_meta.get(k)) == v for k, v in filters.items()):
-                continue
-
-        if params.get("verbose"):
-            ts_display = meta["timestamp"]
-        else:
-            ts_display = _relative_timestamp(meta["timestamp"])
-        note_str = f" - {meta['note']}" if meta.get("note") else ""
-        meta_str = ""
-        if meta.get("user_meta"):
-            meta_str = " " + " ".join(f"{k}={v}" for k, v in meta["user_meta"].items())
-        print(f"[{idx}] {meta['verstr']}  ({ts_display}){note_str}{meta_str}")
-
-    return 0
-
-
-@measure_runtime_decorator
-def snapshot_show(vcs, params, verstr):
-    if verstr is None:
-        VMN_LOGGER.error("Must specify version with -v")
-        return 1
-
-    storage = _get_storage(vcs, params)
-
-    metadata, patches = storage.load(vcs.name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Snapshot {verstr} not found")
-        return 1
-
-    print(yaml.dump(metadata, sort_keys=True))
-    if patches.get("working_tree"):
-        print("--- Working tree patch ---")
-        print(patches["working_tree"])
-    if patches.get("local_commits"):
-        print("--- Local commits patch ---")
-        print(patches["local_commits"])
-    if patches.get("untracked_files"):
-        print("--- Untracked files ---")
-        for name in _list_tarball_members(patches["untracked_files"]):
-            print(f"  {name}")
-
-    if patches.get("deps"):
-        for dep_name, dp in patches["deps"].items():
-            print(f"\n--- Dep: {dep_name} ---")
-            if dp.get("working_tree"):
-                print(f"  working tree patch: {len(dp['working_tree'])} bytes")
-            if dp.get("local_commits"):
-                print(f"  local commits patch: {len(dp['local_commits'])} bytes")
-            if dp.get("untracked_files"):
-                print(
-                    f"  untracked files: {len(_list_tarball_members(dp['untracked_files']))} files"
-                )
-
-    return 0
-
-
-@measure_runtime_decorator
-def snapshot_note(vcs, params, verstr, note):
-    if verstr is None:
-        VMN_LOGGER.error("Must specify version with -v")
-        return 1
-    if note is None:
-        VMN_LOGGER.error("Must specify --note")
-        return 1
-
-    storage = _get_storage(vcs, params)
-
-    if storage.update_note(vcs.name, verstr, note):
-        VMN_LOGGER.info(f"Updated note for {verstr}")
-        return 0
-    else:
-        VMN_LOGGER.error(f"Snapshot {verstr} not found")
-        return 1
-
-
-def _synthesize_stamped_version(vcs, verstr):
-    """Synthesize empty snapshot metadata for a stamped (non-dev) version."""
-    if "-dev." in verstr:
-        return None, None
-
-    try:
-        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
-    except Exception:
-        VMN_LOGGER.debug(f"Failed to resolve stamped version {verstr}", exc_info=True)
-        return None, None
-
-    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-        return None, None
-
-    ver_info = ver_infos[tag_name]["ver_info"]
-    changesets = ver_info["stamping"]["app"].get("changesets", {})
-    commit_hash = changesets.get(".", {}).get("hash", "")
-    if not commit_hash:
-        return None, None
-
-    metadata = {
-        "verstr": verstr,
-        "base_version": verstr,
-        "base_commit": commit_hash,
-        "branch": changesets.get(".", {}).get("branch", ""),
-        "remote": changesets.get(".", {}).get("remote", ""),
-        "timestamp": "stamped",
-        "note": None,
-        "app_name": vcs.name,
-        "changesets": changesets,
-    }
-    return metadata, {}
-
-
-def _load_or_synthesize(storage, vcs, verstr):
-    """Load a snapshot from storage, or synthesize for stamped versions."""
-    meta, patches = storage.load(vcs.name, verstr)
-    if meta is not None:
-        return meta, patches
-
-    meta, patches = _synthesize_stamped_version(vcs, verstr)
-    if meta is not None:
-        return meta, patches
-
-    return None, None
-
-
-@measure_runtime_decorator
-def snapshot_diff(vcs, params, verstr1, verstr2, tool=None):
-    """Compare two snapshots. verstr2 can be 'current' to diff against working state."""
-    if verstr1 is None:
-        VMN_LOGGER.error("Must specify version with -v")
-        return 1
-    if verstr2 is None:
-        VMN_LOGGER.error("Must specify --to version (or 'current')")
-        return 1
-
-    storage = _get_storage(vcs, params)
-
-    meta1, patches1 = _load_or_synthesize(storage, vcs, verstr1)
-    if meta1 is None:
-        VMN_LOGGER.error(f"Snapshot {verstr1} not found")
-        return 1
-
-    if verstr2 == "current":
-        patches2 = _generate_patches(vcs.backend)
-        meta2 = {
-            "verstr": "current",
-            "timestamp": "now",
-            "branch": vcs.backend.active_branch,
-        }
-    else:
-        meta2, patches2 = _load_or_synthesize(storage, vcs, verstr2)
-        if meta2 is None:
-            VMN_LOGGER.error(f"Snapshot {verstr2} not found")
-            return 1
-
-    tool = tool or get_git_difftool(vcs)
-
-    if tool:
-        return _diff_with_external_tool(
-            tool, vcs, verstr1, meta1, patches1, verstr2, meta2, patches2
-        )
-    return _diff_real_tree(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2)
-
-
-@measure_runtime_decorator
-def snapshot_export(vcs, params, verstr, output_path):
-    """Export a snapshot as a complete working directory or tarball."""
-    if verstr is None:
-        VMN_LOGGER.error("Must specify version with -v")
-        return 1
-
-    storage = _get_storage(vcs, params)
-    metadata, patches = storage.load(vcs.name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Snapshot {verstr} not found")
-        return 1
-
-    safe_verstr = verstr.replace("+", "_plus_")
-    if output_path is None:
-        output_path = safe_verstr
-
-    is_tarball = output_path.endswith(".tar.gz") or output_path.endswith(".tgz")
-
-    if is_tarball:
-        tmpdir = tempfile.mkdtemp(prefix="vmn-export-")
-        dest = os.path.join(tmpdir, safe_verstr)
-    else:
-        tmpdir = None
-        dest = output_path
-
-    try:
-        err = _materialize_workdir(vcs, metadata, patches, dest)
-        if err:
-            return err
-
-        _strip_git_dirs(dest)
-
-        if is_tarball:
-            with tarfile.open(output_path, "w:gz") as tar:
-                tar.add(dest, arcname=safe_verstr)
-
-        VMN_LOGGER.info(f"Exported snapshot to {output_path}")
-        print(output_path)
-        return 0
-    finally:
-        if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)

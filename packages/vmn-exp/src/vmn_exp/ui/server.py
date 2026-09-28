@@ -24,7 +24,6 @@ from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.ui.readers import snapshots as snap_reader
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -377,23 +376,6 @@ def create_app(
         if err:
             raise HTTPException(404, err)
         return result
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/snapshots")
-    def list_snapshots(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
-        return snap_reader.list_snapshots(ws.path, _app_name(app_tag))
-
-    @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/snapshots/{verstr}"
-    )
-    def get_snapshot(ws_name: str, app_tag: str, verstr: str):
-        ws = _git_workspace(ws_name)
-        detail, err = snap_reader.get_snapshot(
-            ws.path, _app_name(app_tag), _segment(verstr)
-        )
-        if err:
-            raise HTTPException(404, err)
-        return detail
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
     def version_changelog(

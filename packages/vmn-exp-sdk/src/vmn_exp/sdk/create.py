@@ -2,8 +2,8 @@
 """Creating the experiment record behind ``start_run()``.
 
 Two modes, as with the CLI: a git checkout (cold-start if needed, snapshot the
-tree) and a container built from ``vmn snapshot export`` (no git; record against
-the exported snapshot's identity). The checkout mode lives in
+tree) and a container built from ``vmn-exp export`` (no git; record against
+the exported code's identity). The checkout mode lives in
 :mod:`vmn_exp.gitmode.checkout`, which only the full vmn-exp package ships.
 """
 import contextlib

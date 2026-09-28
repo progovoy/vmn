@@ -261,51 +261,6 @@ def _goto(app_name, version=None, root=False):
     return ret
 
 
-def _snapshot(
-    app_name,
-    action="create",
-    version=None,
-    note=None,
-    to_version=None,
-    tool=None,
-    output=None,
-    meta=None,
-    meta_file=None,
-    filter_args=None,
-    latest=False,
-    last=None,
-):
-    args_list = ["snapshot"]
-    if action != "create":
-        args_list.append(action)
-    args_list.append(app_name)
-    if version is not None:
-        args_list.extend(["--version", version])
-    if last is not None:
-        args_list.extend(["--last", str(last)])
-    if note is not None:
-        args_list.extend(["--note", note])
-    if to_version is not None:
-        args_list.extend(["--to", to_version])
-    if tool is not None:
-        args_list.extend(["--tool", tool])
-    if output is not None:
-        args_list.extend(["--output", output])
-    if meta:
-        for m in meta:
-            args_list.extend(["--meta", m])
-    if meta_file is not None:
-        args_list.extend(["--meta-file", meta_file])
-    if filter_args:
-        for f in filter_args:
-            args_list.extend(["--filter", f])
-    if latest:
-        args_list.append("--latest")
-
-    reset_logger()
-    return vmn_run(args_list)[0]
-
-
 def _add_buildmetadata_to_version(
     app_layout, bm, version=None, file_path=None, url=None
 ):

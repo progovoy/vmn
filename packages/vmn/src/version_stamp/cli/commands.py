@@ -1038,7 +1038,7 @@ def _get_repo_status(
         if "pending" in unexpected:
             VMN_LOGGER.info(
                 "Hint: commit or stash your changes first, or use "
-                "'vmn snapshot create' to save your work."
+                f"'vmn-exp create {vcs.name}' to save your work."
             )
 
         status.error = True

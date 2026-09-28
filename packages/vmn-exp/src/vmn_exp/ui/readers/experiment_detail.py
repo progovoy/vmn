@@ -27,7 +27,6 @@ from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
-from vmn_exp.ui.readers.snapshots import _load_metadata, _patch_presence
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 
@@ -141,6 +140,26 @@ def status_detail(
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
+# Patch kind -> the metadata flag recording whether the record holds it.
+_PATCH_FLAGS = {
+    "working_tree": "has_working_tree_patch",
+    "local_commits": "has_local_commits_patch",
+    "untracked_files": "has_untracked_files",
+}
+
+
+def _patch_presence(storage, app_name, verstr, metadata):
+    """Which patch kinds a record holds — from its metadata flags.
+
+    Only a legacy record that predates the flags pays for loading the patches
+    (the untracked tarball can be hundreds of MB).
+    """
+    if all(flag in metadata for flag in _PATCH_FLAGS.values()):
+        return {kind: bool(metadata[flag]) for kind, flag in _PATCH_FLAGS.items()}
+    _, patches = storage.load(app_name, verstr)
+    return {kind: bool((patches or {}).get(kind)) for kind in _PATCH_FLAGS}
+
+
 def _resolve(storage, app_name, verstr_ref, resolve=None):
     """``(verstr, metadata, error)`` for a ref, loading metadata only.
 
@@ -153,7 +172,7 @@ def _resolve(storage, app_name, verstr_ref, resolve=None):
         verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
     if err:
         return None, None, err
-    metadata = _load_metadata(storage, app_name, verstr)
+    metadata = storage.load_metadata(app_name, verstr)
     if metadata is None:
         return None, None, f"Experiment {verstr} not found"
     return verstr, metadata, None
@@ -244,7 +263,7 @@ def run_series(
     storage, app_name, verstr, keys=None, max_points=DEFAULT_MAX_POINTS, budget=None
 ):
     """``(series, series_total)`` of an existing run, or None when it is gone."""
-    if _load_metadata(storage, app_name, verstr) is None:
+    if storage.load_metadata(app_name, verstr) is None:
         return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     return thinned_series(snapshot, keys, max_points, budget)

@@ -75,7 +75,7 @@ def test_the_commands_and_the_plugin_are_declared():
     assert set(_project("vmn")["scripts"]) >= {"vmn"}
     assert _project("vmn-exp")["scripts"] == {"vmn-exp": "vmn_exp.cli.main:main"}
     plugins = _project("vmn-exp")["entry-points"]["vmn.plugins"]
-    assert plugins == {"snapshot": "vmn_exp.cli.plugin:register_snapshot"}
+    assert plugins == {"dev_version": "vmn_exp.cli.plugin:register_dev_version"}
 
 
 def test_the_s3_import_error_names_the_extra_to_install():

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Creating an experiment record from an exported snapshot — no git needed.
 
-``vmn snapshot export`` writes a ``vmn_metadata.yml`` next to the code it
+``vmn-exp export`` writes a ``vmn_metadata.yml`` next to the code it
 exports; a container built from that tree can record experiments against it.
 Both ``vmn-exp create/run --from-snapshot`` and ``vmn_exp.sdk.start_run``
 do, so the record is shaped here in core rather than in either entry point.

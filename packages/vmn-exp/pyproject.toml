@@ -28,7 +28,7 @@ mlflow = ["mlflow-skinny"]
 vmn-exp = "vmn_exp.cli.main:main"
 
 [project.entry-points."vmn.plugins"]
-snapshot = "vmn_exp.cli.plugin:register_snapshot"
+dev_version = "vmn_exp.cli.plugin:register_dev_version"
 
 [project.urls]
 Homepage = "https://github.com/progovoy/vmn"
