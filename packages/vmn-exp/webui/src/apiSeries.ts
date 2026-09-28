@@ -8,16 +8,21 @@ import { verstrInQuery } from "./util/searchQuery";
 export interface SeriesBatch {
   series: Record<string, Record<string, SeriesPoint[]>>;
   series_total?: Record<string, Record<string, number>>;
+  /** Per run: the metrics that declare an x-axis metric. */
+  step_metrics?: Record<string, Record<string, string>>;
   /** Requested runs the server does not know. */
   missing?: string[];
 }
 
-/** *keys* null means every metric; *maxPoints* thins each series server-side. */
+/** *keys* null means every metric; *maxPoints* thins each series server-side.
+ *  *x* (`{metric: x metric}`) joins those metrics on their x metric: their
+ *  points carry `x`, and points without one are left out. */
 export function fetchSeriesBatch(
   ws: string, app: string, verstrs: string[], keys: string[] | null, maxPoints: number,
+  x?: Record<string, string>,
 ): Promise<SeriesBatch> {
   return post<SeriesBatch>(`/workspaces/${ws}/apps/${appTag(app)}/series`, {
-    verstrs, keys, max_points: maxPoints,
+    verstrs, keys, max_points: maxPoints, x,
   });
 }
 

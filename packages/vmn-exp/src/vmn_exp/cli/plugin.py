@@ -30,7 +30,7 @@ from version_stamp.api import (
 
 EXPERIMENT_ACTIONS = [
     "create", "run", "add", "list", "show", "compare", "diff", "restore",
-    "export", "prune", "tag", "archive", "unarchive", "import-mlflow",
+    "export", "prune", "tag", "archive", "unarchive", "import-mlflow", "watch",
 ]
 
 
@@ -123,6 +123,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--system-metrics", action="store_true", default=False,
                       help="Record the child process tree's CPU/memory as sys_* metrics "
                            "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
+    pexp.add_argument("--interval", type=float, default=None,
+                      help="watch: re-check every N seconds (default: check once, for cron)")
+    pexp.add_argument("--within", default=None,
+                      help="watch: only alert transitions newer than this (e.g. 6h, 1d; "
+                           "default 1d)")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
     pexp.add_argument("--bucket", default=None, help="S3 bucket name")
@@ -328,7 +333,7 @@ def register_all() -> None:
         handle=_handle_experiment,
         access="local",
         read_only_actions=frozenset(
-            {"list", "show", "compare", "diff", "export", "import-mlflow"}
+            {"list", "show", "compare", "diff", "export", "import-mlflow", "watch"}
         ),
         split_after_double_dash=True,
         run_without_repo=_exp_run_without_repo,

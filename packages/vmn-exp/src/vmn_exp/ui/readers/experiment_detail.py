@@ -18,6 +18,7 @@ from vmn_exp.core.fold import fold_inputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.refs import placement_snapshot
+from vmn_exp.core.step_metric import step_metrics
 from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
@@ -26,6 +27,7 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
+from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
@@ -140,26 +142,6 @@ def status_detail(
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
 
 
-# Patch kind -> the metadata flag recording whether the record holds it.
-_PATCH_FLAGS = {
-    "working_tree": "has_working_tree_patch",
-    "local_commits": "has_local_commits_patch",
-    "untracked_files": "has_untracked_files",
-}
-
-
-def _patch_presence(storage, app_name, verstr, metadata):
-    """Which patch kinds a record holds — from its metadata flags.
-
-    Only a legacy record that predates the flags pays for loading the patches
-    (the untracked tarball can be hundreds of MB).
-    """
-    if all(flag in metadata for flag in _PATCH_FLAGS.values()):
-        return {kind: bool(metadata[flag]) for kind, flag in _PATCH_FLAGS.items()}
-    _, patches = storage.load(app_name, verstr)
-    return {kind: bool((patches or {}).get(kind)) for kind in _PATCH_FLAGS}
-
-
 def _resolve(storage, app_name, verstr_ref, resolve=None):
     """``(verstr, metadata, error)`` for a ref, loading metadata only.
 
@@ -192,6 +174,8 @@ def experiment_detail(
     resolve=None,
     read_observed_at=run_state_observed_at,
     read_child_row=None,
+    x=None,
+    schema=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -200,7 +184,9 @@ def experiment_detail(
     *keys* restricts ``series`` to those metrics; ``include_series=False``
     omits them. *read_log* / *read_run_state* are the reader's own loaders;
     *resolve* resolves the ref before storage is asked (see :func:`_resolve`);
-    *read_observed_at* is the run-state store write time loader.
+    *read_observed_at* is the run-state store write time loader. *x* joins
+    the series on another metric (see :func:`thinned_series`);
+    ``step_metrics`` lists what the run and the metrics *schema* declare.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -209,7 +195,7 @@ def experiment_detail(
     snapshot = _PARSED.get(storage, app_name, verstr, read_log)
     tail = snapshot.tail(LOG_TAIL)
     series, series_total = (
-        thinned_series(snapshot, keys, max_points) if include_series else ({}, {})
+        thinned_series(snapshot, keys, max_points, x=x) if include_series else ({}, {})
     )
     return {
         "metadata": metadata,
@@ -220,6 +206,7 @@ def experiment_detail(
         "metrics": snapshot.metrics,
         "series": series,
         "series_total": series_total,
+        "step_metrics": declared_step_metrics(snapshot, schema),
         "artifacts": list_artifacts(storage, app_name, verstr),
         "status": status_detail(
             storage,
@@ -232,7 +219,7 @@ def experiment_detail(
             read_observed_at=read_observed_at,
             read_child_row=read_child_row,
         ),
-        "patches": _patch_presence(storage, app_name, verstr, metadata),
+        "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": _load_env(storage, app_name, verstr, metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
@@ -242,31 +229,61 @@ def experiment_detail(
 _THINNED_PER_SNAPSHOT = 4
 
 
-def thinned_series(snapshot, keys, max_points, budget=None):
+def _x_of(names, x):
+    """``{metric: x metric}`` for the *names* to join: *x* is a metric name
+    (every other metric) or such a map; None joins nothing."""
+    if x is None:
+        return {}
+    if isinstance(x, str):
+        return {k: x for k in names if k != x}
+    return {k: x[k] for k in names if k in x and x[k] != k}
+
+
+def thinned_series(snapshot, keys, max_points, budget=None, x=None):
     """``(series, series_total)`` of *keys* (None: all), thinned so they stay
-    within *budget* points in all (default: the per-response cap). Memoized on
-    the snapshot, so an unchanged run's poll does not thin again."""
+    within *budget* points in all (default: the per-response cap). With *x*
+    (see :func:`_x_of`) those metrics are joined on their x metric first.
+    Memoized on the snapshot, so an unchanged run's poll does not thin again."""
     known = snapshot.series_keys()
     names = list(known) if keys is None else [k for k in keys if k in known]
+    if isinstance(x, str):
+        names = [k for k in names if k != x]
+    x_of = _x_of(names, x)
     per_metric = points_per_metric(max_points, len(names), budget)
-    memo_key = (tuple(names), per_metric)
+    memo_key = (tuple(names), per_metric, tuple(sorted(x_of.items())))
     hit = snapshot.memo.get(memo_key)
     if hit is None:
-        hit = snapshot.thinned(names, per_metric)
+        hit = _thin(snapshot, names, x_of, per_metric)
         if len(snapshot.memo) >= _THINNED_PER_SNAPSHOT:
             snapshot.memo.clear()
         snapshot.memo[memo_key] = hit
     return hit
 
 
+def _thin(snapshot, names, x_of, per_metric):
+    series, totals = snapshot.thinned([k for k in names if k not in x_of], per_metric)
+    joined, joined_totals = snapshot.joined(x_of, per_metric)
+    series.update(joined)
+    totals.update(joined_totals)
+    return {k: series[k] for k in names}, {k: totals[k] for k in names}
+
+
+def declared_step_metrics(snapshot, schema=None):
+    """``{metric: x metric}`` the run's definitions and *schema* declare."""
+    return step_metrics(snapshot.series_keys(), snapshot.definitions, schema)
+
+
 def run_series(
-    storage, app_name, verstr, keys=None, max_points=DEFAULT_MAX_POINTS, budget=None
+    storage, app_name, verstr, keys=None, max_points=DEFAULT_MAX_POINTS, budget=None,
+    x=None, schema=None,
 ):
-    """``(series, series_total)`` of an existing run, or None when it is gone."""
+    """``(series, series_total, step_metrics)`` of an existing run, or None
+    when it is gone."""
     if storage.load_metadata(app_name, verstr) is None:
         return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
-    return thinned_series(snapshot, keys, max_points, budget)
+    series, totals = thinned_series(snapshot, keys, max_points, budget, x)
+    return series, totals, declared_step_metrics(snapshot, schema)
 
 
 def log_page(
