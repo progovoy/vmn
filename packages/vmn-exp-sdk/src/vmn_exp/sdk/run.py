@@ -262,7 +262,7 @@ class Run(RunArtifacts):
     def _open(self):
         self._publish()
         context.register(self)
-        signals.install(_finalize_signaled)
+        install_signal_handlers()
         self._heartbeat.start()
 
     def finish(self, exit_code=0):
@@ -308,8 +308,6 @@ class Run(RunArtifacts):
             self._close_remote_writers()
         finally:
             context.unregister(self)
-            if not context.open_runs():
-                signals.uninstall()
 
     def _close_remote_writers(self):
         # One deadline for both: they upload in parallel, so waiting for each
@@ -493,4 +491,15 @@ def _finalize_signaled(signum):
     _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
 
 
+def install_signal_handlers():
+    """Finalize open runs on SIGTERM. Call from the main thread.
+
+    Done already when ``vmn_exp.sdk`` is imported on the main thread; call it
+    again after installing a SIGTERM handler of your own (it is chained), or
+    when the SDK is first imported from a worker thread.
+    """
+    signals.install(_finalize_signaled, timeout=FINAL_REMOTE_TIMEOUT_SEC)
+
+
 atexit.register(_finalize_open_runs)
+install_signal_handlers()

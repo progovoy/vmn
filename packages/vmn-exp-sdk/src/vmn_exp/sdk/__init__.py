@@ -47,7 +47,7 @@ from vmn_exp.sdk.models import (  # noqa: E402
     set_alias,
 )
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
-from vmn_exp.sdk.run import Run, start_run  # noqa: E402  (needs the helper above)
+from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
 
 __all__ = [
     "NoOpRun",
@@ -57,6 +57,7 @@ __all__ = [
     "current_run",
     "download_model",
     "get_model_version",
+    "install_signal_handlers",
     "list_models",
     "register_model",
     "remove_alias",

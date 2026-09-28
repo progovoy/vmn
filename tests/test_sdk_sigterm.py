@@ -9,14 +9,13 @@ workload installed itself still runs.
 import os
 import signal
 import subprocess
-import threading
+import textwrap
 import time
 
 import pytest
 from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
-from vmn_exp.core.status import load_run_state
-from vmn_exp.sdk import start_run
+from vmn_exp.core.status import derive_status, load_run_state
 
 JOIN_TIMEOUT = 120
 
@@ -67,16 +66,19 @@ def _terminate(proc):
     return proc.returncode, out
 
 
-_OPEN_AND_WAIT = """
-import os, time
-from vmn_exp.sdk import start_run
-{prelude}
+_OPEN_RUN = """
 run = start_run(os.environ["APP"], heartbeat_interval_sec=60)
 run.log_metric("loss", 0.5)
 with open(os.environ["MARKER"], "w") as f:
     f.write(run.id)
 time.sleep(120)
 """
+
+_OPEN_AND_WAIT = """
+import os, time
+from vmn_exp.sdk import start_run
+{prelude}
+""" + _OPEN_RUN
 
 
 def test_sigterm_finalizes_the_run_and_the_process_still_dies(app_layout):
@@ -88,10 +90,7 @@ def test_sigterm_finalizes_the_run_and_the_process_still_dies(app_layout):
     rc, out = _terminate(proc)
 
     assert rc == -signal.SIGTERM, out
-    state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
-    assert state["state"] == "finished", state
-    assert state["exit_code"] == 128 + signal.SIGTERM
-    assert state["received_signal"] == "SIGTERM"
+    _assert_killed_by_sigterm(app_layout, verstr)
     log = _storage(app_layout).load_merged_log(app_layout.app_name, verstr)
     runs = [e for e in log if e.get("type") == "run"]
     assert runs and runs[-1]["exit_code"] == 143
@@ -123,20 +122,17 @@ def test_a_previous_sigterm_handler_is_chained(app_layout):
 
     assert rc == 7, out
     assert os.path.exists(chained), "the workload's own handler never ran"
-    state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
-    assert state["exit_code"] == 143
+    _assert_killed_by_sigterm(app_layout, verstr)
 
 
 _HANDLER_LIFETIME = """
 import os, signal
 from vmn_exp.sdk import start_run
-before = signal.getsignal(signal.SIGTERM)
+installed = signal.getsignal(signal.SIGTERM)
+print("AT_IMPORT", installed is not signal.SIG_DFL)
 run = start_run(os.environ["APP"])
-during = signal.getsignal(signal.SIGTERM)
 run.finish()
-after = signal.getsignal(signal.SIGTERM)
-print("INSTALLED", during is not before)
-print("RESTORED", after is before)
+print("KEPT", signal.getsignal(signal.SIGTERM) is installed)
 
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 with start_run(os.environ["APP"]):
@@ -144,34 +140,91 @@ with start_run(os.environ["APP"]):
 """
 
 
-def test_handler_is_installed_only_while_a_run_is_open(app_layout):
+def test_handler_outlives_a_finished_run_and_never_replaces_sig_ign(app_layout):
+    # Installed when vmn_exp.sdk is imported on the main thread and kept there:
+    # a run a worker thread opens later cannot install it (Python allows no
+    # other thread to), so it must already be in place.
     _bootstrap(app_layout)
     proc = _spawn(app_layout, _HANDLER_LIFETIME)
     out, _ = proc.communicate(timeout=JOIN_TIMEOUT)
 
     assert proc.returncode == 0, out
-    assert "INSTALLED True" in out
-    assert "RESTORED True" in out
+    assert "AT_IMPORT True" in out
+    assert "KEPT True" in out
     # A process that ignores SIGTERM keeps ignoring it: finalizing the run as
     # killed while the process lives on would be a lie.
     assert "IGNORED_KEPT True" in out
 
 
-def test_a_run_opened_off_the_main_thread_installs_nothing(app_layout):
+_OPEN_ON_A_WORKER_THREAD = """
+import os, signal, threading, time
+{imports}
+{prelude}
+def job():
+    from vmn_exp.sdk import start_run
+""" + textwrap.indent(_OPEN_RUN, "    ") + """
+
+thread = threading.Thread(target=job, daemon=True)
+thread.start()
+while thread.is_alive():
+    thread.join(0.2)
+"""
+
+
+def _assert_killed_by_sigterm(app_layout, verstr):
+    state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
+    assert state["exit_code"] == 128 + signal.SIGTERM, state
+    assert state["received_signal"] == "SIGTERM"
+    assert state["state"] == "finished"
+    assert derive_status(state) == "failed"
+
+
+def test_a_run_opened_off_the_main_thread_is_finalized_on_sigterm(app_layout):
     _bootstrap(app_layout)
-    before = signal.getsignal(signal.SIGTERM)
-    seen, errors = [], []
+    marker = os.path.join(app_layout.base_dir, "opened")
+    script = _OPEN_ON_A_WORKER_THREAD.format(
+        imports="import vmn_exp.sdk", prelude=""
+    )
+    proc = _spawn(app_layout, script, MARKER=marker)
+    verstr = _wait_for_file(marker, proc)
 
-    def worker():
-        try:
-            with start_run(app_layout.app_name):
-                seen.append(signal.getsignal(signal.SIGTERM))
-        except Exception as exc:  # surfaced below
-            errors.append(exc)
+    rc, out = _terminate(proc)
 
-    thread = threading.Thread(target=worker)
-    thread.start()
-    thread.join(timeout=JOIN_TIMEOUT)
+    assert rc == -signal.SIGTERM, out
+    _assert_killed_by_sigterm(app_layout, verstr)
 
-    assert not errors, errors
-    assert seen == [before]
+
+_HANDLER_AFTER_IMPORT = _USER_HANDLER + "install_signal_handlers()\n"
+
+
+def test_install_signal_handlers_chains_a_handler_set_after_import(app_layout):
+    _bootstrap(app_layout)
+    marker = os.path.join(app_layout.base_dir, "opened")
+    chained = os.path.join(app_layout.base_dir, "chained")
+    script = _OPEN_ON_A_WORKER_THREAD.format(
+        imports="from vmn_exp.sdk import install_signal_handlers",
+        prelude=_HANDLER_AFTER_IMPORT,
+    )
+    proc = _spawn(app_layout, script, MARKER=marker, CHAINED=chained)
+    verstr = _wait_for_file(marker, proc)
+
+    rc, out = _terminate(proc)
+
+    assert rc == 7, out
+    assert os.path.exists(chained), "the workload's own handler never ran"
+    _assert_killed_by_sigterm(app_layout, verstr)
+
+
+def test_sigterm_with_no_open_run_just_kills(app_layout):
+    marker = os.path.join(app_layout.base_dir, "ready")
+    script = (
+        "import os, time, vmn_exp.sdk\n"
+        "open(os.environ['MARKER'], 'w').write('x')\n"
+        "time.sleep(120)\n"
+    )
+    proc = _spawn(app_layout, script, MARKER=marker)
+    _wait_for_file(marker, proc)
+
+    rc, out = _terminate(proc)
+
+    assert rc == -signal.SIGTERM, out
