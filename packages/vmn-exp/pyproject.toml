@@ -11,7 +11,8 @@ license = { text = "MIT" }
 authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
 requires-python = ">=3.8"
 dependencies = [
-    "vmn<1",
+    # The first vmn without its own `vmn exp`, with the plugin hooks used here.
+    "vmn>0.10.2rc9,<1",
     # Released together with this package; tests/test_workspace.py keeps the
     # pin equal to this package's own version.
     "vmn-exp-sdk==0.0.0",

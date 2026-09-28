@@ -28,3 +28,4 @@ tensorflow
 keras
 optuna
 pip
+numpy

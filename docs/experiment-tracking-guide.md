@@ -357,7 +357,7 @@ aws s3 cp snapshot.tar.gz s3://my-experiments/snapshots/
 # Option B: Bake into Docker image (simpler)
 # Dockerfile:
 #   COPY snapshot/ /workspace/
-#   RUN pip install vmn
+#   RUN pip install vmn-exp   # or vmn-exp-sdk if the job only calls start_run()
 ```
 
 #### Step 2: Configure Once or Pass Flags

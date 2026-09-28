@@ -27,7 +27,8 @@ git commit --allow-empty -m "initial commit"
 git push -u origin HEAD
 ```
 
-Then install vmn (`pip install vmn`) and run the examples from that directory:
+Then install the experiment platform (`pip install vmn-exp`, which brings `vmn`)
+and run the examples from that directory:
 
 ```sh
 python /path/to/vmn/examples/01_minimal.py

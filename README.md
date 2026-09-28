@@ -100,7 +100,9 @@ vmn ships as three packages; install only what you need:
 | `vmn-exp` | Experiment tracking on top of vmn: the `vmn-exp` CLI, model registry, snapshots, and the dashboard (`vmn-exp[ui]`) |
 | `vmn-exp-sdk` | Just the metrics writer for training jobs: `start_run()`, no git needed |
 
-See [docs/packaging.md](https://github.com/progovoy/vmn/blob/master/docs/packaging.md).
+`pip install "vmn-exp[ui]"` brings all three. Coming from vmn 0.10 or earlier,
+`vmn exp`/`model`/`ui` are now `vmn-exp …`; see
+[docs/packaging.md](https://github.com/progovoy/vmn/blob/master/docs/packaging.md#installing).
 
 Inside any Git repository:
 

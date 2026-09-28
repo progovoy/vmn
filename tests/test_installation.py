@@ -27,13 +27,25 @@ def _pip(*args, python=_PY):
 
 @pytest.fixture(scope="session")
 def wheelhouse(tmp_path_factory):
-    """``{dist: wheel path}``, built as the release lane builds them."""
-    out = tmp_path_factory.mktemp("wheelhouse")
+    """``{dist: wheel path}``, built as the release lane builds them.
+
+    Built once for all xdist workers: concurrent builds of one source tree
+    trip over each other's in-tree ``build/`` directories."""
+    from filelock import FileLock
+
+    shared = tmp_path_factory.getbasetemp().parent
+    out = shared / "wheelhouse"
+    with FileLock(str(shared / "wheelhouse.lock")):
+        if not (out / "done").exists():
+            out.mkdir(exist_ok=True)
+            for dist in DISTS:
+                source = os.path.join(_PROJECT_ROOT, "packages", dist)
+                proc = _pip("wheel", "--no-deps", "--no-build-isolation", "-w", str(out),
+                            source)
+                assert proc.returncode == 0, proc.stdout + proc.stderr
+            (out / "done").touch()
     wheels = {}
     for dist in DISTS:
-        source = os.path.join(_PROJECT_ROOT, "packages", dist)
-        proc = _pip("wheel", "--no-deps", "--no-build-isolation", "-w", str(out), source)
-        assert proc.returncode == 0, proc.stdout + proc.stderr
         prefix = dist.replace("-", "_") + "-"
         [wheels[dist]] = [p for p in out.glob("*.whl") if p.name.startswith(prefix)]
     return wheels

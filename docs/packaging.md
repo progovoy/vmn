@@ -4,6 +4,26 @@ Status: **implemented.** This replaced the single `setup.py` and its
 `VMN_DIST=exp` switch. Where the implementation differs from the original
 design, the section says so under "Differs from the design".
 
+## Installing
+
+| You want | Install | Commands you get |
+|---|---|---|
+| Versioning only | `pipx install vmn` (or `pip install vmn`) | `vmn` |
+| Experiment tracking, the model registry, snapshots, the dashboard | `pip install "vmn-exp[ui]"` (drop `[ui]` without the dashboard) | `vmn-exp`, and `vmn` with `vmn snapshot` |
+| Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `[sysmetrics]` for `sys_*`) | none; `from vmn_exp.sdk import start_run` |
+
+`vmn-exp` pulls in `vmn` and `vmn-exp-sdk`, so one install gives you all three.
+A job image needs only `vmn-exp-sdk`: it records runs git-free, with
+`VMN_SNAPSHOT_METADATA` (from `vmn snapshot export`) and `VMN_EXPERIMENT_DIR` or
+`VMN_EXPERIMENT_BUCKET`.
+
+Upgrading from vmn 0.10.x or earlier, where `vmn exp`, `vmn model` and `vmn ui`
+were part of `vmn`: install `vmn-exp` and use `vmn-exp …` instead (for example
+`vmn-exp run my_app -- python train.py`, `vmn-exp model list`, `vmn-exp ui`).
+Experiment records on disk and in S3 are unchanged.
+
+From a checkout (development): see "Repository layout" below, or run `uv sync`.
+
 ## Goals
 
 - Three independent installs from one repo:
@@ -140,9 +160,13 @@ the PyPI release.
 
 ### PyPI
 
-- `vmn` already exists. `vmn-exp` and `vmn-exp-sdk` were free as of
-  2026-09-28; placeholder `0.0.1` releases to claim them were built but not yet
-  uploaded.
+- `vmn` is on PyPI (0.10.1 is the last release before the split). `vmn-exp`
+  and `vmn-exp-sdk` are claimed by placeholder `0.0.1` releases (uploaded
+  2026-09-28), which contain nothing usable.
+- Release order for the split: first a vmn newer than 0.10.2rc9 (the last
+  version with its own `vmn exp`), since vmn-exp requires `vmn>0.10.2rc9,<1`;
+  then vmn-exp and vmn-exp-sdk together (`make minor NAME=vmn_exp`, giving
+  0.1.0 — 0.0.1 is taken by the placeholder).
 - A project is created by its first upload, which needs an account-wide token.
   After that, switch to per-project tokens.
 

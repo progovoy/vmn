@@ -123,7 +123,7 @@ def test_stamping_vmn_exp_writes_one_version_into_both_packages():
     full = toml.loads(stamped["packages/vmn-exp/pyproject.toml"])["project"]
     assert sdk["version"] == full["version"] == "0.2.0"
     assert "vmn-exp-sdk==0.2.0" in full["dependencies"]
-    assert "vmn<1" in full["dependencies"]  # vmn's own pin is left alone
+    assert "vmn>0.10.2rc9,<1" in full["dependencies"]  # vmn's own pin is left alone
 
 
 def test_vmn_stamp_applies_the_release_selectors(app_layout):
@@ -150,3 +150,18 @@ def test_vmn_stamp_applies_the_release_selectors(app_layout):
     full = toml.load(repo / "packages/vmn-exp/pyproject.toml")["project"]
     assert sdk["version"] == full["version"] == "0.1.0"
     assert "vmn-exp-sdk==0.1.0" in full["dependencies"]
+
+
+def test_vmn_exp_needs_a_vmn_with_the_split():
+    """vmn up to 0.10.2rc9 still ships its own `vmn exp` and lacks the plugin
+    hooks vmn-exp uses, so `pip install vmn-exp` must never pick it."""
+    from packaging.requirements import Requirement
+
+    [vmn] = [Requirement(r) for r in _project("vmn-exp")["dependencies"]
+             if Requirement(r).name == "vmn"]
+    assert not vmn.specifier.contains("0.10.1")
+    assert not vmn.specifier.contains("0.10.2rc9", prereleases=True)
+    assert vmn.specifier.contains("0.10.2")
+    assert not vmn.specifier.contains("1.0.0")
+    # The workspace's own vmn must satisfy it, or editable installs conflict.
+    assert vmn.specifier.contains(_project("vmn")["version"], prereleases=True)
