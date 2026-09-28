@@ -14,6 +14,7 @@ import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
+import RunOutput from "../components/RunOutput";
 import TrainingCurves from "../components/TrainingCurves";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import RunProvenanceSection from "./RunProvenance";
@@ -55,6 +56,10 @@ function RunBody({ ws, app, appName, detail }: {
       </div>
       {detail.artifacts && detail.artifacts.length > 0 && (
         <>
+          <RunOutput
+            artifacts={detail.artifacts}
+            downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
+          />
           <ArtifactsList
             artifacts={detail.artifacts}
             downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
