@@ -14,8 +14,9 @@ git fetch --tags --quiet
 
 release() {
     local app=$1 mode=patch
-    # The first release must skip 0.0.1: the PyPI placeholders hold it.
-    if [ -z "$(git tag -l "${app}_*")" ]; then
+    # The first release must skip 0.0.1: the PyPI placeholders hold it. An
+    # init-app tag (0.0.0) alone does not make a release.
+    if [ -z "$(git tag -l "${app}_*" | grep -vx "${app}_0.0.0" || true)" ]; then
         mode=minor
     fi
     vmn stamp -r "${mode}" "${app}"

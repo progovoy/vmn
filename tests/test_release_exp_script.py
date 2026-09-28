@@ -9,7 +9,9 @@ GIT = """#!/bin/sh
 case "$*" in
   "status --porcelain") [ -n "$DIRTY" ] && echo " M file" ;;
   "tag -l vmn_*") echo vmn_0.10.2 ;;
-  "tag -l vmn_exp_*") [ -n "$EXP_TAGGED" ] && echo vmn_exp_0.1.0 ;;
+  "tag -l vmn_exp_*")
+    [ -n "$EXP_INIT_ONLY" ] && echo vmn_exp_0.0.0
+    [ -n "$EXP_TAGGED" ] && echo vmn_exp_0.0.0 && echo vmn_exp_0.1.0 ;;
 esac
 exit 0
 """
@@ -48,6 +50,13 @@ def test_releases_only_the_exp_packages_with_patch(tmp_path):
 def test_the_first_vmn_exp_release_is_minor(tmp_path):
     # 0.0.1 of vmn-exp/vmn-exp-sdk is taken on PyPI by the name placeholders.
     _, calls = _release(tmp_path)
+    assert "vmn stamp -r minor vmn_exp" in calls
+
+
+def test_an_app_with_only_its_init_tag_still_gets_a_minor_first_release(tmp_path):
+    # `vmn init-app vmn_exp` tags 0.0.0; a patch from there would be the
+    # PyPI placeholders' 0.0.1, which upload --skip-existing silently skips.
+    _, calls = _release(tmp_path, EXP_INIT_ONLY="1")
     assert "vmn stamp -r minor vmn_exp" in calls
 
 
