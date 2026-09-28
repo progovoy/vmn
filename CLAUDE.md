@@ -103,6 +103,12 @@ Run a specific test:
 ./tests/run_pytest.sh --specific_test <test_name>
 ```
 
+UI load harness (real `vmn-exp ui` + live job processes; see tests/uiload/README.md):
+```sh
+python tests/uiload/run.py live --profile smoke --duration 0   # watch in a browser
+VMN_UILOAD_PROFILE=smoke python -m pytest -s tests/test_uiload_profile.py
+```
+
 CI is the local Muster pipeline in `ci/pipeline.py` (`./ci/start.sh`, see
 `ci/README.md`) — there is no GitHub Actions workflow.
 
