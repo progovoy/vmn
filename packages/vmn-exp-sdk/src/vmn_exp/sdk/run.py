@@ -49,6 +49,7 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_artifacts import RunArtifacts
 from vmn_exp.sdk.state_publisher import RunStatePublisher
@@ -105,6 +106,7 @@ def start_run(
     name=None,
     tags=None,
     capture_env=None,
+    capture_output=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -134,6 +136,12 @@ def start_run(
     On a non-zero rank of a distributed job (``RANK``, ``LOCAL_RANK`` with
     ``WORLD_SIZE > 1``, or ``SLURM_PROCID``) this returns a :class:`NoOpRun`
     that records nothing, unless ``all_ranks=True``.
+
+    ``capture_output=True`` tees this process's stdout/stderr (fds 1 and 2, so
+    subprocesses and C extensions too) into the run's ``output.log`` artifact,
+    capped by ``VMN_EXP_OUTPUT_CAP_MB`` (default 10), uploaded every
+    ``sync_interval_sec`` and at finish. Off by default: the process then
+    writes to pipes, not its TTY.
     """
     if not all_ranks and is_secondary_rank():
         return NoOpRun(app_name)
@@ -161,6 +169,7 @@ def start_run(
         sync_interval_sec=sync_interval_sec,
         prior_state=prior_state,
         name=name,
+        capture_output=capture_output,
     )
     run._open()
     if prior_state is not None:
@@ -191,6 +200,7 @@ class Run(RunArtifacts):
         sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
         prior_state=None,
         name=None,
+        capture_output=False,
     ):
         self._storage = storage
         self.app_name = app_name
@@ -227,6 +237,9 @@ class Run(RunArtifacts):
             "vmn-exp-sync",
         )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
+        self._output = (
+            RunOutput(storage, app_name, verstr) if capture_output else None
+        )
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
         # Recording the run's outcome warns once per step; heartbeat chores and
@@ -265,6 +278,8 @@ class Run(RunArtifacts):
         self._publish()
         context.register(self)
         install_signal_handlers()
+        if self._output is not None:
+            self._chore_guard("output capture", self._output.start)
         self._heartbeat.start()
 
     def finish(self, exit_code=0):
@@ -300,6 +315,8 @@ class Run(RunArtifacts):
                     duration_sec=duration,
                 ),
             )
+            if self._output is not None:
+                self._record_guard("output log", self._record_output)
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
@@ -317,10 +334,16 @@ class Run(RunArtifacts):
             context.unregister(self)
         return True
 
+    def _record_output(self):
+        self._append(self._output.stop())
+
     def _close_remote_writers(self, deadline):
-        # One deadline for both: they upload in parallel, so waiting for each
+        # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        for what, writer in (("log", self._log_sync), ("state", self._state_publisher)):
+        writers = [("log", self._log_sync), ("state", self._state_publisher)]
+        if self._output is not None:
+            writers.append(("output log", self._output))
+        for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
 
@@ -461,6 +484,8 @@ class Run(RunArtifacts):
             return
         self._last_sync = time.monotonic()
         self._log_sync.submit(get_writer_id())
+        if self._output is not None:
+            self._output.request_upload()
 
 
 def _finalize_open_runs(exit_code=None, **final_state):
