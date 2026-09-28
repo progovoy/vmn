@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vmn-exp-sdk"
-version = "0.0.0"  # written by `vmn stamp vmn_exp`, shared with vmn-exp
+version = "0.1.0"  # written by `vmn stamp vmn_exp`, shared with vmn-exp
 description = "vmn experiment SDK: record runs and metrics from jobs, git-free"
 readme = "README.md"
 license = { text = "MIT" }
