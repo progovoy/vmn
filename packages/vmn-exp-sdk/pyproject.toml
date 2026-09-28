@@ -19,6 +19,8 @@ dependencies = [
 
 [project.optional-dependencies]
 s3 = ["boto3"]
+# runs_dataframe() / get_metric_history()
+pandas = ["pandas"]
 # GPU metrics need pynvml, which stays out of every extra: it is useless
 # without a driver and would break installs on CPU-only hosts.
 

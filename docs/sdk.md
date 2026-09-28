@@ -615,6 +615,39 @@ A `list_runs` row carries the latest value of each metric, the run's `name`
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
+### As pandas DataFrames
+
+```python
+from vmn_exp.sdk.reader import get_metric_history, runs_dataframe
+
+df = runs_dataframe("my_app", query="metrics.loss < 0.5", status="succeeded")
+df.sort_values("metrics.loss").head()
+
+loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timestamp, value
+```
+
+Needs pandas: `pip install "vmn-exp-sdk[pandas]"` (without it both raise an
+`ImportError` naming that extra).
+
+- `runs_dataframe(app_name=None, **list_runs_kwargs)` — the `list_runs` rows as
+  one flat DataFrame, like `mlflow.search_runs()`. It takes every `list_runs`
+  keyword (`storage`, `query`, `status`, `sort`, `last`, `include_archived`, ...),
+  so filtering stays in the query language rather than a second API. Columns:
+  `run_id` (the verstr), `idx`, `name`, `status`, `kind`, `parent`,
+  `tree_status`, `timestamp`/`started_at`/`finished_at` (UTC datetimes),
+  `duration_sec`, `exit_code`, `host`, `branch`, `code_verstr`, `note`,
+  `archived`, then `metrics.<k>`, `params.<k>`, `tags.<k>` and `inputs.<name>`
+  (the input's URI), each group sorted. A run missing a value reads `NaN`/`None`.
+  `metrics.<k>` is the same fold the query language's `metrics.<k>` sees, so
+  numeric params appear there too.
+- `get_metric_history(metric, app_name=None, ref="latest", *, storage=None)` —
+  every logged value of one metric in one run, in log order (`step` is `None`
+  where none was logged); empty when the run never logged it. The metric comes
+  first because it is the only argument without a default.
+
+A separate function rather than `list_runs(output="pandas")`: one return type
+per function keeps `list_runs` free of a pandas code path and type-checkable.
+
 `vmn-exp list`, the ui and `list_runs()` read through an incremental index
 (`list_runs(..., use_index=False)` reads storage directly and writes no index
 file): the folded
