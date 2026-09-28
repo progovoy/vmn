@@ -173,6 +173,7 @@ def experiment_detail(
     resolve=None,
     read_observed_at=run_state_observed_at,
     read_child_row=None,
+    metric_schema=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -181,7 +182,9 @@ def experiment_detail(
     *keys* restricts ``series`` to those metrics; ``include_series=False``
     omits them. *read_log* / *read_run_state* are the reader's own loaders;
     *resolve* resolves the ref before storage is asked (see :func:`_resolve`);
-    *read_observed_at* is the run-state store write time loader.
+    *read_observed_at* is the run-state store write time loader;
+    *metric_schema* is the app's metrics schema, which ``metrics`` (each
+    metric's summary value) and ``metric_summary`` follow.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -192,13 +195,15 @@ def experiment_detail(
     series, series_total = (
         thinned_series(snapshot, keys, max_points) if include_series else ({}, {})
     )
+    metrics, metric_summary = snapshot.summarized_metrics(metric_schema)
     return {
         "metadata": metadata,
         "log": snapshot.log() if include_log else tail,
         "log_tail": tail,
         "log_total": snapshot.total,
         "params": snapshot.params,
-        "metrics": snapshot.metrics,
+        "metrics": metrics,
+        "metric_summary": metric_summary,
         "series": series,
         "series_total": series_total,
         "artifacts": list_artifacts(storage, app_name, verstr),

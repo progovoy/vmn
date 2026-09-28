@@ -183,6 +183,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metric(key, value, step=None)` | one metric. With `step`, it joins a **per-step series** — the curve `exp show` and the UI plot |
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
+| `run.define_metric(name, summary=None, goal=None)` | which value of a metric the run ranks on — see [below](#metric-goals-and-summaries) |
 | `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
 | `run.log_note(text)` | a note entry |
 | `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
@@ -227,6 +228,36 @@ Metric values are stored as floats, whatever you pass:
 
 Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
 Python numbers so `params.max_depth = 3` matches.
+
+### Metric goals and summaries
+
+A metric logged every epoch folds to one number per run: by default the last
+one. `run.define_metric()` picks another, like W&B's `define_metric(summary=)`:
+
+```python
+with start_run("my_app") as run:
+    run.define_metric("val_loss", goal="min")        # rank on the best (lowest) epoch
+    run.define_metric("lr", summary="last")
+    for epoch in range(epochs):
+        run.log_metrics({"val_loss": evaluate(), "lr": sched.lr}, step=epoch)
+```
+
+- `summary` is `"min"`, `"max"` or `"last"`; without it, `goal="min"` means
+  `min` and `goal="max"` means `max`. At least one is required; anything else
+  raises `ValueError`.
+- It is recorded as a `define_metric` log entry
+  (`{"type": "define_metric", "name", "summary"?, "goal"?}`), so it travels
+  with the run — to S3, to other readers, to `vmn-exp ui` — and needs no
+  conf.yml. Call it any time; a later call for the same metric wins.
+- A run's definition beats the app's
+  [conf.yml schema](experiments.md#best-value-summaries-summary), which beats
+  `last`.
+- `row["metrics"][name]` is then that value everywhere (`list_runs(sort=,
+  query=)`, `vmn-exp list --sort`, `prune --query`, the leaderboard), and
+  `row["metric_summary"][name]` holds `{"last", "min", "max"}` for every metric
+  logged more than once. Non-finite values are never a min or max.
+- The run's `goal` sets which value it ranks on; the leaderboard's sort
+  *direction* still comes from conf.yml's `goal`.
 
 ### Tags
 

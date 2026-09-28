@@ -19,6 +19,7 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.cli.prune_query import print_preview, query_candidates
+from vmn_exp.cli.views import metrics_schema
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
@@ -212,7 +213,7 @@ def _targeted_candidates(storage, app_name, metas, snapshot, refs):
     return candidates, None
 
 
-def _select_candidates(storage, app_name, metas, snapshot, args):
+def _select_candidates(storage, app_name, metas, snapshot, args, schema=None):
     """Return ``(candidates, error_code)`` according to the selection flags.
 
     *error_code* is non-None when the caller should return it immediately.
@@ -231,7 +232,7 @@ def _select_candidates(storage, app_name, metas, snapshot, args):
             )
             return None, 1
         try:
-            candidates = query_candidates(storage, app_name, metas, query)
+            candidates = query_candidates(storage, app_name, metas, query, schema)
         except QueryError as e:
             VMN_LOGGER.error(f"Invalid --query: {e}")
             return None, 1
@@ -285,7 +286,9 @@ def experiment_prune(vcs, params, storage, args, app_name):
         print("No experiments to prune")
         return 0
 
-    candidates, rc = _select_candidates(storage, app_name, metas, snapshot, args)
+    candidates, rc = _select_candidates(
+        storage, app_name, metas, snapshot, args, metrics_schema(vcs)
+    )
     if rc is not None:
         return rc
     if candidates is None:

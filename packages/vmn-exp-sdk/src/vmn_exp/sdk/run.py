@@ -24,6 +24,7 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.metric_summary import define_metric_entry
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
@@ -359,6 +360,13 @@ class Run(RunArtifacts):
         if step is not None:
             entry["step"] = step
         self._append(entry)
+
+    def define_metric(self, name, summary=None, goal=None):
+        """Rank metric *name* on its ``summary`` — ``"min"``, ``"max"`` or
+        ``"last"`` (default: from *goal*, ``"min"``/``"max"``) — in every
+        reader. Recorded as a ``define_metric`` log entry, so it travels with
+        the run and beats the app's conf.yml schema; a later call wins."""
+        self._append(define_metric_entry(name, summary=summary, goal=goal))
 
     def log_params(self, mapping):
         # A `params` entry, not a rewrite of the `create` entry: the log is

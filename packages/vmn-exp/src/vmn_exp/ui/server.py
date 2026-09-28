@@ -215,13 +215,16 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         s3_storage = _exp_storage_for(ws)
-        snapshot = source.snapshot(ws, app_name, s3_storage)
         schema = {} if s3_storage else source.metrics_schema(ws, app_name)
-        return snapshot, schema
+        return source.snapshot(ws, app_name, s3_storage, schema), schema
 
     def _detail_options(ws, app_name):
-        """Refs, edges (and in the background, run states) from the app's snapshot."""
-        return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
+        """Refs, edges (and in the background, run states) from the app's
+        snapshot, and the metrics schema the run's metrics are summarized by."""
+        s3_storage = _exp_storage_for(ws)
+        options = source.detail_options(ws, source.snapshot(ws, app_name, s3_storage))
+        options["metric_schema"] = {} if s3_storage else source.metrics_schema(ws, app_name)
+        return options
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"

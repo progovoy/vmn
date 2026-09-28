@@ -22,6 +22,7 @@ from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     entry_params,
     fold_last_metric_at,
     fold_log,
+    fold_metrics,
     fold_row,
     fold_values,
 )
@@ -44,6 +45,12 @@ def effective_params(log):
 def latest_metrics(log):
     """The latest value of each metric, numeric params folded in (see :func:`fold_log`)."""
     return fold_values(fold_log(log), "metrics")
+
+
+def summary_metrics(log, schema=None):
+    """Each metric's value under its summary policy — what rows rank on
+    (see :mod:`vmn_exp.core.metric_summary`)."""
+    return fold_metrics(fold_log(log), schema)[0]
 
 
 def metric_series(log):
@@ -89,13 +96,14 @@ def metric_sort_descending(schema, key):
 # ---------------------------------------------------------------------------
 
 
-def experiment_row(idx, meta, log):
+def experiment_row(idx, meta, log, schema=None):
     """One leaderboard row: an experiment's metadata, params and folded metrics.
 
     The fold rules live in :mod:`vmn_exp.core.fold`, which the
     experiment index folds incrementally with — so both agree by construction.
+    *schema* (the app's metrics schema) sets metrics' summary policies.
     """
-    return fold_row(idx, meta, fold_log(log))
+    return fold_row(idx, meta, fold_log(log), schema=schema)
 
 
 def filter_by_status(rows, status=None):

@@ -15,6 +15,13 @@ Pure: no storage, no clock.
 """
 import math
 
+from vmn_exp.core.metric_summary import (
+    DEFINE_METRIC,
+    entry_definition,
+    summarize,
+    track_extrema,
+)
+
 
 def entry_params(entry):
     """Params carried by a log entry.
@@ -45,6 +52,8 @@ def new_fold():
         "params": {},
         "metrics": {},
         "tags": {},
+        "extrema": {},  # {metric: value, then (min, max)}, see metric_summary
+        "metric_defs": {},
         "last_metric": None,
         "create_note": None,
     }
@@ -107,20 +116,34 @@ def _apply_inputs(fold, entry, key):
     _keep_latest(fold.setdefault("inputs", {}), name, value, key)
 
 
+def _apply_metric_values(fold, entry, key):
+    metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
+    for name, value in (entry.get("values") or {}).items():
+        track_extrema(extrema, name, value)
+        _keep_latest(metrics, name, value, key)
+
+
+def _apply_definition(fold, entry, key):
+    definition = entry_definition(entry)
+    if definition is not None:
+        _keep_latest(fold.setdefault("metric_defs", {}), *definition, key)
+
+
 def _apply(fold, entry, key):
     etype = entry.get("type")
     if etype in ("tags", "create"):
         _apply_tags(fold, entry, key)
     elif etype == "input":
         _apply_inputs(fold, entry, key)
+    elif etype == DEFINE_METRIC:
+        _apply_definition(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
         if number is not None:
             _keep_latest(fold["metrics"], name, number, key)
     if etype == "metrics":
-        for name, value in (entry.get("values") or {}).items():
-            _keep_latest(fold["metrics"], name, value, key)
+        _apply_metric_values(fold, entry, key)
         if fold["last_metric"] is None or key >= tuple(fold["last_metric"][1]):
             fold["last_metric"] = (entry.get("timestamp"), key)
     elif etype == "create":
@@ -155,6 +178,19 @@ def fold_values(fold, field):
     return {name: wrapped[0] for name, wrapped in fold[field].items()}
 
 
+def fold_metrics(fold, schema=None):
+    """``(metrics, metric_summary)`` of a fold — see :func:`summarize`.
+
+    *schema* is the app's metrics schema; the run's own definitions beat it.
+    """
+    return summarize(
+        fold_values(fold, "metrics"),
+        fold.get("extrema") or {},
+        fold_values(fold, "metric_defs") if fold.get("metric_defs") else {},
+        schema,
+    )
+
+
 def fold_tags(fold):
     """``{name: value}`` of the tags a fold holds (removed ones left out)."""
     return {
@@ -176,7 +212,7 @@ def fold_last_metric_at(fold):
     return fold["last_metric"][0] if fold["last_metric"] else None
 
 
-def fold_row(idx, meta, fold, with_create_note=False):
+def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     """The leaderboard row for *meta* whose log folded into *fold*.
 
     *idx* is the 1-based storage index — what ``vmn-exp show <app> -v @N``
@@ -184,8 +220,12 @@ def fold_row(idx, meta, fold, with_create_note=False):
     ``params`` carries every param verbatim; ``metrics`` stays numeric-only (with
     the numeric params folded in), because sorting and charting depend on that.
     ``with_create_note`` adds the first ``create`` entry's note (what
-    ``vmn-exp list`` shows for a run without a metadata note).
+    ``vmn-exp list`` shows for a run without a metadata note). Each metric's
+    value is its summary policy's (see :mod:`vmn_exp.core.metric_summary`,
+    *schema* being the app's metrics schema); ``metric_summary`` has the
+    last/min/max of every metric logged more than once.
     """
+    metrics, metric_summary = fold_metrics(fold, schema)
     row = {
         "idx": idx,
         "verstr": meta["verstr"],
@@ -199,7 +239,8 @@ def fold_row(idx, meta, fold, with_create_note=False):
         "archived": bool(meta.get("archived", False)),
         "tags": fold_tags(fold),
         "params": fold_values(fold, "params"),
-        "metrics": fold_values(fold, "metrics"),
+        "metrics": metrics,
+        "metric_summary": metric_summary,
         "parent": meta.get("parent"),
         "last_metric_at": fold_last_metric_at(fold),
         "inputs": fold_inputs_dict(fold),

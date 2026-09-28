@@ -67,6 +67,9 @@ class NoOpRun:
     def log_params(self, mapping):
         return None
 
+    def define_metric(self, name, summary=None, goal=None):
+        return None
+
     def log_note(self, text):
         return None
 
