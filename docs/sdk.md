@@ -77,7 +77,7 @@ start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
-    system_metrics=False,
+    system_metrics=None,
     sync_interval_sec=30,
     snapshot=True,
     run_id=None,
@@ -97,7 +97,7 @@ start_run(
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
-| `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn-exp-sdk[sysmetrics]"` |
+| `system_metrics` | `None` (default) records this process's CPU/memory (and GPU, with `pynvml` installed) as `sys_*` metrics on every beat; `False` turns sampling off; `True` samples even when `experiment.system_metrics: false` is set in conf.yml but still respects `VMN_SYSTEM_METRICS=0`. `psutil` ships with the SDK; GPU metrics need `pip install pynvml`. A missing sampler dependency is silent (debug log only). Non-zero ranks record nothing, system metrics included |
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 | `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
@@ -106,8 +106,19 @@ start_run(
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 | `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
 
-The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn-exp
-run`, which measures the child's process tree instead):
+The system metrics are on by default — here and on `vmn-exp run`, which
+measures the child's process tree instead. Opt out, strongest first:
+`system_metrics=False` / `vmn-exp run --no-system-metrics`, then
+`VMN_SYSTEM_METRICS=0` (or `false`/`no`/`off`), then conf.yml:
+
+```yaml
+conf:
+  experiment:
+    system_metrics: false
+```
+
+Samples are taken on the heartbeat thread, once per beat (30 s by default), so
+a run shorter than one beat records none.
 
 | Metric | Meaning |
 |---|---|
@@ -891,11 +902,11 @@ For recording-only environments (container images, CI workers, air-gapped
 training jobs), install just the metrics writer:
 
 ```sh
-pip install vmn-exp-sdk           # + [s3] to record to a bucket, [sysmetrics] for sys_* metrics
+pip install vmn-exp-sdk           # + [s3] to record to a bucket; pynvml for GPU sys_* metrics
 ```
 
 `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
-needs. It depends only on `PyYAML` and `filelock`: no vmn, no GitPython, no git
+needs. It depends only on `PyYAML`, `filelock` and `psutil`: no vmn, no GitPython, no git
 binary. Creating a run from a git checkout (cold start, snapshot capture), the
 `vmn-exp` CLI and the dashboard live in `vmn-exp`, which depends on this
 package; in a slim install, `start_run()` in a checkout fails with a pointer to

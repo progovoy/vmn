@@ -216,14 +216,19 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if repo_lock is not None:
         repo_lock.release()
 
-    return _Supervision(storage, app_name, verstr, args).run(run_cmd)
+    from vmn_exp.sdk import sysmetrics
+    from vmn_exp.sdk.create import experiment_conf
+
+    sample = sysmetrics.enabled(getattr(args, "system_metrics", None), experiment_conf(vcs))
+    return _Supervision(storage, app_name, verstr, args, sample).run(run_cmd)
 
 
 class _Supervision:
     """One supervised child: start it, watch it, and record how it ended."""
 
-    def __init__(self, storage, app_name, verstr, args):
+    def __init__(self, storage, app_name, verstr, args, system_metrics=False):
         self.storage = storage
+        self.system_metrics = system_metrics
         self.app_name = app_name
         self.verstr = verstr
         self.args = args
@@ -298,7 +303,7 @@ class _Supervision:
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
-            getattr(self.args, "system_metrics", False),
+            self.system_metrics,
             pid=proc.pid,
         )
 

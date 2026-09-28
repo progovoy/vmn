@@ -10,7 +10,7 @@ design, the section says so under "Differs from the design".
 |---|---|---|
 | Versioning only | `pipx install vmn` (or `pip install vmn`) | `vmn` |
 | Experiment tracking, the model registry, snapshots, the dashboard | `pip install "vmn-exp[ui]"` (drop `[ui]` without the dashboard) | `vmn-exp`, and `vmn` with `vmn snapshot` |
-| Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `[sysmetrics]` for `sys_*`) | none; `from vmn_exp.sdk import start_run` |
+| Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `pynvml` for GPU `sys_*`) | none; `from vmn_exp.sdk import start_run` |
 
 `vmn-exp` pulls in `vmn` and `vmn-exp-sdk`, so one install gives you all three.
 A job image needs only `vmn-exp-sdk`: it records runs git-free, with
@@ -52,8 +52,8 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, … (as today); extra `changelog` |
-| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `sysmetrics`, `mlflow` |
-| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock; extras `s3`, `sysmetrics` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `mlflow` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extra `s3` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
 subpackage belongs to exactly one distribution.

@@ -169,9 +169,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--kill-grace-sec", type=float, default=None,
                       help="Seconds a child gets to exit after a forwarded signal "
                            "before it is killed during 'run'.")
-    pexp.add_argument("--system-metrics", action="store_true", default=False,
-                      help="Record the child process tree's CPU/memory as sys_* metrics "
-                           "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
+    pexp.add_argument("--no-system-metrics", dest="system_metrics", action="store_false",
+                      default=None,
+                      help="run: don't record the child process tree's CPU/memory/GPU as "
+                           "sys_* metrics. Overrides VMN_SYSTEM_METRICS and conf "
+                           "system_metrics settings.")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
     pexp.add_argument("--bucket", default=None, help="S3 bucket name")
