@@ -460,8 +460,9 @@ overwritten by an older beat): a hung S3 PUT cannot delay the local heartbeat.
 Kubernetes eviction) is sent `SIGTERM`, and `atexit` never runs for a process a
 signal kills. The SDK therefore handles `SIGTERM`: it finishes every open run
 with exit code `143` (`128 + 15`, so it reads `failed`, never `stuck`) and
-`received_signal: SIGTERM`, syncs the log (giving up after a minute, so a
-hung store cannot keep the process alive), and then hands the signal on — the handler
+`received_signal: SIGTERM`, syncs the log (giving up after a minute —
+`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` changes that — so a hung store cannot keep
+the process alive), and then hands the signal on — the handler
 that was in place before is called, otherwise the default action is
 re-delivered, so the process still dies of `SIGTERM`. With no run open it
 finalizes nothing. Python lets only the main thread install a handler, so the
@@ -469,7 +470,10 @@ SDK installs it when `vmn_exp.sdk` is imported on the main thread; runs opened
 later from worker threads (a thread-pool sweep) are covered. If you install
 your own `SIGTERM` handler after that import, or first import the SDK from a
 worker thread, call `install_signal_handlers()` from the main thread afterwards
-to chain it. It is never installed over `SIG_IGN`.
+to chain it. It is never installed over `SIG_IGN`. With several runs open,
+every run's final state is written locally first and their uploads then share
+that one wait, so a hung store cannot leave the later runs `stuck`; the same
+holds at interpreter exit.
 
 **A flaky store never becomes your error.** `finish()` does not raise for a
 storage failure (a remote that returns 503 at the end of a ten-hour run is logged

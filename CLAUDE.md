@@ -212,6 +212,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 - `VMN_UI_TOKEN`: Fallback for `vmn-exp ui --token`
 - `VMN_EXP_MIN_STALE_SEC`: Overrides the 60s floor of the stuck window (`max(3 * interval, floor)`), read wherever status is derived (CLI, `vmn-exp ui`). Non-positive/invalid values keep 60.
 - `VMN_EXP_KILL_GRACE_SEC`: Fallback for `vmn-exp run --kill-grace-sec` (seconds a forwarded signal waits before SIGKILL)
+- `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`: Seconds the SDK waits for a run's last remote uploads when it is finalized (`finish()`, SIGTERM, interpreter exit; default 60). Several runs finalized together write their final states first and share this one wait. Non-positive/invalid values keep 60.
 - `VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`: caps on untracked files captured into a snapshot/experiment tarball (defaults 50 / 200; skipped paths are recorded as `untracked_skipped`)
 - `VMN_CAPTURE_ENV`: Set to `0`/`false`/`no`/`off` to disable automatic environment capture (Python version, platform, installed packages) on `vmn-exp create`, `vmn-exp run`, and `start_run()`. CLI `--no-env` and `start_run(capture_env=False)` also opt out; `start_run(capture_env=True)` overrides this variable and conf.yml but cannot override the CLI flag. Opt-out precedence: CLI flag > `VMN_CAPTURE_ENV` > conf `experiment.capture_env`.
 - `VMN_EXPERIMENT_DIR` / `VMN_SNAPSHOT_METADATA`: git-free experiment mode (container images built from `vmn snapshot export`) for both the CLI and `start_run()`

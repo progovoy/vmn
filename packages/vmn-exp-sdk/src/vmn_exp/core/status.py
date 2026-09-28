@@ -85,13 +85,18 @@ def heartbeat_interval_sec(run_state):
         return DEFAULT_HEARTBEAT_INTERVAL_SEC
 
 
+def positive_env_sec(name, default):
+    """Env var *name* as a positive, finite number of seconds, else *default*."""
+    try:
+        value = float(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if math.isfinite(value) and value > 0 else default
+
+
 def min_stale_sec():
     """The stuck floor: ``VMN_EXP_MIN_STALE_SEC`` when a positive number, else 60."""
-    try:
-        floor = float(os.environ.get(MIN_STALE_ENV, ""))
-    except ValueError:
-        return MIN_STALE_SEC
-    return floor if math.isfinite(floor) and floor > 0 else MIN_STALE_SEC
+    return positive_env_sec(MIN_STALE_ENV, MIN_STALE_SEC)
 
 
 def stale_after_sec(run_state):

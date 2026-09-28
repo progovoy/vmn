@@ -31,7 +31,7 @@ def _on_main_thread():
 
 def install(finalize, timeout):
     """Route SIGTERM through ``finalize(signum)`` first, waiting at most
-    *timeout* seconds for it. Idempotent; chains whatever handler is current,
+    ``timeout()`` seconds for it (read when the signal arrives). Idempotent; chains whatever handler is current,
     so it can be called again after the workload installed its own."""
     if not _on_main_thread():
         return
@@ -46,7 +46,7 @@ def install(finalize, timeout):
 def _handle(signum, frame):
     previous = _STATE["previous"]
     try:
-        _run_bounded(_STATE["finalize"], signum, _STATE["timeout"])
+        _run_bounded(_STATE["finalize"], signum, _STATE["timeout"]())
     finally:
         if signal.getsignal(_HANDLED) is _handle:
             signal.signal(_HANDLED, previous)

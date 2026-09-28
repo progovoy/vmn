@@ -40,7 +40,7 @@ class _HungRemote:
 
 @pytest.fixture
 def hung_runs(app_layout, tmp_path, monkeypatch):
-    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME"):
+    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", TIMEOUT)
     _bootstrap(app_layout)
@@ -83,3 +83,67 @@ def test_finalizing_several_runs_waits_for_their_uploads_once(hung_runs):
 
     assert _exit_codes(local, runs) == [0] * RUNS
     assert elapsed < 2 * TIMEOUT, f"waited {elapsed:.2f}s: one timeout per run"
+
+
+# ---------------------------------------------------------------------------
+# VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC
+# ---------------------------------------------------------------------------
+
+TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [("5", 5.0), ("0.25", 0.25), ("0", 60), ("-1", 60), ("soon", 60), ("nan", 60), ("inf", 60)],
+)
+def test_the_final_upload_timeout_reads_a_positive_env_value(monkeypatch, value, expected):
+    monkeypatch.setenv(TIMEOUT_ENV, value)
+    assert run_module.final_upload_timeout_sec() == expected
+
+
+def test_the_final_upload_timeout_defaults_to_a_minute(monkeypatch):
+    monkeypatch.delenv(TIMEOUT_ENV, raising=False)
+    assert run_module.final_upload_timeout_sec() == 60
+
+
+def test_the_env_timeout_bounds_the_shared_upload_wait(hung_runs, monkeypatch):
+    local, runs = hung_runs
+    monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", 60)
+    monkeypatch.setenv(TIMEOUT_ENV, str(TIMEOUT))
+
+    started = time.monotonic()
+    run_module._finalize_open_runs()
+    elapsed = time.monotonic() - started
+
+    assert _exit_codes(local, runs) == [0] * RUNS
+    assert elapsed < 2 * TIMEOUT, f"waited {elapsed:.2f}s"
+
+
+@pytest.fixture
+def sigterm_restored():
+    handler = signal.getsignal(signal.SIGTERM)
+    state = dict(signals._STATE)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, handler)
+        signals._STATE.update(state)
+
+
+def test_the_sigterm_handler_waits_at_most_the_env_timeout(monkeypatch, sigterm_restored):
+    hung = threading.Event()
+    monkeypatch.setattr(run_module, "_finalize_signaled", lambda signum: hung.wait(10))
+    monkeypatch.setenv(TIMEOUT_ENV, "0.2")
+    chained = []
+    signal.signal(signal.SIGTERM, lambda signum, frame: chained.append(signum))
+    run_module.install_signal_handlers()
+
+    started = time.monotonic()
+    try:
+        signal.raise_signal(signal.SIGTERM)
+        elapsed = time.monotonic() - started
+    finally:
+        hung.set()
+
+    assert chained == [signal.SIGTERM]
+    assert elapsed < 5, f"the handler waited {elapsed:.2f}s"

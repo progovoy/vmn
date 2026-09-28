@@ -24,7 +24,7 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
-from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC
+from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
@@ -58,8 +58,10 @@ from vmn_exp.sdk.state_publisher import RunStatePublisher
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SYNC_INTERVAL_SEC = 30
-# How long finish() waits for the last remote writes before giving up on them.
+# How long finish() waits for the last remote writes before giving up on them,
+# unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
+FINAL_UPLOAD_TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
 
 # A run that reached interpreter exit still open was abandoned. Most of the
 # time that is just an mlflow-style "forgot to call finish()" — the process
@@ -494,8 +496,14 @@ def _quietly(step, *args, **kwargs):
         return False
 
 
+def final_upload_timeout_sec():
+    """How long finalizing waits for the last uploads: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+    when a positive number, else a minute. Read when a run is finalized."""
+    return positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
+
+
 def _final_upload_deadline():
-    return time.monotonic() + FINAL_REMOTE_TIMEOUT_SEC
+    return time.monotonic() + final_upload_timeout_sec()
 
 
 def _system_exit_code(exc):
@@ -520,7 +528,7 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=FINAL_REMOTE_TIMEOUT_SEC)
+    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec)
 
 
 atexit.register(_finalize_open_runs)

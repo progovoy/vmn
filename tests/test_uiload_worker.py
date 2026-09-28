@@ -231,3 +231,10 @@ def test_worker_module_runs_as_script():
         [sys.executable, worker.__file__, "--help"], capture_output=True, text=True
     )
     assert out.returncode == 0 and "--jobs-file" in out.stdout
+
+
+def test_job_processes_give_up_on_final_uploads_within_teardown(tmp_path):
+    # Teardown SIGTERMs every job process; a hung store must not hold one for
+    # the SDK's default minute of final-upload waiting.
+    env = worker.snapshot_env_vars(str(tmp_path), APP, str(tmp_path / "run"))
+    assert env["VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"] == "10"

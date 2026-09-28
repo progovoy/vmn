@@ -34,6 +34,7 @@ SRC_DIRS = [os.path.join(REPO, "packages", d, "src") for d in ("vmn", "vmn-exp-s
 CODE_VERSTR = "0.0.1-dev.10ad7e5.0ad0ad0"
 OWNED_ENV = ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_RESUME_RUN_ID", "VMN_WORKING_DIR")
 STOP_BEHAVIORS = ("stuck", "recovers")
+FINAL_UPLOAD_TIMEOUT_SEC = "10"
 
 
 # -- environment -------------------------------------------------------------
@@ -56,6 +57,9 @@ def snapshot_env_vars(root, app, run_dir):
         "VMN_SNAPSHOT_METADATA": write_snapshot_metadata(app, run_dir),
         "VMN_EXPERIMENT_DIR": os.path.abspath(root),
         "VMN_CAPTURE_ENV": "0",
+        # Teardown SIGTERMs job processes; don't let a hung store hold one for
+        # the SDK's default minute of final-upload waiting.
+        "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC": FINAL_UPLOAD_TIMEOUT_SEC,
     }
 
 
