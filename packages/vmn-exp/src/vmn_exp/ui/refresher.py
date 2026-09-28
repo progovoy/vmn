@@ -19,6 +19,8 @@ import logging
 import threading
 import time
 
+from vmn_exp.ui.gil_hint import GilHint
+
 REFRESH_INTERVAL_SEC = 1.0
 IDLE_SEC = 60.0
 # Background refreshes list names + live records, and everything this often
@@ -61,6 +63,7 @@ class Refresher:
         self._watches = {}  # index -> _Watch
         self._lock = threading.Lock()
         self._stopped = threading.Event()
+        self.gil_hint = GilHint()
 
     def snapshot(self, index):
         """*index*'s current snapshot, keeping *index* refreshed from now on."""
@@ -123,3 +126,4 @@ class Refresher:
             watch.failing = True
         else:
             watch.failing = False
+            self.gil_hint.note(len(getattr(index.snapshot(), "rows", ())))

@@ -174,6 +174,36 @@ refresher off unless you pass `background_refresh=True`: every request then
 refreshes the index first and sees every write made before it, at the cost of a
 full listing per request.
 
+### Large stores: run the UI on free-threaded Python
+
+With the GIL, every request and the background refresher share one core. On a
+store of tens of thousands of runs, a busy dashboard queues behind that core.
+A free-threaded Python (3.14t) runs them on every core. The UI only reads the
+store, so it can run on its own interpreter, apart from your jobs'
+environment:
+
+```sh
+uvx --python 3.14t --from "vmn-exp[ui]" vmn-exp ui --repo .
+# or install it as a tool once
+uv tool install --python 3.14t "vmn-exp[ui]"
+```
+
+The load harness (`tests/uiload`, `--profile load`: 100k runs, 500 live jobs,
+16 concurrent clients) measured the same code on each interpreter:
+
+| | 3.9 | 3.14 | 3.14t |
+|---|---|---|---|
+| requests/s | 25 | 42 | 299 |
+| list p50 / p95 | 426 / 1278 ms | 247 / 761 ms | 3.5 / 70 ms |
+| run detail p95 | 1534 ms | 977 ms | 21 ms |
+| new run visible (p95) | 3.7 s | 3.1 s | 1.5 s |
+| first load | 37 s | 27 s | 21 s |
+
+`orjson` has no free-threaded wheel yet; on 3.14t the UI encodes JSON with the
+standard library instead, which the numbers above already include. When a
+watched app has 10,000 runs or more and the GIL is on, `vmn-exp ui` prints this
+hint once.
+
 ## Run status in the dashboard
 
 Every run row carries a color-coded status pill — `created`, `running`, `stuck`,
