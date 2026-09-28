@@ -191,6 +191,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
 | `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
+| `run.define_metric(name, step_metric=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) |
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
@@ -228,6 +229,39 @@ Metric values are stored as floats, whatever you pass:
 Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
 Python numbers so `params.max_depth = 3` matches.
 
+### Custom x axis (`step_metric`)
+
+Chart a metric against another metric instead of the step, like W&B's
+`define_metric`:
+
+```python
+run.define_metric("val_*", step_metric="epoch")
+for step, batch in enumerate(loader):
+    ...
+    if end_of_epoch:
+        run.log_metrics({"val_loss": vl, "val_acc": va, "epoch": epoch}, step=step)
+```
+
+- The declaration is a log entry,
+  `{"type": "define_metric", "name": "val_*", "step_metric": "epoch"}`; extra
+  keyword fields ride along in the same entry. Entries fold per name, last
+  write wins per field, so a resumed run can redeclare.
+- The same can be declared without the SDK (for `vmn-exp run` metrics files and
+  `vmn-exp add`) in the app's conf.yml metrics schema, next to `goal:`:
+  `experiment.metrics.<name or glob>.step_metric: epoch`. A run's own
+  declarations win over the schema, and an exact name over a glob. A metric is
+  never its own x.
+- **Join rule**: a point is plotted at the x metric's value logged at the *same
+  step* (in the same `log_metrics` call or another call with that step);
+  step-less points join only within the same call. A point with no (finite) x
+  value is dropped from the joined series — the plain series is unchanged.
+- Read back: `get_run(...)["step_metrics"]` maps each declaring metric to its
+  x metric, and `get_run(..., x="epoch")["series"]` holds every other metric
+  joined on `epoch`, each point a `{"step", "ts", "value", "x"}`.
+  `vmn_exp.core.log.metric_series(log, x="epoch")` does the same on a raw log.
+- The UI picks the declared x metric by default and lets you choose any
+  metric; see [ui.md](ui.md#custom-x-axis).
+
 ### Tags
 
 Tags are mutable `str -> str` labels (values are stored as strings). Each
@@ -245,6 +279,34 @@ run.set_tag("verdict", "keep")      # still recorded
 Rows carry them as `tags` (`{key: value}`), and the query language reads
 `tags.<key>` (`tags.stage = "prod"`). A `tags:` mapping (or list of labels) in a
 `-f` notes file seeds them at creation.
+
+### Alerts
+
+`run.alert()` is `wandb.alert()`: flag something from inside the loop and get
+told about it.
+
+```python
+if math.isnan(loss):
+    run.alert("loss is NaN", text=f"step {step}, lr {lr}", level="error")
+```
+
+- `level` is `"info"` (default), `"warn"` or `"error"`; anything else raises
+  `ValueError`.
+- It appends an `alert` log entry (`{"type": "alert", "title", "text",
+  "level"}`), rendered by `vmn-exp show` and listed in the dashboard's run log.
+- Repeats of one title within `wait_sec` seconds (default: conf
+  `experiment.alerts.wait_sec`, 60) are dropped — neither logged nor sent — so a
+  check inside a loop cannot spam a channel. `wait_sec=0` sends every call. The
+  return value says whether this one went through.
+- It is sent to the configured sinks when the `alert` trigger is on (the
+  default); delivery runs off-thread, never raises, and `finish()` waits up to
+  5s for it.
+- With the `failed` trigger opted in, the run also alerts when it finishes
+  failed (an exception, `finish(exit_code=N)` with N != 0, SIGTERM).
+
+Sinks (webhook, Slack, shell command), triggers and the env-var fallbacks are
+configured as described in [docs/experiments.md](experiments.md#alerts). A
+`NoOpRun` (non-zero rank) ignores `alert()`.
 
 ### Changing stored runs: archive, unarchive, tags
 
@@ -595,9 +657,11 @@ best = get_run("my_app", ref="latest")
   [the query language](#the-query-language). A bad query raises `QueryError`.
   Everything after `app_name` is keyword-only, so a query passed positionally
   cannot be mistaken for `storage`.
-- `get_run(app_name=None, ref="latest", *, storage=None)` — `ref` takes any
+- `get_run(app_name=None, ref="latest", *, storage=None, x=None)` — `ref` takes any
   [addressing form](experiments.md#addressing-experiments): a full verstr, a
-  unique prefix, `@N`, or `latest`.
+  unique prefix, `@N`, or `latest`. `x="epoch"` joins `series` on that metric
+  (see [Custom x axis](#custom-x-axis-step_metric)); the row's `step_metrics`
+  lists the declared x metrics.
 
 A `list_runs` row carries the latest value of each metric, the run's `name`
 (or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
