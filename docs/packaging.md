@@ -153,9 +153,10 @@ the PyPI release.
   `vmn-exp-sdk==` pin, as part of `vmn stamp`. That replaces `gen_ver.py` and
   the checkout revert. tests/test_workspace.py checks the selectors against the
   real files and through a real `vmn stamp`.
-- `./release.sh` releases everything with a patch bump: vmn first, then
-  vmn-exp and vmn-exp-sdk (a minor bump the very first time, past the 0.0.1
-  placeholders). It refuses a dirty tree.
+- `./release_exp.sh` releases vmn-exp and vmn-exp-sdk with a patch bump (a minor
+  bump the very first time, past the 0.0.1 placeholders). It refuses a dirty
+  tree. vmn is released on its own (`vmn stamp vmn`, `make _build`,
+  `make upload`).
 - `make upload` sends each file to its project's `~/.pypirc` section
   (`[pypi]` for vmn, `[vmn-exp]`, `[vmn-exp-sdk]`), so per-project tokens
   work; a missing section falls back to `[pypi]`, for one account-wide token.

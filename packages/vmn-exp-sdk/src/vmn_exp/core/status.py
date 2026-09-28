@@ -15,6 +15,8 @@ the writer's heartbeat timestamp and, when known, the store's write time of
 ``run_state.yml`` (see :func:`derive_status`).
 """
 import datetime
+import math
+import os
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
@@ -30,6 +32,7 @@ DEFAULT_HEARTBEAT_INTERVAL_SEC = 30
 # PUT. Allow several missed beats, and never less than a minute.
 STALE_MULTIPLIER = 3
 MIN_STALE_SEC = 60
+MIN_STALE_ENV = "VMN_EXP_MIN_STALE_SEC"
 
 RUN_STATE_FILE = "run_state.yml"
 
@@ -82,9 +85,18 @@ def heartbeat_interval_sec(run_state):
         return DEFAULT_HEARTBEAT_INTERVAL_SEC
 
 
+def min_stale_sec():
+    """The stuck floor: ``VMN_EXP_MIN_STALE_SEC`` when a positive number, else 60."""
+    try:
+        floor = float(os.environ.get(MIN_STALE_ENV, ""))
+    except ValueError:
+        return MIN_STALE_SEC
+    return floor if math.isfinite(floor) and floor > 0 else MIN_STALE_SEC
+
+
 def stale_after_sec(run_state):
     """How long a heartbeat may go unrefreshed before the run counts as stuck."""
-    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, MIN_STALE_SEC)
+    return max(heartbeat_interval_sec(run_state) * STALE_MULTIPLIER, min_stale_sec())
 
 
 def run_state_observed_at(storage, app_name, verstr):

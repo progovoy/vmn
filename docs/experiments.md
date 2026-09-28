@@ -307,7 +307,9 @@ time, so a run whose machine vanished does not need anybody to update a record:
 `stuck` is the interesting one: the runner died, was OOM-killed, or lost its
 node, and left nothing behind to say so. Several missed beats are tolerated
 before vmn calls a run stuck — the staleness window is
-`max(3 × heartbeat_interval_sec, 60s)`.
+`max(3 × heartbeat_interval_sec, 60s)`. The 60s floor is read by the *reader*
+(`vmn-exp list`, `vmn-exp ui`) from `$VMN_EXP_MIN_STALE_SEC`; lower it for
+demos and load tests that want hung runs to show up as `stuck` within seconds.
 
 The writer's `heartbeat` timestamp comes from the writer's clock, which may be
 off from the reader's. So every reader — `vmn-exp list`/`show`, `prune`'s live

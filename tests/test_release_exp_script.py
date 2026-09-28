@@ -1,4 +1,4 @@
-"""release.sh stamps and ships vmn first, then vmn-exp + vmn-exp-sdk."""
+"""release_exp.sh stamps and ships vmn-exp + vmn-exp-sdk (vmn is released on its own)."""
 import os
 import stat
 import subprocess
@@ -27,7 +27,7 @@ def _release(tmp_path, **env):
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "calls.log"
     proc = subprocess.run(
-        ["bash", os.path.join(ROOT, "release.sh")], capture_output=True, text=True,
+        ["bash", os.path.join(ROOT, "release_exp.sh")], capture_output=True, text=True,
         env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "LOG": str(log),
              **env},
     )
@@ -35,13 +35,10 @@ def _release(tmp_path, **env):
     return proc, calls
 
 
-def test_releases_vmn_then_the_exp_packages_with_patch(tmp_path):
+def test_releases_only_the_exp_packages_with_patch(tmp_path):
     proc, calls = _release(tmp_path, EXP_TAGGED="1")
     assert proc.returncode == 0, proc.stderr
     assert calls == [
-        "vmn stamp -r patch vmn",
-        "make _build NAME=vmn",
-        "make upload NAME=vmn",
         "vmn stamp -r patch vmn_exp",
         "make _build NAME=vmn_exp",
         "make upload NAME=vmn_exp",
