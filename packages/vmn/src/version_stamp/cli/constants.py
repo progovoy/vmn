@@ -35,7 +35,6 @@ VMN_ARGS = {
     "add": "remote",
     "config": "local",
     "worktrees": "local",
-    "ai": "local",
     "skill": "local",
 }
 

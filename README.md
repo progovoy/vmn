@@ -328,30 +328,26 @@ dashboard with stamp-tree views and snapshot comparison.
 
 ## AI agent integration
 
-`vmn ai` gives AI coding agents the context they need to use vmn correctly:
+`vmn skill` gives AI coding agents the context they need to use vmn correctly:
 
 ```sh
-vmn ai skill --install                  # .claude/skills/vmn/SKILL.md
-vmn ai skill --install --target cursor  # .cursorrules
-vmn ai skill --install --target agents  # AGENTS.md
-
-# Composable development methodology rules
-vmn ai methodology --tdd --minimal-diffs --install
-vmn ai methodology --testability --worktrees --errors --install --target cursor
+vmn skill                               # print the skill block
+vmn skill --install                     # .claude/skills/vmn/SKILL.md
+vmn skill --install --target cursor     # .cursorrules
+vmn skill --install --target agents     # AGENTS.md
 ```
 
-`vmn ai skill` outputs CLI usage instructions. `vmn ai methodology` outputs
-opinionated development rules — pick only what applies to your team:
-`--tdd`, `--testability`, `--boyscout`, `--worktrees`, `--communication`,
-`--minimal-diffs`, `--errors`.
+Re-running `--install` updates vmn's section and leaves the rest of your
+instructions untouched.
 
 Agents that run sweeps and want the `vmn-exp ui` leaderboard's fleet columns
 (total / waiting / running / done / failed) to track them: see
 [docs/ai-fleet-tracking.md](docs/ai-fleet-tracking.md) for which call moves each column.
 
-The legacy `vmn skill` command remains as an alias for `vmn ai skill`.
-Re-running `--install` updates vmn's section and leaves the rest of your
-instructions untouched.
+Optional, opinionated development rules for agents (TDD, testability,
+worktrees, minimal diffs, ...) live in
+[docs/agent-methodology.md](docs/agent-methodology.md) — paste the sections
+you want into your `CLAUDE.md` or `AGENTS.md`.
 
 ## Command map
 
@@ -364,7 +360,7 @@ instructions untouched.
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
 | `vmn-exp` | Track experiments built on working-state snapshots |
 | `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps on private branches (create, pull, freeze, remove) |
-| `vmn ai` | Output or install AI agent skill blocks and methodology rules |
+| `vmn skill` | Output or install the AI agent skill block |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
 | `vmn config` | List or edit global, app, root-app, and branch configuration |
