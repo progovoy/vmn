@@ -47,7 +47,7 @@ from vmn_exp.core.status import (
 )
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.sdk import _resolve_app_name
-from vmn_exp.storage.cached import get_snapshot_storage
+from vmn_exp.storage.open import get_snapshot_storage
 
 EXPERIMENTS_DIR = "experiments"
 

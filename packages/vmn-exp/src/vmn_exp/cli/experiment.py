@@ -239,6 +239,7 @@ def handle_experiment(vmn_ctx):
     action = args.action
 
     params = {
+        "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),

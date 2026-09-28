@@ -28,6 +28,7 @@ def _get_storage(args):
 
     return resolve_experiment_storage(
         dir=getattr(args, "experiment_dir", None),
+        store=getattr(args, "store", None),
         bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),

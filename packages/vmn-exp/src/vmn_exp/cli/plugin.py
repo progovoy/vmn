@@ -47,10 +47,11 @@ def _add_snapshot_parser(subprasers):  # noqa: N802
                        help="The dev version string (for show/note/diff/export actions)")
     psnap.add_argument("--note", default=None, required=False,
                        help="A description note for the snapshot")
-    psnap.add_argument("--backend", default="local", choices=["local", "s3"],
-                       help="Storage backend for snapshots (default: local)")
+    psnap.add_argument("--store", default=None, required=False,
+                       help="Remote snapshot store URI "
+                            "(s3://bucket/prefix, gs://..., az://..., file:///dir)")
     psnap.add_argument("--bucket", default=None, required=False,
-                       help="S3 bucket name (required for s3 backend)")
+                       help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
     psnap.add_argument("--endpoint-url", default=None, required=False,
                        help="Custom S3 endpoint URL (for MinIO, DigitalOcean Spaces, etc.)")
     psnap.add_argument("--prefix", default="vmn-snapshots", required=False,
@@ -174,7 +175,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
-    pexp.add_argument("--bucket", default=None, help="S3 bucket name")
+    pexp.add_argument("--store", default=None,
+                      help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
+                           "file:///dir (or VMN_EXPERIMENT_STORE)")
+    pexp.add_argument("--bucket", default=None,
+                      help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
     pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
     # import-mlflow flags
@@ -210,6 +215,8 @@ def _add_ui_parser(subprasers):  # noqa: N802
                           "(default: ~/.vmn-ui)")
     pui.add_argument("--repo", action="append", default=None,
                      help="Attach a local checkout as a workspace (repeatable)")
+    pui.add_argument("--store", default=None,
+                     help="Read-only experiment store URI (s3://, gs://, az://, file://)")
     pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
     pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
     pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
@@ -240,7 +247,7 @@ def _handle_snapshot(vmn_ctx):
         snapshot_show,
     )
 
-    vmn_ctx.params["backend"] = vmn_ctx.args.backend
+    vmn_ctx.params["store"] = getattr(vmn_ctx.args, "store", None)
     vmn_ctx.params["bucket"] = getattr(vmn_ctx.args, "bucket", None)
     vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
     vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
@@ -251,8 +258,8 @@ def _handle_snapshot(vmn_ctx):
     conf_storage = getattr(vmn_ctx.vcs, "snapshot_storage", None) or {}
     if not vmn_ctx.params.get("bucket") and conf_storage.get("bucket"):
         vmn_ctx.params["bucket"] = conf_storage["bucket"]
-    if vmn_ctx.params.get("backend") == "local" and conf_storage.get("backend"):
-        vmn_ctx.params["backend"] = conf_storage["backend"]
+    if not vmn_ctx.params.get("store") and conf_storage.get("uri"):
+        vmn_ctx.params["store"] = conf_storage["uri"]
     if not vmn_ctx.params.get("prefix") or vmn_ctx.params["prefix"] == "vmn-snapshots":
         vmn_ctx.params["prefix"] = conf_storage.get("prefix", "vmn-snapshots")
     if not vmn_ctx.params.get("endpoint_url") and conf_storage.get("endpoint_url"):
@@ -390,6 +397,7 @@ def _exp_run_without_repo(args):
         os.environ["VMN_WRITER_ID"] = args.writer_id
 
     params = {
+        "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
@@ -431,8 +439,9 @@ def _dev_version_loader(vcs, params, version):
     from vmn_exp.snapshot import (
         LocalSnapshotStorage,
         _restore_with_safety_net,
-        get_snapshot_storage,
     )
+    from vmn_exp.core.storage_resolve import store_uri
+    from vmn_exp.storage.registry import open_store
 
     storage = LocalSnapshotStorage(vcs.vmn_root_path)
     metadata, patches = storage.load(vcs.name, version)
@@ -443,17 +452,14 @@ def _dev_version_loader(vcs, params, version):
 
     if metadata is None:
         conf_storage = getattr(vcs, "snapshot_storage", None) or {}
-        if conf_storage.get("bucket"):
+        store = conf_storage.get("uri") or store_uri(conf_storage, "vmn-snapshots")
+        if store:
             try:
-                s3_storage = get_snapshot_storage(
-                    "s3",
-                    bucket=conf_storage["bucket"],
-                    prefix=conf_storage.get("prefix", "vmn-snapshots"),
-                    endpoint_url=conf_storage.get("endpoint_url"),
+                metadata, patches = open_store(store, subdir="snapshots").load(
+                    vcs.name, version
                 )
-                metadata, patches = s3_storage.load(vcs.name, version)
             except Exception:
-                VMN_LOGGER.debug("S3 snapshot load failed", exc_info=True)
+                VMN_LOGGER.debug("Remote snapshot load failed", exc_info=True)
 
     if metadata is None:
         VMN_LOGGER.error("Snapshot %s not found locally or in configured storage", version)

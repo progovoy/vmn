@@ -17,6 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 s3 = ["boto3"]
+gcs = ["google-cloud-storage>=2.7"]
+azure = ["azure-storage-blob>=12.14", "azure-identity"]
 # GPU metrics also need pynvml, which stays out of every extra: it is useless
 # without a driver and would break installs on CPU-only hosts.
 sysmetrics = ["psutil>=5.9"]

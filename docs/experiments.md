@@ -24,7 +24,7 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 - [Subcommand reference](#subcommand-reference)
 - [Structured notes & params](#structured-notes--params)
 - [Metrics schema (sorting & goals)](#metrics-schema-sorting--goals)
-- [Storage (local & S3)](#storage-local--s3)
+- [Storage (local, S3, GCS, Azure, plugins)](#storage-local-s3-gcs-azure-plugins)
 - [Web UI](#web-ui)
 
 ---
@@ -818,27 +818,90 @@ experiment:
 
 ---
 
-## Storage (local & S3)
+## Storage (local, S3, GCS, Azure, plugins)
 
 Experiments live under `.vmn/{app}/experiments/` by default — local, git-ignored,
-never pushed. To share across a team, point any subcommand at an S3-compatible
-backend:
+never pushed. To share across a team, point any subcommand at a **store URI**:
 
 ```sh
-vmn-exp run my_app --bucket my-experiments \
-    --endpoint-url http://minio:9000 --prefix team/ml -- ./perf_test.sh
+vmn-exp run my_app --store s3://my-experiments/team/ml -- ./perf_test.sh
+vmn-exp run my_app --store "s3://my-experiments/team/ml?endpoint_url=http://minio:9000" -- ./t.sh
+vmn-exp run my_app --store gs://my-experiments/team/ml -- ./t.sh     # pip install 'vmn-exp-sdk[gcs]'
+vmn-exp run my_app --store az://experiments/team/ml -- ./t.sh        # pip install 'vmn-exp-sdk[azure]'
+vmn-exp run my_app --store file:///mnt/nfs/experiments -- ./t.sh
 ```
 
-| Flag | Default | Description |
+| URI | Backend | Notes |
 |---|---|---|
-| `--bucket` | — | S3 bucket name (setting it is what enables S3) |
-| `--endpoint-url` | — | Custom endpoint (MinIO, LocalStack, …) |
-| `--prefix` | `vmn-experiments` | Key prefix inside the bucket |
+| `s3://bucket[/prefix][?endpoint_url=...]` | S3 / MinIO / LocalStack | extra `[s3]` (boto3); AWS credentials as usual |
+| `gs://bucket[/prefix]` | Google Cloud Storage | extra `[gcs]` (google-cloud-storage); Application Default Credentials |
+| `az://container[/prefix][?account_url=...]` | Azure Blob Storage | extra `[azure]`; `AZURE_STORAGE_CONNECTION_STRING`, else `AZURE_STORAGE_ACCOUNT_URL` + `DefaultAzureCredential` |
+| `file:///abs/dir` (or a bare path) | a local/NFS directory | used *as* the local root, no cache in front |
+| `<scheme>://...` | a plugin | see [Storage backends](#storage-backends-plugins) |
 
-These can also be set once under `experiment.storage` in `.vmn/{app}/conf.yml`
-so you don't repeat them on every command; CLI flags override the config.
-With a bucket, runs record locally and sync to it, or go straight to S3 when
-there is no local dir.
+The prefix defaults to `vmn-experiments` (`vmn-snapshots` for `vmn snapshot`).
+The store resolves as `--store` > `VMN_EXPERIMENT_STORE` > `experiment.storage.uri`
+in `.vmn/{app}/conf.yml`. `--bucket`/`--prefix`/`--endpoint-url` (and
+`VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL`, conf `bucket`/`prefix`/
+`endpoint_url`) remain as shorthand for an `s3://` URI; any store URI wins over
+the shorthand. With a remote store, runs record locally and sync to it when
+there is a local root (a checkout or `--experiment-dir`/`VMN_EXPERIMENT_DIR`),
+or go straight to the store when there is none. A missing SDK fails with the
+`pip install 'vmn-exp-sdk[<extra>]'` line to run.
+
+```yaml
+# .vmn/my_app/conf.yml
+experiment:
+  storage:
+    uri: gs://ml-experiments/team
+```
+
+### Storage backends (plugins)
+
+A backend is chosen by the URI scheme. Built-ins are `file`, `s3`, `gs` and
+`az`; a package adds (or overrides) a scheme under the `vmn_exp.storage`
+entry-point group:
+
+```toml
+[project.entry-points."vmn_exp.storage"]
+mem = "my_pkg.store:open_store"
+```
+
+`open_store(uri, subdir)` receives a `vmn_exp.storage.uri.StoreURI`
+(`scheme`, `location` = bucket/container, `path` = prefix, `options` = the query
+string) and `subdir` (`"experiments"` or `"snapshots"`), and returns a
+`vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
+factory)` does the same at runtime. The contract:
+
+- **Records**: a record is `<base>/<app>/<verstr>/` holding `metadata.yml`, the
+  patch files, per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and
+  `artifacts/`. `metadata.yml` makes it exist: write it last, delete it first.
+  Implement the abstract methods (`save`, `load`, `list_snapshots`,
+  `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
+  `list_artifact_files`) and override the defaulted ones your store can do
+  better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
+  `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
+- **`create_exclusive` must be atomic**: of any number of hosts racing for one
+  verstr exactly one gets `True`; everyone else gets `False` and allocates the
+  next name. The base-class default (check, then save) is *not* safe on a shared
+  store — use the store's conditional create (`O_EXCL` mkdir, S3
+  `If-None-Match: *`, GCS `if_generation_match=0`, Azure `overwrite=False`).
+  `update_metadata` should likewise be a compare-and-swap on the object version.
+- **Listing semantics**: `list_verstrs` returns names only (claimed-but-unfinished
+  names included — they are taken); `list_snapshots` returns only records whose
+  `metadata.yml` exists; `list_files` maps `{verstr: {file: (size, mtime[, etag])}}`
+  and is what incremental index refreshes compare, so a rewritten file must
+  change its signature.
+- **`is_remote()`** returns `True` for a network store: it is then fronted by
+  the local root when there is one, and its reads are parallelized. A store
+  returning `False` is used as the local root itself (as `file://` is).
+- **`cache_identity()`** returns a hashable name for the data (e.g.
+  `(scheme, endpoint, bucket, prefix)`) so process-wide caches never mix stores.
+
+An object store with a conditional create and a conditional overwrite gets all
+of this for free by subclassing `vmn_exp.storage.s3.S3SnapshotStorage` with an
+`vmn_exp.storage.object_client.ObjectClient` adapter for its SDK — that is how
+the GCS and Azure backends are built.
 
 ### How records are stored
 
@@ -848,7 +911,8 @@ there is no local dir.
   Every storage directory carries its own `.gitignore` (`*`), so experiments of
   nested apps (`root_app/service`) never show up in `git status` either.
 - **Atomic allocation**: a new run claims its verstr atomically (a plain
-  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3). Two
+  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3, and the
+  GCS/Azure equivalents). Two
   hosts running the same commit against a shared bucket or directory get
   `…` and `….r2`, never one run with both hosts' data merged in.
 - **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, where `<app>` is the tag form
@@ -930,8 +994,8 @@ Exit code is 1 if any run failed.
 
 **No git repo needed**: the command does not take the repo lock and does not
 auto-init the vmn app.  Use `--experiment-dir` or `VMN_EXPERIMENT_DIR` to
-point at an experiment directory outside a repo, or `--bucket` /
-`VMN_EXPERIMENT_BUCKET` to write directly to S3.
+point at an experiment directory outside a repo, or `--store <uri>` /
+`VMN_EXPERIMENT_STORE` (or the `--bucket` shorthand) to write directly to a store.
 
 See [docs/migrating-from-mlflow.md](migrating-from-mlflow.md) for a migration
 guide including artifact layout, query equivalences, and known differences.

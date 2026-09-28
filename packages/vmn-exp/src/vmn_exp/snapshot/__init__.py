@@ -13,11 +13,9 @@ import yaml
 # The storage backends live in their own modules; these names stay importable
 # from here for existing callers.
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
+from vmn_exp.core.storage_resolve import store_uri
 from vmn_exp.storage.base import SnapshotStorage  # noqa: F401
-from vmn_exp.storage.cached import (  # noqa: F401
-    CachedSnapshotStorage,
-    get_snapshot_storage,
-)
+from vmn_exp.storage.cached import CachedSnapshotStorage  # noqa: F401
 from vmn_exp.storage.files import (  # noqa: F401
     read_patches_from_dir as _read_patches_from_dir,
 )
@@ -27,6 +25,7 @@ from vmn_exp.storage.files import (  # noqa: F401
 from vmn_exp.storage.local import (  # noqa: F401
     LocalSnapshotStorage,
 )
+from vmn_exp.storage.open import get_snapshot_storage, open_storage  # noqa: F401
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
     VMN_LOGGER,
@@ -124,13 +123,8 @@ def _relative_timestamp(iso_ts):
 
 
 def _get_storage(vcs, params):
-    return get_snapshot_storage(
-        params.get("backend", "local"),
-        vmn_root_path=vcs.vmn_root_path,
-        bucket=params.get("bucket"),
-        prefix=params.get("prefix", "vmn-snapshots"),
-        endpoint_url=params.get("endpoint_url"),
-    )
+    store = store_uri(params, default_prefix="vmn-snapshots")
+    return open_storage(store, vcs.vmn_root_path, subdir="snapshots")
 
 
 def _parse_meta_args(meta_list):
