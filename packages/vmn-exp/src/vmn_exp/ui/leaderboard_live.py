@@ -5,7 +5,10 @@ Between two index generations only live runs (no exit code yet) change as
 time passes: their status fields, and the ``tree_status`` of every run above
 them. :class:`LivePatch` names that *changed* set once per snapshot and rolls
 the ancestors' ``tree_status`` up from a precomputed terminal part, so a new
-time bucket costs O(changed) instead of re-annotating every row.
+time bucket costs O(changed) instead of re-annotating every row. A snapshot
+built from scratch walks each affected subtree (:meth:`LivePatch.of_rows`);
+one derived from the previous generation gets the terminal parts from the
+children's status counts instead (:meth:`LivePatch.from_counts`).
 
 Every ordering ``sort_rows`` produces is a total order on a per-row key (the
 storage position breaks ties, as its stable sorts do), so :func:`order_key`
@@ -26,6 +29,7 @@ from vmn_exp.core.tree import (
     rollup_status,
     subtree_verstrs,
 )
+from vmn_exp.ui.leaderboard_tree import parent_in
 
 
 def _ancestors_and_self(verstr, parent_of):
@@ -40,9 +44,21 @@ def _ancestors_and_self(verstr, parent_of):
 
 
 class LivePatch:
-    """The rows of one snapshot a time bucket can change, and how."""
+    """The rows of one snapshot a time bucket can change, and how.
 
-    def __init__(self, rows, live, position):
+    ``_rollups`` is ``{i: (terminal statuses, live rows)}`` for each changed
+    row *i*: the statuses no time bucket changes in its subtree (only their
+    rollup matters) and the live rows beneath it.
+    """
+
+    def __init__(self, live, changed, rollups):
+        self.live = tuple(live)
+        self.changed = tuple(changed)
+        self._rollups = rollups
+
+    @classmethod
+    def of_rows(cls, rows, live, position):
+        """Walks every subtree; any parent graph, cycles included."""
         live_set = set(live)
         parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
         affected = {
@@ -51,9 +67,38 @@ class LivePatch:
             for v in _ancestors_and_self(rows[i]["verstr"], parent_of)
             if v in position
         }
-        self.live = tuple(live)
-        self.changed = tuple(sorted(affected | live_set))
-        self._rollups = self._terminal_parts(rows, affected, live_set, position)
+        rollups = cls._terminal_parts(rows, affected, live_set, position)
+        return cls(live, sorted(affected | live_set), rollups)
+
+    @classmethod
+    def from_counts(cls, rows, live, position, edges, child_statuses):
+        """O(changed) from ``{parent: {tree_status: count}}`` of the children
+        (:func:`~vmn_exp.ui.leaderboard_tree.tree_index`); a forest only."""
+        live_set, affected = set(live), set()
+        for i in live:
+            cursor = i
+            while cursor is not None and cursor not in affected:
+                affected.add(cursor)
+                parent = parent_in(edges, rows[cursor]["verstr"])
+                cursor = position.get(parent)
+        kids, rollups = {}, {}
+        for i in sorted(affected, key=lambda i: rows[i]["depth"], reverse=True):
+            row = rows[i]
+            tally = dict(child_statuses.get(row["verstr"], {}))
+            terminal, under = set(), [i] if i in live_set else []
+            for kid in kids.get(i, ()):
+                tally[rows[kid]["tree_status"]] -= 1
+                terminal |= rollups[kid][0]
+                under.extend(rollups[kid][1])
+            terminal.update(s for s, n in tally.items() if n)
+            if i not in live_set:
+                terminal.add(row["status"])
+            summary = rollup_status(terminal)
+            rollups[i] = (frozenset([summary] if summary else ()), tuple(under))
+            parent = position.get(parent_in(edges, row["verstr"]))
+            if parent is not None:
+                kids.setdefault(parent, []).append(i)
+        return cls(live, sorted(affected), rollups)
 
     @staticmethod
     def _terminal_parts(rows, affected, live, position):

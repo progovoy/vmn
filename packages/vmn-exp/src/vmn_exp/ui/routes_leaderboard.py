@@ -4,8 +4,10 @@
 
 Both answer from the app's current index snapshot through a
 :class:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache`, so a poll costs
-a page slice. The list's ``ETag`` is known before any row is touched (index
-generation, parameters, and the time bucket while runs are live): a client
+a page slice, and its encoded body is kept per ETag, so identical requests
+from many clients render and compress it once. The list's ``ETag`` is known
+before any row is touched (index generation, parameters, and the time bucket
+while runs are live): a client
 repeating it gets an empty ``304`` without the payload ever being built.
 Archived rows are left out of all three unless the request passes
 ``archived=1``.
@@ -14,14 +16,19 @@ from fastapi import HTTPException, Request
 
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui.http_params import clamp_page, key_list
+from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS
-from vmn_exp.ui.responses import json_response, not_modified
+from vmn_exp.ui.responses import json_response, memoized_json_response
+
+# Encoded bodies kept per ETag (pages, chart columns): a few generations' worth.
+ENCODED_BODIES = 64
 
 
 def register(app, api_prefix, inputs, cache):
     """*inputs(ws_name, app_tag)* -> ``(snapshot, metrics schema)``, raising
     the route's HTTP errors for a bad workspace or app."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+    bodies = LRU(ENCODED_BODIES)
 
     @app.get(f"{base}/experiments")
     def list_experiments(
@@ -77,16 +84,14 @@ def register(app, api_prefix, inputs, cache):
     def _answer(request, compute, snapshot, schema, params, **tag_extra):
         """A ``304`` when the ETag matches, else *compute*'s payload."""
         etag = cache.etag(snapshot, schema, **params, **tag_extra)
-        unchanged = not_modified(request, etag)
-        if unchanged is not None:
-            return unchanged
         # A query that will not compile (or an unknown column) is the caller's
         # typo: answer 400 with the message (a query's carries the offset).
         try:
-            payload = compute(snapshot, schema, **params)
+            return memoized_json_response(
+                request, etag, lambda: compute(snapshot, schema, **params), bodies
+            )
         except (QueryError, ValueError) as e:
             raise HTTPException(400, str(e))
-        return json_response(payload, etag=etag, request=request)
 
 
 def _check_order(order):

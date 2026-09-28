@@ -101,3 +101,27 @@ def test_concurrent_misses_on_different_keys_are_not_serialized():
         t.join()
 
     assert results == {"a": "a", "b": "b"}
+
+
+def test_peek_and_values_never_compute_or_reorder():
+    lru = LRU(2)
+    compute, calls = _counting("a")
+    lru.get("a", compute)
+    lru.get("b", lambda: "b")
+    assert lru.peek("missing") is None
+    assert lru.peek("a") == "a"
+    assert lru.values() == ["a", "b"]  # peek did not make "a" the most recent
+    lru.get("c", lambda: "c")
+    assert lru.values() == ["b", "c"]
+    assert calls == [1]
+
+
+def test_lru_put_stores_and_evicts_like_get():
+    from vmn_exp.ui.memo import LRU
+
+    lru = LRU(2)
+    lru.put("a", 1)
+    lru.put("b", 2)
+    lru.put("a", 3)  # replaces, and becomes the most recent
+    lru.put("c", 4)  # evicts b, the least recently used
+    assert (lru.peek("a"), lru.peek("b"), lru.peek("c")) == (3, None, 4)

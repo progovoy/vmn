@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover - exercised by monkeypatching
 
 # Below this, compressing costs more than it saves (matches the middleware).
 GZIP_MIN_BYTES = 1000
-GZIP_LEVEL = 5
+GZIP_LEVEL = 3
 
 
 def _finite_or_none(value):
@@ -124,16 +124,42 @@ def json_response(payload, etag=None, request=None, status_code=200):
     thread, when the request accepts it, so the middleware passes it through.
     """
     body = render_json(payload)
-    headers = {"Cache-Control": "no-cache"}
     if etag is None and request is not None:
         etag = hashlib.blake2b(body, digest_size=16).hexdigest()
     if etag is not None:
-        headers["ETag"] = _quoted(etag)
         unchanged = request is not None and not_modified(request, etag)
         if unchanged:
             return unchanged
-    if _accepts_gzip(request) and len(body) >= GZIP_MIN_BYTES:
-        body = gzip.compress(body, compresslevel=GZIP_LEVEL)
+    return _response(_encoded(body, _accepts_gzip(request)), etag, status_code)
+
+
+def memoized_json_response(request, etag, payload_of, bodies):
+    """:func:`json_response` for an answer whose *etag* is known up front:
+    ``payload_of()`` is rendered (and gzipped) once per ETag and encoding
+    into *bodies*, an :class:`~vmn_exp.ui.memo.LRU` — identical requests
+    from many clients share it. Raises what *payload_of* raises."""
+    unchanged = not_modified(request, etag)
+    if unchanged is not None:
+        return unchanged
+    plain = bodies.get((etag, False), lambda: (render_json(payload_of()), False))
+    if not _accepts_gzip(request):
+        return _response(plain, etag, 200)
+    return _response(bodies.get((etag, True), lambda: _encoded(plain[0], True)), etag, 200)
+
+
+def _encoded(body, gzipped):
+    """``(body, gzipped or not)``; small bodies are sent as they are."""
+    if gzipped and len(body) >= GZIP_MIN_BYTES:
+        return gzip.compress(body, compresslevel=GZIP_LEVEL), True
+    return body, False
+
+
+def _response(encoded, etag, status_code):
+    body, gzipped = encoded
+    headers = {"Cache-Control": "no-cache"}
+    if etag is not None:
+        headers["ETag"] = _quoted(etag)
+    if gzipped:
         headers["Content-Encoding"] = "gzip"
         headers["Vary"] = "Accept-Encoding"
     return Response(

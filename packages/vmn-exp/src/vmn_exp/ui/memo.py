@@ -68,6 +68,24 @@ class LRU:
         with self._lock:
             self._entries.clear()
 
+    def peek(self, key):
+        """*key*'s value if it is kept, else None; never computes or reorders."""
+        with self._lock:
+            return self._entries.get(key)
+
+    def put(self, key, value):
+        """Keep *value* as *key*'s, the most recently used."""
+        with self._lock:
+            self._entries[key] = value
+            self._entries.move_to_end(key)
+            while len(self._entries) > self._size:
+                self._entries.popitem(last=False)
+
+    def values(self):
+        """The kept values, least recently used first."""
+        with self._lock:
+            return list(self._entries.values())
+
     def get(self, key, compute, valid=lambda value: True, store=lambda value: True):
         """*key*'s value; *compute* runs on a miss or when *valid* rejects the
         hit, and its value is kept only when *store* accepts it.
@@ -98,11 +116,7 @@ class LRU:
         with self._lock:
             del self._in_flight[key]
         if store(value):
-            with self._lock:
-                self._entries[key] = value
-                self._entries.move_to_end(key)
-                while len(self._entries) > self._size:
-                    self._entries.popitem(last=False)
+            self.put(key, value)
         in_flight.finish(value, None)
         return value
 
