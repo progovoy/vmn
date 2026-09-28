@@ -3,7 +3,9 @@ import type { SeriesPoint } from "../types";
 import { seriesColor } from "../util";
 import { allTimestamped, runOrigin, splitSysMetrics, type XMode } from "../util/chartData";
 import { filterMetrics } from "../util/seriesArrays";
-import { LogToggle, MetricSearch, XModeToggle } from "./ChartControls";
+import { AUTO_X, xMetricMap, xMetricOptions, type XMap } from "../util/xMetric";
+import { useJoinedSeries } from "../hooks/useJoinedSeries";
+import { LogToggle, MetricSearch, XMetricSelect, XModeToggle } from "./ChartControls";
 import MetricGrid, { type GridView } from "./MetricGrid";
 import SmoothingSlider from "./SmoothingSlider";
 
@@ -11,14 +13,19 @@ type Series = Record<string, SeriesPoint[]>;
 
 /** The Run page charts: one small chart per training metric (a loss around
  *  0.1 and an accuracy around 0.9 never share a y axis), plus `sys_*` host
- *  metrics in their own section, hidden until asked for. */
-function TrainingCurves({ series, seriesTotal, startedAt }: {
+ *  metrics in their own section, hidden until asked for. A metric with a
+ *  declared step metric (*stepMetrics*), or every one once an x metric is
+ *  picked, is drawn from *fetchJoined*'s series against that metric. */
+function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoined }: {
   series: Series;
   seriesTotal?: Record<string, number>;
   startedAt?: string | null;
+  stepMetrics?: XMap;
+  fetchJoined?: (xMap: XMap) => Promise<Series>;
 }) {
   const [alpha, setAlpha] = useState(0);
   const [xMode, setXMode] = useState<XMode>("step");
+  const [xChoice, setXChoice] = useState(AUTO_X);
   const [logY, setLogY] = useState(false);
   const [query, setQuery] = useState("");
   const [showSys, setShowSys] = useState(false);
@@ -31,6 +38,11 @@ function TrainingCurves({ series, seriesTotal, startedAt }: {
   const hasTimestamps = useMemo(() => allTimestamped(series), [series]);
   const shownTraining = useMemo(() => filterMetrics(training, query), [training, query]);
   const shownSystem = useMemo(() => filterMetrics(system, query), [system, query]);
+  const xOptions = useMemo(() => xMetricOptions(series), [series]);
+  const xMap = useMemo(
+    () => xMetricMap(training, xMode, xChoice, stepMetrics), [training, xMode, xChoice, stepMetrics],
+  );
+  const joined = useJoinedSeries(xMap, fetchJoined, series);
   const view = useMemo<GridView>(() => ({ xMode, origin, alpha, logY }), [xMode, origin, alpha, logY]);
   // Host samples carry no step: always plot them against run time.
   const sysView = useMemo<GridView>(
@@ -50,6 +62,7 @@ function TrainingCurves({ series, seriesTotal, startedAt }: {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
           <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
+          <XMetricSelect value={xChoice} onChange={setXChoice} metrics={xOptions} enabled={xMode === "step"} />
           <LogToggle value={logY} onChange={setLogY} />
           {downsampled && (
             <span style={{ color: "var(--text-3)", fontSize: 11 }} title="the server downsampled long series">
@@ -65,7 +78,10 @@ function TrainingCurves({ series, seriesTotal, startedAt }: {
       {training.length > 0 && shownTraining.length === 0 && (
         <div style={{ color: "var(--text-3)", fontSize: 12 }}>No metric matches “{query}”.</div>
       )}
-      <MetricGrid metrics={shownTraining} series={series} colorOf={trainColor} view={view} />
+      <MetricGrid
+        metrics={shownTraining} series={series} colorOf={trainColor} view={view}
+        joined={joined} xMap={xMap}
+      />
       {system.length > 0 && (
         <div style={{ marginTop: 12 }}>
           <button className="link" onClick={() => setShowSys((v) => !v)}>
