@@ -2,6 +2,8 @@
 # vmn-exp-sdk together (one version). `vmn stamp` writes the new version into
 # the packages' pyproject.toml files (version_backends in .vmn/<NAME>/conf.yml).
 NAME=vmn
+DIST=${PWD}/dist
+TWINE=twine
 
 ifeq (${NAME},vmn_exp)
 PACKAGES=packages/vmn-exp-sdk packages/vmn-exp
@@ -20,10 +22,20 @@ _build_ui:
 
 _build: clean $(if $(filter vmn_exp,${NAME}),_build_ui)
 	@echo "Building ${PACKAGES}"
-	for pkg in ${PACKAGES}; do uv build --out-dir ${PWD}/dist $${pkg} || exit 1; done
+	for pkg in ${PACKAGES}; do uv build --out-dir ${DIST} $${pkg} || exit 1; done
 
+# Each file goes to its project's ~/.pypirc section (per-project tokens), or to
+# [pypi] when that section is missing (one account-wide token).
 upload:
-	twine upload --verbose ${PWD}/dist/*
+	@for f in ${DIST}/*; do \
+		case $$(basename $$f) in \
+			vmn_exp_sdk-*) section=vmn-exp-sdk ;; \
+			vmn_exp-*) section=vmn-exp ;; \
+			*) section=pypi ;; \
+		esac; \
+		grep -q "^\[$$section\]" ~/.pypirc 2>/dev/null || section=pypi; \
+		${TWINE} upload --verbose --skip-existing -r $$section $$f || exit 1; \
+	done
 
 major: check _major _build
 
@@ -67,7 +79,7 @@ check: _run_black
 	@echo "-------------------------------------------------------------"
 
 clean:
-	rm -rf ${PWD}/dist
+	rm -rf ${DIST}
 	rm -rf ${PWD}/build
 
 package: _package
