@@ -30,7 +30,8 @@ def create_data_dict_for_jinja2(
     if "release_notes_conf_path" in tmplt_value:
         toml_cliff_conf_param = f"-c {tmplt_value['release_notes_conf_path']}"
 
-    if shutil.which("git-cliff"):
+    # No start tag yet (init-app stamps the first version): nothing to note.
+    if shutil.which("git-cliff") and _ref_exists(repo_path, start_tag_name):
         command = f"git-cliff {toml_cliff_conf_param} {start_tag_name}..{end_tag_name} -r {repo_path}"
         try:
             result = subprocess.run(
@@ -44,6 +45,14 @@ def create_data_dict_for_jinja2(
         tmplt_value["release_notes"] = ""
 
     return tmplt_value
+
+
+def _ref_exists(repo_path, ref):
+    result = subprocess.run(
+        ["git", "-C", repo_path, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        capture_output=True,
+    )
+    return result.returncode == 0
 
 
 def gen_jinja2_template_from_data(data, jinja_template_path, output_path):
