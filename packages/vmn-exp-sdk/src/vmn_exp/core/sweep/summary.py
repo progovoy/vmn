@@ -106,9 +106,10 @@ def retry_slots(rows):
     )
 
 
-def summarize(spec, rows, claims=()):
+def summarize(spec, rows, claimed=()):
+    """*claimed* is :func:`~vmn_exp.core.sweep.claims.claimed_trials`' set."""
     latest = latest_attempts(rows)
-    claimed = {c["trial"] for c in claims}
+    claimed = set(claimed)
     best = best_trial(spec, list(latest.values()))
     return {
         "method": spec["method"],

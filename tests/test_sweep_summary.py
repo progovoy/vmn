@@ -51,8 +51,7 @@ def test_summary_counts_the_latest_attempt_of_each_trial():
         _row(1, "running", 0.4),
         _row(2, "succeeded", 0.9, end_reason="stopped"),
     ]
-    claims = [{"trial": 0}, {"trial": 0, "attempt": 1}, {"trial": 1}, {"trial": 2}, {"trial": 3}]
-    summary = summarize(_spec(run_cap=10), rows, claims)
+    summary = summarize(_spec(run_cap=10), rows, claimed={0, 1, 2, 3})
     assert summary["counts"] == {"succeeded": 2, "running": 1}
     assert summary["stopped_early"] == 1
     assert summary["trials"] == 3

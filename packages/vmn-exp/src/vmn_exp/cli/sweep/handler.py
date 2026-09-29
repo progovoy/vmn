@@ -8,7 +8,7 @@ from vmn_exp.cli.experiment import (
 from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.storage_resolve import _get_experiment_storage
-from vmn_exp.core.sweep.claims import list_claims
+from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, load_spec, parse_spec
 from vmn_exp.core.sweep.summary import summarize, trial_rows
 from vmn_exp.core.writer import flush_log
@@ -76,7 +76,7 @@ def resolve_sweep(storage, app_name, ref):
 
 def sweep_status(storage, app_name, sweep, spec, args):
     summary = summarize(spec, trial_rows(storage, app_name, sweep, spec),
-                        list_claims(storage, app_name, sweep))
+                        claimed_trials(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:
         print(dumps(summary))

@@ -3,12 +3,12 @@ what ``vmn-exp ui`` serves at ``.../experiments/{verstr}/sweep``."""
 from vmn_exp.core.sweep.summary import metric_value, stopped_early, summarize, trial_of
 
 
-def sweep_view(spec, sweep_verstr, trials, claims=()):
+def sweep_view(spec, sweep_verstr, trials, claimed=()):
     """*trials* are :func:`~vmn_exp.core.sweep.summary.trial_rows`' rows."""
     return {
         "sweep": sweep_verstr,
         "spec": spec,
-        "summary": dict(summarize(spec, trials, claims), sweep=sweep_verstr),
+        "summary": dict(summarize(spec, trials, claimed), sweep=sweep_verstr),
         "trials": [_trial_entry(spec, row) for row in sorted(trials, key=trial_of)],
     }
 

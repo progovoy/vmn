@@ -5,7 +5,7 @@ does (a trial's own, else its nested runs'). Rows come from the app's index
 snapshot; the spec from the sweep run's metadata."""
 from fastapi import HTTPException, Request
 
-from vmn_exp.core.sweep.claims import list_claims
+from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, parse_spec
 from vmn_exp.core.sweep.summary import sweep_trials
 from vmn_exp.core.sweep.view import sweep_view
@@ -38,5 +38,5 @@ def register(app, prefix, sweep_inputs):
             spec, verstr, [dict(r) for r in snap.rows],
             snap.run_states, snap.run_state_observed_at,
         )
-        payload = sweep_view(spec, verstr, trials, list_claims(storage, app_name, verstr))
+        payload = sweep_view(spec, verstr, trials, claimed_trials(storage, app_name, verstr))
         return json_response(payload, request=request)
