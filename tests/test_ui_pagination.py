@@ -14,7 +14,6 @@ def _make_rows(n):
             "note": f"run {i}",
             "branch": "master",
             "base_version": "1.0.0",
-            "user_meta": None,
             "metrics": {"loss": 1.0 - i * 0.001, "acc": 0.5 + i * 0.001},
         }
         for i in range(n)

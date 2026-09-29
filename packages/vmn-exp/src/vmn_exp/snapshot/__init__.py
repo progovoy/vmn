@@ -76,7 +76,6 @@ def _build_snapshot_metadata(
     patches,
     ver_info,
     note=None,
-    user_meta=None,
 ):
     be = vcs.backend
     try:
@@ -105,8 +104,6 @@ def _build_snapshot_metadata(
     skipped = _skipped_untracked(patches)
     if skipped:
         metadata["untracked_skipped"] = skipped
-    if user_meta:
-        metadata["user_meta"] = user_meta
 
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:

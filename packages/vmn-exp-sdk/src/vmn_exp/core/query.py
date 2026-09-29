@@ -30,7 +30,7 @@ parentheses nest at most ``MAX_NESTING`` levels (deeper is a ``QueryError``);
 
 ``~``/``contains``/``!~`` match a case-insensitive substring; against a
 list-valued field (``command``, ``children``) they match any element, and
-against a dict-valued one (``user_meta``) any value.
+against a dict-valued one (``tags``) any value.
 
 Semantics, deliberately two-valued (no SQL ``UNKNOWN``): a missing or ``None``
 field fails every ordering and substring comparison rather than poisoning the
@@ -61,7 +61,7 @@ import functools
 # Spelled out so a typo is a query error instead of a silently empty result.
 ROW_FIELDS = frozenset(
     """
-    idx verstr code_verstr timestamp note branch base_version user_meta parent
+    idx verstr code_verstr timestamp note branch base_version parent
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status imported_from forked_from forked_from_step

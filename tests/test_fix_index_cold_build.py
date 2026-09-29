@@ -75,7 +75,7 @@ def _seed(root):
     # A hand-edited run state, a YAML-typed metadata field, a verinfo file.
     _write(root, "0.0.1-dev.abc.r3", "run_state.yml", "state: [unclosed\n")
     _write(root, "0.0.1-dev.abc.r4", "run_state.yml", "- just\n- a list\n")
-    _record(storage, 20, when=None, archived=True, user_meta={"k": [1, 2.5, "x"]})
+    _record(storage, 20, when=None, archived=True, env={"k": [1, 2.5, "x"]})
     os.makedirs(_dir(root, "legacy_verinfo"))
     _write(root, "legacy_verinfo", "metadata.yml", "stamping: {}\n")
     os.makedirs(_dir(root, "claim_without_metadata"))

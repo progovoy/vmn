@@ -956,7 +956,7 @@ metrics.acc >= 0.9 and (kind = "inner" or depth = 0)
 |---|---|
 | `=` `==` `!=` | equality. Types must match: a number never equals a string, `true` never equals `1` |
 | `<` `<=` `>` `>=` | ordering, for two numbers or two strings. Mixed types simply don't match |
-| `~` / `contains` / `!~` | case-insensitive substring; the right-hand side must be a string. Against a list field (`command`, `children`) it matches any element — `command ~ "train.py"` — and against `user_meta` any value |
+| `~` / `contains` / `!~` | case-insensitive substring; the right-hand side must be a string. Against a list field (`command`, `children`) it matches any element — `command ~ "train.py"` — and against a dict field (`tags`) any value |
 | `in (…)` / `not in (…)` | membership in a literal list |
 | `and` `or` `not`, `(…)` | the usual, `not` binding tightest |
 

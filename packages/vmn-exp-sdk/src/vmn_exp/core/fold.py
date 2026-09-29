@@ -305,7 +305,6 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "note": meta.get("note"),
         "branch": meta.get("branch"),
         "base_version": meta.get("base_version"),
-        "user_meta": meta.get("user_meta"),
         "name": meta.get("name"),
         "archived": bool(meta.get("archived", False)),
         "tags": fold_tags(fold),

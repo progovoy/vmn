@@ -737,7 +737,7 @@ summary), `imported_from` (set on runs imported from external tools) and
 `--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
 JSON array instead of the table — one object per run with the keys of an SDK
 [`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`, `code_verstr`,
-`timestamp`, `note`, `create_note`, `branch`, `base_version`, `user_meta`,
+`timestamp`, `note`, `create_note`, `branch`, `base_version`,
 `params`, `metrics`, `parent`, `last_metric_at`, `name`, `tags`, `archived`,
 the status fields (`status`,
 `exit_code`, `started_at`, `finished_at`, `heartbeat`, `duration_sec`, `pid`,

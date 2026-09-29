@@ -13,9 +13,9 @@ def _row(verstr, **kw):
 ROWS = [
     _row("a", params={"lr": 0.0001}, metrics={"x": 3000.0, "d": -0.01},
          command=["python", "train.py"], children=["kid.r1"],
-         user_meta={"team": "Vision"}),
+         tags={"team": "Vision"}),
     _row("b", params={"lr": 0.01}, metrics={"x": 10.0, "d": 0.5},
-         command=["bash", "eval.sh"], children=[], user_meta={"team": "nlp"}),
+         command=["bash", "eval.sh"], children=[], tags={"team": "nlp"}),
 ]
 
 
@@ -97,7 +97,7 @@ def test_contains_on_children():
 
 
 def test_contains_matches_any_dict_value():
-    assert _verstrs('user_meta ~ "vision"') == ["a"]
+    assert _verstrs('tags ~ "vision"') == ["a"]
 
 
 def test_contains_on_empty_list_is_false():

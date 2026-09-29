@@ -466,7 +466,6 @@ def test_existing_list_row_keys_are_unchanged(app_layout):
         "note",
         "branch",
         "base_version",
-        "user_meta",
         "metrics",
     ):
         assert key in row, key
