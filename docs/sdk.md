@@ -77,7 +77,7 @@ start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
-    system_metrics=False,
+    system_metrics=None,
     sync_interval_sec=30,
     snapshot=True,
     run_id=None,
@@ -85,6 +85,7 @@ start_run(
     name=None,
     tags=None,
     capture_env=None,
+    capture_output=False,
 )
 ```
 
@@ -97,7 +98,7 @@ start_run(
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
-| `system_metrics` | record this process's CPU/memory (and GPU, with `pynvml`) as `sys_*` metrics on every beat. Needs `pip install "vmn-exp-sdk[sysmetrics]"` |
+| `system_metrics` | `None` (default) records this process's CPU/memory (and GPU, with `pynvml` installed) as `sys_*` metrics on every beat; `False` turns sampling off; `True` samples even when `experiment.system_metrics: false` is set in conf.yml but still respects `VMN_SYSTEM_METRICS=0`. `psutil` ships with the SDK; GPU metrics need `pip install pynvml`. A missing sampler dependency is silent (debug log only). Non-zero ranks record nothing, system metrics included |
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 | `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
@@ -105,9 +106,21 @@ start_run(
 | `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn-exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 | `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
+| `capture_output` | `True` tees this process's stdout/stderr into the run's `output.log` artifact — the same artifact [`vmn-exp run`](experiments.md#console-output-outputlog) keeps. Captured at the file-descriptor level (fds 1 and 2), so `print`, logging handlers, C extensions and subprocesses are all kept, and everything still reaches the original streams. Capped like the CLI (`$VMN_EXP_OUTPUT_CAP_MB`, default 10; first and last halves kept), uploaded off-thread every `sync_interval_sec` and at `finish()` (SIGTERM and interpreter exit included); the fds are restored at finish. Off by default: redirecting a host process's descriptors means it writes to pipes rather than its TTY, which an interactive debugger or a notebook kernel may not expect. Under `vmn-exp run` the CLI already keeps the output, so leave it off there |
 
-The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn-exp
-run`, which measures the child's process tree instead):
+The system metrics are on by default — here and on `vmn-exp run`, which
+measures the child's process tree instead. Opt out, strongest first:
+`system_metrics=False` / `vmn-exp run --no-system-metrics`, then
+`VMN_SYSTEM_METRICS=0` (or `false`/`no`/`off`), then conf.yml:
+
+```yaml
+conf:
+  experiment:
+    system_metrics: false
+```
+
+Samples are taken on the heartbeat thread, once per beat (30 s by default), so
+a run shorter than one beat records none.
 
 | Metric | Meaning |
 |---|---|
@@ -148,10 +161,10 @@ subprocess you launch can use vmn freely.
 
 ### Runs without a git checkout (containers)
 
-A training image built from [`vmn snapshot export`](experiments.md) has no `.git`.
+A training image built from [`vmn-exp export`](experiments.md#export) has no `.git`.
 Set `VMN_SNAPSHOT_METADATA` to the exported `vmn_metadata.yml` (or its directory)
 and `VMN_EXPERIMENT_DIR` to where runs should be recorded, and `start_run()`
-records against that snapshot — the same git-free mode the CLI's `--from-snapshot`
+records against that exported code — the same git-free mode the CLI's `--from-snapshot`
 uses:
 
 ```python
@@ -163,14 +176,19 @@ with start_run() as run:            # app name comes from the metadata
 `app_name` may still be passed (or set via `VMN_APP_NAME`); otherwise the app the
 snapshot names is used.
 
-To record to S3 from a pod, set `VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`,
-default `vmn-experiments`, and `VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like).
-With `VMN_EXPERIMENT_DIR` too, entries are appended to that local scratch dir and the
-new lines are synced to the bucket every `sync_interval_sec`; with the bucket alone
-the run writes straight to S3. The job creates its own record — no prefix needs to
-exist beforehand — and `vmn-exp ui --s3-bucket <bucket>` reads it. `storage=` still
-overrides all of this. With neither a dir nor a bucket, `start_run()` raises a
-`ValueError` naming `VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_BUCKET`.
+To record to a shared store from a pod, set `VMN_EXPERIMENT_STORE` to a store URI —
+`s3://bucket/prefix`, `gs://bucket/prefix` (`[gcs]` extra), `az://container/prefix`
+(`[azure]` extra), `file:///mnt/nfs/exps` or a plugin scheme (see
+[Storage](experiments.md#storage-local-s3-gcs-azure-plugins)).
+`VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`, default `vmn-experiments`, and
+`VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like) is shorthand for an `s3://`
+URI; `VMN_EXPERIMENT_STORE` wins over it. With `VMN_EXPERIMENT_DIR` too, entries are
+appended to that local scratch dir and the new lines are synced to the store every
+`sync_interval_sec`; with the store alone the run writes straight to it. The job
+creates its own record — no prefix needs to exist beforehand — and
+`vmn-exp ui --store <uri>` reads it. `storage=` still overrides all of this. With
+neither a dir nor a store, `start_run()` raises a `ValueError` naming
+`VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_STORE`.
 
 ---
 
@@ -355,7 +373,7 @@ manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
 remove=None, storage=None)` take any [addressing form](experiments.md#addressing-experiments),
 return the verstr they changed and raise `ValueError` for a ref that names no
 run. Archiving writes `archived: true` into `metadata.yml` (atomically on disk,
-under the ETag on S3 — the same path as `vmn snapshot note`); unarchiving
+under the ETag on S3); unarchiving
 removes it. Nothing is deleted, and nothing but listings treats an archived run
 differently — `vmn-exp prune` counts and deletes it like any finished run.
 
@@ -696,9 +714,45 @@ best = get_run("my_app", ref="latest")
   lists the declared x metrics.
 
 A `list_runs` row carries the latest value of each metric, the run's `name`
-(or `None`), its current `tags` and `archived` (a bool). To read a metric's
+(or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
+`format_version` (1 for runs written before it existed); runs written in a
+newer format than the installed SDK reads are left out of both, with a
+warning (see [How records are stored](experiments.md#how-records-are-stored)). To read a metric's
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
+
+### As pandas DataFrames
+
+```python
+from vmn_exp.sdk.reader import get_metric_history, runs_dataframe
+
+df = runs_dataframe("my_app", query="metrics.loss < 0.5", status="succeeded")
+df.sort_values("metrics.loss").head()
+
+loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timestamp, value
+```
+
+Needs pandas: `pip install "vmn-exp-sdk[pandas]"` (without it both raise an
+`ImportError` naming that extra).
+
+- `runs_dataframe(app_name=None, **list_runs_kwargs)` — the `list_runs` rows as
+  one flat DataFrame, like `mlflow.search_runs()`. It takes every `list_runs`
+  keyword (`storage`, `query`, `status`, `sort`, `last`, `include_archived`, ...),
+  so filtering stays in the query language rather than a second API. Columns:
+  `run_id` (the verstr), `idx`, `name`, `status`, `kind`, `parent`,
+  `tree_status`, `timestamp`/`started_at`/`finished_at` (UTC datetimes),
+  `duration_sec`, `exit_code`, `host`, `branch`, `code_verstr`, `note`,
+  `archived`, then `metrics.<k>`, `params.<k>`, `tags.<k>` and `inputs.<name>`
+  (the input's URI), each group sorted. A run missing a value reads `NaN`/`None`.
+  `metrics.<k>` is the same fold the query language's `metrics.<k>` sees, so
+  numeric params appear there too.
+- `get_metric_history(metric, app_name=None, ref="latest", *, storage=None)` —
+  every logged value of one metric in one run, in log order (`step` is `None`
+  where none was logged); empty when the run never logged it. The metric comes
+  first because it is the only argument without a default.
+
+A separate function rather than `list_runs(output="pandas")`: one return type
+per function keeps `list_runs` free of a pandas code path and type-checkable.
 
 `vmn-exp list`, the ui and `list_runs()` read through an incremental index
 (`list_runs(..., use_index=False)` reads storage directly and writes no index
@@ -859,8 +913,16 @@ way as experiment runs:
 
 1. `VMN_SNAPSHOT_METADATA` set → container/snapshot mode
 2. `VMN_EXPERIMENT_DIR` set → that directory
-3. Otherwise → the current git checkout's `.vmn` root (with `VMN_EXPERIMENT_BUCKET`
-   and other env overrides applied)
+3. Otherwise → the current git checkout's `.vmn` root
+
+The local root found this way fronts the remote store, if any:
+`VMN_EXPERIMENT_STORE` (a URI; `resolve_experiment_storage(store=...)` in code),
+else the `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` shorthand for `s3://`.
+With no local root the store is used directly; a `file://` store *is* the root.
+The URI scheme picks the backend from the registry in `vmn_exp.storage.registry`
+(built-ins `file`, `s3`, `gs`, `az`; plugins via the `vmn_exp.storage`
+entry-point group). A backend whose SDK is missing raises `ImportError` naming
+the extra to install, e.g. `pip install 'vmn-exp-sdk[gcs]'`.
 
 ---
 
@@ -987,11 +1049,11 @@ For recording-only environments (container images, CI workers, air-gapped
 training jobs), install just the metrics writer:
 
 ```sh
-pip install vmn-exp-sdk           # + [s3] to record to a bucket, [sysmetrics] for sys_* metrics
+pip install vmn-exp-sdk           # + [s3]/[gcs]/[azure] to record to a bucket; pynvml for GPU sys_* metrics
 ```
 
 `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
-needs. It depends only on `PyYAML` and `filelock`: no vmn, no GitPython, no git
+needs. It depends only on `PyYAML`, `filelock` and `psutil`: no vmn, no GitPython, no git
 binary. Creating a run from a git checkout (cold start, snapshot capture), the
 `vmn-exp` CLI and the dashboard live in `vmn-exp`, which depends on this
 package; in a slim install, `start_run()` in a checkout fails with a pointer to
@@ -1000,15 +1062,15 @@ packages split.
 
 ### Git-free recording
 
-With `VMN_SNAPSHOT_METADATA` pointing to a snapshot metadata file (produced
-by `vmn snapshot export` and baked into your image) and `VMN_EXPERIMENT_DIR`
+With `VMN_SNAPSHOT_METADATA` pointing to the `vmn_metadata.yml` that
+`vmn-exp export` writes (baked into your image) and `VMN_EXPERIMENT_DIR`
 pointing to a writable directory, `start_run()` works with no git checkout and
 no GitPython installed:
 
 ```python
 import os
 
-os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/metadata.yml"
+os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/vmn_metadata.yml"
 os.environ["VMN_EXPERIMENT_DIR"]    = "/mnt/experiments"
 
 from vmn_exp.sdk import start_run

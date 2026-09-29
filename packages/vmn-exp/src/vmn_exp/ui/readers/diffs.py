@@ -13,7 +13,6 @@ from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.core.log import latest_metrics, load_log
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import experiment_storage
-from vmn_exp.ui.readers.snapshots import _load_metadata
 
 MAX_DIFF_BYTES = 2 * 1024 * 1024
 NO_BASE_COMMIT = "tree diff unavailable: {} has no base commit"
@@ -63,7 +62,7 @@ def _resolve_pair(storage, app_name, ref1, ref2):
 
 
 def _record_key(storage, app_name, verstr):
-    meta = _load_metadata(storage, app_name, verstr) or {}
+    meta = storage.load_metadata(app_name, verstr) or {}
     return verstr, meta.get("diff_hash"), meta.get("base_commit"), meta.get("timestamp")
 
 

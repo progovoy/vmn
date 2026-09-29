@@ -1,8 +1,7 @@
-"""The ``vmn-exp`` command: experiments, the model registry, the UI and snapshots.
+"""The ``vmn-exp`` command: experiments, the model registry and the UI.
 
 ``vmn-exp create app`` / ``vmn-exp run app -- cmd`` run experiment actions;
-``vmn-exp model ...``, ``vmn-exp ui`` and ``vmn-exp snapshot ...`` reach the
-other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
+``vmn-exp model ...`` and ``vmn-exp ui`` reach the other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
 through ``version_stamp.api``, with only its own commands registered.
 """
 import copy
@@ -11,7 +10,7 @@ import sys
 from version_stamp.api import VMN_ARGS, find_command, vmn_run
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 
-OWN_COMMANDS = ("exp", "experiment", "model", "ui", "snapshot")
+OWN_COMMANDS = ("exp", "experiment", "model", "ui")
 
 
 def _to_vmn_argv(argv):
@@ -26,7 +25,7 @@ def vmn_exp_run(argv):
     register_all()
     if argv and argv[0] in VMN_ARGS and argv[0] not in EXPERIMENT_ACTIONS:
         print(
-            f"vmn-exp handles experiments, models, the UI and snapshots; "
+            f"vmn-exp handles experiments, models and the UI; "
             f"run 'vmn {argv[0]}' for that.",
             file=sys.stderr,
         )

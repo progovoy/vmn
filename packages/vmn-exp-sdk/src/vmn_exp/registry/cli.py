@@ -38,6 +38,7 @@ def _get_storage(args):
     """Build experiment storage for registry operations from args / env."""
     return resolve_experiment_storage(
         dir=getattr(args, "dir", None),
+        store=getattr(args, "store", None),
         bucket=getattr(args, "bucket", None),
         prefix=getattr(args, "prefix", None),
         endpoint_url=getattr(args, "endpoint_url", None),
@@ -265,7 +266,14 @@ def _add_storage_args(parser):
         default=None,
         help="Experiment storage directory (overrides VMN_EXPERIMENT_DIR)",
     )
-    parser.add_argument("--bucket", default=None, help="S3 bucket name")
+    parser.add_argument(
+        "--store", default=None,
+        help="Storage URI: s3://bucket/prefix, gs://..., az://..., file:///dir",
+    )
+    parser.add_argument(
+        "--bucket", default=None,
+        help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)",
+    )
     parser.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
     parser.add_argument(
         "--endpoint-url",

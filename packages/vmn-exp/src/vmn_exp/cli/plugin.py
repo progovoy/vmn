@@ -1,4 +1,4 @@
-"""Built-in plugin: register experiment, snapshot and ui CommandSpecs.
+"""Built-in plugin: register experiment, ui and model CommandSpecs.
 
 This module is on the EXPERIMENTS side of the boundary (classified via
 EXPERIMENTS_GLOBS in tests/test_architecture_boundary.py).  It is loaded
@@ -6,8 +6,8 @@ by ``version_stamp.cli.plugins`` via importlib — not via a direct import — s
 the AST-level boundary scanner never sees a stamping→experiments edge.
 
 On import this module:
-  1. Registers CommandSpecs for ``experiment``/``exp``, ``snapshot``, and
-     ``ui`` in the plugin_api registry.
+  1. Registers CommandSpecs for ``experiment``/``exp``, ``ui`` and
+     ``model`` in the plugin_api registry.
   2. Registers a dev-version loader so that ``output._goto_dev_version`` can
      restore a dev-version snapshot without importing this module directly.
 """
@@ -18,7 +18,6 @@ import os
 from version_stamp.api import (
     VMN_LOGGER,
     CommandSpec,
-    _get_repo_status,
     find_command,
     register_command,
     register_dev_version_loader,
@@ -28,54 +27,6 @@ from version_stamp.api import (
 # ---------------------------------------------------------------------------
 # Argparse helpers (moved from version_stamp.cli.args)
 # ---------------------------------------------------------------------------
-
-def _add_snapshot_parser(subprasers):  # noqa: N802
-    psnap = subprasers.add_parser(
-        "snapshot",
-        help="Create and manage local snapshots of uncommitted/unpushed changes",
-    )
-    psnap.set_defaults(strict_version=False)
-    psnap.add_argument(
-        "action",
-        nargs="?",
-        default="create",
-        choices=["create", "list", "show", "note", "diff", "export", "restore"],
-        help="Snapshot action: create (default), list, show, note, diff, export, restore",
-    )
-    psnap.add_argument("name", help="The application's name")
-    psnap.add_argument("-v", "--version", default=None, required=False,
-                       help="The dev version string (for show/note/diff/export actions)")
-    psnap.add_argument("--note", default=None, required=False,
-                       help="A description note for the snapshot")
-    psnap.add_argument("--backend", default="local", choices=["local", "s3"],
-                       help="Storage backend for snapshots (default: local)")
-    psnap.add_argument("--bucket", default=None, required=False,
-                       help="S3 bucket name (required for s3 backend)")
-    psnap.add_argument("--endpoint-url", default=None, required=False,
-                       help="Custom S3 endpoint URL (for MinIO, DigitalOcean Spaces, etc.)")
-    psnap.add_argument("--prefix", default="vmn-snapshots", required=False,
-                       help="S3 key prefix for snapshot storage (default: vmn-snapshots)")
-    psnap.add_argument("--to", default=None, required=False,
-                       help="Second version for diff comparison (or 'current' for working state)")
-    psnap.add_argument("--tool", default=None, required=False,
-                       help="External diff tool (e.g., bcompare, meld, vimdiff). "
-                            "Falls back to git config diff.tool")
-    psnap.add_argument("-o", "--output", default=None, required=False,
-                       help="Output path for export (default: {verstr}.tar.gz)")
-    psnap.add_argument("--meta", action="append", default=None, required=False,
-                       help="Key=value metadata pair (can be specified multiple times)")
-    psnap.add_argument("--meta-file", default=None, required=False,
-                       help="Path to YAML file containing metadata key-value pairs")
-    psnap.add_argument("--filter", action="append", default=None, required=False,
-                       help="Filter snapshots by key=value metadata "
-                            "(for list action, can be repeated)")
-    psnap.add_argument("--verbose", action="store_true", default=False,
-                       help="Show full ISO timestamps in list output")
-    psnap.add_argument("--latest", action="store_true", default=False,
-                       help="Use the most recent snapshot (for show/note/diff/export)")
-    psnap.add_argument("--last", type=int, default=None,
-                       help="Show only the N most recent snapshots (for list)")
-
 
 EXPERIMENT_ACTIONS = [
     "create", "run", "add", "list", "show", "compare", "diff", "restore",
@@ -148,7 +99,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="list/show: print machine-readable JSON")
     pexp.add_argument("--from-snapshot", default=None,
                       help="Path to vmn_metadata.yml or directory containing it. "
-                           "Creates experiment from exported snapshot (no git required). "
+                           "Records against a tree from 'vmn-exp export' (no git required). "
                            "Falls back to VMN_SNAPSHOT_METADATA env var.")
     pexp.add_argument("--no-env", dest="capture_env", action="store_false", default=None,
                       help="create/run: skip environment capture (packages, python, platform). "
@@ -169,9 +120,18 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--kill-grace-sec", type=float, default=None,
                       help="Seconds a child gets to exit after a forwarded signal "
                            "before it is killed during 'run'.")
-    pexp.add_argument("--system-metrics", action="store_true", default=False,
-                      help="Record the child process tree's CPU/memory as sys_* metrics "
-                           "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
+    pexp.add_argument("--no-capture-output", dest="capture_output", action="store_false",
+                      default=True,
+                      help="run: don't keep the command's stdout/stderr as the output.log "
+                           "artifact (it still streams to the terminal).")
+    pexp.add_argument("--output-cap-mb", type=float, default=None,
+                      help="run: size cap of output.log; past it the first and last "
+                           "halves are kept (default: VMN_EXP_OUTPUT_CAP_MB or 10).")
+    pexp.add_argument("--no-system-metrics", dest="system_metrics", action="store_false",
+                      default=None,
+                      help="run: don't record the child process tree's CPU/memory/GPU as "
+                           "sys_* metrics. Overrides VMN_SYSTEM_METRICS and conf "
+                           "system_metrics settings.")
     pexp.add_argument("--interval", type=float, default=None,
                       help="watch: re-check every N seconds (default: check once, for cron)")
     pexp.add_argument("--within", default=None,
@@ -179,7 +139,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "default 1d)")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
-    pexp.add_argument("--bucket", default=None, help="S3 bucket name")
+    pexp.add_argument("--store", default=None,
+                      help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
+                           "file:///dir (or VMN_EXPERIMENT_STORE)")
+    pexp.add_argument("--bucket", default=None,
+                      help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
     pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
     # import-mlflow flags
@@ -215,6 +179,8 @@ def _add_ui_parser(subprasers):  # noqa: N802
                           "(default: ~/.vmn-ui)")
     pui.add_argument("--repo", action="append", default=None,
                      help="Attach a local checkout as a workspace (repeatable)")
+    pui.add_argument("--store", default=None,
+                     help="Read-only experiment store URI (s3://, gs://, az://, file://)")
     pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
     pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
     pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
@@ -229,120 +195,6 @@ def _add_ui_parser(subprasers):  # noqa: N802
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
-
-def _handle_snapshot(vmn_ctx):
-    """Handle the ``vmn snapshot`` command. Moved from cli/commands.py."""
-    from vmn_exp.snapshot import (
-        _build_user_meta,
-        _get_storage,
-        _resolve_verstr,
-        snapshot_create,
-        snapshot_diff,
-        snapshot_export,
-        snapshot_list,
-        snapshot_note,
-        snapshot_restore,
-        snapshot_show,
-    )
-
-    vmn_ctx.params["backend"] = vmn_ctx.args.backend
-    vmn_ctx.params["bucket"] = getattr(vmn_ctx.args, "bucket", None)
-    vmn_ctx.params["endpoint_url"] = getattr(vmn_ctx.args, "endpoint_url", None)
-    vmn_ctx.params["prefix"] = getattr(vmn_ctx.args, "prefix", "vmn-snapshots")
-    vmn_ctx.params["filter"] = getattr(vmn_ctx.args, "filter", None)
-    vmn_ctx.params["verbose"] = getattr(vmn_ctx.args, "verbose", False)
-    vmn_ctx.params["last"] = getattr(vmn_ctx.args, "last", None)
-
-    conf_storage = getattr(vmn_ctx.vcs, "snapshot_storage", None) or {}
-    if not vmn_ctx.params.get("bucket") and conf_storage.get("bucket"):
-        vmn_ctx.params["bucket"] = conf_storage["bucket"]
-    if vmn_ctx.params.get("backend") == "local" and conf_storage.get("backend"):
-        vmn_ctx.params["backend"] = conf_storage["backend"]
-    if not vmn_ctx.params.get("prefix") or vmn_ctx.params["prefix"] == "vmn-snapshots":
-        vmn_ctx.params["prefix"] = conf_storage.get("prefix", "vmn-snapshots")
-    if not vmn_ctx.params.get("endpoint_url") and conf_storage.get("endpoint_url"):
-        vmn_ctx.params["endpoint_url"] = conf_storage["endpoint_url"]
-
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally", "detached", "pending", "outgoing",
-        "version_not_matched", "dirty_deps", "deps_synced_with_conf",
-    }
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        app_name = vmn_ctx.vcs.name
-        if "repo_tracked" not in status.state:
-            VMN_LOGGER.error(
-                "Repository not initialized. Run:\n\n"
-                "  vmn init\n"
-                f"  vmn stamp -r patch {app_name}\n"
-            )
-        elif "app_tracked" not in status.state:
-            VMN_LOGGER.error(
-                f"App '{app_name}' not initialized. Run:\n\n"
-                f"  vmn stamp -r patch {app_name}\n"
-            )
-        return 1
-
-    action = vmn_ctx.args.action
-
-    if action in ("show", "note", "diff", "export", "restore"):
-        latest = getattr(vmn_ctx.args, "latest", False)
-        verstr = vmn_ctx.args.version
-        to_ver = getattr(vmn_ctx.args, "to", None) if action == "diff" else None
-
-        if verstr is None and not latest:
-            latest = True
-        if action == "diff" and to_ver is None:
-            to_ver = "current"
-            vmn_ctx.args.to = to_ver
-
-        storage = _get_storage(vmn_ctx.vcs, vmn_ctx.params)
-
-        resolved, err_msg = _resolve_verstr(
-            storage, vmn_ctx.vcs.name, verstr, latest=latest
-        )
-        if err_msg:
-            VMN_LOGGER.error(err_msg)
-            return 1
-        vmn_ctx.args.version = resolved
-
-        if to_ver and to_ver != "current":
-            resolved_to, err_msg = _resolve_verstr(storage, vmn_ctx.vcs.name, to_ver)
-            if err_msg:
-                VMN_LOGGER.error(err_msg)
-                return 1
-            vmn_ctx.args.to = resolved_to
-
-    if action == "create":
-        user_meta = _build_user_meta(
-            vmn_ctx.args.meta, getattr(vmn_ctx.args, "meta_file", None)
-        )
-        return snapshot_create(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.note,
-                               user_meta=user_meta)
-    elif action == "list":
-        return snapshot_list(vmn_ctx.vcs, vmn_ctx.params)
-    elif action == "show":
-        return snapshot_show(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    elif action == "note":
-        return snapshot_note(vmn_ctx.vcs, vmn_ctx.params,
-                             vmn_ctx.args.version, vmn_ctx.args.note)
-    elif action == "diff":
-        return snapshot_diff(
-            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version,
-            getattr(vmn_ctx.args, "to", None), getattr(vmn_ctx.args, "tool", None),
-        )
-    elif action == "export":
-        return snapshot_export(
-            vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version,
-            getattr(vmn_ctx.args, "output", None),
-        )
-    elif action == "restore":
-        return snapshot_restore(vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version)
-    else:
-        VMN_LOGGER.error("Unknown snapshot action: %s", action)
-        return 1
-
 
 def _handle_experiment(vmn_ctx):
     from vmn_exp.cli.experiment import handle_experiment
@@ -395,6 +247,7 @@ def _exp_run_without_repo(args):
         os.environ["VMN_WRITER_ID"] = args.writer_id
 
     params = {
+        "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
@@ -436,8 +289,9 @@ def _dev_version_loader(vcs, params, version):
     from vmn_exp.snapshot import (
         LocalSnapshotStorage,
         _restore_with_safety_net,
-        get_snapshot_storage,
     )
+    from vmn_exp.core.storage_resolve import store_uri
+    from vmn_exp.storage.registry import open_store
 
     storage = LocalSnapshotStorage(vcs.vmn_root_path)
     metadata, patches = storage.load(vcs.name, version)
@@ -448,20 +302,17 @@ def _dev_version_loader(vcs, params, version):
 
     if metadata is None:
         conf_storage = getattr(vcs, "snapshot_storage", None) or {}
-        if conf_storage.get("bucket"):
+        store = conf_storage.get("uri") or store_uri(conf_storage, "vmn-snapshots")
+        if store:
             try:
-                s3_storage = get_snapshot_storage(
-                    "s3",
-                    bucket=conf_storage["bucket"],
-                    prefix=conf_storage.get("prefix", "vmn-snapshots"),
-                    endpoint_url=conf_storage.get("endpoint_url"),
+                metadata, patches = open_store(store, subdir="snapshots").load(
+                    vcs.name, version
                 )
-                metadata, patches = s3_storage.load(vcs.name, version)
             except Exception:
-                VMN_LOGGER.debug("S3 snapshot load failed", exc_info=True)
+                VMN_LOGGER.debug("Remote snapshot load failed", exc_info=True)
 
     if metadata is None:
-        VMN_LOGGER.error("Snapshot %s not found locally or in configured storage", version)
+        VMN_LOGGER.error("Dev version %s not found locally or in configured storage", version)
         return 1
 
     return _restore_with_safety_net(vcs, params, metadata, patches)
@@ -476,16 +327,9 @@ def _register(spec) -> None:
         register_command(spec)
 
 
-def register_snapshot() -> None:
-    """The ``vmn.plugins`` entry point: ``vmn snapshot`` and dev-version goto.
+def register_dev_version() -> None:
+    """The ``vmn.plugins`` entry point: lets ``vmn goto`` restore dev versions.
     Idempotent, so it survives a registry reset."""
-    _register(CommandSpec(
-        names=("snapshot",),
-        add_parser=_add_snapshot_parser,
-        handle=_handle_snapshot,
-        access="local",
-        read_only_actions=frozenset({"list", "show", "diff", "export"}),
-    ))
     register_dev_version_loader(_dev_version_loader)
 
 
@@ -493,7 +337,7 @@ def register_all() -> None:
     """Every command `vmn-exp` serves. Idempotent."""
     from vmn_exp.registry.cli import add_model_parser, model_run_without_repo
 
-    register_snapshot()
+    register_dev_version()
     _register(CommandSpec(
         names=("experiment", "exp"),
         add_parser=lambda sp: (

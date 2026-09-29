@@ -10,6 +10,7 @@ import json
 import math
 
 from vmn_exp.core.log import experiment_row
+from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.status import status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
@@ -40,6 +41,7 @@ def show_payload(
     run.update(status_fields(run_state, observed_at=observed_at))
     run.update(tree)
     run["base_commit"] = metadata.get("base_commit")
+    run["format_version"] = record_format_version(metadata)
     run["has_dep_patches"] = bool(metadata.get("has_dep_patches"))
     run["patches"] = patch_lines(patches)
     run["log"] = log[-log_tail:] if log_tail else log

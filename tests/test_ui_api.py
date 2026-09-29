@@ -328,32 +328,16 @@ def test_ui_experiment_diff_endpoint(app_layout, capfd):
     assert "BETA_LINE" in body["diff"]
 
 
-def test_ui_snapshots_endpoints(app_layout, capfd):
-    """Snapshots browser: list + detail over the snapshots subdir."""
-    from helpers import _snapshot
-
+def test_ui_has_no_snapshots_endpoints(app_layout, capfd):
+    """The snapshot browser API went with the `vmn snapshot` command."""
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(app_layout.app_name, "patch")
 
-    _make_dirty(app_layout, "snap.txt", "snapshot content")
-    capfd.readouterr()
-    assert _snapshot(app_layout.app_name, note="ui snap") == 0
-    verstr = extract_dev_verstr(capfd.readouterr().out)
-
     client = _client(app_layout)
-    r = client.get(f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots")
-    assert r.status_code == 200
-    rows = r.json()
-    assert len(rows) == 1
-    assert rows[0]["verstr"] == verstr
-    assert rows[0]["note"] == "ui snap"
-
-    r = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots/{verstr}"
-    )
-    assert r.status_code == 200
-    assert r.json()["metadata"]["verstr"] == verstr
+    base = f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
+    assert client.get(base).status_code == 404
+    assert client.get(f"{base}/0.0.1-dev.abc1234.def5678").status_code == 404
 
 
 def test_ui_root_app_names_in_urls(app_layout, capfd):

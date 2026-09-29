@@ -50,6 +50,7 @@ from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F40
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
 from vmn_exp.sdk.metric_defs import MetricDefinitions
+from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
@@ -101,7 +102,7 @@ def start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
-    system_metrics=False,
+    system_metrics=None,
     sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
     snapshot=True,
     run_id=None,
@@ -109,18 +110,21 @@ def start_run(
     name=None,
     tags=None,
     capture_env=None,
+    capture_output=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
     ``app_name=None`` resolves the app from the current checkout. Use the result
     as a context manager, or call ``finish()`` yourself.
 
-    With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn snapshot
+    With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn-exp
     export``) no git checkout is needed: the run records against that snapshot
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
 
-    ``system_metrics=True`` records this process's CPU and memory (and GPU, with
-    ``pynvml``) as ``sys_*`` metrics on every heartbeat.
+    System metrics — this process's CPU and memory (and GPU, with ``pynvml``) —
+    are recorded as ``sys_*`` metrics on every heartbeat unless opted out:
+    ``system_metrics=False`` > ``VMN_SYSTEM_METRICS=0`` > conf
+    ``experiment.system_metrics: false``. ``True`` overrides only the conf.
 
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
     one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
@@ -138,6 +142,12 @@ def start_run(
     On a non-zero rank of a distributed job (``RANK``, ``LOCAL_RANK`` with
     ``WORLD_SIZE > 1``, or ``SLURM_PROCID``) this returns a :class:`NoOpRun`
     that records nothing, unless ``all_ranks=True``.
+
+    ``capture_output=True`` tees this process's stdout/stderr (fds 1 and 2, so
+    subprocesses and C extensions too) into the run's ``output.log`` artifact,
+    capped by ``VMN_EXP_OUTPUT_CAP_MB`` (default 10), uploaded every
+    ``sync_interval_sec`` and at finish. Off by default: the process then
+    writes to pipes, not its TTY.
     """
     if not all_ranks and is_secondary_rank():
         return NoOpRun(app_name)
@@ -149,9 +159,11 @@ def start_run(
     ref = resume.requested_run_id(run_id)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
-        app_name, storage, verstr, prior_state = resume.locate(app_name, ref, storage)
+        app_name, storage, verstr, prior_state, exp_conf = resume.locate(
+            app_name, ref, storage
+        )
     else:
-        app_name, storage, verstr = create_record(
+        app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, snapshot, name,
             capture_env=capture_env,
         )
@@ -161,10 +173,11 @@ def start_run(
         app_name,
         verstr,
         heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
-        system_metrics=system_metrics,
+        system_metrics=sysmetrics.enabled(system_metrics, exp_conf),
         sync_interval_sec=sync_interval_sec,
         prior_state=prior_state,
         name=name,
+        capture_output=capture_output,
     )
     run._open()
     if prior_state is not None:
@@ -195,6 +208,7 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
         sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
         prior_state=None,
         name=None,
+        capture_output=False,
     ):
         self._storage = storage
         self.app_name = app_name
@@ -231,6 +245,9 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
             "vmn-exp-sync",
         )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
+        self._output = (
+            RunOutput(storage, app_name, verstr) if capture_output else None
+        )
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
         # Recording the run's outcome warns once per step; heartbeat chores and
@@ -269,6 +286,8 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
         self._publish()
         context.register(self)
         install_signal_handlers()
+        if self._output is not None:
+            self._chore_guard("output capture", self._output.start)
         self._heartbeat.start()
 
     def finish(self, exit_code=0):
@@ -304,6 +323,8 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
                     duration_sec=duration,
                 ),
             )
+            if self._output is not None:
+                self._record_guard("output log", self._record_output)
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
@@ -322,10 +343,16 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
             context.unregister(self)
         return True
 
+    def _record_output(self):
+        self._append(self._output.stop())
+
     def _close_remote_writers(self, deadline):
-        # One deadline for both: they upload in parallel, so waiting for each
+        # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        for what, writer in (("log", self._log_sync), ("state", self._state_publisher)):
+        writers = [("log", self._log_sync), ("state", self._state_publisher)]
+        if self._output is not None:
+            writers.append(("output log", self._output))
+        for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
 
@@ -466,6 +493,8 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
             return
         self._last_sync = time.monotonic()
         self._log_sync.submit(get_writer_id())
+        if self._output is not None:
+            self._output.request_upload()
 
 
 def _finalize_open_runs(exit_code=None, **final_state):

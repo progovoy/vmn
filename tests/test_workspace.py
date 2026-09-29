@@ -44,15 +44,15 @@ def test_vmn_depends_on_neither_exp_package():
     assert not [r for r in _project("vmn")["dependencies"] if r.startswith("vmn-exp")]
 
 
-def test_the_sdk_needs_only_yaml_and_filelock():
+def test_the_sdk_needs_only_yaml_filelock_and_psutil():
     names = sorted(r.split(">")[0].split("=")[0] for r in _project("vmn-exp-sdk")["dependencies"])
-    assert names == ["PyYAML", "filelock"]
+    assert names == ["PyYAML", "filelock", "psutil"]
 
 
 @pytest.mark.parametrize("dist, extras", [
     ("vmn", {"changelog"}),
-    ("vmn-exp-sdk", {"s3", "sysmetrics"}),
-    ("vmn-exp", {"ui", "s3", "sysmetrics", "mlflow"}),
+    ("vmn-exp-sdk", {"s3"}),
+    ("vmn-exp", {"ui", "s3", "mlflow"}),
 ])
 def test_documented_extras_exist(dist, extras):
     assert extras <= set(_project(dist).get("optional-dependencies", {}))
@@ -75,7 +75,7 @@ def test_the_commands_and_the_plugin_are_declared():
     assert set(_project("vmn")["scripts"]) >= {"vmn"}
     assert _project("vmn-exp")["scripts"] == {"vmn-exp": "vmn_exp.cli.main:main"}
     plugins = _project("vmn-exp")["entry-points"]["vmn.plugins"]
-    assert plugins == {"snapshot": "vmn_exp.cli.plugin:register_snapshot"}
+    assert plugins == {"dev_version": "vmn_exp.cli.plugin:register_dev_version"}
 
 
 def test_the_s3_import_error_names_the_extra_to_install():

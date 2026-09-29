@@ -2,6 +2,7 @@
 import os
 import subprocess
 
+import pytest
 
 from helpers import _SRC_PATH, _PY, _bootstrap
 
@@ -60,10 +61,31 @@ def test_vmn_exp_refuses_stamping_commands(app_layout):
     assert "vmn stamp" in proc.stderr
 
 
-def test_vmn_snapshot_works_through_the_installed_plugin(app_layout):
+def test_vmn_has_no_snapshot_command(app_layout, capfd):
+    _bootstrap(app_layout)
+    reset_logger()
+    with pytest.raises(SystemExit) as exc:
+        vmn_run(["snapshot", app_layout.app_name])
+    assert exc.value.code == 2
+    assert "invalid choice" in capfd.readouterr().err
+
+
+def test_vmn_exp_has_no_snapshot_command(app_layout):
+    _bootstrap(app_layout)
+    proc = _vmn_exp(app_layout, "snapshot", app_layout.app_name)
+    assert proc.returncode == 2, proc.stderr
+    assert "invalid choice" in proc.stderr
+
+
+def test_dirty_tree_hint_points_at_vmn_exp_create(app_layout, capfd):
     _bootstrap(app_layout)
     app_layout.write_file_commit_and_push("test_repo_0", "f.txt", "x")
     with open(os.path.join(app_layout.repo_path, "f.txt"), "a") as f:
         f.write("dirty\n")
+    capfd.readouterr()
     reset_logger()
-    assert vmn_run(["snapshot", app_layout.app_name])[0] == 0
+    assert vmn_run(["stamp", "-r", "patch", app_layout.app_name])[0] != 0
+    captured = capfd.readouterr()
+    output = captured.out + captured.err
+    assert f"vmn-exp create {app_layout.app_name}" in output
+    assert "vmn snapshot" not in output

@@ -41,7 +41,7 @@ FINAL_UPLOAD_TIMEOUT_SEC = "10"
 
 
 def write_snapshot_metadata(app, run_dir):
-    """The minimal ``vmn snapshot export`` metadata runs are recorded against."""
+    """The minimal ``vmn-exp export`` metadata runs are recorded against."""
     path = os.path.join(run_dir, "vmn_metadata.yml")
     if not os.path.exists(path):
         os.makedirs(run_dir, exist_ok=True)

@@ -12,6 +12,7 @@ from helpers import (
     _init_app,
     _run_vmn_init,
     _stamp_app,
+    _storage,
     extract_dev_verstr,
 )
 
@@ -109,9 +110,7 @@ def test_ui_restore_action_with_safety_net(app_layout, capfd):
     with open(p) as f:
         assert f.read() == "state A"
     # Safety net preserved the unsaved state B as a snapshot (recoverable).
-    snaps = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
-    ).json()
+    snaps = _storage(app_layout, subdir="snapshots").list_snapshots(app_layout.app_name)
     assert len(snaps) == 1
     assert "auto-saved before restore" in (snaps[0]["note"] or "")
 
@@ -308,67 +307,12 @@ def test_ui_goto_action_without_version(app_layout, capfd):
     assert "tip of the branch" in job["log"]
 
 
-def test_ui_snapshot_create_build_command():
+def test_ui_has_no_snapshot_create_action():
     from vmn_exp.ui.jobs import build_command
 
-    cmd, err = build_command("snapshot_create", "my_app", {"note": "wip refactor"})
-    assert err is None
-    assert cmd == ["vmn", "snapshot", "create", "my_app", "--note", "wip refactor"]
-
-    cmd, err = build_command("snapshot_create", "my_app", {})
-    assert err is None
-    assert cmd == ["vmn", "snapshot", "create", "my_app"]
-
-
-def test_ui_snapshot_create_action(app_layout, capfd):
-    """POST actions/snapshot_create captures the dirty working tree."""
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    _stamp_app(app_layout.app_name, "patch")
-    app_layout.write_file_commit_and_push("test_repo_0", "s.txt", "committed")
-    with open(os.path.join(app_layout.repo_path, "s.txt"), "w") as f:
-        f.write("dirty state")
-
-    client = _client(app_layout)
-    r = client.post(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/snapshot_create",
-        json={"note": "from the ui"},
-    )
-    assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
-    assert job["status"] == "succeeded", job.get("log")
-    assert job["noop"] is False
-
-    rows = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
-    ).json()
-    assert len(rows) == 1
-    assert rows[0]["note"] == "from the ui"
-
-
-def test_ui_snapshot_create_noop_on_clean_tree(app_layout, capfd):
-    """`vmn snapshot create` exits 0 with nothing captured when the working
-    tree is clean. The job must be flagged `noop` so the UI can tell 'nothing
-    to snapshot' apart from an actual new snapshot - the CLI's exit code alone
-    doesn't distinguish them."""
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    _stamp_app(app_layout.app_name, "patch")
-
-    client = _client(app_layout)
-    r = client.post(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/actions/snapshot_create",
-        json={},
-    )
-    assert r.status_code == 202
-    job = _wait_job(client, f"/api/v1/jobs/{r.json()['id']}")
-    assert job["status"] == "succeeded", job.get("log")
-    assert job["noop"] is True
-
-    rows = client.get(
-        f"/api/v1/workspaces/main/apps/{app_layout.app_name}/snapshots"
-    ).json()
-    assert rows == []
+    cmd, err = build_command("snapshot_create", "my_app", {"note": "wip"})
+    assert cmd is None
+    assert "Unknown action" in err
 
 
 def test_ui_workspace_isolation_on_stamp(app_layout, capfd):

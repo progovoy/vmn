@@ -21,14 +21,15 @@ dependencies = [
 [project.optional-dependencies]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "orjson>=3.9"]
 s3 = ["vmn-exp-sdk[s3]"]
-sysmetrics = ["vmn-exp-sdk[sysmetrics]"]
+gcs = ["vmn-exp-sdk[gcs]"]
+azure = ["vmn-exp-sdk[azure]"]
 mlflow = ["mlflow-skinny"]
 
 [project.scripts]
 vmn-exp = "vmn_exp.cli.main:main"
 
 [project.entry-points."vmn.plugins"]
-snapshot = "vmn_exp.cli.plugin:register_snapshot"
+dev_version = "vmn_exp.cli.plugin:register_dev_version"
 
 [project.urls]
 Homepage = "https://github.com/progovoy/vmn"

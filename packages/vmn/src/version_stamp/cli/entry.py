@@ -49,7 +49,7 @@ _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
 
 def _takes_repo_lock(args):
-    """False for the read-only experiment/snapshot actions, which are lock-free.
+    """False for the read-only experiment actions, which are lock-free.
 
     Reads lock semantics from the plugin registry so new commands can declare
     their read-only actions without editing this file.
@@ -203,7 +203,7 @@ def vmn_run(command_line=None):
     try:
         lock = get_repo_lock(root_path)
 
-        # start of non-parallel code section. Read-only experiment/snapshot
+        # start of non-parallel code section. Read-only experiment
         # actions never mutate the checkout, so they must not queue behind
         # (or block) a create that is allocating a verstr.
         if _takes_repo_lock(args):
@@ -334,7 +334,7 @@ def _vmn_run(args, root_path, lock=None):
                 dep_be.prepare_for_remote_operation()
                 del dep_be
 
-    # Plugin-managed commands (snapshot, experiment/exp) dispatch via the registry.
+    # Plugin-managed commands (experiment/exp, ui, model) dispatch via the registry.
     from version_stamp.cli.plugin_api import find as _find_plugin_spec_vmn
 
     _spec = _find_plugin_spec_vmn(vmnc.args.command)

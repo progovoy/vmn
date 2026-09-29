@@ -3,10 +3,12 @@
 
 ::
 
-    from vmn_exp.sdk.reader import get_run, list_runs
+    from vmn_exp.sdk.reader import get_run, list_runs, runs_dataframe
 
     for run in list_runs(status="failed"):
         print(run["verstr"], run["metrics"])
+
+    df = runs_dataframe(query="metrics.loss < 0.5")  # needs pandas
 
 Rows carry exactly what the dashboard shows for a run: its metadata, the latest
 value of every metric, the derived status fields and its place in the run tree.
@@ -38,6 +40,7 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.record_format import readable, record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.reserved import is_reserved_app
@@ -47,8 +50,8 @@ from vmn_exp.core.status import (
     run_state_observed_at,
 )
 from vmn_exp.core.tree import annotate_rows, run_status
-from vmn_exp.sdk import _resolve_app_name
-from vmn_exp.storage.cached import get_snapshot_storage
+from vmn_exp.sdk import _resolve_app_name, frames
+from vmn_exp.storage.open import get_snapshot_storage
 
 EXPERIMENTS_DIR = "experiments"
 
@@ -193,7 +196,7 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     read here — the caller loads the one it needs.
     """
     row = snapshot.row(verstr)
-    meta = storage.load_metadata(app_name, verstr) if row else None
+    meta = readable(storage.load_metadata(app_name, verstr)) if row else None
     if meta is None:
         return None, None
 
@@ -234,6 +237,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     schema = _metrics_schema(root_path, app_name)
     row = experiment_row(target["idx"], target["meta"], log, schema=schema)
     row.update(status)
+    row["format_version"] = record_format_version(target["meta"])
     row["log"] = log
     series = metric_series(log)
     row["series"] = series if x is None else join_all(series, x)
@@ -242,3 +246,35 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     )
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     return row
+
+
+# ---------------------------------------------------------------------------
+# pandas views (the optional ``vmn-exp-sdk[pandas]`` extra)
+# ---------------------------------------------------------------------------
+
+
+def runs_dataframe(app_name=None, **list_runs_kwargs):
+    """:func:`list_runs` as a pandas DataFrame, one row per run.
+
+    Takes every :func:`list_runs` keyword (``storage``, ``query``, ``status``,
+    ``sort``, ...). Columns are flat, like ``mlflow.search_runs()``: ``run_id``
+    (the verstr), ``name``, ``status``, ``kind``, ``parent``, the timestamps (UTC
+    datetimes), then ``metrics.<k>``, ``params.<k>``, ``tags.<k>`` and
+    ``inputs.<name>`` (the input's URI). Raises ImportError without pandas.
+    """
+    frames.require_pandas()
+    records = [frames.run_record(r) for r in list_runs(app_name, **list_runs_kwargs)]
+    return frames.to_dataframe(records, frames.run_columns(records))
+
+
+def get_metric_history(metric, app_name=None, ref="latest", *, storage=None):
+    """Every recorded value of *metric* in one run, as a DataFrame.
+
+    Columns ``step`` (None when logged without one), ``timestamp`` (UTC) and
+    ``value``, in log order; empty when the run never logged *metric*. *ref* is
+    resolved like :func:`get_run`'s. Raises ImportError without pandas.
+    """
+    frames.require_pandas()
+    series = get_run(app_name, ref, storage=storage)["series"]
+    records = frames.history_records(series.get(metric, []))
+    return frames.to_dataframe(records, frames.HISTORY_COLUMNS)
