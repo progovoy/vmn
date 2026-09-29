@@ -14,9 +14,9 @@ import time
 from vmn_exp.cli.run import _create_experiment, _Supervision
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.background import Coalescing
+from vmn_exp.core.status import FAILED, SUCCEEDED
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
-from vmn_exp.core.status import FAILED, SUCCEEDED
 from vmn_exp.core.sweep.early_stop import MedianStopper
 from vmn_exp.core.sweep.peer_points import PeerPoints
 from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
