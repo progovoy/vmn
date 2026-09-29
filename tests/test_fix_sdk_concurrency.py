@@ -5,6 +5,7 @@ A thread-pool sweep (Optuna ``n_jobs>1``, a ``ThreadPoolExecutor``) opens one
 parent through the process-global ``VMN_EXPERIMENT_ID``, and once they have all
 finished the environment must be exactly what it was before the first one.
 """
+import faulthandler
 import os
 import threading
 
@@ -174,6 +175,9 @@ def test_forked_child_inherits_no_open_run(app_layout):
         read_fd, write_fd = os.pipe()
         pid = os.fork()
         if pid == 0:  # child
+            # A child deadlocked on a lock inherited mid-hold dumps its stacks
+            # and exits instead of hanging the worker in waitpid forever.
+            faulthandler.dump_traceback_later(60, exit=True)
             try:
                 # atexit would run this in a child that exits normally: it must
                 # not finalize (and so mark failed) the parent's still-open run.
@@ -201,6 +205,9 @@ def test_run_started_in_a_forked_child_is_an_inner_run(app_layout):
         read_fd, write_fd = os.pipe()
         pid = os.fork()
         if pid == 0:  # child
+            # A child deadlocked on a lock inherited mid-hold dumps its stacks
+            # and exits instead of hanging the worker in waitpid forever.
+            faulthandler.dump_traceback_later(60, exit=True)
             try:
                 with start_run(app_layout.app_name, note="child") as inner:
                     pass
@@ -210,10 +217,11 @@ def test_run_started_in_a_forked_child_is_an_inner_run(app_layout):
             os.write(write_fd, verdict.encode())
             os._exit(0)
         os.close(write_fd)
-        os.waitpid(pid, 0)
+        _, status = os.waitpid(pid, 0)
         child_id = os.read(read_fd, 1000).decode()
         os.close(read_fd)
 
+    assert os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, "forked child hung"
     assert not child_id.startswith("error"), child_id
     assert _parents(app_layout)[child_id] == outer.id
 
