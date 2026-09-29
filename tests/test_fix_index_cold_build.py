@@ -9,7 +9,7 @@ import sys
 import pytest
 import yaml
 
-from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core import index_store as experiment_index_store, index_workers as experiment_index_workers
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.core.index import ExperimentIndex, direct_rows
@@ -28,7 +28,7 @@ def _logger():
 
 
 def _storage(root):
-    return get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    return open_storage(vmn_root_path=str(root), subdir="experiments")
 
 
 def _dir(root, verstr):

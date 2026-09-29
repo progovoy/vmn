@@ -1,6 +1,7 @@
 """``vmn exp --backend`` is gone: the bucket (flag > ``VMN_EXPERIMENT_BUCKET`` >
 conf.yml) alone selects S3.
 """
+from vmn_exp.storage.uri import s3_uri
 import os
 import subprocess
 
@@ -11,7 +12,7 @@ from moto import mock_aws
 
 from helpers import _PY, _SRC_PATH
 from vmn_exp.cli.main import vmn_exp_run
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -60,14 +61,13 @@ def _container(tmp_path, monkeypatch):
 
 
 def _local_runs(root):
-    local = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    local = open_storage(vmn_root_path=str(root), subdir="experiments")
     return local.list_snapshots(APP)
 
 
 def _bucket_runs():
-    return get_snapshot_storage(
-        "s3", bucket=BUCKET, prefix="vmn-experiments", subdir="experiments"
-    ).list_snapshots(APP)
+    storage = open_storage(s3_uri(BUCKET, "vmn-experiments"), subdir="experiments")
+    return storage.list_snapshots(APP)
 
 
 def test_backend_flag_is_rejected(tmp_path):

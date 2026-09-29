@@ -193,9 +193,6 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="Attach a local checkout as a workspace (repeatable)")
     pui.add_argument("--store", default=None,
                      help="Read-only experiment store URI (s3://, gs://, az://, file://)")
-    pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
-    pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
-    pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pui.add_argument("--read-only", action="store_true", default=False,
                      help="Disable all mutation endpoints")
     pui.add_argument("--no-browser", action="store_true", default=False,

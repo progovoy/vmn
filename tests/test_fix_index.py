@@ -1,16 +1,17 @@
 """ExperimentIndex: incremental leaderboard rows that match the direct fold."""
+from vmn_exp.storage.uri import s3_uri
 import os
 
 import pytest
 
-from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
 
 
 def _storage(root):
-    return get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    return open_storage(vmn_root_path=str(root), subdir="experiments")
 
 
 def _make(storage, i, entries_by_writer=None, run_state=None, note=None):
@@ -266,9 +267,10 @@ def test_cached_storage_with_a_remote_folds_like_the_reader(tmp_path, monkeypatc
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     with moto.mock_aws():
         boto3.client("s3").create_bucket(Bucket="vmn-bucket")
-        storage = get_snapshot_storage(
-            "local", vmn_root_path=str(tmp_path / "repo"), bucket="vmn-bucket",
-            prefix="exps", subdir="experiments",
+        storage = open_storage(
+            s3_uri("vmn-bucket", "exps"),
+            vmn_root_path=str(tmp_path / "repo"),
+            subdir="experiments",
         )
         verstrs = _seed(storage, n=2)
         storage.sync_log_to_remote(APP, verstrs[0], "w0")

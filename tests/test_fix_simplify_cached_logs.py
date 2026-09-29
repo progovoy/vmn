@@ -1,11 +1,12 @@
 """Local-first log reads fetch only what the remote has that local lacks."""
+from vmn_exp.storage.uri import s3_uri
 import os
 
 import boto3
 import pytest
 from moto import mock_aws
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 BUCKET = "vmn-bucket"
 V = "0.0.1-dev.aaa.bbb"
@@ -22,11 +23,9 @@ def s3():
 
 
 def _host(tmp_path, name):
-    return get_snapshot_storage(
-        "local",
+    return open_storage(
+        s3_uri(BUCKET, "exp"),
         vmn_root_path=str(tmp_path / name),
-        bucket=BUCKET,
-        prefix="exp",
         subdir="experiments",
     )
 

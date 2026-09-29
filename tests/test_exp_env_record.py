@@ -337,7 +337,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
     """git-free (VMN_SNAPSHOT_METADATA) mode still captures env."""
     from vmn_exp.core.env import capture_env
     from vmn_exp.core.from_snapshot import create_from_snapshot
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
     # Build minimal vmn_metadata.yml
     meta_path = tmp_path / "vmn_metadata.yml"
@@ -346,9 +346,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
         "base_version: 0.0.1\nbase_commit: abc\nbranch: master\n"
     )
 
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=str(tmp_path / "exp"), subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=str(tmp_path / "exp"), subdir="experiments")
 
     env = capture_env()
     verstr, err = create_from_snapshot(

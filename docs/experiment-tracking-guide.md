@@ -338,7 +338,7 @@ flowchart TD
         s3a["vmn-experiments/my_app/\n├── verstr.pod1/ log.pod1.jsonl\n├── verstr.pod2/ log.pod2.jsonl\n└── verstr.podN/ log.podN.jsonl"]
     end
 
-    s3 --> ui["vmn-exp ui --s3-bucket my-experiments\nLeaderboard + live curves"]
+    s3 --> ui["vmn-exp ui --store s3://my-experiments/vmn-experiments\nLeaderboard + live curves"]
 
     style pod1 fill:#e8f5e9,stroke:#388e3c
     style pod2 fill:#fff3e0,stroke:#f57c00
@@ -423,7 +423,7 @@ sequenceDiagram
 #### Step 3: View Results
 
 ```sh
-vmn-exp ui --s3-bucket my-experiments --s3-prefix vmn-experiments
+vmn-exp ui --store s3://my-experiments/vmn-experiments
 
 # Same UI as local mode: leaderboard, training curves,
 # side-by-side comparison, code diffs
@@ -625,7 +625,7 @@ Every command that takes an experiment reference supports these forms:
 | `VMN_EXPERIMENT_DIR` | Shared mount path (or use `--experiment-dir` flag) |
 | `VMN_SNAPSHOT_METADATA` | Path to `vmn_metadata.yml` (or use `--from-snapshot`) |
 | `VMN_EXPERIMENT_BUCKET` | S3 bucket runs are recorded to (or use `--bucket`); the job creates its own records |
-| `VMN_EXPERIMENT_PREFIX` | Key prefix inside the bucket (default `vmn-experiments`, matching `vmn-exp ui --s3-bucket`) |
+| `VMN_EXPERIMENT_PREFIX` | Key prefix inside the bucket (default `vmn-experiments`, matching `vmn-exp ui --store s3://<bucket>/vmn-experiments`) |
 | `VMN_EXPERIMENT_ENDPOINT_URL` | Custom S3 endpoint, e.g. MinIO (or use `--endpoint-url`) |
 
 ### Variables Set BY vmn (for your training script)
@@ -765,7 +765,7 @@ Your Kubernetes Job template runs `vmn-exp run` per pod (see pod specs above).
 
 ```sh
 vmn-exp ui --repo /mnt/fsx           # NFS mode
-vmn-exp ui --s3-bucket my-experiments # S3 mode
+vmn-exp ui --store s3://my-experiments/vmn-experiments # S3 mode
 
 # Open http://localhost:8265 — leaderboard + training curves
 ```

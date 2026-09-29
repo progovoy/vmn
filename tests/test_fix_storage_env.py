@@ -4,6 +4,7 @@ A pod has no conf.yml and often no git checkout: ``VMN_EXPERIMENT_BUCKET`` /
 ``VMN_EXPERIMENT_PREFIX`` / ``VMN_EXPERIMENT_ENDPOINT_URL`` let both the CLI and
 ``start_run()`` record straight to S3.
 """
+from vmn_exp.storage.uri import s3_uri
 import os
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import pytest
 import yaml
 from moto import mock_aws
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.core.writer import (
     merge_conf_into_params,
     merge_env_into_params,
@@ -96,8 +97,9 @@ def s3():
 
 
 def _bucket_runs():
-    return [m["verstr"] for m in get_snapshot_storage(
-        "s3", bucket=BUCKET, prefix="vmn-experiments", subdir="experiments"
+    return [m["verstr"] for m in open_storage(
+        s3_uri(BUCKET, "vmn-experiments"),
+        subdir="experiments",
     ).list_snapshots("trainer")]
 
 
@@ -108,8 +110,9 @@ def test_start_run_in_a_pod_records_straight_to_the_bucket(tmp_path, monkeypatch
         run.log_metric("loss", 0.25)
 
     assert _bucket_runs() == [run.id]
-    log = get_snapshot_storage(
-        "s3", bucket=BUCKET, prefix="vmn-experiments", subdir="experiments"
+    log = open_storage(
+        s3_uri(BUCKET, "vmn-experiments"),
+        subdir="experiments",
     ).load_merged_log("trainer", run.id)
     assert any(e.get("values", {}).get("loss") == 0.25 for e in log)
 

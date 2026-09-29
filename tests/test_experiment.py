@@ -532,11 +532,9 @@ def test_exp_alias(app_layout, capfd):
 
 def _exp_log(app_layout, verstr):
     """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=app_layout.repo_path, subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=app_layout.repo_path, subdir="experiments")
     return storage.load_merged_log(app_layout.app_name, verstr)
 
 

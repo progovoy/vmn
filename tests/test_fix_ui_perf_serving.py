@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
-from vmn_exp.snapshot import CachedSnapshotStorage, get_snapshot_storage
+from vmn_exp.snapshot import CachedSnapshotStorage, open_storage
 from vmn_exp.ui import server as server_mod
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
@@ -25,7 +25,7 @@ VITE_CONFIG = os.path.join(REPO_ROOT, "packages", "vmn-exp", "webui", "vite.conf
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
     storage.save(APP, V, {"verstr": V, "timestamp": "t"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

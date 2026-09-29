@@ -7,7 +7,7 @@ own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
@@ -20,7 +20,7 @@ from vmn_exp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):
-    return get_snapshot_storage("local", vmn_root_path=root_path, subdir="experiments")
+    return open_storage(vmn_root_path=root_path, subdir="experiments")
 
 
 def metrics_schema(root_path, app_name):

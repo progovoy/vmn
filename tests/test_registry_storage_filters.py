@@ -7,9 +7,8 @@ from moto import mock_aws
 
 from vmn_exp.snapshot import (
     S3SnapshotStorage,
-    get_snapshot_storage,
+    open_storage,
 )
-from vmn_exp.sdk.reader import _apps_with_experiments
 from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
 
 BUCKET = "vmn-test-bucket"
@@ -32,9 +31,7 @@ def _aws_env(monkeypatch):
 
 
 def test_artifact_uri_local(tmp_path):
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=str(tmp_path), subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
     uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "model.pkl")
     assert uri.startswith("file://")
     assert "myapp" in uri
@@ -57,18 +54,18 @@ def test_artifact_uri_s3():
 
 
 # ---------------------------------------------------------------------------
-# vmn-registry hidden from exp/reader._apps_with_experiments
+# vmn-registry hidden from the local storage's app listing
 # ---------------------------------------------------------------------------
 
 
-def test_apps_with_experiments_ignores_registry(tmp_path):
+def test_local_list_apps_ignores_registry(tmp_path):
     root = str(tmp_path)
     # Create a real app and the reserved registry pseudo-app
     for app in ("myapp", "vmn-registry"):
         exp_dir = os.path.join(root, ".vmn", app, "experiments")
         os.makedirs(exp_dir)
 
-    apps = _apps_with_experiments(root)
+    apps = open_storage(vmn_root_path=root, subdir="experiments").list_apps()
     assert "myapp" in apps
     assert "vmn-registry" not in apps
 

@@ -25,12 +25,8 @@ def test_ui_args_parse():
             "/r1",
             "--repo",
             "/r2",
-            "--s3-bucket",
-            "bkt",
-            "--s3-prefix",
-            "team/ml",
-            "--endpoint-url",
-            "http://minio:9000",
+            "--store",
+            "s3://bkt/team/ml?endpoint_url=http://minio:9000",
             "--read-only",
             "--no-browser",
             "--no-index",
@@ -42,7 +38,7 @@ def test_ui_args_parse():
     assert args.token == "t0k"
     assert args.data_dir == "/tmp/x"
     assert args.repo == ["/r1", "/r2"]
-    assert args.s3_bucket == "bkt"
+    assert args.store == "s3://bkt/team/ml?endpoint_url=http://minio:9000"
     assert args.read_only is True
     assert args.no_browser is True
     assert args.no_index is True
@@ -59,7 +55,7 @@ def test_ui_defaults_parse():
 
 
 def test_ui_build_manager_from_args(app_layout, capfd):
-    """--repo paths and S3 sources become workspaces; cwd repo is implicit."""
+    """--repo paths and --store sources become workspaces; cwd repo is implicit."""
     from version_stamp.cli.args import parse_user_commands
     from vmn_exp.ui.cli import build_manager
 
@@ -75,10 +71,8 @@ def test_ui_build_manager_from_args(app_layout, capfd):
             data_dir,
             "--repo",
             app_layout.repo_path,
-            "--s3-bucket",
-            "team-bucket",
-            "--s3-prefix",
-            "ml",
+            "--store",
+            "s3://team-bucket/ml",
         ]
     )
     manager = build_manager(args)
@@ -87,10 +81,8 @@ def test_ui_build_manager_from_args(app_layout, capfd):
     assert any(
         w.kind == "git" and w.path == app_layout.repo_path for w in by_name.values()
     )
-    s3 = [w for w in by_name.values() if w.kind == "s3"]
-    assert len(s3) == 1
-    assert s3[0].bucket == "team-bucket"
-    assert s3[0].prefix == "ml"
+    stores = [w for w in by_name.values() if w.kind == "store"]
+    assert [w.store for w in stores] == ["s3://team-bucket/ml"]
 
 
 def test_ui_build_manager_cwd_repo(app_layout, capfd, monkeypatch):

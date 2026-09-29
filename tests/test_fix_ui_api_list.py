@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.snapshot import (
     LocalSnapshotStorage,
     S3SnapshotStorage,
-    get_snapshot_storage,
+    open_storage,
 )
 from vmn_exp.ui.readers.experiments import sort_rows
 
@@ -24,7 +24,7 @@ def _ts(i):
 def _client(tmp_path, use_index=True):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -123,7 +123,7 @@ def s3_client(tmp_path):
         from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))
-        manager.add_s3("ws", bucket="vmn-bucket", prefix="exps")
+        manager.add_store("ws", "s3://vmn-bucket/exps")
         storage = S3SnapshotStorage("vmn-bucket", prefix="exps")
         yield TestClient(create_app(manager)), storage
 

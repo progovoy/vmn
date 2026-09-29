@@ -16,8 +16,8 @@ export function PageHead({ title, what, mono = true }: {
 }
 
 /** A workspace's full location — the git checkout path, or its s3 URI. */
-export function wsLocation(w: Pick<Workspace, "kind" | "path" | "bucket">): string {
-  return w.kind === "s3" ? `s3://${w.bucket}` : w.path ?? "";
+export function wsLocation(w: Pick<Workspace, "path" | "store">): string {
+  return w.store ?? w.path ?? "";
 }
 
 /** Full path/URI + a copy button — the redesign keeps this visible wherever

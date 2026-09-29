@@ -2,7 +2,7 @@ export interface Workspace {
   name: string;
   kind: string;
   path?: string;
-  bucket?: string;
+  store?: string;
 }
 
 export interface AppRow {

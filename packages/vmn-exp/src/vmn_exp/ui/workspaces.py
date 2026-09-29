@@ -2,8 +2,8 @@
 """Workspace registry for vmn-exp ui.
 
 A workspace is an isolated source of vmn data: a git checkout (its own working
-tree, .vmn/, lock and index) or a read-only experiment store: ``s3`` (a
-bucket/prefix) or ``store`` (any storage URI). Several
+tree, .vmn/, lock and index) or a read-only experiment ``store`` named by a
+storage URI (``s3://``, ``gs://``, ``az://``, ``file://``, a plugin scheme). Several
 workspaces may be clones of the same remote — mutations in one never touch
 another. The registry persists in ``<data_dir>/workspaces.yml``.
 
@@ -29,12 +29,9 @@ _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 @dataclass
 class Workspace:
     name: str
-    kind: str = "git"  # "git" | "s3" | "store"
+    kind: str = "git"  # "git" | "store"
     path: Optional[str] = None
     store: Optional[str] = None  # a storage URI, for kind "store"
-    bucket: Optional[str] = None
-    prefix: Optional[str] = None
-    endpoint_url: Optional[str] = None
 
     def to_public_dict(self):
         d = {k: v for k, v in asdict(self).items() if v is not None}
@@ -137,20 +134,6 @@ class WorkspaceManager:
                 f"{path} is not a vmn-managed checkout (no .git or .vmn)"
             )
         ws = Workspace(name=name, kind="git", path=path)
-        self._workspaces[name] = ws
-        self._save()
-        return ws
-
-    def add_s3(self, name, bucket, prefix=None, endpoint_url=None) -> Workspace:
-        """Register a read-only S3 experiment source."""
-        self._validate_new_name(name)
-        ws = Workspace(
-            name=name,
-            kind="s3",
-            bucket=bucket,
-            prefix=prefix,
-            endpoint_url=endpoint_url,
-        )
         self._workspaces[name] = ws
         self._save()
         return ws

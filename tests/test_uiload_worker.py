@@ -13,7 +13,7 @@ import time
 import pytest
 from uiload import worker
 from vmn_exp.sdk.reader import list_runs
-from vmn_exp.storage.open import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 
 APP = "loadapp"
 HB = 0.5
@@ -85,7 +85,7 @@ def launched(tmp_path_factory):
 
 
 def _storage(root):
-    return get_snapshot_storage("local", vmn_root_path=root, subdir="experiments")
+    return open_storage(vmn_root_path=root, subdir="experiments")
 
 
 def _rows(root):

@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.log import sort_by_metric
 from vmn_exp.core.tree import subtree_status
@@ -87,7 +87,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
 def _storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    return str(root), get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    return str(root), open_storage(vmn_root_path=str(root), subdir="experiments")
 
 
 def _runs(storage, n, loss=0.1):
@@ -230,7 +230,7 @@ def s3_ws(tmp_path):
         from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))
-        manager.add_s3("ws", bucket="vmn-bucket", prefix="exps")
+        manager.add_store("ws", "s3://vmn-bucket/exps")
         yield manager
 
 
@@ -238,19 +238,19 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
     from vmn_exp.ui import server as server_mod
 
     built = []
-    real = server_mod.get_snapshot_storage
+    real = server_mod.workspace_storage
 
-    def counted(*a, **kw):
-        built.append(kw.get("bucket"))
-        return real(*a, **kw)
+    def counted(ws):
+        built.append(ws.store)
+        return real(ws)
 
-    monkeypatch.setattr(server_mod, "get_snapshot_storage", counted)
+    monkeypatch.setattr(server_mod, "workspace_storage", counted)
     client = TestClient(server_mod.create_app(s3_ws))
     for _ in range(3):
         assert client.get(f"{BASE}/experiments?limit=5").status_code == 200
     client.get("/api/v1/workspaces/ws/apps")
 
-    assert built == ["vmn-bucket"]
+    assert built == ["s3://vmn-bucket/exps"]
 
 
 def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):

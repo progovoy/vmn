@@ -60,7 +60,7 @@ def test_outer_and_inner_run_linkage(container):
     - inner run's metadata.parent == outer run's verstr
     - a second trial also links to the same outer run
     """
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder
 
@@ -86,9 +86,7 @@ def test_outer_and_inner_run_linkage(container):
     finally:
         recorder.finish()
 
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=str(container), subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=str(container), subdir="experiments")
     meta, _ = storage.load(APP_NAME, inner_id)
     assert meta.get("parent") == outer_id, (
         f"inner run parent should be outer run id {outer_id!r}, got {meta.get('parent')!r}"
@@ -108,7 +106,7 @@ def test_result_series_logs_metrics_with_step(container):
 
     Ray bookkeeping keys (time_this_iter_s, done, etc.) are dropped.
     """
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder
 
@@ -269,7 +267,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(image / "vmn_metadata.yml"))
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(store))
 
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
     from vmn_exp.integrations.ray_tune import TuneRecorder, make_callback
 
@@ -291,9 +289,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
         recorder.finish()
         ray.shutdown()
 
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=str(store), subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=str(store), subdir="experiments")
     runs = storage.list_snapshots(APP_NAME)
     # 1 outer run + 2 inner runs (one per grid search value) = 3 total
     assert len(runs) == 3, f"expected 3 runs (1 outer + 2 inner), got {len(runs)}"

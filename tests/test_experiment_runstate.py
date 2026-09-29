@@ -65,11 +65,11 @@ def test_in_flight_run_is_running_with_advancing_heartbeat(app_layout, capfd):
 
     script = (
         "import os, time, yaml\n"
-        "from vmn_exp.snapshot import get_snapshot_storage\n"
+        "from vmn_exp.snapshot import open_storage\n"
         "from vmn_exp.cli.experiment import load_run_state\n"
         "time.sleep(2.5)\n"
-        "storage = get_snapshot_storage('local',"
-        " vmn_root_path=os.environ['VMN_WORKING_DIR'], subdir='experiments')\n"
+        "storage = open_storage("
+        "vmn_root_path=os.environ['VMN_WORKING_DIR'], subdir='experiments')\n"
         "state = load_run_state(storage, os.environ['VMN_APP_NAME'],"
         " os.environ['VMN_EXPERIMENT_ID'])\n"
         "open('probe.yml', 'w').write(yaml.dump(state))\n"

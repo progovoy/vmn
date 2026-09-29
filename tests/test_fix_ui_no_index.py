@@ -2,7 +2,7 @@
 no on-disk cache."""
 import os
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.files import INDEX_CACHE_FILE
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.workspaces import Workspace
@@ -13,7 +13,7 @@ APP = "app"
 def _setup(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
     source = ExperimentSource(str(tmp_path / "data"), use_index=False)
     return Workspace(name="ws", path=str(root)), storage, source
 

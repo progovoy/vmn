@@ -4,7 +4,7 @@ import os
 import pytest
 import yaml
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.core.refs import resolve_parent
 from version_stamp.core.logging import init_stamp_logger
 
@@ -22,7 +22,7 @@ def _storage_with_run(tmp_path):
     os.makedirs(path)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump({"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}, f)
-    return get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
 
 
 def test_no_ref_means_no_parent(tmp_path):

@@ -104,7 +104,7 @@ export default function App() {
               </option>
               {workspaces.map((w) => (
                 <option key={w.name} value={w.name}>
-                  {w.name} {w.kind === "s3" ? "(s3)" : ""}
+                  {w.name} {w.kind === "store" ? "(store)" : ""}
                 </option>
               ))}
             </select>

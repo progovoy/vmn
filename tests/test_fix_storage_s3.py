@@ -2,6 +2,7 @@
 volatile files never cached, per-writer log merge, incremental segment sync,
 injective app keys, cheap exists, streaming artifacts."""
 
+from vmn_exp.storage.uri import s3_uri
 import datetime
 import os
 from unittest.mock import patch
@@ -12,7 +13,7 @@ from moto import mock_aws
 
 from vmn_exp.snapshot import (
     S3SnapshotStorage,
-    get_snapshot_storage,
+    open_storage,
 )
 from vmn_exp.core.status import derive_status, load_run_state
 from vmn_exp.core.writer import allocate_run_verstr
@@ -38,11 +39,9 @@ def _env(monkeypatch):
 
 
 def _host(tmp_path, name):
-    return get_snapshot_storage(
-        "local",
+    return open_storage(
+        s3_uri(BUCKET, "exps"),
         vmn_root_path=str(tmp_path / name),
-        bucket=BUCKET,
-        prefix="exps",
         subdir="experiments",
     )
 
