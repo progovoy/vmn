@@ -529,16 +529,19 @@ def add_arg_worktrees(subprasers):
     pwt.set_defaults(carry_changes=False)
 
 
-def _add_install_args(parser):
-    """--install, --target, --force args for `vmn skill`."""
-    parser.add_argument(
+def add_arg_skill(subprasers):
+    pskill = subprasers.add_parser(
+        "skill",
+        help="Print vmn usage instructions (skill block) for AI agents",
+    )
+    pskill.add_argument(
         "--install",
         dest="install",
         action="store_true",
         help="Write to a file instead of printing to stdout",
     )
-    parser.set_defaults(install=False)
-    parser.add_argument(
+    pskill.set_defaults(install=False)
+    pskill.add_argument(
         "--target",
         dest="target",
         choices=["claude", "cursor", "agents"],
@@ -546,21 +549,13 @@ def _add_install_args(parser):
         help="Install target: claude → .claude/skills/vmn/SKILL.md, "
         "cursor → .cursorrules, agents → AGENTS.md (default: claude)",
     )
-    parser.add_argument(
+    pskill.add_argument(
         "--force",
         dest="force",
         action="store_true",
         help="Overwrite an existing Claude SKILL.md (claude target only)",
     )
-    parser.set_defaults(force=False)
-
-
-def add_arg_skill(subprasers):
-    pskill = subprasers.add_parser(
-        "skill",
-        help="Print vmn usage instructions (skill block) for AI agents",
-    )
-    _add_install_args(pskill)
+    pskill.set_defaults(force=False)
 
 
 def verify_user_input_version(args, key):
