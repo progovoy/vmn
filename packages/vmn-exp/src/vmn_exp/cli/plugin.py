@@ -290,28 +290,19 @@ def _dev_version_loader(vcs, params, version):
     """Restore repo to state captured in a dev-version snapshot."""
     from vmn_exp.snapshot import (
         LocalSnapshotStorage,
+        _get_storage,
         _restore_with_safety_net,
     )
-    from vmn_exp.core.storage_resolve import store_uri
-    from vmn_exp.storage.registry import open_store
 
-    storage = LocalSnapshotStorage(vcs.vmn_root_path)
-    metadata, patches = storage.load(vcs.name, version)
+    exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
+    metadata, patches = exp_storage.load(vcs.name, version)
 
     if metadata is None:
-        exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
-        metadata, patches = exp_storage.load(vcs.name, version)
-
-    if metadata is None:
-        conf_storage = getattr(vcs, "snapshot_storage", None) or {}
-        store = conf_storage.get("uri") or store_uri(conf_storage, "vmn-snapshots")
-        if store:
-            try:
-                metadata, patches = open_store(store, subdir="snapshots").load(
-                    vcs.name, version
-                )
-            except Exception:
-                VMN_LOGGER.debug("Remote snapshot load failed", exc_info=True)
+        try:
+            # Snapshots (safety ones included): local, then the experiment store.
+            metadata, patches = _get_storage(vcs, params).load(vcs.name, version)
+        except Exception:
+            VMN_LOGGER.debug("Snapshot load failed", exc_info=True)
 
     if metadata is None:
         VMN_LOGGER.error("Dev version %s not found locally or in configured storage", version)

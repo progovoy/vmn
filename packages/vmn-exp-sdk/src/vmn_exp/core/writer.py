@@ -80,9 +80,7 @@ def merge_conf_into_params(vcs, params):
     """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
     merge_env_into_params(params)
     exp_conf = getattr(vcs, "experiment", None) or {}
-    storage_conf = (
-        exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
-    )
+    storage_conf = exp_conf.get("storage", {}) or {}
     for key, conf_key in _STORAGE_CONF_KEYS.items():
         if not params.get(key):
             conf_val = storage_conf.get(conf_key)

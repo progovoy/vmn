@@ -810,7 +810,6 @@ def test_handle_experiment_reads_experiment_dir_from_conf(monkeypatch):
     vcs = SimpleNamespace(
         name="myapp",
         experiment=exp_conf,
-        snapshot_storage=None,
         vmn_root_path="/tmp/fake",
     )
     params = {
@@ -833,7 +832,6 @@ def test_handle_experiment_cli_experiment_dir_overrides_conf(monkeypatch):
     vcs = SimpleNamespace(
         name="myapp",
         experiment=exp_conf,
-        snapshot_storage=None,
         vmn_root_path="/tmp/fake",
     )
     params = {
@@ -896,7 +894,6 @@ def test_handle_experiment_passes_writer_id_from_conf(monkeypatch):
     vcs = SimpleNamespace(
         name="myapp",
         experiment=exp_conf,
-        snapshot_storage=None,
         vmn_root_path="/tmp/fake",
     )
     params = {
