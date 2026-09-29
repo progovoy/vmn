@@ -32,15 +32,14 @@ from vmn_exp.cli.views import (
 )
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.storage_resolve import _get_experiment_storage
+from vmn_exp.gitmode import capture
+from vmn_exp.gitmode.checkout import record_run
 from vmn_exp.snapshot import (
-    _build_snapshot_metadata,
-    _compute_verstr,
     _diff_real_tree,
     _diff_with_external_tool,
     _relative_timestamp,
     _restore_with_safety_net,
     _strip_git_dirs,
-    gather_create_data,
     get_git_difftool,
 )
 import vmn_exp.core.index as experiment_index
@@ -77,7 +76,6 @@ from vmn_exp.core.writer import (
     append_to_log,
     compute_artifact_info,
     create_log_entry,
-    create_run,
     flush_log,
     merge_conf_into_params,
     save_artifact,
@@ -482,44 +480,17 @@ def _experiment_create_core(
             env=env,
         )
 
-    (
-        base_version,
-        commit_hash,
-        patches,
-        dirty_states,
-        ver_info,
-        err,
-    ) = gather_create_data(vcs, allow_clean=True)
+    captured, err = capture.capture_snapshot(vcs)
     if err is not None:
         return None, err
 
-    # Capture env before create_run (env capture is read-only).
+    # Capture env before the record is created (env capture is read-only).
     env = (
         capture_env_safe(python_exe) if should_capture(capture_env, exp_conf) else None
     )
-
-    code_verstr = _compute_verstr(base_version, commit_hash, patches)
-    template = _build_snapshot_metadata(
-        vcs,
-        code_verstr,
-        base_version,
-        commit_hash,
-        dirty_states,
-        patches,
-        ver_info,
-        note=note,
-    )
-    verstr = create_run(
-        storage,
-        vcs.name,
-        code_verstr,
-        template,
-        patches,
-        note=note,
-        create_data=extra_create_data,
-        parent=parent,
-        name=name,
-        env=env,
+    code = capture.ensure_code(storage, vcs, captured)
+    verstr = record_run(
+        vcs, storage, captured, code, note, extra_create_data, parent, name, env=env
     )
     return verstr, None
 

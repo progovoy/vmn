@@ -103,7 +103,6 @@ start_run(
 | `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
 | `system_metrics` | `None` (default) records this process's CPU/memory (and GPU, with `pynvml` installed) as `sys_*` metrics on every beat; `False` turns sampling off; `True` samples even when `experiment.system_metrics: false` is set in conf.yml but still respects `VMN_SYSTEM_METRICS=0`. `psutil` ships with the SDK; GPU metrics need `pip install pynvml`. A missing sampler dependency is silent (debug log only). Non-zero ranks record nothing, system metrics included |
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
-| `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
 | `rewind_to_step` | with `run_id`: hide the reopened run's history past this step. See [Rewinding a run](#rewinding-a-run) |
 | `fork_from` / `fork_step` | start a NEW run seeded with another run's metrics and params up to `fork_step` (`fork_from="<ref>?_step=N"` works too). See [Forking a run](#forking-a-run) |
@@ -157,10 +156,12 @@ The repo lock (`.vmn/vmn.lock`) is held only where it is needed: by the cold
 start, when there is something to initialize, and for the verstr claim. The
 snapshot itself — `git diff`, format-patch, hashing and tarring untracked files —
 is captured *before* the lock is taken, so the trials of a sweep started at once
-capture in parallel instead of queueing behind each other. Within one process
-the untracked tarball is memoized by the tree's identity (repo, `HEAD`, diff
-hash — which covers the untracked files' contents), so trials 2..N of an
-unchanged tree reuse trial 1's. The lock is released before your training code
+capture in parallel instead of queueing behind each other. The code (patches
+and untracked tarball) is stored once per code identity (`HEAD` plus the diff
+hash, which covers the untracked files' contents), so trials 2..N of an
+unchanged tree build no tarball and upload nothing but their own records —
+every one of them still restores to the exact tree (see
+[How records are stored](experiments.md#how-records-are-stored)). The lock is released before your training code
 runs — a run that trains for hours does not block other `vmn` commands, and a
 subprocess you launch can use vmn freely.
 

@@ -5,6 +5,7 @@ import datetime
 
 # The dev-version helpers live in version_stamp.devversion; the names below
 # stay importable from here for experiment code.
+from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
 from vmn_exp.core.storage_resolve import store_uri
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
@@ -72,6 +73,20 @@ def _skipped_untracked(patches):
     return skipped
 
 
+def _patch_summary(patches):
+    """What a record's metadata says about the patches it holds."""
+    summary = {
+        "has_working_tree_patch": "working_tree" in patches,
+        "has_local_commits_patch": "local_commits" in patches,
+        "has_untracked_files": "untracked_files" in patches,
+        "has_dep_patches": bool(patches.get("deps")),
+    }
+    skipped = _skipped_untracked(patches)
+    if skipped:
+        summary["untracked_skipped"] = skipped
+    return summary
+
+
 def _build_snapshot_metadata(
     vcs,
     verstr,
@@ -98,17 +113,11 @@ def _build_snapshot_metadata(
         "note": note,
         "app_name": vcs.name,
         "dirty_states": dirty_states,
-        "has_working_tree_patch": "working_tree" in patches,
-        "has_local_commits_patch": "local_commits" in patches,
-        "has_untracked_files": "untracked_files" in patches,
-        "has_dep_patches": bool(patches.get("deps")),
+        **_patch_summary(patches),
     }
     diff_hash = _compute_diff_hash(patches)
     if diff_hash:
         metadata["diff_hash"] = diff_hash
-    skipped = _skipped_untracked(patches)
-    if skipped:
-        metadata["untracked_skipped"] = skipped
 
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:
@@ -154,7 +163,12 @@ def _save_safety_snapshot(vcs, params, target_verstr):
 
 
 def _restore_with_safety_net(vcs, params, metadata, patches):
-    """Apply a restore, first auto-snapshotting any dirty work it would clobber."""
+    """Apply a restore, first auto-snapshotting any dirty work it would clobber.
+    A record without usable code is refused before anything is touched."""
+    reason = no_code_reason(metadata)
+    if reason is not None:
+        VMN_LOGGER.error(f"Cannot restore {metadata.get('verstr')}: {reason}")
+        return 1
     saved = _save_safety_snapshot(vcs, params, metadata.get("verstr"))
     if saved:
         VMN_LOGGER.info(

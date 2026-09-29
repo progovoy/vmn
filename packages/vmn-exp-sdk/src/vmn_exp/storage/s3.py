@@ -54,12 +54,14 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
                 patches[key] = data if binary else data.decode("utf-8")
         return patches
 
-    def load(self, app_name, verstr):
+    def load_record(self, app_name, verstr):
         prefix = self._record_prefix(app_name, verstr)
         raw = self._get(f"{prefix}/{METADATA_FILE}")
         if raw is None:
             return None, None
         metadata = _base.yaml_safe_load(raw)
+        if metadata.get("code"):
+            return metadata, {}  # a run's code lives in its code object
         patches = self._get_patches(prefix)
 
         dep_prefix = f"{prefix}/deps/"

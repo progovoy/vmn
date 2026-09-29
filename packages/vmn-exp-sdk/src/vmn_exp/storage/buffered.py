@@ -59,8 +59,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
 
-    def load(self, app_name, verstr):
-        return self._remote.load(app_name, verstr)
+    def load_record(self, app_name, verstr):
+        return self._remote.load_record(app_name, verstr)
 
     def load_file(self, app_name, verstr, filename):
         return self._remote.load_file(app_name, verstr, filename)

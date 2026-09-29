@@ -2,9 +2,8 @@
 
 A sweep starts N trials at once. Capturing the snapshot (git diff, format-patch,
 hashing and tarring untracked files) under the repo lock serialized them all;
-only claiming the verstr needs the lock. Within one process, trials 2..N reuse
-the snapshot trial 1 captured while the tree has not changed, and
-``snapshot=False`` records the code identity without any payload.
+only claiming the verstr needs the lock. Trials 2..N of an unchanged tree
+reuse the code object trial 1 stored instead of capturing it again.
 """
 import os
 import subprocess
@@ -110,7 +109,7 @@ def test_concurrent_start_runs_capture_in_parallel(app_layout):
 
 
 # ---------------------------------------------------------------------------
-# per-process memo
+# the stored code object is reused
 # ---------------------------------------------------------------------------
 
 
@@ -160,33 +159,3 @@ def test_a_changed_tree_is_captured_again(app_layout, tarballs):
     assert _record(app_layout, first.id)[0]["diff_hash"] != (
         _record(app_layout, second.id)[0]["diff_hash"]
     )
-
-
-# ---------------------------------------------------------------------------
-# snapshot=False
-# ---------------------------------------------------------------------------
-
-
-def test_snapshot_false_records_identity_without_payload(app_layout, tarballs):
-    _bootstrap(app_layout)
-    _write(app_layout, "untracked.txt", "data")
-    app_layout.write_file_commit_and_push("test_repo_0", "tracked.txt", "v1")
-    _write(app_layout, "tracked.txt", "v2")
-
-    with start_run(app_layout.app_name, snapshot=False) as light:
-        pass
-    with start_run(app_layout.app_name) as full:
-        pass
-
-    light_meta, light_patches = _record(app_layout, light.id)
-    full_meta, _ = _record(app_layout, full.id)
-    assert light_patches == {} or not any(light_patches.values())
-    assert light_meta["snapshot"] is False
-    assert light_meta["has_working_tree_patch"] is False
-    assert light_meta["has_untracked_files"] is False
-    assert light_meta["base_commit"] == full_meta["base_commit"]
-    assert light_meta["diff_hash"] == full_meta["diff_hash"]
-    assert light_meta["code_verstr"] == full_meta["code_verstr"]
-    assert "snapshot" not in full_meta or full_meta["snapshot"] is True
-    # Only the full run built a tarball.
-    assert len(tarballs) == 1

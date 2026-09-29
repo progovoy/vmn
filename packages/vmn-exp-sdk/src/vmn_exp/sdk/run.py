@@ -107,7 +107,6 @@ def start_run(
     storage=None,
     system_metrics=None,
     sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
-    snapshot=True,
     run_id=None,
     all_ranks=False,
     name=None,
@@ -137,9 +136,6 @@ def start_run(
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
     one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
     on ``finish()``.
-
-    ``snapshot=False`` records only the code identity (base commit and diff
-    hash), with no patches or untracked tarball — for many lightweight runs.
 
     ``name`` is a human-readable run name, stored in ``metadata.yml`` and shown
     by ``vmn-exp list``; ``tags`` (``{key: value}``) are set once the run opens.
@@ -186,7 +182,7 @@ def start_run(
                 app_name, fork_from, fork_step, storage
             )
         app_name, storage, verstr, exp_conf = create_record(
-            app_name, note, params, parent, nested, storage, snapshot, name,
+            app_name, note, params, parent, nested, storage, name,
             capture_env=capture_env,
         )
         if fork_from:

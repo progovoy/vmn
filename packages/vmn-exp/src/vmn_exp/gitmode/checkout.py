@@ -15,7 +15,7 @@ from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
 from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.sdk.create import _maybe_capture_env, pick_parent
-from vmn_exp.snapshot import _build_snapshot_metadata, _format_dev_verstr
+from vmn_exp.snapshot import _build_snapshot_metadata
 
 
 def stamped_apps():
@@ -31,7 +31,7 @@ def build_storage(vcs):
 
 
 def create_in_checkout(
-    app_name, note, create_data, parent, nested, storage, snapshot=True, name=None,
+    app_name, note, create_data, parent, nested, storage, name=None,
     capture_env=None, python_exe=None,
 ):
     """The normal mode: cold-start if needed, capture, then claim under the lock."""
@@ -40,7 +40,7 @@ def create_in_checkout(
     os.makedirs(os.path.join(root_path, ".vmn"), exist_ok=True)
 
     vcs, status = tracked_vcs(app_name, root_path)
-    captured, err = capture.capture_snapshot(vcs, snapshot=snapshot, status=status)
+    captured, err = capture.capture_snapshot(vcs, status=status)
     if err is not None:
         return app_name, storage, None, err, {}
     if storage is None:
@@ -48,44 +48,47 @@ def create_in_checkout(
     parent = pick_parent(storage, app_name, parent, nested)
 
     # Capture env OUTSIDE the repo lock (it is read-only and may block on
-    # subprocess probing).
+    # subprocess probing), and store the code there too: it is keyed by
+    # content, so it needs no lock.
     env = _maybe_capture_env(vcs, capture_env, python_exe=python_exe)
+    code = capture.ensure_code(storage, vcs, captured)
 
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     with get_repo_lock(root_path):
-        verstr = _record(vcs, storage, captured, note, create_data, parent, name,
-                         env=env)
+        verstr = record_run(vcs, storage, captured, code, note, create_data, parent,
+                            name, env=env)
     return app_name, storage, verstr, None, experiment_conf(vcs)
 
 
-def _record(vcs, storage, captured, note, create_data, parent, name=None, env=None):
-    """Claim a verstr for *captured* and write the record and its create entry."""
-    code_verstr = _format_dev_verstr(
-        captured.base_version, captured.commit_hash, captured.diff_hash
-    )
+def record_run(vcs, storage, captured, code, note, create_data, parent, name=None,
+               env=None):
+    """Claim a verstr for *captured* and write the record and its create entry.
+
+    *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
+    references the stored code object instead of carrying the patches.
+    """
+    key, summary = code
+    code_verstr = captured.code_verstr
     template = _build_snapshot_metadata(
         vcs,
         code_verstr,
         captured.base_version,
         captured.commit_hash,
         captured.dirty_states,
-        captured.payload,
+        captured.identity,
         captured.ver_info,
         note=note,
     )
-    # The payload may be empty (snapshot=False): identity comes from what was
-    # captured, not from what is stored.
-    if captured.diff_hash:
-        template["diff_hash"] = captured.diff_hash
-    if not captured.snapshot:
-        template["snapshot"] = False
+    template.update(summary)
+    if key:
+        template["code"] = key
     return create_run(
         storage,
         vcs.name,
         code_verstr,
         template,
-        captured.payload,
+        {},
         note=note,
         create_data=create_data,
         parent=parent,

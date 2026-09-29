@@ -14,7 +14,7 @@ SDK_TRAIN = textwrap.dedent(
     from vmn_exp.sdk import start_run, sweep_params
     x = sweep_params()["x"]
     slow = x >= 10
-    with start_run(snapshot=False) as run:
+    with start_run() as run:
         for step in range(1, (60 if slow else 4) + 1):
             run.log_metric("loss", x + 1.0 / step, step=step)
             time.sleep(0.25 if slow else 0.0)

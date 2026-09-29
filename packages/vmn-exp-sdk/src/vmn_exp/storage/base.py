@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 import yaml
 
 from vmn_exp._base import parse_record_metadata
+from vmn_exp.core.code_store import resolve_code
 from vmn_exp.core.record_format import readable
 from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.storage.files import (
@@ -34,8 +35,15 @@ class SnapshotStorage(ABC):
         ...
 
     @abstractmethod
-    def load(self, app_name, verstr):
+    def load_record(self, app_name, verstr):
+        """``(metadata, the record's own patches)``, or ``(None, None)``."""
         ...
+
+    def load(self, app_name, verstr):
+        """``(metadata, patches)``: a run's patches come from its code object
+        (:mod:`vmn_exp.core.code_store`)."""
+        metadata, patches = self.load_record(app_name, verstr)
+        return resolve_code(self, app_name, metadata, patches)
 
     @abstractmethod
     def list_snapshots(self, app_name):
@@ -74,7 +82,7 @@ class SnapshotStorage(ABC):
 
     def exists(self, app_name, verstr):
         """Check if a snapshot exists without loading its full content."""
-        metadata, _ = self.load(app_name, verstr)
+        metadata, _ = self.load_record(app_name, verstr)
         return metadata is not None
 
     def create_exclusive(self, app_name, verstr, metadata, patches):

@@ -1147,7 +1147,7 @@ factory)` does the same at runtime. The contract:
 - **Records**: a record is `<base>/<app>/<verstr>/` holding `metadata.yml`, the
   patch files, per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and
   `artifacts/`. `metadata.yml` makes it exist: write it last, delete it first.
-  Implement the abstract methods (`save`, `load`, `list_snapshots`,
+  Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
   `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
   `list_artifact_files`) and override the defaulted ones your store can do
   better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
@@ -1176,7 +1176,7 @@ the GCS and Azure backends are built.
 
 ### How records are stored
 
-- **One directory (or key prefix) per run**: `metadata.yml`, the patches,
+- **One directory (or key prefix) per run**: `metadata.yml`,
   `run_state.yml`, `artifacts/` and one append-only `log.<writer>.jsonl` per
   writer. `metadata.yml` is written last, so a half-created run is never listed.
   Every storage directory carries its own `.gitignore` (`*`), so experiments of
@@ -1195,8 +1195,20 @@ the GCS and Azure backends are built.
 - **Local-first caching**: immutable files fetched from S3 (metadata, patches)
   are cached locally; `run_state.yml` and logs never are, so another host's run
   shows its live status.
-- **Deduplicated patches**: runs of the same code (`….r2`, `….r3`, …) hard-link
-  byte-identical patch files instead of storing a copy each.
+- **Code stored once per code identity**: a run's patches and untracked tarball
+  live in one *code object* per code identity, not in the run's own directory.
+  Code objects are records of the reserved `vmn-code/<app>` pseudo-app in the
+  same store (`.vmn/vmn-code/<app>/experiments/<code_verstr>.<diff hash>/`
+  locally, `<prefix>/vmn-code-<app>/…` on S3; a root app's `/` becomes `~`),
+  and the run's `metadata.yml` names its object as `code:`. Their
+  `metadata.yml` is written after the payload and marks them complete. A new
+  run of code whose object is already complete builds no tarball and uploads
+  nothing but its own record; an incomplete object is rewritten. `load` (and so
+  `restore`, `vmn goto`, `export`, `diff`) reads the patches from the object;
+  when it is missing or incomplete, `restore`/`goto`/`export` refuse with
+  "code snapshot … is missing from the store" and leave the tree untouched.
+  `prune` deletes a code object together with the last run of its code. A
+  clean-tree run has no code object.
 - **Artifacts** are uploaded to S3 streamed (multipart for large files) and are
   listed and downloadable from S3-backed workspaces. Names may be nested
   relative paths (`artifacts/model/sub/c.txt` is listed as `model/sub/c.txt`);

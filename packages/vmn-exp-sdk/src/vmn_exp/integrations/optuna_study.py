@@ -103,7 +103,6 @@ class StudyTracker:
                 parent=outer_id,
                 nested=True,
                 tags={"trial_number": str(trial.number)},
-                snapshot=False,
             )
             _install_report_hook(trial, run)
             try:
