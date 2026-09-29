@@ -13,7 +13,8 @@ from vmn_exp.core.writer import create_run, merge_conf_into_params
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
 from vmn_exp.sdk import _resolve_app_name
-from vmn_exp.sdk.create import _maybe_capture_env, experiment_conf, pick_parent
+from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.sdk.create import _maybe_capture_env, pick_parent
 from vmn_exp.snapshot import _build_snapshot_metadata, _format_dev_verstr
 
 

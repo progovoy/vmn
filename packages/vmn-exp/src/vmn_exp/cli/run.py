@@ -24,6 +24,7 @@ from vmn_exp.cli.supervisor import (
     supervision_guard,
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.writer import (
     append_to_log,
@@ -230,8 +231,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if repo_lock is not None:
         repo_lock.release()
 
-    exp_conf = getattr(vcs, "experiment", None)
-    return _Supervision(storage, app_name, verstr, args, exp_conf).run(run_cmd)
+    return _Supervision(storage, app_name, verstr, args, experiment_conf(vcs)).run(run_cmd)
 
 
 class _Supervision:

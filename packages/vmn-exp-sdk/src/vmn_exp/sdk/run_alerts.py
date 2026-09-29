@@ -1,17 +1,18 @@
 """``Run.alert()`` and the run's own ``failed`` alert, mixed into ``Run``.
 
-The alert config is loaded on first use, so a run that never alerts never
-reads conf.yml for it.
+The alert config is built on first use from the ``experiment:`` conf
+``start_run()`` already read (``_exp_conf``); conf.yml is not read again.
 """
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config, make_alert
 from vmn_exp.core.writer import create_log_entry
 
 
 class RunAlerts:
-    """Needs ``self._storage``, ``app_name``, ``id``, ``name``, ``_state`` and
-    ``_append`` from the ``Run`` it is mixed into."""
+    """Needs ``self._storage``, ``app_name``, ``id``, ``name``, ``_state``,
+    ``_exp_conf`` and ``_append`` from the ``Run`` it is mixed into."""
 
     _alerter_instance = None
+    _exp_conf = None
 
     def alert(self, title, text="", level="info", wait_sec=None):
         """Record an ``alert`` log entry and send it to the configured sinks.
@@ -36,7 +37,7 @@ class RunAlerts:
 
     def _alerter(self):
         if self._alerter_instance is None:
-            self._alerter_instance = Alerter(load_alert_config(self.app_name))
+            self._alerter_instance = Alerter(load_alert_config(self.app_name, self._exp_conf))
         return self._alerter_instance
 
     def _finish_alerts(self, timeout):

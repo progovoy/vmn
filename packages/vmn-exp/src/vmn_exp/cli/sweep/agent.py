@@ -12,6 +12,7 @@ import threading
 import time
 
 from vmn_exp.cli.run import _create_experiment, _Supervision
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
@@ -94,7 +95,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
     check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
         if spec.get("early_terminate") else None
     supervision = _Supervision(storage, vcs.name, verstr, trial_args,
-                               getattr(vcs, "experiment", None), extra_env=env, on_tick=check)
+                               experiment_conf(vcs), extra_env=env, on_tick=check)
     try:
         supervision.run(trial_args.run_cmd)
     finally:

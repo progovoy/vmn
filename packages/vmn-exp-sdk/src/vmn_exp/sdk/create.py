@@ -11,6 +11,7 @@ import os
 
 import yaml
 
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.env import (
     CAPTURE_ENV_ENV,
     capture_env_safe,
@@ -70,11 +71,6 @@ def create_record(
             f"Run 'vmn-exp create {app_name}' to see what the CLI reports."
         )
     return app_name, storage, verstr, exp_conf
-
-
-def experiment_conf(vcs):
-    """The ``experiment:`` section of *vcs*'s conf.yml, ``{}`` without one."""
-    return getattr(vcs, "experiment", None) or {}
 
 
 def _reject_reentry_without_nesting(nested):

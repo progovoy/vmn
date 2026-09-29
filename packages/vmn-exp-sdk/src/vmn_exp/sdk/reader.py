@@ -26,10 +26,9 @@ log folding it shares with the CLI and the ui lives in
 """
 import os
 
-import yaml
-
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import resolve_root_path
+from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.log import (
     experiment_row,
     filter_archived,
@@ -107,14 +106,7 @@ def _metrics_schema(root_path, app_name):
     """
     if root_path is None:
         return {}
-    path = os.path.join(root_path, ".vmn", app_name.replace("/", os.sep), "conf.yml")
-    try:
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError):
-        return {}
-    conf = data.get("conf") or {}
-    return (conf.get("experiment") or {}).get("metrics") or {}
+    return read_experiment_conf(app_name, root_path).get("metrics") or {}
 
 
 # ---------------------------------------------------------------------------

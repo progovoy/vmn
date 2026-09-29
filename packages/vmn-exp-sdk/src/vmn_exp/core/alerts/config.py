@@ -16,8 +16,8 @@ conf.yml, so each ``VMN_EXP_ALERT_*`` URL/command adds a sink and
 """
 import os
 
-from vmn_exp import _base
 from vmn_exp.core.alerts.sinks import DEFAULT_TIMEOUT_SEC, build_sink
+from vmn_exp.core.app_conf import read_experiment_conf
 
 TRIGGERS = ("alert", "failed", "stuck")
 DEFAULT_ON = ("alert",)
@@ -83,17 +83,3 @@ def _number(value, default):
     except (TypeError, ValueError):
         return default
 
-
-def read_experiment_conf(app_name, root=None):
-    """``conf.experiment`` of ``.vmn/<app>/conf.yml`` under *root*, or {}."""
-    if not app_name:
-        return {}
-    try:
-        root = root or _base.resolve_root_path()
-        path = os.path.join(root, ".vmn", *app_name.split("/"), "conf.yml")
-        with open(path) as f:
-            data = _base.yaml_safe_load(f.read()) or {}
-        return (data.get("conf") or {}).get("experiment") or {}
-    except Exception:
-        _base.VMN_LOGGER.debug("No experiment conf for alerts", exc_info=True)
-        return {}

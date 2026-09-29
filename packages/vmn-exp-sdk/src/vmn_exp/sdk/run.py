@@ -199,6 +199,7 @@ def start_run(
         prior_state=prior_state,
         name=name,
         capture_output=capture_output,
+        exp_conf=exp_conf,
     )
     run.start_step = start_step
     run._open()
@@ -231,8 +232,11 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         prior_state=None,
         name=None,
         capture_output=False,
+        exp_conf=None,
     ):
         self._storage = storage
+        # The checkout's `experiment:` conf, as start_run() read it.
+        self._exp_conf = exp_conf
         self.app_name = app_name
         self.id = verstr
         self.name = name
