@@ -81,6 +81,7 @@ class NoOpRun:
 
     set_tag = set_tags = remove_tag = define_metric = alert = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
+    log_table = log_image = log_histogram = _ignore
 
     def __enter__(self):
         return self
