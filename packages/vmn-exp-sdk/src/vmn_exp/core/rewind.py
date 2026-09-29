@@ -48,22 +48,19 @@ def is_rewound(rewinds, entry, key):
 
 
 def drop_rewound(entries):
-    """*entries* (a merged, ordered log) without the ones a later rewind hides."""
-    if not any(e.get("type") == REWIND for e in entries if isinstance(e, dict)):
+    """*entries* (a merged, ordered log) without the ones a later rewind hides
+    — :func:`is_rewound` keyed by log position, as the fold keys its own."""
+    markers = [
+        [rewind_step(e), pos]
+        for pos, e in enumerate(entries)
+        if isinstance(e, dict) and rewind_step(e) is not None
+    ]
+    if not markers:
         return entries
-    kept, floor = [], None  # the lowest rewind step seen after the cursor
-    for entry in reversed(entries):
-        if isinstance(entry, dict):
-            target = rewind_step(entry)
-            if target is not None:
-                floor = target if floor is None else min(floor, target)
-            else:
-                step = entry_step(entry)
-                if floor is not None and step is not None and step > floor:
-                    continue
-        kept.append(entry)
-    kept.reverse()
-    return kept
+    return [
+        e for pos, e in enumerate(entries)
+        if not (isinstance(e, dict) and is_rewound(markers, e, (pos,)))
+    ]
 
 
 def rewinds_of(log):

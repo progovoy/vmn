@@ -16,7 +16,6 @@ or ``exp``.
 import os
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
@@ -59,10 +58,12 @@ def metric_series(log):
 
     Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
     log order (join them on an x metric with
-    :func:`~vmn_exp.core.step_metric.join_all`).
+    :func:`~vmn_exp.core.step_metric.join_all`). *log* is a merged log, which
+    already leaves out what a rewind hides (``load_log`` /
+    :func:`~vmn_exp.storage.files.flatten_logs`).
     """
     series = {}
-    for entry in drop_rewound(log):
+    for entry in log:
         if entry.get("type") != "metrics":
             continue
         step = entry.get("step")
