@@ -96,6 +96,7 @@ start_run(
     fork_step=None,
     rewind_to_step=None,
     capture_output=False,
+    mode=None,
 )
 ```
 
@@ -118,6 +119,7 @@ start_run(
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 | `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
 | `capture_output` | `True` tees this process's stdout/stderr into the run's `output.log` artifact — the same artifact [`vmn-exp run`](experiments.md#console-output-outputlog) keeps. Captured at the file-descriptor level (fds 1 and 2), so `print`, logging handlers, C extensions and subprocesses are all kept, and everything still reaches the original streams. Capped like the CLI (`$VMN_EXP_OUTPUT_CAP_MB`, default 10; first and last halves kept), uploaded off-thread every `sync_interval_sec` and at `finish()` (SIGTERM and interpreter exit included); the fds are restored at finish. Off by default: redirecting a host process's descriptors means it writes to pipes rather than its TTY, which an interactive debugger or a notebook kernel may not expect. Under `vmn-exp run` the CLI already keeps the output, so leave it off there |
+| `mode` | `None` (default) follows `$VMN_MODE`; `"disabled"` records nothing (see [Disabled mode](#disabled-mode)); `"enabled"` records even under `VMN_MODE=disabled`. Anything else raises `ValueError` |
 
 The system metrics are on by default — here and on `vmn-exp run`, which
 measures the child's process tree instead. Opt out, strongest first:
@@ -747,6 +749,22 @@ heartbeat thread and no git or storage access. It is never registered as open,
 so `current_run()` is `None` there and autologging records nothing. Rank 0
 records as usual and exports `VMN_EXPERIMENT_ID`. Pass `all_ranks=True` to
 record on every rank.
+
+### Disabled mode
+
+`VMN_MODE=disabled` (or `start_run(mode="disabled")`) turns the SDK into a
+no-op — for CI, unit tests of training code, or a debugging session you don't
+want recorded. `start_run()` returns a `NoOpRun` with `run.disabled` set to
+`True` (and `run.id` `None`) before anything else happens: no git checkout is
+needed, nothing is snapshotted or written to the store, `$VMN_RESUME_RUN_ID` is
+left untouched, `current_run()` stays `None` and `VMN_EXPERIMENT_ID` is not
+exported. Every `run.*` method is accepted and ignored, and `autolog()` patches
+nothing. An explicit `mode="enabled"` beats the variable (like `capture_env`).
+
+`vmn-exp run my_app -- cmd` under `VMN_MODE=disabled` just runs `cmd` in place
+of vmn-exp (no lock, auto-init, snapshot or `run_state.yml`), with
+`VMN_METRICS_FILE` pointing at `/dev/null`; its exit code and signals are its
+own. Other `vmn-exp` actions ignore `VMN_MODE`.
 
 ---
 
