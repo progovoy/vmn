@@ -35,6 +35,7 @@ EXPERIMENT_ACTIONS = [
     "importance",
     "rewind",
     "rerun",
+    "push",
 ]
 
 
@@ -91,7 +92,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="Prune experiments older than duration (e.g., 30d)")
     pexp.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                       help="prune: print what would be deleted, delete nothing; "
-                           "rerun: print the plan, create nothing")
+                           "rerun: print the plan, create nothing; "
+                           "push: print what would be pushed, write nothing remote")
     pexp.add_argument("--print", dest="print_only", action="store_true", default=False,
                       help="rerun: print the resolved command, cwd, code identity and a "
                            "recipe (with --json as JSON); runs and creates nothing")
@@ -117,7 +119,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--yes", "-y", action="store_true", default=False,
                       help="prune --query: confirm deletion")
     pexp.add_argument("--json", action="store_true", default=False,
-                      help="list/show/importance: print machine-readable JSON")
+                      help="list/show/importance/push: print machine-readable JSON")
     pexp.add_argument("--from-snapshot", default=None,
                       help="Path to vmn_metadata.yml or directory containing it. "
                            "Records against a tree from 'vmn-exp export' (no git required). "
