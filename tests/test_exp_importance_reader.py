@@ -3,7 +3,7 @@ import pytest
 
 from vmn_exp.core.query import QueryError
 from vmn_exp.sdk.reader import param_importance
-from vmn_exp.storage.cached import get_snapshot_storage
+from vmn_exp.storage.open import get_snapshot_storage
 
 APP = "app"
 
