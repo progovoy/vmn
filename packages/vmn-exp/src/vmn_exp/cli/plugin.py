@@ -274,6 +274,7 @@ def _exp_run_without_repo(args):
         experiment_create,
         experiment_list,
         experiment_prune,
+        experiment_push,
         experiment_rewind,
         experiment_run,
         experiment_show,
@@ -289,6 +290,7 @@ def _exp_run_without_repo(args):
         "compare": experiment_compare,
         "prune": experiment_prune,
         "rewind": experiment_rewind,
+        "push": experiment_push,
     }
 
     handler = dispatch.get(action)
