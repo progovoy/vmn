@@ -239,8 +239,7 @@ class RowCache:
             self._list[pos] = row
         self._pos[key] = pos
         observed = self._observed_of(key, record["rs_sig"])
-        self._maps.put(row, note, parts, outputs, record["run_state"], observed)
-        _put_sparse(self._maps.declared, row["verstr"], declared)
+        self._maps.put(row, note, parts, outputs, declared, record["run_state"], observed)
 
 
 def _put_sparse(values, verstr, value):
@@ -258,12 +257,13 @@ class _Maps:
         self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
         self.parts, self.outputs, self.declared = {}, {}, {}
 
-    def put(self, row, note, parts, outputs, state, observed):
+    def put(self, row, note, parts, outputs, declared, state, observed):
         verstr = row["verstr"]
         self.rows[verstr] = row
         self.notes[verstr] = note
         _put_sparse(self.parts, verstr, parts)
         _put_sparse(self.outputs, verstr, outputs)
+        _put_sparse(self.declared, verstr, declared)
         self.states[verstr] = state
         self.observed[verstr] = observed
         self.edges[verstr] = row.get("parent")

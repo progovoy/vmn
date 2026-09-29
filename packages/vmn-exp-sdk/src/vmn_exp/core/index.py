@@ -44,17 +44,16 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_record import refresh_record, update_record
-from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
+from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache, _put_sparse
 from vmn_exp.core.index_store import IndexStore
 from vmn_exp.core.index_sweep import (
     DEFAULT_FULL_SWEEP_SEC,
     METADATA_FILE,
     Sweep,
 )
-from vmn_exp.core.index_views import lean_row, runs_declared_schema
+from vmn_exp.core.index_views import lean_row, run_declared, runs_declared_schema
 from vmn_exp.core.index_workers import load_new_records
-from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
-from vmn_exp.core.metric_schema import declared_fields
+from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.log import load_log
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 
@@ -381,26 +380,25 @@ def direct_rows(
     *read_run_state* skips the run states (``{}``). *schema* is the app's
     metrics schema.
     """
-    rows, run_states, _ = direct_view(
-        storage, app_name, with_create_note, read_log, read_run_state, schema
-    )
-    return rows, run_states
+    rows = [
+        fold_row(idx, meta, fold, with_create_note, schema)
+        for idx, meta, fold in _direct_folds(storage, app_name, read_log)
+    ]
+    if read_run_state is None:
+        return rows, {}
+    return rows, _run_states(storage, app_name, rows, read_run_state)
 
 
 def direct_view(
-    storage, app_name, with_create_note=False, read_log=load_log,
-    read_run_state=load_run_state, schema=None,
+    storage, app_name, read_log=load_log, read_run_state=load_run_state, schema=None,
 ):
     """``(rows, run_states, declared schema)``: :func:`direct_rows` plus what
     the runs declare (:meth:`IndexSnapshot.declared_schema`)."""
     rows, declared = [], {}
     for idx, meta, fold in _direct_folds(storage, app_name, read_log):
-        rows.append(fold_row(idx, meta, fold, with_create_note, schema))
-        declared[meta["verstr"]] = declared_fields(fold_definitions(fold))
-    by_verstr = {row["verstr"]: row for row in rows}
-    merged = runs_declared_schema(declared, by_verstr.get)
-    if read_run_state is None:
-        return rows, {}, merged
+        rows.append(fold_row(idx, meta, fold, schema=schema))
+        _put_sparse(declared, meta["verstr"], run_declared(fold))
+    merged = runs_declared_schema(declared, {r["verstr"]: r for r in rows}.get)
     return rows, _run_states(storage, app_name, rows, read_run_state), merged
 
 
@@ -423,8 +421,7 @@ def direct_snapshot(storage, app_name, schema=None):
         row, notes[verstr], *sparse = lean_row(idx, meta, fold)
         rows.append(row)
         for values, value in zip((parts, outputs, declared), sparse):
-            if value:
-                values[verstr] = value
+            _put_sparse(values, verstr, value)
     states = _run_states(storage, app_name, rows)
     observed = observed_at_by_verstr(storage, app_name, states)
     snap = IndexSnapshot.build(

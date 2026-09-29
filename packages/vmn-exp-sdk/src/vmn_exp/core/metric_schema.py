@@ -30,11 +30,10 @@ def hidden_fields(hidden=None):
 
 def _schema_fields(definition):
     """The ``goal``/``hidden`` of one declaration that the schema can carry."""
-    fields = {}
-    if definition.get("goal") in GOALS:
-        fields["goal"] = definition["goal"]
-    if isinstance(definition.get("hidden"), bool):
-        fields["hidden"] = definition["hidden"]
+    goal, hidden = _goal_of(definition), _hidden_of(definition)
+    fields = {"goal": goal} if goal else {}
+    if hidden:
+        fields["hidden"] = hidden[0]
     return fields
 
 
@@ -63,8 +62,7 @@ def effective_schema(conf, declared):
     """*conf* (the app's metrics schema) plus the *declared* names it lacks."""
     if not declared:
         return conf or {}
-    extra = {name: fields for name, fields in declared.items() if name not in (conf or {})}
-    return {**(conf or {}), **extra} if extra else (conf or {})
+    return {**declared, **(conf or {})}
 
 
 def _goal_of(definition):

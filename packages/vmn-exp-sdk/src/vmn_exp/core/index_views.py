@@ -38,9 +38,18 @@ def lean_row(idx, meta, fold):
     :func:`~vmn_exp.core.metric_schema.declared_fields`) or None."""
     row = fold_row(idx, meta, fold, with_create_note=True)
     note, summary = row.pop("create_note"), row.pop("metric_summary")
-    defs = fold_definitions(fold) if fold.get("metric_defs") else {}
+    defs = _definitions(fold)
     parts = (summary, defs or None) if summary else None
     return row, note, parts, row.pop("outputs") or None, declared_fields(defs) or None
+
+
+def _definitions(fold):
+    return fold_definitions(fold) if fold.get("metric_defs") else {}
+
+
+def run_declared(fold):
+    """The run's ``goal``/``hidden`` declarations, or None."""
+    return declared_fields(_definitions(fold)) or None
 
 
 def runs_declared_schema(declared_defs, row_of):

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import type { SeriesPoint } from "../types";
 import { seriesColor } from "../util";
 import { allTimestamped, runOrigin, splitSysMetrics, type XMode } from "../util/chartData";
@@ -34,8 +34,6 @@ function TrainingCurves({
   const [xChoice, setXChoice] = useState(AUTO_X);
   const [logY, setLogY] = useState(false);
   const [query, setQuery] = useState("");
-  const [showSys, setShowSys] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
 
   const origin = useMemo(() => runOrigin(series, startedAt), [series, startedAt]);
   const { training, system } = useMemo(
@@ -97,36 +95,35 @@ function TrainingCurves({
         metrics={shownTraining} series={series} colorOf={trainColor} view={view}
         joined={joined} xMap={xMap}
       />
-      {shownHidden.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <button className="link" onClick={() => setShowHidden((v) => !v)}>
-            {showHidden ? "hide hidden metrics" : `show hidden metrics (${shownHidden.length})`}
-          </button>
-          {showHidden && (
-            <div style={{ marginTop: 10 }}>
-              <div className="eyebrow">hidden metrics</div>
-              <MetricGrid
-                metrics={shownHidden} series={series} colorOf={trainColor} view={view}
-                joined={joined} xMap={xMap}
-              />
-            </div>
-          )}
-        </div>
-      )}
-      {system.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <button className="link" onClick={() => setShowSys((v) => !v)}>
-            {showSys ? "hide system metrics" : `show system metrics (${system.length})`}
-          </button>
-          {showSys && (
-            <div style={{ marginTop: 10 }}>
-              <div className="eyebrow">system metrics</div>
-              <MetricGrid
-                metrics={shownSystem} series={series} colorOf={sysColor} view={sysView}
-                height={140} minWidth={260}
-              />
-            </div>
-          )}
+      <Collapsible label="hidden metrics" count={shownHidden.length}>
+        <MetricGrid
+          metrics={shownHidden} series={series} colorOf={trainColor} view={view}
+          joined={joined} xMap={xMap}
+        />
+      </Collapsible>
+      <Collapsible label="system metrics" count={system.length}>
+        <MetricGrid
+          metrics={shownSystem} series={series} colorOf={sysColor} view={sysView}
+          height={140} minWidth={260}
+        />
+      </Collapsible>
+    </div>
+  );
+}
+
+/** A "show <label> (count)" link revealing *children*; nothing when count is 0. */
+function Collapsible({ label, count, children }: { label: string; count: number; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (count === 0) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button className="link" onClick={() => setOpen((v) => !v)}>
+        {open ? `hide ${label}` : `show ${label} (${count})`}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow">{label}</div>
+          {children}
         </div>
       )}
     </div>
