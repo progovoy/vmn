@@ -77,12 +77,8 @@ def push_run(local, target, app_name, verstr, ledger=None, code=None):
     if meta is None:
         return Outcome(verstr, FAILED, "no such local run")
     identity = run_identity(app_name, meta)
-    entry = ledger.get(verstr) or {}
-    if entry.get("identity") != identity:
-        entry = {}
-    if entry.get("complete") and entry.get("fingerprint") == record_fingerprint(
-        local, app_name, verstr
-    ):
+    entry = ledger_entry(ledger, verstr, identity)
+    if up_to_date(entry, local, app_name, verstr):
         return Outcome(verstr, UP_TO_DATE)
     job = _RunPush(local, target, app_name, verstr, code, meta, identity, entry)
     try:
@@ -92,6 +88,19 @@ def push_run(local, target, app_name, verstr, ledger=None, code=None):
     if job.claimed:
         ledger.put(verstr, job.entry)
     return outcome
+
+
+def ledger_entry(ledger, verstr, identity):
+    """The ledger entry of *verstr* when it is of the run *identity*, else {}."""
+    entry = ledger.get(verstr) or {}
+    return entry if entry.get("identity") == identity else {}
+
+
+def up_to_date(entry, local, app_name, verstr):
+    """Whether ledger *entry* says the remote holds the run as it is now."""
+    return bool(entry.get("complete")) and entry.get("fingerprint") == (
+        record_fingerprint(local, app_name, verstr)
+    )
 
 
 class _RunPush:

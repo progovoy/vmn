@@ -386,6 +386,8 @@ def handle_experiment(vmn_ctx):
         return experiment_watch(vcs, storage, _app_name(vcs, args), args)
     elif action == "rewind":
         return experiment_rewind(vcs, params, storage, args)
+    elif action == "push":
+        return experiment_push(vcs, params, storage, args)
     elif action == "lineage":
         from vmn_exp.cli.lineage import experiment_lineage
 
@@ -564,6 +566,12 @@ def experiment_rewind(vcs, params, storage, args):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
     return rewind(storage, _app_name(vcs, args), args)
+
+
+def experiment_push(vcs, params, storage, args):
+    from vmn_exp.cli.push import experiment_push as push
+
+    return push(vcs, params, _app_name(vcs, args), args)
 
 
 # ---------------------------------------------------------------------------

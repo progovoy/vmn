@@ -16,6 +16,7 @@ from collections import OrderedDict
 
 from vmn_exp.ui.jobs_exp_meta import (
     exp_archive_command,
+    exp_push_command,
     exp_rewind_command,
     exp_tag_command,
 )
@@ -157,6 +158,9 @@ def build_command(action, app_name, body):
 
     if action == "exp_rewind":
         return exp_rewind_command(app_name, body)
+
+    if action == "exp_push":
+        return exp_push_command(app_name, body)
 
     if action in ("exp_archive", "exp_unarchive"):
         return exp_archive_command(action.split("_", 1)[1], app_name, body)
