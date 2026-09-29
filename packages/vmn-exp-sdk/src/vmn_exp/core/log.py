@@ -13,12 +13,12 @@ storage backend (:func:`load_log`, :func:`list_artifacts`). No clock, no vcs, no
 CLI arguments — and, like the rest of ``core``, no imports from ``cli``, ``ui``
 or ``exp``.
 """
-import math
 import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.step_metric import join_all
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
     entry_params,
@@ -165,8 +165,8 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
 
     if descending is None:
         descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
-    ranked = [r for r in rows if _sortable(r["metrics"].get(metric))]
-    unranked = [r for r in rows if not _sortable(r["metrics"].get(metric))]
+    ranked = [r for r in rows if is_finite_number(r["metrics"].get(metric))]
+    unranked = [r for r in rows if not is_finite_number(r["metrics"].get(metric))]
     ranked.sort(key=lambda r: r["metrics"][metric], reverse=descending)
     return ranked + unranked
 
@@ -176,15 +176,6 @@ def _by_date(rows, field, newest_first):
     stamped = [r for r in rows if r.get(field)]
     stamped.sort(key=lambda r: r[field], reverse=newest_first)
     return stamped + [r for r in rows if not r.get(field)]
-
-
-def _sortable(value):
-    """Whether *value* can take a place in a metric ranking (NaN cannot)."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
 
 
 # ---------------------------------------------------------------------------

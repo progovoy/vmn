@@ -12,6 +12,7 @@ Duck-typed on purpose: numpy and torch scalars are unwrapped through their
 ``.item()``, so nothing here imports either.
 """
 import logging
+import math
 
 # Stdlib logging, not VMN_LOGGER: the SDK writes through here without the CLI
 # having initialized vmn's logger.
@@ -31,6 +32,16 @@ def _unwrap_scalar(value):
         return item()
     except Exception:  # a vector: .item() only unwraps single elements
         return value
+
+
+def is_finite_number(value):
+    """Whether *value* is a finite int/float — one that can take a place in a
+    ranking, a min/max or a chart axis (bools and NaN/inf cannot)."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 def metric_number(value):

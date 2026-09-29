@@ -20,7 +20,8 @@ but never its min or max. A ``min``/``max`` policy on a metric without any
 finite value falls back to the last value, which then sorts last.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
-from vmn_exp.core.step_metric import _finite, create_define_metric_entry, lookup
+from vmn_exp.core.step_metric import create_define_metric_entry, lookup
+from vmn_exp.core.values import is_finite_number
 
 SUMMARIES = ("min", "max", "last")
 GOALS = ("min", "max")
@@ -70,7 +71,7 @@ def _policy_of(definition):
 def _widen(bounds, value):
     """*bounds* widened by *value* — *bounds* itself when that changes nothing."""
     low, high = bounds
-    if not _finite(value) or (low is not None and low <= value <= high):
+    if not is_finite_number(value) or (low is not None and low <= value <= high):
         return bounds
     return (
         value if low is None or value < low else low,

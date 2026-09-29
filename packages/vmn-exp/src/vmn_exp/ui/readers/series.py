@@ -6,7 +6,7 @@ metric; a chart is a few thousand pixels wide. Min/max bucketing keeps each
 bucket's extremes, so a loss spike or a collapse survives however hard the
 series is thinned — plain striding would step over it.
 """
-import math
+from vmn_exp.core.values import is_finite_number
 
 DEFAULT_MAX_POINTS = 2000
 # Points one response may carry across all its metrics.
@@ -14,12 +14,7 @@ MAX_TOTAL_POINTS = 200_000
 
 
 def _finite(point):
-    value = point.get("value")
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    return is_finite_number(point.get("value"))
 
 
 def _summarize(bucket):

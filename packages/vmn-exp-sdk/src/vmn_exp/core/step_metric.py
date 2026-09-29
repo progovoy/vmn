@@ -18,9 +18,9 @@ at the same step — or, for step-less points, in the same ``log_metrics`` call
 
 Pure functions over plain data, like the rest of ``core``.
 """
-import math
 from fnmatch import fnmatchcase
 
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.writer import create_log_entry
 
 DEFINE_METRIC = "define_metric"
@@ -88,21 +88,13 @@ def _join_key(point):
     return ("step", step) if step is not None else ("ts", point.get("ts"))
 
 
-def _finite(value):
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
-
-
 def join_series(points, x_points):
     """*points* with ``x`` from *x_points* at the same step; unmatched dropped."""
     x_at = {_join_key(p): p.get("value") for p in x_points}
     joined = []
     for point in points:
         x = x_at.get(_join_key(point))
-        if _finite(x):
+        if is_finite_number(x):
             joined.append(dict(point, x=x))
     return joined
 

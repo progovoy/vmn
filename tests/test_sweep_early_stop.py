@@ -12,6 +12,16 @@ def test_points_without_a_step_are_numbered_in_log_order():
     assert step_points([{"step": 10, "value": 1.0}]) == [(10, 1.0)]
 
 
+def test_non_finite_and_boolean_values_are_not_points():
+    points = [
+        {"step": 1, "value": float("nan")},
+        {"step": 2, "value": True},
+        {"step": 3, "value": float("inf")},
+        {"step": 4, "value": 0.5},
+    ]
+    assert step_points(points) == [(4, 0.5)]
+
+
 def test_a_trial_worse_than_the_median_at_its_step_is_stopped():
     others = [_curve([1.0, 0.8, 0.6]), _curve([1.1, 0.9, 0.7]), _curve([5.0, 5.0, 5.0])]
     own = _curve([3.0, 3.0, 3.0])

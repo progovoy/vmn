@@ -13,7 +13,7 @@ the run it came from, so the median rule reads that run's series.
 from collections import Counter
 
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core.log import _sortable
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.status import FAILED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_rows, children_by_parent, subtree_verstrs
 
@@ -79,7 +79,7 @@ def stopped_early(row):
 
 def metric_value(spec, row):
     value = (row.get("metrics") or {}).get(spec["metric"]["name"])
-    return value if _sortable(value) else None
+    return value if is_finite_number(value) else None
 
 
 def best_trial(spec, rows):
