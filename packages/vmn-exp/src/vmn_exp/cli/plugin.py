@@ -293,27 +293,14 @@ def _exp_run_without_repo(args):
 
 def _dev_version_loader(vcs, params, version):
     """Restore repo to state captured in a dev-version snapshot."""
-    from vmn_exp.snapshot import (
-        LocalSnapshotStorage,
-        _get_storage,
-        _restore_with_safety_net,
-    )
+    from vmn_exp.cli.code_record import load_code_record
+    from vmn_exp.cli.experiment import experiment_storage_params
+    from vmn_exp.snapshot import _restore_with_safety_net
 
-    exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
-    metadata, patches = exp_storage.load(vcs.name, version)
-
-    if metadata is None:
-        try:
-            # Snapshots (safety ones included): local, then the experiment store.
-            metadata, patches = _get_storage(vcs, params).load(vcs.name, version)
-        except Exception:
-            VMN_LOGGER.debug("Snapshot load failed", exc_info=True)
-
-    if metadata is None:
-        VMN_LOGGER.error("Dev version %s not found locally or in configured storage", version)
+    record = load_code_record(vcs, experiment_storage_params(vcs, None), version)
+    if record is None:
         return 1
-
-    return _restore_with_safety_net(vcs, params, metadata, patches)
+    return _restore_with_safety_net(vcs, params, *record)
 
 
 # ---------------------------------------------------------------------------

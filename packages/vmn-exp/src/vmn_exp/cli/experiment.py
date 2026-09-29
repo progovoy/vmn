@@ -8,6 +8,7 @@ from typing import List, Optional
 import yaml
 
 from vmn_exp.cli import fork
+from vmn_exp.cli.code_record import load_code_record
 from vmn_exp.cli.manage import (
     MANAGE_ACTIONS,
     experiment_manage,
@@ -1039,17 +1040,12 @@ def experiment_restore(vcs, params, storage, args):
         VMN_LOGGER.error(err)
         return 1
 
-    app_name = _app_name(vcs, args)
-    metadata, patches = storage.load(app_name, verstr)
-    if metadata is None:
-        VMN_LOGGER.error(f"Experiment {verstr} not found")
+    record = load_code_record(
+        vcs, params, verstr, app_name=_app_name(vcs, args), exp_storage=storage
+    )
+    if record is None:
         return 1
-
-    rc = refuse_no_code(metadata, action="restore")
-    if rc is not None:
-        return rc
-
-    return _restore_with_safety_net(vcs, params, metadata, patches)
+    return _restore_with_safety_net(vcs, params, *record)
 
 
 # ---------------------------------------------------------------------------

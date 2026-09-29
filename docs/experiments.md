@@ -831,7 +831,14 @@ Check out the exact code state of an experiment and retrieve its artifacts. If
 the working tree is dirty, that work is **auto-saved first** as a dev version
 (and the `vmn goto -v <saved> my_app` that brings it back is printed) — you
 never lose uncommitted changes. `vmn goto -v <dev-version> my_app` restores a
-run's code the same way.
+run's code the same way (it takes a full verstr, not a prefix or `@N`).
+
+Both look the run up the same way: the local experiments dir, then the app's
+remote experiment store (`--store` > `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`
+> conf `experiment.storage`) only on a local miss, then the snapshots store —
+so a run another host recorded straight to S3 restores from any checkout. A run
+with no code snapshot (e.g. an MLflow import) is refused with an error, and a
+run that is nowhere is reported with the list of places searched.
 
 ```sh
 vmn-exp restore my_app --latest
