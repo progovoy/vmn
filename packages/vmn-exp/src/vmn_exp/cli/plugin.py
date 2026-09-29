@@ -21,6 +21,7 @@ from version_stamp.api import (
     find_command,
     register_command,
     register_dev_version_loader,
+    register_snapshot_store_opener,
 )
 
 
@@ -329,10 +330,18 @@ def _register(spec) -> None:
         register_command(spec)
 
 
+def _snapshot_store_opener(vcs, params):
+    from vmn_exp.snapshot.stores import open_configured_snapshot_stores
+
+    return open_configured_snapshot_stores(vcs, params)
+
+
 def register_dev_version() -> None:
-    """The ``vmn.plugins`` entry point: lets ``vmn goto`` restore dev versions.
-    Idempotent, so it survives a registry reset."""
+    """The ``vmn.plugins`` entry point: lets ``vmn goto`` restore dev versions
+    and ``vmn snapshot`` use the configured experiment store. Idempotent, so
+    it survives a registry reset."""
     register_dev_version_loader(_dev_version_loader)
+    register_snapshot_store_opener(_snapshot_store_opener)
 
 
 def register_all() -> None:
