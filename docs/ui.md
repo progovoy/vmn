@@ -120,12 +120,15 @@ location / {
 
 Mutations are asynchronous jobs:
 
-1. `POST /api/v1/workspaces/{ws}/apps/{app}/actions/{stamp|restore|goto|release|prune|note}`
-   with a JSON body → `202` + `{"id": ...}`.
+1. `POST /api/v1/workspaces/{ws}/apps/{app}/actions/{action}` with a JSON body
+   → `202` + `{"id": ...}`. Actions: `stamp`, `release`, `goto`, `restore`,
+   `prune`, `note`, `exp_create`, `exp_add`, `exp_tag`, `exp_archive`,
+   `exp_unarchive` and `exp_rewind` (body `{"verstr", "step"}`; runs
+   [`vmn-exp rewind`](experiments.md#rewind)).
 2. `GET /api/v1/jobs/{id}` → status (`running`/`succeeded`/`failed`), exit code,
    and the captured log.
 
-Each job runs `vmn <cmd>` as a subprocess in the workspace, so it acquires the
+Each job runs `vmn <cmd>` or `vmn-exp <cmd>` as a subprocess in the workspace, so it acquires the
 per-repo lock (serializing correctly against terminal use) and at most one
 mutation runs per workspace at a time. Restores/gotos over a dirty tree
 auto-save your work first (the safety net) — the job log tells you the

@@ -160,11 +160,12 @@ Set the experiment storage section in `conf.yml`:
 
 ```yaml
 # .vmn/my_app/conf.yml
-experiment:
-  storage:
-    experiment_dir: /mnt/shared       # shared mount path
-    # writer_id defaults to hostname — usually correct
-    # writer_id: alice-laptop         # override if needed
+conf:
+  experiment:
+    storage:
+      experiment_dir: /mnt/shared       # shared mount path
+      # writer_id defaults to hostname — usually correct
+      # writer_id: alice-laptop         # override if needed
 ```
 
 > `writer_id` defaults to `hostname` automatically — no config needed in most cases.
@@ -270,10 +271,11 @@ vmn-exp export my_app --latest -o /mnt/fsx/code
 If your exported tree includes `.vmn/my_app/conf.yml`, set it there:
 
 ```yaml
-experiment:
-  storage:
-    experiment_dir: /mnt/fsx          # all pods write here
-    # writer_id: defaults to hostname (= pod name in K8s)
+conf:
+  experiment:
+    storage:
+      experiment_dir: /mnt/fsx          # all pods write here
+      # writer_id: defaults to hostname (= pod name in K8s)
 ```
 
 Then each pod's entrypoint is just:
@@ -367,11 +369,12 @@ vmn-exp export my_app --latest -o ./code
 Config approach (in `conf.yml` baked into the exported tree):
 
 ```yaml
-experiment:
-  storage:
-    bucket: my-experiments
-    experiment_dir: /tmp/exp
-    # writer_id: defaults to hostname (= pod name)
+conf:
+  experiment:
+    storage:
+      bucket: my-experiments
+      experiment_dir: /tmp/exp
+      # writer_id: defaults to hostname (= pod name)
 ```
 
 Then each pod just runs:
@@ -650,6 +653,7 @@ All storage flags can also be set in `conf.yml` under `experiment.storage` — C
 | `--sync-interval <sec>` | — | Seconds between S3 metric syncs (default: 30) |
 | `--heartbeat-interval <sec>` | — | Seconds between heartbeat refreshes (default: 30) |
 | `--parent <ref>` | — | Attach the run as an inner job of another experiment |
+| `--store <uri>` | `uri` | Store URI (`s3://`, `gs://`, `az://`, `file://`); also `VMN_EXPERIMENT_STORE`. Wins over the `--bucket` shorthand |
 | `--bucket <name>` | `bucket` | S3 bucket name |
 | `--endpoint-url <url>` | `endpoint_url` | Custom S3 endpoint (MinIO, LocalStack) |
 | `--prefix <prefix>` | `prefix` | Key prefix in bucket (default: `vmn-experiments`) |
@@ -657,10 +661,11 @@ All storage flags can also be set in `conf.yml` under `experiment.storage` — C
 Example `conf.yml`:
 
 ```yaml
-experiment:
-  storage:
-    experiment_dir: /mnt/shared
-    bucket: my-experiments    # optional — only for S3 mode
+conf:
+  experiment:
+    storage:
+      experiment_dir: /mnt/shared
+      bucket: my-experiments    # optional — only for S3 mode (or uri: s3://my-experiments/vmn-experiments)
 ```
 
 ---
@@ -672,8 +677,7 @@ containers:
   - name: experiment
     image: my-training:latest
     command:
-      - vmn
-      - exp
+      - vmn-exp
       - run
       - my_app
       - --from-snapshot
@@ -706,8 +710,7 @@ containers:
   - name: experiment
     image: my-training:latest
     command:
-      - vmn
-      - exp
+      - vmn-exp
       - run
       - my_app
       - --from-snapshot

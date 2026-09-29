@@ -1,12 +1,16 @@
 # Experiments
 
-`vmn-exp` (alias: `vmn-exp`) is local-first experiment tracking for any
+`vmn-exp` is local-first experiment tracking for any
 versioned app. An "experiment" is a **snapshot of your working tree plus a log of
 metrics and notes** — nothing more. There is no required training script, no
 server, and no database. Experiments are plain files under
 `.vmn/{app}/experiments/` (git-ignored, never committed or pushed), each anchored
 to an exact version and commit so reproducing a result is one `vmn-exp restore`
 away.
+
+New here? [client-guide.md](client-guide.md) walks through a project end to end
+(install, store, submit, log, watch, compare, reproduce, resume/rewind/fork,
+models, prune). This page is the reference.
 
 Machine-learning training is the headline use case, but the mechanism is
 general. Anything you can measure and want to reproduce fits: **config sweeps,
@@ -166,7 +170,7 @@ Everything after the first `--` is the command. `vmn-exp run` returns the
 command's own exit code, so CI can tell a failed run from a passing one — or
 `128 + N` when signal N ended it, the way a shell reports it.
 
-The command runs in the directory you invoked `vmn` from (or
+The command runs in the directory you invoked `vmn-exp` from (or
 `$VMN_WORKING_DIR` when set), not the repo root, so
 `cd src && vmn-exp run my_app -- python train.py` finds `src/train.py`.
 
@@ -183,7 +187,9 @@ web UI's run page shows it in an **output** card.
   `[vmn: N bytes of output omitted]` marker — the start has the config the job
   printed, the end has the traceback it died with. The terminal is never capped.
 - **Uploaded while it runs**: every `--sync-interval` seconds (only when it
-  changed) and once more at the end — whatever ended it, a forwarded SIGTERM
+  changed; an upload of N bytes also holds the next one off for N / 64 KB
+  seconds, so a chatty command spends at most ~64 KB/s re-uploading it) and
+  once more, unthrottled, at the end — whatever ended it, a forwarded SIGTERM
   included — so a preempted or hung job still has its latest output stored.
   Only a SIGKILL of `vmn-exp run` itself loses what came after the last upload.
 - **Bytes, not text**: output is stored verbatim; non-UTF-8 bytes and control
@@ -350,7 +356,7 @@ writer's clock is behind; a heartbeat dated in the future (a writer clock ahead)
 is ignored, so such a run still turns `stuck` once the store sees no writes.
 When the store time is unknown (a backend listing that carries no mtime), the
 timestamp rule above applies alone. In code: `derive_status(state,
-observed_at=...)` in `version_stamp.core.experiment_status`, with `observed_at`
+observed_at=...)` in `vmn_exp.core.status`, with `observed_at`
 from `run_state_observed_at(storage, app, verstr)` or an index snapshot's
 `run_state_observed_at`; `stale_sec` is the age of the fresher of the two. `heartbeat_seq` increases by one on
 every beat, for readers that poll and want a clock-free "it moved" signal.
@@ -379,7 +385,7 @@ received_signal: SIGTERM  # present when vmn itself was signalled
 A command that traps `SIGTERM` and exits 0 (say, after checkpointing) keeps its
 own exit code; `received_signal` still records that it was asked to stop.
 
-Only a `SIGKILL` of `vmn` itself leaves a run claiming `running` — the stale
+Only a `SIGKILL` of `vmn-exp run` itself leaves a run claiming `running` — the stale
 heartbeat then reports it `stuck`. A failing heartbeat write, a metrics line
 that cannot be stored or a remote sync that errors or hangs never ends
 supervision: vmn warns once and keeps watching the command.
@@ -837,15 +843,16 @@ vmn-exp diff my_app --tool delta
 
 ### `restore`
 
-Check out the exact code state of an experiment and retrieve its artifacts. If
-the working tree is dirty, that work is **auto-saved first** as a dev version
-(and the `vmn goto -v <saved> my_app` that brings it back is printed) — you
-never lose uncommitted changes. `vmn goto -v <dev-version> my_app` restores a
-run's code the same way (it takes a full verstr, not a prefix or `@N`).
+Check out the exact code state of an experiment. If the working tree is
+dirty, that work is **auto-saved first** as a dev version (and the
+`vmn goto -v <saved> my_app` that brings it back is printed) — you never lose
+uncommitted changes. `vmn goto -v <dev-version> my_app` restores a run's code
+the same way (it takes a full verstr, not a prefix or `@N`; see
+[Restore vs goto](#restore-vs-goto)).
 
 Both look the run up the same way: the local experiments dir, then the app's
-remote experiment store (`--store` > `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`
-> conf `experiment.storage`) only on a local miss, then the snapshots store —
+remote experiment store (`--store`, else `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`,
+else conf `experiment.storage`) only on a local miss, then the snapshots store —
 so a run another host recorded straight to S3 restores from any checkout. A run
 with no code snapshot (e.g. an MLflow import) is refused with an error, and a
 run that is nowhere is reported with the list of places searched.
@@ -854,6 +861,23 @@ run that is nowhere is reported with the list of places searched.
 vmn-exp restore my_app --latest
 vmn-exp restore my_app -v @2
 ```
+
+#### Restore vs goto
+
+Both put this checkout at a run's exact code (base commit, working-tree diff,
+local commits, untracked files), auto-save a dirty tree first, and use the same
+lookup. They differ in what they accept:
+
+| | `vmn-exp restore <app>` | `vmn goto -v <verstr> <app>` |
+|---|---|---|
+| Ref | any [addressing form](#addressing-experiments): a full verstr, a unique prefix, `@N`, `latest`/`--latest`; defaults to the latest run | a full dev verstr only (e.g. `1.6.0-dev.a1b2c3d.e4f5g6h`) |
+| Remote store | `--store`/`--bucket`/`--prefix`/`--endpoint-url`, else `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`, else conf | `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`, else conf (no store flags) |
+| Needs | `vmn-exp` | `vmn` with `vmn-exp` installed (vmn-exp registers the dev-version loader `goto` uses) |
+| Also restores | experiment runs only | a stamped (non-dev) version with all its deps, as usual |
+
+Use `restore` while working with runs, where `@N` and prefixes are convenient.
+Use `goto` for the full verstr that a restore prints for your auto-saved work,
+or when a script already speaks `vmn goto`.
 
 ### `export`
 
@@ -1027,12 +1051,13 @@ Declare each metric's goal and a primary metric in `.vmn/{app}/conf.yml` so
 what to sort by when you don't pass `--sort`:
 
 ```yaml
-experiment:
-  metrics:
-    loss:        {goal: min, primary: true}   # lower is better; default sort key
-    val_loss:    {goal: min}
-    acc:         {goal: max}                   # higher is better
-    latency_ms:  {goal: min}
+conf:
+  experiment:
+    metrics:
+      loss:        {goal: min, primary: true}   # lower is better; default sort key
+      val_loss:    {goal: min}
+      acc:         {goal: max}                   # higher is better
+      latency_ms:  {goal: min}
 ```
 
 - `goal: min` → best-first ascending. `goal: max` → best-first descending.
@@ -1062,11 +1087,12 @@ Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
 ranks on 0.2, its best epoch, not on 0.9:
 
 ```yaml
-experiment:
-  metrics:
-    loss:     {goal: min}                  # ranks on the minimum
-    val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
-    lr:       {summary: last}
+conf:
+  experiment:
+    metrics:
+      loss:     {goal: min}                  # ranks on the minimum
+      val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
+      lr:       {summary: last}
 ```
 
 The summary value is what everything ranks and filters on: `list --sort`,
@@ -1129,9 +1155,10 @@ or go straight to the store when there is none. A missing SDK fails with the
 
 ```yaml
 # .vmn/my_app/conf.yml
-experiment:
-  storage:
-    uri: gs://ml-experiments/team
+conf:
+  experiment:
+    storage:
+      uri: gs://ml-experiments/team
 ```
 
 ### Storage backends (plugins)

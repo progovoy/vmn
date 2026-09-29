@@ -17,10 +17,15 @@ with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
     print(run.id)     # the verstr, e.g. 1.6.0-dev.a1b2c3d.e4f5g6h
 ```
 
-No extra install: the SDK ships in the base wheel and adds no third-party
-dependencies. It imports `version_stamp.core` and the snapshot helpers and
-nothing else — in particular never `version_stamp.ui` — so the experiment
-feature stays liftable into its own distribution later.
+The SDK ships in `vmn-exp-sdk` (`pip install vmn-exp-sdk`, which depends only
+on PyYAML, filelock and psutil); `pip install vmn-exp` brings it along with the
+CLI. It never imports `vmn` (`version_stamp`), the CLI or the dashboard, so a
+job image needs nothing else — see [Slim install](#slim-install). Creating a
+run from a repository checkout additionally needs `vmn-exp`, which provides the
+snapshot capture.
+
+For a task-by-task walkthrough (submit, log, watch, compare, resume/rewind/fork,
+models), see [client-guide.md](client-guide.md).
 
 A run needs a git repo with a remote and a usable git identity: creating one
 commits a snapshot, so `user.name` and `user.email` must be set. In a container
@@ -79,7 +84,6 @@ start_run(
     storage=None,
     system_metrics=None,
     sync_interval_sec=30,
-    snapshot=True,
     run_id=None,
     all_ranks=False,
     name=None,
@@ -767,7 +771,7 @@ as an inner run:
 ```python
 with start_run("my_app", note="lr sweep"):
     for lr in (1e-4, 3e-4, 1e-3):
-        subprocess.run(["vmn", "exp", "run", "my_app", "--", "python", "train.py", "--lr", str(lr)])
+        subprocess.run(["vmn-exp", "run", "my_app", "--", "python", "train.py", "--lr", str(lr)])
 ```
 
 Either way you get the same outer/inner structure — including `kind` and the
