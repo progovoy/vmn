@@ -11,15 +11,9 @@ import datetime
 import yaml
 
 from vmn_exp._base import VMN_LOGGER, now_iso, yaml_safe_load
+from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
-from vmn_exp.core.status import (
-    FAILED,
-    STUCK,
-    derive_status,
-    load_run_state,
-    parse_iso,
-    run_state_observed_at,
-)
+from vmn_exp.core.status import FAILED, STUCK, derive_status, parse_iso
 
 ALERTS_FILE = "alerts_sent.yml"
 
@@ -105,35 +99,40 @@ def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None
 
 def watch_app(storage, app_name, alerter, within_sec, now=None):
     """Alert every run of *app_name* that went failed/stuck in the last
-    *within_sec* seconds and has not alerted it yet. ``[(verstr, status)]``."""
+    *within_sec* seconds and has not alerted it yet. ``[(verstr, status)]``.
+
+    Statuses come from the app's index snapshot; only the candidates' alert
+    markers are read."""
     wanted = {s for s in (FAILED, STUCK) if alerter.wants(s)}
     if not wanted:
         return []
     now = _now(now)
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
     fired = []
-    for verstr in storage.list_verstrs(app_name):
+    for verstr, run_state, status in _candidates(snap, wanted, within_sec, now):
+        name = (snap.row(verstr) or {}).get("name")
         try:
-            status = _check_run(storage, app_name, verstr, alerter, wanted, within_sec, now)
+            sent = alert_transition(
+                storage, app_name, verstr, run_state, status, alerter, name, now
+            )
         except Exception:
             VMN_LOGGER.debug(f"Alert check of {verstr} failed", exc_info=True)
             continue
-        if status:
+        if sent:
             fired.append((verstr, status))
     return fired
 
 
-def _check_run(storage, app_name, verstr, alerter, wanted, within_sec, now):
-    run_state = load_run_state(storage, app_name, verstr)
-    if not run_state:
-        return None
-    observed_at = run_state_observed_at(storage, app_name, verstr)
-    status = derive_status(run_state, now=now, observed_at=observed_at)
-    if status not in wanted:
-        return None
-    since = _transition_time(status, run_state)
-    if since is None or (now - since).total_seconds() > within_sec:
-        return None
-    name = (storage.load_metadata(app_name, verstr) or {}).get("name")
-    if alert_transition(storage, app_name, verstr, run_state, status, alerter, name, now):
-        return status
-    return None
+def _candidates(snap, wanted, within_sec, now):
+    """``(verstr, run_state, status)`` of the runs that went *wanted* within
+    the window."""
+    for verstr, run_state in snap.run_states.items():
+        if not run_state:
+            continue
+        observed_at = snap.run_state_observed_at.get(verstr)
+        status = derive_status(run_state, now=now, observed_at=observed_at)
+        if status not in wanted:
+            continue
+        since = _transition_time(status, run_state)
+        if since is not None and (now - since).total_seconds() <= within_sec:
+            yield verstr, run_state, status

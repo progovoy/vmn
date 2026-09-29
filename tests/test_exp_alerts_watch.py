@@ -185,3 +185,28 @@ def test_watch_command_alerts_stuck_runs(app_layout, capfd, monkeypatch):
         assert _experiment(app_layout.app_name, action="watch") == 0
         assert _experiment(app_layout.app_name, action="watch") == 0
     assert [b["run_id"] for b in hook.bodies] == [verstr]
+
+
+def test_a_watch_tick_reads_only_the_candidates_markers(app_layout, capfd, monkeypatch):
+    _bootstrap(app_layout)
+    stuck = _create(app_layout, capfd)
+    quiet = [_create(app_layout, capfd) for _ in range(3)]
+    _age_run_state(app_layout, stuck, _stuck_state(_an_hour_ago()))
+    for verstr in quiet:
+        _age_run_state(app_layout, verstr, dict(
+            _stuck_state(_an_hour_ago()), state="finished", exit_code=0,
+            finished_at=_an_hour_ago(),
+        ))
+    storage = _storage(app_layout)
+    with WebhookReceiver() as hook:
+        alerter = _alerter(hook.url, ["stuck", "failed"])
+        assert watch_app(storage, app_layout.app_name, alerter, 86400) == [(stuck, "stuck")]
+
+        reads = []
+        real_load_file, real_load_metadata = storage.load_file, storage.load_metadata
+        monkeypatch.setattr(storage, "load_file", lambda app, v, name: (
+            reads.append((v, name)) or real_load_file(app, v, name)))
+        monkeypatch.setattr(storage, "load_metadata", lambda app, v: (
+            reads.append((v, "metadata")) or real_load_metadata(app, v)))
+        assert watch_app(storage, app_layout.app_name, alerter, 86400) == []
+    assert reads == [(stuck, ALERTS_FILE)]
