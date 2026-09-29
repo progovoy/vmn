@@ -55,6 +55,7 @@ from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
+from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 
@@ -271,6 +272,7 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             "vmn-exp-sync",
         )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
+        self._media_uploads = MediaUploads(self._save_artifact_file)
         self._output = (
             RunOutput(storage, app_name, verstr) if capture_output else None
         )
@@ -375,7 +377,11 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        writers = [("log", self._log_sync), ("state", self._state_publisher)]
+        writers = [
+            ("log", self._log_sync),
+            ("state", self._state_publisher),
+            ("media files", self._media_uploads),
+        ]
         if self._output is not None:
             writers.append(("output log", self._output))
         for what, writer in writers:
