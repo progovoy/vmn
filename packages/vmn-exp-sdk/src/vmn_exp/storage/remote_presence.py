@@ -8,11 +8,10 @@ the next host to claim the name inherits) or overwrite the foreign record.
 
 So a write goes through only to a record the remote is known to hold: one
 this cache created, saved or pulled from the remote, or one whose remote
-metadata names the same run (:func:`same_record`). The answer is memoized per
+metadata names the same run (:func:`record_identity`). The answer is memoized per
 cache: one metadata GET per record not created or pulled through it.
 """
-from vmn_exp._base import VMN_LOGGER, parse_record_metadata
-from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp._base import VMN_LOGGER
 
 # What makes two records the same run whatever their name or mutable fields.
 _IDENTITY_FIELDS = ("timestamp", "base_commit", "diff_hash", "code_verstr")
@@ -24,10 +23,6 @@ def record_identity(metadata):
     imported = metadata.get("imported_from")
     run_id = imported.get("run_id") if isinstance(imported, dict) else None
     return identity + (run_id,)
-
-
-def same_record(local_metadata, remote_metadata):
-    return record_identity(local_metadata) == record_identity(remote_metadata)
 
 
 class RemotePresence:
@@ -49,7 +44,7 @@ class RemotePresence:
         remote cannot be read (nothing is memoized then)."""
         key = (app_name, verstr)
         if key not in self._known:
-            local = self._metadata(self._local, app_name, verstr)
+            local = self._local.load_metadata(app_name, verstr)
             if local is None:
                 return False
             self._known[key] = self._check(app_name, verstr, local)
@@ -65,17 +60,14 @@ class RemotePresence:
             self.mark(app_name, verstr)
 
     def _check(self, app_name, verstr, local):
-        remote = self._metadata(self._remote, app_name, verstr)
+        remote = self._remote.load_metadata(app_name, verstr)
         if remote is None:
             VMN_LOGGER.debug(f"{verstr} is local only: its writes stay local")
             return False
-        if not same_record(local, remote):
+        if record_identity(local) != record_identity(remote):
             VMN_LOGGER.debug(
                 f"The remote {verstr} is another run of that name: writes stay local"
             )
             return False
         return True
 
-    @staticmethod
-    def _metadata(storage, app_name, verstr):
-        return parse_record_metadata(storage.load_file(app_name, verstr, METADATA_FILE))

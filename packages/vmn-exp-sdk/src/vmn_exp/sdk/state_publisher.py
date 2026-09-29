@@ -19,7 +19,7 @@ from vmn_exp.storage.cached import CachedSnapshotStorage
 
 def split_storage(storage, app_name, verstr):
     """``(inline, background upload or None)`` of *storage* for one run's
-    state writes; the upload takes ``(filename, data)``.
+    state writes; the upload takes the state's serialized ``data``.
 
     A local-first cache with a remote is split into its local side and an
     upload to the remote — made only once the remote is known to hold this
@@ -33,17 +33,20 @@ def split_storage(storage, app_name, verstr):
         # remote), and it exposes no public accessor for its local side.
         if storage._remote is None:
             return storage._local, None
-        upload = functools.partial(_upload_if_held, storage, app_name, verstr)
-        return storage._local, upload
+        return storage._local, functools.partial(
+            _upload_if_held, storage, app_name, verstr
+        )
     if getattr(storage, "is_remote", lambda: False)():
-        return None, functools.partial(storage.save_file, app_name, verstr)
+        return None, functools.partial(
+            storage.save_file, app_name, verstr, RUN_STATE_FILE
+        )
     return storage, None
 
 
-def _upload_if_held(storage, app_name, verstr, filename, data):
+def _upload_if_held(storage, app_name, verstr, data):
     remote = storage.remote_for(app_name, verstr)
     if remote is not None:
-        remote.save_file(app_name, verstr, filename, data)
+        remote.save_file(app_name, verstr, RUN_STATE_FILE, data)
 
 
 class RunStatePublisher:
@@ -56,9 +59,7 @@ class RunStatePublisher:
         self._where = (app_name, verstr, RUN_STATE_FILE)
         self._remote = None
         if upload is not None:
-            self._remote = Coalescing(
-                functools.partial(upload, RUN_STATE_FILE), "vmn-run-state"
-            )
+            self._remote = Coalescing(upload, "vmn-run-state")
 
     def publish(self, state):
         """Write *state* now locally; queue it for the remote. Raises on a
