@@ -276,32 +276,34 @@ CAPTURE_ENV_ENV = "VMN_CAPTURE_ENV"
 _OPT_OUT_VALS = frozenset(("0", "false", "False", "no", "off"))
 
 
-def should_capture(explicit, exp_conf=None):
-    """Return True if the environment should be captured.
+def opted_in(explicit, env_var, conf_key, exp_conf=None):
+    """Whether an on-by-default feature is on.
 
-    Precedence: explicit arg > ``VMN_CAPTURE_ENV`` > conf > True.
+    Precedence: explicit arg > *env_var* > ``exp_conf[conf_key]`` > True.
 
     *explicit* controls the override:
 
-    * ``False`` — always skip (overrides env-var and conf).
-    * ``True``  — override conf, but still respect ``VMN_CAPTURE_ENV``.
+    * ``False`` — always off (overrides env-var and conf).
+    * ``True``  — override conf, but still respect *env_var*.
     * ``None``  — full opt-out chain (env-var → conf → default True).
 
     *exp_conf* is the ``experiment:`` section of the app's conf.yml, as a dict.
     """
     if explicit is False:
         return False
-    env_val = os.environ.get(CAPTURE_ENV_ENV)
-    if env_val in _OPT_OUT_VALS:
+    if os.environ.get(env_var) in _OPT_OUT_VALS:
         return False
     if explicit is True:
-        return True  # explicit True overrides conf but env-var already checked
-    # explicit is None: also check conf
-    if exp_conf:
-        conf_val = exp_conf.get("capture_env")
-        if conf_val is not None:
-            return bool(conf_val)
+        return True
+    conf_val = (exp_conf or {}).get(conf_key)
+    if conf_val is not None:
+        return bool(conf_val)
     return True
+
+
+def should_capture(explicit, exp_conf=None):
+    """Return True if the environment should be captured (see :func:`opted_in`)."""
+    return opted_in(explicit, CAPTURE_ENV_ENV, "capture_env", exp_conf)
 
 
 def capture_env_safe(python_exe=None):

@@ -25,7 +25,11 @@ def _state(app_layout, verstr):
 
 def _metric_steps(app_layout, verstr):
     log = _storage(app_layout).load_merged_log(app_layout.app_name, verstr)
-    return sorted(e["step"] for e in log if e.get("type") == "metrics")
+    # Only the run's own metric: the default-on system metrics carry no step.
+    return sorted(
+        e["step"] for e in log
+        if e.get("type") == "metrics" and "loss" in (e.get("values") or {})
+    )
 
 
 def _preempted_run(app_layout):
