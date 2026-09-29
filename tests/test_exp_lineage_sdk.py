@@ -85,6 +85,17 @@ def test_use_artifact_refuses_an_artifact_the_run_did_not_log(store, tmp_path):
             consumer.use_artifact(producer.id, "nope.bin")
 
 
+def test_a_non_zero_rank_gets_the_file_and_records_nothing(store, tmp_path):
+    from vmn_exp.sdk.ranks import NoOpRun
+
+    producer, _ = _producer(tmp_path)
+    before = len(store.list_verstrs(APP))
+    local = NoOpRun(APP).use_artifact(producer.id, "model.pkl")
+    with open(local, "rb") as f:
+        assert f.read() == b"weights"
+    assert len(store.list_verstrs(APP)) == before
+
+
 def test_get_lineage_upstream_downstream_and_models(store, tmp_path):
     producer, _ = _producer(tmp_path)
     producer.register_model("clf", artifact_path="model.pkl", alias="prod")

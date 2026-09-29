@@ -53,15 +53,16 @@ def _write_text(path, write):
         write(f)
 
 
-def _produced_output(storage, app_name, ref, path):
-    """``(verstr, output)`` of artifact *path* logged by run *ref*, or a ValueError."""
+def fetch_artifact(storage, app_name, ref, path):
+    """``(verstr, output, local path)`` of artifact *path* logged by run *ref*;
+    ValueError when *ref* resolves to nothing or logged no such artifact."""
     verstr, err = resolve_experiment(storage, app_name, ref)
     if err:
         raise ValueError(err)
     output = fold_outputs_dict(fold_log(load_log(storage, app_name, verstr))).get(path)
     if output is None:
         raise ValueError(f"Run {verstr} of {app_name} logged no artifact {path!r}")
-    return verstr, output
+    return verstr, output, storage.artifact_local_path(app_name, verstr, path)
 
 
 class RunArtifacts:
@@ -77,8 +78,7 @@ class RunArtifacts:
         defaults to this run's app.
         """
         app_name = app_name or self.app_name
-        verstr, output = _produced_output(self._storage, app_name, ref, path)
-        local = self._storage.artifact_local_path(app_name, verstr, path)
+        verstr, output, local = fetch_artifact(self._storage, app_name, ref, path)
         self.log_input(
             artifact_ref_uri(app_name, verstr, path),
             name=name or default_input_name(path),

@@ -184,7 +184,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
 | `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
-| `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact |
+| `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact. On a non-zero rank it still returns the path, recording nothing |
 | `run.log_note(text)` | a note entry |
 | `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
 | `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |

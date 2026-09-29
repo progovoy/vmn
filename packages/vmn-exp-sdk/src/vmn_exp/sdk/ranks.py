@@ -76,6 +76,14 @@ class NoOpRun:
     def log_input(self, uri, name=None, digest=None, kind=None):
         return None
 
+    def use_artifact(self, ref, path, name=None, app_name=None):
+        """The artifact's local path, as rank 0 gets it — nothing is recorded."""
+        from vmn_exp.core.storage_resolve import resolve_experiment_storage
+        from vmn_exp.sdk.run_artifacts import fetch_artifact
+
+        storage = resolve_experiment_storage()
+        return fetch_artifact(storage, app_name or self.app_name, ref, path)[2]
+
     def _ignore(self, *args, **kwargs):
         return None
 
