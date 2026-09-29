@@ -42,12 +42,14 @@ class _Collision(Exception):
 class Outcome:
     """What pushing *verstr* did: ``status`` is one of :data:`NEW`,
     :data:`UPDATE`, :data:`UP_TO_DATE`, :data:`COLLISION`, :data:`FAILED`;
-    ``detail`` explains a collision or failure."""
+    ``detail`` explains a collision or failure; ``renamed_from`` is the old
+    name of a run a collision renamed (:mod:`vmn_exp.core.push_rename`)."""
 
     verstr: str
     status: str
     detail: str = ""
     warnings: list = field(default_factory=list)
+    renamed_from: str = ""
 
 
 def require_push_target(target):
