@@ -2,9 +2,10 @@
 """Run-to-run lineage: which runs made what a run consumed, and which consumed
 what it made.
 
-A run's ``inputs`` (``run.log_input``) and ``outputs`` (its artifacts, with
-their sha256) are already on every index row, so lineage is a join over rows —
-no log is read. Two kinds of edge:
+A run's ``inputs`` (``run.log_input``) and ``outputs`` (its artifacts and
+logged images/tables, with their sha256) are already folded by the index —
+inputs on every row, outputs beside the lean rows (``outputs_of``) — so
+lineage is a join over rows: no log is read. Two kinds of edge:
 
 * **uri** — an input whose URI is ``vmn://<app>/<verstr>/<artifact path>``
   (what ``run.use_artifact`` records) names its producer outright. ``<app>``
@@ -47,10 +48,16 @@ def normalize_digest(digest):
 
 
 class LineageIndex:
-    """The digest and URI maps of one app's rows. Build once per index snapshot."""
+    """The digest and URI maps of one app's rows. Build once per index snapshot.
 
-    def __init__(self, rows):
+    *outputs_of(verstr)* gives a row's outputs when its rows are an index
+    snapshot's lean ones (``IndexSnapshot.outputs_of``); else they are read
+    off the rows.
+    """
+
+    def __init__(self, rows, outputs_of=None):
         self.rows = {}
+        self.outputs_of = outputs_of or (lambda verstr: self.rows[verstr].get("outputs") or {})
         self.producers = {}  # digest -> [(verstr, artifact path)]
         self.digest_consumers = {}  # digest -> [(verstr, input name, input)]
         self.uri_consumers = {}  # (app, verstr) -> [(verstr, input name, input, path)]
@@ -60,7 +67,7 @@ class LineageIndex:
     def _add(self, row):
         verstr = row["verstr"]
         self.rows[verstr] = row
-        for path, out in (row.get("outputs") or {}).items():
+        for path, out in self.outputs_of(verstr).items():
             digest = normalize_digest((out or {}).get("digest"))
             if digest:
                 self.producers.setdefault(digest, []).append((verstr, path))
@@ -100,7 +107,7 @@ def _downstream_edges(app_name, row, index):
         ((app_name, verstr), _link(name, path, inp.get("digest"), "uri"))
         for verstr, name, inp, path in index.uri_consumers.get((app_name, row["verstr"]), ())
     ]
-    for path, out in sorted((row.get("outputs") or {}).items()):
+    for path, out in sorted(index.outputs_of(row["verstr"]).items()):
         digest = normalize_digest((out or {}).get("digest"))
         for verstr, name, inp in index.digest_consumers.get(digest, ()) if digest else ():
             edges.append(((app_name, verstr), _link(name, path, inp.get("digest"), "digest")))

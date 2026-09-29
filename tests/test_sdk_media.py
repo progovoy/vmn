@@ -116,16 +116,17 @@ def test_log_image_from_a_png_path(run, storage, tmp_path):
     assert _entries(storage, "image")[0]["width"] == 2
 
 
-def test_media_files_are_not_lineage_outputs(run, storage, tmp_path):
-    """Per-step media would bloat every row's ``outputs``; the image/table
-    entry is their only log entry."""
+def test_media_files_are_outputs_recorded_by_their_own_entry(run, storage, tmp_path):
+    """The image/table entry is both the media record and the output record
+    (its ``sha256``/``size``): there is no separate ``artifact`` entry."""
     src = tmp_path / "pic.png"
     src.write_bytes(encode_png(bytes(3 * 2 * 2), 2, 2, 3))
     run.log_image("pic", str(src))
     run.log_table("t", [{"n": 1}])
     run.finish()
     assert not _entries(storage, "artifact")
-    assert reader.get_run(APP, VERSTR, storage=storage)["outputs"] == {}
+    outputs = reader.get_run(APP, VERSTR, storage=storage)["outputs"]
+    assert set(outputs) == {"media/pic/0.png", "tables/t/0.json"}
 
 
 def test_a_non_png_image_without_pil_keeps_its_extension(run, storage, tmp_path, monkeypatch):

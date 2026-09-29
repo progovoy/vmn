@@ -24,8 +24,13 @@ _SECTIONS = {"image": "media", "table": "tables", "histogram": "histograms"}
 _COUNT_NAMES = {"image": "images", "table": "tables", "histogram": "histograms"}
 
 
+# The sha256/size an image/table entry records it as an output with are
+# served by the run's ``outputs``, not repeated per media item.
+_NOT_IN_ITEMS = ("type", "name", "timestamp", "_writer", "sha256", "size")
+
+
 def _item(entry):
-    return {k: v for k, v in entry.items() if k not in ("type", "name", "timestamp", "_writer")}
+    return {k: v for k, v in entry.items() if k not in _NOT_IN_ITEMS}
 
 
 def _spread(items, limit):

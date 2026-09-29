@@ -194,6 +194,13 @@ export interface InputEntry {
   kind?: string | null;
 }
 
+/** A file the run stored: an artifact, or a logged image/table. */
+export interface OutputEntry {
+  path: string;
+  digest: string | null;
+  size: number | null;
+}
+
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
   /** The newest log entries — the whole log only when requested with
@@ -223,6 +230,8 @@ export interface ExperimentDetail {
   env?: EnvData | null;
   /** Named inputs (datasets/artefacts) logged during the run. */
   inputs?: Record<string, InputEntry> | null;
+  /** Files the run stored, by path (list rows never carry these). */
+  outputs?: Record<string, OutputEntry> | null;
   /** Source identifier when the run was imported from an external system. */
   imported_from?: string | null;
   /** Logged images per key, one item per step (`run.log_image`). */

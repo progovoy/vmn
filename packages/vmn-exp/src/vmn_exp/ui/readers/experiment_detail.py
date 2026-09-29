@@ -14,7 +14,7 @@ from collections import ChainMap
 import yaml
 
 from vmn_exp.snapshot import _resolve_verstr
-from vmn_exp.core.fold import fold_inputs_dict
+from vmn_exp.core.fold import fold_inputs_dict, fold_outputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.refs import placement_snapshot
@@ -226,6 +226,7 @@ def experiment_detail(
         "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": _load_env(storage, app_name, verstr, metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
+        "outputs": fold_outputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
         "forked_from": metadata.get("forked_from"),
         "rewinds": snapshot.rewinds(),

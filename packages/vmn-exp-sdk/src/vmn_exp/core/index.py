@@ -15,7 +15,8 @@ warm; a heartbeat there rewrites only its small run-state row.
 Readers get an immutable :class:`IndexSnapshot` per ``generation`` (bumped by
 anything visible, run states included) that never takes the index lock or
 touches storage. Its rows are ``experiment_row``'s under no metrics schema and
-without ``metric_summary`` (the row copies handed out carry it); a caller's
+without ``metric_summary`` or ``outputs`` (the snapshot keeps them per
+verstr; the row copies handed out carry them); a caller's
 schema is a view of it (:meth:`IndexSnapshot.summarized`), never index state.
 Status is derived from its run states on every read, since it depends on the
 clock.
@@ -287,7 +288,7 @@ class ExperimentIndex:
 
     def rows(self, with_create_note=False):
         """``experiment_row`` dicts in storage order — fresh copies, ``idx`` and
-        ``metric_summary`` set.
+        ``metric_summary`` and ``outputs`` set.
 
         ``with_create_note`` adds ``create_note``: the first ``create`` entry's
         note, which ``vmn-exp list`` shows for a run without a metadata note.
@@ -311,8 +312,16 @@ def _adopted(old, record, state_moved):
 
 
 def _row_copies(snap, with_create_note):
-    """Copies of *snap*'s rows with their ``metric_summary`` (and create note)."""
-    rows = [dict(row, metric_summary=snap.metric_summary(row["verstr"])) for row in snap.rows]
+    """Copies of *snap*'s rows with their ``metric_summary`` and ``outputs``
+    (and create note)."""
+    rows = [
+        dict(
+            row,
+            metric_summary=snap.metric_summary(row["verstr"]),
+            outputs=dict(snap.outputs_of(row["verstr"])),
+        )
+        for row in snap.rows
+    ]
     if with_create_note:
         for row in rows:
             row["create_note"] = snap.create_notes[row["verstr"]]
@@ -393,15 +402,17 @@ def _run_states(storage, app_name, rows, read_run_state=load_run_state):
 def direct_snapshot(storage, app_name, schema=None):
     """An :class:`IndexSnapshot` (generation 0) built by reading every record,
     summarized by *schema* like :func:`indexed_snapshot`'s."""
-    rows, notes, parts = [], {}, {}
+    rows, notes, parts, outputs = [], {}, {}, {}
     for idx, meta, fold in _direct_folds(storage, app_name, load_log):
-        row, notes[meta["verstr"]], part = lean_row(idx, meta, fold)
+        row, notes[meta["verstr"]], part, made = lean_row(idx, meta, fold)
         rows.append(row)
         if part:
             parts[meta["verstr"]] = part
+        if made:
+            outputs[meta["verstr"]] = made
     states = _run_states(storage, app_name, rows)
     observed = observed_at_by_verstr(storage, app_name, states)
-    snap = IndexSnapshot.build(app_name, 0, rows, states, notes, observed, parts)
+    snap = IndexSnapshot.build(app_name, 0, rows, states, notes, observed, parts, outputs)
     return snap.summarized(schema)
 
 

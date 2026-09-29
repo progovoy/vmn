@@ -273,8 +273,8 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
 
 | Call | Accepts | Stored as | Log entry |
 |---|---|---|---|
-| `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns"}` (+ `total_rows` when truncated) |
-| `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height"}` |
+| `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns", "sha256", "size"}` (+ `total_rows` when truncated) |
+| `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height", "sha256", "size"}` |
 | `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
 
 - Tables keep at most **10,000 rows** (`vmn_exp.core.tables.MAX_TABLE_ROWS`);
@@ -289,6 +289,20 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
   finite value nothing is logged and a warning says so.
 - A rank > 0 [`NoOpRun`](#distributed-training-ddp-torchrun-slurm) ignores
   all three.
+- Logged images and tables are **outputs** of the run, like `log_artifact`
+  files: the entry's `sha256`/`size` are those of the encoded bytes, hashed in
+  memory before the upload, so they appear in `get_run()["outputs"]`, match
+  `outputs."media/samples/3.png".size > 0` queries, link consumers in
+  [lineage](#lineage), and another run can fetch one with
+  `run.use_artifact(ref, "media/samples/3.png")` (or `"tables/preds/3.json"`).
+  The file is stored on a background worker, so the entry can precede it:
+  for as long as the upload takes, a reader may see an output whose file is
+  not there yet. A file that fails to store — the save raises, or it is still
+  queued when the run's final upload wait (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`)
+  runs out — gets an `{"type": "output_failed", "path", "error"}` entry that
+  retracts the output, so it is never claimed for good (the media index still
+  lists the image/table entry). A process killed before its queue drained is
+  the one case left claiming a file that never landed.
 
 `get_run()` returns the indexes next to `artifacts`: `media`, `tables` and
 `histograms` map each name to its steps in order (the latest entry for a step
@@ -915,9 +929,14 @@ get_lineage("my_app", evaluate.id, depth=2)
 `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)`
 links runs through what they consumed and produced:
 
-- every row carries `outputs` — `{artifact path: {"path", "digest": "sha256:<hex>", "size"}}`,
-  folded from the run's artifact entries (the latest upload of a path wins) —
-  next to `inputs`;
+- every `get_run`/`list_runs` row carries `outputs` — `{path: {"path", "digest":
+  "sha256:<hex>", "size"}}`, folded from the run's artifact, image and table
+  entries (the latest write of a path wins; an `output_failed` entry retracts
+  one) — next to `inputs`. The experiment index keeps them beside its lean
+  rows rather than on them, so `vmn-exp ui` list, leaderboard, facets and
+  columns payloads never carry them (a run logging an image per step has one
+  output per step), while lineage, run detail and `outputs.*` queries read
+  them;
 - **upstream** are the runs whose artifacts this run consumed: an input whose
   URI is `vmn://<app>/<verstr>/<path>` (what `use_artifact` records; `<app>` is
   the tag form, `/` → `-`) names its producer, in any app; any other input
@@ -985,7 +1004,7 @@ are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
   (`archived = true` — only meaningful with `include_archived=True`, since the
   default listing drops archived rows first).
 - `inputs.<name>.uri|digest|kind` — a logged input; `outputs.<path>.path|digest|size`
-  — an artifact the run logged ([lineage](#lineage)). Quote a key with a dot or
+  — an artifact, image or table the run logged ([lineage](#lineage)). Quote a key with a dot or
   slash in it: `outputs."model.pkl".digest = "sha256:..."`.
 
 `metrics` and `params` read different dicts, and the difference matters:

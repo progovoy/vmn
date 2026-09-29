@@ -276,7 +276,7 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             "vmn-exp-sync",
         )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
-        self._media_uploads = MediaUploads(self._save_artifact_file)
+        self._media_uploads = MediaUploads(self._save_artifact_file, self._retract_output)
         self._output = (
             RunOutput(storage, app_name, verstr) if capture_output else None
         )
@@ -380,12 +380,11 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
 
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
-        # in turn would double the worst case.
-        writers = [
-            ("log", self._log_sync),
-            ("state", self._state_publisher),
-            ("media files", self._media_uploads),
-        ]
+        # in turn would double the worst case. Media files first: one that
+        # fails is retracted in the log, which then has to sync once more.
+        if self._close_media_uploads(max(0.0, deadline - time.monotonic())):
+            self._log_sync.submit(get_writer_id())
+        writers = [("log", self._log_sync), ("state", self._state_publisher)]
         if self._output is not None:
             writers.append(("output log", self._output))
         for what, writer in writers:

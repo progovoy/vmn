@@ -43,11 +43,6 @@ def png_size(data):
     return struct.unpack(">II", data[16:24])
 
 
-def png_file_size(path):
-    with open(path, "rb") as f:
-        return png_size(f.read(24))
-
-
 def to_uint8(array):
     """*array* (numpy, HxW or HxWxC) as uint8: floats are taken as 0..1."""
     import numpy as np

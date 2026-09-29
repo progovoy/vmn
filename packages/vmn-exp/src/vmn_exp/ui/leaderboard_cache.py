@@ -38,6 +38,7 @@ import threading
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.importance import param_importance
 from vmn_exp.core.log import primary_metric
+from vmn_exp.core.query import query_roots
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.http_params import MAX_PAGE
@@ -73,8 +74,21 @@ def _status(snapshot, verstr):
     )
 
 
-def _filtered(rows, status, query, archived):
-    return apply_filters(_visible(rows, archived), status, query)
+def _filtered(snapshot, rows, status, query, archived):
+    """*rows* of *snapshot* passing the filters (a query may read the
+    snapshot's ``outputs``, kept off the rows)."""
+    return apply_filters(_visible(rows, archived), status, query, snapshot)
+
+
+def _left_filtered(order, left, status, query, archived):
+    """Those of the *left* rows (of an older snapshot) *order* holds. A
+    query over ``outputs`` cannot be judged again on them — the current
+    snapshot has their successors' — but they are in *order* exactly when
+    they passed it."""
+    if not (query and query.strip() and "outputs" in query_roots(query)):
+        return _filtered(None, left, status, query, archived)
+    ids = {id(row) for row in left}
+    return [row for row in order if id(row) in ids]
 
 
 class _Base:
@@ -143,7 +157,7 @@ class _Base:
         while stop and (count < 1 or len(out) < count):
             start = max(0, stop - chunk)
             window = [patched.get(i, self.rows[i]) for i in range(start, stop)]
-            out = _filtered(window, status, query, archived) + out
+            out = _filtered(self.snapshot, window, status, query, archived) + out
             stop, chunk = start, chunk * 2
         return out
 
@@ -179,7 +193,7 @@ class _Static:
         """Filtered and sorted from scratch: O(N log N)."""
         changed = set(base.patch.changed)
         rows = [row for i, row in enumerate(base.rows) if i not in changed]
-        filtered = _filtered(rows, status, query, archived)
+        filtered = _filtered(base.snapshot, rows, status, query, archived)
         ordered = sort_rows(filtered, schema, sort=sort, order=order)
         with_metric = _carrying(sort or primary_metric(schema), filtered)
         return cls(base.token, ordered, filtered, with_metric)
@@ -189,8 +203,8 @@ class _Static:
         from any number of generations back), the *joined* rows in by
         bisection. None when whether any row carries the sort metric flips —
         the order changes shape then — or a left row is missing."""
-        left = _filtered(left, status, query, archived)
-        joined = _filtered(joined, status, query, archived)
+        left = _left_filtered(self.sorted, left, status, query, archived)
+        joined = _filtered(base.snapshot, joined, status, query, archived)
         metric = sort or primary_metric(schema)
         with_metric = self.with_metric - _carrying(metric, left) + _carrying(metric, joined)
         if bool(with_metric) != self.has_metric:
@@ -284,7 +298,7 @@ class LeaderboardCache:
         return self._sorted.get(
             (base.token, bucket, schema_key, None) + filters,
             lambda: static.merged(
-                base, _filtered(base.changed_at(bucket), status, query, archived),
+                base, _filtered(base.snapshot, base.changed_at(bucket), status, query, archived),
                 schema, sort, order,
             ),
         )

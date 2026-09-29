@@ -71,15 +71,17 @@ def list_apps(root_path):
     return rows
 
 
-def apply_filters(rows, status=None, query=None):
+def apply_filters(rows, status=None, query=None, snapshot=None):
     """Both row filters, ANDed: the status whitelist then the query language.
 
     Runs after status derivation and before :func:`sort_rows`, which owns
     ordering and paging — so ``total`` counts the rows that matched. Raises
     :class:`~version_stamp.core.experiment_query.QueryError` on a bad *query*;
-    the API turns that into a 400.
+    the API turns that into a 400. *snapshot*: the index snapshot the lean
+    *rows* came from, whose ``outputs`` a query may read.
     """
-    return filter_rows(filter_by_status(rows, status), query)
+    extra = {"outputs": snapshot.outputs_of} if snapshot is not None else None
+    return filter_rows(filter_by_status(rows, status), query, extra=extra)
 
 
 ORDERS = ("asc", "desc")
