@@ -15,6 +15,7 @@ from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui import (
     routes_leaderboard,
+    routes_lineage,
     routes_media,
     routes_models,
     routes_series,
@@ -417,6 +418,15 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return _any_exp_storage(ws), app_name, _app_schema(ws, app_name)
 
+    def _lineage_inputs(ws_name, app_tag):
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        s3_storage = _exp_storage_for(ws)
+        return (
+            app_name,
+            lambda name: source.snapshot(ws, name, s3_storage),
+            _any_exp_storage(ws),
+        )
+
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
@@ -424,6 +434,7 @@ def create_app(
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_media.register(app, API_PREFIX, _series_storage)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
+    routes_lineage.register(app, API_PREFIX, _lineage_inputs)
     routes_models.register(
         app, API_PREFIX,
         lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),

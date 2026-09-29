@@ -3,7 +3,7 @@
 
 ::
 
-    from vmn_exp.sdk.reader import get_run, list_runs, runs_dataframe
+    from vmn_exp.sdk.reader import get_lineage, get_run, list_runs, runs_dataframe
 
     for run in list_runs(status="failed"):
         print(run["verstr"], run["metrics"])
@@ -38,6 +38,7 @@ from vmn_exp.core.log import (
     metric_series,
     sort_by_metric,
 )
+from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
@@ -52,6 +53,7 @@ from vmn_exp.core.status import (
     run_state_observed_at,
 )
 from vmn_exp.core.tree import annotate_rows, run_status
+from vmn_exp.registry.view import models_for_run
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.storage.open import get_snapshot_storage
 
@@ -269,6 +271,35 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     row.update(media_index(log))
     return row
 
+
+def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
+    """The runs linked to run *ref* through what it consumed and produced.
+
+    Returns ``{"app", "verstr", "upstream", "downstream", "models",
+    "truncated"}``: *upstream* are the runs whose artifacts this one logged as
+    inputs (by ``vmn://`` URI — see ``Run.use_artifact`` — or by digest),
+    *downstream* the runs of the same app that consumed its artifacts, each
+    walked *depth* hops and capped at *limit* nodes; *models* the model
+    versions registered from it. Read from the experiment index rows, so no
+    run log is read. Raises ValueError when *ref* resolves to nothing.
+    """
+    app_name, storage, _ = _resolve(app_name, storage)
+    verstr, err = resolve_experiment(storage, app_name, ref or "latest")
+    if err:
+        raise ValueError(err)
+    indexes = {}
+
+    def index_for(app):
+        if app not in indexes:
+            indexes[app] = LineageIndex(_all_rows(app, storage))
+        return indexes[app]
+
+    try:
+        found = resolve_lineage(app_name, verstr, index_for, depth=depth, limit=limit)
+    except KeyError as e:
+        raise ValueError(e.args[0]) from None
+    found.update(app=app_name, verstr=verstr, models=models_for_run(storage, app_name, verstr))
+    return found
 
 # ---------------------------------------------------------------------------
 # pandas views (the optional ``vmn-exp-sdk[pandas]`` extra)

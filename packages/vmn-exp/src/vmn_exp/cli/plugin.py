@@ -31,6 +31,7 @@ from version_stamp.api import (
 EXPERIMENT_ACTIONS = [
     "create", "run", "add", "list", "show", "compare", "diff", "restore",
     "export", "prune", "tag", "archive", "unarchive", "import-mlflow", "watch",
+    "lineage",
     "importance",
 ]
 
@@ -140,6 +141,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--within", default=None,
                       help="watch: only alert transitions newer than this (e.g. 6h, 1d; "
                            "default 1d)")
+    pexp.add_argument("--depth", type=int, default=1,
+                      help="lineage: follow links this many hops (default: 1)")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
     pexp.add_argument("--store", default=None,
@@ -351,7 +354,7 @@ def register_all() -> None:
         access="local",
         read_only_actions=frozenset(
             {"list", "show", "compare", "diff", "export", "import-mlflow", "watch",
-             "importance"}
+             "lineage", "importance"}
         ),
         split_after_double_dash=True,
         run_without_repo=_exp_run_without_repo,

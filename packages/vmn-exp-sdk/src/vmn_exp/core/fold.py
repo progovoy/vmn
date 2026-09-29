@@ -112,6 +112,16 @@ def _apply_inputs(fold, entry, key):
     _keep_latest(fold.setdefault("inputs", {}), name, value, key)
 
 
+def _apply_outputs(fold, entry, key):
+    """Fold one ``artifact`` entry: the latest upload of a path wins."""
+    path = entry.get("path")
+    if not path:
+        return
+    sha = entry.get("sha256")
+    value = {"path": path, "digest": f"sha256:{sha}" if sha else None, "size": entry.get("size")}
+    _keep_latest(fold.setdefault("outputs", {}), path, value, key)
+
+
 def _apply_metric_values(fold, entry, key):
     metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
     for name, value in (entry.get("values") or {}).items():
@@ -136,6 +146,8 @@ def _apply(fold, entry, key):
         _apply_tags(fold, entry, key)
     elif etype == "input":
         _apply_inputs(fold, entry, key)
+    elif etype == "artifact":
+        _apply_outputs(fold, entry, key)
     elif etype == DEFINE_METRIC:
         _apply_definition(fold, entry, key)
     for name, value in entry_params(entry).items():
@@ -217,6 +229,11 @@ def fold_inputs_dict(fold):
     }
 
 
+def fold_outputs_dict(fold):
+    """``{path: {path, digest, size}}`` of the artifacts a run produced."""
+    return {path: wrapped[0] for path, wrapped in fold.get("outputs", {}).items()}
+
+
 def fold_last_metric_at(fold):
     return fold["last_metric"][0] if fold["last_metric"] else None
 
@@ -253,6 +270,7 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "parent": meta.get("parent"),
         "last_metric_at": fold_last_metric_at(fold),
         "inputs": fold_inputs_dict(fold),
+        "outputs": fold_outputs_dict(fold),
         "env": meta.get("env"),
         "imported_from": meta.get("imported_from"),
     }
