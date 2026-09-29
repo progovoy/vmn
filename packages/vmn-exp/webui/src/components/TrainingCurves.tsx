@@ -44,7 +44,7 @@ function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoin
   const xMap = useMemo(
     () => xMetricMap(training, xMode, xChoice, stepMetrics), [training, xMode, xChoice, stepMetrics],
   );
-  const joined = useJoinedSeries(xMap, fetchJoined, series);
+  const { data: joined, error: joinError } = useJoinedSeries(xMap, fetchJoined, series);
   const view = useMemo<GridView>(
     () => ({ xMode, origin, alpha, logY, markStep }), [xMode, origin, alpha, logY, markStep],
   );
@@ -80,6 +80,7 @@ function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoin
           <SmoothingSlider value={alpha} onChange={setAlpha} />
         </div>
       </div>
+      {joinError && <div className="error">{joinError.message}</div>}
       {training.length > 0 && shownTraining.length === 0 && (
         <div style={{ color: "var(--text-3)", fontSize: 12 }}>No metric matches “{query}”.</div>
       )}

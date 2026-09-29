@@ -19,11 +19,6 @@ export interface RunSummary {
 /** One shared empty tag set, so an untagged run's tags keep their identity. */
 const NO_TAGS: Record<string, string> = Object.freeze({}) as Record<string, string>;
 
-/** The verbatim params, or snapshot `user_meta` for a record without any. */
-const paramsOrMeta = (
-  params: Record<string, unknown> | undefined, meta: Record<string, unknown> | null | undefined,
-) => (params && Object.keys(params).length > 0 ? params : meta ?? null);
-
 export function summaryFromDetail(d: ExperimentDetail): RunSummary {
   const meta = d.metadata;
   return {
@@ -35,7 +30,7 @@ export function summaryFromDetail(d: ExperimentDetail): RunSummary {
     status: d.status ?? null,
     metrics: d.metrics,
     metricSummary: d.metric_summary,
-    params: paramsOrMeta(d.params, meta.user_meta as Record<string, unknown> | null | undefined),
+    params: d.params ?? null,
   };
 }
 
@@ -71,6 +66,6 @@ export function summaryFromRow(r: ExperimentRow): RunSummary {
     note: r.note,
     status: statusFromRow(r),
     metrics: r.metrics,
-    params: paramsOrMeta(r.params, r.user_meta),
+    params: r.params ?? null,
   };
 }

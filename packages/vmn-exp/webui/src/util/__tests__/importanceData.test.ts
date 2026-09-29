@@ -4,7 +4,7 @@ import type { ExperimentRow } from "../../types";
 
 const row = (i: number, metrics: ExperimentRow["metrics"], params: Record<string, unknown>): ExperimentRow => ({
   idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null, branch: null,
-  base_version: null, user_meta: null, params, metrics,
+  base_version: null, params, metrics,
 });
 
 describe("valueMeans", () => {

@@ -4,7 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { appTag } from "../http";
 import { runLineage } from "../apiRun";
 import type { Lineage, LineageModel, LineageNode } from "../apiRun";
+import type { RunState } from "../types";
 import { runHref } from "../util";
+import StatusPill from "./StatusPill";
 
 const DEPTHS = [1, 2, 3];
 
@@ -36,7 +38,7 @@ function NodeList({ ws, title, nodes, ownApp }: {
         {nodes.map((node) => (
           <li key={`${node.app}/${node.verstr}`}>
             <NodeLabel ws={ws} node={node} ownApp={ownApp} />
-            {node.status && <span className="badge">{node.status}</span>}
+            {node.status && <StatusPill status={node.status as RunState} />}
             {node.depth > 1 && <span className="muted">depth {node.depth}</span>}
             {node.links.map((l) => (
               <div key={`${l.input}/${l.artifact}/${l.via}`} className="mono muted">

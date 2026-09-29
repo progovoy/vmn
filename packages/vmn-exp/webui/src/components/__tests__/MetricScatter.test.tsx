@@ -33,9 +33,9 @@ async function plotted(): Promise<{ rest: Pts; best: Pts; fills: unknown[] }> {
 const count = (p: Pts) => p[0].length;
 
 const ROWS: ExperimentRow[] = [
-  { idx: 1, verstr: "1.0.0-dev.a", code_verstr: "1.0.0-dev.a", timestamp: null, note: "run 1", branch: "main", base_version: "1.0.0", user_meta: { lr: 0.01 }, metrics: { loss: 0.5, acc: 0.8 } },
-  { idx: 2, verstr: "1.0.0-dev.b", code_verstr: "1.0.0-dev.b", timestamp: null, note: "run 2", branch: "main", base_version: "1.0.0", user_meta: { lr: 0.001 }, metrics: { loss: 0.3, acc: 0.9 } },
-  { idx: 3, verstr: "1.0.0-dev.c", code_verstr: "1.0.0-dev.c", timestamp: null, note: "run 3", branch: "main", base_version: "1.0.0", user_meta: { lr: 0.1 }, metrics: { loss: 0.7, acc: 0.7 } },
+  { idx: 1, verstr: "1.0.0-dev.a", code_verstr: "1.0.0-dev.a", timestamp: null, note: "run 1", branch: "main", base_version: "1.0.0", params: { lr: 0.01 }, metrics: { loss: 0.5, acc: 0.8 } },
+  { idx: 2, verstr: "1.0.0-dev.b", code_verstr: "1.0.0-dev.b", timestamp: null, note: "run 2", branch: "main", base_version: "1.0.0", params: { lr: 0.001 }, metrics: { loss: 0.3, acc: 0.9 } },
+  { idx: 3, verstr: "1.0.0-dev.c", code_verstr: "1.0.0-dev.c", timestamp: null, note: "run 3", branch: "main", base_version: "1.0.0", params: { lr: 0.1 }, metrics: { loss: 0.7, acc: 0.7 } },
 ];
 
 const SCHEMA: MetricsSchema = {
@@ -57,7 +57,7 @@ describe("MetricScatter", () => {
   it("skips rows with missing X or Y values", async () => {
     const rowsWithGap: ExperimentRow[] = [
       ...ROWS,
-      { idx: 4, verstr: "1.0.0-dev.d", code_verstr: "1.0.0-dev.d", timestamp: null, note: "run 4", branch: "main", base_version: "1.0.0", user_meta: null, metrics: { loss: 0.4 } },
+      { idx: 4, verstr: "1.0.0-dev.d", code_verstr: "1.0.0-dev.d", timestamp: null, note: "run 4", branch: "main", base_version: "1.0.0", metrics: { loss: 0.4 } },
     ];
     render(
       <MetricScatter rows={rowsWithGap} metricCols={["loss", "acc"]} paramCols={[]} schema={SCHEMA} />

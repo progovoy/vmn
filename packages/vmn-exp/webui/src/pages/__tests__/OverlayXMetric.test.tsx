@@ -72,4 +72,12 @@ describe("Overlay x metric", () => {
       "w", "my-app", RUNS, ["acc", "loss"], 1000, { acc: "epoch", loss: "epoch" },
     ));
   });
+
+  it("shows a failed join and keeps the overlay drawn", async () => {
+    mockedBatch.mockImplementation((_ws, _app, _runs, _metrics, _points, xMap) =>
+      xMap ? Promise.reject(new Error("join exploded")) : Promise.resolve(batch({ [RUNS[0]]: { loss: "epoch" } })));
+    renderOverlay();
+    expect(await screen.findByText(/join exploded/)).toBeInTheDocument();
+    expect(screen.getByText("loss")).toBeInTheDocument();
+  });
 });

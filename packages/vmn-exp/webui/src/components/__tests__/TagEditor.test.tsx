@@ -13,7 +13,7 @@ import TagEditor from "../TagEditor";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const V = "0.0.1-dev.a";
-const running = { id: "j1", status: "running", command: [], exit_code: null, log: "", noop: false };
+const running = { id: "j1", status: "running", command: [], exit_code: null, log: "" };
 const done = (status: string) => ({ ...running, status, exit_code: status === "succeeded" ? 0 : 1 });
 
 function setup(tags: Record<string, string> = { team: "vision" }) {

@@ -8,7 +8,7 @@ import type { ExperimentRow } from "../../types";
 function row(i: number, metrics: Record<string, number | null>, params: Record<string, unknown> = {}): ExperimentRow {
   return {
     idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null,
-    branch: "main", base_version: "0.0.1", user_meta: null, params,
+    branch: "main", base_version: "0.0.1", params,
     metrics: metrics as Record<string, number>,
   };
 }
