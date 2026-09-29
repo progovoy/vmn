@@ -46,6 +46,7 @@ def _metric_parts(fold):
     return {
         "metrics": dict(fold["metrics"]),
         "extrema": dict(fold.get("extrema") or {}),
+        "firsts": dict(fold.get("firsts") or {}),
         "metric_defs": {n: dict(f) for n, f in (fold.get("metric_defs") or {}).items()},
     }
 

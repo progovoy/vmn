@@ -23,6 +23,7 @@ from vmn_exp.cli.run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
+from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     dumps,
@@ -56,6 +57,7 @@ from vmn_exp.core.log import (
     load_log,
     sort_by_metric,
 )
+from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.output_log import OUTPUT_LOG_NAME
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
@@ -509,6 +511,14 @@ def experiment_add(vcs, params, storage, args):
         return 1
 
     app_name = _app_name(vcs, args)
+    try:
+        definition = define_metric_entry(args)
+    except ValueError as e:
+        VMN_LOGGER.error(str(e))
+        return 1
+    if definition:
+        append_to_log(storage, app_name, verstr, definition)
+        VMN_LOGGER.info(f"Defined metric {definition['name']} for {verstr}")
 
     if args.metrics:
         entry = create_log_entry("metrics", values=_parse_metrics(args.metrics))
@@ -606,7 +616,7 @@ def experiment_list(vcs, params, storage, args):
     # Through the experiment index: after the first listing, only the logs and
     # run states that changed since are read again.
     schema = metrics_schema(vcs)
-    index_rows, run_states, observed = experiment_index.indexed_status_rows(
+    index_rows, run_states, observed, declared = experiment_index.indexed_status_view(
         storage, app_name, with_create_note=True, schema=schema
     )
     as_json = getattr(args, "json", False)
@@ -627,7 +637,7 @@ def experiment_list(vcs, params, storage, args):
     rows = _list_rows(matching, getattr(args, "last", None))
     if args.sort and not any(args.sort in row["metrics"] for row in rows):
         VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
-    rows = sort_by_metric(rows, schema, sort=args.sort)
+    rows = sort_by_metric(rows, effective_schema(schema, declared), sort=args.sort)
     if args.top:
         rows = rows[: args.top]
 

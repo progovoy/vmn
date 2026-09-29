@@ -12,7 +12,7 @@ is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 """
 from dataclasses import dataclass, field, replace
 
-from vmn_exp.core.index_views import SchemaRows, lean_row, schema_key
+from vmn_exp.core.index_views import SchemaRows, lean_row, runs_declared_schema, schema_key
 from vmn_exp.core.status import observed_at_from_mtime
 
 _VIEWS_PER_SNAPSHOT = 4
@@ -36,6 +36,10 @@ class IndexSnapshot:
     # {verstr: {path: {path, digest, size}}} of rows with outputs — off the
     # rows, which list pages serve (see outputs_of).
     outputs: dict = field(default_factory=dict, repr=False)
+    # {verstr: {metric: {"goal"?, "hidden"?}}} of rows whose run declares
+    # any — what declared_schema() merges.
+    declared_defs: dict = field(default_factory=dict, repr=False)
+    _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
     _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
@@ -44,7 +48,7 @@ class IndexSnapshot:
     @classmethod
     def build(
         cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
-        metric_parts=None, outputs=None,
+        metric_parts=None, outputs=None, declared_defs=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -57,6 +61,7 @@ class IndexSnapshot:
             run_state_observed_at=observed_at or {},
             metric_parts=metric_parts or {},
             outputs=outputs or {},
+            declared_defs=declared_defs or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -73,6 +78,14 @@ class IndexSnapshot:
         """``{path: {path, digest, size}}`` of the files *verstr* stored.
         Shared: copy before changing."""
         return self.outputs.get(verstr) or {}
+
+    def declared_schema(self):
+        """``{metric: {"goal"?, "hidden"?}}`` the runs declare, the latest
+        run winning — computed once per snapshot. Shared: copy before
+        changing."""
+        if not self._declared:
+            self._declared.append(runs_declared_schema(self.declared_defs, self.row))
+        return self._declared[0]
 
     def summarized(self, schema):
         """This snapshot with its rows' metrics under the metrics *schema* —
@@ -155,7 +168,7 @@ class RowCache:
     """
 
     def __init__(self):
-        self._rows = {}  # key -> (row with idx, create note, metric parts, outputs)
+        self._rows = {}  # key -> (row with idx, create note, metric parts, outputs, declared)
         self._observed = {}  # key -> (rs_sig, store write time it encodes)
         self._order = []  # the keys of the last snapshot, in order
         self._pos = {}  # key -> its position in _order
@@ -195,7 +208,8 @@ class RowCache:
             app_name=app_name, generation=generation, rows=tuple(self._list),
             run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
             run_state_observed_at=dict(m.observed), metric_parts=dict(m.parts),
-            outputs=dict(m.outputs), _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
+            outputs=dict(m.outputs), declared_defs=dict(m.declared),
+            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
         )
 
     def _patch(self, touched, records):
@@ -218,7 +232,7 @@ class RowCache:
             self._put(key, pos, records[key])
 
     def _put(self, key, pos, record):
-        row, note, parts, outputs = self._row(key, pos + 1, record)
+        row, note, parts, outputs, declared = self._row(key, pos + 1, record)
         if pos == len(self._list):
             self._list.append(row)
         else:
@@ -226,6 +240,7 @@ class RowCache:
         self._pos[key] = pos
         observed = self._observed_of(key, record["rs_sig"])
         self._maps.put(row, note, parts, outputs, record["run_state"], observed)
+        _put_sparse(self._maps.declared, row["verstr"], declared)
 
 
 def _put_sparse(values, verstr, value):
@@ -241,7 +256,7 @@ class _Maps:
 
     def __init__(self):
         self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
-        self.parts, self.outputs = {}, {}
+        self.parts, self.outputs, self.declared = {}, {}, {}
 
     def put(self, row, note, parts, outputs, state, observed):
         verstr = row["verstr"]

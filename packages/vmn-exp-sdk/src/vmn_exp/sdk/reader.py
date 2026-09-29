@@ -41,6 +41,7 @@ from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
+from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.step_metric import join_all, step_metrics
@@ -104,17 +105,23 @@ def _all_rows(app_name, storage, use_index=True, schema=None):
     state is read. Asking about a single run goes through
     :func:`_subtree_row` instead.
     """
+    return _rows_and_declared(app_name, storage, use_index, schema)[0]
+
+
+def _rows_and_declared(app_name, storage, use_index=True, schema=None):
+    """``(rows, declared schema)``: :func:`_all_rows` plus the goals/hidden
+    flags the runs declare (:mod:`vmn_exp.core.metric_schema`)."""
     if use_index:
-        rows, run_states, observed = experiment_index.indexed_status_rows(
+        rows, run_states, observed, declared = experiment_index.indexed_status_view(
             storage, app_name, schema=schema
         )
     else:
-        rows, run_states = experiment_index.direct_rows(
+        rows, run_states, declared = experiment_index.direct_view(
             storage, app_name, read_log=_load_log, read_run_state=load_run_state,
             schema=schema,
         )
         observed = observed_at_by_verstr(storage, app_name, run_states)
-    return annotate_rows(rows, run_states, observed)
+    return annotate_rows(rows, run_states, observed), declared
 
 
 # ---------------------------------------------------------------------------
@@ -157,12 +164,13 @@ def list_runs(
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     schema = _metrics_schema(root_path, app_name)
-    rows = _all_rows(app_name, storage, use_index=use_index, schema=schema)
+    rows, declared = _rows_and_declared(app_name, storage, use_index, schema)
     rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query)
     if last:
         rows = rows[-int(last) :]
-    return sort_by_metric(rows, schema, sort=sort)
+    # Summaries follow the conf schema only; direction also what runs declare.
+    return sort_by_metric(rows, effective_schema(schema, declared), sort=sort)
 
 
 def param_importance(
