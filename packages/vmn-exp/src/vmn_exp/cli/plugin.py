@@ -6,8 +6,8 @@ by ``version_stamp.cli.plugins`` via importlib — not via a direct import — s
 the AST-level boundary scanner never sees a stamping→experiments edge.
 
 On import this module:
-  1. Registers CommandSpecs for ``experiment``/``exp``, ``ui`` and
-     ``model`` in the plugin_api registry.
+  1. Registers CommandSpecs for ``experiment``/``exp``, ``ui``, ``sweep``
+     and ``model`` in the plugin_api registry.
   2. Registers a dev-version loader so that ``output._goto_dev_version`` can
      restore a dev-version snapshot without importing this module directly.
 """
@@ -201,6 +201,16 @@ def _handle_experiment(vmn_ctx):
     return handle_experiment(vmn_ctx)
 
 
+def _add_sweep_parser(subparsers):
+    from vmn_exp.cli.sweep.parser import add_sweep_parser
+    return add_sweep_parser(subparsers)
+
+
+def _handle_sweep(vmn_ctx):
+    from vmn_exp.cli.sweep.handler import handle_sweep
+    return handle_sweep(vmn_ctx)
+
+
 def _handle_ui(vmn_ctx):
     from vmn_exp.ui.cli import handle_ui
     return handle_ui(vmn_ctx.args)
@@ -357,6 +367,14 @@ def register_all() -> None:
         add_parser=_add_ui_parser,
         handle=_handle_ui,
         access="local",
+    ))
+    _register(CommandSpec(
+        names=("sweep",),
+        add_parser=_add_sweep_parser,
+        handle=_handle_sweep,
+        access="local",
+        read_only_actions=frozenset({"status"}),
+        split_after_double_dash=True,
     ))
     _register(CommandSpec(
         names=("model",),

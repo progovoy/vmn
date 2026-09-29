@@ -231,99 +231,114 @@ def _export_conf_writer_id(writer_id):
     experiment_writer._WRITER_ID = None  # re-read on the next log append
 
 
-@measure_runtime_decorator
-def handle_experiment(vmn_ctx):
-    from version_stamp.api import _get_repo_status, _init_app, handle_init
-
-    vcs = vmn_ctx.vcs
-    args = vmn_ctx.args
-    action = args.action
-
+def experiment_storage_params(vcs, args):
+    """The storage params of *args*, conf.yml's filling the gaps."""
     params = {
         "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
+        "experiment_dir": getattr(args, "experiment_dir", None),
+        "writer_id": getattr(args, "writer_id", None),
     }
-    params["experiment_dir"] = getattr(args, "experiment_dir", None)
-    params["writer_id"] = getattr(args, "writer_id", None)
-
     merge_conf_into_params(vcs, params)
     _export_conf_writer_id(params.get("writer_id"))
+    return params
+
+
+def auto_init(vmn_ctx):
+    """Initialize the repo and the app when either is untracked (a zero-setup
+    cold start). Returns 1 on failure, None otherwise."""
+    from version_stamp.api import _get_repo_status, _init_app, handle_init
+
+    vcs = vmn_ctx.vcs
+    args = vmn_ctx.args
+    expected_status = {"repo_tracked", "app_tracked"}
+    optional_status = {
+        "repos_exist_locally",
+        "detached",
+        "pending",
+        "outgoing",
+        "version_not_matched",
+        "dirty_deps",
+        "deps_synced_with_conf",
+    }
+    # An untracked repo or app is the normal cold-start case here, not a
+    # failure: the branch below initializes both. Reporting them as errors
+    # first made a successful first run read like a crash.
+    status = _get_repo_status(
+        vcs,
+        expected_status,
+        optional_status,
+        suppress_errors={"repo_tracked", "app_tracked"},
+    )
+
+    if status.error:
+        auto_initialized = False
+        be = vcs.backend
+        vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
+        vmn_init_file = os.path.join(vmn_path, "conf.yml")
+
+        _dirty_ok = {"pending", "outgoing"}
+
+        repo_missing = "repo_tracked" not in status.state and not be.is_path_tracked(
+            vmn_init_file
+        )
+        app_missing = "app_tracked" not in status.state and not be.is_path_tracked(
+            vcs.app_dir_path
+        )
+
+        # A brand-new app name in a repo that already has other apps is
+        # far more likely a typo than a deliberate new app, and unlike
+        # `vmn show`/`vmn goto` this path commits, tags and pushes as a
+        # side effect. Refuse unless the repo is genuinely uninitialized
+        # (no other app could exist yet) or the user opted in with
+        # --new-app.
+        if app_missing and not repo_missing and not getattr(args, "new_app", False):
+            other_apps = _other_configured_apps(vcs)
+            if other_apps:
+                VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
+                return 1
+
+        if repo_missing:
+            VMN_LOGGER.info("Auto-initializing repository...")
+            ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
+            if ret != 0:
+                return 1
+            auto_initialized = True
+
+        if app_missing:
+            # Name the app and the baseline: a typo'd app name becomes a
+            # permanent git tag, so creating one must never be silent.
+            VMN_LOGGER.info(
+                f"Auto-initializing new vmn app '{vcs.name}' at 0.0.0..."
+            )
+            err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
+            if err:
+                return 1
+            auto_initialized = True
+
+        if auto_initialized:
+            vcs.update_attrs_from_app_conf_file()
+            vcs.initialize_backend_attrs()
+
+
+@measure_runtime_decorator
+def handle_experiment(vmn_ctx):
+    vcs = vmn_ctx.vcs
+    args = vmn_ctx.args
+    action = args.action
+
+    params = experiment_storage_params(vcs, args)
 
     # Auto-init for create/run (zero-setup cold start), unless from_snapshot mode.
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
     )
     if action in ("create", "run") and not from_snapshot:
-        expected_status = {"repo_tracked", "app_tracked"}
-        optional_status = {
-            "repos_exist_locally",
-            "detached",
-            "pending",
-            "outgoing",
-            "version_not_matched",
-            "dirty_deps",
-            "deps_synced_with_conf",
-        }
-        # An untracked repo or app is the normal cold-start case here, not a
-        # failure: the branch below initializes both. Reporting them as errors
-        # first made a successful first run read like a crash.
-        status = _get_repo_status(
-            vcs,
-            expected_status,
-            optional_status,
-            suppress_errors={"repo_tracked", "app_tracked"},
-        )
-
-        if status.error:
-            auto_initialized = False
-            be = vcs.backend
-            vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
-            vmn_init_file = os.path.join(vmn_path, "conf.yml")
-
-            _dirty_ok = {"pending", "outgoing"}
-
-            repo_missing = "repo_tracked" not in status.state and not be.is_path_tracked(
-                vmn_init_file
-            )
-            app_missing = "app_tracked" not in status.state and not be.is_path_tracked(
-                vcs.app_dir_path
-            )
-
-            # A brand-new app name in a repo that already has other apps is
-            # far more likely a typo than a deliberate new app, and unlike
-            # `vmn show`/`vmn goto` this path commits, tags and pushes as a
-            # side effect. Refuse unless the repo is genuinely uninitialized
-            # (no other app could exist yet) or the user opted in with
-            # --new-app.
-            if app_missing and not repo_missing and not getattr(args, "new_app", False):
-                other_apps = _other_configured_apps(vcs)
-                if other_apps:
-                    VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
-                    return 1
-
-            if repo_missing:
-                VMN_LOGGER.info("Auto-initializing repository...")
-                ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
-                if ret != 0:
-                    return 1
-                auto_initialized = True
-
-            if app_missing:
-                # Name the app and the baseline: a typo'd app name becomes a
-                # permanent git tag, so creating one must never be silent.
-                VMN_LOGGER.info(
-                    f"Auto-initializing new vmn app '{vcs.name}' at 0.0.0..."
-                )
-                err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
-                if err:
-                    return 1
-                auto_initialized = True
-
-            if auto_initialized:
-                vcs.update_attrs_from_app_conf_file()
-                vcs.initialize_backend_attrs()
+        err = auto_init(vmn_ctx)
+        if err:
+            return err
 
     storage = _get_experiment_storage(vcs, params)
 

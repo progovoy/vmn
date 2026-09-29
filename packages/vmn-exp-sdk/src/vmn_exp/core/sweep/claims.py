@@ -44,12 +44,20 @@ def claim_next_trial(storage, app_name, sweep_verstr, spec, agent=None, history=
     raise RuntimeError(f"Could not claim a trial of sweep {sweep_verstr}")
 
 
-def claim_retry(storage, app_name, sweep_verstr, trial, agent=None):
-    """Claim the next attempt at *trial*, with the original params; None when
-    the trial was never claimed."""
+def claim_retry(storage, app_name, sweep_verstr, trial, agent=None, attempt=None):
+    """Claim a new attempt at *trial*, with the original params.
+
+    With *attempt*, claim exactly that one — None when another agent already
+    did, which is how an agent that saw attempt K fail avoids a duplicate
+    retry. Without, claim the next free attempt. None when the trial was never
+    claimed.
+    """
     original = _load(storage, _record(app_name, sweep_verstr, trial, 0))
     if original is None:
         return None
+    if attempt is not None:
+        return _claim(storage, app_name, sweep_verstr, trial, attempt,
+                      original["params"], agent)
     for _ in range(_MAX_ATTEMPTS):
         attempts = [a for t, a in _slots(storage, app_name, sweep_verstr) if t == trial]
         attempt = max(attempts, default=0) + 1

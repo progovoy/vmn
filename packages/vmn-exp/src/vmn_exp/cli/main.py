@@ -1,7 +1,7 @@
 """The ``vmn-exp`` command: experiments, the model registry and the UI.
 
 ``vmn-exp create app`` / ``vmn-exp run app -- cmd`` run experiment actions;
-``vmn-exp model ...`` and ``vmn-exp ui`` reach the other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
+``vmn-exp model ...``, ``vmn-exp sweep ...`` and ``vmn-exp ui`` reach the other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
 through ``version_stamp.api``, with only its own commands registered.
 """
 import copy
@@ -10,7 +10,7 @@ import sys
 from version_stamp.api import VMN_ARGS, find_command, vmn_run
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 
-OWN_COMMANDS = ("exp", "experiment", "model", "ui")
+OWN_COMMANDS = ("exp", "experiment", "model", "sweep", "ui")
 
 
 def _to_vmn_argv(argv):

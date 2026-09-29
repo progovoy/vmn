@@ -17,6 +17,7 @@ import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunOutput from "../components/RunOutput";
 import TrainingCurves from "../components/TrainingCurves";
+import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import RunProvenanceSection from "./RunProvenance";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
@@ -117,6 +118,7 @@ export default function Run() {
     client.invalidateQueries({ queryKey: rowsPrefix(ws, app) });
   };
   const runUrl = (v: string) => runHref(`/ws/${ws}/app/${app}`, v);
+  const sweepSpec = detail ? sweepSpecOf(detail.metadata) : null;
 
   return (
     <>
@@ -134,6 +136,9 @@ export default function Run() {
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
       {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}
+      {sweepSpec && (
+        <SweepSection ws={ws} app={app} verstr={summary.verstr} spec={sweepSpec} runUrl={runUrl} />
+      )}
 
       <div className="card-grid-2" style={{ marginBottom: 16 }}>
         {detail ? <MetadataCard detail={detail} /> : <Skeleton />}

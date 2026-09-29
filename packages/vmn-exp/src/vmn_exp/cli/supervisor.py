@@ -176,6 +176,13 @@ class SignalForwarder:
         if self.received is not None:
             self._forward(getattr(signal, self.received))
 
+    def request_stop(self):
+        """Send the child SIGTERM on the supervisor's own initiative, with the
+        same grace period before SIGKILL as a forwarded signal."""
+        if self._kill_at is None:
+            self._kill_at = time.monotonic() + self._grace_sec
+        self._forward(signal.SIGTERM)
+
     def enforce_grace(self):
         """Kill a child that outlived the grace period of a forwarded signal."""
         if self._kill_at is not None and time.monotonic() >= self._kill_at:

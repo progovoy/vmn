@@ -227,8 +227,13 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
 class _Supervision:
     """One supervised child: start it, watch it, and record how it ended."""
 
-    def __init__(self, storage, app_name, verstr, args, exp_conf=None):
+    def __init__(self, storage, app_name, verstr, args, exp_conf=None,
+                 extra_env=None, on_tick=None):
         self.storage = storage
+        self.extra_env = extra_env or {}
+        # Called with this supervision on every poll while the child lives.
+        self.on_tick = on_tick
+        self.stopped_early = False
         self.exp_conf = exp_conf
         self.app_name = app_name
         self.verstr = verstr
@@ -268,6 +273,7 @@ class _Supervision:
         env["VMN_EXPERIMENT_ID"] = self.verstr
         env["VMN_APP_NAME"] = self.app_name or ""
         env["VMN_METRICS_FILE"] = self.metrics_path
+        env.update(self.extra_env)
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
             proc = subprocess.Popen(run_cmd, cwd=_child_cwd(), **stdio)
@@ -329,8 +335,19 @@ class _Supervision:
                 )
                 self.guard("system metrics", sampler.tick)
                 last_heartbeat = now
+            if self.on_tick is not None:
+                self.guard("supervision hook", self.on_tick, self)
             self.forwarder.enforce_grace()
             time.sleep(_METRICS_TAIL_INTERVAL)
+
+    def request_stop(self):
+        """End the child early, on purpose: SIGTERM now, SIGKILL after the grace.
+
+        The run then records ``stopped_early`` and succeeds, whatever code the
+        child exits with (kept as ``child_exit_code``).
+        """
+        self.stopped_early = True
+        self.forwarder.request_stop()
 
     def _stop(self, proc):
         """Make sure the child is gone: supervision never leaves an orphan."""
@@ -362,6 +379,9 @@ class _Supervision:
             final["signal"] = signal_name(-returncode)
         if self.forwarder.received:
             final["received_signal"] = self.forwarder.received
+        if self.stopped_early:
+            final.update(stopped_early=True, child_exit_code=exit_code, exit_code=0)
+            exit_code = 0
         self._publish_final(final)
 
         self.guard(
