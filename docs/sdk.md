@@ -234,8 +234,8 @@ Python numbers so `params.max_depth = 3` matches.
 
 ### Tables, images and histograms
 
-Rich values are keyed by `name` and `step` (default: a per-name counter from
-0, so pass `step=` explicitly when resuming a run). Each writes one small log
+Rich values are keyed by `name` and `step` (default: one past the name's last
+logged step in this process, so pass `step=` explicitly when resuming). Each writes one small log
 entry; the table and image bodies are artifacts. The run page's **Media**
 section shows them, and `vmn-exp show` counts them.
 

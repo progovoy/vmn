@@ -245,3 +245,15 @@ def test_png_roundtrip_through_pil_when_logged(run, storage):
     run.finish()
     img = image_mod.open(io.BytesIO(_artifact(storage, "media/rt/0.png")))
     assert np.array_equal(np.asarray(img), arr)
+
+
+def test_auto_steps_continue_after_an_explicit_step_and_skip_failures(run, storage):
+    run.log_histogram("h", [1.0], step=4)
+    run.log_histogram("h", [1.0])
+    with pytest.raises(TypeError):
+        run.log_image("i", 42)
+    run.log_table("i", [{"a": 1}])
+    run.log_image("i", _FakeFigure())
+    run.finish()
+    assert [e["step"] for e in _entries(storage, "histogram")] == [4, 5]
+    assert _entries(storage, "image")[0]["step"] == 0
