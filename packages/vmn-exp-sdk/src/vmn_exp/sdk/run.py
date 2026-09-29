@@ -60,7 +60,9 @@ from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
+from vmn_exp.sdk.run_metrics import RunMetrics
 from vmn_exp.sdk.state_publisher import RunStatePublisher
+from vmn_exp.sdk.steps import StepCounter, first_step
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
 # a library emits records rather than configuring handlers.
@@ -210,6 +212,9 @@ def start_run(
         exp_conf=exp_conf,
     )
     run.start_step = start_step
+    run._steps = StepCounter(
+        first_step(storage, app_name, verstr, start_step, prior_state is not None)
+    )
     run._open()
     if prior_state is not None:
         _record_resume_inputs(run, note, params)
@@ -233,7 +238,7 @@ def _checkout_relative_cwd():
     return repo_relative_cwd(os.getcwd(), _try_repo_root())
 
 
-class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
+class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     disabled = False
@@ -259,6 +264,8 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         self.name = name
         # The step a fork or a rewound run continues from (None otherwise).
         self.start_step = None
+        # The step a log_metrics() without step= records; start_run() seeds it.
+        self._steps = StepCounter()
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None and atexit leaves it alone.
         self.pid = os.getpid()
@@ -295,7 +302,7 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             RunOutput(storage, app_name, verstr) if capture_output else None
         )
         # No pid: this process *is* the workload.
-        self._sampler = sysmetrics.Sampler(self.log_metrics, system_metrics)
+        self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics)
         # Recording the run's outcome warns once per step; heartbeat chores and
         # syncs are routine enough to stay at debug.
         self._record_guard = BestEffort(
@@ -441,15 +448,6 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         return False  # never swallow — nor replace — the workload's exception
 
     # -- recording ---------------------------------------------------------
-
-    def log_metric(self, key, value, step=None):
-        self.log_metrics({key: value}, step=step)
-
-    def log_metrics(self, mapping, step=None):
-        entry = create_log_entry("metrics", values=dict(mapping))
-        if step is not None:
-            entry["step"] = step
-        self._append(entry)
 
     def log_params(self, mapping):
         # A `params` entry, not a rewrite of the `create` entry: the log is

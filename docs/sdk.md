@@ -213,8 +213,8 @@ Every call appends to the run's log; nothing is ever rewritten.
 
 | Call | Records |
 |---|---|
-| `run.log_metric(key, value, step=None)` | one metric. With `step`, it joins a **per-step series** — the curve `exp show` and the UI plot |
-| `run.log_metrics({...})` | several metrics at once; also takes `step=` |
+| `run.log_metric(key, value, step=None, commit=True)` | one metric, at `step` (default: `run.step`) — a point of the **per-step series** `exp show` and the UI plot. See [Steps](#steps) |
+| `run.log_metrics({...}, step=None, commit=True)` | several metrics at once, sharing one step |
 | `run.log_params({...})` | more inputs, merged into the run's params |
 | `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
 | `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact. On a non-zero rank it still returns the path, recording nothing |
@@ -666,6 +666,39 @@ as a warning, not thrown at the workload), and it always closes the run — the
 run leaves the open-run registry and the environment is handed back regardless.
 An exception from your own code inside the `with` block is re-raised unchanged;
 a storage error while recording it is logged, never substituted for it.
+
+### Steps
+
+Every metrics entry has a step. `run.step` is the step the next
+`log_metrics()` without `step=` records; each such call records it and then
+advances it by one (one counter per run, like W&B's `_step`):
+
+```python
+run.log_metrics({"loss": 0.9, "acc": 0.1})   # step 0 — one call, one shared step
+run.log_metric("loss", 0.8)                  # step 1
+run.log_metric("loss", 0.5, step=10)         # step 10; run.step is now 11
+run.log_metric("loss", 0.6, step=3)          # kept at step 3; run.step stays 11
+run.log_metric("lr", 1e-3, commit=False)     # step 11, not advanced ...
+run.log_metric("loss", 0.4)                  # ... so this one is step 11 too
+```
+
+- An explicit `step=s` is recorded as given and raises `run.step` to `s + 1`
+  when that is higher; a lower step is kept, never dropped (forks and rewinds
+  re-log old steps). `commit=False` records at the current step (or `s`)
+  without advancing, so the next call shares it.
+- A call whose every value is dropped as non-numeric consumes no step. The
+  counter is thread-safe: concurrent calls get distinct steps.
+- A fork or a rewound run starts at `run.start_step`; a resumed run at one past
+  the highest step its (non-rewound) metrics reached; a new run at 0.
+- System metrics (`sys_*`) carry no step and consume none; images, tables and
+  histograms keep their own per-name steps; the metrics file of `vmn-exp run`
+  still needs an explicit `step=N` prefix for a stepped point.
+- Runs logged before auto-stepping have step-less points, which the UI charts
+  against seconds; overlaying one with a newer run mixes seconds and steps.
+  Since every SDK metric now has a step, a rewind hides metrics logged without
+  an explicit `step=` too.
+- `NoOpRun` counts `run.step` the same way, so `range(run.step, ...)` works on
+  every rank.
 
 ### Resuming a preempted run
 
