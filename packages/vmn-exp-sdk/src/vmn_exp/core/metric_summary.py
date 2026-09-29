@@ -94,14 +94,23 @@ def summarize(last_values, extrema, run_defs, schema):
         for name, seen in extrema.items()
         if _repeated(seen)
     }
-    if not run_defs and not schema:  # every metric is `last`
-        return last_values, summary
-    schema = schema or {}
-    metrics = {}
-    for name, last in last_values.items():
-        seen = extrema.get(name)
-        low, high = seen[:2] if _repeated(seen) else _widen((None, None), last)
-        policy = lookup(name, run_defs, _policy_of) or lookup(name, schema, _policy_of)
-        best = low if policy == "min" else high if policy == "max" else None
-        metrics[name] = last if best is None else best
-    return metrics, summary
+    return with_policies(last_values, summary, run_defs, schema), summary
+
+
+def with_policies(metrics, summary, run_defs, schema):
+    """*metrics* with each metric of *summary* at its policy's value — the
+    run's definitions first, then *schema*. Only a metric logged more than
+    once can differ from its last value, so the rest are left as they are;
+    *metrics* itself comes back when no value changes."""
+    if not summary or not (run_defs or schema):
+        return metrics
+    picked = {}
+    for name, seen in summary.items():
+        policy = lookup(name, run_defs or {}, _policy_of) or lookup(
+            name, schema or {}, _policy_of
+        )
+        best = seen[policy] if policy in GOALS else None
+        value = seen["last"] if best is None else best
+        if value is not metrics.get(name):
+            picked[name] = value
+    return {**metrics, **picked} if picked else metrics

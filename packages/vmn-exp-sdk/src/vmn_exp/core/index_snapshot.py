@@ -6,11 +6,16 @@ The index builds one per generation and swaps it in whole, so a reader holds a
 consistent set of rows, run states and parent edges without taking the index
 lock or touching storage. Rows are shared between readers: treat them (and the
 dicts here) as read-only and copy before changing anything.
-"""
-from dataclasses import dataclass, field
 
-from vmn_exp.core.fold import fold_row
+A snapshot's rows follow no metrics schema; :meth:`IndexSnapshot.summarized`
+is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
+"""
+from dataclasses import dataclass, field, replace
+
+from vmn_exp.core.index_views import SchemaRows, lean_row, schema_key
 from vmn_exp.core.status import observed_at_from_mtime
+
+_VIEWS_PER_SNAPSHOT = 4
 
 
 @dataclass(frozen=True, eq=False)
@@ -25,11 +30,18 @@ class IndexSnapshot:
     # datetime), or None} — pass it to derive_status/status_fields as
     # observed_at for clock-skew-proof stuck detection.
     run_state_observed_at: dict = field(default_factory=dict, repr=False)
+    # {verstr: (metric_summary, run definitions)} of rows with a repeated
+    # metric — what a schema view and a row copy's metric_summary read.
+    metric_parts: dict = field(default_factory=dict, repr=False)
     _by_verstr: dict = field(default_factory=dict, repr=False)
+    _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
+    _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
+    _base: object = field(default=None, repr=False)  # a view's schema-less snapshot
 
     @classmethod
     def build(
-        cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None
+        cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
+        metric_parts=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -40,12 +52,42 @@ class IndexSnapshot:
             edges={row["verstr"]: row.get("parent") for row in rows},
             create_notes=create_notes or {},
             run_state_observed_at=observed_at or {},
+            metric_parts=metric_parts or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
     def row(self, verstr):
         """The row of *verstr*, or None."""
         return self._by_verstr.get(verstr)
+
+    def metric_summary(self, verstr):
+        """``{metric: {"last", "min", "max"}}`` of *verstr*'s repeated metrics."""
+        parts = self.metric_parts.get(verstr)
+        return dict(parts[0]) if parts else {}
+
+    def summarized(self, schema):
+        """This snapshot with its rows' metrics under the metrics *schema* —
+        the same object for the same schema, and this very snapshot when the
+        schema changes no row. The shared rows are never touched."""
+        base = self._base or self
+        if not schema or not base.metric_parts:
+            return base
+        key = schema_key(schema)
+        view = base._views.get(key)
+        if view is None:
+            view = base._view(base._schema_rows.rows(base.rows, base.metric_parts, schema))
+            if len(base._views) >= _VIEWS_PER_SNAPSHOT:
+                base._views.clear()
+            base._views[key] = view
+        return view
+
+    def _view(self, rows):
+        if all(a is b for a, b in zip(rows, self.rows)):
+            return self
+        return replace(
+            self, rows=tuple(rows), _by_verstr={r["verstr"]: r for r in rows},
+            _views={}, _base=self,
+        )
 
     def resolve(self, ref, latest=False, kind="experiment"):
         """``(verstr, error)`` for *ref*, like the CLI's ``_resolve_verstr``.
@@ -104,23 +146,13 @@ class RowCache:
     """
 
     def __init__(self):
-        self._rows = {}  # key -> (row with idx, create note)
+        self._rows = {}  # key -> (row with idx, create note, metric parts)
         self._observed = {}  # key -> (rs_sig, store write time it encodes)
         self._order = []  # the keys of the last snapshot, in order
         self._pos = {}  # key -> its position in _order
         self._list = []  # their rows
         self._maps = _Maps()
-        self.schema = None  # the app's metrics schema rows are summarized by
-
-    def set_schema(self, schema):
-        """Summarize rows by *schema* from now on; True if that changes them
-        (every row is re-derived from its fold on the next snapshot)."""
-        schema = schema or None
-        if schema == self.schema:
-            return False
-        self.schema = schema
-        self._rows = {}
-        return True
+        self._schema_rows = SchemaRows()  # shared by its snapshots' views
 
     def pop(self, key, default=None):
         return self._rows.pop(key, default)
@@ -128,10 +160,9 @@ class RowCache:
     def _row(self, key, idx, record):
         cached = self._rows.get(key)
         if cached is None:
-            row = fold_row(idx, record["meta"], record["fold"], True, self.schema)
-            cached = self._rows[key] = (row, row.pop("create_note"))
+            cached = self._rows[key] = lean_row(idx, record["meta"], record["fold"])
         elif cached[0]["idx"] != idx:
-            cached = self._rows[key] = (dict(cached[0], idx=idx), cached[1])
+            cached = self._rows[key] = (dict(cached[0], idx=idx),) + cached[1:]
         return cached
 
     def _observed_of(self, key, rs_sig):
@@ -154,7 +185,8 @@ class RowCache:
         return IndexSnapshot(
             app_name=app_name, generation=generation, rows=tuple(self._list),
             run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
-            run_state_observed_at=dict(m.observed), _by_verstr=dict(m.rows),
+            run_state_observed_at=dict(m.observed), metric_parts=dict(m.parts),
+            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
         )
 
     def _patch(self, touched, records):
@@ -177,13 +209,14 @@ class RowCache:
             self._put(key, pos, records[key])
 
     def _put(self, key, pos, record):
-        row, note = self._row(key, pos + 1, record)
+        row, note, parts = self._row(key, pos + 1, record)
         if pos == len(self._list):
             self._list.append(row)
         else:
             self._list[pos] = row
         self._pos[key] = pos
-        self._maps.put(row, note, record["run_state"], self._observed_of(key, record["rs_sig"]))
+        observed = self._observed_of(key, record["rs_sig"])
+        self._maps.put(row, note, parts, record["run_state"], observed)
 
 
 class _Maps:
@@ -191,11 +224,16 @@ class _Maps:
 
     def __init__(self):
         self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
+        self.parts = {}
 
-    def put(self, row, note, state, observed):
+    def put(self, row, note, parts, state, observed):
         verstr = row["verstr"]
         self.rows[verstr] = row
         self.notes[verstr] = note
+        if parts:
+            self.parts[verstr] = parts
+        else:
+            self.parts.pop(verstr, None)
         self.states[verstr] = state
         self.observed[verstr] = observed
         self.edges[verstr] = row.get("parent")

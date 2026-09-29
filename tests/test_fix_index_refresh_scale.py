@@ -159,5 +159,5 @@ def test_the_rows_match_a_direct_read_after_churn(live_store, clock, tmp_path):
         index.refresh()
     rows, states = experiment_index.direct_rows(live_store.st, APP)
     snap = index.snapshot()
-    assert [dict(r) for r in snap.rows] == rows
+    assert index.rows() == rows  # the copies carry metric_summary
     assert snap.run_states == states

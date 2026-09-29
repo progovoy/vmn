@@ -44,6 +44,11 @@ def _seed(st):
     return a, b, c
 
 
+def _lean(rows):
+    """Row copies as the snapshot shares them: without ``metric_summary``."""
+    return [{k: v for k, v in r.items() if k != "metric_summary"} for r in rows]
+
+
 def _index(st, tmp_path):
     return ExperimentIndex(st, APP, cache_path=str(tmp_path / "idx.sqlite"))
 
@@ -55,7 +60,7 @@ def test_snapshot_holds_rows_states_and_edges(st, tmp_path):
 
     assert isinstance(snap, IndexSnapshot)
     assert isinstance(snap.rows, tuple)
-    assert list(snap.rows) == index.rows()
+    assert list(snap.rows) == _lean(index.rows())
     assert snap.run_states == index.run_states()
     assert snap.edges == {a: None, b: a, c: None}
     assert snap.row(b)["idx"] == 2
@@ -203,7 +208,7 @@ def test_indexed_snapshot_matches_a_direct_read(st, tmp_path):
     cache = str(tmp_path / "shared.sqlite")
     snap = indexed_snapshot(st, APP, cache_path=cache)
     rows, states = direct_rows(st, APP)
-    assert list(snap.rows) == rows
+    assert list(snap.rows) == _lean(rows)
     assert snap.run_states == states
 
 
