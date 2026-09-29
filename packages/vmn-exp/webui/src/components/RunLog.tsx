@@ -16,6 +16,7 @@ const DOT_COLOR: Record<string, string> = {
   metrics: "var(--text-3)",
   note: "var(--pre)",
   artifact: "var(--hotfix)",
+  alert: "var(--bad)",
 };
 
 export function describeEntry(e: LogEntry): string {
@@ -33,6 +34,8 @@ export function describeEntry(e: LogEntry): string {
       return `note: ${e.text}`;
     case "artifact":
       return `artifact: ${e.path} (${e.size} bytes)`;
+    case "alert":
+      return `alert [${e.level}]: ${e.title}${e.text ? `: ${e.text}` : ""}`;
     case "run":
       return `ran \`${((e.command as string[]) ?? []).join(" ")}\` — exit ${e.exit_code} in ${e.duration_sec}s`;
     default:
