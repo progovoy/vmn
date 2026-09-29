@@ -36,6 +36,7 @@ import os
 import threading
 
 import vmn_exp.core.status as experiment_status
+from vmn_exp.core.importance import param_importance, require_metric
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
@@ -238,6 +239,7 @@ class LeaderboardCache:
         self._deltas = DeltaLog()
         self._sorted = LRU(size)
         self._columns = LRU(size)
+        self._importance = LRU(size)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
@@ -333,6 +335,24 @@ class LeaderboardCache:
     def _columns_payload(self, snapshot, schema, sort, status, query, order, archived, keys, limit):
         rows = self._ordered(snapshot, schema, sort, None, status, query, order, archived)
         return columns_payload(rows[:limit], keys, len(rows))
+
+    def importance(self, snapshot, schema, metric, status=None, query=None, archived=False):
+        """Parameter importance for *metric* over the filtered rows.
+
+        Raises ``ValueError`` when no visible run carries *metric*,
+        ``QueryError`` on a bad *query*.
+        """
+        base, bucket = self._base(snapshot)
+        params = (metric, status, query, archived)
+        return self._importance.get(
+            (base.token, bucket, _schema_key(schema)) + params,
+            lambda: self._importance_payload(snapshot, schema, *params),
+        )
+
+    def _importance_payload(self, snapshot, schema, metric, status, query, archived):
+        require_metric(self._ordered(snapshot, schema, None, None, None, None, None, archived), metric)
+        rows = self._ordered(snapshot, schema, None, None, status, query, None, archived)
+        return param_importance(rows, metric)
 
     def etag(self, snapshot, schema, **params):
         """Changes whenever :meth:`page` could answer differently."""

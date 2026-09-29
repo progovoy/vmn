@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The leaderboard routes: ``.../experiments`` pages, ``.../experiments-columns``
-(whole-set chart data) and ``.../experiments-facets``.
+(whole-set chart data), ``.../experiments-importance`` (which params drive a
+metric) and ``.../experiments-facets``.
 
 Both answer from the app's current index snapshot through a
 :class:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache`, so a poll costs
@@ -9,7 +10,7 @@ from many clients render and compress it once. The list's ``ETag`` is known
 before any row is touched (index generation, parameters, and the time bucket
 while runs are live): a client
 repeating it gets an empty ``304`` without the payload ever being built.
-Archived rows are left out of all three unless the request passes
+Archived rows are left out of all of them unless the request passes
 ``archived=1``.
 """
 from fastapi import HTTPException, Request
@@ -73,6 +74,20 @@ def register(app, api_prefix, inputs, cache):
             sort=sort, status=status, query=q, order=order, archived=archived,
         )
         return _answer(request, cache.columns, snapshot, schema, params, route="columns")
+
+    @app.get(f"{base}/experiments-importance")
+    def experiment_importance(
+        request: Request,
+        ws_name: str,
+        app_tag: str,
+        metric: str,
+        q: str = None,
+        status: str = None,
+        archived: bool = False,
+    ):
+        snapshot, schema = inputs(ws_name, app_tag)
+        params = dict(metric=metric, status=status, query=q, archived=archived)
+        return _answer(request, cache.importance, snapshot, schema, params, route="importance")
 
     @app.get(f"{base}/experiments-facets")
     def experiment_facets(
