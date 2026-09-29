@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { apiModels } from "../apiModels";
 import type { ModelKind, ModelRow } from "../apiModels";
-import { relTime } from "../util";
+import { modelHref, relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 
 const KIND_OPTIONS: [ModelKind | "", string][] = [
@@ -25,9 +25,9 @@ function ModelTableRow({ model, ws }: { model: ModelRow; ws: string }) {
   return (
     <tr>
       <td>
-        <Link to={`/ws/${ws}/models/${encodeURIComponent(model.name)}`}>{model.name}</Link>
+        <Link to={modelHref(ws, model.name)}>{model.name}</Link>
         {" "}
-        {model.kind && <span className={`badge kind-${model.kind}`}>{model.kind}</span>}
+        {model.kind && <span className="badge">{model.kind}</span>}
         {" "}
         <AliasBadges aliases={model.aliases} />
       </td>

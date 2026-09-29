@@ -32,14 +32,13 @@
  * Mutations return 403 when the server is running in read-only mode.
  */
 import { get, post, del } from "./http";
-import type { LineageNode } from "./apiRun";
+import type { LineageNode, ModelKind } from "./apiRun";
+
+export type { ModelKind };
 
 // ---------------------------------------------------------------------------
 // JSON shapes
 // ---------------------------------------------------------------------------
-
-/** Models and datasets share the registry; absent = model (older servers). */
-export type ModelKind = "model" | "dataset";
 
 /** One row in the models table. */
 export interface ModelRow {

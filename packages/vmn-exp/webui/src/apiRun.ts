@@ -17,6 +17,9 @@ export function runLog(
   );
 }
 
+/** Models and datasets share the registry; absent = model (older servers). */
+export type ModelKind = "model" | "dataset";
+
 export interface LineageLink {
   input: string;
   artifact: string;
@@ -25,14 +28,14 @@ export interface LineageLink {
   /** Set when the artifact is a registered version's (e.g. via `use_model`). */
   model?: string;
   version?: number;
-  kind?: "model" | "dataset";
+  kind?: ModelKind;
 }
 
 /** A reference dataset (`vmn-registry://` input) the run used. */
 export interface LineageDataset {
   model: string;
   version: number;
-  kind: "model" | "dataset";
+  kind: ModelKind;
   input: string;
   digest: string | null;
   /** False once the version is deleted or gone; null when unknown. */
@@ -52,7 +55,7 @@ export interface LineageNode {
 
 export interface LineageModel {
   model: string;
-  kind?: "model" | "dataset";
+  kind?: ModelKind;
   version: number;
   aliases: string[];
   status: string;

@@ -19,24 +19,29 @@ from vmn_exp.core.tree import annotate_rows
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries, read_uses
 from vmn_exp.registry.store import get_version, model_kind, run_of
-from vmn_exp.registry.view import models_for_run, resolve_ref
+from vmn_exp.registry.view import models_for_run, run_models
 
 
 class RegistryLinks:
-    """The registry lookups :func:`resolve_lineage` takes as *registry*."""
+    """The registry lookups :func:`resolve_lineage` takes as *registry*: the
+    registry's run → versions map is read once per walk, not once per node."""
 
     def __init__(self, storage):
         self.storage = storage
+        self._run_models = None
 
     def models_of(self, app, verstr):
-        return models_for_run(self.storage, app, verstr)
+        if self._run_models is None:
+            self._run_models = run_models(self.storage)
+        return self._run_models.get((app, verstr), ())
 
     def version_live(self, name, n):
-        try:
-            resolve_ref(self.storage, f"{name}@{n}")
-        except KeyError:
-            return False
-        return True
+        status = _version_status(self.storage, name, n)
+        return status != "deleted" and get_version(self.storage, name, n) is not None
+
+
+def _version_status(storage, name, n):
+    return fold_registry(read_entries(storage, name))["status"].get(n, "active")
 
 
 def app_indexes(storage):
@@ -81,7 +86,7 @@ def version_lineage(storage, name, n, index_for=None, status_of=None):
         "model": name,
         "version": n,
         "kind": model_kind(storage, name) or "model",
-        "status": fold_registry(read_entries(storage, name))["status"].get(n, "active"),
+        "status": _version_status(storage, name, n),
         "producer": run_node(producer, index_for, status_of=status_of) if producer else None,
         "consumers": [
             run_node((use["app"], use["verstr"]), index_for, status_of=status_of)

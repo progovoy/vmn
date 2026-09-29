@@ -5,7 +5,7 @@ import { appTag } from "../http";
 import { runLineage } from "../apiRun";
 import type { Lineage, LineageDataset, LineageLink, LineageModel, LineageNode } from "../apiRun";
 import type { RunState } from "../types";
-import { runHref } from "../util";
+import { modelHref, runHref } from "../util";
 import StatusPill from "./StatusPill";
 
 const DEPTHS = [1, 2, 3];
@@ -25,10 +25,6 @@ function NodeLabel({ ws, node, ownApp }: { ws: string; node: LineageNode; ownApp
       {text}
     </Link>
   );
-}
-
-function modelHref(ws: string, model: string) {
-  return `/ws/${ws}/models/${encodeURIComponent(model)}`;
 }
 
 function LinkLine({ ws, link }: { ws: string; link: LineageLink }) {
