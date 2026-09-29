@@ -684,85 +684,55 @@ def test_get_experiment_storage_default_uses_vcs_root(tmp_path):
 # =========================================================================
 
 
-def test_run_experiment_from_snapshot_create(tmp_path, monkeypatch):
+def _snapshot_metadata(tmp_path):
+    meta_path = tmp_path / "vmn_metadata.yml"
+    meta_path.write_text(
+        yaml.dump(
+            {
+                "verstr": "1.0.0-dev.aaa.bbb",
+                "app_name": "myapp",
+                "base_version": "1.0.0",
+                "base_commit": "abc1234",
+                "branch": "main",
+                "remote": None,
+            }
+        )
+    )
+    return str(meta_path)
+
+
+def _vmn_exp(*argv):
+    from vmn_exp.cli.main import vmn_exp_run
+
+    code, _ = vmn_exp_run(list(argv))
+    return code
+
+
+def test_cli_from_snapshot_create(tmp_path, monkeypatch):
     from vmn_exp.core import writer as experiment_writer
 
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
-
-    meta_path = tmp_path / "vmn_metadata.yml"
-    meta_path.write_text(
-        yaml.dump(
-            {
-                "verstr": "1.0.0-dev.aaa.bbb",
-                "app_name": "myapp",
-                "base_version": "1.0.0",
-                "base_commit": "abc1234",
-                "branch": "main",
-                "remote": None,
-            }
-        )
+    ret = _vmn_exp(
+        "create", "myapp", "--from-snapshot", _snapshot_metadata(tmp_path),
+        "--experiment-dir", str(tmp_path), "--note", "test note",
     )
-
-    args = SimpleNamespace(
-        action="create",
-        name="myapp",
-        from_snapshot=str(meta_path),
-        backend="local",
-        bucket=None,
-        prefix="vmn-experiments",
-        endpoint_url=None,
-        experiment_dir=str(tmp_path),
-        note="test note",
-        file=None,
-        metrics=None,
-        writer_id=None,
-    )
-    ret = _run_experiment_from_snapshot(args)
     assert ret == 0
     experiment_writer._WRITER_ID = None
 
 
-def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
+def test_cli_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
     from vmn_exp.core import writer as experiment_writer
 
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
-    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
-
-    meta_path = tmp_path / "vmn_metadata.yml"
-    meta_path.write_text(
-        yaml.dump(
-            {
-                "verstr": "1.0.0-dev.aaa.bbb",
-                "app_name": "myapp",
-                "base_version": "1.0.0",
-                "base_commit": "abc1234",
-                "branch": "main",
-                "remote": None,
-            }
-        )
+    ret = _vmn_exp(
+        "create", "myapp", "--from-snapshot", _snapshot_metadata(tmp_path),
+        "--experiment-dir", str(tmp_path), "--writer-id", "my-pod",
     )
-
-    args = SimpleNamespace(
-        action="create",
-        name="myapp",
-        from_snapshot=str(meta_path),
-        backend="local",
-        bucket=None,
-        prefix="vmn-experiments",
-        endpoint_url=None,
-        experiment_dir=str(tmp_path),
-        note=None,
-        file=None,
-        metrics=None,
-        writer_id="my-pod",
-    )
-    ret = _run_experiment_from_snapshot(args)
     assert ret == 0
     assert os.environ.get("VMN_WRITER_ID") == "my-pod"
     # Plain pop, not monkeypatch.delenv: delenv would record "my-pod" as the
@@ -771,25 +741,15 @@ def test_run_experiment_from_snapshot_sets_writer_id(tmp_path, monkeypatch):
     experiment_writer._WRITER_ID = None
 
 
-def test_run_experiment_from_snapshot_unsupported_action(tmp_path, monkeypatch):
+def test_cli_from_snapshot_unsupported_action(tmp_path, monkeypatch):
     from vmn_exp.core import writer as experiment_writer
 
     experiment_writer._WRITER_ID = None
 
-    from vmn_exp.cli.main import run_experiment_from_snapshot as _run_experiment_from_snapshot
-
-    args = SimpleNamespace(
-        action="diff",
-        name="myapp",
-        from_snapshot="/fake/path",
-        backend="local",
-        bucket=None,
-        prefix="vmn-experiments",
-        endpoint_url=None,
-        experiment_dir=str(tmp_path),
-        writer_id=None,
+    ret = _vmn_exp(
+        "diff", "myapp", "--from-snapshot", "/fake/path",
+        "--experiment-dir", str(tmp_path),
     )
-    ret = _run_experiment_from_snapshot(args)
     assert ret == 1
     experiment_writer._WRITER_ID = None
 

@@ -4,10 +4,9 @@
 ``vmn-exp model ...``, ``vmn-exp sweep ...`` and ``vmn-exp ui`` reach the other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
 through ``version_stamp.api``, with only its own commands registered.
 """
-import copy
 import sys
 
-from version_stamp.api import VMN_ARGS, find_command, vmn_run
+from version_stamp.api import VMN_ARGS, vmn_run
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 
 OWN_COMMANDS = ("exp", "experiment", "model", "sweep", "ui")
@@ -31,14 +30,6 @@ def vmn_exp_run(argv):
         )
         return 2, None
     return vmn_run(_to_vmn_argv(argv))
-
-
-def run_experiment_from_snapshot(args):
-    """Run an experiment command without a git repo (from-snapshot mode)."""
-    register_all()
-    args = copy.copy(args)
-    args.command = "experiment"
-    return find_command("experiment").run_without_repo(args)
 
 
 def main(argv=None):

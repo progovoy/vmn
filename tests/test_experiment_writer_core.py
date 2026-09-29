@@ -23,7 +23,6 @@ from vmn_exp.core.writer import (
     get_writer_id,
     merge_conf_into_params,
     save_artifact,
-    save_log,
     save_run_state,
 )
 
@@ -90,15 +89,6 @@ def test_append_to_log_writes_through_the_per_writer_jsonl(monkeypatch):
     append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"})
 
     assert storage.log_entries == [("app", "0.0.1", "pod-7", {"type": "note", "text": "hi"})]
-
-
-def test_save_log_dumps_the_whole_log_as_yaml():
-    storage = _FakeStorage()
-    log = [{"type": "create", "note": "first"}]
-
-    save_log(storage, "app", "0.0.1", log)
-
-    assert yaml.safe_load(storage.load_file("app", "0.0.1", "log.yml")) == log
 
 
 # ---------------------------------------------------------------------------

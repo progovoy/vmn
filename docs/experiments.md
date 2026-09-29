@@ -1073,7 +1073,7 @@ vmn-exp run my_app --store file:///mnt/nfs/experiments -- ./t.sh
 | `file:///abs/dir` (or a bare path) | a local/NFS directory | used *as* the local root, no cache in front |
 | `<scheme>://...` | a plugin | see [Storage backends](#storage-backends-plugins) |
 
-The prefix defaults to `vmn-experiments` (`vmn-snapshots` for `vmn snapshot`).
+The prefix defaults to `vmn-experiments`.
 The store resolves as `--store` > `VMN_EXPERIMENT_STORE` > `experiment.storage.uri`
 in `.vmn/{app}/conf.yml`. `--bucket`/`--prefix`/`--endpoint-url` (and
 `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL`, conf `bucket`/`prefix`/

@@ -167,11 +167,6 @@ def flush_log(storage, app_name, verstr):
         sync(app_name, verstr, get_writer_id())
 
 
-def save_log(storage, app_name, verstr, log):
-    """Save experiment log to storage. Legacy: prefer append_to_log for new code."""
-    storage.save_file(app_name, verstr, "log.yml", yaml.dump(log, sort_keys=False))
-
-
 # ---------------------------------------------------------------------------
 # run state
 # ---------------------------------------------------------------------------
