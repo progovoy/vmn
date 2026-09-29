@@ -1,6 +1,6 @@
 """Prune registry guard (C6): registered runs are never deleted, not even with --force.
 
-Seven tests:
+Tests:
 1. registered run survives bulk prune (--keep 0)
 2. registered run survives --force
 3. registered run survives targeted -v prune even with --force
@@ -8,6 +8,8 @@ Seven tests:
 5. deleted model version no longer protects
 6. registry read failure deletes nothing and exits non-zero
 7. ancestor of a registered run is kept
+8. the producer of a copied dataset is kept
+9. a consumer run may be pruned; version lineage then marks it missing
 """
 import pytest
 import vmn_exp.registry.view as _reg_view
@@ -191,3 +193,40 @@ def test_ancestor_of_registered_run_is_kept(app_layout, capfd):
     remaining = _verstrs(app_layout)
     assert inner in remaining, "registered inner run must survive"
     assert outer in remaining, "ancestor of registered run must survive"
+
+
+# ---------------------------------------------------------------------------
+# Plan 06: datasets and recorded usage
+# ---------------------------------------------------------------------------
+
+
+def test_prune_refuses_producer_of_copied_dataset(app_layout, capfd):
+    from vmn_exp.registry.datasets import copied_fields, register_dataset_version
+
+    _bootstrap(app_layout)
+    producer = _create(app_layout)
+    st = _storage(app_layout)
+    run_ref = {"app": app_layout.app_name, "verstr": producer}
+    register_dataset_version(st, "train", copied_fields(st, run_ref, "data.csv", "sha256:x"))
+
+    err, out = _prune(app_layout, capfd, keep=0)
+    assert err == 0, out
+    assert producer in _verstrs(app_layout)
+
+
+def test_prune_consumer_run_allowed_version_lineage_marks_missing(app_layout, capfd):
+    from vmn_exp.registry.lineage import version_lineage
+    from vmn_exp.registry.log import record_use
+
+    _bootstrap(app_layout)
+    producer = _create(app_layout)
+    consumer = _create(app_layout)
+    _register(app_layout, producer)
+    record_use(_storage(app_layout), "mymodel", 1, app_layout.app_name, consumer)
+
+    err, out = _prune(app_layout, capfd, keep=0)
+    assert err == 0, out
+    assert _verstrs(app_layout) == [producer]
+    found = version_lineage(_storage(app_layout), "mymodel", 1)
+    assert [(n["verstr"], n["found"]) for n in found["consumers"]] == [(consumer, False)]
+    assert found["producer"]["found"] is True

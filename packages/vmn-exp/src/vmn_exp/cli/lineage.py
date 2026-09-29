@@ -1,5 +1,6 @@
 """``vmn-exp lineage <app> -v <ref> [--depth N] [--json]``: the runs a run
-consumed from and fed, and the model versions registered from it."""
+consumed from and fed, the registry versions it used and the ones registered
+from it."""
 from vmn_exp.cli.views import dumps
 from vmn_exp.sdk.reader import get_lineage
 from version_stamp.api import VMN_LOGGER
@@ -13,6 +14,13 @@ def _node_line(node, app_name):
     return f"    {label}  {extra}{hops}".rstrip()
 
 
+def _link_line(link):
+    line = f"        {link['input']} <- {link['artifact']} ({link['via']})"
+    if "model" in link:
+        line += f"  {link['kind']} {link['model']} v{link['version']}"
+    return line
+
+
 def _print_nodes(title, nodes, app_name):
     if not nodes:
         print(f"  {title} none")
@@ -21,7 +29,7 @@ def _print_nodes(title, nodes, app_name):
     for node in nodes:
         print(_node_line(node, app_name))
         for link in node["links"]:
-            print(f"        {link['input']} <- {link['artifact']} ({link['via']})")
+            print(_link_line(link))
 
 
 def _print_models(models):
@@ -31,6 +39,15 @@ def _print_models(models):
     for m in models:
         aliases = f" [{', '.join(m['aliases'])}]" if m["aliases"] else ""
         print(f"    {m['model']} v{m['version']}{aliases}  {m['status']}")
+
+
+def _print_datasets(datasets):
+    if not datasets:
+        return
+    print("  Datasets:")
+    for d in datasets:
+        missing = "  missing" if d["found"] is False else ""
+        print(f"    {d['model']} v{d['version']}  (input {d['input']}){missing}")
 
 
 def experiment_lineage(storage, app_name, args):
@@ -48,6 +65,7 @@ def experiment_lineage(storage, app_name, args):
     print(f"Lineage: {lineage['verstr']}")
     _print_nodes("Upstream:  ", lineage["upstream"], app_name)
     _print_nodes("Downstream:", lineage["downstream"], app_name)
+    _print_datasets(lineage["datasets"])
     _print_models(lineage["models"])
     if lineage["truncated"]:
         print("  (truncated: more linked runs than shown)")
