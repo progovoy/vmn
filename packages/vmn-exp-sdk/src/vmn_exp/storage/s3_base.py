@@ -10,6 +10,7 @@ from vmn_exp.storage.files import (
     checked_app_path,
     safe_verstr,
 )
+from vmn_exp.storage.registry import missing_extra
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs,
 # few enough to fit boto3's default connection pool (10 per client).
@@ -51,10 +52,7 @@ def boto3_client(endpoint_url=None):
     try:
         import boto3
     except ImportError:
-        raise ImportError(
-            "boto3 is required for S3 snapshot storage. "
-            "Install it with: pip install 'vmn-exp-sdk[s3]'"
-        ) from None
+        raise missing_extra("boto3", "s3") from None
     return boto3.client("s3", **({"endpoint_url": endpoint_url} if endpoint_url else {}))
 
 

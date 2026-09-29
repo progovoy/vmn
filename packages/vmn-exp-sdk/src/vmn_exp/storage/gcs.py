@@ -6,15 +6,10 @@ generation is the ETag, so ``if_generation_match=0`` is the atomic
 ``If-None-Match: *`` create and ``if_generation_match=<generation>`` the
 ``If-Match`` overwrite. Credentials come from Application Default Credentials.
 """
-from vmn_exp.storage.object_client import (
-    BAD_RANGE,
-    MISSING,
-    Body,
-    ObjectClient,
-    ObjectStoreError,
-)
+from vmn_exp.storage.files import valid_artifact_path
+from vmn_exp.storage.object_client import Body, ObjectClient
 from vmn_exp.storage.registry import default_prefix, missing_extra
-from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.storage.s3 import _ARTIFACT_CHUNK, S3SnapshotStorage
 
 
 def _obj(blob):
@@ -32,24 +27,18 @@ class GCSObjectClient(ObjectClient):
         blob = self._bucket.get_blob(key)
         return _obj(blob) if blob is not None else None
 
-    def _existing(self, key):
-        blob = self._bucket.get_blob(key)
-        if blob is None:
-            raise ObjectStoreError(MISSING, key)
-        return blob
-
     def _get(self, key, offset):
-        blob = self._existing(key)
-        if offset and offset >= blob.size:
-            raise ObjectStoreError(BAD_RANGE, key)
-        # The generation read first: a newer object under an older token only
-        # makes a conditional write retry.
-        return {
-            "Body": Body(lambda: blob.download_as_bytes(start=offset or None),
-                         lambda size: _chunks(blob, size)),
-            "ETag": str(blob.generation),
-            "ContentLength": blob.size - offset,
-        }
+        # One request: a missing key raises 404, a start past the end 416, and
+        # the download carries the generation it read (x-goog-generation).
+        blob = self._bucket.blob(key)
+        data = blob.download_as_bytes(start=offset or None)
+        return {"Body": Body(lambda: data), "ETag": str(blob.generation),
+                "ContentLength": len(data)}
+
+    def stream(self, key, chunk_size):
+        """``(chunks, size)`` reading *key* piecewise, or None when it is missing."""
+        blob = self._bucket.get_blob(key)
+        return None if blob is None else (_chunks(blob, chunk_size), blob.size)
 
     def _put(self, key, body, if_none_match, if_match):
         data = body.encode("utf-8") if isinstance(body, str) else body
@@ -97,6 +86,13 @@ class GCSSnapshotStorage(S3SnapshotStorage):
         if client is None:
             client = _default_client()
         super().__init__(bucket, prefix=prefix, client=GCSObjectClient(client, bucket))
+
+    def open_artifact(self, app_name, verstr, name):
+        """Streamed, never buffered: a GCS read is one whole-object download."""
+        if not valid_artifact_path(name):
+            return None
+        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        return self._s3.stream(key, _ARTIFACT_CHUNK)
 
 
 def _default_client(endpoint_url=None):
