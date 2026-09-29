@@ -233,7 +233,8 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
         repo_lock.release()
 
     return _Supervision(
-        storage, app_name, verstr, args, experiment_conf(vcs), root=vcs.vmn_root_path
+        storage, app_name, verstr, args, experiment_conf(vcs),
+        root=getattr(vcs, "vmn_root_path", None),
     ).run(run_cmd)
 
 
