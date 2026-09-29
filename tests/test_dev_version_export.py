@@ -6,7 +6,7 @@ import subprocess
 import pytest
 import yaml
 
-from vmn_exp import snapshot as snap
+import version_stamp.devversion.materialize as dv_materialize
 from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core import logging as vmn_logging
 from helpers import _PY, _SRC_PATH, _bootstrap, _experiment, extract_dev_verstr
@@ -120,7 +120,7 @@ def test_clone_timeout_is_an_error_not_a_hang(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", timeout)
 
-    assert snap._shallow_clone_at(str(tmp_path / "d"), UNREACHABLE_REMOTE, "a" * 40) == 1
+    assert dv_materialize._shallow_clone_at(str(tmp_path / "d"), UNREACHABLE_REMOTE, "a" * 40) == 1
 
 
 def _vmn_exp_without_git(cwd, *argv):

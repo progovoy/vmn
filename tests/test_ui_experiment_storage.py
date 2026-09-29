@@ -8,7 +8,8 @@ import pytest
 import yaml
 from moto import mock_aws
 
-from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core.index import direct_rows
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui.index import app_snapshot

@@ -9,11 +9,8 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import (
-    LocalSnapshotStorage,
-    S3SnapshotStorage,
-    get_snapshot_storage,
-)
+from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader

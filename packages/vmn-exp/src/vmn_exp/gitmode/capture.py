@@ -18,12 +18,8 @@ import threading
 from dataclasses import dataclass
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.snapshot import (
-    _compute_diff_hash,
-    _untracked_caps,
-    gather_create_data,
-    untracked_payload,
-)
+from vmn_exp.snapshot import _compute_diff_hash, _untracked_caps, gather_create_data
+from version_stamp.api import untracked_payload
 
 _MEMO = {"key": None, "payloads": None}
 _MEMO_LOCK = threading.Lock()

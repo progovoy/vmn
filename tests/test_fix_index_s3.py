@@ -6,7 +6,7 @@ import pytest
 moto = pytest.importorskip("moto")
 import boto3  # noqa: E402
 
-from vmn_exp.snapshot import S3SnapshotStorage  # noqa: E402
+from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
 from vmn_exp.core.index import (  # noqa: E402
     ExperimentIndex,
     direct_rows,

@@ -6,11 +6,8 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import (
-    LocalSnapshotStorage,
-    S3SnapshotStorage,
-    get_snapshot_storage,
-)
+from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.ui.readers.experiments import sort_rows
 
 APP = "app"

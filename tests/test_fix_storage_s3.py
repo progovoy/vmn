@@ -10,10 +10,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from vmn_exp.snapshot import (
-    S3SnapshotStorage,
-    get_snapshot_storage,
-)
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core.status import derive_status, load_run_state
 from vmn_exp.core.writer import allocate_run_verstr
 from version_stamp.core.logging import init_stamp_logger

@@ -29,7 +29,7 @@ def mocked_bucket(monkeypatch):
 
 
 def s3_storage():
-    from vmn_exp.snapshot import S3SnapshotStorage
+    from vmn_exp.storage.s3 import S3SnapshotStorage
 
     return S3SnapshotStorage(BUCKET, prefix=PREFIX)
 

@@ -10,7 +10,8 @@ import os
 import pytest
 from s3_helpers import cached_host, meta, mocked_bucket, record_calls, s3_storage
 
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.core.logging import init_stamp_logger
 

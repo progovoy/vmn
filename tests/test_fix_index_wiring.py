@@ -150,7 +150,7 @@ def test_s3_workspace_listing_is_cached_across_requests(monkeypatch, tmp_path):
     moto = pytest.importorskip("moto")
     import boto3
 
-    from vmn_exp.snapshot import S3SnapshotStorage
+    from vmn_exp.storage.s3 import S3SnapshotStorage
     from vmn_exp.ui.index import app_snapshot
 
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")

@@ -5,10 +5,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from vmn_exp.snapshot import (
-    S3SnapshotStorage,
-    get_snapshot_storage,
-)
+from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.sdk.reader import _apps_with_experiments
 from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
 

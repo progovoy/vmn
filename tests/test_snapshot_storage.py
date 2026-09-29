@@ -7,12 +7,9 @@ import pytest
 import yaml
 from moto import mock_aws
 
-from vmn_exp.snapshot import (
-    CachedSnapshotStorage,
-    LocalSnapshotStorage,
-    S3SnapshotStorage,
-    _unique_snapshot_verstr,
-)
+from vmn_exp.snapshot import LocalSnapshotStorage, _unique_snapshot_verstr
+from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from version_stamp.core.version_math import deserialize_vmn_version
 

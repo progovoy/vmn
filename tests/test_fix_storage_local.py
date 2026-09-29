@@ -8,7 +8,8 @@ import subprocess
 import pytest
 import yaml
 
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 
 

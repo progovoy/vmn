@@ -17,7 +17,8 @@ import time
 import pytest
 from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core import status as st
 from vmn_exp.sdk import start_run
 

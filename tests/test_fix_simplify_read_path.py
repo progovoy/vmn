@@ -256,7 +256,7 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
 def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):
     import tempfile
 
-    from vmn_exp.snapshot import S3SnapshotStorage
+    from vmn_exp.storage.s3 import S3SnapshotStorage
     from vmn_exp.ui.server import create_app
 
     storage = S3SnapshotStorage("vmn-bucket", prefix="exps")

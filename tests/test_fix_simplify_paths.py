@@ -5,7 +5,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from vmn_exp.snapshot import LocalSnapshotStorage, S3SnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.storage.files import valid_artifact_path
 from version_stamp.core.utils import parse_record_metadata, valid_path_component
 from vmn_exp.ui.security import safe_segment

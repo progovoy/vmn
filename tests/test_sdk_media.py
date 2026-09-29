@@ -16,7 +16,8 @@ from vmn_exp.core.tables import MAX_TABLE_ROWS
 from vmn_exp.sdk import reader
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.sdk.run import Run
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"

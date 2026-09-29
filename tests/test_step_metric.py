@@ -13,7 +13,8 @@ from vmn_exp.core.step_metric import (
     metric_definitions,
     step_metrics,
 )
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import reader
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.sdk.run import Run

@@ -3,51 +3,34 @@
 and ``vmn goto -v <dev-version>``."""
 import datetime
 
-# The storage backends and the dev-version helpers live in their own modules;
-# these names stay importable from here for experiment code.
+# The dev-version helpers live in version_stamp.devversion; the names below
+# stay importable from here for experiment code.
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
 from vmn_exp.core.storage_resolve import store_uri
-from vmn_exp.storage.cached import CachedSnapshotStorage  # noqa: F401
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: F401
 from vmn_exp.storage.open import get_snapshot_storage, open_storage  # noqa: F401
-from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
     VMN_LOGGER,
     now_iso,
     # dev-version apply
-    _apply_patches_to_workdir,
     _apply_snapshot_patches,
     _reset_worktree,
     # dev-version capture
     _compute_diff_hash,
     _compute_verstr,
     _format_dev_verstr,
-    _generate_dep_patches,
-    _generate_patches,
     _unique_snapshot_verstr,
     gather_create_data,
     # dev-version materialize
     _diff_real_tree,
     _diff_with_external_tool,
     _materialize_workdir,
-    _shallow_clone_at,
     _strip_git_dirs,
     get_git_difftool,
     render_tree_diff,
     # dev-version untracked
-    _collect_untracked_tarball,
-    _hash_untracked_content,
     _untracked_caps,
-    copy_untracked_files,
-    payload_from_tarball,
 )
-
-
-def untracked_payload(repo_path):
-    """devversion's ``untracked_payload``, collecting through this module's
-    ``_collect_untracked_tarball`` so experiment code (and its tests) can
-    still patch the collector here."""
-    return payload_from_tarball(*_collect_untracked_tarball(repo_path))
 
 
 def _relative_timestamp(iso_ts):

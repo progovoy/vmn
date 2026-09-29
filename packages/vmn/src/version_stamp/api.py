@@ -122,6 +122,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_within_caps":                "version_stamp.devversion.untracked:_within_caps",
     "copy_untracked_files":        "version_stamp.devversion.untracked:copy_untracked_files",
     "payload_from_tarball":        "version_stamp.devversion.untracked:payload_from_tarball",
+    "untracked_payload":           "version_stamp.devversion.untracked:untracked_payload",
 }
 
 # __all__ is the sorted key set of the registry — the single source of truth.

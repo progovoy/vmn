@@ -8,6 +8,7 @@ import tarfile
 import pytest
 
 from vmn_exp import snapshot as snap
+import version_stamp.devversion.untracked as dv_untracked
 from version_stamp.core import logging as vmn_logging
 from helpers import (
     DEV_VERSION_RE,
@@ -91,7 +92,7 @@ def test_untracked_file_over_per_file_cap_is_skipped(tmp_path, monkeypatch):
     _write(os.path.join(repo, "ckpt", "big.bin"), 2 * MB)
     monkeypatch.setenv("VMN_SNAPSHOT_MAX_FILE_MB", "1")
 
-    tarball, skipped = snap._collect_untracked_tarball(repo)
+    tarball, skipped = dv_untracked._collect_untracked_tarball(repo)
 
     assert _members(tarball) == ["small.txt"]
     assert skipped == ["ckpt/big.bin"]
@@ -103,7 +104,7 @@ def test_untracked_total_cap_stops_adding(tmp_path, monkeypatch):
         _write(os.path.join(repo, name), 400 * 1024)
     monkeypatch.setenv("VMN_SNAPSHOT_MAX_TOTAL_MB", "1")
 
-    tarball, skipped = snap._collect_untracked_tarball(repo)
+    tarball, skipped = dv_untracked._collect_untracked_tarball(repo)
 
     assert _members(tarball) == ["a.bin", "b.bin"]
     assert skipped == ["c.bin"]
@@ -114,7 +115,7 @@ def test_all_untracked_skipped_yields_no_tarball(tmp_path, monkeypatch):
     _write(os.path.join(repo, "big.bin"), 2 * MB)
     monkeypatch.setenv("VMN_SNAPSHOT_MAX_FILE_MB", "1")
 
-    tarball, skipped = snap._collect_untracked_tarball(repo)
+    tarball, skipped = dv_untracked._collect_untracked_tarball(repo)
 
     assert tarball is None
     assert skipped == ["big.bin"]
@@ -200,7 +201,7 @@ def test_untracked_hash_cache_hit(app_layout):
     """`_hash_untracked_content` caches by (path, size, mtime)."""
     _bootstrap(app_layout)
     f_path = _write_text(app_layout, "cached.txt", "A")
-    h1 = snap._hash_untracked_content(app_layout.repo_path)
+    h1 = dv_untracked._hash_untracked_content(app_layout.repo_path)
     assert h1 is not None
 
     # Same-length content with the original stat restored: the cache key matches.
@@ -208,7 +209,7 @@ def test_untracked_hash_cache_hit(app_layout):
     _write_text(app_layout, "cached.txt", "B")
     os.utime(f_path, ns=(st.st_atime_ns, st.st_mtime_ns))
 
-    assert snap._hash_untracked_content(app_layout.repo_path) == h1
+    assert dv_untracked._hash_untracked_content(app_layout.repo_path) == h1
 
 
 @pytest.mark.parametrize("hash_len", [7, 12])

@@ -17,7 +17,8 @@ from helpers import _bootstrap
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import signals, start_run
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 
 TIMEOUT = 0.5
 RUNS = 3

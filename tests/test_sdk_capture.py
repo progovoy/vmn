@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
-from vmn_exp import snapshot as snap
+import version_stamp.devversion.untracked as dv_untracked
 from vmn_exp.sdk import start_run
 
 N_WORKERS = 8
@@ -117,13 +117,13 @@ def test_concurrent_start_runs_capture_in_parallel(app_layout):
 @pytest.fixture
 def tarballs(monkeypatch):
     calls = []
-    real = snap._collect_untracked_tarball
+    real = dv_untracked._collect_untracked_tarball
 
     def spy(repo_path):
         calls.append(repo_path)
         return real(repo_path)
 
-    monkeypatch.setattr(snap, "_collect_untracked_tarball", spy)
+    monkeypatch.setattr(dv_untracked, "_collect_untracked_tarball", spy)
     return calls
 
 

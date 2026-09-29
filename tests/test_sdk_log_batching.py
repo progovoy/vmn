@@ -15,7 +15,8 @@ import time
 import pytest
 from helpers import _SRC_PATH, _PY
 
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.run import Run
 
@@ -124,7 +125,8 @@ def test_a_finished_run_still_accepts_writes(storage):
 
 _SCRIPT = """
 import os, sys, time
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.run import Run
 log_buffer.FLUSH_INTERVAL_SEC = 3600

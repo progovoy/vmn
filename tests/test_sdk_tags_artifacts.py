@@ -10,7 +10,8 @@ import pytest
 import yaml
 from helpers import _bootstrap, _storage
 
-from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core.log import experiment_row
 from vmn_exp.sdk import manage, reader, start_run
 from vmn_exp.sdk.run import Run

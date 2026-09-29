@@ -95,6 +95,7 @@ _EXPECTED_ALL = [
     "resolve_root_path",
     "sha256_file",
     "tag_name_to_app_name",
+    "untracked_payload",
     "valid_app_path",
     "valid_path_component",
     "version",

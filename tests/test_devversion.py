@@ -1,47 +1,11 @@
 """Tests for the version_stamp.devversion package.
 
-Two fast unit tests (no Docker needed):
-  test_snapshot_reexports_are_devversion_objects — snapshot.py re-exports the
-      exact same callable objects as the devversion sub-modules.
+A fast unit test (no Docker needed):
   test_devversion_imports_no_experiment_modules — subprocess guard: importing
       the four devversion modules loads no experiment/snapshot/ui code.
 """
 import subprocess
 import sys
-
-import pytest
-
-
-def test_snapshot_reexports_are_devversion_objects():
-    """snapshot.py re-exports from devversion must be the same objects."""
-    import vmn_exp.snapshot as snap
-    import version_stamp.devversion.apply as dv_apply
-    import version_stamp.devversion.capture as dv_cap
-    import version_stamp.devversion.materialize as dv_mat
-    import version_stamp.devversion.untracked as dv_unt
-
-    # capture
-    assert snap.gather_create_data is dv_cap.gather_create_data
-    assert snap._generate_patches is dv_cap._generate_patches
-    assert snap._generate_dep_patches is dv_cap._generate_dep_patches
-    assert snap._compute_diff_hash is dv_cap._compute_diff_hash
-    assert snap._compute_verstr is dv_cap._compute_verstr
-    assert snap._format_dev_verstr is dv_cap._format_dev_verstr
-    assert snap._unique_snapshot_verstr is dv_cap._unique_snapshot_verstr
-
-    # untracked
-    assert snap.copy_untracked_files is dv_unt.copy_untracked_files
-    assert snap._hash_untracked_content is dv_unt._hash_untracked_content
-
-    # apply
-    assert snap._apply_patches_to_workdir is dv_apply._apply_patches_to_workdir
-    assert snap._apply_snapshot_patches is dv_apply._apply_snapshot_patches
-    assert snap._reset_worktree is dv_apply._reset_worktree
-
-    # materialize
-    assert snap._materialize_workdir is dv_mat._materialize_workdir
-    assert snap.get_git_difftool is dv_mat.get_git_difftool
-    assert snap.render_tree_diff is dv_mat.render_tree_diff
 
 
 def test_devversion_imports_no_experiment_modules():

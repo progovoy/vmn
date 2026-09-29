@@ -223,12 +223,13 @@ def test_compare_does_not_load_patches(app_layout, capfd, monkeypatch):
     a = _create(app_layout, "--metrics", "loss=1")
     b = _create(app_layout, "--metrics", "loss=2")
 
-    from vmn_exp import snapshot
+    from vmn_exp.storage.cached import CachedSnapshotStorage
+    from vmn_exp.storage.local import LocalSnapshotStorage
 
     def _no_patches(*args, **kwargs):
         raise AssertionError("compare loaded patches")
 
-    for cls in (snapshot.LocalSnapshotStorage, snapshot.CachedSnapshotStorage):
+    for cls in (LocalSnapshotStorage, CachedSnapshotStorage):
         monkeypatch.setattr(cls, "load", _no_patches)
 
     capfd.readouterr()
