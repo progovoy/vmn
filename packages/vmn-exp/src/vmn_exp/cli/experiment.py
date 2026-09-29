@@ -355,6 +355,10 @@ def handle_experiment(vmn_ctx):
         from vmn_exp.cli.watch import experiment_watch
 
         return experiment_watch(vcs, storage, _app_name(vcs, args), args)
+    elif action == "lineage":
+        from vmn_exp.cli.lineage import experiment_lineage
+
+        return experiment_lineage(storage, _app_name(vcs, args), args)
     else:
         VMN_LOGGER.error(f"Unknown experiment action: {action}")
         return 1
