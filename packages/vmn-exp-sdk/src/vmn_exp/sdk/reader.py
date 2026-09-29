@@ -38,6 +38,7 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.record_format import readable, record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.reserved import is_reserved_app
@@ -190,7 +191,7 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     read here — the caller loads the one it needs.
     """
     row = snapshot.row(verstr)
-    meta = storage.load_metadata(app_name, verstr) if row else None
+    meta = readable(storage.load_metadata(app_name, verstr)) if row else None
     if meta is None:
         return None, None
 
@@ -230,6 +231,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     log = _load_log(storage, app_name, verstr)
     row = experiment_row(target["idx"], target["meta"], log)
     row.update(status)
+    row["format_version"] = record_format_version(target["meta"])
     row["log"] = log
     series = metric_series(log)
     row["series"] = series if x is None else join_all(series, x)

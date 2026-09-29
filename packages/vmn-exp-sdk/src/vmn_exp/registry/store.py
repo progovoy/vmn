@@ -20,6 +20,7 @@ not import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
 """
 from __future__ import annotations
 
+from vmn_exp.core.record_format import readable, stamped
 from vmn_exp.registry.fold import now_iso
 from vmn_exp.registry.names import (
     REGISTRY_APP,
@@ -43,7 +44,7 @@ def ensure_model(storage, model, description=None, actor=None):
     if actor is not None:
         metadata["actor"] = actor
     # Return value ignored: False = record already exists, that is fine.
-    storage.create_exclusive(REGISTRY_APP, model, metadata, {})
+    storage.create_exclusive(REGISTRY_APP, model, stamped(metadata), {})
 
 
 def register_version(
@@ -71,7 +72,7 @@ def register_version(
     all_names = list(storage.list_record_names(REGISTRY_APP))
     n = max(_taken_version_numbers(all_names, model), default=0) + 1
 
-    metadata_base = {"model": model, "run_ref": run_ref, "timestamp": now_iso()}
+    metadata_base = stamped({"model": model, "run_ref": run_ref, "timestamp": now_iso()})
     if artifact_path is not None:
         metadata_base["artifact_path"] = artifact_path
     if description is not None:
@@ -122,7 +123,7 @@ def get_version(storage, model, n) -> dict | None:
     """Return the metadata dict for version *n* of *model*, or None."""
     record_name = version_record_name(model, n)
     metadata, _ = storage.load(REGISTRY_APP, record_name)
-    return metadata
+    return readable(metadata, record_name)
 
 
 # ---------------------------------------------------------------------------

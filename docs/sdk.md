@@ -664,7 +664,10 @@ best = get_run("my_app", ref="latest")
   lists the declared x metrics.
 
 A `list_runs` row carries the latest value of each metric, the run's `name`
-(or `None`), its current `tags` and `archived` (a bool). To read a metric's
+(or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
+`format_version` (1 for runs written before it existed); runs written in a
+newer format than the installed SDK reads are left out of both, with a
+warning (see [How records are stored](experiments.md#how-records-are-stored)). To read a metric's
 whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
 name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
 
