@@ -11,8 +11,8 @@ the user set it) so a Python child still streams live.
 """
 import subprocess
 import threading
-import time
 
+from vmn_exp.core.background import join_all
 from vmn_exp.core.output_log import OutputArtifact, output_cap_bytes, pump
 
 # How long the end of a run waits for the pipes to drain. A grandchild that
@@ -51,7 +51,5 @@ class OutputTee:
             thread.start()
 
     def drain(self, timeout=_DRAIN_TIMEOUT_SEC):
-        deadline = time.monotonic() + timeout
-        for thread in self._threads:
-            thread.join(max(0.0, deadline - time.monotonic()))
+        join_all(self._threads, timeout)
 

@@ -9,9 +9,17 @@ one at a time, in order.
 """
 import logging
 import threading
+import time
 
 _LOGGER = logging.getLogger(__name__)
 _NOTHING = object()
+
+
+def join_all(threads, timeout):
+    """Join *threads* within *timeout* seconds in total, not per thread."""
+    deadline = time.monotonic() + timeout
+    for thread in threads:
+        thread.join(max(0.0, deadline - time.monotonic()))
 
 
 class Coalescing:
