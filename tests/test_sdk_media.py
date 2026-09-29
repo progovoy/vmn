@@ -194,6 +194,21 @@ def test_log_histogram_of_nothing_finite_records_nothing(run, storage, caplog):
     assert "finite" in caplog.text
 
 
+def test_log_histogram_accepts_precomputed_bins_counts(run, storage):
+    run.log_histogram("w", {"bins": [0, 1, 2], "counts": [3, 4]}, step=2)
+    run.finish()
+    (entry,) = _entries(storage, "histogram")
+    assert entry["step"] == 2
+    assert entry["bins"] == [0.0, 1.0, 2.0] and entry["counts"] == [3, 4]
+
+
+def test_log_histogram_rejects_mismatched_precomputed_lengths(run, storage):
+    with pytest.raises(ValueError, match="bins"):
+        run.log_histogram("w", {"bins": [0, 1], "counts": [3, 4]})
+    run.finish()
+    assert not _entries(storage, "histogram")
+
+
 # -- no-op run --------------------------------------------------------------
 
 

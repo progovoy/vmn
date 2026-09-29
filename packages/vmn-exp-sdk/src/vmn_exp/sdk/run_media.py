@@ -9,7 +9,9 @@
   ``media/<name>/<step>.png`` and logs ``{"type": "image", "name", "step",
   "path", "caption", "width", "height", "sha256", "size"}``.
 * ``log_histogram(name, values, step=None, bins=64)`` bins the finite values
-  here and logs ``{"type": "histogram", "name", "step", "bins", "counts"}``.
+  here and logs ``{"type": "histogram", "name", "step", "bins", "counts"}``;
+  *values* may instead be a precomputed ``{"bins": edges, "counts": counts}``
+  (``len(bins) == len(counts) + 1``).
 
 An image or table entry is also the run's record of its file as an output
 (like an ``artifact`` entry: ``row["outputs"]``, lineage, ``use_artifact``);
@@ -26,8 +28,9 @@ import json
 import logging
 import os
 import shutil
+from collections.abc import Mapping
 
-from vmn_exp.core.histogram import histogram
+from vmn_exp.core.histogram import histogram, precomputed
 from vmn_exp.core.png import array_to_png, png_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
@@ -172,7 +175,7 @@ class RunMedia:
         )
 
     def log_histogram(self, name, values, step=None, bins=64):
-        binned = histogram(values, bins=bins)
+        binned = precomputed(values) if isinstance(values, Mapping) else histogram(values, bins)
         if binned is None:
             _LOGGER.warning("Histogram %r has no finite values: not logged", name)
             return

@@ -1,9 +1,9 @@
 import { artifactUrl } from "../api";
 import type { ExperimentDetail } from "../types";
 import { hasMedia } from "../util/media";
-import MediaHistograms from "../components/MediaHistograms";
 import MediaImages from "../components/MediaImages";
 import MediaTable from "../components/MediaTable";
+import RunHistograms from "../components/RunHistograms";
 
 /** The run page's Media card: logged images, tables and histograms. */
 export default function RunMediaSection({ ws, app, detail }: {
@@ -19,8 +19,9 @@ export default function RunMediaSection({ ws, app, detail }: {
       {detail.tables && Object.keys(detail.tables).length > 0 && (
         <MediaTable ws={ws} app={app} verstr={verstr} tables={detail.tables} />
       )}
-      {detail.histograms && (
-        <MediaHistograms histograms={detail.histograms} totals={detail.histograms_total} />
+      {detail.histograms_total && (
+        <RunHistograms ws={ws} app={app} verstr={verstr} totals={detail.histograms_total}
+          inline={detail.histograms} />
       )}
     </div>
   );

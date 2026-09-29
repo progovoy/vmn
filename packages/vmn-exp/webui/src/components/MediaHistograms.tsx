@@ -46,7 +46,7 @@ function OverTime({ items }: { items: HistogramItem[] }) {
   );
 }
 
-function HistogramKey({ name, items, total }: {
+export function HistogramKey({ name, items, total }: {
   name: string; items: HistogramItem[]; total: number;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
