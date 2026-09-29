@@ -229,7 +229,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments-columns`, `.../experiments-importance`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
@@ -301,7 +301,7 @@ work at all.
 ### Archived runs
 
 Rows with a truthy `archived` field (soft-deleted runs) are left out of
-`.../experiments`, `.../experiments-columns` and `.../experiments-facets` —
+`.../experiments`, `.../experiments-columns`, `.../experiments-importance` and `.../experiments-facets` —
 including their `total` — unless the request passes `archived=1`. Rows without
 the field count as not archived. The flag is part of the ETag.
 
@@ -335,6 +335,36 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 - Memoized per index snapshot (and status bucket while runs are live), with an
   `ETag`/`304` like the list.
 
+### Parameter importance
+
+`GET .../apps/{app}/experiments-importance?metric=<m>` answers which params
+drive a metric over every run the filters match — what the leaderboard's
+**Importance** chart shows (pick the target metric, it defaults to the sort
+metric; click a param to open its scatter against the metric, or a per-value
+mean table for a categorical/bool param):
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'q=status = "succeeded"' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments-importance?metric=loss"
+```
+
+```json
+[{"param": "lr", "importance": 0.91, "correlation": 0.95, "spearman": 0.94, "kind": "numeric", "n": 240},
+ {"param": "opt", "importance": 0.06, "correlation": null, "spearman": null, "kind": "categorical", "n": 240}]
+```
+
+- Sorted by `importance`, a random-forest share that sums to 1; `correlation`
+  (Pearson) and `spearman` are `null` for categorical params; `n` counts the runs
+  carrying both the param and the metric. Params with a single value are left out.
+  See [`vmn-exp importance`](experiments.md#importance) for the algorithm.
+- `q`, `status` and `archived` mean what they mean on the list. `metric` is
+  required; one no visible run carries is a **400**, as is a bad `q`. A filter
+  matching no run answers `[]`.
+- Past 5000 matching runs a deterministic sample of 5000 is scored (well under
+  a second). Memoized per index snapshot (and status bucket while runs are
+  live), with an `ETag`/`304` like the list.
+
 ### Facets
 
 `GET .../apps/{app}/experiments-facets` answers the app's filter vocabulary,
@@ -360,6 +390,8 @@ Every list is sorted; `metric_keys` includes numeric params (they fold into
 | `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
 | `step_metrics` | `{metric: x metric}` for every metric that declares one (`run.define_metric(..., step_metric=)` or `step_metric:` in the conf.yml metrics schema) |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
+| `media` / `tables` / `histograms` | logged images, tables and histograms per name, one item per step (see [Media](#media)) |
+| `histograms_total` | `{name: steps logged}`; `histograms` keeps at most 100 evenly spaced steps per name |
 
 Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
 which answers `{"entries": [...], "total": N}` oldest first.
@@ -416,6 +448,38 @@ staged on the server's disk); with a token set the request needs the
 `Authorization` header like every other API call. Downloads are sent as stored
 (never gzipped by the server) with an RFC 5987 `filename*` so any file name
 survives.
+
+### Media
+
+What `run.log_image` / `log_table` / `log_histogram` recorded (see
+[docs/sdk.md](sdk.md#tables-images-and-histograms)) shows in the run page's
+**Media** section: an image grid with a step slider per key, a table viewer
+(key and step pickers, server-side sort by clicking a column, 50 rows a page)
+and a histogram chart per key for the chosen step, with an *over time* view
+that stacks every step on a shared x range.
+
+- Images download through the artifact route above
+  (`.../artifacts/media/<name>/<step>.png`) as `image/png`; every artifact is
+  served with a `Content-Type` guessed from its name, S3 ones included.
+- `GET .../experiments/{verstr}/table/{path}?offset=0&limit=100&sort=<column>&order=asc|desc`
+  answers one page of a logged table:
+  `{"columns": [{"name", "type"}], "rows": [[...]], "total", "offset", "truncated"}`.
+  Sorting covers the whole table (missing cells last in both orders);
+  `limit` is capped at 1000. An unknown path is a `404`; a file that is not a
+  logged table, or an unknown sort column, a `400`.
+
+### Lineage
+
+`GET .../experiments/{verstr}/lineage?depth=1&limit=100` answers the runs linked
+to one run through what it consumed and produced — the same object as the SDK's
+[`get_lineage`](sdk.md#lineage): `{app, verstr, upstream, downstream, models,
+truncated}`, each node `{app, verstr, name, timestamp, status, depth, found,
+links}`. It is answered from the app's index snapshot: the digest and
+`vmn://` URI maps are built once per snapshot and shared by every request, so a
+lookup costs the linked runs, not the workspace. `depth` is 1..10 and `limit`
+1..1000 (else 400); an unknown run is a 404. The run page shows it as a
+**lineage** card (upstream/downstream runs linked to their pages, registered
+models, a depth picker).
 
 ### Model registry API
 

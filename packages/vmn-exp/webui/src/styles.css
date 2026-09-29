@@ -692,6 +692,8 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 }
 .metric-name { color: var(--text-2); font-size: 13px; }
 .metric-goal { color: var(--text-3); font-size: 11px; }
+.metric-values { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.metric-summary { color: var(--text-3); font-size: 11px; font-family: var(--mono); }
 .exact-secs { color: var(--text-3); font-size: 11.5px; font-family: var(--mono); }
 .run-note { color: var(--text-2); margin: 0 0 20px; display: flex; gap: 10px; align-items: baseline; }
 .run-note input { flex: 1; }
@@ -818,3 +820,23 @@ tr.row.archived .run-link { text-decoration: line-through; text-decoration-color
 .lb-table .tree-roll { flex-shrink: 0; }
 td.fleet-cell { font-family: var(--mono); font-size: 12px; }
 td.fleet-failed:not(:empty) { color: var(--text-2); }
+
+/* Run page media: image tiles, histograms, logged tables */
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.media-tile { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.media-tile-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.media-tile figcaption { font-size: 12px; opacity: 0.8; }
+.media-step { width: 100%; }
+.media-table { margin-bottom: 12px; }
+.media-pager { display: flex; gap: 12px; align-items: center; margin-top: 6px; font-size: 12px; }
+.hist-bar { fill: var(--accent); }
+.hist-cell { fill: var(--accent); }
+.hist-axis { font-size: 10px; fill: currentColor; opacity: 0.7; }
+.media-card .muted { opacity: 0.7; font-size: 12px; }
+
+/* run lineage card */
+.lineage-group { margin-top: 8px; }
+.lineage-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.lineage-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 3px 0; }
+.lineage-list li > div { flex-basis: 100%; padding-left: 12px; font-size: 12px; }
+.lineage .muted { color: var(--text-3); }

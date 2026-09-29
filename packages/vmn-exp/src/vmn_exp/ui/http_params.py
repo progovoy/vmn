@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Small request/response header helpers for vmn-exp ui routes."""
+import mimetypes
 from urllib.parse import quote
 
 # One page of leaderboard rows or log entries, whatever a client asks for.
@@ -26,3 +27,8 @@ def attachment(filename):
         c if 32 <= ord(c) < 127 and c not in '"\\' else "_" for c in filename
     )
     return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+
+
+def media_type(filename):
+    """The ``Content-Type`` a download of *filename* is served with."""
+    return mimetypes.guess_type(filename)[0] or "application/octet-stream"

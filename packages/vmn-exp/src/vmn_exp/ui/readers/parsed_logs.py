@@ -21,9 +21,11 @@ from vmn_exp.storage.files import flatten_logs
 from vmn_exp.core.fold import (
     fold_last_metric_at,
     fold_log,
+    fold_metrics,
     fold_values,
 )
 from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.step_metric import join_series, metric_definitions
@@ -32,6 +34,16 @@ from vmn_exp.ui.readers.series import SeriesThinner, downsample
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_MAX_ENTRIES = 128
 MAX_THINNERS = 256
+
+
+def _metric_parts(fold):
+    """What :func:`fold_metrics` reads, copied at this poll: the fold itself
+    keeps growing under a snapshot."""
+    return {
+        "metrics": dict(fold["metrics"]),
+        "extrema": dict(fold.get("extrema") or {}),
+        "metric_defs": {n: dict(f) for n, f in (fold.get("metric_defs") or {}).items()},
+    }
 
 
 class LogSnapshot:
@@ -45,9 +57,16 @@ class LogSnapshot:
         self._counts = dict(parsed.counts)
         self.params = fold_values(parsed.fold, "params")
         self.metrics = fold_values(parsed.fold, "metrics")
+        self._metric_fold = _metric_parts(parsed.fold)
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.definitions = dict(parsed.definitions)
+        self.media = parsed.media_view
         self.memo = {}  # derived views (thinned series) of this exact snapshot
+
+    def summarized_metrics(self, schema=None):
+        """``(metrics, metric_summary)`` under the metrics *schema* — see
+        :func:`~vmn_exp.core.fold.fold_metrics`."""
+        return fold_metrics(self._metric_fold, schema)
 
     def log(self):
         return self._entries[: self.total]
@@ -99,6 +118,8 @@ class _Parsed:
         self.entries, self.series, self.counts = [], {}, {}
         self.fold = fold_log([])
         self.definitions = {}
+        self.media = MediaIndex()
+        self.media_view = self.media.view()
         self.offsets = None  # {log file: bytes consumed} when incremental
         self.sig = None
         self.snapshot = None
@@ -113,6 +134,8 @@ class _Parsed:
     def extend(self, new_entries):
         fold_log(new_entries, self.fold, start=len(self.entries))
         metric_definitions(new_entries, into=self.definitions)
+        if self.media.add(new_entries):
+            self.media_view = self.media.view()
         self.entries.extend(new_entries)
         for key, points in metric_series(new_entries).items():
             self.series.setdefault(key, []).extend(points)

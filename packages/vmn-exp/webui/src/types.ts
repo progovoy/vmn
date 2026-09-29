@@ -19,7 +19,17 @@ export interface AppConfig {
 /** Per-metric leaderboard config from conf.yml (experiment.metrics). */
 export interface MetricSpec {
   goal?: "min" | "max";
+  /** Which value the run ranks on; defaults from `goal` (else `last`). */
+  summary?: "min" | "max" | "last";
   primary?: boolean;
+}
+
+/** A metric logged more than once: its last value and finite min/max
+ *  (`null` when it never had a finite value). */
+export interface MetricSummary {
+  last: number | null;
+  min: number | null;
+  max: number | null;
 }
 
 export type MetricsSchema = Record<string, MetricSpec>;
@@ -119,6 +129,19 @@ export interface ExperimentColumns {
   total: number;
 }
 
+/** One param's row of `/experiments-importance`: its share of a random
+ *  forest's impurity decrease for the target metric (the column sums to 1),
+ *  its Pearson/Spearman correlation (null for categorical params) and the
+ *  runs carrying both. */
+export interface ParamImportanceEntry {
+  param: string;
+  importance: number;
+  correlation: number | null;
+  spearman: number | null;
+  kind: "numeric" | "bool" | "categorical";
+  n: number;
+}
+
 /** Every branch / metric key / param key across an app's runs. */
 export interface ExperimentFacets {
   branches: string[];
@@ -190,7 +213,10 @@ export interface ExperimentDetail {
   step_metrics?: Record<string, string>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
+  /** Each metric's summary value (best, per its policy — see MetricSpec). */
   metrics: Record<string, number | string | null>;
+  /** last/min/max of every metric logged more than once. */
+  metric_summary?: Record<string, MetricSummary>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   /** Names may be nested paths (`plots/loss.png`). */
@@ -202,6 +228,53 @@ export interface ExperimentDetail {
   inputs?: Record<string, InputEntry> | null;
   /** Source identifier when the run was imported from an external system. */
   imported_from?: string | null;
+  /** Logged images per key, one item per step (`run.log_image`). */
+  media?: Record<string, MediaItem[]>;
+  /** Logged tables per key, one item per step (`run.log_table`). */
+  tables?: Record<string, TableItem[]>;
+  /** Logged histograms per key; at most 100 evenly spaced steps each. */
+  histograms?: Record<string, HistogramItem[]>;
+  /** Steps logged per histogram key before thinning. */
+  histograms_total?: Record<string, number>;
+}
+
+export interface MediaItem {
+  step: number;
+  /** Artifact path of the image (`media/<key>/<step>.png`). */
+  path: string;
+  caption?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface TableItem {
+  step: number;
+  /** Artifact path of the columnar table document. */
+  path: string;
+  rows: number;
+  columns: string[];
+  total_rows?: number;
+}
+
+export interface HistogramItem {
+  step: number;
+  /** Bin edges: one more than `counts`. */
+  bins: number[];
+  counts: number[];
+}
+
+export interface TableColumn {
+  name: string;
+  type: "number" | "string" | "bool" | "null" | "mixed";
+}
+
+/** One page of a logged table from `/experiments/{v}/table/{path}`. */
+export interface TablePage {
+  columns: TableColumn[];
+  rows: unknown[][];
+  total: number;
+  offset: number;
+  truncated: boolean;
 }
 
 export interface VersionRow {

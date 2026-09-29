@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, Fleet, MetricsSchema, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
 
@@ -82,27 +82,51 @@ export function ParamsCard({ params }: { params: Record<string, unknown> | null 
   );
 }
 
-export function MetricsCard({ metrics, schema, children }: {
-  metrics: ExperimentDetail["metrics"]; schema: MetricsSchema | null; children?: ReactNode;
+/** "last 0.9 · min 0.2 · max 1" — or null when all three read the same. */
+function summaryLine(parts: MetricSummary | undefined): string | null {
+  if (!parts) return null;
+  const shown = [parts.last, parts.min, parts.max].map(fmtVal);
+  if (new Set(shown).size === 1) return null;
+  return `last ${shown[0]} · min ${shown[1]} · max ${shown[2]}`;
+}
+
+/** Each metric's summary value (its best, per the metric's policy), with
+ *  last/min/max beside it when they differ. */
+export function MetricsCard({ metrics, summary, schema, children }: {
+  metrics: ExperimentDetail["metrics"];
+  summary?: Record<string, MetricSummary>;
+  schema: MetricsSchema | null;
+  children?: ReactNode;
 }) {
   return (
     <div className="card">
-      <div className="eyebrow">final metrics</div>
+      <div className="eyebrow">metrics</div>
       {Object.keys(metrics).length === 0 ? (
         <div className="empty" style={{ padding: 12 }}>No metrics logged.</div>
       ) : (
         <div>
-          {Object.entries(metrics).map(([k, v]) => (
-            <div key={k} className="metric-line">
-              <span className="metric-name">
-                {k}{" "}
-                {typeof v === "number" && (
-                  <span className="metric-goal">{metricGoal(schema, k) === "min" ? "↓" : "↑"}</span>
-                )}
-              </span>
-              <span className={`metric${schema?.[k]?.primary ? " best" : ""}`}>{fmtVal(v)}</span>
-            </div>
-          ))}
+          {Object.entries(metrics).map(([k, v]) => {
+            const line = summaryLine(summary?.[k]);
+            return (
+              <div key={k} className="metric-line">
+                <span className="metric-name">
+                  {k}{" "}
+                  {typeof v === "number" && (
+                    <span className="metric-goal">{metricGoal(schema, k) === "min" ? "↓" : "↑"}</span>
+                  )}
+                </span>
+                <span className="metric-values">
+                  <span
+                    data-testid={`metric-value-${k}`}
+                    className={`metric${schema?.[k]?.primary ? " best" : ""}`}
+                  >{fmtVal(v)}</span>
+                  {line && (
+                    <span data-testid={`metric-summary-${k}`} className="metric-summary">{line}</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {children}

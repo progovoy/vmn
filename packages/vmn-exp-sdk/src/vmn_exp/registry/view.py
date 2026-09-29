@@ -14,6 +14,9 @@ resolve_ref(storage, ref) -> dict
 registered_runs(storage) -> set[tuple[str, str]]
     Set of ``(app, verstr)`` pairs referenced by any non-deleted version of
     any model — used by prune to refuse deletion of registered runs.
+
+models_for_run(storage, app, verstr) -> list[dict]
+    The live model versions registered from one run (run lineage).
 """
 from __future__ import annotations
 
@@ -114,27 +117,48 @@ def registered_runs(storage) -> set:
     model version still references.
     """
     result: set = set()
-    for model in list_models(storage):
-        entries = read_entries(storage, model)
-        fold = fold_registry(entries)
-        for n in list_versions(storage, model):
-            if fold["status"].get(n) == "deleted":
-                continue
-            meta = get_version(storage, model, n)
-            if not meta:
-                continue
-            run_ref = meta.get("run_ref")
-            if isinstance(run_ref, dict):
-                app = run_ref.get("app")
-                verstr = run_ref.get("verstr")
-                if app and verstr:
-                    result.add((app, verstr))
+    for _, _, meta, _ in _live_versions(storage):
+        run_ref = meta.get("run_ref")
+        if isinstance(run_ref, dict):
+            app = run_ref.get("app")
+            verstr = run_ref.get("verstr")
+            if app and verstr:
+                result.add((app, verstr))
     return result
+
+
+def models_for_run(storage, app: str, verstr: str) -> list:
+    """``[{model, version, aliases, status, artifact_path}]`` registered from
+    run *verstr* of *app* (deleted versions left out), model/version-ordered."""
+    found = []
+    for model, n, meta, fold in _live_versions(storage):
+        if meta.get("run_ref") != {"app": app, "verstr": verstr}:
+            continue
+        found.append({
+            "model": model,
+            "version": n,
+            "aliases": sorted(a for a, v in fold["aliases"].items() if v == n),
+            "status": fold["status"].get(n, "active"),
+            "artifact_path": meta.get("artifact_path"),
+        })
+    return found
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _live_versions(storage):
+    """``(model, n, version metadata, registry fold)`` of every non-deleted version."""
+    for model in list_models(storage):
+        fold = fold_registry(read_entries(storage, model))
+        for n in list_versions(storage, model):
+            if fold["status"].get(n) == "deleted":
+                continue
+            meta = get_version(storage, model, n)
+            if meta:
+                yield model, n, meta, fold
+
 
 def _version_or_raise(storage, model: str, n: int, fold: dict, ref: str) -> dict:
     if fold["status"].get(n) == "deleted":

@@ -3,7 +3,7 @@
 
 ::
 
-    from vmn_exp.sdk.reader import get_run, list_runs, runs_dataframe
+    from vmn_exp.sdk.reader import get_lineage, get_run, list_runs, runs_dataframe
 
     for run in list_runs(status="failed"):
         print(run["verstr"], run["metrics"])
@@ -38,7 +38,10 @@ from vmn_exp.core.log import (
     metric_series,
     sort_by_metric,
 )
+from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage
 from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.importance import param_importance as _param_importance
+from vmn_exp.core.media import media_index
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import readable, record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
@@ -50,6 +53,7 @@ from vmn_exp.core.status import (
     run_state_observed_at,
 )
 from vmn_exp.core.tree import annotate_rows, run_status
+from vmn_exp.registry.view import models_for_run
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.storage.open import get_snapshot_storage
 
@@ -96,7 +100,8 @@ def _resolve(app_name, storage):
 
 
 def _metrics_schema(root_path, app_name):
-    """``experiment.metrics`` from the app's conf.yml — drives sort direction.
+    """``experiment.metrics`` from the app's conf.yml — sort direction and
+    summary policies.
 
     The app conf only, like the ui reads it; branch confs are not consulted.
     """
@@ -117,7 +122,7 @@ def _metrics_schema(root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _all_rows(app_name, storage, use_index=True):
+def _all_rows(app_name, storage, use_index=True, schema=None):
     """Every run of an app, status-annotated, in storage order (oldest first).
 
     With *use_index* the rows come from the experiment index, which re-reads
@@ -127,11 +132,12 @@ def _all_rows(app_name, storage, use_index=True):
     """
     if use_index:
         rows, run_states, observed = experiment_index.indexed_status_rows(
-            storage, app_name
+            storage, app_name, schema=schema
         )
     else:
         rows, run_states = experiment_index.direct_rows(
-            storage, app_name, read_log=_load_log, read_run_state=load_run_state
+            storage, app_name, read_log=_load_log, read_run_state=load_run_state,
+            schema=schema,
         )
         observed = observed_at_by_verstr(storage, app_name, run_states)
     return annotate_rows(rows, run_states, observed)
@@ -176,12 +182,31 @@ def list_runs(
             :mod:`vmn_exp.sdk.manage`).
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    rows = _all_rows(app_name, storage, use_index=use_index)
+    schema = _metrics_schema(root_path, app_name)
+    rows = _all_rows(app_name, storage, use_index=use_index, schema=schema)
     rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query)
     if last:
         rows = rows[-int(last) :]
-    return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)
+    return sort_by_metric(rows, schema, sort=sort)
+
+
+def param_importance(
+    app_name=None, metric=None, *, storage=None, query=None, status=None,
+    include_archived=False,
+):
+    """Which params drive *metric*: ``[{param, importance, correlation,
+    spearman, kind, n}]`` over the runs :func:`list_runs` would return for
+    the same *query*/*status*, most important first (see
+    :mod:`vmn_exp.core.importance`).
+
+    Raises ValueError when no run carries *metric*, ``QueryError`` on a bad
+    *query*.
+    """
+    app_name, storage, _ = _resolve(app_name, storage)
+    rows = filter_archived(_all_rows(app_name, storage), include_archived)
+    matching = filter_rows(filter_by_status(rows, status), query)
+    return _param_importance(matching, metric, universe=rows)
 
 
 def _subtree_row(app_name, storage, verstr, snapshot):
@@ -208,7 +233,8 @@ def _subtree_row(app_name, storage, verstr, snapshot):
 
 def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series``,
-    ``step_metrics`` and ``artifacts``.
+    ``step_metrics``, ``artifacts`` and the ``media`` / ``tables`` /
+    ``histograms`` indexes (see :mod:`vmn_exp.core.media`).
 
     *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N``
     or ``latest``. Raises ValueError when it resolves to nothing.
@@ -231,18 +257,49 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
     log = _load_log(storage, app_name, verstr)
-    row = experiment_row(target["idx"], target["meta"], log)
+    schema = _metrics_schema(root_path, app_name)
+    row = experiment_row(target["idx"], target["meta"], log, schema=schema)
     row.update(status)
     row["format_version"] = record_format_version(target["meta"])
     row["log"] = log
     series = metric_series(log)
     row["series"] = series if x is None else join_all(series, x)
     row["step_metrics"] = step_metrics(
-        series, metric_definitions(log), _metrics_schema(root_path, app_name)
+        series, metric_definitions(log), schema
     )
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
+    row.update(media_index(log))
     return row
 
+
+def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
+    """The runs linked to run *ref* through what it consumed and produced.
+
+    Returns ``{"app", "verstr", "upstream", "downstream", "models",
+    "truncated"}``: *upstream* are the runs whose artifacts this one logged as
+    inputs (by ``vmn://`` URI — see ``Run.use_artifact`` — or by digest),
+    *downstream* the runs of the same app that consumed its artifacts, each
+    walked *depth* hops and capped at *limit* nodes; *models* the model
+    versions registered from it. Read from the experiment index rows, so no
+    run log is read. Raises ValueError when *ref* resolves to nothing.
+    """
+    app_name, storage, _ = _resolve(app_name, storage)
+    verstr, err = resolve_experiment(storage, app_name, ref or "latest")
+    if err:
+        raise ValueError(err)
+    indexes = {}
+
+    def index_for(app):
+        if app not in indexes:
+            indexes[app] = LineageIndex(_all_rows(app, storage))
+        return indexes[app]
+
+    try:
+        found = resolve_lineage(app_name, verstr, index_for, depth=depth, limit=limit)
+    except KeyError as e:
+        raise ValueError(e.args[0]) from None
+    found.update(app=app_name, verstr=verstr, models=models_for_run(storage, app_name, verstr))
+    return found
 
 # ---------------------------------------------------------------------------
 # pandas views (the optional ``vmn-exp-sdk[pandas]`` extra)

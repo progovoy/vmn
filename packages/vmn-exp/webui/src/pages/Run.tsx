@@ -15,10 +15,12 @@ import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
+import RunLineage from "../components/RunLineage";
 import RunOutput from "../components/RunOutput";
 import TrainingCurves from "../components/TrainingCurves";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
+import RunMediaSection from "./RunMedia";
 import RunProvenanceSection from "./RunProvenance";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
@@ -59,6 +61,7 @@ function RunBody({ ws, app, appName, detail }: {
         series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at}
         stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
       />
+      <RunMediaSection ws={ws} app={app} detail={detail} />
       <div className="card-grid-wide">
         <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />
         <div className="card">
@@ -85,6 +88,7 @@ function RunBody({ ws, app, appName, detail }: {
         inputs={detail.inputs}
         importedFrom={detail.imported_from}
       />
+      <RunLineage ws={ws} app={app} verstr={verstr} />
     </>
   );
 }
@@ -143,7 +147,7 @@ export default function Run() {
       <div className="card-grid-2" style={{ marginBottom: 16 }}>
         {detail ? <MetadataCard detail={detail} /> : <Skeleton />}
         <ParamsCard params={summary.params} />
-        <MetricsCard metrics={summary.metrics} schema={schema}>
+        <MetricsCard metrics={summary.metrics} summary={summary.metricSummary} schema={schema}>
           {detail && (
             <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
           )}

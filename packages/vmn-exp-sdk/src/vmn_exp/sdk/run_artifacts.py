@@ -13,6 +13,11 @@ import tempfile
 
 import yaml
 
+from vmn_exp.core.fold import fold_log, fold_outputs_dict
+from vmn_exp.core.inputs import default_input_name
+from vmn_exp.core.lineage import artifact_ref_uri
+from vmn_exp.core.log import load_log
+from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.storage.files import (
     artifact_file_path,
     list_artifact_tree,
@@ -48,8 +53,39 @@ def _write_text(path, write):
         write(f)
 
 
+def fetch_artifact(storage, app_name, ref, path):
+    """``(verstr, output, local path)`` of artifact *path* logged by run *ref*;
+    ValueError when *ref* resolves to nothing or logged no such artifact."""
+    verstr, err = resolve_experiment(storage, app_name, ref)
+    if err:
+        raise ValueError(err)
+    output = fold_outputs_dict(fold_log(load_log(storage, app_name, verstr))).get(path)
+    if output is None:
+        raise ValueError(f"Run {verstr} of {app_name} logged no artifact {path!r}")
+    return verstr, output, storage.artifact_local_path(app_name, verstr, path)
+
+
 class RunArtifacts:
     """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``log_artifact``."""
+
+    def use_artifact(self, ref, path, name=None, app_name=None):
+        """Consume artifact *path* of run *ref* (verstr, prefix, ``@N``) and
+        return a local path to it.
+
+        Records an input named *name* (default: the path's basename) whose URI
+        is ``vmn://<app>/<verstr>/<path>`` and whose digest is the artifact's
+        sha256, so lineage links this run to its producer. *app_name*
+        defaults to this run's app.
+        """
+        app_name = app_name or self.app_name
+        verstr, output, local = fetch_artifact(self._storage, app_name, ref, path)
+        self.log_input(
+            artifact_ref_uri(app_name, verstr, path),
+            name=name or default_input_name(path),
+            digest=output["digest"],
+            kind="artifact",
+        )
+        return local
 
     def _log_produced(self, name, produce):
         """Log the file *produce(path)* writes, stored as artifact *name*."""

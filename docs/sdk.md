@@ -202,14 +202,18 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
 | `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
+| `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact. On a non-zero rank it still returns the path, recording nothing |
 | `run.log_note(text)` | a note entry |
 | `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
 | `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |
 | `run.log_text(text, name)` | a text file |
 | `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
 | `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
+| `run.log_table(name, data, columns=None, step=None)` | a table — see [Tables, images and histograms](#tables-images-and-histograms) |
+| `run.log_image(name, image, step=None, caption=None)` | an image, stored as PNG |
+| `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
-| `run.define_metric(name, step_metric=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) |
+| `run.define_metric(name, step_metric=None, summary=None, goal=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — and which of its values the run ranks on — see [Metric goals and summaries](#metric-goals-and-summaries) |
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
@@ -247,6 +251,45 @@ Metric values are stored as floats, whatever you pass:
 Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
 Python numbers so `params.max_depth = 3` matches.
 
+### Tables, images and histograms
+
+Rich values are keyed by `name` and `step` (default: one past the name's last
+logged step in this process, so pass `step=` explicitly when resuming). Each writes one small log
+entry; the table and image bodies are artifacts. The run page's **Media**
+section shows them, and `vmn-exp show` counts them.
+
+```python
+run.log_table("preds", [{"y": 1, "p": 0.9}, {"y": 0, "p": 0.2}], step=epoch)
+run.log_table("preds", [[1, 0.9], [0, 0.2]], columns=["y", "p"], step=epoch)
+run.log_table("preds", df, step=epoch)              # a pandas DataFrame
+run.log_image("samples", batch[0], step=epoch, caption="first batch")
+run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
+```
+
+| Call | Accepts | Stored as | Log entry |
+|---|---|---|---|
+| `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns"}` (+ `total_rows` when truncated) |
+| `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height"}` |
+| `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
+
+- Tables keep at most **10,000 rows** (`vmn_exp.core.tables.MAX_TABLE_ROWS`);
+  longer ones are truncated with a warning. Cells are made JSON-safe: numpy
+  scalars are unwrapped, NaN/inf become `null`, other objects their `str`.
+- Images need no Pillow: numpy arrays are encoded by a small stdlib (zlib) PNG
+  encoder when Pillow is absent. With Pillow, it encodes arrays and converts
+  non-PNG files; without it a non-PNG file is stored as is, under its own
+  extension.
+- Histograms bin only the finite values (NaN/inf dropped) into `bins` equal
+  bins with numpy when installed, else in pure Python (same edges). With no
+  finite value nothing is logged and a warning says so.
+- A rank > 0 [`NoOpRun`](#distributed-training-ddp-torchrun-slurm) ignores
+  all three.
+
+`get_run()` returns the indexes next to `artifacts`: `media`, `tables` and
+`histograms` map each name to its steps in order (the latest entry for a step
+wins), and `histograms_total` counts each histogram's steps — `histograms`
+keeps at most 100 evenly spaced steps per name, first and last included.
+
 ### Custom x axis (`step_metric`)
 
 Chart a metric against another metric instead of the step, like W&B's
@@ -279,6 +322,38 @@ for step, batch in enumerate(loader):
   `vmn_exp.core.log.metric_series(log, x="epoch")` does the same on a raw log.
 - The UI picks the declared x metric by default and lets you choose any
   metric; see [ui.md](ui.md#custom-x-axis).
+
+### Metric goals and summaries
+
+A metric logged every epoch folds to one number per run: by default the last
+one. `run.define_metric()` picks another, like W&B's `define_metric(summary=)`:
+
+```python
+with start_run("my_app") as run:
+    run.define_metric("val_loss", goal="min")        # rank on the best (lowest) epoch
+    run.define_metric("lr", summary="last")
+    for epoch in range(epochs):
+        run.log_metrics({"val_loss": evaluate(), "lr": sched.lr}, step=epoch)
+```
+
+- `summary` is `"min"`, `"max"` or `"last"`; without it, `goal="min"` means
+  `min` and `goal="max"` means `max`. Anything else raises `ValueError`.
+- It is the same `define_metric` call (and log entry) that declares a
+  [`step_metric`](#custom-x-axis-step_metric):
+  `{"type": "define_metric", "name", "summary"?, "goal"?, "step_metric"?}`.
+  So it travels with the run — to S3, to other readers, to `vmn-exp ui` — and
+  needs no conf.yml. Entries fold per field, last write wins: declaring a
+  `step_metric` later keeps an earlier `summary`.
+- `name` may be a glob (`run.define_metric("val_*", goal="min")`); an exact
+  name beats a glob. A run's declaration beats the app's
+  [conf.yml schema](experiments.md#best-value-summaries-summary) (globs work
+  there too), which beats `last`.
+- `row["metrics"][name]` is then that value everywhere (`list_runs(sort=,
+  query=)`, `vmn-exp list --sort`, `prune --query`, the leaderboard), and
+  `row["metric_summary"][name]` holds `{"last", "min", "max"}` for every metric
+  logged more than once. Non-finite values are never a min or max.
+- The run's `goal` sets which value it ranks on; the leaderboard's sort
+  *direction* still comes from conf.yml's `goal`.
 
 ### Tags
 
@@ -688,6 +763,21 @@ best = get_run("my_app", ref="latest")
   unique prefix, `@N`, or `latest`. `x="epoch"` joins `series` on that metric
   (see [Custom x axis](#custom-x-axis-step_metric)); the row's `step_metrics`
   lists the declared x metrics.
+- `param_importance(app_name=None, metric=None, *, storage=None, query=None,
+  status=None, include_archived=False)` — which params drive `metric` over the
+  runs `list_runs` would return for the same filters: a list of
+  `{"param", "importance", "correlation", "spearman", "kind", "n"}`, most
+  important first. `importance` is a random-forest share (sums to 1),
+  `correlation`/`spearman` are `None` for categorical params; see
+  [`vmn-exp importance`](experiments.md#importance) for the details. Raises
+  `ValueError` when no run carries `metric`, `QueryError` on a bad query.
+
+  ```python
+  from vmn_exp.sdk.reader import param_importance
+
+  for entry in param_importance("my_app", "loss", query='status = "succeeded"')[:3]:
+      print(entry["param"], round(entry["importance"], 2), entry["correlation"])
+  ```
 
 A `list_runs` row carries the latest value of each metric, the run's `name`
 (or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
@@ -745,6 +835,48 @@ directly. Status is still derived on every call.
 to find the run's place in the tree; it then reads just that run — its
 metadata, log and artifacts, and the run states of its own subtree.
 
+### Lineage
+
+```python
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.reader import get_lineage
+
+with start_run("my_app", name="train") as train:
+    train.log_input("s3://bucket/data.parquet", digest="sha256:9f2c...")
+    train.log_artifact("model.pkl")
+
+with start_run("my_app", name="eval") as evaluate:
+    path = evaluate.use_artifact(train.id, "model.pkl")   # vmn://my_app/<train>/model.pkl
+
+get_lineage("my_app", evaluate.id, depth=2)
+# {"app": "my_app", "verstr": "...", "upstream": [...], "downstream": [...],
+#  "models": [...], "truncated": False}
+```
+
+`get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)`
+links runs through what they consumed and produced:
+
+- every row carries `outputs` — `{artifact path: {"path", "digest": "sha256:<hex>", "size"}}`,
+  folded from the run's artifact entries (the latest upload of a path wins) —
+  next to `inputs`;
+- **upstream** are the runs whose artifacts this run consumed: an input whose
+  URI is `vmn://<app>/<verstr>/<path>` (what `use_artifact` records; `<app>` is
+  the tag form, `/` → `-`) names its producer, in any app; any other input
+  matches every run of the same app with an output of the same digest
+  (compared without the `sha256:` prefix, case-insensitively);
+- **downstream** are the runs of the same app that consumed this run's outputs,
+  by the same two rules;
+- **models** are the live model versions registered from the run:
+  `{"model", "version", "aliases", "status", "artifact_path"}`.
+
+Each node is `{"app", "verstr", "name", "timestamp", "status", "depth", "found",
+"links"}`; `depth` counts hops (1 = direct), `found` is False for a `vmn://`
+URI naming a run that is not there, and `links` lists `{"input", "artifact",
+"digest", "via": "uri"|"digest"}`. `depth` follows links further; each
+direction keeps at most `limit` nodes (`truncated` says one was cut). It is a
+join over the index rows, so no run log is read. A run is never its own
+neighbour. `ValueError` when `ref` resolves to nothing.
+
 As on the write side, `app_name=None` resolves from the current repo.
 
 ---
@@ -793,6 +925,9 @@ are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
 - `name` (`name ~ "sweep"`, `name = null` for unnamed runs) and `archived`
   (`archived = true` — only meaningful with `include_archived=True`, since the
   default listing drops archived rows first).
+- `inputs.<name>.uri|digest|kind` — a logged input; `outputs.<path>.path|digest|size`
+  — an artifact the run logged ([lineage](#lineage)). Quote a key with a dot or
+  slash in it: `outputs."model.pkl".digest = "sha256:..."`.
 
 `metrics` and `params` read different dicts, and the difference matters:
 **`metrics` holds numeric values only** (params that parse as finite, non-boolean

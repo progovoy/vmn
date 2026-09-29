@@ -11,6 +11,7 @@ describe("chartKeys", () => {
     expect(chartKeys("scatter", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr"]);
     expect(chartKeys("parallel", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr"]);
     expect(chartKeys("grouped", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr", "branch"]);
+    expect(chartKeys("importance", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr"]);
   });
 });
 

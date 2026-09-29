@@ -17,6 +17,9 @@ interface Props {
   schema: MetricsSchema | null;
   /** Called with a clicked point's run; defaults to opening the run page. */
   onSelect?: (verstr: string) => void;
+  /** Axes to start from (the importance panel opens param vs metric). */
+  initialX?: string;
+  initialY?: string;
 }
 
 const HEIGHT = 320;
@@ -40,10 +43,10 @@ function AxisSelect({ label, value, cols, onChange }: {
 /** Canvas scatter (uPlot) of any metric or numeric param against another;
  *  the best point by the y metric's goal is highlighted. Hover shows the
  *  nearest run, click opens it. */
-function MetricScatter({ rows, metricCols, paramCols, schema, onSelect }: Props) {
+function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX, initialY }: Props) {
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
-  const [xCol, setXCol] = useState(metricCols[0] ?? paramCols[0] ?? "");
-  const [yCol, setYCol] = useState(metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
+  const [xCol, setXCol] = useState(initialX ?? metricCols[0] ?? paramCols[0] ?? "");
+  const [yCol, setYCol] = useState(initialY ?? metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
   const yGoal = metricGoal(schema, yCol);
   const select = useRunSelect(onSelect);
 

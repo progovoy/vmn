@@ -34,7 +34,7 @@ function Status({ state }: { state: Loaded<unknown> }) {
   return <div className="artifact-loading">loading preview…</div>;
 }
 
-function ImagePreview({ url, name }: { url: string; name: string }) {
+export function ImagePreview({ url, name }: { url: string; name: string }) {
   // A plain <img> can't send the Authorization header: with a token, fetch
   // the bytes ourselves and show them from a blob URL.
   const headers = authHeaders();

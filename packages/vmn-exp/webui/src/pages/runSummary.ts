@@ -1,4 +1,4 @@
-import type { ExperimentDetail, ExperimentRow, RunStatus } from "../types";
+import type { ExperimentDetail, ExperimentRow, MetricSummary, RunStatus } from "../types";
 
 /** What the top of the Run page shows. A leaderboard row carries all of it,
  *  so the page can paint from the row cache before the detail arrives. */
@@ -11,6 +11,8 @@ export interface RunSummary {
   note: string | null;
   status: RunStatus | null;
   metrics: ExperimentDetail["metrics"];
+  /** last/min/max per metric logged more than once — detail only. */
+  metricSummary?: Record<string, MetricSummary>;
   params: Record<string, unknown> | null;
 }
 
@@ -32,6 +34,7 @@ export function summaryFromDetail(d: ExperimentDetail): RunSummary {
     note: (meta.note as string | undefined) || null,
     status: d.status ?? null,
     metrics: d.metrics,
+    metricSummary: d.metric_summary,
     params: paramsOrMeta(d.params, meta.user_meta as Record<string, unknown> | null | undefined),
   };
 }

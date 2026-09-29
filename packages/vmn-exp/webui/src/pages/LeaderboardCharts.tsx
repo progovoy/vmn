@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
+import type { RowsFilter } from "../queries";
 import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
 
 // Chart code is heavy (uPlot among it); loading them lazily keeps them off the table's
@@ -9,17 +10,27 @@ const MetricBarChart = lazy(() => import("../components/MetricBarChart"));
 const MetricScatter = lazy(() => import("../components/MetricScatter"));
 const ParallelCoordinates = lazy(() => import("../components/ParallelCoordinates"));
 const GroupedMetrics = lazy(() => import("../components/GroupedMetrics"));
+const ParamImportance = lazy(() => import("../components/ParamImportance"));
 
 const LABELS: Record<ChartView, string> = {
   trend: "Trend", bar: "Bar", scatter: "Scatter", parallel: "Parallel", grouped: "Grouped",
+  importance: "Importance",
 };
+
+/** What the importance panel asks the server about: the board's app and filter. */
+export interface ImportanceSource {
+  ws: string;
+  app: string;
+  filter: RowsFilter;
+  defaultMetric?: string | null;
+}
 
 export function ChartFallback() {
   return <div className="chart-fallback" aria-label="loading chart" />;
 }
 
 export default function LeaderboardCharts({
-  view, onView, rows, label, metricCols, paramCols, schema, onBrush,
+  view, onView, rows, label, metricCols, paramCols, schema, onBrush, importance,
 }: {
   view: ChartView;
   onView: (v: ChartView) => void;
@@ -30,6 +41,7 @@ export default function LeaderboardCharts({
   paramCols: string[];
   schema: MetricsSchema | null;
   onBrush: (indices: number[] | null) => void;
+  importance: ImportanceSource;
 }) {
   const common = { rows, metricCols, schema };
   return (
@@ -51,6 +63,7 @@ export default function LeaderboardCharts({
         {view === "scatter" && <MetricScatter {...common} paramCols={paramCols} />}
         {view === "parallel" && <ParallelCoordinates {...common} paramCols={paramCols} onBrush={onBrush} />}
         {view === "grouped" && <GroupedMetrics {...common} paramCols={paramCols} />}
+        {view === "importance" && <ParamImportance {...common} {...importance} paramCols={paramCols} />}
       </Suspense>
     </>
   );
