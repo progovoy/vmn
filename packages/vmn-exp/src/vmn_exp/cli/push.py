@@ -8,6 +8,7 @@ The target is the store the flags, ``VMN_EXPERIMENT_STORE`` or conf name;
 is not up to date, and writes nothing.
 """
 import json
+from collections import Counter
 from dataclasses import asdict
 
 from vmn_exp._base import VMN_LOGGER
@@ -85,11 +86,11 @@ def _report(outcomes, as_json, dry_run):
         return failed
     for outcome in outcomes:
         print(_line(outcome))
-    count = lambda *statuses: sum(o.status in statuses for o in outcomes)  # noqa: E731
+    counts = Counter(o.status for o in outcomes)
     renamed = sum(bool(o.renamed_from) or (dry_run and o.status == COLLISION)
                   for o in outcomes)
-    print(f"pushed {count(NEW, UPDATE)}, up-to-date {count(UP_TO_DATE)}, "
-          f"renamed {renamed}, skipped {count(SKIPPED)}, failed {failed}")
+    print(f"pushed {counts[NEW] + counts[UPDATE]}, up-to-date {counts[UP_TO_DATE]}, "
+          f"renamed {renamed}, skipped {counts[SKIPPED]}, failed {failed}")
     return failed
 
 
