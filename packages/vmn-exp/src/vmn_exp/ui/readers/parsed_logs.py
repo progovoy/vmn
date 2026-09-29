@@ -29,6 +29,7 @@ from vmn_exp.core.fold import (
 )
 from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.media import MediaIndex
+from vmn_exp.core.metric_schema import hidden_metrics
 from vmn_exp.core.rewind import REWIND
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
@@ -77,6 +78,11 @@ class LogSnapshot:
     def step_metrics(self, schema=None):
         """``{metric: x metric}`` the run's definitions and *schema* declare."""
         return step_metrics(self._counts, fold_definitions(self._metric_fold), schema)
+
+    def hidden_metrics(self, schema=None):
+        """The run's metrics its definitions, else *schema*, mark hidden."""
+        names = {*self.metrics, *self._counts}
+        return hidden_metrics(names, fold_definitions(self._metric_fold), schema)
 
     def log(self):
         return self._entries[: self.total]

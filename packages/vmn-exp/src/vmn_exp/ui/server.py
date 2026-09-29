@@ -11,6 +11,7 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui import (
     routes_leaderboard,
@@ -211,11 +212,14 @@ def create_app(
         return app_lists.get(ws_name, compute)
 
     def _leaderboard_inputs(ws_name, app_tag):
-        """``(snapshot, metrics schema)`` of an app; no app conf in a store."""
+        """``(snapshot, effective metrics schema)`` of an app: rows summarized
+        by the conf schema (none in a store), sorted by it plus what the runs
+        declare (see :mod:`vmn_exp.core.metric_schema`)."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         schema = _app_schema(ws, app_name)
-        return source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
+        snapshot = source.snapshot(ws, app_name, _exp_storage_for(ws), schema)
+        return snapshot, effective_schema(schema, snapshot.declared_schema())
 
     def _app_schema(ws, app_name):
         """The app's conf.yml metrics schema; none in a store."""
@@ -328,8 +332,7 @@ def create_app(
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):
-        ws = _experiment_workspace(ws_name)
-        return _app_schema(ws, _app_name(app_tag))
+        return _leaderboard_inputs(ws_name, app_tag)[1]
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):

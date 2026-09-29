@@ -61,7 +61,7 @@ function RunBody({ ws, app, appName, detail }: {
       <TrainingCurves
         series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at}
         stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
-        markStep={detail.forked_from?.step}
+        markStep={detail.forked_from?.step} hiddenMetrics={detail.hidden_metrics}
       />
       <RunMediaSection ws={ws} app={app} detail={detail} />
       <div className="card-grid-wide">
