@@ -32,7 +32,7 @@ afterEach(() => {
 
 const row = (i: number, metrics: Record<string, number>): ExperimentRow => ({
   idx: i, verstr: `0.0.1-dev.${i}`, code_verstr: `0.0.1-dev.${i}`, timestamp: null,
-  note: null, branch: "main", base_version: "0.0.1", user_meta: null, metrics,
+  note: null, branch: "main", base_version: "0.0.1", metrics,
 });
 const ROWS = [row(1, { loss: 0.5, acc: 0.8 }), row(2, { loss: 0.3, acc: 0.9 })];
 

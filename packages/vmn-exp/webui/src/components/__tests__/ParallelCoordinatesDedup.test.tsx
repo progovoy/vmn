@@ -11,7 +11,7 @@ function row(
 ): ExperimentRow {
   return {
     idx, verstr: `v${idx}`, code_verstr: `v${idx}`, timestamp: null, note: null,
-    branch: "main", base_version: "0.0.1", user_meta: null, params, metrics,
+    branch: "main", base_version: "0.0.1", params, metrics,
   };
 }
 

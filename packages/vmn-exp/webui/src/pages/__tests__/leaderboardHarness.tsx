@@ -16,7 +16,7 @@ export function row(i: number, extra: Partial<ExperimentRow> = {}): ExperimentRo
     note: null,
     branch: "main",
     base_version: "0.0.1",
-    user_meta: null,
+   
     params: {},
     metrics: {},
     status: "succeeded",
