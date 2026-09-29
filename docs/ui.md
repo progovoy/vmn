@@ -352,6 +352,8 @@ Every list is sorted; `metric_keys` includes numeric params (they fold into
 | `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
 | `step_metrics` | `{metric: x metric}` for every metric that declares one (`run.define_metric(..., step_metric=)` or `step_metric:` in the conf.yml metrics schema) |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
+| `media` / `tables` / `histograms` | logged images, tables and histograms per name, one item per step (see [Media](#media)) |
+| `histograms_total` | `{name: steps logged}`; `histograms` keeps at most 100 evenly spaced steps per name |
 
 Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
 which answers `{"entries": [...], "total": N}` oldest first.
@@ -408,6 +410,25 @@ staged on the server's disk); with a token set the request needs the
 `Authorization` header like every other API call. Downloads are sent as stored
 (never gzipped by the server) with an RFC 5987 `filename*` so any file name
 survives.
+
+### Media
+
+What `run.log_image` / `log_table` / `log_histogram` recorded (see
+[docs/sdk.md](sdk.md#tables-images-and-histograms)) shows in the run page's
+**Media** section: an image grid with a step slider per key, a table viewer
+(key and step pickers, server-side sort by clicking a column, 50 rows a page)
+and a histogram chart per key for the chosen step, with an *over time* view
+that stacks every step on a shared x range.
+
+- Images download through the artifact route above
+  (`.../artifacts/media/<name>/<step>.png`) as `image/png`; every artifact is
+  served with a `Content-Type` guessed from its name, S3 ones included.
+- `GET .../experiments/{verstr}/table/{path}?offset=0&limit=100&sort=<column>&order=asc|desc`
+  answers one page of a logged table:
+  `{"columns": [{"name", "type"}], "rows": [[...]], "total", "offset", "truncated"}`.
+  Sorting covers the whole table (missing cells last in both orders);
+  `limit` is capped at 1000. An unknown path is a `404`; a file that is not a
+  logged table, or an unknown sort column, a `400`.
 
 ### Model registry API
 

@@ -190,6 +190,9 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_text(text, name)` | a text file |
 | `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
 | `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
+| `run.log_table(name, data, columns=None, step=None)` | a table — see [Tables, images and histograms](#tables-images-and-histograms) |
+| `run.log_image(name, image, step=None, caption=None)` | an image, stored as PNG |
+| `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
 | `run.define_metric(name, step_metric=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) |
 
@@ -228,6 +231,45 @@ Metric values are stored as floats, whatever you pass:
 
 Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
 Python numbers so `params.max_depth = 3` matches.
+
+### Tables, images and histograms
+
+Rich values are keyed by `name` and `step` (default: a per-name counter from
+0, so pass `step=` explicitly when resuming a run). Each writes one small log
+entry; the table and image bodies are artifacts. The run page's **Media**
+section shows them, and `vmn-exp show` counts them.
+
+```python
+run.log_table("preds", [{"y": 1, "p": 0.9}, {"y": 0, "p": 0.2}], step=epoch)
+run.log_table("preds", [[1, 0.9], [0, 0.2]], columns=["y", "p"], step=epoch)
+run.log_table("preds", df, step=epoch)              # a pandas DataFrame
+run.log_image("samples", batch[0], step=epoch, caption="first batch")
+run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
+```
+
+| Call | Accepts | Stored as | Log entry |
+|---|---|---|---|
+| `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns"}` (+ `total_rows` when truncated) |
+| `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height"}` |
+| `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
+
+- Tables keep at most **10,000 rows** (`vmn_exp.core.tables.MAX_TABLE_ROWS`);
+  longer ones are truncated with a warning. Cells are made JSON-safe: numpy
+  scalars are unwrapped, NaN/inf become `null`, other objects their `str`.
+- Images need no Pillow: numpy arrays are encoded by a small stdlib (zlib) PNG
+  encoder when Pillow is absent. With Pillow, it encodes arrays and converts
+  non-PNG files; without it a non-PNG file is stored as is, under its own
+  extension.
+- Histograms bin only the finite values (NaN/inf dropped) into `bins` equal
+  bins with numpy when installed, else in pure Python (same edges). With no
+  finite value nothing is logged and a warning says so.
+- A rank > 0 [`NoOpRun`](#distributed-training-ddp-torchrun-slurm) ignores
+  all three.
+
+`get_run()` returns the indexes next to `artifacts`: `media`, `tables` and
+`histograms` map each name to its steps in order (the latest entry for a step
+wins), and `histograms_total` counts each histogram's steps — `histograms`
+keeps at most 100 evenly spaced steps per name, first and last included.
 
 ### Custom x axis (`step_metric`)
 
