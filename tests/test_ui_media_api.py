@@ -1,4 +1,6 @@
 """The ui API's media: detail indexes, paged tables and PNG downloads."""
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -61,13 +63,23 @@ def test_detail_carries_the_media_indexes(run, client, tmp_path):
     assert got["histograms_total"] == {"w": 1}
 
 
+def _media_steps_once_stored(run, client, name, count):
+    """The detail's steps of *name* once *count* of them are stored and logged
+    (an image's entry is appended by the background uploader)."""
+    deadline = time.monotonic() + 10
+    while True:
+        run._log_buffer.flush()
+        steps = [i["step"] for i in client.get(BASE).json()["media"].get(name, [])]
+        if len(steps) >= count or time.monotonic() > deadline:
+            return steps
+        time.sleep(0.02)
+
+
 def test_detail_sees_media_logged_after_a_first_poll(run, client, tmp_path):
     run.log_image("s", _png(tmp_path), step=0)
-    run._log_buffer.flush()
-    assert [i["step"] for i in client.get(BASE).json()["media"]["s"]] == [0]
+    assert _media_steps_once_stored(run, client, "s", 1) == [0]
     run.log_image("s", _png(tmp_path), step=1)
-    run._log_buffer.flush()
-    assert [i["step"] for i in client.get(BASE).json()["media"]["s"]] == [0, 1]
+    assert _media_steps_once_stored(run, client, "s", 2) == [0, 1]
 
 
 def test_a_run_without_media_has_empty_indexes(run, client):

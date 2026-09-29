@@ -1,6 +1,6 @@
 """Logged images and tables are run outputs: they fold into ``outputs`` with
 the sha256/size of the stored bytes, ``use_artifact`` fetches them, lineage
-links their consumers, and a file that never got stored is retracted."""
+links their consumers, and a file that never got stored is never recorded."""
 import hashlib
 import threading
 
@@ -124,30 +124,30 @@ class _FailingStore(LocalSnapshotStorage):
         return super().save_artifact_file(app_name, verstr, src_path, name=name)
 
 
-def test_a_media_file_that_failed_to_store_is_retracted(store, tmp_path):
+def test_a_media_file_that_failed_to_store_is_never_recorded(store, tmp_path):
     with start_run(storage=_FailingStore(store.vmn_root_path, subdir="experiments")) as run:
         run.log_image("pic", _png(tmp_path))
         run.log_table("t", [{"a": 1}])
     row = get_run(APP, run.id, storage=store)
     assert set(row["outputs"]) == {"tables/t/0.json"}
-    assert [e["path"] for e in row["log"] if e["type"] == "image"] == ["media/pic/0.png"]
+    assert [e["path"] for e in row["log"] if e["type"] == "image"] == []
 
 
-def test_uploads_still_queued_at_the_close_deadline_are_reported_failed(tmp_path):
-    gate, failed, stored = threading.Event(), [], []
+def test_uploads_still_queued_at_the_close_deadline_are_never_recorded(tmp_path):
+    gate, recorded = threading.Event(), []
 
     def save(path, name):
         gate.wait(5)
-        stored.append(name)
 
-    uploads = MediaUploads(save, on_failed=lambda name, exc: failed.append(name))
+    uploads = MediaUploads(save)
     for name in ("a", "b", "c"):
         staged = tmp_path / name
         staged.mkdir()
         (staged / "f").write_bytes(b"x")
-        uploads.submit(str(staged), str(staged / "f"), name)
+        uploads.submit(str(staged), str(staged / "f"), name, lambda n=name: recorded.append(n))
     assert uploads.close(0.2) is False
     gate.set()
+    uploads._thread.join(5)
     # "a" was being stored when the deadline passed; the rest never started.
-    assert failed == ["b", "c"]
+    assert recorded == ["a"]
     assert not (tmp_path / "b").exists() and not (tmp_path / "c").exists()

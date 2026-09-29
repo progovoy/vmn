@@ -296,14 +296,14 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
   `outputs."media/samples/3.png".size > 0` queries, link consumers in
   [lineage](#lineage), and another run can fetch one with
   `run.use_artifact(ref, "media/samples/3.png")` (or `"tables/preds/3.json"`).
-  The file is stored on a background worker, so the entry can precede it:
-  for as long as the upload takes, a reader may see an output whose file is
-  not there yet. A file that fails to store — the save raises, or it is still
+  The file is stored on a background worker, and its entry is logged only
+  once the file is stored (keeping the step and timestamp of the
+  `log_image`/`log_table` call), so a reader never sees an output — or an
+  image/table — whose file is not there, even from a process killed
+  mid-upload. A file that fails to store — the save raises, or it is still
   queued when the run's final upload wait (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`)
-  runs out — gets an `{"type": "output_failed", "path", "error"}` entry that
-  retracts the output, so it is never claimed for good (the media index still
-  lists the image/table entry). A process killed before its queue drained is
-  the one case left claiming a file that never landed.
+  runs out — is never recorded; a warning says so. `finish()` waits for the
+  queue before its final log flush.
 
 `get_run()` returns the indexes next to `artifacts`: `media`, `tables` and
 `histograms` map each name to its steps in order (the latest entry for a step
@@ -932,8 +932,7 @@ links runs through what they consumed and produced:
 
 - every `get_run`/`list_runs` row carries `outputs` — `{path: {"path", "digest":
   "sha256:<hex>", "size"}}`, folded from the run's artifact, image and table
-  entries (the latest write of a path wins; an `output_failed` entry retracts
-  one) — next to `inputs`. The experiment index keeps them beside its lean
+  entries (the latest write of a path wins) — next to `inputs`. The experiment index keeps them beside its lean
   rows rather than on them, so `vmn-exp ui` list, leaderboard, facets and
   columns payloads never carry them (a run logging an image per step has one
   output per step), while lineage, run detail and `outputs.*` queries read

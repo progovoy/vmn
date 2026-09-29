@@ -37,9 +37,9 @@ def _seed(app_layout):
                                      "values": {"loss": float(i)}})
 
 
-def _image(ts):
+def _image(ts, size=4):
     return {"timestamp": ts, "type": "image", "name": "x", "step": 0,
-            "path": "media/x/0.png", "sha256": "a" * 64, "size": 4}
+            "path": "media/x/0.png", "sha256": "a" * 64, "size": size}
 
 
 def _page(cache, snap):
@@ -61,8 +61,7 @@ def test_an_outputs_query_follows_outputs_across_generations(app_layout, monkeyp
     cache = LeaderboardCache()
     assert _page(cache, indexed_snapshot(storage, app, wait=True)) == ["0.0.2"]
 
-    _append(app_layout, "0.0.2", {"timestamp": "2026-09-21T13:02:00Z",
-                                  "type": "output_failed", "path": "media/x/0.png"})
+    _append(app_layout, "0.0.2", _image("2026-09-21T13:02:00Z", size=0))  # re-logged empty
     _append(app_layout, "0.0.5", _image("2026-09-21T13:02:00Z"))
     snap = indexed_snapshot(storage, app, wait=True)
     assert _page(cache, snap) == ["0.0.5"]

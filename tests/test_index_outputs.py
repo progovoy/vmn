@@ -113,16 +113,6 @@ def test_incremental_refresh_keeps_outputs_right(app_layout):
     assert [r["verstr"] for r in rows] == ["0.0.1"]
 
 
-def test_a_retracted_output_leaves_the_index(app_layout):
-    _seed(app_layout)
-    storage = _storage(app_layout)
-    indexed_snapshot(storage, app_layout.app_name, wait=True)
-    _append(app_layout, "0.0.1", [{"timestamp": "2026-09-21T12:06:00Z",
-                                   "type": "output_failed", "path": "media/x/0.png"}])
-    snap = indexed_snapshot(storage, app_layout.app_name, wait=True)
-    assert snap.outputs_of("0.0.1") == {}
-
-
 def test_cli_list_query_and_json_reach_outputs(app_layout, capfd):
     _seed(app_layout)
     capfd.readouterr()
