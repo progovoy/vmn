@@ -5,7 +5,6 @@ import datetime
 
 # The dev-version helpers live in version_stamp.devversion; the names below
 # stay importable from here for experiment code.
-from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
 from vmn_exp.core.storage_resolve import store_uri
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
@@ -164,11 +163,8 @@ def _save_safety_snapshot(vcs, params, target_verstr):
 
 def _restore_with_safety_net(vcs, params, metadata, patches):
     """Apply a restore, first auto-snapshotting any dirty work it would clobber.
-    A record without usable code is refused before anything is touched."""
-    reason = no_code_reason(metadata)
-    if reason is not None:
-        VMN_LOGGER.error(f"Cannot restore {metadata.get('verstr')}: {reason}")
-        return 1
+    *metadata* must come from ``load_code_record``, which refuses a record
+    without usable code before anything is touched."""
     saved = _save_safety_snapshot(vcs, params, metadata.get("verstr"))
     if saved:
         VMN_LOGGER.info(
