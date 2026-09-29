@@ -119,6 +119,29 @@ def test_the_registry_skips_a_future_format_version_record(tmp_path, warnings):
     assert warnings
 
 
+@pytest.mark.parametrize("use_index", [True, False])
+def test_a_future_record_is_warned_about_once_per_storage(tmp_path, warnings, use_index):
+    storage = _storage(tmp_path)
+    _run(storage, "0.0.1")
+    future = _run(storage, "0.0.2", format_version=FUTURE)
+
+    for _ in range(3):
+        list_runs("app", storage=storage, use_index=use_index)
+        storage.list_snapshots("app")
+
+    assert len([w for w in warnings if future in w]) == 1, warnings
+
+
+def test_storage_readers_leave_a_future_record_out(tmp_path):
+    storage = _storage(tmp_path)
+    current = _run(storage, "0.0.1")
+    future = _run(storage, "0.0.2", format_version=FUTURE)
+
+    assert [m["verstr"] for m in storage.list_snapshots("app")] == [current]
+    assert storage.load_metadata("app", future) is None
+    assert storage.load_metadata("app", current)["verstr"] == current
+
+
 def test_show_json_exposes_the_format_version(app_layout, capfd):
     import json
 

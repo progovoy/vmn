@@ -43,7 +43,7 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
 from vmn_exp.core.query import filter_rows
-from vmn_exp.core.record_format import readable, record_format_version
+from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.reserved import is_reserved_app
@@ -218,7 +218,7 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     read here — the caller loads the one it needs.
     """
     row = snapshot.row(verstr)
-    meta = readable(storage.load_metadata(app_name, verstr)) if row else None
+    meta = storage.load_metadata(app_name, verstr) if row else None
     if meta is None:
         return None, None
 

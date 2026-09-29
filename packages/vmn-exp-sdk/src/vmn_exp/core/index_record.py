@@ -79,4 +79,4 @@ def _load_meta(storage, app_name, key):
     # The same rule list_snapshots applies: legacy verinfo files share the tree.
     # A newer record format is left out, as if the record were not there.
     meta = parse_record_metadata(storage.load_file(app_name, key, METADATA_FILE))
-    return readable(meta, key)
+    return readable(meta, f"{app_name}/{key}", owner=storage)

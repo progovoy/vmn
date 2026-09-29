@@ -123,7 +123,7 @@ def get_version(storage, model, n) -> dict | None:
     """Return the metadata dict for version *n* of *model*, or None."""
     record_name = version_record_name(model, n)
     metadata, _ = storage.load(REGISTRY_APP, record_name)
-    return readable(metadata, record_name)
+    return readable(metadata, f"{REGISTRY_APP}/{record_name}", owner=storage)
 
 
 # ---------------------------------------------------------------------------

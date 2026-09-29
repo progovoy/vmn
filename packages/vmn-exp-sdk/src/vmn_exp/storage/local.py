@@ -218,7 +218,8 @@ class LocalSnapshotStorage(SnapshotStorage):
             if meta is None:
                 VMN_LOGGER.debug(f"Skipping non-snapshot metadata: {meta_path}")
                 continue
-            results.append(meta)
+            if self.readable(meta, app_name, meta["verstr"]) is not None:
+                results.append(meta)
         results.sort(key=lambda m: m.get("timestamp", ""))
         return results
 

@@ -49,7 +49,6 @@ from vmn_exp.core.index_sweep import (
 )
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import experiment_row, load_log
-from vmn_exp.core.record_format import readable
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 
 _LOGGER = logging.getLogger(__name__)
@@ -376,7 +375,7 @@ def direct_rows(
     metrics schema.
     """
     rows = []
-    metas = [m for m in storage.list_snapshots(app_name) if readable(m)]
+    metas = storage.list_snapshots(app_name)
     for idx, meta in enumerate(metas, 1):
         log = read_log(storage, app_name, meta["verstr"])
         row = experiment_row(idx, meta, log, schema=schema)

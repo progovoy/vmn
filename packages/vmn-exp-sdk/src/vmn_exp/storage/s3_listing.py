@@ -171,7 +171,11 @@ class S3Listing:
             f"{prefix}/{safe_verstr(name)}/{METADATA_FILE}"
             for name, prefix in self._names_by_prefix(app_name).items()
         ]
-        metas = [m for m in parallel_map(self._load_listed_metadata, keys) if m]
+        metas = [
+            m
+            for m in parallel_map(self._load_listed_metadata, keys)
+            if m and self.readable(m, app_name, m["verstr"]) is not None
+        ]
         return sorted(metas, key=lambda m: m.get("timestamp", ""))
 
     def list_files(self, app_name, keys=None):

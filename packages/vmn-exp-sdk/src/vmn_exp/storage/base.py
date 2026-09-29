@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 import yaml
 
 from vmn_exp._base import parse_record_metadata
+from vmn_exp.core.record_format import readable
 from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
@@ -44,8 +45,17 @@ class SnapshotStorage(ABC):
         return [m["verstr"] for m in self.list_snapshots(app_name)]
 
     def load_metadata(self, app_name, verstr):
-        """A record's metadata alone — no patches or tarball — or None."""
+        """A record's metadata alone — no patches or tarball — or None (also
+        for a record a newer format wrote)."""
+        return self.readable(self._parsed_metadata(app_name, verstr), app_name, verstr)
+
+    def _parsed_metadata(self, app_name, verstr):
         return parse_record_metadata(self.load_file(app_name, verstr, METADATA_FILE))
+
+    def readable(self, metadata, app_name, verstr):
+        """*metadata*, or None when a newer record format wrote it (warned
+        about once per record by this storage)."""
+        return readable(metadata, f"{app_name}/{verstr}", owner=self)
 
     def exists(self, app_name, verstr):
         """Check if a snapshot exists without loading its full content."""
@@ -91,7 +101,7 @@ class SnapshotStorage(ABC):
         """Merge *updates* into the record's metadata (a None value drops the
         field); False when there is no record. Backends override this with an
         atomic (local) or conditional (S3) rewrite."""
-        metadata = self.load_metadata(app_name, verstr)
+        metadata = self._parsed_metadata(app_name, verstr)
         if metadata is None:
             return False
         data = yaml.dump(apply_metadata_updates(metadata, updates), sort_keys=True)

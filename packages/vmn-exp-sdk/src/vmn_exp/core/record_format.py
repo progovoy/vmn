@@ -6,7 +6,9 @@ Every new run (and model registry) record carries ``format_version`` in its
 entries and ``run_state.yml`` — so log lines carry no version of their own. A
 record without the field predates it and reads as version 1. A reader meeting
 a newer version than :data:`RECORD_FORMAT_VERSION` skips the record with a
-warning rather than mis-read it: upgrade vmn-exp to see it.
+warning rather than mis-read it: upgrade vmn-exp to see it. The storage
+backends apply the gate where they parse metadata (``list_snapshots``,
+``load_metadata``) and warn once per record per storage, not on every read.
 """
 from vmn_exp._base import VMN_LOGGER
 
@@ -24,16 +26,36 @@ def record_format_version(metadata):
     return metadata.get(FORMAT_VERSION_KEY, 1)
 
 
-def readable(metadata, name=None):
-    """*metadata*, or None (with a warning) when a newer format wrote it."""
+def readable(metadata, name=None, owner=None):
+    """*metadata*, or None when a newer format wrote it.
+
+    The skip is warned about once per record *name* per *owner* (the storage
+    the record was read from); without an owner, on every call.
+    """
     if metadata is None:
         return None
     version = record_format_version(metadata)
     if isinstance(version, int) and version <= RECORD_FORMAT_VERSION:
         return metadata
-    VMN_LOGGER.warning(
-        f"Skipping record {name or metadata.get('verstr')}: format_version "
-        f"{version} is newer than this vmn-exp supports "
-        f"({RECORD_FORMAT_VERSION}); upgrade vmn-exp to read it"
-    )
+    name = name or metadata.get("verstr")
+    if _first_sighting(owner, name):
+        VMN_LOGGER.warning(
+            f"Skipping record {name}: format_version {version} is newer than "
+            f"this vmn-exp supports ({RECORD_FORMAT_VERSION}); upgrade vmn-exp "
+            f"to read it"
+        )
     return None
+
+
+def _first_sighting(owner, name):
+    warned = getattr(owner, "_format_warned", None)
+    if warned is None:
+        warned = set()
+        try:
+            owner._format_warned = warned
+        except AttributeError:
+            return True
+    if name in warned:
+        return False
+    warned.add(name)
+    return True
