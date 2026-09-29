@@ -305,6 +305,8 @@ def test_cached_sync_log_to_remote(tmp_path):
     remote = MagicMock()
     cached = CachedSnapshotStorage(local, remote)
     _save_exp(local, "app", "1.0.0-dev.aaa.bbb")
+    # The remote holds this same record (same run identity as the local copy).
+    remote.load_metadata.side_effect = local.load_metadata
 
     entry = {"timestamp": "t1", "type": "metrics"}
     cached.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-1", entry)
