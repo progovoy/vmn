@@ -417,7 +417,7 @@ class _Supervision:
         self.guard(
             "output log entry",
             lambda: append_to_log(
-                self.storage, self.app_name, self.verstr, self.output.artifact_entry()
+                self.storage, self.app_name, self.verstr, self.output.seal()
             ),
         )
 
@@ -465,8 +465,7 @@ class _Supervision:
         _ingest_metric_records(self.storage, self.app_name, self.verstr, records)
 
     def _sync_once(self):
-        if self.output is not None:
-            self.guard("output log upload", self.output.upload)
+        # The log first: a slow output PUT must not hold back liveness data.
         self.guard(
             "remote sync",
             self.storage.sync_log_to_remote,
@@ -474,3 +473,5 @@ class _Supervision:
             self.verstr,
             self.writer_id,
         )
+        if self.output is not None:
+            self.guard("output log upload", self.output.upload)
