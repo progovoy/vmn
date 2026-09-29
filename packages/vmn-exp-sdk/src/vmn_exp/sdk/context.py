@@ -38,6 +38,12 @@ def _is_open_here(run):
     return getattr(run, "pid", os.getpid()) == os.getpid()
 
 
+def _registered_here():
+    """This process's registered runs, finishing ones included: a run stays
+    exported as ``VMN_EXPERIMENT_ID`` until it unregisters."""
+    return [r for r in _OPEN_RUNS if getattr(r, "pid", os.getpid()) == os.getpid()]
+
+
 def open_runs():
     """This process's open runs, oldest first."""
     with _LOCK:
@@ -67,7 +73,7 @@ def context_run():
 def register(run):
     """Mark *run* open: bind it to this context and export it to subprocesses."""
     with _LOCK:
-        if not open_runs():
+        if not _registered_here():
             _BASELINE["pid"] = os.getpid()
             _BASELINE["env"] = {key: os.environ.get(key) for key in _ENV_KEYS}
         _OPEN_RUNS.append(run)
@@ -86,7 +92,7 @@ def unregister(run):
             _CURRENT.set(prev if _is_open_here(prev) else None)
         if getattr(run, "pid", os.getpid()) != os.getpid():
             return  # a forked child closing an inherited run owns no env for it
-        remaining = open_runs()
+        remaining = open_runs() or _registered_here()
         if remaining:
             _export(remaining[-1])
         else:
@@ -96,7 +102,7 @@ def unregister(run):
 def launcher_experiment_id():
     """``VMN_EXPERIMENT_ID`` as the process received it, before any run of ours."""
     with _LOCK:
-        if _BASELINE["pid"] == os.getpid() and open_runs():
+        if _BASELINE["pid"] == os.getpid() and _registered_here():
             return _BASELINE["env"].get(EXPERIMENT_ID_ENV)
         return os.environ.get(EXPERIMENT_ID_ENV)
 
