@@ -43,7 +43,7 @@ def test_env_fills_unset_storage_params(monkeypatch):
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", BUCKET)
     monkeypatch.setenv("VMN_EXPERIMENT_PREFIX", "team-a")
     monkeypatch.setenv("VMN_EXPERIMENT_ENDPOINT_URL", "http://minio:9000")
-    params = {"backend": "local", "bucket": None, "prefix": "vmn-experiments"}
+    params = {"backend": "local", "bucket": None, "prefix": None}
 
     merge_env_into_params(params)
 

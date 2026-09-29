@@ -1,4 +1,5 @@
 """The ``sweep`` command's argparse subparser."""
+from vmn_exp.core.storage_resolve import add_storage_flags
 
 SWEEP_ACTIONS = ("create", "agent", "status")
 
@@ -24,20 +25,16 @@ def add_sweep_parser(subparsers):
                         "stuck before claiming new ones")
     p.add_argument("--json", action="store_true", default=False,
                    help="status: print machine-readable JSON")
-    _add_storage_flags(p)
+    add_experiment_storage_flags(p)
     _add_supervision_flags(p)
 
 
-def _add_storage_flags(p):
-    p.add_argument("--store", default=None,
-                   help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
-                        "file:///dir (or VMN_EXPERIMENT_STORE)")
-    p.add_argument("--bucket", default=None,
-                   help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
-    p.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
-    p.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
+def add_experiment_storage_flags(p):
+    """The store flags plus where experiments land and who writes them."""
+    add_storage_flags(p)
     p.add_argument("--experiment-dir", default=None,
-                   help="Write experiments to this directory instead of local .vmn/")
+                   help="Write experiments to this directory instead of local .vmn/ "
+                        "(or VMN_EXPERIMENT_DIR)")
     p.add_argument("--writer-id", default=None,
                    help="Unique writer ID for this process (default: VMN_WRITER_ID "
                         "or hostname)")

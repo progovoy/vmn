@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 
-from vmn_exp.core.storage_resolve import resolve_experiment_storage
+from vmn_exp.core.storage_resolve import add_storage_flags, resolve_experiment_storage
 from vmn_exp.registry.log import set_alias as _set_alias
 from vmn_exp.registry.log import remove_alias as _remove_alias
 from vmn_exp.registry.log import set_version_status
@@ -266,21 +266,7 @@ def _add_storage_args(parser):
         default=None,
         help="Experiment storage directory (overrides VMN_EXPERIMENT_DIR)",
     )
-    parser.add_argument(
-        "--store", default=None,
-        help="Storage URI: s3://bucket/prefix, gs://..., az://..., file:///dir",
-    )
-    parser.add_argument(
-        "--bucket", default=None,
-        help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)",
-    )
-    parser.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
-    parser.add_argument(
-        "--endpoint-url",
-        dest="endpoint_url",
-        default=None,
-        help="Custom S3 endpoint URL",
-    )
+    add_storage_flags(parser)
 
 
 def add_model_parser(subparsers):
