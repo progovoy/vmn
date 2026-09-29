@@ -91,15 +91,24 @@ def _join_key(point):
     return ("step", step) if step is not None else ("ts", point.get("ts"))
 
 
-def join_series(points, x_points):
-    """*points* with ``x`` from *x_points* at the same step; unmatched dropped."""
-    x_at = {_join_key(p): p.get("value") for p in x_points}
+def x_lookup(x_points):
+    """``{join key: x value}`` of an x metric's points, for :func:`join_on`."""
+    return {_join_key(p): p.get("value") for p in x_points}
+
+
+def join_on(points, x_at):
+    """*points* with ``x`` from the :func:`x_lookup` *x_at*; unmatched dropped."""
     joined = []
     for point in points:
         x = x_at.get(_join_key(point))
         if is_finite_number(x):
             joined.append(dict(point, x=x))
     return joined
+
+
+def join_series(points, x_points):
+    """*points* with ``x`` from *x_points* at the same step; unmatched dropped."""
+    return join_on(points, x_lookup(x_points))
 
 
 def join_all(series, x):

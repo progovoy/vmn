@@ -15,6 +15,7 @@ The cache is bounded by the log bytes it holds, not by a count of records.
 """
 import threading
 from collections import OrderedDict
+from itertools import islice
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import flatten_logs
@@ -31,7 +32,7 @@ from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.rewind import REWIND
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
-from vmn_exp.core.step_metric import join_series, step_metrics
+from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
 from vmn_exp.ui.readers.series import SeriesThinner, downsample
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
@@ -113,13 +114,16 @@ class LogSnapshot:
             }
         return series, {k: self._counts[k] for k in names}
 
+    def _points(self, key):
+        """*key*'s points this snapshot sees, without copying them."""
+        return islice(self._series[key], self._counts[key]) if key in self._counts else ()
+
     def joined(self, x_of, max_points):
         """``(series, series_total)`` of each metric of *x_of* joined on its x
-        metric (see :func:`join_series`), then thinned to *max_points*."""
-        joined = {
-            k: join_series(self.series([k]).get(k, []), self.series([x]).get(x, []))
-            for k, x in x_of.items()
-        }
+        metric (see :func:`~vmn_exp.core.step_metric.join_series`), then
+        thinned to *max_points*."""
+        lookups = {x: x_lookup(self._points(x)) for x in set(x_of.values())}
+        joined = {k: join_on(self._points(k), lookups[x]) for k, x in x_of.items()}
         return (
             {k: downsample(v, max_points) for k, v in joined.items()},
             {k: len(v) for k, v in joined.items()},
