@@ -19,13 +19,15 @@ from __future__ import annotations
 import json
 import logging
 
-from vmn_exp.core.storage_resolve import add_storage_flags, resolve_experiment_storage
+from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.registry.log import set_alias as _set_alias
 from vmn_exp.registry.log import remove_alias as _remove_alias
-from vmn_exp.registry.log import set_version_status
+from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
+from vmn_exp.registry.log import read_uses, set_version_status
 from vmn_exp.registry.names import valid_model_name, valid_alias_name, parse_ref
-from vmn_exp.registry.store import ensure_model, register_version, list_models
+from vmn_exp.registry.store import ensure_model, list_models, model_kind, register_version
 from vmn_exp.registry.view import model_state, resolve_ref
+from vmn_exp.registry.cli_parser import add_model_parser  # noqa: F401  (re-exported)
 
 _LOG = logging.getLogger(__name__)
 
@@ -54,41 +56,61 @@ def _cmd_register(storage, args):
     if not model_name or not valid_model_name(model_name):
         _LOG.error("Invalid model name: %r", model_name)
         return 1
-
-    version_ref = getattr(args, "version_ref", None)
-    if not version_ref:
-        _LOG.error("Missing required -v / --version (run ref)")
-        return 1
-
-    app_name = getattr(args, "app", None)
-    artifact_path = getattr(args, "artifact", None)
-    description = getattr(args, "description", None)
     alias_name = getattr(args, "alias", None)
-
-    verstr = _resolve_run_ref(storage, app_name, version_ref)
-    if verstr is None:
-        _LOG.error("Could not resolve run ref %r (app=%r)", version_ref, app_name)
+    if alias_name is not None and not valid_alias_name(alias_name):
+        _LOG.error("Invalid alias name: %r", alias_name)
+        return 1
+    source = _register_source_error(args)
+    if source:
+        _LOG.error("%s", source)
         return 1
 
-    run_ref = {"app": app_name, "verstr": verstr} if app_name else {"verstr": verstr}
-
-    ensure_model(storage, model_name, description=description)
-    n = register_version(
-        storage,
-        model_name,
-        run_ref,
-        artifact_path=artifact_path,
-        description=description,
-    )
+    try:
+        n, origin = _register_version(storage, model_name, args)
+    except (ValueError, FileNotFoundError) as exc:
+        _LOG.error("%s", exc)
+        return 1
 
     if alias_name is not None:
-        if not valid_alias_name(alias_name):
-            _LOG.error("Invalid alias name: %r", alias_name)
-            return 1
         _set_alias(storage, model_name, alias_name, n)
 
-    print(f"Registered {model_name} version {n} (run_ref={verstr!r})")
+    print(f"Registered {model_name} version {n} ({origin})")
     return 0
+
+
+def _register_source_error(args):
+    """Why the register flags name no single source, else None."""
+    version_ref, uri = getattr(args, "version_ref", None), getattr(args, "uri", None)
+    if bool(version_ref) == bool(uri):
+        return "Pass exactly one of -v/--version (a run) or --uri (a reference dataset)"
+    if uri and getattr(args, "kind", None) != "dataset":
+        return "--uri registers a reference dataset: add --kind dataset"
+    return None
+
+
+def _register_version(storage, model_name, args):
+    """``(n, origin text)`` of the new (or deduped) version."""
+    description = getattr(args, "description", None)
+    uri = getattr(args, "uri", None)
+    if uri:
+        fields = reference_fields(uri, getattr(args, "digest", None))
+        n = register_dataset_version(storage, model_name, fields, description=description)
+        return n, f"uri={fields['uri']!r}"
+
+    app_name = getattr(args, "app", None)
+    verstr = _resolve_run_ref(storage, app_name, args.version_ref)
+    if verstr is None:
+        raise ValueError(f"Could not resolve run ref {args.version_ref!r} (app={app_name!r})")
+    run_ref = {"app": app_name, "verstr": verstr} if app_name else {"verstr": verstr}
+    artifact_path = getattr(args, "artifact", None)
+    if getattr(args, "kind", None) == "dataset":
+        fields = copied_fields(storage, run_ref, artifact_path, getattr(args, "digest", None))
+        n = register_dataset_version(storage, model_name, fields, description=description)
+    else:
+        ensure_model(storage, model_name, description=description)
+        n = register_version(storage, model_name, run_ref, artifact_path=artifact_path,
+                             description=description)
+    return n, f"run_ref={verstr!r}"
 
 
 def _cmd_alias(storage, args):
@@ -128,7 +150,7 @@ def _cmd_alias(storage, args):
 
 
 def _cmd_list(storage, args):
-    models = list_models(storage)
+    models = list_models(storage, kind=getattr(args, "kind", None))
     if getattr(args, "json", False):
         print(json.dumps(models))
     else:
@@ -186,6 +208,9 @@ def _cmd_resolve(storage, args):
             "verstr": verstr,
             "artifact_path": artifact_path,
             "artifact_uri": artifact_uri,
+            "kind": model_kind(storage, model),
+            "uri": meta.get("uri"),
+            "digest": meta.get("digest"),
         }))
     else:
         print(f"model:    {model}")
@@ -195,8 +220,11 @@ def _cmd_resolve(storage, args):
             print(f"verstr:   {verstr}")
         if artifact_path:
             print(f"artifact: {artifact_path}")
-        if artifact_uri:
-            print(f"uri:      {artifact_uri}")
+        uri = artifact_uri or meta.get("uri")
+        if uri:
+            print(f"uri:      {uri}")
+        if meta.get("digest"):
+            print(f"digest:   {meta['digest']}")
     return 0
 
 
@@ -223,7 +251,19 @@ def _cmd_deprecate(storage, args):
 
 
 def _cmd_delete(storage, args):
-    return _cmd_set_status(storage, args, "deleted")
+    rc = _cmd_set_status(storage, args, "deleted")
+    if rc == 0:
+        _warn_consumers(storage, args.model_name, int(args.version_ref))
+    return rc
+
+
+def _warn_consumers(storage, model_name, version):
+    users = read_uses(storage, model_name).get(version, [])
+    if users:
+        _LOG.warning(
+            "%s version %d was used by %d runs; their lineage still names it.",
+            model_name, version, len(users),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -253,93 +293,6 @@ def model_run_without_repo(args):
         _LOG.error("Unknown model action: %r", getattr(args, "action", None))
         return 1
     return handler(storage, args)
-
-
-# ---------------------------------------------------------------------------
-# Argparse setup
-# ---------------------------------------------------------------------------
-
-def _add_storage_args(parser):
-    """Add common storage flags to a subcommand parser."""
-    parser.add_argument(
-        "--dir",
-        default=None,
-        help="Experiment storage directory (overrides VMN_EXPERIMENT_DIR)",
-    )
-    add_storage_flags(parser)
-
-
-def add_model_parser(subparsers):
-    """Register the ``model`` command and its subcommands."""
-    pmodel = subparsers.add_parser(
-        "model",
-        help="Model registry: register, alias, list, show, resolve, deprecate, delete",
-    )
-    pmodel.set_defaults(strict_version=False)
-
-    msub = pmodel.add_subparsers(dest="action", metavar="action")
-    msub.required = True
-
-    # register
-    preg = msub.add_parser("register", help="Register a new model version")
-    preg.add_argument("model_name", help="Model name")
-    preg.add_argument(
-        "-v", "--version",
-        dest="version_ref",
-        required=True,
-        help="Run ref (verstr, @N, prefix) to link",
-    )
-    preg.add_argument("--app", default=None, help="App name for run ref resolution")
-    preg.add_argument("--artifact", default=None, help="Artifact path within the run")
-    preg.add_argument("--alias", default=None, help="Also set this alias after registering")
-    preg.add_argument("--description", default=None, help="Human-readable description")
-    _add_storage_args(preg)
-
-    # alias
-    palias = msub.add_parser("alias", help="Manage model aliases")
-    palias.add_argument("model_name", help="Model name")
-    palias.add_argument("alias", help="Alias name")
-    palias.add_argument("alias_version", nargs="?", help="Version number to point to")
-    palias.add_argument(
-        "--remove", action="store_true", default=False, help="Remove this alias"
-    )
-    palias.add_argument(
-        "--expect",
-        default=None,
-        help="Expected current version (int) or 'none'; mismatch exits 1",
-    )
-    _add_storage_args(palias)
-
-    # list
-    plist = msub.add_parser("list", help="List registered models")
-    plist.add_argument("--json", action="store_true", default=False)
-    _add_storage_args(plist)
-
-    # show
-    pshow = msub.add_parser("show", help="Show model versions, statuses, and aliases")
-    pshow.add_argument("model_name", help="Model name")
-    pshow.add_argument("--json", action="store_true", default=False)
-    _add_storage_args(pshow)
-
-    # resolve
-    presolve = msub.add_parser("resolve", help="Resolve a model ref to app/verstr/artifact")
-    presolve.add_argument("model_name", help="Model ref (e.g. model@alias, model@3, model)")
-    presolve.add_argument("--json", action="store_true", default=False)
-    _add_storage_args(presolve)
-
-    # deprecate
-    pdep = msub.add_parser("deprecate", help="Mark a model version as deprecated")
-    pdep.add_argument("model_name", help="Model name")
-    pdep.add_argument("version_ref", help="Version number")
-    _add_storage_args(pdep)
-
-    # delete
-    pdel = msub.add_parser("delete", help="Mark a model version as deleted")
-    pdel.add_argument("model_name", help="Model name")
-    pdel.add_argument("version_ref", help="Version number")
-    _add_storage_args(pdel)
-
-    return pmodel
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +336,7 @@ def _print_model_state(model_name, state):
     header = state.get("header") or {}
     desc = header.get("description")
     print(f"Model: {model_name}")
+    print(f"  Kind: {state.get('kind') or 'model'}")
     if desc:
         print(f"  Description: {desc}")
     print(f"  Versions: {len(state['versions'])}")

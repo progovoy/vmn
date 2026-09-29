@@ -971,7 +971,8 @@ links runs through what they consumed and produced:
 - **downstream** are the runs of the same app that consumed this run's outputs,
   by the same two rules;
 - **models** are the live model versions registered from the run:
-  `{"model", "version", "aliases", "status", "artifact_path"}`.
+  `{"model", "kind", "version", "aliases", "status", "artifact_path"}` (`kind`
+  is `model` or `dataset`).
 
 Each node is `{"app", "verstr", "name", "timestamp", "status", "depth", "found",
 "links"}`; `depth` counts hops (1 = direct), `found` is False for a `vmn://`
@@ -1112,12 +1113,51 @@ path = download_model("resnet50@production", dst="/tmp/models")  # copy to dir
 Local storage returns the on-disk path directly. S3 storage downloads the
 artifact to a temporary cache directory.
 
+`download_model` inside an open run also records the use (below);
+`record=False` opts out. A reference dataset raises `ValueError`.
+
+### Datasets
+
+Datasets are registry entries of kind `dataset` (same namespace, refs and
+aliases as models). Reference mode records a location and digest, copied mode
+points at a run artifact:
+
+```python
+from vmn_exp.sdk import register_dataset, get_dataset_version
+
+register_dataset("imagenet", "/data/imagenet")                 # local path: hashed
+register_dataset("raw", "s3://lake/raw/", digest="sha256:ab..")
+register_dataset("train_split", run=run, artifact_path="data/train.parquet")
+meta = get_dataset_version("imagenet")
+```
+
+Exactly one of `uri` / `artifact_path`; `dedupe=True` (default) returns the
+existing version for a digest already registered. See
+[models.md](models.md#datasets) for the digest rules.
+
+### Recording use
+
+```python
+from vmn_exp.sdk import use_model, use_dataset
+
+with start_run("serving") as run:
+    run.use_model("resnet50@production")     # returns the version metadata
+    run.use_dataset("imagenet")
+```
+
+Each use logs an `input` named `<name>@<N>` (the resolved number, never an
+alias) — URI `vmn://<app>/<verstr>/<path>` of the producer artifact with its
+digest, or `vmn-registry://<name>@<N>` for a reference dataset — and appends a
+best-effort `use` entry to the registry record `<name>-uses`. Once per version
+per run; `get_model_version` never records; `NoOpRun.use_*` only resolve. See
+[models.md](models.md#using-versions).
+
 ### Listing models
 
 ```python
 from vmn_exp.sdk import list_models
 
-print(list_models())   # e.g. ["bert-base", "resnet50"]
+print(list_models())   # e.g. ["bert_base", "imagenet", "resnet50"]
 ```
 
 ### Storage resolution

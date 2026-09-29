@@ -1,8 +1,9 @@
 """vmn-exp — experiment tracking SDK.
 
-Self-contained on purpose: this package depends on vmn_exp.core, vmn_exp.storage,
-vmn_exp.snapshot, and version_stamp.api — never on vmn_exp.ui or vmn_exp.cli —
-so the SDK can be lifted out as its own distribution later.
+Self-contained on purpose: this package depends only on vmn_exp.core,
+vmn_exp.storage, vmn_exp.registry and vmn_exp._base — never on version_stamp,
+vmn_exp.snapshot, vmn_exp.ui or vmn_exp.cli (vmn_exp.gitmode only lazily) —
+so it ships as its own distribution (tests/test_packaging_split.py).
 """
 import os
 
@@ -46,9 +47,11 @@ from vmn_exp.sdk.models import (  # noqa: E402
     remove_alias,
     set_alias,
 )
+from vmn_exp.sdk.datasets import get_dataset_version, register_dataset  # noqa: E402
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
 from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
 from vmn_exp.sdk.sweep import sweep_params  # noqa: E402
+from vmn_exp.sdk.usage import use_dataset, use_model  # noqa: E402
 
 __all__ = [
     "NoOpRun",
@@ -57,12 +60,16 @@ __all__ = [
     "autolog_disable",
     "current_run",
     "download_model",
+    "get_dataset_version",
     "get_model_version",
     "install_signal_handlers",
     "list_models",
+    "register_dataset",
     "register_model",
     "remove_alias",
     "set_alias",
     "start_run",
     "sweep_params",
+    "use_dataset",
+    "use_model",
 ]

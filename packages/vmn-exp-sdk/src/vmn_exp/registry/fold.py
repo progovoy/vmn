@@ -21,6 +21,11 @@ Version status change::
     {"type": "status", "version": <int>, "status": "active"|"deprecated"|"deleted",
      "ts": <iso>, "writer": <str>, "pos": <int>, "actor": {...}}
 
+Version use (in the sibling ``<model>-uses`` record, see ``fold_uses``)::
+
+    {"type": "use", "version": <int>, "run": {"app", "verstr"},
+     "ts": <iso>, "writer": <str>, "pos": <int>, "actor": {...}}
+
 Pure: no storage, no clock.
 """
 from __future__ import annotations
@@ -96,6 +101,39 @@ def fold_registry(entries: list) -> dict:
     status = {version: stored[0] for version, stored in _status.items()}
     audit = [e for e, _ in sorted(dict_entries, key=lambda x: x[1])]
     return {"aliases": aliases, "status": status, "audit": audit}
+
+
+def fold_uses(entries: list) -> dict:
+    """``{version: [{app, verstr, ts}]}`` of the runs that used each version.
+
+    One row per ``(version, run)``, from its earliest ``use`` entry (by
+    ``(ts, writer, pos)``); rows ordered by that key. Chunking-invariant.
+    """
+    earliest: dict = {}
+    for entry in entries:
+        use = _use_of(entry)
+        if use is None:
+            continue
+        key = _sort_key(entry)
+        if use not in earliest or key < earliest[use]:
+            earliest[use] = key
+    uses: dict = {}
+    for (n, app, verstr), key in sorted(earliest.items(), key=lambda kv: (kv[1], kv[0])):
+        uses.setdefault(n, []).append({"app": app, "verstr": verstr, "ts": key[0]})
+    return uses
+
+
+def _use_of(entry) -> tuple | None:
+    """``(version, app, verstr)`` of a well-formed ``use`` entry, else None."""
+    if not isinstance(entry, dict) or entry.get("type") != "use":
+        return None
+    run, n = entry.get("run"), entry.get("version")
+    if not isinstance(n, int) or not isinstance(run, dict):
+        return None
+    app, verstr = run.get("app"), run.get("verstr")
+    if not (isinstance(app, str) and app and isinstance(verstr, str) and verstr):
+        return None
+    return n, app, verstr
 
 
 def _parse_ts(ts: str) -> datetime | None:
