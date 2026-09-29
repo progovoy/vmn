@@ -24,6 +24,7 @@ from vmn_exp.core.fold import (
     fold_values,
 )
 from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.rewind import REWIND
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.step_metric import join_series, metric_definitions
@@ -173,7 +174,10 @@ def _read_growth(local, app_name, verstr, files, offsets):
 
 
 def _appends_in_order(entries, new_entries):
-    """Whether *new_entries* all sort after *entries* in the merged log."""
+    """Whether *new_entries* all sort after *entries* in the merged log — and
+    carry no rewind, which may hide some of *entries*."""
+    if entries and any(e.get("type") == REWIND for e in new_entries):
+        return False
     stamps = [e.get("timestamp", "") for e in new_entries]
     if not all(isinstance(ts, str) for ts in stamps):
         return False

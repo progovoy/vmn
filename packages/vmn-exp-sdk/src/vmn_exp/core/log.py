@@ -17,6 +17,7 @@ import math
 import os
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.step_metric import join_all
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
@@ -56,7 +57,7 @@ def metric_series(log, x=None):
     step, and points without one are dropped (see :mod:`vmn_exp.core.step_metric`).
     """
     series = {}
-    for entry in log:
+    for entry in drop_rewound(log):
         if entry.get("type") != "metrics":
             continue
         step = entry.get("step")

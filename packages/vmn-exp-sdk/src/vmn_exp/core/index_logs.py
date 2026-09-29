@@ -15,7 +15,7 @@ A file that vanishes mid-read refolds the record through the storage's
 ``load_logs_by_writer``.
 """
 from vmn_exp._base import yaml_safe_load
-from vmn_exp.core.fold import apply_entries, new_fold
+from vmn_exp.core.fold import apply_entries, fold_rewinds, needs_refold, new_fold
 from vmn_exp.core.jsonl_tail import read_complete_lines
 from vmn_exp.core.logfiles import (
     LEGACY_LOG_FILE as LEGACY_LOG,
@@ -69,8 +69,8 @@ def _read_tail(fold, counts, direct, where, name, state):
     return True
 
 
-def _refold_direct(record, storage, direct, where, sigs):
-    fold, counts, logs = new_fold(), {}, {}
+def _refold_direct(record, storage, direct, where, sigs, rewinds=()):
+    fold, counts, logs = new_fold(rewinds), {}, {}
     if LEGACY_LOG in sigs:
         raw = storage.load_file(*where, LEGACY_LOG)
         legacy = yaml_safe_load(raw) if raw else None
@@ -86,8 +86,8 @@ def _refold_direct(record, storage, direct, where, sigs):
     return True
 
 
-def _refold_merged(record, storage, where, sigs):
-    fold = new_fold()
+def _refold_merged(record, storage, where, sigs, rewinds=()):
+    fold = new_fold(rewinds)
     logs_by_writer = storage.load_logs_by_writer(*where)
     for writer in sorted(logs_by_writer):
         apply_entries(fold, writer, 0, logs_by_writer[writer] or [])
@@ -99,11 +99,26 @@ def _refold_merged(record, storage, where, sigs):
 
 
 def update_logs(record, storage, direct, app_name, key, sigs):
-    """Bring *record*'s fold up to the log files *sigs*; True if it changed."""
+    """Bring *record*'s fold up to the log files *sigs*; True if it changed.
+
+    A rewind the fold had not seen may hide entries it already folded, so the
+    record is folded again knowing it (see :func:`~vmn_exp.core.fold.needs_refold`).
+    """
+    changed = _update_logs(record, storage, direct, (app_name, key), sigs)
+    if changed and needs_refold(record["fold"]):
+        _refold(record, storage, direct, (app_name, key), sigs, fold_rewinds(record["fold"]))
+    return changed
+
+
+def _refold(record, storage, direct, where, sigs, rewinds=()):
+    if not _refold_direct(record, storage, direct, where, sigs, rewinds):
+        _refold_merged(record, storage, where, sigs, rewinds)
+
+
+def _update_logs(record, storage, direct, where, sigs):
     old = record["logs"]
     if {name: state["sig"] for name, state in old.items()} == sigs:
         return False
-    where = (app_name, key)
     if _appends_only(old, sigs):
         fold, counts = record["fold"], record["counts"]
         ok = True
@@ -118,6 +133,5 @@ def update_logs(record, storage, direct, app_name, key, sigs):
                 state["sig"] = sigs[name]
         if ok:
             return True
-    if not _refold_direct(record, storage, direct, where, sigs):
-        _refold_merged(record, storage, where, sigs)
+    _refold(record, storage, direct, where, sigs)
     return True

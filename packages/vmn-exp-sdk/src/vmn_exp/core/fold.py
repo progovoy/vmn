@@ -15,6 +15,8 @@ Pure: no storage, no clock.
 """
 import math
 
+from vmn_exp.core.rewind import is_rewound, rewind_step
+
 
 def entry_params(entry):
     """Params carried by a log entry.
@@ -39,15 +41,39 @@ def _foldable_param(value):
     return number if math.isfinite(number) else None
 
 
-def new_fold():
-    """The fold of an empty log."""
+def new_fold(rewinds=()):
+    """The fold of an empty log — knowing *rewinds* up front (see
+    :func:`needs_refold`)."""
     return {
         "params": {},
         "metrics": {},
         "tags": {},
         "last_metric": None,
         "create_note": None,
+        "rewinds": [list(r) for r in rewinds],
+        "stale": False,
     }
+
+
+def needs_refold(fold):
+    """Whether *fold* met a rewind it did not know when it started: entries it
+    folded earlier may be ones that rewind hides, so fold the log again from
+    ``new_fold(fold_rewinds(fold))``."""
+    return bool(fold.get("stale"))
+
+
+def fold_rewinds(fold):
+    """The ``[step, *key]`` rewinds *fold* has seen."""
+    return [list(r) for r in fold.get("rewinds", ())]
+
+
+def _learn_rewind(fold, step, key):
+    """Record a rewind marker; a first sight of it makes the fold stale."""
+    marker = [step, *key]
+    known = fold.setdefault("rewinds", [])
+    if marker not in known:
+        known.append(marker)
+        fold["stale"] = True
 
 
 def entry_tags(entry):
@@ -108,6 +134,12 @@ def _apply_inputs(fold, entry, key):
 
 
 def _apply(fold, entry, key):
+    target = rewind_step(entry)
+    if target is not None:
+        _learn_rewind(fold, target, key)
+        return
+    if is_rewound(fold.get("rewinds"), entry, key):
+        return
     etype = entry.get("type")
     if etype in ("tags", "create"):
         _apply_tags(fold, entry, key)
@@ -143,6 +175,14 @@ def fold_log(log, fold=None, start=0):
     are folded into it, so a log that grew folds only its new entries.
     """
     fold = new_fold() if fold is None else fold
+    stale = fold.get("stale", False)
+    for position, entry in enumerate(log, start):
+        target = rewind_step(entry) if isinstance(entry, dict) else None
+        if target is not None:
+            _learn_rewind(fold, target, (position,))
+    # The rewinds of *log* itself are learnt before it is folded; only one
+    # that hides entries folded by an earlier call makes the fold stale.
+    fold["stale"] = stale or (start > 0 and fold.get("stale", False))
     for position, entry in enumerate(log, start):
         if isinstance(entry, dict):
             _apply(fold, entry, (position,))
