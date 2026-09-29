@@ -64,7 +64,6 @@ def _create(app_layout, *extra):
         ["exp", "list"],
         ["exp", "show"],
         ["exp", "compare"],
-        ["snapshot", "list"],
     ],
 )
 def test_read_only_commands_do_not_wait_for_the_repo_lock(app_layout, argv):

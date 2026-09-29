@@ -16,6 +16,7 @@ import NoteEditor from "../components/NoteEditor";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunLineage from "../components/RunLineage";
+import RunOutput from "../components/RunOutput";
 import TrainingCurves from "../components/TrainingCurves";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import RunProvenanceSection from "./RunProvenance";
@@ -68,6 +69,10 @@ function RunBody({ ws, app, appName, detail }: {
       </div>
       {detail.artifacts && detail.artifacts.length > 0 && (
         <>
+          <RunOutput
+            artifacts={detail.artifacts}
+            downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
+          />
           <ArtifactsList
             artifacts={detail.artifacts}
             downloadUrl={(filename) => artifactUrl(ws, app, verstr, filename)}
@@ -135,7 +140,7 @@ export default function Run() {
       <div className="card-grid-2" style={{ marginBottom: 16 }}>
         {detail ? <MetadataCard detail={detail} /> : <Skeleton />}
         <ParamsCard params={summary.params} />
-        <MetricsCard metrics={summary.metrics} schema={schema}>
+        <MetricsCard metrics={summary.metrics} summary={summary.metricSummary} schema={schema}>
           {detail && (
             <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
           )}

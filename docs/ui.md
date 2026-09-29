@@ -30,7 +30,10 @@ The current repo becomes an implicit workspace. Open the printed URL.
 A **workspace** is an isolated source of data:
 
 - a **git checkout** — its own working tree, `.vmn/`, lock, and derived index; or
-- a read-only **S3** experiment bucket.
+- a read-only experiment **store**: any store URI (`s3://`, `gs://`, `az://`,
+  `file://`, plugin schemes — see
+  [Storage](experiments.md#storage-local-s3-gcs-azure-plugins)), or an S3
+  bucket given by the `--s3-bucket` shorthand.
 
 The server hosts many. Several git workspaces may be clones of the *same* remote
 (e.g. one per branch or per user) — a stamp or restore in one never touches
@@ -42,20 +45,25 @@ Register sources at startup:
 vmn-exp ui --data-dir /srv/vmn-ui \
        --repo /srv/checkouts/model-a \
        --repo /srv/checkouts/model-b \
-       --s3-bucket team-experiments --s3-prefix ml --endpoint-url http://minio:9000
+       --store gs://team-experiments/ml
 ```
+
+`--s3-bucket team-experiments --s3-prefix ml --endpoint-url http://minio:9000`
+is shorthand for `--store "s3://team-experiments/ml?endpoint_url=http://minio:9000"`.
+Re-running with the same `--store` reuses its workspace.
 
 or at runtime via the API (`POST /api/v1/workspaces` with `{"name","path"}`).
 The registry persists in `<data-dir>/workspaces.yml` (default `~/.vmn-ui`).
 
-### S3-only (no git repo)
+### Store-only (no git repo)
 
 ```sh
-vmn-exp ui --s3-bucket team-experiments --s3-prefix ml
+vmn-exp ui --store s3://team-experiments/ml
+vmn-exp ui --store az://experiments/ml      # needs vmn-exp[azure]
 ```
 
 Experiment browsing (leaderboards, run detail, artifacts) works with no local
-checkout. Repo actions (stamp/goto) are naturally unavailable for S3 sources.
+checkout. Repo actions (stamp/goto) are naturally unavailable for store sources.
 
 ## Remote deployment
 
@@ -121,8 +129,8 @@ Mutations are asynchronous jobs:
 Each job runs `vmn <cmd>` as a subprocess in the workspace, so it acquires the
 per-repo lock (serializing correctly against terminal use) and at most one
 mutation runs per workspace at a time. Restores/gotos over a dirty tree
-auto-snapshot your work first (the safety net) — the job log tells you the
-recovery command.
+auto-save your work first (the safety net) — the job log tells you the
+`vmn goto` that recovers it.
 
 ## The index
 
@@ -221,8 +229,8 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
-`.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
+`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments-columns`, `.../experiments-importance`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../tree/root`, `.../deps`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
 
@@ -293,7 +301,7 @@ work at all.
 ### Archived runs
 
 Rows with a truthy `archived` field (soft-deleted runs) are left out of
-`.../experiments`, `.../experiments-columns` and `.../experiments-facets` —
+`.../experiments`, `.../experiments-columns`, `.../experiments-importance` and `.../experiments-facets` —
 including their `total` — unless the request passes `archived=1`. Rows without
 the field count as not archived. The flag is part of the ETag.
 
@@ -326,6 +334,36 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   caps the rows returned; `total` counts every match.
 - Memoized per index snapshot (and status bucket while runs are live), with an
   `ETag`/`304` like the list.
+
+### Parameter importance
+
+`GET .../apps/{app}/experiments-importance?metric=<m>` answers which params
+drive a metric over every run the filters match — what the leaderboard's
+**Importance** chart shows (pick the target metric, it defaults to the sort
+metric; click a param to open its scatter against the metric, or a per-value
+mean table for a categorical/bool param):
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'q=status = "succeeded"' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments-importance?metric=loss"
+```
+
+```json
+[{"param": "lr", "importance": 0.91, "correlation": 0.95, "spearman": 0.94, "kind": "numeric", "n": 240},
+ {"param": "opt", "importance": 0.06, "correlation": null, "spearman": null, "kind": "categorical", "n": 240}]
+```
+
+- Sorted by `importance`, a random-forest share that sums to 1; `correlation`
+  (Pearson) and `spearman` are `null` for categorical params; `n` counts the runs
+  carrying both the param and the metric. Params with a single value are left out.
+  See [`vmn-exp importance`](experiments.md#importance) for the algorithm.
+- `q`, `status` and `archived` mean what they mean on the list. `metric` is
+  required; one no visible run carries is a **400**, as is a bad `q`. A filter
+  matching no run answers `[]`.
+- Past 5000 matching runs a deterministic sample of 5000 is scored (well under
+  a second). Memoized per index snapshot (and status bucket while runs are
+  live), with an `ETag`/`304` like the list.
 
 ### Facets
 

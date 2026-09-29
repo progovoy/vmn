@@ -13,7 +13,7 @@ import time
 import pytest
 from uiload import worker
 from vmn_exp.sdk.reader import list_runs
-from vmn_exp.storage.cached import get_snapshot_storage
+from vmn_exp.storage.open import get_snapshot_storage
 
 APP = "loadapp"
 HB = 0.5

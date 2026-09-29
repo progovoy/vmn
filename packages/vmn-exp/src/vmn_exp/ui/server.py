@@ -30,7 +30,6 @@ from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.ui.readers import snapshots as snap_reader
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -40,7 +39,7 @@ from vmn_exp.ui.responses import (
 )
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
 from vmn_exp.ui.static_files import mount_static
-from vmn_exp.ui.workspaces import WorkspaceError
+from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 API_PREFIX = "/api/v1"
 # A chart's worth of points per metric, however much a client asks for.
@@ -149,11 +148,11 @@ def create_app(
         return _workspace(name)
 
     def _exp_storage_for(ws):
-        """The workspace's S3 experiment storage (memoized), or None for git."""
-        if ws.kind != "s3":
+        """The workspace's S3/store experiment storage (memoized), or None for git."""
+        if ws.kind == "git":
             return None  # None means: use the default path-based reader
         if ws.name not in s3_storages:
-            s3_storages[ws.name] = get_snapshot_storage(
+            s3_storages[ws.name] = workspace_storage(ws) or get_snapshot_storage(
                 "s3",
                 bucket=ws.bucket,
                 prefix=ws.prefix or "vmn-experiments",
@@ -220,8 +219,8 @@ def create_app(
         """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
-        snapshot = source.snapshot(ws, app_name, _exp_storage_for(ws))
-        return snapshot, _app_schema(ws, app_name)
+        schema = _app_schema(ws, app_name)
+        return source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
     def _app_schema(ws, app_name):
         """The app's conf.yml metrics schema; none on S3."""
@@ -385,23 +384,6 @@ def create_app(
         if err:
             raise HTTPException(404, err)
         return result
-
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/snapshots")
-    def list_snapshots(ws_name: str, app_tag: str):
-        ws = _git_workspace(ws_name)
-        return snap_reader.list_snapshots(ws.path, _app_name(app_tag))
-
-    @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/snapshots/{verstr}"
-    )
-    def get_snapshot(ws_name: str, app_tag: str, verstr: str):
-        ws = _git_workspace(ws_name)
-        detail, err = snap_reader.get_snapshot(
-            ws.path, _app_name(app_tag), _segment(verstr)
-        )
-        if err:
-            raise HTTPException(404, err)
-        return detail
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
     def version_changelog(

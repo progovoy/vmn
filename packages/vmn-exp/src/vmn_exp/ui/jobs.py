@@ -18,8 +18,8 @@ from vmn_exp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
 
 # Substrings a successful job's log can carry to mean "ran fine, but there
 # was nothing to do" - distinct from actually producing the thing the action
-# promised (e.g. `vmn snapshot create` on a clean tree exits 0 and does not
-# create a snapshot).
+# promised (e.g. a dev-version capture of a clean tree exits 0 and records
+# nothing).
 _NOOP_LOG_MARKERS = ("No local changes to snapshot (working tree is clean)",)
 
 # A job that waits on a credential prompt or a lock must not pin its workspace
@@ -138,12 +138,6 @@ def build_command(action, app_name, body):
         if note:
             cmd += ["--note", note]
         return cmd + metric_args, None
-
-    if action == "snapshot_create":
-        cmd = ["vmn", "snapshot", "create", app_name]
-        if body.get("note"):
-            cmd += ["--note", body["note"]]
-        return cmd, None
 
     if action == "note":
         verstr, note = body.get("verstr"), body.get("note")

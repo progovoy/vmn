@@ -9,12 +9,12 @@ design, the section says so under "Differs from the design".
 | You want | Install | Commands you get |
 |---|---|---|
 | Versioning only | `pipx install vmn` (or `pip install vmn`) | `vmn` |
-| Experiment tracking, the model registry, snapshots, the dashboard | `pip install "vmn-exp[ui]"` (drop `[ui]` without the dashboard) | `vmn-exp`, and `vmn` with `vmn snapshot` |
-| Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `[sysmetrics]` for `sys_*`) | none; `from vmn_exp.sdk import start_run` |
+| Experiment tracking, the model registry, the dashboard | `pip install "vmn-exp[ui]"` (drop `[ui]` without the dashboard) | `vmn-exp`, and `vmn goto` for dev versions |
+| Recording metrics from a training job or container | `pip install vmn-exp-sdk` (`[s3]` for a bucket, `pynvml` for GPU `sys_*`) | none; `from vmn_exp.sdk import start_run` |
 
 `vmn-exp` pulls in `vmn` and `vmn-exp-sdk`, so one install gives you all three.
 A job image needs only `vmn-exp-sdk`: it records runs git-free, with
-`VMN_SNAPSHOT_METADATA` (from `vmn snapshot export`) and `VMN_EXPERIMENT_DIR` or
+`VMN_SNAPSHOT_METADATA` (from `vmn-exp export`) and `VMN_EXPERIMENT_DIR` or
 `VMN_EXPERIMENT_BUCKET`.
 
 Upgrading from vmn 0.10.x or earlier, where `vmn exp`, `vmn model` and `vmn ui`
@@ -52,8 +52,8 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, … (as today); extra `changelog` |
-| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `sysmetrics`, `mlflow` |
-| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock; extras `s3`, `sysmetrics` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `mlflow` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extra `s3` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
 subpackage belongs to exactly one distribution.
@@ -62,14 +62,14 @@ subpackage belongs to exactly one distribution.
 
 - Knows nothing about experiments: the `exp`/`experiment`, `model` and `ui`
   commands are gone, and no module names `vmn_exp`.
-- **`vmn snapshot`** is a `vmn` command, provided by `vmn-exp` through the
-  `vmn.plugins` entry point group (along with `vmn goto <dev-version>`).
-  `vmn` loads whatever that group lists.
+- **`vmn goto <dev-version>`** is provided by `vmn-exp` through the
+  `vmn.plugins` entry point group (`dev_version`), which registers the loader
+  that restores a recorded dev version. `vmn` loads whatever that group lists.
 
-  *Differs from the design,* which kept snapshots inside `vmn`. Their storage
-  and record format live in `vmn_exp` (the SDK needs them), so `vmn` alone has
-  no `snapshot` command; installing `vmn-exp` adds it. The plugin hook replaced
-  the hardcoded `BUILTIN_PLUGINS` list rather than being removed.
+  *Differs from the design,* which kept dev-version records inside `vmn`. Their
+  storage and record format live in `vmn_exp` (the SDK needs them), so `vmn`
+  alone cannot restore one; installing `vmn-exp` adds it. The plugin hook
+  replaced the hardcoded `BUILTIN_PLUGINS` list rather than being removed.
 - `version_stamp.api` becomes vmn's public, versioned contract:
   - documented;
   - covered by contract tests;
@@ -80,7 +80,7 @@ subpackage belongs to exactly one distribution.
 ### vmn-exp
 
 - The full experiment platform: the `vmn-exp` command (experiment actions
-  directly — `vmn-exp run app -- cmd` — plus `model`, `ui` and `snapshot`),
+  directly — `vmn-exp run app -- cmd` — plus `model` and `ui`),
   the dashboard, and the MLflow importer.
 - *Differs from the design:* `vmn skill` still carries the experiment section
   (now with `vmn-exp` commands); there is no separate `vmn-exp skill`.

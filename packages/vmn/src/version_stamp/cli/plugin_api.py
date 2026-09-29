@@ -94,7 +94,7 @@ _dev_version_loader: Optional[Callable] = None
 def register_dev_version_loader(fn: Callable) -> None:
     """Register *fn* as the handler for ``vmn goto <dev-verstr>`` / show --dev.
 
-    ``fn(vcs, params, version) -> int``.  The snapshot/experiment plugin
+    ``fn(vcs, params, version) -> int``.  vmn-exp's ``dev_version`` plugin
     registers itself here so that ``output.py`` and ``commands.py`` can
     restore dev-version state without importing experiments modules directly.
     """
@@ -106,13 +106,13 @@ def load_dev_version(vcs, params: dict, version: str) -> int:
     """Restore the repo to the state captured in a dev-version snapshot.
 
     Delegates to the registered loader.  Returns 1 and logs an error if no
-    loader has been registered (snapshot plugin not loaded).
+    loader has been registered (vmn-exp not installed).
     """
     if _dev_version_loader is None:
         import logging as _logging
 
         _logging.getLogger(__name__).error(
-            "Cannot restore dev version %s: snapshot plugin not loaded.", version
+            "Cannot restore dev version %s: vmn-exp is not installed.", version
         )
         return 1
     return _dev_version_loader(vcs, params, version)

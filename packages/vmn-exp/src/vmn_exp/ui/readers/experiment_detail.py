@@ -27,8 +27,8 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
+from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
-from vmn_exp.ui.readers.snapshots import _load_metadata, _patch_presence
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 
@@ -154,7 +154,7 @@ def _resolve(storage, app_name, verstr_ref, resolve=None):
         verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
     if err:
         return None, None, err
-    metadata = _load_metadata(storage, app_name, verstr)
+    metadata = storage.load_metadata(app_name, verstr)
     if metadata is None:
         return None, None, f"Experiment {verstr} not found"
     return verstr, metadata, None
@@ -186,7 +186,9 @@ def experiment_detail(
     *resolve* resolves the ref before storage is asked (see :func:`_resolve`);
     *read_observed_at* is the run-state store write time loader. *x* joins
     the series on another metric (see :func:`thinned_series`);
-    ``step_metrics`` lists what the run and the metrics *schema* declare.
+    ``step_metrics`` lists what the run and the metrics *schema* declare;
+    ``metrics`` (each metric's summary value) and ``metric_summary`` follow
+    the run's and the *schema*'s summary policies.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -197,13 +199,15 @@ def experiment_detail(
     series, series_total = (
         thinned_series(snapshot, keys, max_points, x=x) if include_series else ({}, {})
     )
+    metrics, metric_summary = snapshot.summarized_metrics(schema)
     return {
         "metadata": metadata,
         "log": snapshot.log() if include_log else tail,
         "log_tail": tail,
         "log_total": snapshot.total,
         "params": snapshot.params,
-        "metrics": snapshot.metrics,
+        "metrics": metrics,
+        "metric_summary": metric_summary,
         "series": series,
         "series_total": series_total,
         "step_metrics": declared_step_metrics(snapshot, schema),
@@ -219,7 +223,7 @@ def experiment_detail(
             read_observed_at=read_observed_at,
             read_child_row=read_child_row,
         ),
-        "patches": _patch_presence(storage, app_name, verstr, metadata),
+        "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": _load_env(storage, app_name, verstr, metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
@@ -279,7 +283,7 @@ def run_series(
 ):
     """``(series, series_total, step_metrics)`` of an existing run, or None
     when it is gone."""
-    if _load_metadata(storage, app_name, verstr) is None:
+    if storage.load_metadata(app_name, verstr) is None:
         return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)

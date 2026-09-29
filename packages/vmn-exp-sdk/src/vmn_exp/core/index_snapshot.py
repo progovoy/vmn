@@ -110,6 +110,17 @@ class RowCache:
         self._pos = {}  # key -> its position in _order
         self._list = []  # their rows
         self._maps = _Maps()
+        self.schema = None  # the app's metrics schema rows are summarized by
+
+    def set_schema(self, schema):
+        """Summarize rows by *schema* from now on; True if that changes them
+        (every row is re-derived from its fold on the next snapshot)."""
+        schema = schema or None
+        if schema == self.schema:
+            return False
+        self.schema = schema
+        self._rows = {}
+        return True
 
     def pop(self, key, default=None):
         return self._rows.pop(key, default)
@@ -117,7 +128,7 @@ class RowCache:
     def _row(self, key, idx, record):
         cached = self._rows.get(key)
         if cached is None:
-            row = fold_row(idx, record["meta"], record["fold"], True)
+            row = fold_row(idx, record["meta"], record["fold"], True, self.schema)
             cached = self._rows[key] = (row, row.pop("create_note"))
         elif cached[0]["idx"] != idx:
             cached = self._rows[key] = (dict(cached[0], idx=idx), cached[1])

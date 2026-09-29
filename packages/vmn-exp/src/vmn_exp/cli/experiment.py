@@ -21,7 +21,13 @@ from vmn_exp.cli.run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
-from vmn_exp.cli.views import dumps, show_payload
+from vmn_exp.cli.views import (
+    dumps,
+    format_metric_lines,
+    format_number,
+    metrics_schema,
+    show_payload,
+)
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.snapshot import (
     _build_snapshot_metadata,
@@ -39,14 +45,15 @@ import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
-from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_values
+from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
 from vmn_exp.core.log import (
     effective_params,
     filter_archived,
-    latest_metrics,
+    summary_metrics,
     load_log,
     sort_by_metric,
 )
+from vmn_exp.core.output_log import OUTPUT_LOG_NAME
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
     parent_edges,
@@ -187,14 +194,6 @@ def _parse_notes_file(path):
     return data
 
 
-def _get_metrics_schema(vcs):
-    """Read experiment.metrics from conf.yml if present."""
-    exp_conf = getattr(vcs, "experiment", None)
-    if isinstance(exp_conf, dict):
-        return exp_conf.get("metrics", {})
-    return {}
-
-
 def _resolve_experiment_version(
     storage, vcs, args, default_latest=False, snapshot=None
 ):
@@ -239,6 +238,7 @@ def handle_experiment(vmn_ctx):
     action = args.action
 
     params = {
+        "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
         "prefix": getattr(args, "prefix", "vmn-experiments"),
         "endpoint_url": getattr(args, "endpoint_url", None),
@@ -351,6 +351,10 @@ def handle_experiment(vmn_ctx):
         return experiment_export(vcs, params, storage, args)
     elif action == "prune":
         return experiment_prune(vcs, params, storage, args)
+    elif action == "importance":
+        from vmn_exp.cli.importance import experiment_importance
+
+        return experiment_importance(storage, _app_name(vcs, args), args)
     elif action == "watch":
         from vmn_exp.cli.watch import experiment_watch
 
@@ -599,8 +603,9 @@ def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
     # Through the experiment index: after the first listing, only the logs and
     # run states that changed since are read again.
+    schema = metrics_schema(vcs)
     index_rows, run_states, observed = experiment_index.indexed_status_rows(
-        storage, app_name, with_create_note=True
+        storage, app_name, with_create_note=True, schema=schema
     )
     as_json = getattr(args, "json", False)
     if not index_rows and not as_json:
@@ -617,7 +622,6 @@ def experiment_list(vcs, params, storage, args):
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
 
-    schema = _get_metrics_schema(vcs) if vcs else {}
     rows = _list_rows(matching, getattr(args, "last", None))
     if args.sort and not any(args.sort in row["metrics"] for row in rows):
         VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
@@ -683,6 +687,12 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
 
 
 @measure_runtime_decorator
+def _print_output_log(storage, app_name, verstr):
+    for artifact in storage.list_artifacts(app_name, verstr):
+        if artifact["name"] == OUTPUT_LOG_NAME:
+            print(f"  Output:    {OUTPUT_LOG_NAME} ({artifact['size']} bytes)")
+
+
 def experiment_show(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
     snapshot = placement_snapshot(storage, app_name)
@@ -699,9 +709,10 @@ def experiment_show(vcs, params, storage, args):
         return 1
 
     log = load_log(storage, app_name, verstr)
+    schema = metrics_schema(vcs)
     if getattr(args, "json", False):
         return _print_show_json(
-            storage, app_name, verstr, metadata, patches, log, args, snapshot
+            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
         )
 
     print(f"Experiment: {verstr}")
@@ -716,6 +727,7 @@ def experiment_show(vcs, params, storage, args):
     env_summary = metadata.get("env")
     if env_summary:
         print(f"  Env:       {format_env_oneliner(env_summary)}")
+    _print_output_log(storage, app_name, verstr)
     _print_status_block(storage, app_name, verstr, metadata, snapshot)
 
     # Patch stats
@@ -732,12 +744,11 @@ def experiment_show(vcs, params, storage, args):
         for ln in format_inputs_lines(inputs):
             print(f"  {ln}")
 
-    # Metrics from log
-    metrics = fold_values(_fold, "metrics")
+    metrics, summary = fold_metrics(_fold, schema)
     if metrics:
         print("\n  Metrics:")
-        for k, v in sorted(metrics.items()):
-            print(f"    {k}: {v:.4g}" if isinstance(v, float) else f"    {k}: {v}")
+        for line in format_metric_lines(metrics, summary):
+            print(f"    {line}")
 
     if log:
         _print_log(log, getattr(args, "full_log", False))
@@ -747,12 +758,15 @@ def experiment_show(vcs, params, storage, args):
 SHOW_LOG_TAIL = 50
 
 
-def _print_show_json(storage, app_name, verstr, metadata, patches, log, args, snapshot):
+def _print_show_json(
+    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
+):
     run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
     idx = storage_index(storage, app_name, verstr, snapshot)
     tail = None if getattr(args, "full_log", False) else SHOW_LOG_TAIL
     payload = show_payload(
-        idx, metadata, patches, log, run_state, tree, tail, observed_at=observed_at
+        idx, metadata, patches, log, run_state, tree, tail,
+        observed_at=observed_at, schema=schema,
     )
     print(dumps(payload))
     return 0
@@ -879,11 +893,11 @@ def experiment_compare(vcs, params, storage, args):
         return 1
 
     # Metrics comparison table
-    schema = _get_metrics_schema(vcs) if vcs else {}
+    schema = metrics_schema(vcs)
     all_keys = set()
     exp_metrics = []
     for meta, patches, log in experiments:
-        m = latest_metrics(log)
+        m = summary_metrics(log, schema)
         exp_metrics.append(m)
         all_keys.update(m.keys())
 
@@ -928,16 +942,12 @@ def experiment_compare(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _fmt_val(v):
-    return f"{v:.4g}" if isinstance(v, float) else str(v)
-
-
 def _print_delta_line(label, d1, d2):
     parts = []
     for k in sorted(set(d1) | set(d2)):
         a, b = d1.get(k), d2.get(k)
         if a != b:
-            parts.append(f"{k} {_fmt_val(a)} -> {_fmt_val(b)}")
+            parts.append(f"{k} {format_number(a)} -> {format_number(b)}")
     if parts:
         print(f"{label}: " + "   ".join(parts))
 
@@ -955,7 +965,10 @@ def experiment_diff(vcs, params, storage, args):
 
     print(f"Comparing {v1} -> {v2}\n")
     _print_delta_line("params", effective_params(log1), effective_params(log2))
-    _print_delta_line("metrics", latest_metrics(log1), latest_metrics(log2))
+    schema = metrics_schema(vcs)
+    _print_delta_line(
+        "metrics", summary_metrics(log1, schema), summary_metrics(log2, schema)
+    )
 
     print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2)
     print()

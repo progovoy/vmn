@@ -692,6 +692,8 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 }
 .metric-name { color: var(--text-2); font-size: 13px; }
 .metric-goal { color: var(--text-3); font-size: 11px; }
+.metric-values { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.metric-summary { color: var(--text-3); font-size: 11px; font-family: var(--mono); }
 .exact-secs { color: var(--text-3); font-size: 11.5px; font-family: var(--mono); }
 .run-note { color: var(--text-2); margin: 0 0 20px; display: flex; gap: 10px; align-items: baseline; }
 .run-note input { flex: 1; }

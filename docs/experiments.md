@@ -24,7 +24,7 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 - [Subcommand reference](#subcommand-reference)
 - [Structured notes & params](#structured-notes--params)
 - [Metrics schema (sorting & goals)](#metrics-schema-sorting--goals)
-- [Storage (local & S3)](#storage-local--s3)
+- [Storage (local, S3, GCS, Azure, plugins)](#storage-local-s3-gcs-azure-plugins)
 - [Web UI](#web-ui)
 
 ---
@@ -154,8 +154,9 @@ moved between two runs.
 
 `exp run` snapshots the tree, runs **any** command (a shell script, `hyperfine`,
 `wrk`, `pytest-benchmark`, `python train.py` — anything), and records the exit
-code and duration. The command inherits your terminal, so its output streams
-live.
+code and duration. The command's output streams live to your terminal
+(stdout to stdout, stderr to stderr) and is also kept as the run's
+[`output.log`](#console-output-outputlog) artifact.
 
 ```sh
 vmn-exp run my_app --note "batch=64" -- ./perf_test.sh
@@ -168,6 +169,32 @@ command's own exit code, so CI can tell a failed run from a passing one — or
 The command runs in the directory you invoked `vmn` from (or
 `$VMN_WORKING_DIR` when set), not the repo root, so
 `cd src && vmn-exp run my_app -- python train.py` finds `src/train.py`.
+
+### Console output: `output.log`
+
+`vmn-exp run` tees the command's stdout and stderr: every byte still reaches
+your terminal as it is written, and a combined copy is stored as the run's
+`output.log` artifact (next to any other artifact, locally or on S3), with an
+`artifact` log entry. `vmn-exp show` prints an `Output:` line for it and the
+web UI's run page shows it in an **output** card.
+
+- **Size cap**: `--output-cap-mb` (default 10, or `$VMN_EXP_OUTPUT_CAP_MB`).
+  Past the cap the first and last halves are kept around a
+  `[vmn: N bytes of output omitted]` marker — the start has the config the job
+  printed, the end has the traceback it died with. The terminal is never capped.
+- **Uploaded while it runs**: every `--sync-interval` seconds (only when it
+  changed) and once more at the end — whatever ended it, a forwarded SIGTERM
+  included — so a preempted or hung job still has its latest output stored.
+  Only a SIGKILL of `vmn-exp run` itself loses what came after the last upload.
+- **Bytes, not text**: output is stored verbatim; non-UTF-8 bytes and control
+  codes never break capture. A failing capture never stops supervision.
+- **Pipes, not a TTY**: the command writes to pipes, so `isatty()` is false —
+  tools may drop colours and progress bars switch to their non-interactive
+  mode. `PYTHONUNBUFFERED=1` is set (unless you set it) so a Python command
+  still streams line by line. A pty was not used: it merges the two streams,
+  rewrites line endings, is POSIX-only and paints redraws into the log.
+  `--no-capture-output` gives the command your terminal back and stores
+  nothing.
 
 ### The metrics-file protocol
 
@@ -253,8 +280,10 @@ Two things only the SDK gives you: [autologging](sdk.md#autologging) — one
 hyperparameters and scores (and, with `log_models=True`, the fitted models) with
 no logging in your training code — and the [query
 language](sdk.md#the-query-language) for filtering runs on metrics and params.
-`--system-metrics` records the `sys_*` metrics [listed in the SDK
-guide](sdk.md#starting-a-run) for the child's process tree.
+`exp run` records the `sys_*` metrics [listed in the SDK
+guide](sdk.md#starting-a-run) for the child's process tree on every heartbeat,
+by default. `--no-system-metrics`, `VMN_SYSTEM_METRICS=0` or conf
+`experiment.system_metrics: false` turn it off (in that precedence).
 
 ---
 
@@ -558,7 +587,9 @@ vmn-exp run my_app --parent latest -- python train.py --lr 0.1
 |---|---|---|
 | `--heartbeat-interval <sec>` | `30` | How often the run refreshes its heartbeat |
 | `--kill-grace-sec <sec>` | `30` (`$VMN_EXP_KILL_GRACE_SEC`) | How long a [signalled](#preemption-and-signals) command may take to exit before it is killed |
-| `--sync-interval <sec>` | `30` | How often the log syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
+| `--sync-interval <sec>` | `30` | How often the log (and `output.log`) syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
+| `--output-cap-mb <mb>` | `10` (`$VMN_EXP_OUTPUT_CAP_MB`) | Size cap of the [`output.log`](#console-output-outputlog) artifact; past it the first and last halves are kept |
+| `--no-capture-output` | *(capture enabled)* | Don't keep the command's output as `output.log`; the command inherits the terminal |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
 | `--no-env` | *(capture enabled)* | Skip environment capture for this run |
 | `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
@@ -672,8 +703,7 @@ The `[N]` in front of each row is the run's storage index — the same number
 `vmn-exp list my_app --sort loss` showing `[7]` first means `vmn-exp show my_app
 -v @7` opens that run.
 
-`list`, `show`, `compare`, `diff` and `export` (and `vmn snapshot
-list|show|diff|export`) are read-only and take no repo lock, so they never wait
+`list`, `show`, `compare`, `diff` and `export` are read-only and take no repo lock, so they never wait
 for — or hold up — a `create`/`run` in the same checkout.
 
 `--query '<expr>'` keeps the runs matching [the query
@@ -702,11 +732,45 @@ An app with no runs prints `[]`.
 costs one listing plus whatever changed — never a re-read of every record. So
 does resolving `@N`, `latest` and prefixes.
 
+### `importance`
+
+Which params drive a metric — the CLI face of the dashboard's Importance panel.
+
+```sh
+vmn-exp importance my_app --metric loss
+vmn-exp importance my_app --metric loss --query 'status = "succeeded"' --json
+```
+
+```
+param    importance                        correlation  kind         n
+lr            0.912  ##################         +0.954  numeric      240
+opt           0.061  #                               -  categorical  240
+dropout       0.027  #                          -0.081  numeric      236
+```
+
+For the runs `list --query` would show (archived ones only with `--archived`)
+that carry the metric, every param with at least two distinct values gets:
+
+- `importance` — its share of the impurity decrease of a small random forest
+  fitted to predict the metric from the params (50 trees, depth 6, fixed seed,
+  so the same runs always give the same answer). The column sums to 1.
+- `correlation` — Pearson correlation with the metric (`spearman`, the rank
+  correlation, is in `--json`). Categorical params have no order, so theirs is
+  `-`/`null`; bools count as 0/1.
+- `kind` (`numeric`, `bool`, `categorical`) and `n`, the runs carrying both the
+  param and the metric. A run missing a numeric param counts as its median;
+  a missing categorical value is a category of its own.
+
+Past 5000 runs a deterministic sample of 5000 is scored. An unknown metric or a
+bad `--query` exits 1. Read-only: no repo lock. From Python:
+[`reader.param_importance`](sdk.md#reading-runs-back).
+
 ### `show`
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, latest metrics, and the log timeline — the newest 50 entries, with a
+lines, metrics (each at its [summary value](#best-value-summaries-summary),
+with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
 ```sh
@@ -745,8 +809,10 @@ vmn-exp diff my_app --tool delta
 ### `restore`
 
 Check out the exact code state of an experiment and retrieve its artifacts. If
-the working tree is dirty, that work is **auto-snapshotted first** (and the
-recovery command is printed) — you never lose uncommitted changes.
+the working tree is dirty, that work is **auto-saved first** as a dev version
+(and the `vmn goto -v <saved> my_app` that brings it back is printed) — you
+never lose uncommitted changes. `vmn goto -v <dev-version> my_app` restores a
+run's code the same way.
 
 ```sh
 vmn-exp restore my_app --latest
@@ -761,7 +827,13 @@ directory or a `.tar.gz`.
 ```sh
 vmn-exp export my_app                        # latest -> <verstr>.tar.gz
 vmn-exp export my_app --latest -o best.tar.gz
+vmn-exp export my_app --latest -o /mnt/code  # a plain directory
 ```
+
+The exported tree carries a `vmn_metadata.yml`, so a container built from it
+records runs without git: `vmn-exp create my_app --from-snapshot /mnt/code
+--experiment-dir /mnt/runs` (or `VMN_SNAPSHOT_METADATA` for [`start_run()`](sdk.md)). See the
+[tracking guide](experiment-tracking-guide.md) for the cluster flow.
 
 ### `prune`
 
@@ -910,29 +982,141 @@ experiment:
 - Schema columns also fix the column order in `list`/`compare`; any extra
   metrics you logged appear after them, alphabetically.
 
----
+### Best-value summaries (`summary`)
 
-## Storage (local & S3)
+A run that logs a metric many times (a loss per epoch) folds it into one
+number per run. Which one is the metric's **summary policy**:
 
-Experiments live under `.vmn/{app}/experiments/` by default — local, git-ignored,
-never pushed. To share across a team, point any subcommand at an S3-compatible
-backend:
+| `summary` | The run's `metrics.<name>` is |
+|---|---|
+| `last` | the latest value logged |
+| `min` | the smallest finite value logged |
+| `max` | the largest finite value logged |
 
-```sh
-vmn-exp run my_app --bucket my-experiments \
-    --endpoint-url http://minio:9000 --prefix team/ml -- ./perf_test.sh
+Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
+`goal: max` → `max`); a metric with neither is `last`. So with
+`loss: {goal: min}` an overfitting run — loss 1.0, 0.2, then back up to 0.9 —
+ranks on 0.2, its best epoch, not on 0.9:
+
+```yaml
+experiment:
+  metrics:
+    loss:     {goal: min}                  # ranks on the minimum
+    val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
+    lr:       {summary: last}
 ```
 
-| Flag | Default | Description |
-|---|---|---|
-| `--bucket` | — | S3 bucket name (setting it is what enables S3) |
-| `--endpoint-url` | — | Custom endpoint (MinIO, LocalStack, …) |
-| `--prefix` | `vmn-experiments` | Key prefix inside the bucket |
+The summary value is what everything ranks and filters on: `list --sort`,
+`--query metrics.loss < 0.3`, `prune --query`, `compare`, `diff`, the UI
+leaderboard, and `list_runs()` rows. Every metric logged more than once also
+carries its full `metric_summary` (`{"last", "min", "max"}`) in `list --json`,
+`show --json`, `list_runs()`/`get_run()` rows and the UI run detail; `show`
+prints them where they differ:
 
-These can also be set once under `experiment.storage` in `.vmn/{app}/conf.yml`
-so you don't repeat them on every command; CLI flags override the config.
-With a bucket, runs record locally and sync to it, or go straight to S3 when
-there is no local dir.
+```
+  Metrics:
+    loss: 0.2 (last 0.9, min 0.2, max 1)
+```
+
+- **Precedence**: a run's own definition — [`run.define_metric()`](sdk.md#metric-goals-and-summaries),
+  recorded in its log — beats conf.yml, which beats the `last` default. In
+  each, an exact metric name beats a glob key (`"val_*": {goal: min}`).
+- **Live**: conf.yml's policies apply when a run is read, so editing them
+  re-ranks existing runs too (the index re-derives rows from its folded state,
+  no log is re-read). An S3 workspace in `vmn-exp ui` has no conf.yml, so only
+  the runs' own definitions apply there.
+- **NaN/inf** stay in the log and may be a metric's `last`, but never its
+  `min`/`max`. A `min`/`max` metric with no finite value at all keeps its last
+  (non-finite) value and sorts last.
+- Numeric params folded into `metrics` are single values: `min`/`max` of a
+  param is the param itself.
+
+---
+
+## Storage (local, S3, GCS, Azure, plugins)
+
+Experiments live under `.vmn/{app}/experiments/` by default — local, git-ignored,
+never pushed. To share across a team, point any subcommand at a **store URI**:
+
+```sh
+vmn-exp run my_app --store s3://my-experiments/team/ml -- ./perf_test.sh
+vmn-exp run my_app --store "s3://my-experiments/team/ml?endpoint_url=http://minio:9000" -- ./t.sh
+vmn-exp run my_app --store gs://my-experiments/team/ml -- ./t.sh     # pip install 'vmn-exp-sdk[gcs]'
+vmn-exp run my_app --store az://experiments/team/ml -- ./t.sh        # pip install 'vmn-exp-sdk[azure]'
+vmn-exp run my_app --store file:///mnt/nfs/experiments -- ./t.sh
+```
+
+| URI | Backend | Notes |
+|---|---|---|
+| `s3://bucket[/prefix][?endpoint_url=...]` | S3 / MinIO / LocalStack | extra `[s3]` (boto3); AWS credentials as usual |
+| `gs://bucket[/prefix]` | Google Cloud Storage | extra `[gcs]` (google-cloud-storage); Application Default Credentials |
+| `az://container[/prefix][?account_url=...]` | Azure Blob Storage | extra `[azure]`; `AZURE_STORAGE_CONNECTION_STRING`, else `AZURE_STORAGE_ACCOUNT_URL` + `DefaultAzureCredential` |
+| `file:///abs/dir` (or a bare path) | a local/NFS directory | used *as* the local root, no cache in front |
+| `<scheme>://...` | a plugin | see [Storage backends](#storage-backends-plugins) |
+
+The prefix defaults to `vmn-experiments` (`vmn-snapshots` for `vmn snapshot`).
+The store resolves as `--store` > `VMN_EXPERIMENT_STORE` > `experiment.storage.uri`
+in `.vmn/{app}/conf.yml`. `--bucket`/`--prefix`/`--endpoint-url` (and
+`VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL`, conf `bucket`/`prefix`/
+`endpoint_url`) remain as shorthand for an `s3://` URI; any store URI wins over
+the shorthand. With a remote store, runs record locally and sync to it when
+there is a local root (a checkout or `--experiment-dir`/`VMN_EXPERIMENT_DIR`),
+or go straight to the store when there is none. A missing SDK fails with the
+`pip install 'vmn-exp-sdk[<extra>]'` line to run.
+
+```yaml
+# .vmn/my_app/conf.yml
+experiment:
+  storage:
+    uri: gs://ml-experiments/team
+```
+
+### Storage backends (plugins)
+
+A backend is chosen by the URI scheme. Built-ins are `file`, `s3`, `gs` and
+`az`; a package adds (or overrides) a scheme under the `vmn_exp.storage`
+entry-point group:
+
+```toml
+[project.entry-points."vmn_exp.storage"]
+mem = "my_pkg.store:open_store"
+```
+
+`open_store(uri, subdir)` receives a `vmn_exp.storage.uri.StoreURI`
+(`scheme`, `location` = bucket/container, `path` = prefix, `options` = the query
+string) and `subdir` (`"experiments"` or `"snapshots"`), and returns a
+`vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
+factory)` does the same at runtime. The contract:
+
+- **Records**: a record is `<base>/<app>/<verstr>/` holding `metadata.yml`, the
+  patch files, per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and
+  `artifacts/`. `metadata.yml` makes it exist: write it last, delete it first.
+  Implement the abstract methods (`save`, `load`, `list_snapshots`,
+  `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
+  `list_artifact_files`) and override the defaulted ones your store can do
+  better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
+  `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
+- **`create_exclusive` must be atomic**: of any number of hosts racing for one
+  verstr exactly one gets `True`; everyone else gets `False` and allocates the
+  next name. The base-class default (check, then save) is *not* safe on a shared
+  store — use the store's conditional create (`O_EXCL` mkdir, S3
+  `If-None-Match: *`, GCS `if_generation_match=0`, Azure `overwrite=False`).
+  `update_metadata` should likewise be a compare-and-swap on the object version.
+- **Listing semantics**: `list_verstrs` returns names only (claimed-but-unfinished
+  names included — they are taken); `list_snapshots` returns only records whose
+  `metadata.yml` exists; `list_files` maps `{verstr: {file: (size, mtime[, etag])}}`
+  and is what incremental index refreshes compare, so a rewritten file must
+  change its signature.
+- **`is_remote()`** returns `True` for a network store: it is then fronted by
+  the local root when there is one, and its reads are parallelized. A store
+  returning `False` is used as the local root itself (as `file://` is).
+- **`cache_identity()`** returns a hashable name for the data (e.g.
+  `(scheme, endpoint, bucket, prefix)`) so process-wide caches never mix stores.
+
+An object store with a conditional create and a conditional overwrite gets all
+of this for free by subclassing `vmn_exp.storage.s3.S3SnapshotStorage` with an
+`vmn_exp.storage.object_client.ObjectClient` adapter for its SDK — that is how
+the GCS and Azure backends are built.
 
 ### How records are stored
 
@@ -942,7 +1126,8 @@ there is no local dir.
   Every storage directory carries its own `.gitignore` (`*`), so experiments of
   nested apps (`root_app/service`) never show up in `git status` either.
 - **Atomic allocation**: a new run claims its verstr atomically (a plain
-  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3). Two
+  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3, and the
+  GCS/Azure equivalents). Two
   hosts running the same commit against a shared bucket or directory get
   `…` and `….r2`, never one run with both hosts' data merged in.
 - **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, where `<app>` is the tag form
@@ -963,6 +1148,13 @@ there is no local dir.
 - **Batched appends**: `append_log_entries` writes a batch of entries as one
   write of whole lines (one PUT on S3); the SDK flushes its buffered log that
   way, so readers never see a partial line.
+- **Format version**: every new run (and model registry record) stores
+  `format_version` in its `metadata.yml`. It versions the whole record —
+  metadata, log lines and `run_state.yml` — so log lines carry none of their
+  own. A record without it reads as version 1. `list`, `show`, the ui and the
+  SDK reader skip a record whose version is newer than the installed vmn-exp
+  supports, with a warning to upgrade, rather than mis-read it. `show --json`
+  prints the field.
 
 ---
 
@@ -971,7 +1163,8 @@ there is no local dir.
 `vmn-exp ui` (from `pip install "vmn-exp[ui]"`) serves a dashboard over the same files:
 a sortable experiment leaderboard, per-run detail with **live training/perf
 curves** (from `step=` series), side-by-side compare with a real code diff, and
-an artifact browser. Each run gets a color-coded
+an artifact browser. The leaderboard's **Importance** chart ranks the params
+driving a metric (see [`importance`](#importance)). Each run gets a color-coded
 [status](#run-status-did-my-job-die) pill, inner runs nest under their outer run,
 and the page auto-refreshes while anything is unfinished. See
 [docs/ui.md](ui.md) for the full tour and the API fields.
@@ -1024,8 +1217,8 @@ Exit code is 1 if any run failed.
 
 **No git repo needed**: the command does not take the repo lock and does not
 auto-init the vmn app.  Use `--experiment-dir` or `VMN_EXPERIMENT_DIR` to
-point at an experiment directory outside a repo, or `--bucket` /
-`VMN_EXPERIMENT_BUCKET` to write directly to S3.
+point at an experiment directory outside a repo, or `--store <uri>` /
+`VMN_EXPERIMENT_STORE` (or the `--bucket` shorthand) to write directly to a store.
 
 See [docs/migrating-from-mlflow.md](migrating-from-mlflow.md) for a migration
 guide including artifact layout, query equivalences, and known differences.

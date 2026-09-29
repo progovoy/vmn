@@ -3,7 +3,7 @@
 import type { ExperimentColumns, ExperimentRow } from "../types";
 import type { ChartView } from "../hooks/useLeaderboardView";
 
-const PLOTS_PARAMS: ReadonlySet<ChartView> = new Set(["scatter", "parallel", "grouped"]);
+const PLOTS_PARAMS: ReadonlySet<ChartView> = new Set(["scatter", "parallel", "grouped", "importance"]);
 
 /** The column keys *view* needs. */
 export function chartKeys(view: ChartView, metricCols: string[], paramCols: string[]): string[] {

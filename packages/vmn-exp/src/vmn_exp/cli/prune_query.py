@@ -12,14 +12,15 @@ from vmn_exp.core.tree import annotate_rows
 _PREVIEW_CAP = 20
 
 
-def query_candidates(storage, app_name, metas, query_text):
-    """Return the subset of *metas* whose full rows match *query_text*.
+def query_candidates(storage, app_name, metas, query_text, schema=None):
+    """Return the subset of *metas* whose full rows match *query_text*;
+    *schema* (the app's metrics schema) sets which value ``metrics.x`` is.
 
     Raises :class:`~version_stamp.core.experiment_query.QueryError` for an
     empty or syntactically invalid query.  Callers must catch it.
     """
     predicate = compile_query(query_text)  # raises QueryError on bad input
-    rows, run_states, observed = indexed_status_rows(storage, app_name)
+    rows, run_states, observed = indexed_status_rows(storage, app_name, schema=schema)
     tree_rows = annotate_rows(rows, run_states, observed)
     matching = {row["verstr"] for row in tree_rows if predicate(row)}
     return [m for m in metas if m["verstr"] in matching]
