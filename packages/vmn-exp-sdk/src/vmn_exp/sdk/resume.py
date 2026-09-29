@@ -10,7 +10,7 @@ spans every attempt; ``resume_count`` says how many there were.
 import datetime
 import os
 
-from vmn_exp.core.resolve_ref import _resolve_verstr
+from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.status import load_run_state, parse_iso
 from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.sdk.create import (
@@ -35,7 +35,7 @@ def requested_run_id(run_id):
     return os.environ.pop(RESUME_ENV, None) or None
 
 
-def locate(app_name, ref, storage):
+def locate(app_name, ref, storage, action="resume"):
     """``(app_name, storage, verstr, prior_state)``; ValueError if not found."""
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
     if meta_path:
@@ -47,12 +47,7 @@ def locate(app_name, ref, storage):
         if storage is None:
             storage = checkout.checkout_storage(app_name)
 
-    verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
-    # The resolver passes stamped (non-dev) versions through unchecked.
-    if not err and not storage.exists(app_name, verstr):
-        err = "no such experiment"
-    if err:
-        raise ValueError(f"Cannot resume run '{ref}' of '{app_name}': {err}")
+    verstr = resolve_run(storage, app_name, ref, action)
     return app_name, storage, verstr, load_run_state(storage, app_name, verstr) or {}
 
 

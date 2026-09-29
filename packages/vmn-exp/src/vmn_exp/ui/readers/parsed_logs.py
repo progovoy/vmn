@@ -21,6 +21,7 @@ from vmn_exp.storage.files import flatten_logs
 from vmn_exp.core.fold import (
     fold_last_metric_at,
     fold_log,
+    fold_rewinds,
     fold_values,
 )
 from vmn_exp.core.log import load_log, metric_series
@@ -48,10 +49,19 @@ class LogSnapshot:
         self.metrics = fold_values(parsed.fold, "metrics")
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.definitions = dict(parsed.definitions)
+        # The fold keys a rewind by its log position (see fold_log).
+        self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
         self.memo = {}  # derived views (thinned series) of this exact snapshot
 
     def log(self):
         return self._entries[: self.total]
+
+    def rewinds(self):
+        """``[{"step", "timestamp"}]`` of the log's rewinds, in log order."""
+        return [
+            {"step": step, "timestamp": self._entries[pos].get("timestamp")}
+            for step, pos in self._rewinds
+        ]
 
     def tail(self, n):
         return self._entries[max(self.total - n, 0) : self.total]

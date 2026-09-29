@@ -223,6 +223,8 @@ def experiment_detail(
         "env": _load_env(storage, app_name, verstr, metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
+        "forked_from": metadata.get("forked_from"),
+        "rewinds": snapshot.rewinds(),
     }, None
 
 

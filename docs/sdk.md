@@ -85,6 +85,9 @@ start_run(
     name=None,
     tags=None,
     capture_env=None,
+    fork_from=None,
+    fork_step=None,
+    rewind_to_step=None,
 )
 ```
 
@@ -101,6 +104,8 @@ start_run(
 | `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
 | `snapshot` | `False` records only the code identity — base commit and diff hash, the same `code_verstr` a full snapshot gets — with no patches and no untracked tarball (`metadata.yml` says `snapshot: false`). For many lightweight runs; such a run cannot be restored |
 | `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
+| `rewind_to_step` | with `run_id`: hide the reopened run's history past this step. See [Rewinding a run](#rewinding-a-run) |
+| `fork_from` / `fork_step` | start a NEW run seeded with another run's metrics and params up to `fork_step` (`fork_from="<ref>?_step=N"` works too). See [Forking a run](#forking-a-run) |
 | `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
 | `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn-exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
@@ -562,6 +567,57 @@ A reference that matches no experiment of the app raises `ValueError`.
 `$VMN_RESUME_RUN_ID` is consumed (removed from the environment) when used, so
 neither the next run this process opens nor a vmn subprocess resumes it again;
 an explicit `run_id` wins over it.
+
+### Forking a run
+
+Branch a new run off another one at a step — try a different learning-rate
+schedule from epoch 200 without retraining the first 200 (W&B's `fork_from`):
+
+```python
+with start_run("my_app", fork_from=source_id, fork_step=200) as run:
+    for step in range(run.start_step, 400):   # start_step == 201
+        run.log_metric("loss", train_one_epoch(), step=step)
+# fork_from=f"{source_id}?_step=200" is the same thing
+```
+
+The fork is an ordinary new run: its own verstr, its own snapshot of the
+*current* working tree (the code identity is what you run now, not the
+source's), and `metadata.yml` records `forked_from: {verstr, step}`. Its log
+opens with the source's `metrics` entries up to and including the step and the
+params logged before it, copied with `"inherited": true` and their original
+timestamps, so the fork's own entries always fold over them — `params=` passed
+here win over inherited ones. Without `fork_step` the whole history is copied
+and `forked_from.step` is the source's last step. The source must be a run of
+the same app; an unknown reference raises `ValueError` before anything is
+created. `run_id` and `fork_from` cannot be combined.
+
+A fork is **not a child**: `parent`, `kind` and `tree_status` are unchanged
+(nest it with `parent=` if you also want that). Rows carry a flat
+`forked_from` (the source verstr) and `forked_from_step`, so
+`list_runs(query='forked_from = "<verstr>"')` finds every fork of a run;
+`vmn-exp show` prints `Forked from: <verstr> @ step N` and the dashboard links
+the source and marks the fork step on the charts.
+
+### Rewinding a run
+
+Resume a run but throw away what it logged after a step — a divergence at step
+300 you want to redo from a step-250 checkpoint:
+
+```python
+with start_run("my_app", run_id=run_id, rewind_to_step=250) as run:
+    for step in range(run.start_step, 500):   # start_step == 251
+        ...
+```
+
+Logs are append-only across writers and S3 segments, so nothing is deleted:
+the run appends `{"type": "rewind", "step": 250}`, and every reader — the
+merged log, the leaderboard fold, `list_runs`, the incremental experiment index,
+the run page's series — ignores each entry with a step past 250 that was
+written before that marker. Entries written after it count as usual; entries
+without a step (params, notes, tags) are never rewound. Rewinding again later
+cuts again from the new marker. A run that is live elsewhere (`running`, with a
+fresh heartbeat) is refused with `RuntimeError` — its writer would keep logging
+the steps being rewound. `vmn-exp show` prints each `Rewound to step N` line.
 
 ### Distributed training (DDP, torchrun, Slurm)
 

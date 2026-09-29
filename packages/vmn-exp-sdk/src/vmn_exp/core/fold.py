@@ -216,6 +216,12 @@ def fold_last_metric_at(fold):
     return fold["last_metric"][0] if fold["last_metric"] else None
 
 
+def _fork_fields(meta):
+    """``forked_from`` flat (a verstr) so the query language can compare it."""
+    origin = meta.get("forked_from") or {}
+    return {"forked_from": origin.get("verstr"), "forked_from_step": origin.get("step")}
+
+
 def fold_row(idx, meta, fold, with_create_note=False):
     """The leaderboard row for *meta* whose log folded into *fold*.
 
@@ -245,6 +251,7 @@ def fold_row(idx, meta, fold, with_create_note=False):
         "inputs": fold_inputs_dict(fold),
         "env": meta.get("env"),
         "imported_from": meta.get("imported_from"),
+        **_fork_fields(meta),
     }
     if with_create_note:
         row["create_note"] = fold["create_note"][0] if fold["create_note"] else None

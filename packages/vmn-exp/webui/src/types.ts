@@ -202,6 +202,20 @@ export interface ExperimentDetail {
   inputs?: Record<string, InputEntry> | null;
   /** Source identifier when the run was imported from an external system. */
   imported_from?: string | null;
+  /** The run (and step) this run was forked from; a fork is not a child. */
+  forked_from?: ForkOrigin | null;
+  /** Rewinds of this run, in log order: history past `step` was hidden. */
+  rewinds?: RunRewind[];
+}
+
+export interface ForkOrigin {
+  verstr: string;
+  step: number | null;
+}
+
+export interface RunRewind {
+  step: number;
+  timestamp: string | null;
 }
 
 export interface VersionRow {
