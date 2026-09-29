@@ -95,7 +95,8 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
     check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
         if spec.get("early_terminate") else None
     supervision = _Supervision(storage, vcs.name, verstr, trial_args,
-                               experiment_conf(vcs), extra_env=env, on_tick=check)
+                               experiment_conf(vcs), extra_env=env, on_tick=check,
+                               root=vcs.vmn_root_path)
     try:
         supervision.run(trial_args.run_cmd)
     finally:

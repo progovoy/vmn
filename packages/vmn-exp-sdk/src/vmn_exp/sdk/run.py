@@ -24,7 +24,9 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
+from vmn_exp.core.storage_resolve import _try_repo_root
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
@@ -224,6 +226,13 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
+def _checkout_relative_cwd():
+    """This process's cwd relative to its checkout; None when git-free."""
+    if os.environ.get(SNAPSHOT_METADATA_ENV):
+        return None
+    return repo_relative_cwd(os.getcwd(), _try_repo_root())
+
+
 class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
@@ -302,6 +311,8 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             # There is no child command here — the run *is* this process. Its
             # argv is the honest answer, and consumers read the key.
             "command": list(sys.argv),
+            "runner": RUNNER_SDK,
+            "cwd": _checkout_relative_cwd(),
             "pid": os.getpid(),
             "host": socket.gethostname(),
             "started_at": started_at,
