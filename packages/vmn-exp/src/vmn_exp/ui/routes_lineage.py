@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""``GET .../apps/{app}/experiments/{verstr}/lineage?depth=1&limit=100``.
+"""``GET .../apps/{app}/experiments/{verstr}/lineage?depth=1&limit=100`` and
+``GET .../models/{name}/versions/{n}/lineage``.
 
-Answered from the app's index snapshot: the digest/URI maps of
+Answered from the apps' index snapshots: the digest/URI maps of
 :class:`~vmn_exp.core.lineage.LineageIndex` are built once per snapshot and
 shared by every request against it, so a lookup costs the linked runs, not
-the workspace. The payload is :func:`vmn_exp.sdk.reader.get_lineage`'s.
+the workspace. The payloads are :func:`vmn_exp.sdk.reader.get_lineage`'s and
+:func:`vmn_exp.registry.lineage.version_lineage`'s.
 """
 import weakref
 
 from fastapi import HTTPException, Request
 
-from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage
+from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex
 from vmn_exp.core.status import derive_status
-from vmn_exp.registry.view import models_for_run
+from vmn_exp.registry.lineage import run_lineage, version_lineage
+from vmn_exp.registry.names import valid_model_name
 from vmn_exp.ui.responses import json_response
 
 MAX_DEPTH = 10
@@ -76,13 +79,29 @@ def register(app, prefix, lineage_inputs, segment):
         app_name, snapshot_for, storage = lineage_inputs(ws_name, app_tag)
         apps = _Apps(snapshot_for)
         try:
-            found = resolve_lineage(
-                app_name, verstr, apps.index_for, depth=depth, limit=limit,
+            found = run_lineage(
+                storage, app_name, verstr, apps.index_for, depth=depth, limit=limit,
                 status_of=apps.status_of,
             )
         except KeyError as e:
             raise HTTPException(404, e.args[0])
-        found.update(
-            app=app_name, verstr=verstr, models=models_for_run(storage, app_name, verstr)
-        )
+        return json_response(found, request=request)
+
+
+def register_version_lineage(app, prefix, workspace_inputs):
+    """Add ``GET .../models/{name}/versions/{n}/lineage``; *workspace_inputs(ws_name)*
+    → ``(snapshot_for(app_name), storage)``."""
+
+    @app.get(f"{prefix}/workspaces/{{ws_name}}/models/{{model_name}}/versions/{{n}}/lineage")
+    def version_lineage_route(request: Request, ws_name: str, model_name: str, n: int):
+        if not valid_model_name(model_name):
+            raise HTTPException(400, f"Invalid model name {model_name!r}")
+        snapshot_for, storage = workspace_inputs(ws_name)
+        apps = _Apps(snapshot_for)
+        try:
+            found = version_lineage(
+                storage, model_name, n, index_for=apps.index_for, status_of=apps.status_of
+            )
+        except KeyError as e:
+            raise HTTPException(404, e.args[0])
         return json_response(found, request=request)

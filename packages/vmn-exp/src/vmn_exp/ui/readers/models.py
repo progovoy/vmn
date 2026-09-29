@@ -8,7 +8,7 @@ from __future__ import annotations
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.names import REGISTRY_APP
-from vmn_exp.registry.store import get_version, list_models, list_versions
+from vmn_exp.registry.store import get_version, header_kind, list_models, list_versions
 
 
 def _actor_str(actor) -> str:
@@ -104,6 +104,7 @@ def model_detail_response(storage, model_name: str) -> tuple:
 
     return {
         "name": model_name,
+        "kind": header_kind(header),
         "description": header.get("description"),
         "versions": versions,
         "aliases": fold["aliases"],
@@ -111,13 +112,14 @@ def model_detail_response(storage, model_name: str) -> tuple:
     }, None
 
 
-def list_models_response(storage) -> dict:
-    """Return ``{"models": [ModelRow ...]}`` for the list endpoint."""
+def list_models_response(storage, kind=None) -> dict:
+    """Return ``{"models": [ModelRow ...]}`` for the list endpoint, only
+    *kind* (``model``/``dataset``) entries when given."""
     model_names = list_models(storage)
     rows = []
     for name in model_names:
         header, _ = storage.load(REGISTRY_APP, name)
-        if header is None:
+        if header is None or kind not in (None, header_kind(header)):
             continue
         ns = list_versions(storage, name)
         entries = read_entries(storage, name)
@@ -131,6 +133,7 @@ def list_models_response(storage) -> dict:
 
         rows.append({
             "name": name,
+            "kind": header_kind(header),
             "description": header.get("description"),
             "latest_version": latest,
             "aliases": fold["aliases"],

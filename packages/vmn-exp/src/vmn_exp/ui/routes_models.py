@@ -13,7 +13,7 @@ from vmn_exp.ui.jobs_models import (
 )
 from vmn_exp.ui.readers.models import list_models_response, model_detail_response
 from vmn_exp.registry.log import remove_alias, set_alias, set_version_status
-from vmn_exp.registry.names import valid_alias_name, valid_model_name
+from vmn_exp.registry.names import KINDS, valid_alias_name, valid_model_name
 from vmn_exp.registry.store import ensure_model, register_version
 
 
@@ -44,9 +44,11 @@ def register(app, api_prefix, any_exp_storage):
     # ------------------------------------------------------------------
 
     @app.get(f"{base}")
-    def list_models_route(ws_name: str):
+    def list_models_route(ws_name: str, kind: str = None):
+        if kind is not None and kind not in KINDS:
+            raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
         storage = any_exp_storage(ws_name)
-        return list_models_response(storage)
+        return list_models_response(storage, kind=kind)
 
     @app.get(f"{base}/{{model_name}}")
     def get_model_route(ws_name: str, model_name: str):
