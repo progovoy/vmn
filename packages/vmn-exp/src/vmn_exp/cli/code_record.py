@@ -3,10 +3,12 @@
 
 Search order: the app's experiment store as configured (local first, the
 remote store only on a local miss), then the snapshots store (safety
-snapshots). A record without a code snapshot (e.g. an MLflow import) is
+snapshots and ``vmn snapshot create`` records, whose code objects live in the
+experiment store). A record without a code snapshot (e.g. an MLflow import) is
 refused.
 """
 from vmn_exp.cli.provenance import refuse_no_code
+from vmn_exp.core.code_store import CODE_MISSING, resolve_code
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.core.writer import STORAGE_ENV
 from vmn_exp.snapshot import _get_storage
@@ -24,8 +26,8 @@ def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None):
         exp_storage = _open_experiment_storage(vcs, params)
     metadata, patches = _try_load(exp_storage, app_name, verstr, "experiment")
     if metadata is None:
-        metadata, patches = _try_load(
-            _open_snapshot_storage(vcs, params), app_name, verstr, "snapshot"
+        metadata, patches = _load_snapshot(
+            _open_snapshot_storage(vcs, params), app_name, verstr, exp_storage
         )
     if metadata is None:
         VMN_LOGGER.error(
@@ -61,6 +63,16 @@ def _try_load(storage, app_name, verstr, kind):
     except Exception:
         VMN_LOGGER.debug(f"{kind} load of {verstr} failed", exc_info=True)
         return None, None
+
+
+def _load_snapshot(storage, app_name, verstr, exp_storage):
+    """A snapshot record; ``vmn snapshot create`` keeps its code object with
+    the experiments' (the shared code store), not beside the record."""
+    metadata, patches = _try_load(storage, app_name, verstr, "snapshot")
+    if not (metadata or {}).get(CODE_MISSING) or exp_storage is None:
+        return metadata, patches
+    record, own_patches = storage.load_record(app_name, verstr)
+    return resolve_code(exp_storage, app_name, record, own_patches)
 
 
 def _searched(params):
