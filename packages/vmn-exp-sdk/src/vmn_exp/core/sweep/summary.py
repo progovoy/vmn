@@ -3,7 +3,7 @@
 A trial row is an ordinary run row (status-annotated) whose ``parent`` is the
 sweep; its ``sweep_trial`` / ``sweep_attempt`` tags say which slot it fills.
 A retried trial is judged by its latest attempt. An early-stopped trial ends
-``succeeded`` and carries the tag ``stopped_early=true``.
+``succeeded``, its run state's ``end_reason`` ``stopped``.
 
 A trial's target metric is its own when it logged one, else its descendants'
 (a ``start_run()`` inside the trial nests a run under it): the only descendant
@@ -14,10 +14,9 @@ from collections import Counter
 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.log import _sortable
-from vmn_exp.core.status import FAILED, STUCK, SUCCEEDED
+from vmn_exp.core.status import FAILED, STOPPED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_rows, children_by_parent, subtree_verstrs
 
-STOPPED_EARLY_TAG = "stopped_early"
 RETRYABLE = (FAILED, STUCK)
 
 
@@ -74,7 +73,7 @@ def latest_attempts(rows):
 
 
 def stopped_early(row):
-    return (row.get("tags") or {}).get(STOPPED_EARLY_TAG) == "true"
+    return row.get("end_reason") == STOPPED
 
 
 def metric_value(spec, row):

@@ -16,8 +16,8 @@ from vmn_exp.core.background import Coalescing
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
 from vmn_exp.core.sweep.early_stop import MedianStopper
-from vmn_exp.core.sweep.summary import STOPPED_EARLY_TAG, history, retry_slots, trial_rows
-from vmn_exp.core.writer import append_to_log, create_tags_entry, get_writer_id
+from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
+from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
 
@@ -120,8 +120,6 @@ class _EarlyStopCheck:
             return
         if self._verdict.is_set():
             VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early (median rule)")
-            append_to_log(self._storage, self._app_name, self._verstr,
-                          create_tags_entry({STOPPED_EARLY_TAG: "true"}))
             supervision.request_stop()
         elif self._stopper.due(time.monotonic()):
             self._worker.submit()
