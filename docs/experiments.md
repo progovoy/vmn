@@ -672,6 +672,39 @@ An app with no runs prints `[]`.
 costs one listing plus whatever changed — never a re-read of every record. So
 does resolving `@N`, `latest` and prefixes.
 
+### `importance`
+
+Which params drive a metric — the CLI face of the dashboard's Importance panel.
+
+```sh
+vmn-exp importance my_app --metric loss
+vmn-exp importance my_app --metric loss --query 'status = "succeeded"' --json
+```
+
+```
+param    importance                        correlation  kind         n
+lr            0.912  ##################         +0.954  numeric      240
+opt           0.061  #                               -  categorical  240
+dropout       0.027  #                          -0.081  numeric      236
+```
+
+For the runs `list --query` would show (archived ones only with `--archived`)
+that carry the metric, every param with at least two distinct values gets:
+
+- `importance` — its share of the impurity decrease of a small random forest
+  fitted to predict the metric from the params (50 trees, depth 6, fixed seed,
+  so the same runs always give the same answer). The column sums to 1.
+- `correlation` — Pearson correlation with the metric (`spearman`, the rank
+  correlation, is in `--json`). Categorical params have no order, so theirs is
+  `-`/`null`; bools count as 0/1.
+- `kind` (`numeric`, `bool`, `categorical`) and `n`, the runs carrying both the
+  param and the metric. A run missing a numeric param counts as its median;
+  a missing categorical value is a category of its own.
+
+Past 5000 runs a deterministic sample of 5000 is scored. An unknown metric or a
+bad `--query` exits 1. Read-only: no repo lock. From Python:
+[`reader.param_importance`](sdk.md#reading-runs-back).
+
 ### `show`
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
@@ -956,7 +989,8 @@ there is no local dir.
 `vmn-exp ui` (from `pip install "vmn-exp[ui]"`) serves a dashboard over the same files:
 a sortable experiment leaderboard, per-run detail with **live training/perf
 curves** (from `step=` series), side-by-side compare with a real code diff, and
-an artifact browser. Each run gets a color-coded
+an artifact browser. The leaderboard's **Importance** chart ranks the params
+driving a metric (see [`importance`](#importance)). Each run gets a color-coded
 [status](#run-status-did-my-job-die) pill, inner runs nest under their outer run,
 and the page auto-refreshes while anything is unfinished. See
 [docs/ui.md](ui.md) for the full tour and the API fields.

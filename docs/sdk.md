@@ -662,6 +662,21 @@ best = get_run("my_app", ref="latest")
   unique prefix, `@N`, or `latest`. `x="epoch"` joins `series` on that metric
   (see [Custom x axis](#custom-x-axis-step_metric)); the row's `step_metrics`
   lists the declared x metrics.
+- `param_importance(app_name=None, metric=None, *, storage=None, query=None,
+  status=None, include_archived=False)` — which params drive `metric` over the
+  runs `list_runs` would return for the same filters: a list of
+  `{"param", "importance", "correlation", "spearman", "kind", "n"}`, most
+  important first. `importance` is a random-forest share (sums to 1),
+  `correlation`/`spearman` are `None` for categorical params; see
+  [`vmn-exp importance`](experiments.md#importance) for the details. Raises
+  `ValueError` when no run carries `metric`, `QueryError` on a bad query.
+
+  ```python
+  from vmn_exp.sdk.reader import param_importance
+
+  for entry in param_importance("my_app", "loss", query='status = "succeeded"')[:3]:
+      print(entry["param"], round(entry["importance"], 2), entry["correlation"])
+  ```
 
 A `list_runs` row carries the latest value of each metric, the run's `name`
 (or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
