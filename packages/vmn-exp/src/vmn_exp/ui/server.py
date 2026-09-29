@@ -433,10 +433,10 @@ def create_app(
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
-    routes_media.register(app, API_PREFIX, _series_storage)
+    routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
-    routes_lineage.register(app, API_PREFIX, _lineage_inputs)
-    routes_sweep.register(app, API_PREFIX, _lineage_inputs)
+    routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
+    routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_models.register(
         app, API_PREFIX,
         lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),

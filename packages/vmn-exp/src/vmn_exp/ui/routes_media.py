@@ -19,7 +19,6 @@ from vmn_exp.core.tables import table_page
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui.http_params import clamp_page
 from vmn_exp.ui.responses import json_response
-from vmn_exp.ui.security import safe_segment
 
 DEFAULT_TABLE_PAGE = 100
 
@@ -39,8 +38,9 @@ def load_table(storage, app_name, verstr, path):
     return doc
 
 
-def register(app, prefix, storage_for):
-    """Add the route; *storage_for(ws_name, app_tag)* → ``(storage, app_name, ...)``."""
+def register(app, prefix, storage_for, segment):
+    """Add the route; *storage_for(ws_name, app_tag)* → ``(storage, app_name, ...)``,
+    *segment(verstr)* returns a URL verstr or raises a 400."""
 
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
@@ -58,7 +58,8 @@ def register(app, prefix, storage_for):
         order: str = "asc",
     ):
         storage, app_name = storage_for(ws_name, app_tag)[:2]
-        if not safe_segment(verstr) or not valid_artifact_path(path):
+        segment(verstr)
+        if not valid_artifact_path(path):
             raise HTTPException(400, "Invalid table path")
         doc = load_table(storage, app_name, verstr, path)
         offset, limit = clamp_page(offset, limit)

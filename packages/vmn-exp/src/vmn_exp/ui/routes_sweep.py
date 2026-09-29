@@ -10,7 +10,6 @@ from vmn_exp.core.sweep.spec import SpecError, parse_spec
 from vmn_exp.core.sweep.summary import sweep_trials
 from vmn_exp.core.sweep.view import sweep_view
 from vmn_exp.ui.responses import json_response
-from vmn_exp.ui.security import safe_segment
 
 
 def _spec_of(storage, app_name, verstr):
@@ -21,14 +20,14 @@ def _spec_of(storage, app_name, verstr):
         return None
 
 
-def register(app, prefix, sweep_inputs):
+def register(app, prefix, sweep_inputs, segment):
     """Add the route; *sweep_inputs(ws_name, app_tag)* →
-    ``(app_name, snapshot_for(app_name), storage)``."""
+    ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
+    a URL verstr or raises a 400."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/sweep")
     def experiment_sweep(request: Request, ws_name: str, app_tag: str, verstr: str):
-        if not safe_segment(verstr):
-            raise HTTPException(400, f"Invalid version '{verstr}'")
+        segment(verstr)
         app_name, snapshot_for, storage = sweep_inputs(ws_name, app_tag)
         spec = _spec_of(storage, app_name, verstr)
         if spec is None:

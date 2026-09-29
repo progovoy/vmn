@@ -14,7 +14,6 @@ from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage
 from vmn_exp.core.status import derive_status
 from vmn_exp.registry.view import models_for_run
 from vmn_exp.ui.responses import json_response
-from vmn_exp.ui.security import safe_segment
 
 MAX_DEPTH = 10
 MAX_LIMIT = 1000
@@ -51,18 +50,17 @@ class _Apps:
         )
 
 
-def _checked(verstr, depth, limit):
-    if not safe_segment(verstr):
-        raise HTTPException(400, f"Invalid version '{verstr}'")
+def _checked(depth, limit):
     if not 1 <= depth <= MAX_DEPTH:
         raise HTTPException(400, f"depth must be 1..{MAX_DEPTH}")
     if not 1 <= limit <= MAX_LIMIT:
         raise HTTPException(400, f"limit must be 1..{MAX_LIMIT}")
 
 
-def register(app, prefix, lineage_inputs):
+def register(app, prefix, lineage_inputs, segment):
     """Add the route; *lineage_inputs(ws_name, app_tag)* →
-    ``(app_name, snapshot_for(app_name), storage)``."""
+    ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
+    a URL verstr or raises a 400."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/lineage")
     def experiment_lineage(
@@ -73,7 +71,8 @@ def register(app, prefix, lineage_inputs):
         depth: int = 1,
         limit: int = DEFAULT_LIMIT,
     ):
-        _checked(verstr, depth, limit)
+        segment(verstr)
+        _checked(depth, limit)
         app_name, snapshot_for, storage = lineage_inputs(ws_name, app_tag)
         apps = _Apps(snapshot_for)
         try:

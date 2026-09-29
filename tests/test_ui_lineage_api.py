@@ -96,6 +96,12 @@ def test_unknown_run_is_404(client, app_layout):
     assert _get(client, app_layout, "0.0.1-exp.nope").status_code == 404
 
 
+def test_an_unsafe_verstr_is_400(client, app_layout):
+    resp = _get(client, app_layout, "a%5Cb")
+    assert resp.status_code == 400
+    assert "Invalid version" in resp.json()["detail"]
+
+
 def test_bad_depth_is_400(client, app_layout):
     assert _get(client, app_layout, "0.0.1-exp.train", depth=0).status_code == 400
 

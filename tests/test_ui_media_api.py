@@ -112,6 +112,8 @@ def test_table_endpoint_errors(run, client, tmp_path):
     assert client.get(f"{BASE}/table/media/s/0.png").status_code == 400
     assert client.get(f"{BASE}/table/tables/t/0.json", params={"sort": "x"}).status_code == 400
     assert client.get(f"{BASE}/table/a/%2E%2E/b.json").status_code in (400, 404)
+    unsafe = BASE.replace(f"/experiments/{V}", "/experiments/a%5Cb")
+    assert client.get(f"{unsafe}/table/tables/t/0.json").status_code == 400
 
 
 def test_streamed_artifacts_get_a_guessed_content_type():

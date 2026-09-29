@@ -80,3 +80,9 @@ def test_a_run_that_is_not_a_sweep_is_404(app_layout, swept):
     trial = _trials(app_layout, swept)[0]["verstr"]
     assert client.get(_url(app_layout, trial)).status_code == 404
     assert client.get(_url(app_layout, "0.0.9-nope")).status_code == 404
+
+
+def test_an_unsafe_verstr_is_400(app_layout):
+    resp = _client(app_layout).get(_url(app_layout, "a%5Cb"))
+    assert resp.status_code == 400
+    assert "Invalid version" in resp.json()["detail"]
