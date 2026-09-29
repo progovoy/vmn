@@ -45,12 +45,20 @@ def _ancestors_and_self(verstr, parent_of):
     return chain
 
 
+def _settled_kids(row, rows, kids_live):
+    """``Counter`` of *row*'s children's statuses, less its *kids_live*."""
+    counts = Counter(row.get("child_counts") or {})
+    counts.subtract(rows[k]["status"] for k in kids_live)
+    return +counts
+
+
 class LivePatch:
     """The rows of one snapshot a time bucket can change, and how.
 
-    ``_rollups`` is ``{i: (terminal statuses, live rows)}`` for each changed
-    row *i*: the statuses no time bucket changes in its subtree (only their
-    rollup matters) and the live rows beneath it.
+    ``_rollups`` is ``{i: (terminal statuses, live rows, settled child
+    statuses, live children)}`` for each changed row *i*: the statuses no time
+    bucket changes in its subtree (only their rollup matters), the live rows
+    beneath it, and the same split for its direct children's ``child_counts``.
     """
 
     def __init__(self, live, changed, rollups):
@@ -96,7 +104,13 @@ class LivePatch:
             if i not in live_set:
                 terminal.add(row["status"])
             summary = rollup_status(terminal)
-            rollups[i] = (frozenset([summary] if summary else ()), tuple(under))
+            kids_live = tuple(k for k in kids.get(i, ()) if k in live_set)
+            rollups[i] = (
+                frozenset([summary] if summary else ()),
+                tuple(under),
+                _settled_kids(row, rows, kids_live),
+                kids_live,
+            )
             parent = position.get(parent_in(edges, row["verstr"]))
             if parent is not None:
                 kids.setdefault(parent, []).append(i)
