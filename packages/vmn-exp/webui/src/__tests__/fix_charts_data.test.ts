@@ -44,9 +44,9 @@ describe("helpers", () => {
     expect(colours.size).toBe(30);
   });
 
-  it("paramValue prefers params over user_meta", () => {
-    expect(paramValue({ params: { lr: 0.1 }, user_meta: { lr: 9 } }, "lr")).toBe(0.1);
-    expect(paramValue({ params: {}, user_meta: { lr: 9 } }, "lr")).toBe(9);
-    expect(paramValue({ user_meta: null }, "lr")).toBeUndefined();
+  it("paramValue reads params", () => {
+    expect(paramValue({ params: { lr: 0.1 } }, "lr")).toBe(0.1);
+    expect(paramValue({ params: {} }, "lr")).toBeUndefined();
+    expect(paramValue({ params: null }, "lr")).toBeUndefined();
   });
 });

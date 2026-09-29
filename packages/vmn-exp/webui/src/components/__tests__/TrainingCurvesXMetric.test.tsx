@@ -5,6 +5,7 @@ vi.mock("uplot", async () => await import("./fakeUPlot"));
 
 import FakeUPlot, { enableCanvas, instances, resetInstances } from "./fakeUPlot";
 import TrainingCurves from "../TrainingCurves";
+import { renderWithClient } from "../../test-utils";
 import { XMetricSelect } from "../ChartControls";
 import type { SeriesPoint } from "../../types";
 
@@ -54,8 +55,7 @@ describe("TrainingCurves x metric", () => {
   it("plots a metric against its declared step metric by default", async () => {
     const joined = { val_loss: [0, 2, 4].map((s, i) => ({ step: s, ts: null, value: 1, x: i * 10 })) };
     const fetchJoined = vi.fn().mockResolvedValue(joined);
-    render(
-      <TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />,
+    renderWithClient(<TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />,
     );
     await waitFor(() => expect(fetchJoined).toHaveBeenCalledWith({ val_loss: "epoch" }));
     await waitFor(() => expect(plottedXs("val_loss")).toEqual([0, 10, 20]));
@@ -64,7 +64,7 @@ describe("TrainingCurves x metric", () => {
 
   it("picking a metric joins every other chart on it", async () => {
     const fetchJoined = vi.fn().mockResolvedValue({});
-    render(<TrainingCurves series={SERIES} fetchJoined={fetchJoined} />);
+    renderWithClient(<TrainingCurves series={SERIES} fetchJoined={fetchJoined} />);
     expect(fetchJoined).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole("combobox", { name: /x axis metric/i }), { target: { value: "epoch" } });
     await waitFor(() =>
@@ -73,12 +73,19 @@ describe("TrainingCurves x metric", () => {
 
   it("none keeps declared metrics on the step axis", async () => {
     const fetchJoined = vi.fn().mockResolvedValue({});
-    render(
-      <TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />,
+    renderWithClient(<TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />,
     );
     await waitFor(() => expect(fetchJoined).toHaveBeenCalledTimes(1));
     fireEvent.change(screen.getByRole("combobox", { name: /x axis metric/i }), { target: { value: "none" } });
     await waitFor(() => expect(plottedXs("val_loss")).toEqual([0, 1, 2, 3, 4, 5]));
     expect(fetchJoined).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a failed join and keeps the chart on the step axis", async () => {
+    const fetchJoined = vi.fn().mockRejectedValue(new Error("join exploded"));
+    renderWithClient(<TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />,
+    );
+    expect(await screen.findByText(/join exploded/)).toBeInTheDocument();
+    expect(plottedXs("val_loss")).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });

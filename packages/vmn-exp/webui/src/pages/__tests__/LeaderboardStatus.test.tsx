@@ -45,7 +45,7 @@ function row(
     note: null,
     branch: "main",
     base_version: "0.0.1",
-    user_meta: null,
+   
     metrics: { loss: 0.5 },
     status,
     exit_code: null,

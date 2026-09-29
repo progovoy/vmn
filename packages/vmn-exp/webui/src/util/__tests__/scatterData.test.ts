@@ -4,7 +4,7 @@ import type { ExperimentRow } from "../../types";
 
 const row = (i: number, metrics: Record<string, number | null>, params: Record<string, unknown> = {}): ExperimentRow => ({
   idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null, branch: "main",
-  base_version: "0.0.1", user_meta: null, params, metrics: metrics as Record<string, number>,
+  base_version: "0.0.1", params, metrics: metrics as Record<string, number>,
 });
 
 describe("scatterGroups", () => {
