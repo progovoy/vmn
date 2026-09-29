@@ -42,7 +42,8 @@ def is_secondary_rank(env=None):
 
 
 class NoOpRun:
-    """What ``start_run()`` returns on a non-zero rank: records nothing.
+    """What ``start_run()`` returns on a non-zero rank, or with ``disabled``
+    True under ``VMN_MODE=disabled``: records nothing.
 
     It is never registered as open, so ``current_run()`` stays None (autolog
     records nothing either) and ``VMN_EXPERIMENT_ID`` is not exported.
@@ -52,8 +53,9 @@ class NoOpRun:
     name = None
     start_step = None
 
-    def __init__(self, app_name=None):
+    def __init__(self, app_name=None, disabled=False):
         self.app_name = app_name
+        self.disabled = disabled
         self.pid = os.getpid()
 
     def finish(self, exit_code=0):

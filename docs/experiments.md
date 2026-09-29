@@ -617,6 +617,11 @@ vmn-exp run my_app --parent latest -- python train.py --lr 0.1
 | `--no-env` | *(capture enabled)* | Skip environment capture for this run |
 | `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
 
+With `VMN_MODE=disabled` in the environment, `run` records nothing: it replaces
+itself with the command (no lock, auto-init, snapshot or `run_state.yml`; works
+outside a git checkout), sets `VMN_METRICS_FILE` to `/dev/null`, and exits with
+the command's own exit code. See [Disabled mode](sdk.md#disabled-mode).
+
 ### Input tracking
 
 `--input [name=]uri[#digest]` records a dataset, model checkpoint, or any other artifact the run consumed. It is repeatable; each call appends an independent log entry:
