@@ -184,6 +184,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_metrics({...})` | several metrics at once; also takes `step=` |
 | `run.log_params({...})` | more inputs, merged into the run's params |
 | `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
+| `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact |
 | `run.log_note(text)` | a note entry |
 | `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
 | `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |
@@ -683,6 +684,48 @@ directly. Status is still derived on every call.
 to find the run's place in the tree; it then reads just that run — its
 metadata, log and artifacts, and the run states of its own subtree.
 
+### Lineage
+
+```python
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.reader import get_lineage
+
+with start_run("my_app", name="train") as train:
+    train.log_input("s3://bucket/data.parquet", digest="sha256:9f2c...")
+    train.log_artifact("model.pkl")
+
+with start_run("my_app", name="eval") as evaluate:
+    path = evaluate.use_artifact(train.id, "model.pkl")   # vmn://my_app/<train>/model.pkl
+
+get_lineage("my_app", evaluate.id, depth=2)
+# {"app": "my_app", "verstr": "...", "upstream": [...], "downstream": [...],
+#  "models": [...], "truncated": False}
+```
+
+`get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)`
+links runs through what they consumed and produced:
+
+- every row carries `outputs` — `{artifact path: {"path", "digest": "sha256:<hex>", "size"}}`,
+  folded from the run's artifact entries (the latest upload of a path wins) —
+  next to `inputs`;
+- **upstream** are the runs whose artifacts this run consumed: an input whose
+  URI is `vmn://<app>/<verstr>/<path>` (what `use_artifact` records; `<app>` is
+  the tag form, `/` → `-`) names its producer, in any app; any other input
+  matches every run of the same app with an output of the same digest
+  (compared without the `sha256:` prefix, case-insensitively);
+- **downstream** are the runs of the same app that consumed this run's outputs,
+  by the same two rules;
+- **models** are the live model versions registered from the run:
+  `{"model", "version", "aliases", "status", "artifact_path"}`.
+
+Each node is `{"app", "verstr", "name", "timestamp", "status", "depth", "found",
+"links"}`; `depth` counts hops (1 = direct), `found` is False for a `vmn://`
+URI naming a run that is not there, and `links` lists `{"input", "artifact",
+"digest", "via": "uri"|"digest"}`. `depth` follows links further; each
+direction keeps at most `limit` nodes (`truncated` says one was cut). It is a
+join over the index rows, so no run log is read. A run is never its own
+neighbour. `ValueError` when `ref` resolves to nothing.
+
 As on the write side, `app_name=None` resolves from the current repo.
 
 ---
@@ -731,6 +774,9 @@ are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
 - `name` (`name ~ "sweep"`, `name = null` for unnamed runs) and `archived`
   (`archived = true` — only meaningful with `include_archived=True`, since the
   default listing drops archived rows first).
+- `inputs.<name>.uri|digest|kind` — a logged input; `outputs.<path>.path|digest|size`
+  — an artifact the run logged ([lineage](#lineage)). Quote a key with a dot or
+  slash in it: `outputs."model.pkl".digest = "sha256:..."`.
 
 `metrics` and `params` read different dicts, and the difference matters:
 **`metrics` holds numeric values only** (params that parse as finite, non-boolean

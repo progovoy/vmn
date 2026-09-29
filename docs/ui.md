@@ -221,7 +221,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments-columns`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, `.../snapshots`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields
@@ -408,6 +408,19 @@ staged on the server's disk); with a token set the request needs the
 `Authorization` header like every other API call. Downloads are sent as stored
 (never gzipped by the server) with an RFC 5987 `filename*` so any file name
 survives.
+
+### Lineage
+
+`GET .../experiments/{verstr}/lineage?depth=1&limit=100` answers the runs linked
+to one run through what it consumed and produced — the same object as the SDK's
+[`get_lineage`](sdk.md#lineage): `{app, verstr, upstream, downstream, models,
+truncated}`, each node `{app, verstr, name, timestamp, status, depth, found,
+links}`. It is answered from the app's index snapshot: the digest and
+`vmn://` URI maps are built once per snapshot and shared by every request, so a
+lookup costs the linked runs, not the workspace. `depth` is 1..10 and `limit`
+1..1000 (else 400); an unknown run is a 404. The run page shows it as a
+**lineage** card (upstream/downstream runs linked to their pages, registered
+models, a depth picker).
 
 ### Model registry API
 

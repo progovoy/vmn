@@ -19,6 +19,7 @@ Grammar::
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
                | "~" | "!~" | "contains"
     field      = name | ( "metrics" | "params" | "tags" ) "." ( name | string )
+               | ( "inputs" | "outputs" ) "." ( name | string ) "." name
     literal    = number | string | "true" | "false" | "null"
     number     = [ "-" ] digits [ "." digits ] [ ( "e" | "E" ) [ "+" | "-" ] digits ]
 

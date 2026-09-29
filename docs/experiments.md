@@ -589,6 +589,34 @@ with start_run("my_app") as run:
 Inputs are visible in `vmn-exp show` and queryable as three-part paths:
 `inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind`.
 
+### Lineage
+
+A run's artifacts are its **outputs**: each row carries
+`outputs.<path>.path|digest|size` (`digest` is `sha256:<hex>`), queryable like
+inputs — quote a path with a dot or slash: `outputs."model.pkl".digest = "sha256:..."`.
+Runs link when one's input is another's output:
+
+* an input URI `vmn://<app>/<verstr>/<artifact path>` (`<app>` in tag form,
+  `/` → `-`) names the producing run directly — `run.use_artifact(ref, path)`
+  in the SDK records one, or pass it to `--input`;
+* any other input links to the runs of the same app that produced an artifact
+  with the same digest.
+
+```sh
+vmn-exp add my_app -v @1 --attach model.pkl
+vmn-exp create my_app --input "model=vmn://my_app/<verstr of @1>/model.pkl"
+vmn-exp lineage my_app -v @2 --depth 2
+vmn-exp lineage my_app -v @1 --json
+```
+
+`vmn-exp lineage <app> -v <ref> [--depth N] [--json]` prints the upstream runs
+(what this run consumed), the downstream runs of the same app (what consumed
+its outputs), each with the input/artifact pairs that link them, and the model
+versions registered from the run. `--depth` (default 1) follows links further;
+`--json` prints the same object as `get_lineage` in the SDK
+([Lineage](sdk.md#lineage)). It is read-only, never takes the repo lock, and is
+answered from the experiment index.
+
 ### Environment capture
 
 Both `create` and `run` automatically record a snapshot of the runtime environment into the experiment: Python version, platform, and installed packages (the full `pip freeze` output). The summary (≤ 2 KB) is embedded in `metadata.yml` under `"env"`, and the full package list is written to `env.yml` next to it. These writes are best-effort — a failure never prevents the run from being created.
@@ -654,7 +682,8 @@ REST API use. It sees every row field, including `status`, `kind`, `depth` and
 `tree_status`, and applies before `--last`, `--sort` and `--top`. A bad query
 exits 1 with the offending offset. Provenance fields are also queryable:
 `inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind` (3-part paths
-for each logged input), `env.<key>` and `env.packages.<pkg>` (environment
+for each logged input), `outputs.<path>.digest|size|path` (each artifact the run
+logged; quote a dotted path: `outputs."model.pkl".digest`), `env.<key>` and `env.packages.<pkg>` (environment
 summary), and `imported_from` (set on runs imported from external tools).
 
 `--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
