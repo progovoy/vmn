@@ -9,6 +9,8 @@ same local directory or S3 bucket you already use for experiments holds the regi
 - [Refs](#refs)
 - [CLI](#cli)
 - [SDK](#sdk)
+- [Datasets](#datasets)
+- [Using versions](#using-versions)
 - [UI](#ui)
 - [Storage and scope](#storage-and-scope)
 - [Prune protection](#prune-protection)
@@ -22,8 +24,13 @@ same local directory or S3 bucket you already use for experiments holds the regi
 dots; no hyphens; no `.vN` suffix (that's reserved for the version record names).
 Example: `bert_base`, `resnet50`, `fraud.detector`.
 
+**Kind** — every name is a `model` or a `dataset` (one namespace: a name is
+one or the other, and registering it as the other kind is an error). Records
+from before datasets existed are models.
+
 **Version** — an immutable record attached to a specific experiment run and (optionally)
-an artifact path within that run.  Version numbers are assigned atomically in ascending
+an artifact path within that run.  A *reference dataset* version has no run: it
+records a `uri` plus a `digest` (and `size`/`files` for a local path) instead.  Version numbers are assigned atomically in ascending
 order starting at 1; numbers are never reused, even after a version is deleted.
 
 **Alias** — a mutable pointer to a version number.  Any string is a valid alias except
@@ -58,19 +65,31 @@ All `vmn-exp model` sub-commands are git-free: they read/write experiment storag
 and never take the repo lock.  Pass `--dir`, `--store <uri>` (or the `--bucket`/`--prefix`/`--endpoint-url` shorthand) to
 select a non-default storage root (same flags as `vmn-exp`).
 
-### `vmn-exp model register <model> -v <run-ref>`
+### `vmn-exp model register <model> (-v <run-ref> | --kind dataset --uri <uri>)`
 
-Register a new version of `<model>` pointing at the experiment run `<run-ref>`.
+Register a new version of `<model>` pointing at the experiment run `<run-ref>`,
+or (for a reference dataset) at `<uri>`.
 
 ```sh
 vmn-exp model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h
 vmn-exp model register resnet50 -v 1.6.0-dev.a1b2c3d.e4f5g6h --app my_app
 vmn-exp model register resnet50 -v latest --artifact weights/model.pt --alias staging
 vmn-exp model register resnet50 -v latest --description "fine-tuned on v2 data"
+vmn-exp model register imagenet --kind dataset --uri /data/imagenet      # hashed
+vmn-exp model register imagenet --kind dataset --uri s3://data/imagenet/ --digest sha256:ab12...
+vmn-exp model register train_split --kind dataset -v latest --app prep --artifact data/train.parquet
 ```
 
 Flags:
-- `-v` / `--version` (required): experiment run ref (verstr, `@N`, `--latest`)
+- `-v` / `--version`: experiment run ref (verstr, `@N`, `--latest`); exactly one
+  of `-v` and `--uri` is required
+- `--kind`: `model` (default) or `dataset`
+- `--uri`: a reference dataset's location (needs `--kind dataset`). A local file
+  or directory is hashed (see [Datasets](#datasets)); a remote URI keeps
+  `--digest`. Registering a digest the dataset already has prints the existing
+  version instead of adding one.
+- `--digest`: the dataset digest (`sha256:<hex>`); for `-v` datasets it defaults
+  to the digest the run logged for `--artifact`
 - `--app`: app name; inferred from storage when omitted
 - `--artifact`: relative artifact path within the run
 - `--description`: human-readable description
@@ -90,11 +109,13 @@ mismatch exits non-zero — use this to guard against concurrent alias moves.
 
 ### `vmn-exp model list`
 
-List all model names in the registry.
+List all model (and dataset) names in the registry; `--kind model|dataset`
+lists one kind.
 
 ```sh
 vmn-exp model list
 vmn-exp model list --json
+vmn-exp model list --kind dataset
 ```
 
 ### `vmn-exp model show <model>`
@@ -108,7 +129,8 @@ vmn-exp model show resnet50 --json
 
 ### `vmn-exp model resolve <ref>`
 
-Print the resolved version metadata for a ref (useful in scripts).
+Print the resolved version metadata for a ref (useful in scripts): app, verstr,
+artifact, and a dataset's `uri`/`digest`; `--json` adds `kind`.
 
 ```sh
 vmn-exp model resolve resnet50@production
@@ -125,13 +147,14 @@ vmn-exp model deprecate resnet50 1
 
 ### `vmn-exp model delete <model> <version-number>`
 
-Mark a version as deleted.  Aliases pointing to it are removed first (errors if
-any alias would be left dangling — remove them explicitly beforehand, or use
-`--force` to remove aliases automatically).
+Mark a version as deleted.  Refused (exit 1) while any alias still points at
+it — remove those aliases first (`vmn-exp model alias <model> <alias> --remove`).
+Deleting a version that runs recorded using (see [Using versions](#using-versions))
+succeeds but warns `... was used by K runs`: their logs still name it.
 
 ```sh
+vmn-exp model alias resnet50 staging --remove
 vmn-exp model delete resnet50 1
-vmn-exp model delete resnet50 1 --force   # also removes aliases pointing at v1
 ```
 
 A version that is protected by the registry prune guard (i.e., the run that
@@ -151,6 +174,10 @@ from vmn_exp.sdk import (
     get_model_version,
     list_models,
     download_model,
+    register_dataset,
+    get_dataset_version,
+    use_model,
+    use_dataset,
 )
 ```
 
@@ -191,14 +218,19 @@ meta = get_model_version("resnet50@2")
 meta = get_model_version("resnet50")     # latest
 ```
 
-The returned dict contains:
+The returned dict is the raw version record:
+- `model`: the name
 - `n`: version number (int)
-- `run_ref`: `{"app": ..., "verstr": ...}`
+- `run_ref`: `{"app": ..., "verstr": ...}` (absent for a reference dataset)
 - `artifact_path`: relative path within the run (may be absent)
+- `uri`, `digest`, `size`, `files`: dataset fields (may be absent)
 - `description`: human-readable string (may be absent)
-- `status`: `"active"`, `"deprecated"`, or `"deleted"`
-- `aliases`: list of alias names currently pointing at this version
-- `created`: ISO timestamp
+- `timestamp`: ISO timestamp of registration
+- `format_version`: the record format
+
+Status and aliases are not part of it — read them from `vmn-exp model show
+<model> --json` (or `vmn_exp.registry.view.model_state`).
+`get_model_version` never records a use, even inside a run.
 
 ### Downloading an artifact
 
@@ -208,19 +240,98 @@ path = download_model("resnet50@production", dst="/tmp")   # copies to a dir
 ```
 
 Local storage returns the on-disk path directly.  S3 storage downloads to a
-temporary cache directory.
+temporary cache directory.  Inside an open run (`current_run()`) the download is
+recorded as a use of that version (see [Using versions](#using-versions));
+`record=False` opts out.  A reference dataset has nothing stored and raises
+`ValueError`.
 
 ### Listing
 
 ```python
-print(list_models())   # ["bert_base", "resnet50"]
+print(list_models())   # ["bert_base", "imagenet", "resnet50"] — models and datasets
 ```
+
+`vmn_exp.registry.store.list_models(storage, kind="dataset")` filters by kind.
 
 ### Storage override
 
 All functions accept an optional `storage=` keyword for passing an explicit
 storage object.  When omitted, storage is resolved from env / git checkout (same
 as `start_run`).
+
+---
+
+## Datasets
+
+Datasets are registry entries of kind `dataset`, in the same namespace and with
+the same refs, aliases and statuses as models.
+
+**Reference mode** (the default) copies no bytes: the version records where the
+data lives and a digest of it.
+
+```python
+from vmn_exp.sdk import register_dataset, get_dataset_version
+
+register_dataset("imagenet", "/data/imagenet", alias="train")   # local dir: hashed
+register_dataset("raw_logs", "s3://lake/logs/2026-09/", digest="sha256:ab12...")
+meta = get_dataset_version("imagenet@train")
+# {"model": "imagenet", "n": 1, "uri": "/data/imagenet", "digest": "sha256:...",
+#  "size": 123456, "files": 42, ...}
+```
+
+A local file's digest is its `sha256:<hex>`; a directory's is the sha256 of a
+manifest of every file below it, sorted by relative path
+(`<relpath>\0<file sha256>\n` per file), so it depends on names and contents
+only. Local paths are stored absolute. Remote URIs are not read: pass `digest=`
+yourself, or none.
+
+**Copied mode** stores the bytes as an artifact of a data-prep run and points
+the version at it — the run is then prune-protected and shows the dataset in
+its lineage `models`:
+
+```python
+with start_run("prep") as run:
+    run.log_artifact("train.parquet", name="data/train.parquet")
+    register_dataset("train_split", run=run, artifact_path="data/train.parquet")
+```
+
+Pass exactly one of `uri` or `artifact_path`. With `dedupe=True` (the default)
+registering a digest the dataset already has returns that (newest, non-deleted)
+version instead of a new one. `register_dataset` on a model name, and
+`get_dataset_version` / `use_dataset` of a model, raise `ValueError`.
+
+---
+
+## Using versions
+
+A run records the model and dataset versions it consumed:
+
+```python
+from vmn_exp.sdk import start_run, download_model
+
+with start_run("serving") as run:
+    meta = run.use_model("resnet50@production")   # version metadata
+    data = run.use_dataset("imagenet@train")
+    path = download_model("resnet50@production")  # also records (record=True)
+```
+
+`use_model` / `use_dataset` also exist as module functions (`run=` defaults to
+the current run; with no run open they only resolve). Each use writes:
+
+- an `input` entry on the run named `<name>@<N>` — pinned to the resolved
+  number, never the alias, so using `m@3` and later `m@4` keeps both. A version
+  backed by a run artifact gets that artifact's `vmn://<app>/<verstr>/<path>`
+  URI and digest (exactly what `run.use_artifact` records, so lineage links the
+  run to its producer); a reference dataset gets `vmn-registry://<name>@<N>`.
+  Its `kind` is `model` or `dataset`.
+- a `use` entry in the registry record `<name>-uses` (not the model's own log,
+  so the model's audit is untouched):
+  `{"type": "use", "version": N, "run": {"app", "verstr"}, "ts", "writer", "pos", "actor"}`.
+  This write is best-effort — a failure is a warning, never an exception.
+
+A run records each version once. `get_model_version`, `get_dataset_version`
+and `register_model` never record. On a non-zero rank, `NoOpRun.use_model` /
+`use_dataset` resolve and record nothing.
 
 ---
 
@@ -249,13 +360,19 @@ and a relative artifact path; the actual bytes live in the experiment run's
 storage directory.  Deleting a run that has a registered model version is blocked
 by the prune guard.
 
+Record layout under `vmn-registry`: `<name>` (header: `kind`, `description`),
+`<name>.v<N>` (one per version), `<name>-uses` (the usage log; model names never
+contain `-`, so it cannot collide with a model).
+
 ---
 
 ## Prune protection
 
 `vmn-exp prune` (and `vmn-exp prune --query`) refuses to delete any run that has
 at least one active (non-deleted) model version pointing to it, even with
-`--force`.  To free storage, delete the model version first:
+`--force` — including a copied dataset's data-prep run.  Reference datasets have
+no run and protect nothing.  Runs that merely *used* a version are not
+protected: pruning one leaves its `use` entry behind.  To free storage, delete the model version first:
 
 ```sh
 vmn-exp model delete resnet50 3
