@@ -13,9 +13,15 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.storage.files import valid_artifact_path
-from vmn_exp.ui import routes_leaderboard, routes_models, routes_series, routes_tree
+from vmn_exp.ui import (
+    routes_leaderboard,
+    routes_media,
+    routes_models,
+    routes_series,
+    routes_tree,
+)
 from vmn_exp.ui.experiment_source import ExperimentSource
-from vmn_exp.ui.http_params import attachment, clamp_page, key_list
+from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
@@ -314,7 +320,7 @@ def create_app(
             chunks, size = found
             return StreamingResponse(
                 chunks,
-                media_type="application/octet-stream",
+                media_type=media_type(filename),
                 headers={
                     "Content-Disposition": attachment(download_name),
                     "Content-Length": str(size),
@@ -416,6 +422,7 @@ def create_app(
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
+    routes_media.register(app, API_PREFIX, _series_storage)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_models.register(
         app, API_PREFIX,

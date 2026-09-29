@@ -21,6 +21,7 @@ from vmn_exp.cli.run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
+from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import dumps, show_payload
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.snapshot import (
@@ -735,6 +736,12 @@ def experiment_show(vcs, params, storage, args):
         for k, v in sorted(metrics.items()):
             print(f"    {k}: {v:.4g}" if isinstance(v, float) else f"    {k}: {v}")
 
+    media = media_lines(log)
+    if media:
+        print("\n  Media:")
+        for line in media:
+            print(f"    {line}")
+
     if log:
         _print_log(log, getattr(args, "full_log", False))
     return 0
@@ -781,6 +788,9 @@ def _describe_log_entry(entry):
         return f"{head}: {text}" if text else head
     if etype == "artifact":
         return f"artifact: {entry.get('path', '?')} ({entry.get('size', 0)} bytes)"
+    media = describe_media_entry(entry)
+    if media:
+        return media
     if etype == "create":
         note = entry.get("note") or ""
         return f"created{': ' + note if note else ''}"

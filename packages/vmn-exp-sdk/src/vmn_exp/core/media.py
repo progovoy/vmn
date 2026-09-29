@@ -41,14 +41,21 @@ class MediaIndex:
         self._by_kind = {kind: {} for kind in _SECTIONS}  # kind -> name -> step -> item
         self._entries = {kind: 0 for kind in _SECTIONS}
 
-    def extend(self, entries):
+    def add(self, entries):
+        """Index *entries*; returns how many were media entries."""
+        added = 0
         for entry in entries:
             kind = entry.get("type")
             name = entry.get("name")
             if kind not in _SECTIONS or not isinstance(name, str):
                 continue
+            added += 1
             self._entries[kind] += 1
             self._by_kind[kind].setdefault(name, {})[entry.get("step")] = _item(entry)
+        return added
+
+    def extend(self, entries):
+        self.add(entries)
         return self
 
     def _sorted(self, kind):
