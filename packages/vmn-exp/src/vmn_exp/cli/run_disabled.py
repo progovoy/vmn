@@ -9,7 +9,6 @@ import os
 import sys
 
 from version_stamp.api import VMN_LOGGER
-from vmn_exp.cli.run import _child_cwd
 from vmn_exp.sdk.mode import is_disabled
 
 NOTICE = "vmn-exp: VMN_MODE=disabled - running the command without recording a run"
@@ -29,6 +28,8 @@ def exec_if_disabled(args):
     print(NOTICE, file=sys.stderr)
     sys.stdout.flush()
     sys.stderr.flush()
+    from vmn_exp.cli.run import _child_cwd  # the supervisor stack, only when needed
+
     os.chdir(_child_cwd())
     os.execvpe(run_cmd[0], run_cmd, dict(os.environ, VMN_METRICS_FILE=os.devnull))
     return 0  # only reached when execvpe is stubbed out
