@@ -10,7 +10,9 @@ from them, reusing every row the index did not re-derive since.
 
 ``metric_summary`` itself stays off the shared rows (a leaderboard at 100k
 runs would carry it in every payload); the row copies the reader API and the
-CLI hand out put it back.
+CLI hand out put it back. So do ``outputs`` — a run logging an image per step
+has one per step — which the snapshot keeps per verstr for the lineage index
+and ``outputs.*`` queries (:func:`~vmn_exp.core.query.filter_rows` ``extra``).
 """
 import json
 import threading
@@ -28,12 +30,13 @@ def schema_key(schema):
 
 
 def lean_row(idx, meta, fold):
-    """``(row, create note, parts)`` of a folded record: the row without the
-    schema or its ``metric_summary``; *parts* None when no metric repeats."""
+    """``(row, create note, parts, outputs)`` of a folded record: the row
+    without the schema, its ``metric_summary`` or its ``outputs``; *parts*
+    None when no metric repeats, *outputs* None when the run stored none."""
     row = fold_row(idx, meta, fold, with_create_note=True)
     note, summary = row.pop("create_note"), row.pop("metric_summary")
     parts = (summary, fold_definitions(fold) or None) if summary else None
-    return row, note, parts
+    return row, note, parts, row.pop("outputs") or None
 
 
 def summarized_row(row, parts, schema):

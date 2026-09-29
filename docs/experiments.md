@@ -639,9 +639,19 @@ Inputs are visible in `vmn-exp show` and queryable as three-part paths:
 
 ### Lineage
 
-A run's artifacts are its **outputs**: each row carries
-`outputs.<path>.path|digest|size` (`digest` is `sha256:<hex>`), queryable like
-inputs — quote a path with a dot or slash: `outputs."model.pkl".digest = "sha256:..."`.
+A run's artifacts — and the images and tables the SDK's `run.log_image` /
+`run.log_table` store (`media/<name>/<step>.png`, `tables/<name>/<step>.json`)
+— are its **outputs**: `list --json`/`show --json` rows and the SDK's
+`get_run`/`list_runs` carry `outputs.<path>.path|digest|size` (`digest` is
+`sha256:<hex>` of the stored bytes), queryable like inputs — quote a path with
+a dot or slash: `outputs."model.pkl".digest = "sha256:..."`,
+`list --query 'outputs."media/samples/0.png".size > 0'`. The experiment index
+keeps outputs beside its rows, not on them, so the `vmn-exp ui` list and
+leaderboard pages never ship them (per-step images would bloat every row);
+`?q=` queries, the run detail (`outputs`) and lineage still read them. A
+logged image/table can precede its file (it uploads in the background); one
+that fails to store is retracted by an `output_failed` log entry — see
+[sdk.md](sdk.md#tables-images-and-histograms).
 Runs link when one's input is another's output:
 
 * an input URI `vmn://<app>/<verstr>/<artifact path>` (`<app>` in tag form,
@@ -729,7 +739,7 @@ REST API use. It sees every row field, including `status`, `kind`, `depth` and
 `tree_status`, and applies before `--last`, `--sort` and `--top`. A bad query
 exits 1 with the offending offset. Provenance fields are also queryable:
 `inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind` (3-part paths
-for each logged input), `outputs.<path>.digest|size|path` (each artifact the run
+for each logged input), `outputs.<path>.digest|size|path` (each artifact, image or table the run
 logged; quote a dotted path: `outputs."model.pkl".digest`), `env.<key>` and `env.packages.<pkg>` (environment
 summary), `imported_from` (set on runs imported from external tools) and
 `forked_from`/`forked_from_step` (a fork's source verstr and step).

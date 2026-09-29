@@ -24,7 +24,7 @@ def lineage_index(snapshot):
     """The :class:`LineageIndex` of *snapshot*, built on first use."""
     index = _INDEXES.get(snapshot)
     if index is None:
-        index = _INDEXES[snapshot] = LineageIndex(snapshot.rows)
+        index = _INDEXES[snapshot] = LineageIndex(snapshot.rows, snapshot.outputs_of)
     return index
 
 

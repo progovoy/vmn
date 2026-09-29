@@ -446,9 +446,40 @@ def compile_query(text):
     return _Parser(text).parse()
 
 
-def filter_rows(rows, text):
-    """Rows matching *text*; all of them when *text* is empty or None."""
+@functools.lru_cache(maxsize=256)
+def query_roots(text):
+    """The top-level row keys *text* reads (``outputs`` for
+    ``outputs."a.png".size``, ``status`` for ``status = "failed"``)."""
+    return frozenset(
+        (value[0] if isinstance(value, tuple) else value.split(".")[0])
+        for kind, value, _ in tokenize(text)
+        if kind == "name"
+    )
+
+
+def _completing(text, extra):
+    """``row -> row`` giving a row the *extra* fields ``{key: of(verstr)}``
+    *text* reads but the row lacks — a copy, only for evaluating."""
+    wanted = {key: of for key, of in (extra or {}).items() if key in query_roots(text)}
+    if not wanted:
+        return lambda row: row
+
+    def complete(row):
+        missing = {k: of(row["verstr"]) for k, of in wanted.items() if k not in row}
+        return dict(row, **missing) if missing else row
+
+    return complete
+
+
+def filter_rows(rows, text, extra=None):
+    """Rows matching *text*; all of them when *text* is empty or None.
+
+    *extra* ``{key: of(verstr)}`` supplies fields kept off lean rows (the
+    index snapshot's ``outputs``): a query reading one sees it, the rows
+    returned are the ones given.
+    """
     if not text or not text.strip():
         return rows
     predicate = compile_query(text)
-    return [row for row in rows if predicate(row)]
+    complete = _completing(text, extra)
+    return [row for row in rows if predicate(complete(row))]

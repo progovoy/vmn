@@ -3,23 +3,31 @@
 
 * ``log_table(name, data, columns=None, step=None)`` stores a columnar JSON
   artifact ``tables/<name>/<step>.json`` (see :mod:`vmn_exp.core.tables`) and
-  logs ``{"type": "table", "name", "step", "path", "rows", "columns"}``.
+  logs ``{"type": "table", "name", "step", "path", "rows", "columns",
+  "sha256", "size"}``.
 * ``log_image(name, image, step=None, caption=None)`` stores
   ``media/<name>/<step>.png`` and logs ``{"type": "image", "name", "step",
-  "path", "caption", "width", "height"}``.
+  "path", "caption", "width", "height", "sha256", "size"}``.
 * ``log_histogram(name, values, step=None, bins=64)`` bins the finite values
   here and logs ``{"type": "histogram", "name", "step", "bins", "counts"}``.
+
+An image or table entry is also the run's record of its file as an output
+(like an ``artifact`` entry: ``row["outputs"]``, lineage, ``use_artifact``);
+``sha256``/``size`` are of the encoded bytes, hashed here before the
+background upload (:mod:`vmn_exp.sdk.media_uploads`) stores exactly them.
 
 *step* defaults to one past the name's last logged step (0 at first). numpy, Pillow and pandas
 are optional and imported only when an input needs them.
 """
+import hashlib
 import json
 import logging
 import os
 import shutil
 
+from vmn_exp.core.fold import OUTPUT_FAILED
 from vmn_exp.core.histogram import histogram
-from vmn_exp.core.png import array_to_png, png_file_size, to_uint8
+from vmn_exp.core.png import array_to_png, png_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.media_uploads import staging_dir
@@ -86,8 +94,9 @@ class RunMedia:
     :class:`~vmn_exp.sdk.media_uploads.MediaUploads`) and ``_append``.
 
     Media files are stored as artifacts without an ``artifact`` log entry of
-    their own: the table/image entry is their record, and per-step media would
-    otherwise bloat every row's lineage ``outputs``.
+    their own: the table/image entry is their record, as media and as an
+    output. It is appended before the file is queued, so the retraction a
+    failed upload appends always comes after it.
     """
 
     def _media_step(self, kind, name, step):
@@ -106,19 +115,42 @@ class RunMedia:
         self._media_steps[key] = max(self._media_steps.get(key, 0), step + 1)
         self._append(entry)
 
-    def _store(self, name, produce):
-        """Queue the file *produce(tmp path)* writes for storing as artifact
-        *name*; returns ``(artifact name, (width, height) of a PNG or None)``."""
+    def _retract_output(self, path, exc):
+        """``on_failed`` of the uploads: the file *path* will never be stored."""
+        self._outputs_retracted = True
+        self._append(create_log_entry(OUTPUT_FAILED, path=path, error=str(exc)))
+
+    def _close_media_uploads(self, timeout):
+        """Wait for the queued files; True when a file was retracted, so the
+        final log sync must run again to carry the retraction."""
+        if not self._media_uploads.close(timeout):
+            _LOGGER.warning(f"vmn: the final media files of run {self.id} are still uploading")
+        return getattr(self, "_outputs_retracted", False)
+
+    def _store(self, kind, name, step, path, produce, **fields):
+        """Log the *kind* entry of the file *produce(tmp path)* writes, then
+        queue that file for storing as artifact *path* (its name may take the
+        written file's extension). ``(width, height)`` of a PNG goes into the
+        entry, with the stored bytes' ``sha256`` and ``size``."""
         tmp = staging_dir()
         try:
-            written = produce(os.path.join(tmp, os.path.basename(name)))
-            stored = name[: -len(os.path.basename(name))] + os.path.basename(written)
-            size = png_file_size(written) if stored.endswith(".png") else None
-            self._media_uploads.submit(tmp, written, checked_artifact_name(stored))
+            written = produce(os.path.join(tmp, os.path.basename(path)))
+            stored = checked_artifact_name(
+                path[: -len(os.path.basename(path))] + os.path.basename(written)
+            )
+            with open(written, "rb") as f:
+                data = f.read()
+            if kind == "image":
+                fields["width"], fields["height"] = png_size(data) or (None, None)
+            entry = create_log_entry(
+                kind, name=name, step=step, path=stored,
+                sha256=hashlib.sha256(data).hexdigest(), size=len(data), **fields,
+            )
+            self._logged(kind, name, step, entry)
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
-        return stored, size
+        self._media_uploads.submit(tmp, written, stored)
 
     def log_table(self, name, data, columns=None, step=None):
         doc, total = table_document(data, columns=columns)
@@ -134,27 +166,18 @@ class RunMedia:
                 json.dump(doc, f, allow_nan=False)
             return dest
 
-        self._store(path, produce)
-        entry = create_log_entry(
-            "table", name=name, step=step, path=path, rows=doc["rows"],
-            columns=[c["name"] for c in doc["columns"]],
+        extra = {"total_rows": total} if doc["truncated"] else {}
+        self._store(
+            "table", name, step, path, produce,
+            rows=doc["rows"], columns=[c["name"] for c in doc["columns"]], **extra,
         )
-        if doc["truncated"]:
-            entry["total_rows"] = total
-        self._logged("table", name, step, entry)
 
     def log_image(self, name, image, step=None, caption=None):
         step = self._media_step("image", name, step)
-        path, size = self._store(
-            checked_artifact_name(f"media/{name}/{step}.png"),
-            lambda dest: write_image(image, dest),
+        path = checked_artifact_name(f"media/{name}/{step}.png")
+        self._store(
+            "image", name, step, path, lambda dest: write_image(image, dest), caption=caption,
         )
-        width, height = size or (None, None)
-        entry = create_log_entry(
-            "image", name=name, step=step, path=path, caption=caption,
-            width=width, height=height,
-        )
-        self._logged("image", name, step, entry)
 
     def log_histogram(self, name, values, step=None, bins=64):
         binned = histogram(values, bins=bins)

@@ -33,6 +33,9 @@ class IndexSnapshot:
     # {verstr: (metric_summary, run definitions)} of rows with a repeated
     # metric — what a schema view and a row copy's metric_summary read.
     metric_parts: dict = field(default_factory=dict, repr=False)
+    # {verstr: {path: {path, digest, size}}} of rows with outputs — off the
+    # rows, which list pages serve (see outputs_of).
+    outputs: dict = field(default_factory=dict, repr=False)
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
     _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
@@ -41,7 +44,7 @@ class IndexSnapshot:
     @classmethod
     def build(
         cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
-        metric_parts=None,
+        metric_parts=None, outputs=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -53,6 +56,7 @@ class IndexSnapshot:
             create_notes=create_notes or {},
             run_state_observed_at=observed_at or {},
             metric_parts=metric_parts or {},
+            outputs=outputs or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -64,6 +68,11 @@ class IndexSnapshot:
         """``{metric: {"last", "min", "max"}}`` of *verstr*'s repeated metrics."""
         parts = self.metric_parts.get(verstr)
         return dict(parts[0]) if parts else {}
+
+    def outputs_of(self, verstr):
+        """``{path: {path, digest, size}}`` of the files *verstr* stored.
+        Shared: copy before changing."""
+        return self.outputs.get(verstr) or {}
 
     def summarized(self, schema):
         """This snapshot with its rows' metrics under the metrics *schema* —
@@ -146,7 +155,7 @@ class RowCache:
     """
 
     def __init__(self):
-        self._rows = {}  # key -> (row with idx, create note, metric parts)
+        self._rows = {}  # key -> (row with idx, create note, metric parts, outputs)
         self._observed = {}  # key -> (rs_sig, store write time it encodes)
         self._order = []  # the keys of the last snapshot, in order
         self._pos = {}  # key -> its position in _order
@@ -186,7 +195,7 @@ class RowCache:
             app_name=app_name, generation=generation, rows=tuple(self._list),
             run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
             run_state_observed_at=dict(m.observed), metric_parts=dict(m.parts),
-            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
+            outputs=dict(m.outputs), _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
         )
 
     def _patch(self, touched, records):
@@ -209,14 +218,22 @@ class RowCache:
             self._put(key, pos, records[key])
 
     def _put(self, key, pos, record):
-        row, note, parts = self._row(key, pos + 1, record)
+        row, note, parts, outputs = self._row(key, pos + 1, record)
         if pos == len(self._list):
             self._list.append(row)
         else:
             self._list[pos] = row
         self._pos[key] = pos
         observed = self._observed_of(key, record["rs_sig"])
-        self._maps.put(row, note, parts, record["run_state"], observed)
+        self._maps.put(row, note, parts, outputs, record["run_state"], observed)
+
+
+def _put_sparse(values, verstr, value):
+    """Keep *value* under *verstr*, or drop the key when it is empty."""
+    if value:
+        values[verstr] = value
+    else:
+        values.pop(verstr, None)
 
 
 class _Maps:
@@ -224,16 +241,14 @@ class _Maps:
 
     def __init__(self):
         self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
-        self.parts = {}
+        self.parts, self.outputs = {}, {}
 
-    def put(self, row, note, parts, state, observed):
+    def put(self, row, note, parts, outputs, state, observed):
         verstr = row["verstr"]
         self.rows[verstr] = row
         self.notes[verstr] = note
-        if parts:
-            self.parts[verstr] = parts
-        else:
-            self.parts.pop(verstr, None)
+        _put_sparse(self.parts, verstr, parts)
+        _put_sparse(self.outputs, verstr, outputs)
         self.states[verstr] = state
         self.observed[verstr] = observed
         self.edges[verstr] = row.get("parent")
