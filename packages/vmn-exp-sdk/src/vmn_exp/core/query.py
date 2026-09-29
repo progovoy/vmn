@@ -64,7 +64,7 @@ ROW_FIELDS = frozenset(
     idx verstr code_verstr timestamp note branch base_version parent
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
-    kind depth tree_status imported_from forked_from forked_from_step
+    kind depth tree_status imported_from forked_from forked_from_step rerun_of
     """.split()
 )
 

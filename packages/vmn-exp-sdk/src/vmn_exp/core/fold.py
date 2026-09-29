@@ -327,6 +327,7 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "env": meta.get("env"),
         "imported_from": meta.get("imported_from"),
         **_fork_fields(meta),
+        "rerun_of": meta.get("rerun_of"),
     }
     if with_create_note:
         row["create_note"] = fold["create_note"][0] if fold["create_note"] else None

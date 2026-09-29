@@ -25,6 +25,7 @@ from vmn_exp.cli.supervisor import (
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.writer import (
     append_to_log,
@@ -231,15 +232,23 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if repo_lock is not None:
         repo_lock.release()
 
-    return _Supervision(storage, app_name, verstr, args, experiment_conf(vcs)).run(run_cmd)
+    return _Supervision(
+        storage, app_name, verstr, args, experiment_conf(vcs), root=vcs.vmn_root_path
+    ).run(run_cmd)
 
 
 class _Supervision:
-    """One supervised child: start it, watch it, and record how it ended."""
+    """One supervised child: start it, watch it, and record how it ended.
+
+    The child runs in *cwd* (default: where vmn was invoked); ``run_state.yml``
+    records that cwd relative to *root* (the repo root; None records null).
+    """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
-                 extra_env=None, on_tick=None):
+                 extra_env=None, on_tick=None, cwd=None, root=None):
         self.storage = storage
+        self.cwd = cwd or _child_cwd()
+        self.root = root
         self.extra_env = extra_env or {}
         # Called with this supervision on every poll while the child lives.
         self.on_tick = on_tick
@@ -294,7 +303,7 @@ class _Supervision:
         env.update(self.extra_env)
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
-            proc = subprocess.Popen(run_cmd, cwd=_child_cwd(), **stdio)
+            proc = subprocess.Popen(run_cmd, cwd=self.cwd, **stdio)
         except FileNotFoundError:
             VMN_LOGGER.error("Command not found: " + run_cmd[0])
             return None
@@ -315,6 +324,8 @@ class _Supervision:
         self.run_state = {
             "state": "running",
             "command": list(run_cmd),
+            "runner": RUNNER_CLI,
+            "cwd": repo_relative_cwd(self.cwd, self.root),
             "pid": proc.pid,
             "host": socket.gethostname(),
             "started_at": started_at,

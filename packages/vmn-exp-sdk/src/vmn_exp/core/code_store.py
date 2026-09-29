@@ -57,6 +57,18 @@ def resolve_code(storage, app_name, metadata, patches):
     return metadata, code_patches
 
 
+def find_code_key(storage, app_name, code_verstr):
+    """The key of the one complete code object of *code_verstr*, or None when
+    there is none or more than one (a ``from_snapshot`` run names only its
+    code verstr)."""
+    keys = [
+        key for key in storage.list_record_names(code_app(app_name))
+        if key.rsplit(".", 1)[0] == code_verstr
+        and stored_code(storage, app_name, key) is not None
+    ]
+    return keys[0] if len(keys) == 1 else None
+
+
 def drop_unused_code(storage, app_name, code_verstrs):
     """Delete the code objects of *code_verstrs* no run of the app still uses
     — complete or not. Called after runs are deleted, so a code object goes

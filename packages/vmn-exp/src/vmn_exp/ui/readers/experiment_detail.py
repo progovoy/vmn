@@ -229,6 +229,7 @@ def experiment_detail(
         "outputs": fold_outputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
         "forked_from": metadata.get("forked_from"),
+        "rerun_of": metadata.get("rerun_of"),
         "rewinds": snapshot.rewinds(),
     }, None
 
