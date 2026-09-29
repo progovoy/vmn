@@ -1,5 +1,5 @@
 """``--store <uri>`` on every command that opens experiment/snapshot storage:
-``snapshot``, ``exp`` (and ``import-mlflow``), ``model`` and ``ui``."""
+``exp`` (and ``import-mlflow``), ``model`` and ``ui``."""
 from types import SimpleNamespace
 
 import boto3
@@ -34,7 +34,6 @@ def _remote(storage):
 
 
 @pytest.mark.parametrize("argv", [
-    ["snapshot", "list", "app"],
     ["exp", "list", "app"],
     ["exp", "import-mlflow", "app", "--mlruns", "/x"],
     ["ui"],
@@ -42,11 +41,6 @@ def _remote(storage):
 def test_store_flag_parses(argv):
     args = parse_user_commands(argv + ["--store", "gs://b/p"])
     assert args.store == "gs://b/p"
-
-
-def test_snapshot_backend_flag_is_gone():
-    with pytest.raises(SystemExit):
-        parse_user_commands(["snapshot", "list", "app", "--backend", "s3"])
 
 
 def test_snapshot_storage_honours_store(s3, tmp_path):
