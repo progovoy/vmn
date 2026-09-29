@@ -4,6 +4,7 @@
 * ``reference_fields`` — ``uri``/``digest``/``size``/``files`` of a reference
   dataset: a local path is made absolute and hashed, a remote URI keeps the
   caller's digest (or none).
+* ``copied_fields`` — the fields of a dataset stored as run artifact *path*.
 * ``version_with_digest`` — the newest live version carrying a digest (dedupe).
 * ``register_dataset_version`` — ensure a dataset header, then reuse the
   version with the same digest (``dedupe``) or claim a new one.
@@ -35,6 +36,20 @@ def reference_fields(uri: str, digest: str | None = None) -> dict:
     if digest is not None:
         fields["digest"] = digest
     return {"uri": os.path.abspath(uri), **fields}
+
+
+def copied_fields(storage, run_ref: dict, path, digest: str | None = None) -> dict:
+    """Version fields of a dataset logged as artifact *path* of *run_ref*:
+    the digest (unless given) and size are the ones the run logged."""
+    output = {}
+    if run_ref.get("app") and path:
+        output = producer_output(storage, run_ref["app"], run_ref["verstr"], path) or {}
+    return {
+        "run_ref": run_ref,
+        "artifact_path": path,
+        "digest": digest or output.get("digest"),
+        "size": output.get("size"),
+    }
 
 
 def version_with_digest(storage, name: str, digest: str) -> int | None:

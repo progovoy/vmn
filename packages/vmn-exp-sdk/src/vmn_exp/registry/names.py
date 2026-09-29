@@ -134,6 +134,3 @@ def uses_record_name(model: str) -> str:
     """Record name of *model*'s usage log."""
     return f"{model}{_USES_SUFFIX}"
 
-
-def is_uses_record(name: str) -> bool:
-    return name.endswith(_USES_SUFFIX)

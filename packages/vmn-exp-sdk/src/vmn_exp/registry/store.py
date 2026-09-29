@@ -59,10 +59,22 @@ def ensure_model(storage, model, description=None, actor=None, kind="model"):
 
 def model_kind(storage, model) -> str | None:
     """``model``/``dataset`` of *model*'s header; None when it has none."""
-    header, _ = storage.load(REGISTRY_APP, model)
+    return header_kind(storage.load(REGISTRY_APP, model)[0])
+
+
+def header_kind(header) -> str | None:
+    """``model``/``dataset`` of a loaded *header* (no ``kind`` = model)."""
     if not isinstance(header, dict):
         return None
     return header.get("kind") or "model"
+
+
+def run_of(meta) -> tuple | None:
+    """``(app, verstr)`` of the run a version record points at, else None."""
+    run_ref = (meta or {}).get("run_ref")
+    if isinstance(run_ref, dict) and run_ref.get("app") and run_ref.get("verstr"):
+        return run_ref["app"], run_ref["verstr"]
+    return None
 
 
 def register_version(
@@ -135,16 +147,13 @@ def list_models(storage, kind=None) -> list:
     """Sorted list of model names that have complete header records, only
     those of *kind* (``model``/``dataset``) when given."""
     all_names = list(storage.list_record_names(REGISTRY_APP))
-    names = sorted(
-        name
-        for name in all_names
-        if parse_version_record(name) is None
-        and valid_model_name(name)
-        and storage.exists(REGISTRY_APP, name)
+    candidates = sorted(
+        name for name in all_names
+        if parse_version_record(name) is None and valid_model_name(name)
     )
     if kind is None:
-        return names
-    return [name for name in names if model_kind(storage, name) == kind]
+        return [name for name in candidates if storage.exists(REGISTRY_APP, name)]
+    return [name for name in candidates if model_kind(storage, name) == kind]
 
 
 def get_version(storage, model, n) -> dict | None:

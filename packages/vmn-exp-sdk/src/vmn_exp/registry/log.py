@@ -193,13 +193,14 @@ def record_use(
     A run already recorded for *version* writes nothing.
     """
     record = uses_record_name(model)
-    header = {"model": model, "type": "uses_header", "timestamp": _reg_ts()}
-    storage.create_exclusive(REGISTRY_APP, record, stamped(header), {})
     entries = read_entries(storage, record)
-    if any(u["app"] == app and u["verstr"] == verstr
-           for u in fold_uses(entries).get(version, ())):
-        return
+    if not entries:  # a log needs its record: create it on the first use
+        header = {"model": model, "type": "uses_header", "timestamp": _reg_ts()}
+        storage.create_exclusive(REGISTRY_APP, record, stamped(header), {})
     run = {"app": app, "verstr": verstr}
+    if any(e.get("type") == "use" and e.get("version") == version and e.get("run") == run
+           for e in entries):
+        return
     _append_entry(storage, record, _build_entry(entries, "use", actor, version=version, run=run))
 
 

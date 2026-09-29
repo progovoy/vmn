@@ -22,7 +22,7 @@ import logging
 from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.registry.log import set_alias as _set_alias
 from vmn_exp.registry.log import remove_alias as _remove_alias
-from vmn_exp.registry.datasets import producer_output, reference_fields, register_dataset_version
+from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import read_uses, set_version_status
 from vmn_exp.registry.names import valid_model_name, valid_alias_name, parse_ref
 from vmn_exp.registry.store import ensure_model, list_models, model_kind, register_version
@@ -66,13 +66,10 @@ def _cmd_register(storage, args):
         return 1
 
     try:
-        registered = _register_version(storage, model_name, args)
+        n, origin = _register_version(storage, model_name, args)
     except (ValueError, FileNotFoundError) as exc:
         _LOG.error("%s", exc)
         return 1
-    if registered is None:
-        return 1
-    n, origin = registered
 
     if alias_name is not None:
         _set_alias(storage, model_name, alias_name, n)
@@ -92,8 +89,7 @@ def _register_source_error(args):
 
 
 def _register_version(storage, model_name, args):
-    """``(n, origin text)`` of the new (or deduped) version; None when the run
-    ref does not resolve."""
+    """``(n, origin text)`` of the new (or deduped) version."""
     description = getattr(args, "description", None)
     uri = getattr(args, "uri", None)
     if uri:
@@ -104,29 +100,17 @@ def _register_version(storage, model_name, args):
     app_name = getattr(args, "app", None)
     verstr = _resolve_run_ref(storage, app_name, args.version_ref)
     if verstr is None:
-        _LOG.error("Could not resolve run ref %r (app=%r)", args.version_ref, app_name)
-        return None
-    fields = {
-        "run_ref": {"app": app_name, "verstr": verstr} if app_name else {"verstr": verstr},
-        "artifact_path": getattr(args, "artifact", None),
-    }
+        raise ValueError(f"Could not resolve run ref {args.version_ref!r} (app={app_name!r})")
+    run_ref = {"app": app_name, "verstr": verstr} if app_name else {"verstr": verstr}
+    artifact_path = getattr(args, "artifact", None)
     if getattr(args, "kind", None) == "dataset":
-        n = register_dataset_version(
-            storage, model_name, _copied_fields(storage, app_name, verstr, fields, args),
-            description=description,
-        )
+        fields = copied_fields(storage, run_ref, artifact_path, getattr(args, "digest", None))
+        n = register_dataset_version(storage, model_name, fields, description=description)
     else:
         ensure_model(storage, model_name, description=description)
-        n = register_version(storage, model_name, description=description, **fields)
+        n = register_version(storage, model_name, run_ref, artifact_path=artifact_path,
+                             description=description)
     return n, f"run_ref={verstr!r}"
-
-
-def _copied_fields(storage, app_name, verstr, fields, args):
-    """*fields* plus the digest/size the run logged for the artifact."""
-    path = fields["artifact_path"]
-    output = (producer_output(storage, app_name, verstr, path) if app_name and path else None) or {}
-    digest = getattr(args, "digest", None) or output.get("digest")
-    return {**fields, "digest": digest, "size": output.get("size")}
 
 
 def _cmd_alias(storage, args):
@@ -236,8 +220,9 @@ def _cmd_resolve(storage, args):
             print(f"verstr:   {verstr}")
         if artifact_path:
             print(f"artifact: {artifact_path}")
-        if artifact_uri or meta.get("uri"):
-            print(f"uri:      {artifact_uri or meta['uri']}")
+        uri = artifact_uri or meta.get("uri")
+        if uri:
+            print(f"uri:      {uri}")
         if meta.get("digest"):
             print(f"digest:   {meta['digest']}")
     return 0

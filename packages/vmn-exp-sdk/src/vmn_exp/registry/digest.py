@@ -15,6 +15,7 @@ import hashlib
 import os
 
 from vmn_exp._base import sha256_file
+from vmn_exp.storage.files import artifact_file_path, list_artifact_tree
 
 
 def local_digest(path: str) -> dict:
@@ -30,21 +31,12 @@ def local_digest(path: str) -> dict:
 
 def _dir_digest(root: str) -> dict:
     manifest = hashlib.sha256()
-    size = files = 0
-    for rel, full in _files_below(root):
-        manifest.update(f"{rel}\0{sha256_file(full)}\n".encode())
-        size += os.path.getsize(full)
-        files += 1
-    return {"digest": f"sha256:{manifest.hexdigest()}", "size": size, "files": files}
-
-
-def _files_below(root: str) -> list:
-    """``[(posix relpath, path)]`` of every regular file below *root*, relpath-sorted."""
-    found = []
-    for dirpath, _, filenames in os.walk(root):
-        for filename in filenames:
-            full = os.path.join(dirpath, filename)
-            if os.path.isfile(full):
-                rel = os.path.relpath(full, root).replace(os.sep, "/")
-                found.append((rel, full))
-    return sorted(found)
+    tree = list_artifact_tree(root)  # posix relpaths, name-sorted
+    for entry in tree:
+        file_sha = sha256_file(artifact_file_path(root, entry["name"]))
+        manifest.update(f"{entry['name']}\0{file_sha}\n".encode())
+    return {
+        "digest": f"sha256:{manifest.hexdigest()}",
+        "size": sum(entry["size"] for entry in tree),
+        "files": len(tree),
+    }

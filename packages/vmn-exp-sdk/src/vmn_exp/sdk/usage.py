@@ -20,11 +20,12 @@ import logging
 import threading
 import weakref
 
+from vmn_exp.core.best_effort import BestEffort
 from vmn_exp.core.lineage import artifact_ref_uri
 from vmn_exp.registry.datasets import producer_output
 from vmn_exp.registry.log import record_use
 from vmn_exp.registry.names import parse_ref, registry_uri
-from vmn_exp.registry.store import model_kind
+from vmn_exp.registry.store import model_kind, run_of
 from vmn_exp.registry.view import resolve_ref
 from vmn_exp.sdk import context
 from vmn_exp.sdk.models import _resolve_storage
@@ -32,6 +33,10 @@ from vmn_exp.sdk.models import _resolve_storage
 _LOGGER = logging.getLogger("vmn_exp.sdk")
 _USED = weakref.WeakKeyDictionary()  # run -> {(name, n)} it already recorded
 _USED_LOCK = threading.Lock()
+# Warns on the first failure of each step, then stays at debug.
+_REGISTRY_GUARD = BestEffort(
+    _LOGGER, lambda what, exc: f"vmn: could not record the {what} in the registry: {exc}"
+)
 
 
 def use_model(ref, *, run=None, storage=None) -> dict:
@@ -72,11 +77,8 @@ def record_version_use(run, storage, meta, kind) -> None:
     run.log_input(**_version_input(storage, meta, kind))
     with _USED_LOCK:
         _USED.setdefault(run, set()).add(key)
-    try:
-        record_use(storage, meta["model"], meta["n"], run.app_name, run.id)
-    except Exception as exc:  # noqa: BLE001 — the run must not fail on it
-        _LOGGER.warning(f"vmn: could not record the use of {key[0]}@{key[1]} "
-                        f"by run {run.id} in the registry: {exc}")
+    _REGISTRY_GUARD(f"use of {key[0]}@{key[1]}", record_use,
+                    storage, key[0], key[1], run.app_name, run.id)
 
 
 def _use(ref, kind, run, storage):
@@ -92,10 +94,9 @@ def _version_input(storage, meta, kind) -> dict:
     """``log_input`` keywords naming *meta*'s version."""
     name, n = meta["model"], meta["n"]
     uri, digest = registry_uri(name, n), meta.get("digest")
-    run_ref, path = meta.get("run_ref"), meta.get("artifact_path")
-    if isinstance(run_ref, dict) and run_ref.get("app") and run_ref.get("verstr") and path:
-        app, verstr = run_ref["app"], run_ref["verstr"]
-        uri = artifact_ref_uri(app, verstr, path)
-        output = producer_output(storage, app, verstr, path)
-        digest = (output or {}).get("digest") or digest
+    producer, path = run_of(meta), meta.get("artifact_path")
+    if producer and path:
+        uri = artifact_ref_uri(*producer, path)
+        # A copied dataset recorded its producer's digest; a model did not.
+        digest = digest or (producer_output(storage, *producer, path) or {}).get("digest")
     return {"uri": uri, "name": f"{name}@{n}", "digest": digest, "kind": kind}

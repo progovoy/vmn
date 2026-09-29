@@ -28,8 +28,20 @@ import weakref
 
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
-from vmn_exp.registry.names import REGISTRY_APP, is_uses_record, parse_ref
-from vmn_exp.registry.store import get_version, list_models, list_versions, model_kind
+from vmn_exp.registry.names import (
+    REGISTRY_APP,
+    parse_ref,
+    parse_version_record,
+    valid_model_name,
+)
+from vmn_exp.registry.store import (
+    get_version,
+    header_kind,
+    list_models,
+    list_versions,
+    model_kind,
+    run_of,
+)
 
 
 _VERSION_ROW_FIELDS = ("run_ref", "artifact_path", "uri", "digest", "size", "files")
@@ -75,7 +87,7 @@ def model_state(storage, model: str) -> dict:
 
     return {
         "header": header,
-        "kind": model_kind(storage, model),
+        "kind": header_kind(header),
         "versions": versions,
         "aliases": fold["aliases"],
         "audit": fold["audit"],
@@ -147,12 +159,12 @@ _RUN_MODELS_LOCK = threading.Lock()
 def _run_models(storage):
     """``{(app, verstr): [version entry]}``, cached on the registry listing.
 
-    Usage records are left out of the key: recording a use changes no
-    version, so it must not force a rescan."""
+    The key holds only the records the scan reads (model headers and
+    versions): a write to any other record, like a usage log, is no rescan."""
     listing = {
         name: files
         for name, files in storage.list_files(REGISTRY_APP).items()
-        if not is_uses_record(name)
+        if valid_model_name(name) or parse_version_record(name)
     }
     with _RUN_MODELS_LOCK:
         cached = _RUN_MODELS.get(storage)
@@ -168,10 +180,10 @@ def _run_models(storage):
 def _scan_run_models(storage):
     run_models = {}
     for model, kind, n, meta, fold in _live_versions(storage):
-        run_ref = meta.get("run_ref")
-        if not isinstance(run_ref, dict) or not (run_ref.get("app") and run_ref.get("verstr")):
+        run = run_of(meta)
+        if run is None:
             continue
-        run_models.setdefault((run_ref["app"], run_ref["verstr"]), []).append({
+        run_models.setdefault(run, []).append({
             "model": model,
             "kind": kind,
             "version": n,

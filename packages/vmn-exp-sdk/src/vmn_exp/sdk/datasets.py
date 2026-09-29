@@ -23,7 +23,7 @@ Usage::
 """
 from __future__ import annotations
 
-from vmn_exp.registry.datasets import producer_output, reference_fields, register_dataset_version
+from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import set_alias as _log_set_alias
 from vmn_exp.registry.view import resolve_ref
 from vmn_exp.sdk.models import _resolve_storage, _run_to_ref, check_model_name
@@ -59,7 +59,9 @@ def register_dataset(
         storage = _resolve_storage(storage)
         fields = reference_fields(uri, digest)
     else:
-        storage, fields = _copied_fields(run, app_name, artifact_path, digest, storage)
+        app, verstr, run_storage = _run_to_ref(run, app_name)
+        storage = _resolve_storage(storage or run_storage)
+        fields = copied_fields(storage, {"app": app, "verstr": verstr}, artifact_path, digest)
 
     n = register_dataset_version(storage, name, fields, description=description, dedupe=dedupe)
     if alias:
@@ -72,14 +74,3 @@ def get_dataset_version(ref, *, storage=None) -> dict:
     version metadata. Records no use; ValueError when *ref* is a model."""
     return resolved_version(_resolve_storage(storage), ref, "dataset")
 
-
-def _copied_fields(run, app_name, artifact_path, digest, storage):
-    app, verstr, run_storage = _run_to_ref(run, app_name)
-    storage = _resolve_storage(storage or run_storage)
-    output = producer_output(storage, app, verstr, artifact_path) or {}
-    return storage, {
-        "run_ref": {"app": app, "verstr": verstr},
-        "artifact_path": artifact_path,
-        "digest": digest or output.get("digest"),
-        "size": output.get("size"),
-    }
