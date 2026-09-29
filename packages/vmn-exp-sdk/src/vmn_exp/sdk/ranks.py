@@ -50,6 +50,7 @@ class NoOpRun:
 
     id = None
     name = None
+    start_step = None
 
     def __init__(self, app_name=None):
         self.app_name = app_name
@@ -89,7 +90,7 @@ class NoOpRun:
 
     set_tag = set_tags = remove_tag = define_metric = alert = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
-    log_table = log_image = log_histogram = _ignore
+    log_table = log_image = log_histogram = register_model = _ignore
 
     def __enter__(self):
         return self

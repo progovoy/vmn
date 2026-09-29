@@ -97,3 +97,23 @@ def test_all_ranks_opts_out_of_the_noop(app_layout, monkeypatch):
         assert run.id
 
     assert len(_storage(app_layout).list_snapshots(app_layout.app_name)) == 1
+
+
+def _public_names(obj):
+    return {name for name in dir(obj) if not name.startswith("_")}
+
+
+def test_noop_run_exposes_every_public_name_of_a_real_run(app_layout):
+    """Instance attributes and every mixin's methods: code written against
+    Run (e.g. ``range(run.start_step, ...)`` after a fork) runs on any rank."""
+    _bootstrap(app_layout)
+    with start_run(app_layout.app_name) as run:
+        expected = _public_names(run)
+
+    assert {"start_step", "id", "name", "app_name", "pid"} <= expected
+    assert sorted(expected - _public_names(NoOpRun("app"))) == []
+
+
+def test_noop_run_data_attributes_match_an_unforked_run():
+    run = NoOpRun("app")
+    assert (run.id, run.name, run.start_step) == (None, None, None)
