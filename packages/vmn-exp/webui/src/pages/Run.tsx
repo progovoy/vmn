@@ -15,6 +15,7 @@ import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
+import RunLineage from "../components/RunLineage";
 import TrainingCurves from "../components/TrainingCurves";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import RunProvenanceSection from "./RunProvenance";
@@ -79,6 +80,7 @@ function RunBody({ ws, app, appName, detail }: {
         inputs={detail.inputs}
         importedFrom={detail.imported_from}
       />
+      <RunLineage ws={ws} app={app} verstr={verstr} />
     </>
   );
 }

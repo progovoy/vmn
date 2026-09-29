@@ -818,3 +818,10 @@ tr.row.archived .run-link { text-decoration: line-through; text-decoration-color
 .lb-table .tree-roll { flex-shrink: 0; }
 td.fleet-cell { font-family: var(--mono); font-size: 12px; }
 td.fleet-failed:not(:empty) { color: var(--text-2); }
+
+/* run lineage card */
+.lineage-group { margin-top: 8px; }
+.lineage-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.lineage-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 3px 0; }
+.lineage-list li > div { flex-basis: 100%; padding-left: 12px; font-size: 12px; }
+.lineage .muted { color: var(--text-3); }
