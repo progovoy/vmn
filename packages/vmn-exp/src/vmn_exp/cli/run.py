@@ -279,10 +279,18 @@ class _Supervision:
         return exit_code
 
     def _start(self, run_cmd):
+        from vmn_exp.sdk import sysmetrics  # exp's __init__ imports the CLI
+
+        self.samples_tree = sysmetrics.enabled(
+            getattr(self.args, "system_metrics", None), self.exp_conf
+        )
         env = dict(os.environ)
         env["VMN_EXPERIMENT_ID"] = self.verstr
         env["VMN_APP_NAME"] = self.app_name or ""
         env["VMN_METRICS_FILE"] = self.metrics_path
+        if self.samples_tree:
+            # An SDK run in the child must not sample the tree a second time.
+            env[sysmetrics.SUPERVISOR_SAMPLES_ENV] = "1"
         env.update(self.extra_env)
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
@@ -325,7 +333,7 @@ class _Supervision:
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
-            sysmetrics.enabled(getattr(self.args, "system_metrics", None), self.exp_conf),
+            self.samples_tree,
             pid=proc.pid,
         )
 
@@ -417,7 +425,7 @@ class _Supervision:
         self.guard(
             "output log entry",
             lambda: append_to_log(
-                self.storage, self.app_name, self.verstr, self.output.artifact_entry()
+                self.storage, self.app_name, self.verstr, self.output.seal()
             ),
         )
 
@@ -465,8 +473,7 @@ class _Supervision:
         _ingest_metric_records(self.storage, self.app_name, self.verstr, records)
 
     def _sync_once(self):
-        if self.output is not None:
-            self.guard("output log upload", self.output.upload)
+        # The log first: a slow output PUT must not hold back liveness data.
         self.guard(
             "remote sync",
             self.storage.sync_log_to_remote,
@@ -474,3 +481,5 @@ class _Supervision:
             self.verstr,
             self.writer_id,
         )
+        if self.output is not None:
+            self.guard("output log upload", self.output.upload)

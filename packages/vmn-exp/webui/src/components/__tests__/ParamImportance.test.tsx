@@ -23,7 +23,7 @@ const ENTRIES = [
 
 const row = (i: number, loss: number, params: Record<string, unknown>): ExperimentRow => ({
   idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null, branch: null,
-  base_version: null, user_meta: null, params, metrics: { loss, acc: 1 - loss },
+  base_version: null, params, metrics: { loss, acc: 1 - loss },
 });
 const ROWS = [
   row(1, 0.2, { lr: 1, opt: "adam" }),

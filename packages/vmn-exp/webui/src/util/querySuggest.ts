@@ -7,7 +7,7 @@ export const ROW_FIELDS = [
   "base_version", "kind", "depth", "tree_status", "parent", "children",
   "exit_code", "duration_sec", "started_at", "finished_at", "heartbeat",
   "last_metric_at", "host", "pid", "command", "stale_sec",
-  "heartbeat_interval_sec", "user_meta",
+  "heartbeat_interval_sec",
 ];
 
 export const OPERATORS = ["=", "!=", "<", "<=", ">", ">=", "~", "!~", "in", "not in", "contains"];

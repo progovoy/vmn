@@ -46,8 +46,6 @@ export interface Job {
   status: string;
   exit_code: number | null;
   log: string;
-  /** Ran fine but did nothing. */
-  noop: boolean;
 }
 
 /** Lifecycle of a `vmn-exp run` — "stuck" means the heartbeat went stale
@@ -108,7 +106,6 @@ export interface ExperimentRow extends Partial<RunStatus> {
   note: string | null;
   branch: string | null;
   base_version: string | null;
-  user_meta: Record<string, unknown> | null;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
   /** The numeric fold: metrics plus any param that parses as a number.

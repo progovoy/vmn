@@ -39,7 +39,7 @@ describe("charts follow a theme switch", () => {
   it("rebuilds a scatter chart so it re-reads the palette", async () => {
     const rows: ExperimentRow[] = [1, 2].map((i) => ({
       idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null,
-      branch: "main", base_version: "1", user_meta: null, metrics: { loss: i, acc: i / 10 },
+      branch: "main", base_version: "1", metrics: { loss: i, acc: i / 10 },
     }));
     render(<MetricScatter rows={rows} metricCols={["loss", "acc"]} paramCols={[]} schema={{}} />);
     await waitFor(() => expect(instances).toHaveLength(1));

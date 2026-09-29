@@ -24,7 +24,7 @@ describe("chart components are memoized", () => {
 
 const row = (i: number, metrics: Record<string, number>): ExperimentRow => ({
   idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null,
-  branch: i % 2 ? "main" : "dev", base_version: "0.0.1", user_meta: null, metrics,
+  branch: i % 2 ? "main" : "dev", base_version: "0.0.1", metrics,
 });
 const ROWS = [row(1, { loss: 0.5, acc: 0.1 }), row(2, { loss: 0.4, acc: 0.2 })];
 

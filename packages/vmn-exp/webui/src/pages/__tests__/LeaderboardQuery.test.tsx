@@ -43,7 +43,7 @@ function row(idx: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
     note: null,
     branch: "main",
     base_version: "0.0.1",
-    user_meta: null,
+   
     metrics: { loss: 0.5 },
     status: "succeeded",
     exit_code: 0,
