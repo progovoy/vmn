@@ -179,6 +179,11 @@ def _within_caps(candidates):
     return kept, skipped
 
 
+def untracked_over_caps(repo_path):
+    """Untracked paths of *repo_path* a snapshot would leave out (size caps)."""
+    return _within_caps(_untracked_candidates(repo_path))[1]
+
+
 def _collect_untracked_tarball(repo_path):
     """Collect untracked non-ignored files into a tar.gz, within the size caps.
 

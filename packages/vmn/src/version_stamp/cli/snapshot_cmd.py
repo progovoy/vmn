@@ -2,9 +2,10 @@
 
 ``add_arg_snapshot(subparsers)`` declares the parser; ``handle_snapshot(ctx)``
 checks the app is stamped, opens the stores (``--store`` / ``--local``, see
-:mod:`version_stamp.snapshot.stores`), resolves ``-v`` refs and dispatches.
-``restore``/``export``/``diff`` resolve their own refs in
-``version_stamp.snapshot.restore`` / ``.export`` (imported lazily).
+:mod:`version_stamp.snapshot.stores`), resolves ``-v`` refs and dispatches to
+the ``version_stamp.snapshot`` modules (imported lazily). ``show``/``export``/
+``diff`` default to the latest snapshot; ``note``/``delete``/``restore`` need
+``-v`` or ``--latest``.
 ``list``/``show``/``diff``/``export`` run without the repo lock
 (``constants.READ_ONLY_ACTIONS``).
 """
@@ -68,10 +69,6 @@ def _params(vmn_ctx):
     return vmn_ctx.params
 
 
-def _ref(args):
-    return "latest" if args.latest else args.version
-
-
 def _resolve(records, app_name, args, default_latest):
     from version_stamp.snapshot.refs import resolve_snapshot_ref
 
@@ -84,15 +81,22 @@ def _resolve(records, app_name, args, default_latest):
     return verstr
 
 
-def _run_record_action(vcs, args, stores):
-    from version_stamp.snapshot import delete, listing
+def _ref_actions(vcs, params, args, stores):
+    """``{action: (defaults to latest?, run(verstr))}`` of the actions taking a ref."""
+    from version_stamp.snapshot import delete, diff, export, listing, restore
 
-    actions = {
+    return {
         "show": (True, lambda v: listing.snapshot_show(stores.records, vcs.name, v, args.as_json)),
         "note": (False, lambda v: listing.snapshot_note(stores.records, vcs.name, v, args.note)),
         "delete": (False, lambda v: delete.snapshot_delete(stores, vcs.name, v)),
+        "restore": (False, lambda v: restore.snapshot_restore(vcs, params, stores, v)),
+        "export": (True, lambda v: export.snapshot_export(vcs, stores, v, args.output)),
+        "diff": (True, lambda v: diff.snapshot_diff(vcs, stores, v, to=args.to, tool=args.tool)),
     }
-    default_latest, run = actions[args.action]
+
+
+def _run_ref_action(vcs, params, args, stores):
+    default_latest, run = _ref_actions(vcs, params, args, stores)[args.action]
     verstr = _resolve(stores.records, vcs.name, args, default_latest)
     return 1 if verstr is None else run(verstr)
 
@@ -121,18 +125,6 @@ def _list(vcs, args, stores):
                          verbose=args.verbose, as_json=args.as_json)
 
 
-def _run_tree_action(vcs, params, args):
-    if args.action == "restore":
-        from version_stamp.snapshot.restore import snapshot_restore
-
-        return snapshot_restore(vcs, params, ref=_ref(args))
-    from version_stamp.snapshot import export
-
-    if args.action == "export":
-        return export.snapshot_export(vcs, params, ref=_ref(args), output_path=args.output)
-    return export.snapshot_diff(vcs, params, ref=_ref(args), to=args.to, tool=args.tool)
-
-
 def _open_stores(vcs, params):
     from version_stamp.snapshot.stores import SnapshotStoreError, open_snapshot_stores
 
@@ -149,8 +141,6 @@ def handle_snapshot(vmn_ctx):
     if status is None:
         return 1
     params = _params(vmn_ctx)
-    if args.action in ("restore", "export", "diff"):
-        return _run_tree_action(vcs, params, args)
     stores = _open_stores(vcs, params)
     if stores is None:
         return 1
@@ -158,4 +148,4 @@ def handle_snapshot(vmn_ctx):
         return _create(vcs, args, stores, status)
     if args.action == "list":
         return _list(vcs, args, stores)
-    return _run_record_action(vcs, args, stores)
+    return _run_ref_action(vcs, params, args, stores)

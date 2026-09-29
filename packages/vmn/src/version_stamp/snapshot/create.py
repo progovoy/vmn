@@ -12,6 +12,9 @@ Re-creating a state already saved keeps its record — same verstr, same
 Public:
   - ``parse_meta_args(["k=v", ...]) -> dict`` (ValueError on a bad item).
   - ``build_user_meta(meta_args, meta_file) -> dict | None``.
+  - ``snapshot_verstr(records, app_name, captured) -> str``.
+  - ``store_snapshot(vcs, stores, captured, verstr, note=None, user_meta=None)
+    -> (summary, created)`` — never touches an existing record.
   - ``snapshot_create(vcs, stores, note=None, user_meta=None, status=None) -> int``;
     prints the verstr as its last stdout line.
 """
@@ -88,6 +91,25 @@ def _warn_skipped(summary):
         )
 
 
+def snapshot_verstr(records, app_name, captured):
+    """The verstr *captured* is (or would be) saved under in *records*."""
+    return _unique_snapshot_verstr(
+        records, app_name, captured.base_version, captured.commit_hash,
+        captured.diff_hash, _changesets(captured),
+    )
+
+
+def store_snapshot(vcs, stores, captured, verstr, note=None, user_meta=None):
+    """Store *captured*'s code object and, unless *verstr* already exists, its
+    record. ``(payload summary, created)``."""
+    code, summary = ensure_code(stores.code, vcs, captured)
+    created = not stores.records.exists(vcs.name, verstr)
+    if created:
+        metadata = _new_record(vcs, verstr, captured, code, summary, note, user_meta)
+        stores.records.save(vcs.name, verstr, metadata, {})
+    return summary, created
+
+
 def snapshot_create(vcs, stores, note=None, user_meta=None, status=None):
     captured, err = capture_identity(vcs, status=status)
     if err is not None:
@@ -96,17 +118,10 @@ def snapshot_create(vcs, stores, note=None, user_meta=None, status=None):
         print(CLEAN_TREE, file=sys.stderr)
         return 0
 
-    records = stores.records
-    verstr = _unique_snapshot_verstr(
-        records, vcs.name, captured.base_version, captured.commit_hash,
-        captured.diff_hash, _changesets(captured),
-    )
-    code, summary = ensure_code(stores.code, vcs, captured)
-    if records.exists(vcs.name, verstr):
-        _refresh_existing(records, vcs.name, verstr, note, user_meta)
-    else:
-        metadata = _new_record(vcs, verstr, captured, code, summary, note, user_meta)
-        records.save(vcs.name, verstr, metadata, {})
+    verstr = snapshot_verstr(stores.records, vcs.name, captured)
+    summary, created = store_snapshot(vcs, stores, captured, verstr, note, user_meta)
+    if not created:
+        _refresh_existing(stores.records, vcs.name, verstr, note, user_meta)
     _warn_skipped(summary)
     VMN_LOGGER.info(f"Created snapshot: {verstr}")
     print(verstr)
