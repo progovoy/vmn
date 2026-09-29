@@ -14,12 +14,16 @@ of the list:
   and a ``-v`` targeting it directly, for the same reason;
 * a run with a kept descendant is kept, so no surviving run points at a parent
   that no longer exists.
+
+A code object (:mod:`vmn_exp.core.code_store`) is deleted with the last run of
+its code.
 """
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.cli.prune_query import print_preview, query_candidates
 from vmn_exp.cli.views import metrics_schema
+from vmn_exp.core.code_store import drop_unused_code
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
@@ -190,7 +194,8 @@ def _metas_and_snapshot(storage, app_name):
         if snapshot is not None:
             metas = [
                 {"verstr": r["verstr"], "timestamp": r.get("timestamp"),
-                 "parent": r.get("parent"), "tags": r.get("tags") or {}}
+                 "parent": r.get("parent"), "tags": r.get("tags") or {},
+                 "code_verstr": r.get("code_verstr")}
                 for r in snapshot.rows
             ]
             return metas, snapshot
@@ -337,6 +342,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
 
     verstrs = [m["verstr"] for m in to_delete]
     _map(storage, lambda v: storage.delete(app_name, v), verstrs)
+    drop_unused_code(storage, app_name, {m.get("code_verstr") for m in to_delete})
     for verstr in verstrs:
         print(f"Deleted {verstr}")
     print(f"Pruned {len(to_delete)} experiments, kept {len(metas) - len(to_delete)}")

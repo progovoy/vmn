@@ -42,7 +42,7 @@ def gitmode():
 
 
 def create_record(
-    app_name, note, params, parent, nested, storage, snapshot, name=None,
+    app_name, note, params, parent, nested, storage, name=None,
     capture_env=None, python_exe=None,
 ):
     """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
@@ -62,7 +62,7 @@ def create_record(
         )
     else:
         app_name, storage, verstr, err, exp_conf = gitmode().create_in_checkout(
-            app_name, note, create_data, parent, nested, storage, snapshot, name,
+            app_name, note, create_data, parent, nested, storage, name,
             capture_env=capture_env, python_exe=python_exe,
         )
     if err:

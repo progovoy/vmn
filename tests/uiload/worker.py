@@ -153,7 +153,7 @@ class Worker:
 
         return start_run(
             self.app, name=job["job_id"], params=job.get("params") or None,
-            tags=job.get("tags") or None, parent=parent, snapshot=False,
+            tags=job.get("tags") or None, parent=parent,
             capture_env=False, heartbeat_interval_sec=self.heartbeat_sec,
         )
 

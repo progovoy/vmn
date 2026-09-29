@@ -61,12 +61,12 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
             self._local.delete(app_name, verstr)
         return claimed
 
-    def load(self, app_name, verstr):
-        meta, patches = self._local.load(app_name, verstr)
+    def load_record(self, app_name, verstr):
+        meta, patches = self._local.load_record(app_name, verstr)
         if meta is not None:
             return meta, patches
         if self._remote:
-            meta, patches = self._remote.load(app_name, verstr)
+            meta, patches = self._remote.load_record(app_name, verstr)
             if meta is not None:
                 self._local.save(app_name, verstr, meta, patches)
             return meta, patches
@@ -239,7 +239,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         if not (self._remote and self._remote.exists(app_name, verstr)):
             return False
         try:
-            self.load(app_name, verstr)
+            self.load_record(app_name, verstr)
         except Exception:
             VMN_LOGGER.debug("Could not fetch the remote record", exc_info=True)
         return True

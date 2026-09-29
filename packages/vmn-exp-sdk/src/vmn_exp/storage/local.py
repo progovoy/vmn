@@ -15,7 +15,6 @@ from vmn_exp.storage.files import (
     INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
-    PATCH_FILES,
     apply_metadata_updates,
     artifact_file_path,
     artifact_name_for,
@@ -33,14 +32,6 @@ from vmn_exp.storage.files import (
     write_patches_to_dir,
 )
 from vmn_exp.storage.listing import RecordListings, files_in, map_dirs
-
-
-def _has_patch_content(patches):
-    """Whether *patches* (or one of its ``deps``) carries a file worth
-    linking — a clean-tree record has none, in itself or in any dep."""
-    if any(patches.get(key) for key, _, _ in PATCH_FILES):
-        return True
-    return any(_has_patch_content(dp) for dp in patches.get("deps", {}).values())
 
 
 def _append_bytes(path, text):
@@ -110,59 +101,12 @@ class LocalSnapshotStorage(SnapshotStorage):
         self._write_record(app_name, verstr, snap_dir, metadata, patches)
         return True
 
-    def _same_code_dirs(self, app_name, verstr, metadata):
-        """Sibling runs of the same code, whose patches may be shared."""
-        code = (metadata or {}).get("code_verstr")
-        if not code:
-            return []
-        base = self._snapshot_base_dir(app_name)
-        own, code = safe_verstr(verstr), safe_verstr(code)
-        return [
-            os.path.join(base, name)
-            for name in os.listdir(base)
-            if name != own and (name == code or name.startswith(code + "."))
-        ]
-
-    def _link_sources(self, app_name, verstr, metadata, patches):
-        """``[(sibling dir, trusted)]`` to hard-link identical patches from.
-
-        A sibling with the same ``diff_hash`` has the same patches (trusted: no
-        bytes need comparing); one with a different hash has none to share;
-        one that predates the hash is compared byte for byte. A record with no
-        patch content of its own (a clean tree) has nothing to link regardless,
-        so it skips the sibling scan entirely.
-        """
-        if not _has_patch_content(patches):
-            return []
-        want = (metadata or {}).get("diff_hash")
-        sources = []
-        for path in self._same_code_dirs(app_name, verstr, metadata):
-            theirs = self._sibling_diff_hash(path)
-            if want and theirs:
-                if theirs == want:
-                    return [(path, True)]
-                continue
-            sources.append((path, False))
-        return sources
-
-    def _sibling_diff_hash(self, snap_dir):
-        try:
-            with open(os.path.join(snap_dir, METADATA_FILE), "rb") as f:
-                return (parse_record_metadata(f.read()) or {}).get("diff_hash")
-        except OSError:
-            return None
-
     def _write_record(self, app_name, verstr, snap_dir, metadata, patches):
-        siblings = self._link_sources(app_name, verstr, metadata, patches)
-        write_patches_to_dir(snap_dir, patches, link_from=siblings)
+        write_patches_to_dir(snap_dir, patches)
         for dep_path, dep_patches in patches.get("deps", {}).items():
-            safe_dep = safe_dep_name(dep_path)
-            dep_dir = os.path.join(snap_dir, "deps", safe_dep)
+            dep_dir = os.path.join(snap_dir, "deps", safe_dep_name(dep_path))
             Path(dep_dir).mkdir(parents=True, exist_ok=True)
-            dep_sources = [
-                (os.path.join(s, "deps", safe_dep), trusted) for s, trusted in siblings
-            ]
-            write_patches_to_dir(dep_dir, dep_patches, link_from=dep_sources)
+            write_patches_to_dir(dep_dir, dep_patches)
         # Last: metadata.yml is what makes the record visible.
         atomic_write(
             os.path.join(snap_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True)
@@ -172,7 +116,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         with open(meta_path, "rb") as f:
             return _base.yaml_safe_load(f)
 
-    def load(self, app_name, verstr):
+    def load_record(self, app_name, verstr):
         snap_dir = self._snapshot_dir(app_name, verstr)
         meta_path = os.path.join(snap_dir, METADATA_FILE)
         if not os.path.isfile(meta_path):

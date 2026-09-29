@@ -2,7 +2,6 @@
 """File-level helpers shared by the snapshot storage backends: record file
 names, atomic writes and patch files (log naming/parsing: core.experiment_logfiles)."""
 import os
-import shutil
 import tempfile
 
 from vmn_exp._base import valid_app_path, valid_path_component
@@ -155,45 +154,8 @@ def atomic_write(path, data):
         raise
 
 
-def _same_bytes(path, data):
-    try:
-        if os.path.getsize(path) != len(data):
-            return False
-        with open(path, "rb") as f:
-            return f.read() == data
-    except OSError:
-        return False
-
-
-def _link_or_copy(src, dst):
-    if os.path.lexists(dst):
-        os.unlink(dst)
-    try:
-        os.link(src, dst)
-    except OSError:
-        shutil.copy2(src, dst)
-
-
-def _same_size(path, data):
-    try:
-        return os.path.getsize(path) == len(data)
-    except OSError:
-        return False
-
-
-def _identical(path, data, trusted):
-    """Whether *path* holds *data*. A *trusted* source (same ``diff_hash``)
-    already has the same content, so its size is proof enough."""
-    return _same_size(path, data) if trusted else _same_bytes(path, data)
-
-
-def write_patches_to_dir(directory, patches, link_from=()):
-    """Write the patch files *patches* carries and drop the ones it lacks.
-
-    An identical file in one of the *link_from* ``(directory, trusted)``
-    sources is hard-linked rather than written again, so runs of the same code
-    share their patches.
-    """
+def write_patches_to_dir(directory, patches):
+    """Write the patch files *patches* carries and drop the ones it lacks."""
     for key, filename, binary in PATCH_FILES:
         path = os.path.join(directory, filename)
         content = patches.get(key)
@@ -201,19 +163,7 @@ def write_patches_to_dir(directory, patches, link_from=()):
             if os.path.lexists(path):
                 os.unlink(path)
             continue
-        data = content if binary else content.encode("utf-8")
-        source = next(
-            (
-                os.path.join(src, filename)
-                for src, trusted in link_from
-                if _identical(os.path.join(src, filename), data, trusted)
-            ),
-            None,
-        )
-        if source:
-            _link_or_copy(source, path)
-        else:
-            atomic_write(path, data)
+        atomic_write(path, content if binary else content.encode("utf-8"))
 
 
 def read_patches_from_dir(directory):

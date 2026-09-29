@@ -92,36 +92,3 @@ def test_storage_load_metadata_reads_metadata_alone(local):
 # ---------------------------------------------------------------------------
 # dedupe by diff_hash
 # ---------------------------------------------------------------------------
-
-
-def _run_meta(verstr, diff_hash):
-    return {"verstr": verstr, "timestamp": "t", "code_verstr": "c", "diff_hash": diff_hash}
-
-
-def test_same_diff_hash_links_patches_without_comparing_bytes(local, monkeypatch):
-    from vmn_exp.storage import files
-
-    def no_byte_compare(*a, **k):
-        raise AssertionError("compared bytes despite a matching diff_hash")
-
-    patches = {"working_tree": "diff\n" * 10, "untracked_files": b"tar" * 10}
-    local.save("app", "c", _run_meta("c", "h1"), patches)
-    monkeypatch.setattr(files, "_same_bytes", no_byte_compare)
-    local.save("app", "c.r2", _run_meta("c.r2", "h1"), dict(patches))
-
-    for name in ("working_tree.patch", "untracked_files.tar.gz"):
-        a = os.stat(os.path.join(local._snapshot_dir("app", "c"), name))
-        b = os.stat(os.path.join(local._snapshot_dir("app", "c.r2"), name))
-        assert a.st_ino == b.st_ino, name
-
-
-def test_different_diff_hash_never_links_or_compares(local, monkeypatch):
-    from vmn_exp.storage import files
-
-    local.save("app", "c", _run_meta("c", "h1"), {"working_tree": "same\n"})
-    monkeypatch.setattr(files, "_same_bytes", lambda *a, **k: 1 / 0)
-    local.save("app", "c.r2", _run_meta("c.r2", "h2"), {"working_tree": "same\n"})
-
-    a = os.stat(os.path.join(local._snapshot_dir("app", "c"), "working_tree.patch"))
-    b = os.stat(os.path.join(local._snapshot_dir("app", "c.r2"), "working_tree.patch"))
-    assert a.st_ino != b.st_ino

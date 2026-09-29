@@ -2,15 +2,16 @@
 
 These are synthetic app identifiers used internally by vmn features (e.g. the
 model registry uses the ``vmn-registry`` pseudo-app, sweep trial claims the
-``vmn-sweeps/...`` tree).  They should never surface in ``vmn-exp list``, the
-UI app chooser, or any other place that enumerates experiment apps.
+``vmn-sweeps/...`` tree, run code objects the ``vmn-code/...`` one).  They
+should never surface in ``vmn-exp list``, the UI app chooser, or any other
+place that enumerates experiment apps.
 
 The constant is defined here — in the experiment-side core — so that every
 listing function can import it without creating a circular dependency.
 ``vmn_exp/registry`` may reuse it once the package split lands.
 """
 
-RESERVED_APPS: frozenset = frozenset({"vmn-registry", "vmn-sweeps"})
+RESERVED_APPS: frozenset = frozenset({"vmn-registry", "vmn-sweeps", "vmn-code"})
 
 
 def is_reserved_app(name: str) -> bool:

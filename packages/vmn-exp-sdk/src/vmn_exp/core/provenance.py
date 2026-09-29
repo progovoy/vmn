@@ -2,6 +2,7 @@
 
 Pure functions; no I/O, no storage, no clock.
 """
+from vmn_exp.core.code_store import CODE_MISSING
 
 
 def no_code_reason(meta):
@@ -9,8 +10,12 @@ def no_code_reason(meta):
 
     The structural gate is ``base_commit`` absence — that is what
     ``_materialize_workdir`` requires.  ``imported_from`` enriches the message
-    when present (MLflow imports carry a ``source_commit`` hint).
+    when present (MLflow imports carry a ``source_commit`` hint). A run whose
+    code object is gone or incomplete (see :mod:`vmn_exp.core.code_store`) has
+    no usable code either.
     """
+    if meta.get(CODE_MISSING):
+        return f"code snapshot {meta.get('code')} is missing from the store"
     if meta.get("base_commit"):
         return None
     imported_from = meta.get("imported_from")

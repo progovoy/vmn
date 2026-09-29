@@ -95,7 +95,7 @@ class TuneRecorder:
         experiment_name: Human-readable name stored as the outer run's ``name``
             field (shown by ``vmn-exp list``).
         **start_run_kwargs: Forwarded verbatim to every ``start_run()`` call.
-            Useful for ``storage=``, ``snapshot=False``, ``tags=``, etc.
+            Useful for ``storage=``, ``tags=``, etc.
     """
 
     def __init__(
