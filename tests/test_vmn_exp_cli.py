@@ -81,11 +81,11 @@ def test_vmn_snapshot_is_a_builtin_command(app_layout):
     assert proc.returncode == 0, proc.stderr
 
 
-def test_vmn_exp_has_no_snapshot_command(app_layout):
+def test_vmn_exp_points_snapshot_at_vmn(app_layout):
     _bootstrap(app_layout)
     proc = _vmn_exp(app_layout, "snapshot", app_layout.app_name)
     assert proc.returncode == 2, proc.stderr
-    assert "invalid choice" in proc.stderr
+    assert "vmn snapshot" in proc.stderr
 
 
 def test_dirty_tree_hint_points_at_vmn_snapshot_create(app_layout, capfd):
