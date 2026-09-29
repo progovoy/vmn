@@ -175,7 +175,7 @@ class CachedLogs:
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         """Ship the writer's complete lines appended since the last sync; once
         the run has finished, compact what the remote holds for the writer."""
-        if not self._remote:
+        if not self.remote_for(app_name, verstr):
             return
         with self._sync_lock:
             self._ship_new_lines(app_name, verstr, writer_id)

@@ -19,6 +19,7 @@ from vmn_exp.storage.files import (
     is_volatile_file,
 )
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.storage.remote_presence import RemotePresence
 
 
 class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
@@ -28,6 +29,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
     def __init__(self, local_storage, remote_storage=None):
         self._local = local_storage
         self._remote = remote_storage
+        self._presence = RemotePresence(local_storage, remote_storage)
         self._init_logs()
 
     def _local_patches(self, patches):
@@ -44,6 +46,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 VMN_LOGGER.warning("Failed to sync snapshot to remote storage")
                 VMN_LOGGER.debug("Remote save failed", exc_info=True)
                 raise
+            self._presence.mark(app_name, verstr)
 
     def create_exclusive(self, app_name, verstr, metadata, patches):
         local_patches = self._local_patches(patches)
@@ -59,6 +62,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         if not claimed:
             # Another host holds this name on the shared remote.
             self._local.delete(app_name, verstr)
+        self._presence.mark(app_name, verstr, claimed)
         return claimed
 
     def load_record(self, app_name, verstr):
@@ -69,6 +73,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
             meta, patches = self._remote.load_record(app_name, verstr)
             if meta is not None:
                 self._local.save(app_name, verstr, meta, patches)
+                self._presence.mark(app_name, verstr)
             return meta, patches
         return None, None
 
@@ -209,6 +214,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
 
     def delete(self, app_name, verstr):
         self._local.delete(app_name, verstr)
+        self._presence.forget(app_name, verstr)
         if self._remote:
             try:
                 self._remote.delete(app_name, verstr)
@@ -238,18 +244,32 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
             return True
         if not (self._remote and self._remote.exists(app_name, verstr)):
             return False
+        self._presence.mark(app_name, verstr)
         try:
             self.load_record(app_name, verstr)
         except Exception:
             VMN_LOGGER.debug("Could not fetch the remote record", exc_info=True)
         return True
 
+    def remote_for(self, app_name, verstr):
+        """The remote to write *verstr*'s files to: None unless the remote
+        holds this very record (see :mod:`vmn_exp.storage.remote_presence`)."""
+        if self._remote and self._presence.holds(app_name, verstr):
+            return self._remote
+        return None
+
+    def mirror_record(self, app_name, verstr):
+        """Upload a record only the local copy holds (a content-addressed
+        code object) to the remote. A log buffer holds no body to upload."""
+        if self._remote and self._local_is_replica:
+            self._presence.upload_if_missing(app_name, verstr)
+
     def save_file(self, app_name, verstr, filename, data):
         if not self._ensure_local_record(app_name, verstr):
             VMN_LOGGER.debug(f"Not writing {filename}: {verstr} does not exist")
             return False
         self._local.save_file(app_name, verstr, filename, data)
-        if self._remote:
+        if self.remote_for(app_name, verstr):
             try:
                 self._remote.save_file(app_name, verstr, filename, data)
             except Exception:
@@ -261,7 +281,7 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         if not self._ensure_local_record(app_name, verstr):
             return False
         self._local.save_artifact_file(app_name, verstr, src_path, name=name)
-        if self._remote:
+        if self.remote_for(app_name, verstr):
             try:
                 self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
             except Exception:

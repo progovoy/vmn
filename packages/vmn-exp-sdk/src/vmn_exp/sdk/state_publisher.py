@@ -17,20 +17,36 @@ from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.cached import CachedSnapshotStorage
 
 
-def split_storage(storage):
-    """``(inline, background)`` halves of *storage* for run-state writes.
+def split_storage(storage, app_name, verstr):
+    """``(inline, background upload or None)`` of *storage* for one run's
+    state writes; the upload takes the state's serialized ``data``.
 
-    A local-first cache with a remote is split into its two sides; a store that
-    is remote only is written entirely in the background; anything else (a
-    local store, or a caller's own wrapper) is written inline, as given.
+    A local-first cache with a remote is split into its local side and an
+    upload to the remote — made only once the remote is known to hold this
+    run (:meth:`CachedSnapshotStorage.remote_for`, whose check may be a GET,
+    so it runs in the background too). A store that is remote only is written
+    entirely in the background; anything else (a local store, or a caller's
+    own wrapper) is written inline, as given.
     """
     if isinstance(storage, CachedSnapshotStorage):
         # Private, but the cache's documented shape (local-first + optional
-        # remote), and it exposes no public accessor for its two sides.
-        return storage._local, storage._remote
+        # remote), and it exposes no public accessor for its local side.
+        if storage._remote is None:
+            return storage._local, None
+        return storage._local, functools.partial(
+            _upload_if_held, storage, app_name, verstr
+        )
     if getattr(storage, "is_remote", lambda: False)():
-        return None, storage
+        return None, functools.partial(
+            storage.save_file, app_name, verstr, RUN_STATE_FILE
+        )
     return storage, None
+
+
+def _upload_if_held(storage, app_name, verstr, data):
+    remote = storage.remote_for(app_name, verstr)
+    if remote is not None:
+        remote.save_file(app_name, verstr, RUN_STATE_FILE, data)
 
 
 class RunStatePublisher:
@@ -38,12 +54,11 @@ class RunStatePublisher:
 
     def __init__(self, storage, app_name, verstr):
         self._storage = storage
-        self._inline, remote = split_storage(storage)
+        self._inline, upload = split_storage(storage, app_name, verstr)
         self._split = self._inline is not storage
         self._where = (app_name, verstr, RUN_STATE_FILE)
         self._remote = None
-        if remote is not None:
-            upload = functools.partial(remote.save_file, *self._where)
+        if upload is not None:
             self._remote = Coalescing(upload, "vmn-run-state")
 
     def publish(self, state):

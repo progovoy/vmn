@@ -44,6 +44,15 @@ def store_code(storage, app_name, key, payload, summary):
     storage.save(code_app(app_name), key, dict(summary, verstr=key), payload)
 
 
+def publish_code(storage, app_name, key):
+    """Upload *key*'s code object to the remote when only the local cache
+    holds it (``stored_code`` reads local-first): a run created there must
+    not point at a code object the remote lacks."""
+    mirror = getattr(storage, "mirror_record", None)
+    if mirror is not None:
+        mirror(code_app(app_name), key)
+
+
 def resolve_code(storage, app_name, metadata, patches):
     """``(metadata, patches)`` of a run record with its code object's patches
     in place of its own; a run whose object is unusable gets empty patches
