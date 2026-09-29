@@ -96,6 +96,15 @@ describe("MetricScatter", () => {
     expect(fills).toEqual(["#0000ff", "#00ff00"]);
   });
 
+  it("starts from the given axes", async () => {
+    render(
+      <MetricScatter rows={ROWS} metricCols={["loss", "acc"]} paramCols={["lr"]} schema={SCHEMA}
+        initialX="lr" initialY="loss" />
+    );
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    expect(selects.map((s) => s.value)).toEqual(["lr", "loss"]);
+  });
+
   it("handles empty data gracefully", () => {
     const { container } = render(
       <MetricScatter rows={[]} metricCols={["loss"]} paramCols={[]} schema={SCHEMA} />

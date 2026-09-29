@@ -204,6 +204,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           <LeaderboardCharts
             view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
             metricCols={cols.metricCols} paramCols={cols.paramCols} schema={schema} onBrush={onBrush}
+            importance={{ ws, app, filter, defaultMetric: sortLabel }}
           />
 
           <LeaderboardTable

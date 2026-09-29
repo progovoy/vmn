@@ -119,6 +119,19 @@ export interface ExperimentColumns {
   total: number;
 }
 
+/** One param's row of `/experiments-importance`: its share of a random
+ *  forest's impurity decrease for the target metric (the column sums to 1),
+ *  its Pearson/Spearman correlation (null for categorical params) and the
+ *  runs carrying both. */
+export interface ParamImportanceEntry {
+  param: string;
+  importance: number;
+  correlation: number | null;
+  spearman: number | null;
+  kind: "numeric" | "bool" | "categorical";
+  n: number;
+}
+
 /** Every branch / metric key / param key across an app's runs. */
 export interface ExperimentFacets {
   branches: string[];

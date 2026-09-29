@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { setAllParams, useUrlState } from "./useUrlState";
 import { moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 
-export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped"] as const;
+export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped", "importance"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
 export type Order = "asc" | "desc";
 

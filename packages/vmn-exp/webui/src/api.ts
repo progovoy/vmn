@@ -1,7 +1,7 @@
 import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentColumns, ExperimentDetail,
-  ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema, VersionRow,
-  Workspace,
+  ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema,
+  ParamImportanceEntry, VersionRow, Workspace,
 } from "./types";
 import { appTag, BASE, get, post } from "./http";
 import { PAGE_SIZE } from "./paging";
@@ -87,6 +87,17 @@ export const api = {
     const p = new URLSearchParams({ keys: keys.join(",") });
     setFilter(p, opts);
     return get<ExperimentColumns>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-columns?${p}`);
+  },
+  /** Which params drive *metric* over the filtered runs, most important first. */
+  experimentsImportance: (
+    ws: string, app: string, metric: string,
+    opts: Pick<PageOpts, "status" | "query" | "archived"> = {},
+  ) => {
+    const p = new URLSearchParams({ metric });
+    setFilter(p, opts);
+    return get<ParamImportanceEntry[]>(
+      `/workspaces/${ws}/apps/${appTag(app)}/experiments-importance?${p}`,
+    );
   },
   /** The newest *n* runs, newest first: `last` picks them by storage order on
    *  the server, whatever the leaderboard's sort. */
