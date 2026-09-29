@@ -103,6 +103,15 @@ _EXPECTED_ALL = [
     "valid_path_component",
     "version",
     "yaml_safe_load",
+    # snapshot capture + store (version_stamp.snapshot)
+    "SnapshotCapture",
+    "capture_identity",
+    "ensure_code",
+    "build_record_metadata",
+    "patch_summary",
+    "open_snapshot_stores",
+    "register_snapshot_store_opener",
+    "LocalRecordStore",
 ]
 
 _REPO_ROOT = Path(__file__).parent.parent

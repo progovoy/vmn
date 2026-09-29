@@ -122,32 +122,44 @@ def _compute_verstr(base_version, commit_hash, patches, hash_len=7):
     )
 
 
-def _stored_diff_hash(storage, app_name, verstr):
-    """``(exists, diff_hash)`` of the snapshot stored at *verstr*."""
+def _stored_metadata(storage, app_name, verstr):
+    """``(exists, metadata dict)`` of the snapshot stored at *verstr*."""
     raw = storage.load_file(app_name, verstr, "metadata.yml")
     if raw is None:
-        return False, None
+        return False, {}
     try:
         meta = yaml_safe_load(raw)
     except Exception:
         meta = None
-    return True, meta.get("diff_hash") if isinstance(meta, dict) else None
+    return True, meta if isinstance(meta, dict) else {}
 
 
-def _unique_snapshot_verstr(storage, app_name, base_version, commit_hash, diff_hash):
-    """The shortest dev verstr that is free or already holds this exact content.
+def _stored_diff_hash(storage, app_name, verstr):
+    """``(exists, diff_hash)`` of the snapshot stored at *verstr*."""
+    exists, meta = _stored_metadata(storage, app_name, verstr)
+    return exists, meta.get("diff_hash")
+
+
+def _unique_snapshot_verstr(
+    storage, app_name, base_version, commit_hash, diff_hash, changesets=None
+):
+    """The shortest dev verstr that is free or already holds this exact state.
 
     A snapshot never overwrites a different one: on a prefix collision (or a
     legacy record that carries no ``diff_hash`` to compare) the diff hash is
-    extended instead.
+    extended instead. With *changesets*, a record of the same diff at other
+    repo commits is a collision too; without them only the diff counts.
     """
+    # Imported here: version_stamp.snapshot.record imports this module.
+    from version_stamp.snapshot.record import same_state
+
     verstr = _format_dev_verstr(base_version, commit_hash, diff_hash)
     if not diff_hash:
         return verstr
     for hash_len in _DIFF_HASH_LENGTHS:
         verstr = _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len)
-        exists, stored = _stored_diff_hash(storage, app_name, verstr)
-        if not exists or stored == diff_hash:
+        exists, stored = _stored_metadata(storage, app_name, verstr)
+        if not exists or same_state(stored, diff_hash, changesets):
             return verstr
     return verstr
 
