@@ -74,6 +74,13 @@ ROW_FIELDS = frozenset(
 # ``env`` holds the environment summary dict (python, packages, …).
 DICT_PREFIXES = ("metrics", "params", "tags", "env")
 
+# Three-part fields: ``inputs.<name>.<sub>`` and ``outputs.<artifact path>.<sub>``
+# (quote a key with a dot or slash in it: ``outputs."model.pkl".digest``).
+NESTED_SUBFIELDS = {
+    "inputs": ("uri", "digest", "kind"),
+    "outputs": ("path", "digest", "size"),
+}
+
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")
 
@@ -103,8 +110,9 @@ def _describe(token):
     if kind == "end":
         return "end of query"
     if kind == "name" and isinstance(value, tuple):
-        prefix, key = value
-        return f"'{prefix}.\"{key}\"'"
+        prefix, key = value[:2]
+        sub = f".{value[2]}" if len(value) == 3 else ""
+        return f"'{prefix}.\"{key}\"{sub}'"
     return f"'{value}'"
 
 
@@ -159,9 +167,19 @@ def _lex_name(text, pos):
     if raw.endswith(".") and end < len(text) and text[end] in "'\"":
         prefix = raw[:-1]
         string_token, end = _lex_string(text, end)
-        return ("name", (prefix, string_token[1]), pos), end
+        return _lex_subfield(text, end, prefix, string_token[1], pos)
     kind = "kw" if raw.lower() in _KEYWORDS else "name"
     return (kind, raw.lower() if kind == "kw" else raw, pos), end
+
+
+def _lex_subfield(text, end, prefix, key, pos):
+    """A quoted key, and the ``.digest`` sub-field that may follow it."""
+    if not text.startswith(".", end):
+        return ("name", (prefix, key), pos), end
+    sub_end = end + 1
+    while sub_end < len(text) and (text[sub_end].isalnum() or text[sub_end] == "_"):
+        sub_end += 1
+    return ("name", (prefix, key, text[end + 1 : sub_end]), pos), sub_end
 
 
 def tokenize(text):
@@ -199,6 +217,8 @@ def tokenize(text):
 
 
 def _getter(name, pos):
+    if isinstance(name, tuple) and len(name) == 3:
+        return _nested_getter(*name, pos)
     if isinstance(name, tuple):
         prefix, key = name
         if prefix in DICT_PREFIXES:
@@ -214,18 +234,24 @@ def _getter(name, pos):
         return lambda row: (row.get(prefix) or {}).get(key)
     if len(parts) == 3:
         p0, p1, p2 = parts
-        if p0 == "inputs":
-            if p2 not in ("uri", "digest", "kind"):
-                _fail(
-                    f"inputs.{p1}.{p2}: sub-field must be uri, digest, or kind", pos
-                )
-            return lambda row: ((row.get("inputs") or {}).get(p1) or {}).get(p2)
+        if p0 in NESTED_SUBFIELDS:
+            return _nested_getter(p0, p1, p2, pos)
         if p0 == "env" and p1 == "packages":
             return lambda row: (
                 ((row.get("env") or {}).get("packages")) or {}
             ).get(p2)
         _fail(f"unknown field '{name}'", pos)
     _fail(f"unknown field '{name}'", pos)
+
+
+def _nested_getter(prefix, key, sub, pos):
+    """``inputs.<name>.<sub>`` / ``outputs.<artifact path>.<sub>``."""
+    allowed = NESTED_SUBFIELDS.get(prefix)
+    if allowed is None:
+        _fail(f"unknown field '{prefix}.\"{key}\".{sub}'", pos)
+    if sub not in allowed:
+        _fail(f"{prefix}.{key}.{sub}: sub-field must be {', '.join(allowed)}", pos)
+    return lambda row: ((row.get(prefix) or {}).get(key) or {}).get(sub)
 
 
 def _is_number(value):
