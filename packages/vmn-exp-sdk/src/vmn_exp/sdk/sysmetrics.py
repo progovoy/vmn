@@ -28,6 +28,7 @@ Three things are deliberate:
 import importlib
 import logging
 import os
+import sys
 import threading
 import time
 
@@ -94,11 +95,26 @@ def sdk_enabled(explicit, exp_conf=None):
     return enabled(explicit, exp_conf)
 
 
+# Optional modules found missing; never looked for again in this process.
+_MISSING = set()
+
+
 def _import_optional(name):
-    """Import *name* or return None. The single seam tests use to fake absence."""
+    """Import *name* or return None. The single seam tests use to fake absence.
+
+    A module already imported, or already found missing, is answered without
+    entering the import machinery: :class:`Sampler` resolves both on its
+    caller's thread, so its init thread never holds an import lock. One held at
+    ``fork()`` stays held in the child, which deadlocks on its own first import
+    of that module (a DataLoader forking workers right after ``start_run()``).
+    """
+    module = sys.modules.get(name)
+    if module is not None or name in _MISSING:
+        return module
     try:
         return importlib.import_module(name)
     except Exception:
+        _MISSING.add(name)
         return None
 
 
@@ -297,8 +313,11 @@ class Sampler:
         self._collector = collector
         if enabled and collector is None:
             # Off-thread, and started now so the first tick finds it ready:
-            # importing psutil and nvmlInit() can take seconds on a host with
-            # a sulking driver, and belong on neither start_run() nor a beat.
+            # nvmlInit() can take seconds on a host with a sulking driver, and
+            # belongs on neither start_run() nor a beat. The imports do not
+            # (see _import_optional), so they happen here.
+            _import_optional("psutil")
+            _import_optional("pynvml")
             threading.Thread(
                 target=self._build, name="vmn-sysmetrics-init", daemon=True
             ).start()
