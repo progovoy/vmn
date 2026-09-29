@@ -134,6 +134,13 @@ mutation runs per workspace at a time. Restores/gotos over a dirty tree
 auto-save your work first (the safety net) — the job log tells you the
 `vmn goto` that recovers it.
 
+There is no Rerun action: a [`vmn-exp rerun`](experiments.md#rerun) supervises
+its command for as long as it runs, which a job can't host. The run page's
+*reproduce* card shows the `vmn-exp rerun <app> -v <verstr>` command (for runs
+that recorded one) and a **reruns →** link to the leaderboard filtered by
+`rerun_of = "<verstr>"`; a rerun's page links back to its source (*rerun of
+…*). Run detail returns the source as top-level `rerun_of`.
+
 ## The index
 
 By default the server keeps a small SQLite cache under `<data-dir>/index/` to

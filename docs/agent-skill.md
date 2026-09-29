@@ -68,6 +68,12 @@ vmn-exp diff <app_name>
 vmn-exp restore <app_name> --latest
 # For the best run instead: find it with `vmn-exp list --sort <metric>`, then
 # vmn-exp restore <app_name> -v <version>
+
+# Re-run a run's recorded command against its exact code, in a throwaway
+# workspace (the live checkout is untouched); the new run records rerun_of
+vmn-exp rerun <app_name> -v <version> [-- <other command>]
+# What a cluster job would run (command, cwd, code identity); vmn does not schedule
+vmn-exp rerun <app_name> -v <version> --print --json
 ```
 
 ### Driving the UI's fleet columns (total / waiting / running / done / failed)
