@@ -9,6 +9,7 @@ absolute, never with ``..``.
 """
 import json
 import os
+import posixpath
 import tempfile
 
 import yaml
@@ -35,6 +36,22 @@ def checked_artifact_name(name):
     if not valid_artifact_path(name):
         raise ValueError(f"Invalid artifact name {name!r}: use a relative a/b/c path")
     return name
+
+
+def store_produced(name, produce, save, inspect=None):
+    """Write a file with *produce(tmp path)* and hand it to *save(path, name)*
+    as artifact *name* — renamed to the basename of the path *produce* returns,
+    when it returns one (a file that kept its own extension). Returns
+    ``(artifact name, inspect(written file) or None)``."""
+    checked_artifact_name(name)
+    with tempfile.TemporaryDirectory(prefix="vmn-artifact-") as tmp:
+        path = os.path.join(tmp, posixpath.basename(name))
+        written = produce(path) or path
+        stored = checked_artifact_name(
+            posixpath.join(posixpath.dirname(name), os.path.basename(written))
+        )
+        save(written, stored)
+        return stored, inspect(written) if inspect else None
 
 
 def _tree_names(local_dir, prefix):
@@ -87,30 +104,28 @@ class RunArtifacts:
         )
         return local
 
-    def _log_produced(self, name, produce):
-        """Log the file *produce(path)* writes, stored as artifact *name*."""
-        checked_artifact_name(name)
-        with tempfile.TemporaryDirectory(prefix="vmn-artifact-") as tmp:
-            path = os.path.join(tmp, os.path.basename(name))
-            produce(path)
-            self.log_artifact(path, name=name)
-
     def log_dict(self, obj, name):
         """*obj* as JSON (``.json``) or YAML (``.yaml``/``.yml``), by *name*'s extension."""
         writer = _DICT_WRITERS.get(os.path.splitext(name)[1].lower())
         if writer is None:
             raise ValueError(f"log_dict needs a .json, .yaml or .yml name, got {name!r}")
-        self._log_produced(name, lambda path: _write_text(path, lambda f: writer(obj, f)))
+        store_produced(
+            name, lambda path: _write_text(path, lambda f: writer(obj, f)), self.log_artifact
+        )
 
     def log_text(self, text, name):
-        self._log_produced(name, lambda path: _write_text(path, lambda f: f.write(text)))
+        store_produced(
+            name, lambda path: _write_text(path, lambda f: f.write(text)), self.log_artifact
+        )
 
     def log_figure(self, figure, name, **savefig_kwargs):
         """A matplotlib-style figure, through its ``savefig`` (format from *name*).
 
         Duck-typed: nothing here imports matplotlib.
         """
-        self._log_produced(name, lambda path: figure.savefig(path, **savefig_kwargs))
+        store_produced(
+            name, lambda path: figure.savefig(path, **savefig_kwargs), self.log_artifact
+        )
 
     def log_artifacts(self, local_dir, prefix=None):
         """Every file under *local_dir*, named by its path below it (under *prefix*).

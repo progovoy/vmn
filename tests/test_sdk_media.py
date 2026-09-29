@@ -116,6 +116,31 @@ def test_log_image_from_a_png_path(run, storage, tmp_path):
     assert _entries(storage, "image")[0]["width"] == 2
 
 
+def test_media_files_are_not_lineage_outputs(run, storage, tmp_path):
+    """Per-step media would bloat every row's ``outputs``; the image/table
+    entry is their only log entry."""
+    src = tmp_path / "pic.png"
+    src.write_bytes(encode_png(bytes(3 * 2 * 2), 2, 2, 3))
+    run.log_image("pic", str(src))
+    run.log_table("t", [{"n": 1}])
+    run.finish()
+    assert not _entries(storage, "artifact")
+    assert reader.get_run(APP, VERSTR, storage=storage)["outputs"] == {}
+
+
+def test_a_non_png_image_without_pil_keeps_its_extension(run, storage, tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    monkeypatch.setitem(sys.modules, "PIL.Image", None)
+    src = tmp_path / "pic.gif"
+    src.write_bytes(b"GIF89a")
+    run.log_image("gif", str(src))
+    run.finish()
+    (entry,) = _entries(storage, "image")
+    assert entry["path"] == "media/gif/0.gif"
+    assert (entry["width"], entry["height"]) == (None, None)
+    assert _artifact(storage, "media/gif/0.gif") == b"GIF89a"
+
+
 def test_log_image_from_a_pil_image(run, storage):
     image_mod = pytest.importorskip("PIL.Image")
     run.log_image("pil", image_mod.new("RGB", (5, 3)), step=1)

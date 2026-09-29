@@ -17,13 +17,12 @@ import json
 import logging
 import os
 import shutil
-import tempfile
 
 from vmn_exp.core.histogram import histogram
 from vmn_exp.core.png import array_to_png, png_file_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
-from vmn_exp.sdk.run_artifacts import checked_artifact_name
+from vmn_exp.sdk.run_artifacts import checked_artifact_name, store_produced
 
 _LOGGER = logging.getLogger("vmn_exp.sdk")
 
@@ -65,6 +64,10 @@ def _write_array_image(array, dest):
     return dest
 
 
+def _png_size(path):
+    return png_file_size(path) if path.endswith(".png") else None
+
+
 def write_image(image, dest):
     """Write *image* as the PNG *dest*; returns the path written (a non-PNG
     file logged without Pillow keeps its own extension)."""
@@ -83,7 +86,12 @@ def write_image(image, dest):
 
 class RunMedia:
     """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``_save_artifact_file``
-    and ``_append``."""
+    and ``_append``.
+
+    Media files are stored as artifacts without an ``artifact`` log entry of
+    their own: the table/image entry is their record, and per-step media would
+    otherwise bloat every row's lineage ``outputs``.
+    """
 
     def _media_step(self, kind, name, step):
         """*step*, checked, or the next free auto step of (*kind*, *name*)."""
@@ -101,15 +109,6 @@ class RunMedia:
         self._media_steps[key] = max(self._media_steps.get(key, 0), step + 1)
         self._append(entry)
 
-    def _store(self, name, produce):
-        """Save the file *produce(tmp path)* writes as artifact *name*; returns
-        ``(artifact name stored under, (width, height) of a PNG or None)``."""
-        with tempfile.TemporaryDirectory(prefix="vmn-media-") as tmp:
-            written = produce(os.path.join(tmp, os.path.basename(name)))
-            stored = name[: -len(os.path.basename(name))] + os.path.basename(written)
-            self._save_artifact_file(written, checked_artifact_name(stored))
-            return stored, png_file_size(written) if stored.endswith(".png") else None
-
     def log_table(self, name, data, columns=None, step=None):
         doc, total = table_document(data, columns=columns)
         step = self._media_step("table", name, step)
@@ -122,9 +121,8 @@ class RunMedia:
         def produce(dest):
             with open(dest, "w", encoding="utf-8") as f:
                 json.dump(doc, f, allow_nan=False)
-            return dest
 
-        self._store(path, produce)
+        store_produced(path, produce, self._save_artifact_file)
         entry = create_log_entry(
             "table", name=name, step=step, path=path, rows=doc["rows"],
             columns=[c["name"] for c in doc["columns"]],
@@ -135,9 +133,11 @@ class RunMedia:
 
     def log_image(self, name, image, step=None, caption=None):
         step = self._media_step("image", name, step)
-        path, size = self._store(
-            checked_artifact_name(f"media/{name}/{step}.png"),
+        path, size = store_produced(
+            f"media/{name}/{step}.png",
             lambda dest: write_image(image, dest),
+            self._save_artifact_file,
+            inspect=_png_size,
         )
         width, height = size or (None, None)
         entry = create_log_entry(
