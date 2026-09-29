@@ -482,14 +482,24 @@ that stacks every step on a shared x range.
 
 `GET .../experiments/{verstr}/lineage?depth=1&limit=100` answers the runs linked
 to one run through what it consumed and produced — the same object as the SDK's
-[`get_lineage`](sdk.md#lineage): `{app, verstr, upstream, downstream, models,
-truncated}`, each node `{app, verstr, name, timestamp, status, depth, found,
-links}`. It is answered from the app's index snapshot: the digest and
+[`get_lineage`](sdk.md#lineage): `{app, verstr, upstream, downstream, datasets,
+models, truncated}`, each node `{app, verstr, name, timestamp, status, depth,
+found, links}` (a link to a registered version's artifact also carries
+`model`, `version`, `kind`). It is answered from the app's index snapshot: the digest and
 `vmn://` URI maps are built once per snapshot and shared by every request, so a
 lookup costs the linked runs, not the workspace. `depth` is 1..10 and `limit`
 1..1000 (else 400); an unknown run is a 404. The run page shows it as a
-**lineage** card (upstream/downstream runs linked to their pages, registered
-models, a depth picker).
+**lineage** card (upstream/downstream runs linked to their pages, a badge
+linking each used model/dataset version to its registry page, the reference
+datasets used, registered models, a depth picker).
+
+`GET .../models/{name}/versions/{n}/lineage` is the version side — the
+registry's [`version_lineage`](sdk.md#lineage): `{model, version, kind,
+status, producer, consumers}`, the producer run node (null for a reference
+dataset) and the runs recorded using the version, each `found`/`status` from
+its app's index snapshot. An invalid name is a 400, a version that never
+existed a 404. The model page shows it as a **lineage** card with a version
+picker (newest by default).
 
 ### Model registry API
 
@@ -497,8 +507,9 @@ Under `/api/v1/workspaces/{ws}/models/`:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `.../models` | List all registered models (`{"models": [ModelRow...]}`) |
-| `GET` | `.../models/{name}` | Full model detail: versions, aliases, audit log |
+| `GET` | `.../models[?kind=model\|dataset]` | List registered models and datasets (`{"models": [ModelRow...]}`, each row with its `kind`); `kind` filters (400 for any other value) |
+| `GET` | `.../models/{name}` | Full model detail: `kind`, versions, aliases, audit log |
+| `GET` | `.../models/{name}/versions/{n}/lineage` | The version's producer run and consumer runs (see [Lineage](#lineage)) |
 | `POST` | `.../models/{name}/versions` | Register a new version; body `{"run": {"app", "verstr"}, "artifact_path"?, "alias"?, "description"?}`; returns `{"version": N}` (201) |
 | `POST` | `.../models/{name}/aliases` | Move alias; body `{"alias", "version", "expect"?}`; 409 on expect mismatch |
 | `DELETE` | `.../models/{name}/aliases/{alias}` | Remove an alias |

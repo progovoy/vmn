@@ -680,11 +680,27 @@ vmn-exp lineage my_app -v @1 --json
 
 `vmn-exp lineage <app> -v <ref> [--depth N] [--json]` prints the upstream runs
 (what this run consumed), the downstream runs of the same app (what consumed
-its outputs), each with the input/artifact pairs that link them, and the model
-versions registered from the run. `--depth` (default 1) follows links further;
+its outputs), each with the input/artifact pairs that link them — a pair whose
+artifact is a registered version's gets that version too
+(`clf@2 <- model.pkl (uri)  model clf v2`) — the reference datasets it used
+(`Datasets:`, its `vmn-registry://` inputs), and the model versions registered
+from the run. `--depth` (default 1) follows links further;
 `--json` prints the same object as `get_lineage` in the SDK
 ([Lineage](sdk.md#lineage)). It is read-only, never takes the repo lock, and is
 answered from the experiment index.
+
+A used registry version is an ordinary input named `<name>@<N>` (see
+[models.md](models.md#using-versions)), so the query language finds the runs
+that used one:
+
+```sh
+vmn-exp list my_app --query 'inputs."resnet50@3".kind = "model"'
+vmn-exp list my_app --query 'inputs."imagenet@1".uri ~ "vmn-registry://"'
+```
+
+For every app at once — including consumers in other apps, which downstream
+links never reach — ask the version itself: the model page's lineage card in
+`vmn-exp ui`, or `version_lineage` ([sdk.md](sdk.md#lineage)).
 
 ### Environment capture
 

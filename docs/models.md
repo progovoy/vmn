@@ -333,13 +333,30 @@ A run records each version once. `get_model_version`, `get_dataset_version`
 and `register_model` never record. On a non-zero rank, `NoOpRun.use_model` /
 `use_dataset` resolve and record nothing.
 
+### Lineage
+
+Uses extend the run lineage ([sdk.md](sdk.md#lineage)) rather than adding a
+graph of their own:
+
+- From the consuming run (`get_lineage`, `vmn-exp lineage`, the run page's
+  lineage card): a used run-backed version is an upstream link to its producer
+  run, in any app, carrying `model`, `version` and `kind`; reference datasets
+  are listed in `datasets` (`{model, version, kind, input, digest, found}`).
+- From the version (`vmn_exp.registry.lineage.version_lineage(storage, name, n)`,
+  `GET .../models/{name}/versions/{n}/lineage`, the model page's lineage card):
+  `{model, version, kind, status, producer, consumers}` — the run it was
+  registered from (None for a reference dataset) and every run recorded in its
+  `<name>-uses` record, each marked `found: false` once pruned.
+
 ---
 
 ## UI
 
 The `vmn-exp ui` dashboard has a **Models** page listing all registered models and
-their current aliases and statuses.  Clicking a model opens a detail page that
-shows all versions with links to the originating experiment runs.
+datasets, each with a kind badge and its current aliases (a kind filter narrows
+it; API `?kind=model|dataset`).  Clicking one opens a detail page that shows all
+versions with links to the originating experiment runs, and a **lineage** card
+with the picked version's producer run and the runs that used it.
 
 A **Register** button on the Artifacts panel of any run detail page lets you
 register a new model version directly from the UI without leaving the browser.
