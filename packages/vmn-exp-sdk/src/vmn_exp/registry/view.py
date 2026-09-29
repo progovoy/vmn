@@ -17,8 +17,14 @@ registered_runs(storage) -> set[tuple[str, str]]
 
 models_for_run(storage, app, verstr) -> list[dict]
     The live model versions registered from one run (run lineage).
+
+Both read one ``{(app, verstr): versions}`` map, rebuilt only when the
+registry's file listing changes.
 """
 from __future__ import annotations
+
+import threading
+import weakref
 
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
@@ -116,37 +122,52 @@ def registered_runs(storage) -> set:
     The prune command uses this to prevent deleting experiment runs that a
     model version still references.
     """
-    result: set = set()
-    for _, _, meta, _ in _live_versions(storage):
-        run_ref = meta.get("run_ref")
-        if isinstance(run_ref, dict):
-            app = run_ref.get("app")
-            verstr = run_ref.get("verstr")
-            if app and verstr:
-                result.add((app, verstr))
-    return result
+    return set(_run_models(storage))
 
 
 def models_for_run(storage, app: str, verstr: str) -> list:
     """``[{model, version, aliases, status, artifact_path}]`` registered from
     run *verstr* of *app* (deleted versions left out), model/version-ordered."""
-    found = []
+    return [dict(m) for m in _run_models(storage).get((app, verstr), ())]
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+_RUN_MODELS = weakref.WeakKeyDictionary()  # storage -> (listing, run models)
+_RUN_MODELS_LOCK = threading.Lock()
+
+
+def _run_models(storage):
+    """``{(app, verstr): [version entry]}``, cached on the registry listing."""
+    listing = storage.list_files(REGISTRY_APP)
+    with _RUN_MODELS_LOCK:
+        cached = _RUN_MODELS.get(storage)
+    if listing and cached is not None and cached[0] == listing:
+        return cached[1]
+    run_models = _scan_run_models(storage)
+    if listing:
+        with _RUN_MODELS_LOCK:
+            _RUN_MODELS[storage] = (listing, run_models)
+    return run_models
+
+
+def _scan_run_models(storage):
+    run_models = {}
     for model, n, meta, fold in _live_versions(storage):
-        if meta.get("run_ref") != {"app": app, "verstr": verstr}:
+        run_ref = meta.get("run_ref")
+        if not isinstance(run_ref, dict) or not (run_ref.get("app") and run_ref.get("verstr")):
             continue
-        found.append({
+        run_models.setdefault((run_ref["app"], run_ref["verstr"]), []).append({
             "model": model,
             "version": n,
             "aliases": sorted(a for a, v in fold["aliases"].items() if v == n),
             "status": fold["status"].get(n, "active"),
             "artifact_path": meta.get("artifact_path"),
         })
-    return found
+    return run_models
 
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 def _live_versions(storage):
     """``(model, n, version metadata, registry fold)`` of every non-deleted version."""
