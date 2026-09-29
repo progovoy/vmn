@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import yaml
 
+from vmn_exp.cli import fork
 from vmn_exp.cli.manage import (
     MANAGE_ACTIONS,
     experiment_manage,
@@ -387,6 +388,9 @@ def experiment_create(vcs, params, storage, args):
     parent, err = _resolve_parent(storage, app_name, args)
     if err is not None:
         return err
+    source, err = fork.fork_source(storage, app_name, args)
+    if err is not None:
+        return err
 
     verstr, err = _experiment_create_core(
         vcs,
@@ -400,6 +404,7 @@ def experiment_create(vcs, params, storage, args):
     )
     if err is not None:
         return err
+    fork.seed(storage, app_name, verstr, source)
 
     if getattr(args, "metrics", None):
         append_to_log(
@@ -730,6 +735,7 @@ def experiment_show(vcs, params, storage, args):
         print(f"  Env:       {format_env_oneliner(env_summary)}")
     _print_output_log(storage, app_name, verstr)
     _print_status_block(storage, app_name, verstr, metadata, snapshot)
+    fork.print_lineage(metadata, log)
 
     # Patch stats
     for ptype in ("working_tree", "local_commits"):

@@ -14,6 +14,8 @@ export interface GridView {
   origin: number;
   alpha: number;
   logY: boolean;
+  /** Mark this step on step charts (where a forked run branched off). */
+  markStep?: number | null;
 }
 
 const MetricCell = memo(function MetricCell({ name, points, xMetric, color, view, height }: {
@@ -27,18 +29,21 @@ const MetricCell = memo(function MetricCell({ name, points, xMetric, color, view
 }) {
   const { origin, alpha, logY } = view;
   const xMode = xMetric ? "metric" : view.xMode;
+  const markStep = xMode === "step" ? view.markStep ?? null : null;
   const formatX = useMemo(() => (xMetric ? xMetricLabel(xMetric) : undefined), [xMetric]);
   const curves = useMemo(() => {
     const xy = toXY(points, xMode, origin, { positiveOnly: logY });
     return withSmoothing({ key: name, label: name, color, ...xy }, alpha);
   }, [points, xMode, origin, logY, alpha, name, color]);
   return (
-    <div data-testid="metric-chart" data-metric={name}>
+    <div data-testid="metric-chart" data-metric={name} data-mark-step={markStep ?? undefined}>
       <div className="mono" style={{ fontSize: 12, color: "var(--text-2)", height: HEADER_H }}>
         {name}{xMetric && <span style={{ color: "var(--text-3)" }}> vs {xMetric}</span>}
       </div>
       <LazyMount height={height}>
-        <CurveChart series={curves} xMode={xMode} logY={logY} height={height} formatX={formatX} />
+        <CurveChart
+          series={curves} xMode={xMode} logY={logY} height={height} formatX={formatX} markX={markStep}
+        />
       </LazyMount>
     </div>
   );

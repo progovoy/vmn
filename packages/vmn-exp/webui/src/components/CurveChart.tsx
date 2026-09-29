@@ -6,6 +6,7 @@ import {
   curveData, curveOptions, X_TICK, type CurveSeries,
 } from "../util/curveOptions";
 import { tooltipRows } from "../util/seriesArrays";
+import { withStepMarker } from "../util/chartMarkers";
 import CurveTooltip from "./CurveTooltip";
 import UPlotChart, { type CursorInfo } from "./UPlotChart";
 
@@ -19,7 +20,7 @@ const stepLabel = (x: number) => `step ${x}`;
  *  changes; new values for the same curves are swapped in place. */
 function CurveChart({
   series, xMode, logY = false, height = 280, hidden, focused = null,
-  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, hideX = false, formatX,
+  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, hideX = false, formatX, markX = null,
 }: {
   series: CurveSeries[];
   xMode: XMode;
@@ -32,15 +33,18 @@ function CurveChart({
   tooltipLimit?: number;
   hideX?: boolean;
   formatX?: (x: number) => string;
+  /** Step axes only: mark this x with a dashed line (a fork point). */
+  markX?: number | null;
 }) {
   // Keyed on the curves' identity, not their arrays: fresh values for the
   // same curves (a poll) must not rebuild the plot.
   const shape = series.map((s) => `${s.key}|${s.color}|${s.faded ? 1 : 0}`).join(",");
   const themeVersion = useThemeVersion();
-  const options = useMemo(
-    () => curveOptions(series, { xMode, logY, height, hideX, theme: chartTheme() }),
-    [shape, xMode, logY, height, hideX, themeVersion],
-  );
+  const options = useMemo(() => {
+    const theme = chartTheme();
+    const opts = curveOptions(series, { xMode, logY, height, hideX, theme });
+    return withStepMarker(opts, xMode === "step" ? markX : null, theme.axis);
+  }, [shape, xMode, logY, height, hideX, themeVersion, markX]);
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);

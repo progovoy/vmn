@@ -37,6 +37,7 @@ from vmn_exp.core.writer import (
 from vmn_exp.sdk import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
     context,
+    fork,
     resume,
     signals,
     sysmetrics,
@@ -111,6 +112,9 @@ def start_run(
     name=None,
     tags=None,
     capture_env=None,
+    fork_from=None,
+    fork_step=None,
+    rewind_to_step=None,
     capture_output=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
@@ -139,6 +143,13 @@ def start_run(
 
     ``run_id`` (or ``VMN_RESUME_RUN_ID``) reopens an existing run of the app
     instead of creating one — a requeued job continuing where it was preempted.
+    With ``rewind_to_step=N`` too, the reopened run's history past step N is
+    hidden (refused while the run is live elsewhere).
+
+    ``fork_from`` (a run ref, optionally ``"<ref>?_step=N"``) with
+    ``fork_step=N`` creates a NEW run that starts with that run's metrics and
+    params up to step N (all of them without a step) and continues from N + 1;
+    ``run.start_step`` is the step to log next.
 
     On a non-zero rank of a distributed job (``RANK``, ``LOCAL_RANK`` with
     ``WORLD_SIZE > 1``, or ``SLURM_PROCID``) this returns a :class:`NoOpRun`
@@ -156,18 +167,27 @@ def start_run(
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
 
-    prior_state = None
+    prior_state, start_step = None, None
     ref = resume.requested_run_id(run_id)
+    fork.check_modes(ref, fork_from, rewind_to_step)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
+        if rewind_to_step is not None:
+            start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
+        if fork_from:
+            app_name, storage, source, fork_step = fork.locate_source(
+                app_name, fork_from, fork_step, storage
+            )
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, snapshot, name,
             capture_env=capture_env,
         )
+        if fork_from:
+            start_step = fork.seed(storage, app_name, verstr, source, fork_step)
 
     run = Run(
         storage,
@@ -180,6 +200,7 @@ def start_run(
         name=name,
         capture_output=capture_output,
     )
+    run.start_step = start_step
     run._open()
     if prior_state is not None:
         _record_resume_inputs(run, note, params)
@@ -215,6 +236,8 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         self.app_name = app_name
         self.id = verstr
         self.name = name
+        # The step a fork or a rewound run continues from (None otherwise).
+        self.start_step = None
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None and atexit leaves it alone.
         self.pid = os.getpid()

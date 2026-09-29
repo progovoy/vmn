@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 
+from vmn_exp.cli import fork
 from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
@@ -165,6 +166,9 @@ def _create_experiment(vcs, storage, args):
     parent, err = cli._resolve_parent(storage, app_name, args)
     if err is not None:
         return app_name, None, err
+    source, err = fork.fork_source(storage, app_name, args)
+    if err is not None:
+        return app_name, None, err
 
     run_cmd = getattr(args, "run_cmd", None)
     python_exe = _detect_python_exe(run_cmd) if run_cmd else None
@@ -181,6 +185,8 @@ def _create_experiment(vcs, storage, args):
         capture_env=capture_env,
         python_exe=python_exe,
     )
+    if err is None:
+        fork.seed(storage, app_name, verstr, source)
     return app_name, verstr, err
 
 

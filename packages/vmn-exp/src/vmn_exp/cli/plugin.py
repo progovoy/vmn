@@ -145,6 +145,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="lineage: follow links this many hops (default: 1)")
     pexp.add_argument("--parent", default=None,
                       help="Parent experiment for a nested run.")
+    pexp.add_argument("--fork-from", default=None, metavar="REF",
+                      help="create/run: start a new run with REF's metrics and params "
+                           "(up to --fork-step; 'REF?_step=N' also works)")
+    pexp.add_argument("--fork-step", type=int, default=None, metavar="N",
+                      help="create/run: with --fork-from, copy history up to step N "
+                           "(default: all of it)")
     pexp.add_argument("--store", default=None,
                       help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
                            "file:///dir (or VMN_EXPERIMENT_STORE)")

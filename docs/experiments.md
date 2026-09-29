@@ -502,6 +502,18 @@ failed > stuck > running > created > succeeded
 One failed trial therefore makes the whole sweep read as failed, which is the
 answer you usually want from a glance.
 
+### Forks are not children
+
+`vmn-exp create/run --fork-from <ref> [--fork-step N]` (or the SDK's
+`start_run(fork_from=..., fork_step=N)`) starts a new run seeded with another
+run's metrics and params up to step N — all of them without `--fork-step`;
+`<ref>?_step=N` also works. The fork records `forked_from: {verstr, step}` but
+no `parent`: it is `single` unless nested some other way, and it never counts
+in its source's `tree_status`. Rows carry `forked_from`/`forked_from_step`, so
+`vmn-exp list my_app --query 'forked_from = "<verstr>"'` lists a run's forks.
+Rewinding a run (history past a step hidden by a `rewind` log entry) is SDK
+only — see [Forking and rewinding](sdk.md#forking-a-run).
+
 ### What `exp list` looks like
 
 Inner runs are indented under their outer run:
@@ -591,6 +603,7 @@ vmn-exp run my_app --parent latest -- python train.py --lr 0.1
 | `--output-cap-mb <mb>` | `10` (`$VMN_EXP_OUTPUT_CAP_MB`) | Size cap of the [`output.log`](#console-output-outputlog) artifact; past it the first and last halves are kept |
 | `--no-capture-output` | *(capture enabled)* | Don't keep the command's output as `output.log`; the command inherits the terminal |
 | `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
+| `--fork-from <ref>` / `--fork-step <N>` | *(none)* | Start this run with `<ref>`'s metrics and params up to step N (all of them without `--fork-step`). Also accepted by `create`. See [Forks are not children](#forks-are-not-children) |
 | `--no-env` | *(capture enabled)* | Skip environment capture for this run |
 | `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
 
@@ -714,7 +727,8 @@ exits 1 with the offending offset. Provenance fields are also queryable:
 `inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind` (3-part paths
 for each logged input), `outputs.<path>.digest|size|path` (each artifact the run
 logged; quote a dotted path: `outputs."model.pkl".digest`), `env.<key>` and `env.packages.<pkg>` (environment
-summary), and `imported_from` (set on runs imported from external tools).
+summary), `imported_from` (set on runs imported from external tools) and
+`forked_from`/`forked_from_step` (a fork's source verstr and step).
 
 `--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
 JSON array instead of the table — one object per run with the keys of an SDK
@@ -769,7 +783,8 @@ bad `--query` exits 1. Read-only: no repo lock. From Python:
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, metrics (each at its [summary value](#best-value-summaries-summary),
+lines, `Forked from: <verstr> @ step N` for a fork and a `Rewound to step N`
+line per rewind, metrics (each at its [summary value](#best-value-summaries-summary),
 with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
