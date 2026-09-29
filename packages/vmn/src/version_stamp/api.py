@@ -8,7 +8,7 @@ Boundary rules (see PLAN.md §2.2):
   R1  vmn_exp.* → version_stamp.* only via this module.
   R3  ``import version_stamp.api`` loads no experiment module and no ``git``.
 
-All 94 names are resolved lazily via PEP 562 ``__getattr__`` from the
+All 95 names are resolved lazily via PEP 562 ``__getattr__`` from the
 ``_LAZY_REGISTRY`` table below.  Each lookup caches the result in the module
 namespace so repeated accesses pay only one ``importlib.import_module`` call.
 
@@ -136,6 +136,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "open_snapshot_stores":        "version_stamp.snapshot.stores:open_snapshot_stores",
     "register_snapshot_store_opener": "version_stamp.cli.plugin_api:register_snapshot_store_opener",
     "LocalRecordStore":            "version_stamp.snapshot.local_store:LocalRecordStore",
+    "relative_timestamp":          "version_stamp.snapshot.listing:relative_timestamp",
 }
 
 # __all__ is the sorted key set of the registry — the single source of truth.

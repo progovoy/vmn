@@ -16,6 +16,7 @@ from version_stamp.core.constants import (
     VMN_VERSTR_REGEX,
 )
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.cli.snapshot_cmd import add_arg_snapshot  # noqa: F401
 
 
 def _should_split_double_dash(cl: list) -> bool:

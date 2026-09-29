@@ -23,8 +23,10 @@ from version_stamp.cli.commands import (  # noqa: F401
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.cli.constants import (
     LOG_FILENAME,
+    READ_ONLY_ACTIONS,
     VMN_ARGS,
 )
+from version_stamp.cli.snapshot_cmd import handle_snapshot  # noqa: F401
 from version_stamp.cli.worktree_git import git_current_branch
 from version_stamp.core.utils import is_island_branch
 from version_stamp.cli.worktrees import handle_worktrees  # noqa: F401
@@ -59,8 +61,8 @@ def _takes_repo_lock(args):
     spec = _find_plugin_spec(getattr(args, "command", None) or "")
     if spec is not None:
         return getattr(args, "action", None) not in spec.read_only_actions
-    # Non-plugin commands always take the lock.
-    return True
+    # Built-in commands take the lock except for their READ_ONLY_ACTIONS.
+    return getattr(args, "action", None) not in READ_ONLY_ACTIONS.get(args.command, ())
 
 
 def _reject_island_version_creation(args, root_path):

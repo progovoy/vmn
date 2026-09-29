@@ -259,6 +259,46 @@ def _goto(app_name, version=None, root=False):
     return ret
 
 
+def _snapshot(
+    app_name,
+    action="create",
+    version=None,
+    note=None,
+    to_version=None,
+    tool=None,
+    output=None,
+    meta=None,
+    meta_file=None,
+    filter_args=None,
+    latest=False,
+    last=None,
+    store=None,
+    local=False,
+    as_json=False,
+    force=False,
+):
+    args_list = ["snapshot"]
+    if action != "create":
+        args_list.append(action)
+    args_list.append(app_name)
+    options = {
+        "--version": version, "--last": last, "--note": note, "--to": to_version,
+        "--tool": tool, "--output": output, "--meta-file": meta_file, "--store": store,
+    }
+    for flag, value in options.items():
+        if value is not None:
+            args_list.extend([flag, str(value)])
+    for m in meta or ():
+        args_list.extend(["--meta", m])
+    for f in filter_args or ():
+        args_list.extend(["--filter", f])
+    flags = {"--latest": latest, "--local": local, "--json": as_json, "--force": force}
+    args_list.extend(flag for flag, on in flags.items() if on)
+
+    reset_logger()
+    return vmn_run(args_list)[0]
+
+
 def _add_buildmetadata_to_version(
     app_layout, bm, version=None, file_path=None, url=None
 ):
