@@ -110,6 +110,7 @@ _EXPECTED_ALL = [
     "build_record_metadata",
     "patch_summary",
     "open_snapshot_stores",
+    "restore_record",
     "register_snapshot_store_opener",
     "LocalRecordStore",
     "relative_timestamp",

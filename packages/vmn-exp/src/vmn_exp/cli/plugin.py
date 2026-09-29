@@ -107,7 +107,9 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="rerun: run the command here, relative to the restored app "
                            "root (default: the recorded cwd)")
     pexp.add_argument("--force", action="store_true", default=False,
-                      help="prune: also delete runs that are still running")
+                      help="prune: also delete runs that are still running; restore: "
+                           "even if untracked files over the snapshot size caps would "
+                           "be deleted without being saved")
     pexp.add_argument("--local-only", action="store_true", default=False,
                       help="prune: delete local copies only, keep the remote (S3) ones")
     pexp.add_argument("--protect-tag", dest="protect_tag", action="append", default=None,

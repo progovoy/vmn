@@ -32,7 +32,11 @@ from version_stamp.api import (  # noqa: F401
     _untracked_caps,
 )
 from version_stamp.api import build_record_metadata as _build_snapshot_metadata
+from version_stamp.api import open_snapshot_stores, restore_record
 from version_stamp.api import patch_summary as _patch_summary  # noqa: F401
+
+# The command that brings back the work a dev-version restore saved.
+GOTO_HINT = "vmn goto -v {verstr} {app}"
 
 
 def _relative_timestamp(iso_ts):
@@ -65,53 +69,11 @@ def _get_storage(vcs, params):
     return open_storage(store, vcs.vmn_root_path, subdir="snapshots")
 
 
-def _save_safety_snapshot(vcs, params, target_verstr):
-    """Snapshot the current dirty state before a restore overwrites it."""
-    (
-        base_version,
-        commit_hash,
-        patches,
-        dirty_states,
-        ver_info,
-        err,
-    ) = gather_create_data(vcs, allow_clean=True)
-    if err is not None:
-        return None
-    diff_hash = _compute_diff_hash(patches)
-    if diff_hash is None:
-        return None
-
-    storage = _get_storage(vcs, params)
-    verstr = _unique_snapshot_verstr(
-        storage, vcs.name, base_version, commit_hash, diff_hash
-    )
-    if verstr == target_verstr:
-        return None
-
-    metadata = _build_snapshot_metadata(
-        vcs,
-        verstr,
-        base_version,
-        commit_hash,
-        dirty_states,
-        patches,
-        ver_info,
-        note="auto-saved before restore",
-    )
-    storage.save(vcs.name, verstr, metadata, patches)
-    return verstr
-
-
 def _restore_with_safety_net(vcs, params, metadata, patches):
-    """Apply a restore, first auto-snapshotting any dirty work it would clobber.
-    *metadata* must come from ``load_code_record``, which refuses a record
-    without usable code before anything is touched."""
-    saved = _save_safety_snapshot(vcs, params, metadata.get("verstr"))
-    if saved:
-        VMN_LOGGER.info(
-            f"Current work saved as {saved} — restore it anytime with: "
-            f"vmn goto -v {saved} {vcs.name}"
-        )
-    if not params.get("deps_only"):
-        _reset_worktree(vcs)
-    return _apply_snapshot_patches(vcs, params, metadata, patches)
+    """Restore a dev version through ``vmn snapshot``'s restore: the work it
+    replaces is saved as a snapshot first (refused while untracked files over
+    the size caps would be lost, unless ``params["force"]``). *metadata* must
+    come from ``load_code_record``, which refuses a record without usable code
+    before anything is touched."""
+    stores = open_snapshot_stores(vcs, params)
+    return restore_record(vcs, params, stores, (metadata, patches), GOTO_HINT)

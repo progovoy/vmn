@@ -76,7 +76,9 @@ files it is refused and lists them; move them away, raise the caps, or pass
 
 With `vmn-exp` installed, `vmn goto -v <snapshot-verstr> <app>` restores a
 snapshot too (it takes a full verstr, not a prefix or `@N`), through the same
-lookup as experiment runs; see
+lookup as experiment runs. `vmn goto -v <dev-version>` and `vmn-exp restore`
+run this same restore — auto-save, size-cap refusal and `--force` — and their
+hint names `vmn goto -v <saved> <app>`; see
 [Restore vs goto](experiments.md#restore-vs-goto).
 
 ### diff

@@ -232,6 +232,12 @@ def add_arg_goto(subprasers):
     pgoto.set_defaults(root=False)
     pgoto.add_argument("--deps-only", dest="deps_only", action="store_true")
     pgoto.set_defaults(deps_only=False)
+    pgoto.add_argument(
+        "--force",
+        action="store_true",
+        help="Dev versions: restore even if untracked files over the snapshot "
+        "size caps would be deleted without being saved",
+    )
     pgoto.add_argument("name", help="The application's name")
     pgoto.add_argument(
         "--pull",

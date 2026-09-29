@@ -798,6 +798,7 @@ def handle_goto(vmn_ctx):
         optional_status |= {"pending", "outgoing", "dirty_deps"}
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
+    vmn_ctx.params["force"] = vmn_ctx.args.force
 
     status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
     if status.error:

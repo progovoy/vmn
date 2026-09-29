@@ -7,7 +7,12 @@ restore that would lose ones over the snapshot size caps is refused unless
 ``params["force"]``. Then the worktree is reset to the snapshot's base commit
 and its patches (and its deps') are applied — detached, as ``vmn goto`` does.
 
-Public: ``SAFETY_NOTE``,
+``params["deps_only"]`` leaves the app checkout alone and only applies deps.
+
+Public: ``SAFETY_NOTE``, ``SNAPSHOT_HINT``,
+``restore_record(vcs, params, stores, record, hint) -> int`` (the restore of an
+already loaded ``(metadata, patches)``; ``vmn-exp restore`` and ``vmn goto -v
+<dev>`` use it too, through ``version_stamp.api``),
 ``snapshot_restore(vcs, params, stores, verstr) -> int``.
 """
 from version_stamp.core.logging import VMN_LOGGER
@@ -18,6 +23,8 @@ from version_stamp.snapshot.create import snapshot_verstr, store_snapshot
 from version_stamp.snapshot.load import load_snapshot
 
 SAFETY_NOTE = "auto-saved before restore"
+# How the saved work is brought back, formatted with ``app`` and ``verstr``.
+SNAPSHOT_HINT = "vmn snapshot restore {app} -v {verstr}"
 
 
 def _refuse_dropping(dropped):
@@ -56,21 +63,27 @@ def _reset(vcs):
     return 0
 
 
-def snapshot_restore(vcs, params, stores, verstr):
-    record = load_snapshot(stores, vcs.name, verstr, "restore")
-    if record is None:
-        return 1
-    saved, err = _save_current_work(vcs, stores, verstr, params.get("force"))
+def restore_record(vcs, params, stores, record, hint):
+    """Save the current work into *stores*, then put *record* in the checkout."""
+    target = record[0].get("verstr")
+    saved, err = _save_current_work(vcs, stores, target, params.get("force"))
     if err:
         return err
     if saved:
         VMN_LOGGER.info(
             f"Current work saved as {saved} — restore it anytime with: "
-            f"vmn snapshot restore {vcs.name} -v {saved}"
+            + hint.format(app=vcs.name, verstr=saved)
         )
-    if _reset(vcs):
+    if not params.get("deps_only") and _reset(vcs):
         return 1
-    ret = _apply_snapshot_patches(vcs, params, *record)
+    return _apply_snapshot_patches(vcs, params, *record)
+
+
+def snapshot_restore(vcs, params, stores, verstr):
+    record = load_snapshot(stores, vcs.name, verstr, "restore")
+    if record is None:
+        return 1
+    ret = restore_record(vcs, params, stores, record, SNAPSHOT_HINT)
     if ret == 0:
         VMN_LOGGER.info(f"Restored snapshot {verstr}")
     return ret

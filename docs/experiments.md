@@ -871,10 +871,15 @@ vmn-exp diff my_app --tool delta
 ### `restore`
 
 Check out the exact code state of an experiment. If the working tree is
-dirty, that work is **auto-saved first** as a dev version (and the
-`vmn goto -v <saved> my_app` that brings it back is printed) — you never lose
-uncommitted changes. `vmn goto -v <dev-version> my_app` restores a run's code
-the same way (it takes a full verstr, not a prefix or `@N`; see
+dirty, that work is **auto-saved first** as a [snapshot](snapshots.md) noted
+`auto-saved before restore` (and the `vmn goto -v <saved> my_app` that brings
+it back is printed) — you never lose uncommitted changes. This is the same
+restore `vmn snapshot restore` runs: the reset deletes untracked files, so when
+some are over the snapshot size caps (`VMN_SNAPSHOT_MAX_FILE_MB` /
+`VMN_SNAPSHOT_MAX_TOTAL_MB`) and could not be saved, the restore refuses and
+names them; `--force` restores anyway and loses them.
+`vmn goto -v <dev-version> my_app` restores a run's code the same way,
+`--force` included (it takes a full verstr, not a prefix or `@N`; see
 [Restore vs goto](#restore-vs-goto)).
 
 Both look the run up the same way: the local experiments dir, then the app's
@@ -887,6 +892,7 @@ run that is nowhere is reported with the list of places searched.
 ```sh
 vmn-exp restore my_app --latest
 vmn-exp restore my_app -v @2
+vmn-exp restore my_app -v @2 --force   # even if big untracked files would be lost
 ```
 
 #### Restore vs goto

@@ -134,6 +134,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "build_record_metadata":       "version_stamp.snapshot.record:build_record_metadata",
     "patch_summary":               "version_stamp.snapshot.record:patch_summary",
     "open_snapshot_stores":        "version_stamp.snapshot.stores:open_snapshot_stores",
+    "restore_record":              "version_stamp.snapshot.restore:restore_record",
     "register_snapshot_store_opener": "version_stamp.cli.plugin_api:register_snapshot_store_opener",
     "LocalRecordStore":            "version_stamp.snapshot.local_store:LocalRecordStore",
     "relative_timestamp":          "version_stamp.snapshot.listing:relative_timestamp",

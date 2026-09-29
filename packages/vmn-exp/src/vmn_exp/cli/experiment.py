@@ -1040,7 +1040,7 @@ def experiment_restore(vcs, params, storage, args):
     )
     if record is None:
         return 1
-    return _restore_with_safety_net(vcs, params, *record)
+    return _restore_with_safety_net(vcs, dict(params, force=args.force), *record)
 
 
 # ---------------------------------------------------------------------------
