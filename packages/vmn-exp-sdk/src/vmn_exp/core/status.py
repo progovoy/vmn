@@ -56,6 +56,11 @@ def load_run_state(storage, app_name, verstr):
     return state if isinstance(state, dict) else None
 
 
+def run_finished(storage, app_name, verstr):
+    """Whether the run's state says it has finished."""
+    return (load_run_state(storage, app_name, verstr) or {}).get("state") == "finished"
+
+
 def parse_iso(ts):
     """Parse an ISO-8601 timestamp (``Z`` suffix included), or None."""
     if not ts or not isinstance(ts, str):

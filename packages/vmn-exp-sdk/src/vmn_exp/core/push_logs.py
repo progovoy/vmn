@@ -10,6 +10,7 @@ prefix first; a mismatch fails loudly and never starts over, because the
 remote bytes are someone else's.
 """
 from vmn_exp.storage.files import log_object_name, log_writer_and_seq
+from vmn_exp.storage.s3_base import parallel_map
 
 
 class LogPrefixMismatch(RuntimeError):
@@ -42,8 +43,11 @@ class _WriterLog:
         objects = list(self._target.log_objects(*self._at, self._writer))
         remote_size = sum(size for _, size in objects)
         if remote_size and remote_size != shipped:
-            self._verify_prefix(objects, remote_size)
-        chunk = self._complete_lines(remote_size)
+            local = self._local_bytes(0)
+            self._verify_prefix(objects, remote_size, local[:remote_size])
+            chunk = _complete_lines(local[remote_size:])
+        else:
+            chunk = _complete_lines(self._local_bytes(remote_size))
         if chunk:
             seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
             seq = max(seqs) + 1 if seqs else 0
@@ -56,15 +60,12 @@ class _WriterLog:
         name = log_object_name(self._writer)
         return self._local.read_file_from(*self._at, name, offset) or b""
 
-    def _complete_lines(self, offset):
-        data = self._local_bytes(offset)
-        return data[: data.rfind(b"\n") + 1]
-
-    def _verify_prefix(self, objects, remote_size):
-        remote = b"".join(
-            self._target.load_file(*self._at, name) or b"" for name, _ in objects
+    def _verify_prefix(self, objects, remote_size, local):
+        bodies = parallel_map(
+            lambda name: self._target.load_file(*self._at, name) or b"",
+            [name for name, _ in objects],
         )
-        local = self._local_bytes(0)[:remote_size]
+        remote = b"".join(bodies)
         if len(remote) != remote_size or remote != local:
             raise LogPrefixMismatch(
                 f"{self._at[1]}: the remote log of writer {self._writer!r} is not "
@@ -72,3 +73,7 @@ class _WriterLog:
                 "id?). Not pushing it; set a unique VMN_WRITER_ID per host."
             )
 
+
+def _complete_lines(data):
+    """*data* up to its last newline: a partial line waits for the next push."""
+    return data[: data.rfind(b"\n") + 1]

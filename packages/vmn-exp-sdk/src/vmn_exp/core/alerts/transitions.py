@@ -34,9 +34,15 @@ def load_sent(storage, app_name, verstr):
     return sent if isinstance(sent, dict) else {}
 
 
+def save_sent(storage, app_name, verstr, sent):
+    """Write the run's ``{transition key: sent_at}`` markers; returns the bytes."""
+    data = yaml.dump({"sent": sent})
+    storage.save_file(app_name, verstr, ALERTS_FILE, data)
+    return data
+
+
 def _mark_sent(storage, app_name, verstr, sent, key):
-    sent = dict(sent, **{key: now_iso()})
-    storage.save_file(app_name, verstr, ALERTS_FILE, yaml.dump({"sent": sent}))
+    save_sent(storage, app_name, verstr, dict(sent, **{key: now_iso()}))
 
 
 def transition_key(status, run_state):

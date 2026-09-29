@@ -13,9 +13,7 @@
 """
 import hashlib
 
-import yaml
-
-from vmn_exp.core.alerts.transitions import ALERTS_FILE, load_sent
+from vmn_exp.core.alerts.transitions import ALERTS_FILE, load_sent, save_sent
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES, is_log_file
 
@@ -85,27 +83,24 @@ class _FilePusher:
         mine = load_sent(self._local, *self._at)
         theirs = load_sent(self._target, *self._at)
         merged = dict(theirs, **mine)
-        data = yaml.dump({"sent": merged})
         if merged != theirs:
-            self._target.save_file(*self._at, ALERTS_FILE, data)
+            save_sent(self._target, *self._at, merged)
         if merged != mine:
-            self._local.save_file(*self._at, ALERTS_FILE, data)
+            save_sent(self._local, *self._at, merged)
         return self._local.load_file(*self._at, ALERTS_FILE)
 
 
 def push_artifacts(local, target, app_name, verstr):
-    """Upload the artifacts the remote lacks or holds at another size;
-    returns how many were uploaded."""
+    """Upload the artifacts the remote lacks or holds at another size."""
+    artifacts = local.list_artifacts(app_name, verstr)
+    if not artifacts:
+        return
     remote = {a["name"]: a["size"] for a in target.list_artifacts(app_name, verstr)}
-    uploaded = 0
-    for artifact in local.list_artifacts(app_name, verstr):
+    for artifact in artifacts:
         name = artifact["name"]
-        if remote.get(name) == artifact["size"]:
-            continue
-        path = local.artifact_local_path(app_name, verstr, name)
-        target.save_artifact_file(app_name, verstr, path, name=name)
-        uploaded += 1
-    return uploaded
+        if remote.get(name) != artifact["size"]:
+            path = local.artifact_local_path(app_name, verstr, name)
+            target.save_artifact_file(app_name, verstr, path, name=name)
 
 
 def merge_fields(local, target, app_name, verstr, local_meta, remote_meta, base):
@@ -114,12 +109,11 @@ def merge_fields(local, target, app_name, verstr, local_meta, remote_meta, base)
     fields, warnings = {}, []
     for field in MERGED_FIELDS:
         mine, theirs = local_meta.get(field), remote_meta.get(field)
-        value = _merged_value(field, mine, theirs, base, warnings)
-        if value != theirs:
-            target.update_metadata(app_name, verstr, {field: value})
-        if value != mine:
-            local.update_metadata(app_name, verstr, {field: value})
-        fields[field] = value
+        fields[field] = _merged_value(field, mine, theirs, base, warnings)
+    for storage, meta in ((target, remote_meta), (local, local_meta)):
+        changed = {k: v for k, v in fields.items() if meta.get(k) != v}
+        if changed:  # one (conditional) metadata rewrite per side
+            storage.update_metadata(app_name, verstr, changed)
     return fields, warnings
 
 

@@ -5,7 +5,7 @@ remote may already hold an identical one from another host. A remote prune can
 delete a just-uploaded object before the run that uses it is claimed, so the
 pusher re-checks the marker after the claim (:meth:`CodePusher.recheck`).
 """
-from vmn_exp.core.code_store import code_app, stored_code, store_code
+from vmn_exp.core.code_store import copy_code, stored_code
 
 UPLOADED, PRESENT, MISSING = "uploaded", "present", "missing"
 
@@ -35,15 +35,10 @@ class CodePusher:
         """After a claim: re-upload *key* if a remote prune removed it."""
         if stored_code(self._target, self._app_name, key) is None:
             self._done[key] = self._upload(key)
-        return self._done.get(key, PRESENT)
 
     def _upload(self, key):
-        metadata, payload = self._local.load_record(code_app(self._app_name), key)
-        if metadata is None:
+        if not copy_code(self._local, self._target, self._app_name, key):
             return self._count(MISSING)
-        summary = {k: v for k, v in metadata.items() if k != "verstr"}
-        # The payload first, then the marker: store_code saves the record.
-        store_code(self._target, self._app_name, key, payload, summary)
         return self._count(UPLOADED)
 
     def _count(self, status):

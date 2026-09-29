@@ -12,7 +12,7 @@ files always equals a full re-read.
 import threading
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import run_finished
 from vmn_exp.storage.files import (
     LEGACY_LOG_FILE,
     flatten_logs,
@@ -212,8 +212,7 @@ class CachedLogs:
         return data[: data.rfind(b"\n") + 1]
 
     def _run_finished(self, app_name, verstr):
-        state = load_run_state(self._local, app_name, verstr)
-        return (state or {}).get("state") == "finished"
+        return run_finished(self._local, app_name, verstr)
 
     def _compact(self, app_name, verstr, writer_id):
         compact = getattr(self._remote, "compact_log_segments", None)

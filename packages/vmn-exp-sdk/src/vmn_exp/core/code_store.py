@@ -44,6 +44,16 @@ def store_code(storage, app_name, key, payload, summary):
     storage.save(code_app(app_name), key, dict(summary, verstr=key), payload)
 
 
+def copy_code(src, dst, app_name, key):
+    """Copy *key*'s code object from *src* to *dst* (payload, then marker);
+    False when *src* has no such object."""
+    marker, payload = src.load_record(code_app(app_name), key)
+    if marker is None:
+        return False
+    dst.save(code_app(app_name), key, marker, payload)
+    return True
+
+
 def publish_code(storage, app_name, key):
     """Upload *key*'s code object to the remote when only the local cache
     holds it (``stored_code`` reads local-first): a run created there must

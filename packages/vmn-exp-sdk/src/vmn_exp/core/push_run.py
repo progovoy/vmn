@@ -25,13 +25,17 @@ from vmn_exp.core.push_files import merge_fields, push_artifacts, push_files
 from vmn_exp.core.push_identity import record_fingerprint, run_identity
 from vmn_exp.core.push_ledger import PushLedger
 from vmn_exp.core.push_logs import push_logs
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import run_finished
 
 NEW, UPDATE, UP_TO_DATE, COLLISION, FAILED = (
     "new", "update", "up-to-date", "collision", "failed",
 )
 _REQUIRED = ("put_log_segment", "log_objects", "list_artifacts", "record_files",
              "compact_log_segments")
+
+
+class _Collision(Exception):
+    """The remote name belongs to another run."""
 
 
 @dataclass
@@ -103,9 +107,10 @@ class _RunPush:
         key = self._meta.get("code")
         if key and not self._base.get("code_pushed"):
             self._push_code(key)
-        status, remote_meta = self._claim()
-        if status == COLLISION:
-            return Outcome(self._verstr, COLLISION, remote_meta, self.warnings)
+        try:
+            status, remote_meta = self._claim()
+        except _Collision as e:
+            return Outcome(self._verstr, COLLISION, str(e), self.warnings)
         if key and status == NEW and self.entry.get("code_pushed"):
             self._code.recheck(key)
         self._push_contents(remote_meta)
@@ -118,7 +123,7 @@ class _RunPush:
         self.entry.update(code_key=key, code_pushed=pushed)
 
     def _claim(self):
-        """``(NEW | UPDATE, remote metadata)`` or ``(COLLISION, reason)``."""
+        """``(NEW | UPDATE, remote metadata)``; raises :class:`_Collision`."""
         remote_meta = self._target.load_metadata(self._app, self._verstr)
         if remote_meta is None:
             _, patches = self._local.load_record(self._app, self._verstr)
@@ -126,11 +131,11 @@ class _RunPush:
                 self._app, self._verstr, self._meta, patches or {},
                 claim_token=self._identity,
             ):
-                return COLLISION, "the remote name is claimed by another run"
+                raise _Collision("the remote name is claimed by another run")
             self.claimed = True
             return NEW, self._meta
         if run_identity(self._app, remote_meta) != self._identity:
-            return COLLISION, "the remote holds another run of that name"
+            raise _Collision("the remote holds another run of that name")
         self.claimed = True
         return UPDATE, remote_meta
 
@@ -140,12 +145,12 @@ class _RunPush:
         self.entry["files"] = files
         self.warnings += warnings
         self.entry["log_bytes"] = push_logs(
-            *at, self._base.get("log_bytes"), finished=self._finished()
+            *at, self._base.get("log_bytes"),
+            finished=run_finished(self._local, self._app, self._verstr),
         )
         push_artifacts(*at)
-        local_meta = self._local.load_metadata(self._app, self._verstr)
         fields, warnings = merge_fields(
-            *at, local_meta, remote_meta, self._base.get("fields")
+            *at, self._meta, remote_meta, self._base.get("fields")
         )
         self.entry["fields"] = fields
         self.warnings += warnings
@@ -156,12 +161,10 @@ class _RunPush:
             pushed_at=now_iso(),
         )
 
-    def _finished(self):
-        state = load_run_state(self._local, self._app, self._verstr)
-        return (state or {}).get("state") == "finished"
-
     def _fill_etags(self):
+        fresh = [r for r in self.entry["files"].items() if "etag" not in r[1]]
+        if not fresh:
+            return
         listing = self._target.record_files(self._app, self._verstr)
-        for name, record in self.entry["files"].items():
-            if "etag" not in record:
-                record["etag"] = (listing.get(name) or (None, None, None))[2]
+        for name, record in fresh:
+            record["etag"] = (listing.get(name) or (None, None, None))[2]
