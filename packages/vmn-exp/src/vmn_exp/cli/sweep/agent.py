@@ -52,7 +52,7 @@ def _next_claim(storage, app_name, sweep, spec, agent, retry_failed):
     def current_rows():
         nonlocal rows
         if rows is None:
-            rows = trial_rows(storage, app_name, sweep)
+            rows = trial_rows(storage, app_name, sweep, spec)
         return rows
 
     if retry_failed:
@@ -108,6 +108,7 @@ class _EarlyStopCheck:
     """
 
     def __init__(self, spec, storage, app_name, sweep, verstr):
+        self._spec = spec
         self._stopper = MedianStopper(spec, storage, app_name)
         self._storage, self._app_name = storage, app_name
         self._sweep, self._verstr = sweep, verstr
@@ -129,8 +130,10 @@ class _EarlyStopCheck:
         self._worker.close(timeout=0)
 
     def _check(self, _item):
-        if self._stopper.should_stop(self._verstr, self._siblings):
+        # Compare the runs that carry the metric: a trial's own, or the run a
+        # start_run() inside it nested under it.
+        rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec)
+        sources = {r["verstr"]: r["metric_source"] for r in rows}
+        own = sources.pop(self._verstr, self._verstr)
+        if self._stopper.should_stop(own, lambda: list(sources.values())):
             self._verdict.set()
-
-    def _siblings(self):
-        return [r["verstr"] for r in trial_rows(self._storage, self._app_name, self._sweep)]

@@ -760,9 +760,9 @@ produces.
 
 Inside a trial that [`vmn-exp sweep agent`](sweeps.md) launched,
 `from vmn_exp.sdk import sweep_params` returns the trial's params (a fresh dict
-from `$VMN_SWEEP_PARAMS`; `{}` outside a sweep). Report the sweep's metric
-through `$VMN_METRICS_FILE`: a `start_run()` in the trial opens a nested run,
-whose metrics the sweep does not read.
+from `$VMN_SWEEP_PARAMS`; `{}` outside a sweep). A `start_run()` in the trial
+nests under the trial run, and the sweep reads the target metric from it (see
+[a trial's metric](sweeps.md#inside-a-trial)).
 
 ### Threads, forks and `current_run()`
 

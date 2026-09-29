@@ -2,7 +2,7 @@
 import math
 
 from vmn_exp.core.sweep.spec import parse_spec
-from vmn_exp.core.sweep.summary import best_trial, history, summarize
+from vmn_exp.core.sweep.summary import attribute_metric, best_trial, history, summarize
 
 
 def _spec(goal="min", run_cap=None):
@@ -70,3 +70,44 @@ def test_history_is_finished_trials_with_a_value():
         _row(3, "succeeded", 0.8, lr=0.4, tags={"stopped_early": "true"}),
     ]
     assert history(_spec(), rows) == [({"lr": 0.1}, 0.3), ({"lr": 0.4}, 0.8)]
+
+
+# ---------------------------------------------------------------------------
+# a trial's metric from its nested runs (start_run() inside the trial)
+# ---------------------------------------------------------------------------
+
+
+def _child(verstr, parent, loss=None):
+    return {"verstr": verstr, "parent": parent, "status": "succeeded",
+            "metrics": {} if loss is None else {"loss": loss}, "tags": {}, "params": {}}
+
+
+def test_a_trial_without_the_metric_takes_it_from_its_only_descendant():
+    trial = dict(_row(0, "succeeded"), parent="sweep")
+    rows = [trial, _child("c", trial["verstr"]), _child("g", "c", 0.4)]
+    [attributed] = attribute_metric(_spec(), [trial], rows)
+    assert attributed["metrics"]["loss"] == 0.4
+    assert attributed["metric_source"] == "g"
+    assert "loss" not in trial["metrics"]  # the input row is left alone
+
+
+def test_several_descendants_give_the_best_by_goal():
+    trial = dict(_row(0, "succeeded"), parent="sweep")
+    rows = [trial, _child("a", trial["verstr"], 0.7), _child("b", trial["verstr"], 0.3)]
+    assert attribute_metric(_spec("min"), [trial], rows)[0]["metric_source"] == "b"
+    assert attribute_metric(_spec("max"), [trial], rows)[0]["metric_source"] == "a"
+
+
+def test_the_trials_own_metric_wins_over_descendants():
+    trial = dict(_row(0, "succeeded", 0.9), parent="sweep")
+    rows = [trial, _child("a", trial["verstr"], 0.1)]
+    [attributed] = attribute_metric(_spec(), [trial], rows)
+    assert attributed["metrics"]["loss"] == 0.9
+    assert attributed["metric_source"] == trial["verstr"]
+
+
+def test_a_trial_with_no_metric_anywhere_has_itself_as_source():
+    trial = dict(_row(0, "running"), parent="sweep")
+    [attributed] = attribute_metric(_spec(), [trial], [trial, _child("a", trial["verstr"])])
+    assert attributed["metric_source"] == trial["verstr"]
+    assert "loss" not in attributed["metrics"]

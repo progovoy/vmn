@@ -4,23 +4,54 @@ A trial row is an ordinary run row (status-annotated) whose ``parent`` is the
 sweep; its ``sweep_trial`` / ``sweep_attempt`` tags say which slot it fills.
 A retried trial is judged by its latest attempt. An early-stopped trial ends
 ``succeeded`` and carries the tag ``stopped_early=true``.
+
+A trial's target metric is its own when it logged one, else its descendants'
+(a ``start_run()`` inside the trial nests a run under it): the only descendant
+carrying the metric, or the best of several by goal. ``metric_source`` names
+the run it came from, so the median rule reads that run's series.
 """
 from collections import Counter
 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.log import _sortable
 from vmn_exp.core.status import FAILED, STUCK, SUCCEEDED
-from vmn_exp.core.tree import annotate_rows
+from vmn_exp.core.tree import annotate_rows, children_by_parent, subtree_verstrs
 
 STOPPED_EARLY_TAG = "stopped_early"
 RETRYABLE = (FAILED, STUCK)
 
 
-def trial_rows(storage, app_name, sweep_verstr):
-    """Every run of the sweep (retries included), status-annotated."""
+def trial_rows(storage, app_name, sweep_verstr, spec):
+    """Every run of the sweep (retries included), status-annotated, with the
+    target metric attributed (see :func:`attribute_metric`)."""
     rows, run_states, observed = experiment_index.indexed_status_rows(storage, app_name)
     annotated = annotate_rows(rows, run_states, observed)
-    return [r for r in annotated if r.get("parent") == sweep_verstr]
+    trials = [r for r in annotated if r.get("parent") == sweep_verstr]
+    return attribute_metric(spec, trials, annotated)
+
+
+def attribute_metric(spec, trials, rows):
+    """Copies of *trials* carrying ``metric_source`` and, when a descendant in
+    *rows* supplied it, the target metric in ``metrics``."""
+    name = spec["metric"]["name"]
+    children_of = children_by_parent(rows)
+    by_verstr = {r["verstr"]: r for r in rows}
+    attributed = []
+    for trial in trials:
+        source = _metric_source(spec, trial, children_of, by_verstr)
+        row = dict(trial, metric_source=source["verstr"])
+        if source is not trial:
+            row["metrics"] = dict(trial.get("metrics") or {}, **{name: metric_value(spec, source)})
+        attributed.append(row)
+    return attributed
+
+
+def _metric_source(spec, trial, children_of, by_verstr):
+    if metric_value(spec, trial) is not None:
+        return trial
+    descendants = [by_verstr[v] for v in subtree_verstrs(trial["verstr"], children_of)
+                   if v != trial["verstr"] and v in by_verstr]
+    return best_trial(spec, descendants) or trial
 
 
 def trial_of(row):

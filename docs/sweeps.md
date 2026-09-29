@@ -95,25 +95,29 @@ gets, besides `VMN_EXPERIMENT_ID` / `VMN_APP_NAME` / `VMN_METRICS_FILE`:
 * `VMN_SWEEP_PARAMS` — the trial's params as JSON;
 * `VMN_SWEEP_ID` — the sweep's verstr; `VMN_SWEEP_TRIAL` — the trial index.
 
-Report the target metric with the [metrics-file protocol](experiments.md#the-metrics-file-protocol),
-with a `step=` for early stopping to compare at:
+Report the target metric either way, with a step for early stopping to compare
+at. With the SDK:
 
 ```python
-import os
-from vmn_exp.sdk import sweep_params
+from vmn_exp.sdk import start_run, sweep_params
 
 params = sweep_params()              # {} outside a sweep
-with open(os.environ["VMN_METRICS_FILE"], "a") as f:
+with start_run() as run:             # nests under the trial run
     for step in range(1, params["epochs"] + 1):
-        loss = train_one_epoch(params["lr"])
-        f.write(f"step={step} loss={loss}\n")
-        f.flush()
+        run.log_metric("loss", train_one_epoch(params["lr"]), step=step)
 ```
 
-The trial run records its params (so `params.lr > 1e-3` and `metrics.loss`
-queries work), the tags `sweep=<ref>`, `sweep_trial=N`, `sweep_attempt=K`, and
-is named `<sweep name>-t<N>`. A `start_run()` inside the trial opens a *nested*
-run under it; the sweep only reads the trial run's own metrics.
+or with the [metrics-file protocol](experiments.md#the-metrics-file-protocol):
+`f.write(f"step={step} loss={loss}\n")` to `$VMN_METRICS_FILE`.
+
+A trial's metric is the trial run's own when it has one, else its
+descendants': the only descendant that logged it, or the best of several by
+goal. `status`, the best trial, the median rule (that run's series by step) and
+bayes suggestions all read it the same way.
+
+The trial run records its params (so `params.lr > 1e-3` queries work), the tags
+`sweep=<ref>`, `sweep_trial=N`, `sweep_attempt=K`, and is named
+`<sweep name>-t<N>`.
 
 ## Claims: how agents coordinate
 

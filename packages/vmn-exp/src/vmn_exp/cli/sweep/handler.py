@@ -75,7 +75,7 @@ def resolve_sweep(storage, app_name, ref):
 
 
 def sweep_status(storage, app_name, sweep, spec, args):
-    summary = summarize(spec, trial_rows(storage, app_name, sweep),
+    summary = summarize(spec, trial_rows(storage, app_name, sweep, spec),
                         list_claims(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:
