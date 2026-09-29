@@ -208,14 +208,13 @@ def test_get_repo_lock_honours_the_lock_file_env_override(monkeypatch, tmp_path)
 
 
 class _Vcs:
-    def __init__(self, experiment=None, snapshot_storage=None):
+    def __init__(self, experiment=None):
         self.experiment = experiment
-        self.snapshot_storage = snapshot_storage
 
 
-def test_merge_conf_into_params_fills_unset_and_default_valued_keys():
+def test_merge_conf_into_params_fills_unset_keys():
     vcs = _Vcs(experiment={"storage": {"bucket": "b", "prefix": "p"}})
-    params = {"bucket": None, "prefix": "vmn-experiments"}
+    params = {"bucket": None, "prefix": None}
 
     merge_conf_into_params(vcs, params)
 
@@ -238,15 +237,6 @@ def test_merge_conf_into_params_lets_explicit_cli_values_win():
     merge_conf_into_params(vcs, params)
 
     assert params["bucket"] == "from-cli"
-
-
-def test_merge_conf_into_params_falls_back_to_snapshot_storage_conf():
-    vcs = _Vcs(snapshot_storage={"bucket": "snap-bucket"})
-    params = {"bucket": None}
-
-    merge_conf_into_params(vcs, params)
-
-    assert params == {"bucket": "snap-bucket"}
 
 
 def test_merge_conf_into_params_tolerates_a_vcs_without_conf():

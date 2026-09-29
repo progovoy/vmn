@@ -13,7 +13,7 @@ import pytest
 import yaml
 from helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import start_run
@@ -112,9 +112,7 @@ def test_start_run_works_in_a_container_without_git(container):
 
     assert run.app_name == "trainer"
     assert run.id.startswith("0.0.1-dev.abc1234.def5678")
-    storage = get_snapshot_storage(
-        "local", vmn_root_path=str(container), subdir="experiments"
-    )
+    storage = open_storage(vmn_root_path=str(container), subdir="experiments")
     assert [m["verstr"] for m in storage.list_snapshots("trainer")] == [run.id]
     state = load_run_state(storage, "trainer", run.id)
     assert state["exit_code"] == 0

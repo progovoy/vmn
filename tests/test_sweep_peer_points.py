@@ -3,13 +3,13 @@ series is read once, a running one again only once its log grew."""
 from vmn_exp.core.sweep import peer_points
 from vmn_exp.core.sweep.peer_points import PeerPoints, metric_points
 from vmn_exp.core.writer import append_to_log, create_log_entry
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 
 APP = "my_app"
 
 
 def _storage(tmp_path):
-    return get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(None, str(tmp_path), subdir="experiments")
 
 
 def _log(storage, verstr, step, **values):

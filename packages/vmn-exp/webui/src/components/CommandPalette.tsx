@@ -97,7 +97,7 @@ export default function CommandPalette({ ws, app, workspaces, apps, onClose }: {
     workspaces.forEach((w) =>
       w.name !== ws && out.push({
         kind: "workspace", label: w.name,
-        hint: w.kind === "s3" ? "s3" : w.path, to: `/ws/${w.name}`,
+        hint: w.store ?? w.path, to: `/ws/${w.name}`,
       })
     );
     return out;

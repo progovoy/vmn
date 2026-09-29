@@ -6,7 +6,7 @@ from s3_helpers import mocked_bucket, s3_storage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.log import load_log, metric_series
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
 
 APP = "app"
@@ -35,7 +35,7 @@ def clock(monkeypatch):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    s = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.save_file(APP, V, "run_state.yml", "state: running\n")
     for i, loss in ((1, 1.0), (2, 0.5), (3, 0.25)):

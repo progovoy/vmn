@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -26,7 +26,7 @@ def _run(storage, verstr, n=10, keys=("loss", "acc")):
 def _client(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager

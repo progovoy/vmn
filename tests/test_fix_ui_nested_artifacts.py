@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 APP = "app"
 V = "1.0.0-dev.nested"
@@ -15,7 +15,7 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}/artifacts"
 def client(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     src = tmp_path / "c.txt"
     src.write_bytes(b"nested bytes")

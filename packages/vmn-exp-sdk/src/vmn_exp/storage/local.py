@@ -206,6 +206,15 @@ class LocalSnapshotStorage(SnapshotStorage):
             and os.path.isfile(os.path.join(entry.path, METADATA_FILE))
         ]
 
+    def _app_keys(self):
+        """Every ``.vmn/<app>/`` holding this storage's subdir (``root/svc`` nested)."""
+        vmn_dir = os.path.join(self.vmn_root_path, ".vmn")
+        for dirpath, dirnames, _ in os.walk(vmn_dir):
+            if dirpath != vmn_dir and self._subdir in dirnames:
+                yield os.path.relpath(dirpath, vmn_dir).replace(os.sep, "/")
+                dirnames.remove(self._subdir)
+            dirnames[:] = [d for d in dirnames if d != "branch_conf" and d[0] != "."]
+
     def list_verstrs(self, app_name):
         return [unsafe_verstr(entry.name) for entry in self._record_dirs(app_name)]
 

@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.core import index_store as experiment_index_store
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 
@@ -17,8 +17,7 @@ def short_busy_timeout(monkeypatch):
 
 
 def _seeded(tmp_path, n=3):
-    storage = get_snapshot_storage("local", vmn_root_path=str(tmp_path / "repo"),
-                                   subdir="experiments")
+    storage = open_storage(vmn_root_path=str(tmp_path / "repo"), subdir="experiments")
     for i in range(n):
         v = f"0.0.1-dev.abc.r{i}"
         storage.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

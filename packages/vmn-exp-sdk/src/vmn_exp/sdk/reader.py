@@ -45,7 +45,6 @@ from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
-from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.status import (
     load_run_state,
     observed_at_by_verstr,
@@ -54,7 +53,7 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.view import models_for_run
 from vmn_exp.sdk import _resolve_app_name, frames
-from vmn_exp.storage.open import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 
 EXPERIMENTS_DIR = "experiments"
 
@@ -66,24 +65,7 @@ EXPERIMENTS_DIR = "experiments"
 
 def _experiment_storage(root_path):
     """The checkout's local experiments. An S3 workspace passes its own storage."""
-    return get_snapshot_storage(
-        "local", vmn_root_path=root_path, subdir=EXPERIMENTS_DIR
-    )
-
-
-def _apps_with_experiments(root_path):
-    """Every app under ``.vmn`` that has an experiments directory."""
-    vmn_dir = os.path.join(root_path, ".vmn")
-    apps = []
-    for dirpath, dirnames, _ in os.walk(vmn_dir):
-        if os.path.basename(dirpath) != EXPERIMENTS_DIR:
-            continue
-        dirnames[:] = []  # experiment dirs, nothing to look for inside
-        rel = os.path.relpath(os.path.dirname(dirpath), vmn_dir)
-        name = rel.replace(os.sep, "/")
-        if not is_reserved_app(name):
-            apps.append(name)
-    return sorted(apps)
+    return open_storage(vmn_root_path=root_path, subdir=EXPERIMENTS_DIR)
 
 
 def _resolve(app_name, storage):
@@ -94,7 +76,7 @@ def _resolve(app_name, storage):
     say) and there is no conf.yml to read.
     """
     root_path = None if (app_name and storage) else resolve_root_path()
-    app_name = _resolve_app_name(app_name, lambda: _apps_with_experiments(root_path))
+    app_name = _resolve_app_name(app_name, lambda: _experiment_storage(root_path).list_apps())
     return app_name, storage or _experiment_storage(root_path), root_path
 
 

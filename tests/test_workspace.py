@@ -79,8 +79,11 @@ def test_the_commands_and_the_plugin_are_declared():
 
 
 def test_the_s3_import_error_names_the_extra_to_install():
+    from vmn_exp.storage.registry import missing_extra
+
     s3_base = ROOT / "packages/vmn-exp-sdk/src/vmn_exp/storage/s3_base.py"
-    assert "vmn-exp-sdk[s3]" in s3_base.read_text()
+    assert 'missing_extra("boto3", "s3")' in s3_base.read_text()
+    assert "pip install 'vmn-exp-sdk[s3]'" in str(missing_extra("boto3", "s3"))
 
 
 def _selectors(app):

@@ -69,7 +69,13 @@ class ObjectClient:
     - ``_iter(prefix, delimiter, start_after)`` -> object dicts and, with a
       delimiter, common-prefix strings; only names after *start_after*
     - ``_remove(key)`` (missing is fine), ``_upload(src, key)``, ``_download(key, dest)``
+
+    A store whose SDK cannot start a listing after a key sets
+    ``server_side_start_after = False``: its ``_iter`` then skips client-side,
+    so a listing pages on rather than jumping with ``StartAfter``.
     """
+
+    server_side_start_after = True
 
     def __init__(self):
         self._cursors = {}

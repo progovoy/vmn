@@ -9,7 +9,8 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.ui import leaderboard_cache
@@ -26,7 +27,7 @@ def _ts(i):
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -200,7 +201,7 @@ def s3_workspace(tmp_path, monkeypatch):
 
         data_dir = str(tmp_path / "data")
         manager = WorkspaceManager(data_dir)
-        manager.add_s3("ws", bucket="vmn-bucket", prefix="persisted")
+        manager.add_store("ws", "s3://vmn-bucket/persisted")
         yield (lambda: TestClient(create_app(manager))), S3SnapshotStorage(
             "vmn-bucket", prefix="persisted"
         ), data_dir

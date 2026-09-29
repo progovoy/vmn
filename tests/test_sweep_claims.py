@@ -14,14 +14,14 @@ from vmn_exp.core.sweep.claims import (
 )
 from vmn_exp.core.sweep.spec import parse_spec
 from vmn_exp.core.sweep.suggest import grid_point
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 APP = "my_app"
 SWEEP = "0.0.1-dev.aaaaaaa.bbbbbbb"
 
 
 def _local(tmp_path):
-    return get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
 
 
 def _grid(run_cap=None, n_values=6):

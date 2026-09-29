@@ -24,8 +24,7 @@ from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
 
-# Storage params an app's conf.yml may supply (param -> conf key), and the CLI
-# defaults that count as "unset" for merging purposes.
+# Storage params an app's conf.yml may supply (param -> conf key).
 _STORAGE_CONF_KEYS = {
     "store": "uri",
     "bucket": "bucket",
@@ -34,7 +33,6 @@ _STORAGE_CONF_KEYS = {
     "experiment_dir": "experiment_dir",
     "writer_id": "writer_id",
 }
-_DEFAULT_PARAM_VALUES = ("vmn-experiments",)
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
 
@@ -68,10 +66,6 @@ def get_writer_id(conf_writer_id=None):
     return _WRITER_ID
 
 
-def _is_unset(params, key):
-    return not params.get(key) or params[key] in _DEFAULT_PARAM_VALUES
-
-
 def merge_env_into_params(params):
     """Fill unset storage params from ``VMN_EXPERIMENT_*`` (flags override env).
 
@@ -79,7 +73,7 @@ def merge_env_into_params(params):
     pointed at a bucket.
     """
     for key, var in STORAGE_ENV.items():
-        if _is_unset(params, key) and os.environ.get(var):
+        if not params.get(key) and os.environ.get(var):
             params[key] = os.environ[var]
 
 
@@ -87,11 +81,9 @@ def merge_conf_into_params(vcs, params):
     """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
     merge_env_into_params(params)
     exp_conf = experiment_conf(vcs)
-    storage_conf = (
-        exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
-    )
+    storage_conf = exp_conf.get("storage", {}) or {}
     for key, conf_key in _STORAGE_CONF_KEYS.items():
-        if _is_unset(params, key):
+        if not params.get(key):
             conf_val = storage_conf.get(conf_key)
             if conf_val:
                 params[key] = conf_val

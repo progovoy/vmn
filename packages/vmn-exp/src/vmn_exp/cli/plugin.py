@@ -37,6 +37,8 @@ EXPERIMENT_ACTIONS = [
 
 
 def _add_experiment_parser(subprasers, name):  # noqa: N802
+    from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
+
     pexp = subprasers.add_parser(
         name, help="Experiment tracking for reproducible research"
     )
@@ -112,11 +114,6 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       metavar="[NAME=]URI[#DIGEST]",
                       help="create/run/add: record a dataset or artifact input. "
                            "Optional name= prefix and #digest suffix. Repeatable.")
-    pexp.add_argument("--experiment-dir", default=None,
-                      help="Write experiments to this directory instead of local .vmn/. "
-                           "Falls back to VMN_EXPERIMENT_DIR env var.")
-    pexp.add_argument("--writer-id", default=None,
-                      help="Unique writer ID for this process (default: VMN_WRITER_ID or hostname).")
     pexp.add_argument("--sync-interval", type=int, default=30,
                       help="Seconds between S3 metric syncs during 'run' (default: 30).")
     pexp.add_argument("--heartbeat-interval", type=int, default=30,
@@ -151,13 +148,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--fork-step", type=int, default=None, metavar="N",
                       help="create/run: with --fork-from, copy history up to step N "
                            "(default: all of it)")
-    pexp.add_argument("--store", default=None,
-                      help="Storage URI: s3://bucket/prefix, gs://..., az://..., "
-                           "file:///dir (or VMN_EXPERIMENT_STORE)")
-    pexp.add_argument("--bucket", default=None,
-                      help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
-    pexp.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
-    pexp.add_argument("--prefix", default="vmn-experiments", help="S3 key prefix")
+    add_experiment_storage_flags(pexp)
     # import-mlflow flags
     _mlf = pexp.add_mutually_exclusive_group()
     _mlf.add_argument("--mlruns", default=None, metavar="DIR",
@@ -193,9 +184,6 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="Attach a local checkout as a workspace (repeatable)")
     pui.add_argument("--store", default=None,
                      help="Read-only experiment store URI (s3://, gs://, az://, file://)")
-    pui.add_argument("--s3-bucket", default=None, help="Read-only S3 experiment source")
-    pui.add_argument("--s3-prefix", default=None, help="S3 key prefix")
-    pui.add_argument("--endpoint-url", default=None, help="Custom S3 endpoint URL")
     pui.add_argument("--read-only", action="store_true", default=False,
                      help="Disable all mutation endpoints")
     pui.add_argument("--no-browser", action="store_true", default=False,
@@ -262,21 +250,13 @@ def _exp_run_without_repo(args):
         experiment_prune,
         experiment_run,
         experiment_show,
+        experiment_storage_params,
     )
-    from vmn_exp.core.writer import merge_env_into_params
 
     if getattr(args, "writer_id", None):
         os.environ["VMN_WRITER_ID"] = args.writer_id
 
-    params = {
-        "store": getattr(args, "store", None),
-        "bucket": getattr(args, "bucket", None),
-        "prefix": getattr(args, "prefix", "vmn-experiments"),
-        "endpoint_url": getattr(args, "endpoint_url", None),
-        "experiment_dir": getattr(args, "experiment_dir", None),
-    }
-    merge_env_into_params(params)
-
+    params = experiment_storage_params(None, args)
     storage = _get_experiment_storage(None, params)
     action = args.action
 
@@ -310,28 +290,19 @@ def _dev_version_loader(vcs, params, version):
     """Restore repo to state captured in a dev-version snapshot."""
     from vmn_exp.snapshot import (
         LocalSnapshotStorage,
+        _get_storage,
         _restore_with_safety_net,
     )
-    from vmn_exp.core.storage_resolve import store_uri
-    from vmn_exp.storage.registry import open_store
 
-    storage = LocalSnapshotStorage(vcs.vmn_root_path)
-    metadata, patches = storage.load(vcs.name, version)
+    exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
+    metadata, patches = exp_storage.load(vcs.name, version)
 
     if metadata is None:
-        exp_storage = LocalSnapshotStorage(vcs.vmn_root_path, subdir="experiments")
-        metadata, patches = exp_storage.load(vcs.name, version)
-
-    if metadata is None:
-        conf_storage = getattr(vcs, "snapshot_storage", None) or {}
-        store = conf_storage.get("uri") or store_uri(conf_storage, "vmn-snapshots")
-        if store:
-            try:
-                metadata, patches = open_store(store, subdir="snapshots").load(
-                    vcs.name, version
-                )
-            except Exception:
-                VMN_LOGGER.debug("Remote snapshot load failed", exc_info=True)
+        try:
+            # Snapshots (safety ones included): local, then the experiment store.
+            metadata, patches = _get_storage(vcs, params).load(vcs.name, version)
+        except Exception:
+            VMN_LOGGER.debug("Snapshot load failed", exc_info=True)
 
     if metadata is None:
         VMN_LOGGER.error("Dev version %s not found locally or in configured storage", version)

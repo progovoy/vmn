@@ -32,8 +32,7 @@ A **workspace** is an isolated source of data:
 - a **git checkout** — its own working tree, `.vmn/`, lock, and derived index; or
 - a read-only experiment **store**: any store URI (`s3://`, `gs://`, `az://`,
   `file://`, plugin schemes — see
-  [Storage](experiments.md#storage-local-s3-gcs-azure-plugins)), or an S3
-  bucket given by the `--s3-bucket` shorthand.
+  [Storage](experiments.md#storage-local-s3-gcs-azure-plugins)).
 
 The server hosts many. Several git workspaces may be clones of the *same* remote
 (e.g. one per branch or per user) — a stamp or restore in one never touches
@@ -48,8 +47,8 @@ vmn-exp ui --data-dir /srv/vmn-ui \
        --store gs://team-experiments/ml
 ```
 
-`--s3-bucket team-experiments --s3-prefix ml --endpoint-url http://minio:9000`
-is shorthand for `--store "s3://team-experiments/ml?endpoint_url=http://minio:9000"`.
+A custom S3 endpoint (MinIO, say) rides in the URI:
+`--store "s3://team-experiments/ml?endpoint_url=http://minio:9000"`.
 Re-running with the same `--store` reuses its workspace.
 
 or at runtime via the API (`POST /api/v1/workspaces` with `{"name","path"}`).
@@ -143,8 +142,8 @@ rebuilds it from the files.
 Experiments are indexed incrementally: a refresh re-reads only what moved — a
 new run, a changed `metadata.yml`, the new bytes of a grown log, a rewritten
 `run_state.yml` (a heartbeat). So a live run appending metrics, or a hundred
-runs heartbeating, costs those files, not a re-read of every experiment. S3
-workspaces get the same index, keyed by bucket and prefix and persisted next to
+runs heartbeating, costs those files, not a re-read of every experiment. Store
+workspaces get the same index, keyed by store URI and persisted next to
 the others (`<data-dir>/index/s3-*.sqlite`), so a restarted server does not
 re-read every record; a refresh is a LIST plus the objects that changed (ranged
 GETs for grown logs). The stamp tree, root topology and dependency graphs are

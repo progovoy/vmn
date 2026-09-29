@@ -11,7 +11,6 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from vmn_exp.snapshot import get_snapshot_storage
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui import (
     routes_leaderboard,
@@ -84,9 +83,9 @@ def create_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
     leaderboards = LeaderboardCache()
     app_lists = TTLCache(APPS_TTL_SEC)
-    # One client per S3 workspace: building one resolves credentials, and its
+    # One client per store workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
-    s3_storages = {}
+    store_storages = {}
 
     if token:
 
@@ -146,25 +145,19 @@ def create_app(
         return ws
 
     def _experiment_workspace(name):
-        """Like _workspace but accepts git, s3, and path-only workspaces for experiment routes."""
+        """Like _workspace but accepts git and store workspaces for experiment routes."""
         return _workspace(name)
 
     def _exp_storage_for(ws):
-        """The workspace's S3/store experiment storage (memoized), or None for git."""
+        """The store workspace's experiment storage (memoized), or None for git."""
         if ws.kind == "git":
             return None  # None means: use the default path-based reader
-        if ws.name not in s3_storages:
-            s3_storages[ws.name] = workspace_storage(ws) or get_snapshot_storage(
-                "s3",
-                bucket=ws.bucket,
-                prefix=ws.prefix or "vmn-experiments",
-                endpoint_url=ws.endpoint_url,
-                subdir="experiments",
-            )
-        return s3_storages[ws.name]
+        if ws.name not in store_storages:
+            store_storages[ws.name] = workspace_storage(ws)
+        return store_storages[ws.name]
 
     def _any_exp_storage(ws):
-        """The workspace's experiment storage, local checkout or S3."""
+        """The workspace's experiment storage, local checkout or store."""
         return _exp_storage_for(ws) or source.workspace_index(ws).storage
 
     @app.get(f"{API_PREFIX}/meta")
@@ -205,27 +198,27 @@ def create_app(
         # A later workspace of the same name may point elsewhere.
         source.forget(ws_name)
         app_lists.pop(ws_name)
-        s3_storages.pop(ws_name, None)
+        store_storages.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
     def list_apps(ws_name: str):
         ws = _experiment_workspace(ws_name)
-        s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            compute = lambda: exp_reader.list_apps_from_storage(s3_storage)  # noqa: E731
+        store_storage = _exp_storage_for(ws)
+        if store_storage:
+            compute = lambda: exp_reader.list_apps_from_storage(store_storage)  # noqa: E731
         else:
             compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
         return app_lists.get(ws_name, compute)
 
     def _leaderboard_inputs(ws_name, app_tag):
-        """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
+        """``(snapshot, metrics schema)`` of an app; no app conf in a store."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         schema = _app_schema(ws, app_name)
         return source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
     def _app_schema(ws, app_name):
-        """The app's conf.yml metrics schema; none on S3."""
+        """The app's conf.yml metrics schema; none in a store."""
         return {} if _exp_storage_for(ws) else source.metrics_schema(ws, app_name)
 
     def _detail_options(ws, app_name):
@@ -373,11 +366,11 @@ def create_app(
         app_name = _app_name(app_tag)
         _segment(v)
         _segment(to)
-        s3_storage = _exp_storage_for(ws)
+        store_storage = _exp_storage_for(ws)
         try:
-            if s3_storage:
+            if store_storage:
                 result, err = diff_reader.experiment_diff_from_storage(
-                    s3_storage, app_name, v, to
+                    store_storage, app_name, v, to
                 )
             else:
                 result, err = diff_reader.cached_experiment_diff(ws.path, app_name, v, to)
@@ -421,10 +414,10 @@ def create_app(
 
     def _lineage_inputs(ws_name, app_tag):
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        s3_storage = _exp_storage_for(ws)
+        store_storage = _exp_storage_for(ws)
         return (
             app_name,
-            lambda name: source.snapshot(ws, name, s3_storage),
+            lambda name: source.snapshot(ws, name, store_storage),
             _any_exp_storage(ws),
         )
 

@@ -74,10 +74,11 @@ class FakeBlob:
             self.upload_from_string(f.read())
 
     def download_as_bytes(self, start=None):
-        data = self._current().data
-        if start and start >= len(data):
+        obj = self._current()
+        if start and start >= len(obj.data):
             raise RequestRangeNotSatisfiable(self.name)
-        return data[start or 0:]
+        self.generation = obj.generation  # as the SDK does, from x-goog-generation
+        return obj.data[start or 0:]
 
     def download_to_filename(self, filename):
         with open(filename, "wb") as f:

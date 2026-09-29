@@ -104,6 +104,11 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 seen.add(name)
         return names
 
+    def list_apps(self):
+        apps = set(self._local.list_apps())
+        apps.update(self._remote_listing([], "list_apps"))
+        return sorted(apps)
+
     def list_run_verstrs(self, app_name, code_verstr):
         names = set(self._local.list_verstrs(app_name))
         if not self._remote:

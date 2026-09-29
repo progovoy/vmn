@@ -237,7 +237,7 @@ def experiment_storage_params(vcs, args):
     params = {
         "store": getattr(args, "store", None),
         "bucket": getattr(args, "bucket", None),
-        "prefix": getattr(args, "prefix", "vmn-experiments"),
+        "prefix": getattr(args, "prefix", None),
         "endpoint_url": getattr(args, "endpoint_url", None),
         "experiment_dir": getattr(args, "experiment_dir", None),
         "writer_id": getattr(args, "writer_id", None),

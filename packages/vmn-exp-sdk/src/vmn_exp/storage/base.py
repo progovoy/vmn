@@ -18,6 +18,7 @@ import yaml
 
 from vmn_exp._base import parse_record_metadata
 from vmn_exp.core.record_format import readable
+from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
@@ -43,6 +44,20 @@ class SnapshotStorage(ABC):
     def list_verstrs(self, app_name):
         """Names only. Backends override this to avoid parsing any metadata."""
         return [m["verstr"] for m in self.list_snapshots(app_name)]
+
+    def list_apps(self):
+        """The names of the apps with records here, sorted; reserved
+        pseudo-apps (the model registry, sweep claims) are left out."""
+        return sorted(
+            {self._app_name_of(key) for key in self._app_keys() if not is_reserved_app(key)}
+        )
+
+    def _app_keys(self):
+        """The raw per-app keys this backend stores records under."""
+        return ()
+
+    def _app_name_of(self, key):
+        return key
 
     def load_metadata(self, app_name, verstr):
         """A record's metadata alone — no patches or tarball — or None (also

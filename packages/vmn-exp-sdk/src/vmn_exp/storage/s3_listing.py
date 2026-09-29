@@ -114,6 +114,15 @@ class S3Listing:
                 merged[key] = extra[key]
         return merged
 
+    def _app_keys(self):
+        base = self.prefix + "/"
+        return [cp[len(base) :].rstrip("/") for cp in self._common_prefixes(base)]
+
+    def _app_name_of(self, key):
+        # The tag form (``root/svc`` → ``root-svc``) is bijective: ``-`` is
+        # illegal in app names. A legacy ``root_svc`` key lists as it is.
+        return key.replace("-", "/")
+
     def _names_under(self, prefix):
         base = prefix + "/"
         return {
@@ -204,6 +213,8 @@ class S3Listing:
         """
         files = {}
         params = {"Prefix": base}
+        # Without server-side StartAfter a jump re-reads everything before it.
+        can_jump = getattr(self._s3, "server_side_start_after", True)
         while True:
             page = self._s3.list_objects_v2(Bucket=self.bucket, **params)
             skip_to = None
@@ -217,7 +228,7 @@ class S3Listing:
                 return files
             params = (
                 {"Prefix": base, "StartAfter": skip_to}
-                if skip_to
+                if skip_to and can_jump
                 else {"Prefix": base, "ContinuationToken": page["NextContinuationToken"]}
             )
 

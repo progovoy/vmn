@@ -25,7 +25,7 @@ def stamped_apps():
 
 
 def build_storage(vcs):
-    params = {"prefix": "vmn-experiments"}
+    params = {}
     merge_conf_into_params(vcs, params)
     return _get_experiment_storage(vcs, params)
 

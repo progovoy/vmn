@@ -96,7 +96,6 @@ def test_ui_workspace_storage_is_only_for_store_workspaces():
     from vmn_exp.ui.workspaces import Workspace, workspace_storage
 
     assert workspace_storage(Workspace(name="g", kind="git", path="/x")) is None
-    assert workspace_storage(Workspace(name="s", kind="s3", bucket=BUCKET)) is None
 
 
 def test_ui_store_workspaces_get_their_own_index(tmp_path):

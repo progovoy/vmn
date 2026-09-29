@@ -23,6 +23,8 @@ def _obj(props):
 
 
 class AzureObjectClient(ObjectClient):
+    server_side_start_after = False  # list_blobs/walk_blobs take no start key
+
     def __init__(self, container, if_not_modified):
         super().__init__()
         self._container = container

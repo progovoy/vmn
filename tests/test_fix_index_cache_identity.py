@@ -6,7 +6,7 @@ The root is resolved once per storage object."""
 import os
 
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.storage.open import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 
 
 def _count_realpath(monkeypatch):
@@ -30,7 +30,7 @@ def test_local_cache_identity_resolves_the_root_once(tmp_path, monkeypatch):
 
 
 def test_cached_storage_identity_resolves_the_root_once(tmp_path, monkeypatch):
-    st = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    st = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
     calls = _count_realpath(monkeypatch)
     first = st.cache_identity()
     for _ in range(100):

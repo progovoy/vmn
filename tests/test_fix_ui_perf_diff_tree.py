@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 from starlette.testclient import TestClient
 
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 from vmn_exp.ui import tree_cache
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import tree as tree_reader
@@ -29,7 +29,7 @@ def ws(tmp_path):
     _git(root, "init", "-q")
     _git(root, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q",
          "--allow-empty", "-m", "init")
-    storage = get_snapshot_storage("local", vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
     return TestClient(create_app(manager)), storage, root

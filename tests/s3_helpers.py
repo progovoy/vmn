@@ -1,4 +1,5 @@
 """Shared helpers for the moto-backed S3 storage tests."""
+from vmn_exp.storage.uri import s3_uri
 import collections
 import contextlib
 import threading
@@ -35,13 +36,11 @@ def s3_storage():
 
 
 def cached_host(tmp_path, name):
-    from vmn_exp.snapshot import get_snapshot_storage
+    from vmn_exp.snapshot import open_storage
 
-    return get_snapshot_storage(
-        "local",
+    return open_storage(
+        s3_uri(BUCKET, PREFIX),
         vmn_root_path=str(tmp_path / name),
-        bucket=BUCKET,
-        prefix=PREFIX,
         subdir="experiments",
     )
 

@@ -34,7 +34,7 @@ def _workspace_name(path):
 def build_manager(args):
     """Create the WorkspaceManager for a `vmn-exp ui` invocation.
 
-    Sources: every ``--repo`` path, a ``--store``/``--s3-bucket`` source, and — when no
+    Sources: every ``--repo`` path, a ``--store`` URI, and — when no
     explicit source is given — the repo enclosing the current directory.
     Re-attaching an already-registered source is a no-op.
     """
@@ -44,13 +44,10 @@ def build_manager(args):
     manager = WorkspaceManager(data_dir)
 
     registered_paths = {os.path.realpath(w.path) for w in manager.list() if w.path}
-    registered_buckets = {
-        (w.bucket, w.prefix) for w in manager.list() if w.kind == "s3"
-    }
 
     repos = list(args.repo or [])
     store = getattr(args, "store", None)
-    if not repos and not args.s3_bucket and not store:
+    if not repos and not store:
         cwd_root = _cwd_repo_root()
         if cwd_root:
             repos.append(cwd_root)
@@ -67,16 +64,6 @@ def build_manager(args):
             manager.attach_path(name, path)
         except WorkspaceError as e:
             VMN_LOGGER.error(str(e))
-
-    if args.s3_bucket and (args.s3_bucket, args.s3_prefix) not in registered_buckets:
-        name = f"s3-{args.s3_bucket}"
-        if not manager.get(name):
-            manager.add_s3(
-                name,
-                args.s3_bucket,
-                prefix=args.s3_prefix,
-                endpoint_url=args.endpoint_url,
-            )
 
     if store and store not in {w.store for w in manager.list()}:
         _add_store_workspace(manager, store)

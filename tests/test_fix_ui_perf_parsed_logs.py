@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from vmn_exp.snapshot import LocalSnapshotStorage, get_snapshot_storage
+from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core.log import (
     effective_params,
     last_metric_at,
@@ -31,7 +31,7 @@ def _metric(i, **values):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    s = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": _ts(0), "type": "create", "params": {"lr": 0.1}})
     return s

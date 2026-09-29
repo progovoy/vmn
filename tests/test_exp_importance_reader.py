@@ -3,13 +3,13 @@ import pytest
 
 from vmn_exp.core.query import QueryError
 from vmn_exp.sdk.reader import param_importance
-from vmn_exp.storage.open import get_snapshot_storage
+from vmn_exp.storage.open import open_storage
 
 APP = "app"
 
 
 def _storage(tmp_path):
-    return get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
 
 
 def _run(storage, i, loss, **params):

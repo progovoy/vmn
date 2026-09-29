@@ -9,7 +9,7 @@ import os
 import yaml
 
 from vmn_exp.core.index import ExperimentIndex
-from vmn_exp.snapshot import get_snapshot_storage
+from vmn_exp.snapshot import open_storage
 
 APP = "app"
 RUNS = 3000
@@ -69,7 +69,7 @@ def _refresh(index, touched):
 
 
 def _storage(tmp_path):
-    storage = get_snapshot_storage("local", vmn_root_path=str(tmp_path), subdir="experiments")
+    storage = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
     return storage, _track_record_reads(storage)
 
 
