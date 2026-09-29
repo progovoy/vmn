@@ -244,6 +244,8 @@ export interface ExperimentDetail {
   histograms_total?: Record<string, number>;
   /** The run (and step) this run was forked from; a fork is not a child. */
   forked_from?: ForkOrigin | null;
+  /** The run this run is a `vmn-exp rerun` of. */
+  rerun_of?: string | null;
   /** Rewinds of this run, in log order: history past `step` was hidden. */
   rewinds?: RunRewind[];
 }
