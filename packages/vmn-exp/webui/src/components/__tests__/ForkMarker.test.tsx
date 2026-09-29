@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("uplot", async () => await import("./fakeUPlot"));
 
 import { enableCanvas, instances, resetInstances } from "./fakeUPlot";
 import TrainingCurves from "../TrainingCurves";
+import { renderWithClient } from "../../test-utils";
 import { stepMarkerHook } from "../../util/chartMarkers";
 import type { SeriesPoint } from "../../types";
 
@@ -27,7 +28,7 @@ const drawHooks = (i: number) => ((instances[i].opts.hooks as Hooks | undefined)
 
 describe("fork point on the Run page charts", () => {
   it("marks the fork step on every step chart", async () => {
-    render(<TrainingCurves series={{ loss: pts(10), acc: pts(10) }} markStep={4} />);
+    renderWithClient(<TrainingCurves series={{ loss: pts(10), acc: pts(10) }} markStep={4} />);
     await waitFor(() => expect(instances).toHaveLength(2));
     expect(drawHooks(0)).toHaveLength(1);
     const charts = screen.getAllByTestId("metric-chart");
@@ -35,7 +36,7 @@ describe("fork point on the Run page charts", () => {
   });
 
   it("draws no marker without a fork step", async () => {
-    render(<TrainingCurves series={{ loss: pts(10) }} />);
+    renderWithClient(<TrainingCurves series={{ loss: pts(10) }} />);
     await waitFor(() => expect(instances).toHaveLength(1));
     expect(drawHooks(0)).toHaveLength(0);
     expect(screen.getByTestId("metric-chart").getAttribute("data-mark-step")).toBeNull();
@@ -43,7 +44,7 @@ describe("fork point on the Run page charts", () => {
 
   it("drops the marker off step axes", async () => {
     const series = { loss: pts(10).map((p, i) => ({ ...p, ts: `2026-01-01T00:00:0${i}Z` })) };
-    render(<TrainingCurves series={series} markStep={4} />);
+    renderWithClient(<TrainingCurves series={series} markStep={4} />);
     await waitFor(() => expect(instances).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: /relative/i }));
     await waitFor(() => expect(instances).toHaveLength(2));

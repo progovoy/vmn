@@ -50,6 +50,13 @@ function renderView(lineage: Lineage) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("LineageView", () => {
+  it("shows each run's status as a status pill", () => {
+    renderView(LINEAGE);
+    const pills = screen.getAllByLabelText(/^succeeded/);
+    expect(pills).toHaveLength(3);
+    pills.forEach((p) => expect(p).toHaveClass("status-pill", "succeeded"));
+  });
+
   it("links upstream and downstream runs to their run pages", () => {
     renderView(LINEAGE);
     expect(screen.getByRole("link", { name: "prep" })).toHaveAttribute(

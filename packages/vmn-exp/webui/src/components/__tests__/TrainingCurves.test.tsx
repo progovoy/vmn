@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("uplot", async () => await import("./fakeUPlot"));
 
 import { enableCanvas, instances, resetInstances } from "./fakeUPlot";
 import TrainingCurves from "../TrainingCurves";
+import { renderWithClient } from "../../test-utils";
 import type { SeriesPoint } from "../../types";
 
 const pts = (n: number, f: (i: number) => number): SeriesPoint[] =>
@@ -33,26 +34,26 @@ const chartTitles = () =>
 
 describe("TrainingCurves small multiples", () => {
   it("draws one chart per training metric, each on its own axis", async () => {
-    render(<TrainingCurves series={SERIES} />);
+    renderWithClient(<TrainingCurves series={SERIES} />);
     expect(chartTitles()).toEqual(["loss", "val_loss", "acc"]);
     await waitFor(() => expect(instances).toHaveLength(3));
   });
 
   it("filters the charts with the metric search box", () => {
-    render(<TrainingCurves series={SERIES} />);
+    renderWithClient(<TrainingCurves series={SERIES} />);
     fireEvent.change(screen.getByPlaceholderText(/filter metrics/i), { target: { value: "LOSS" } });
     expect(chartTitles()).toEqual(["loss", "val_loss"]);
   });
 
   it("says when the search matches nothing", () => {
-    render(<TrainingCurves series={SERIES} />);
+    renderWithClient(<TrainingCurves series={SERIES} />);
     fireEvent.change(screen.getByPlaceholderText(/filter metrics/i), { target: { value: "zzz" } });
     expect(screen.queryAllByTestId("metric-chart")).toHaveLength(0);
     expect(screen.getByText(/no metric matches/i)).toBeInTheDocument();
   });
 
   it("toggles a log y axis", async () => {
-    render(<TrainingCurves series={{ loss: SERIES.loss }} />);
+    renderWithClient(<TrainingCurves series={{ loss: SERIES.loss }} />);
     await waitFor(() => expect(instances).toHaveLength(1));
     const btn = screen.getByRole("button", { name: /log/i });
     expect(btn).toHaveAttribute("aria-pressed", "false");
@@ -64,7 +65,7 @@ describe("TrainingCurves small multiples", () => {
   });
 
   it("adds a faded raw curve under the smoothed one", async () => {
-    render(<TrainingCurves series={{ loss: SERIES.loss }} />);
+    renderWithClient(<TrainingCurves series={{ loss: SERIES.loss }} />);
     fireEvent.change(screen.getByRole("slider"), { target: { value: "0.5" } });
     await waitFor(() => {
       const last = instances[instances.length - 1];
@@ -73,14 +74,14 @@ describe("TrainingCurves small multiples", () => {
   });
 
   it("keeps sys_* metrics in their own section until asked for", () => {
-    render(<TrainingCurves series={SERIES} />);
+    renderWithClient(<TrainingCurves series={SERIES} />);
     expect(chartTitles()).not.toContain("sys_rss_mb");
     fireEvent.click(screen.getByText(/show system metrics \(1\)/));
     expect(chartTitles()).toContain("sys_rss_mb");
   });
 
   it("renders nothing without plottable series", () => {
-    const { container } = render(<TrainingCurves series={{ loss: pts(1, () => 1) }} />);
+    const { container } = renderWithClient(<TrainingCurves series={{ loss: pts(1, () => 1) }} />);
     expect(container.firstChild).toBeNull();
   });
 });

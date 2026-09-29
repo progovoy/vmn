@@ -63,8 +63,7 @@ export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) 
   );
 }
 
-/** Params card: the verbatim `params` (strings and booleans included), with
- *  snapshot `user_meta` only as a fallback for records that have no params. */
+/** Params card: the verbatim `params` (strings and booleans included). */
 export function ParamsCard({ params }: { params: Record<string, unknown> | null | undefined }) {
   if (!params || Object.keys(params).length === 0) return null;
   return (

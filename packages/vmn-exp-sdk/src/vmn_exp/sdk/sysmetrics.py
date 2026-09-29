@@ -28,9 +28,16 @@ Three things are deliberate:
 import importlib
 import logging
 import os
+import threading
 import time
 
 from vmn_exp.core.env import opted_in
+from vmn_exp.sdk.sysmetrics_gpu import (
+    GPU_MEM_MB,
+    GPU_NODE_MEM_MB,
+    GPU_NODE_UTIL_PERCENT,
+    gpu_probe,
+)
 
 # Stdlib logging, not VMN_LOGGER: this is reached from the SDK too, which never
 # calls init_stamp_logger.
@@ -40,11 +47,6 @@ CPU_PERCENT = "sys_cpu_percent"
 # Resident memory of the tree: the root's RSS plus each child's *unique* memory,
 # so forked workers sharing the parent's pages are not counted N times.
 RSS_MB = "sys_rss_mb"
-# GPU memory held by this run's process tree (per-process NVML accounting).
-GPU_MEM_MB = "sys_gpu_mem_mb"
-# Node-level figures over the visible devices, whoever is using them.
-GPU_NODE_MEM_MB = "sys_gpu_node_mem_mb"
-GPU_NODE_UTIL_PERCENT = "sys_gpu_node_util_percent"
 
 SYS_METRIC_NAMES = (
     CPU_PERCENT,
@@ -62,6 +64,17 @@ _MB = float(1024 * 1024)
 
 #: Set to ``0``/``false``/``no``/``off`` to turn system metrics off.
 SYSTEM_METRICS_ENV = "VMN_SYSTEM_METRICS"
+#: Set by ``vmn-exp run`` in its child's env when it samples the child's tree.
+SUPERVISOR_SAMPLES_ENV = "VMN_EXP_SUPERVISOR_SAMPLES"
+
+# Enumerating the tree scans every process on the host: re-walk it only once
+# the time since the last walk is this many times what that walk cost.
+TREE_WALK_DUTY = 0.01
+# A child's USS parses its smaps; between reads it is estimated from its RSS.
+USS_EVERY_N_TICKS = 10
+
+# The clock the tree-walk budget reads; a seam for tests.
+_clock = time.monotonic
 
 
 def enabled(explicit, exp_conf=None):
@@ -71,6 +84,14 @@ def enabled(explicit, exp_conf=None):
     kwarg) > ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
     """
     return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
+
+
+def sdk_enabled(explicit, exp_conf=None):
+    """:func:`enabled`, but off by default under a ``vmn-exp run`` that
+    already samples this process's tree — explicit ``True`` still samples."""
+    if explicit is None and os.environ.get(SUPERVISOR_SAMPLES_ENV):
+        return False
+    return enabled(explicit, exp_conf)
 
 
 def _import_optional(name):
@@ -99,6 +120,10 @@ class _ProcessProbe:
     def __init__(self, root):
         self._root = root
         self._tracked = {root.pid: root}
+        self._walked_at = None
+        self._walk_cost = 0.0
+        self._ticks = 0
+        self._uss_ratio = {}  # pid -> USS / RSS at its last USS read
         # Prime every process's CPU interval; a first reading is always 0.0.
         for proc in self._tree()[0]:
             self._read_cpu(proc)
@@ -109,19 +134,31 @@ class _ProcessProbe:
         """The pids sampled last tick — the run's process tree."""
         return set(self._tracked)
 
+    def _walk_due(self):
+        if self._walked_at is None:
+            return True
+        return _clock() - self._walked_at >= self._walk_cost / TREE_WALK_DUTY
+
     def _tree(self):
         """This tick's processes (reusing held objects) and the newly seen pids."""
+        if not self._walk_due():
+            return list(self._tracked.values()), set()
         found = [self._root]
+        started = _clock()
         try:
             found.extend(self._root.children(recursive=True))
         except Exception:
             # The root exited, or we lost the right to look.
             _LOGGER.debug("Could not enumerate child processes", exc_info=True)
             found = list(self._tracked.values())
+        self._walked_at, self._walk_cost = started, _clock() - started
 
         new = {p.pid for p in found} - set(self._tracked)
         # Rebuilt rather than pruned, so a finished worker stops being sampled.
         self._tracked = {p.pid: self._tracked.get(p.pid, p) for p in found}
+        self._uss_ratio = {
+            pid: r for pid, r in self._uss_ratio.items() if pid in self._tracked
+        }
         return list(self._tracked.values()), new
 
     @staticmethod
@@ -130,6 +167,11 @@ class _ProcessProbe:
             return proc.cpu_percent(None)
         except Exception:
             return 0.0
+
+    def _forget(self, proc):
+        if proc is not self._root:
+            self._tracked.pop(proc.pid, None)
+            self._uss_ratio.pop(proc.pid, None)
 
     def _newborn_cpu(self, proc, elapsed):
         """CPU percent of a process first seen this tick.
@@ -147,21 +189,28 @@ class _ProcessProbe:
         except Exception:
             return 0.0
 
-    def _memory(self, proc):
-        """The root's RSS; a child's unique set size, falling back to its RSS."""
-        if proc is not self._root:
+    def _memory(self, proc, read_uss):
+        """The root's RSS; a child's unique set size — read when *read_uss* or
+        first seen, else its RSS scaled by the USS share last read."""
+        if proc is self._root:
+            return proc.memory_info().rss
+        if read_uss or proc.pid not in self._uss_ratio:
             try:
-                return proc.memory_full_info().uss
+                info = proc.memory_full_info()
+                self._uss_ratio[proc.pid] = info.uss / info.rss if info.rss else 1.0
+                return info.uss
             except Exception:
-                pass
-        return proc.memory_info().rss
+                self._uss_ratio[proc.pid] = 1.0
+        return proc.memory_info().rss * self._uss_ratio[proc.pid]
 
     def __call__(self):
         wait = MIN_SAMPLE_INTERVAL_SEC - (time.monotonic() - self._last_mono)
         if wait > 0:
-            time.sleep(wait)  # at most once, right after the probe was built
+            time.sleep(wait)  # only when called right after the probe was built
         procs, new = self._tree()
         elapsed = time.monotonic() - self._last_mono
+        read_uss = self._ticks % USS_EVERY_N_TICKS == 0
+        self._ticks += 1
         cpu = 0.0
         memory = 0
         for proc in procs:
@@ -171,9 +220,9 @@ class _ProcessProbe:
                         cpu += self._newborn_cpu(proc, elapsed)
                     else:
                         cpu += proc.cpu_percent(None)
-                    memory += self._memory(proc)
+                    memory += self._memory(proc, read_uss)
             except Exception:
-                continue  # exited between listing and reading: normal
+                self._forget(proc)  # exited between listing and reading: normal
         self._last_mono, self._last_wall = time.monotonic(), time.time()
         return {CPU_PERCENT: round(cpu, 1), RSS_MB: round(memory / _MB, 1)}
 
@@ -190,107 +239,6 @@ def _process_probe(pid=None):
         return None
 
 
-def _visible_handles(pynvml):
-    """NVML handles of the devices ``CUDA_VISIBLE_DEVICES`` exposes to the run.
-
-    NVML enumerates every physical device on the node; CUDA only the listed
-    ones — by index or by (a unique prefix of) UUID, stopping at the first
-    invalid index. Unset means all; empty means none.
-    """
-    count = pynvml.nvmlDeviceGetCount()
-    handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(count)]
-    raw = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if raw is None:
-        return handles
-    visible = []
-    for token in (t.strip() for t in raw.split(",")):
-        if not token:
-            continue
-        if token.lstrip("-").isdigit():
-            index = int(token)
-            if index < 0 or index >= count:
-                break
-            visible.append(handles[index])
-            continue
-        match = [h for h in handles if _uuid(pynvml, h).startswith(token)]
-        if len(match) != 1:
-            break
-        visible.append(match[0])
-    return visible
-
-
-def _uuid(pynvml, handle):
-    try:
-        uuid = pynvml.nvmlDeviceGetUUID(handle)
-    except Exception:
-        return ""
-    return uuid.decode() if isinstance(uuid, bytes) else str(uuid)
-
-
-def _gpu_probe(pids=None):
-    """GPU memory of the run's processes, plus node memory and utilization.
-
-    *pids* returns the run's process tree each tick. Every NVML query is guarded
-    on its own, so a query a device does not support (utilization on MIG, say)
-    costs that value, not the whole sample.
-    """
-    pynvml = _import_optional("pynvml")
-    if pynvml is None:
-        return None
-
-    try:
-        pynvml.nvmlInit()
-        # Handles are stable for the process's lifetime, so resolve them once
-        # instead of per device per tick.
-        handles = _visible_handles(pynvml)
-    except Exception:
-        # No driver, no device, a container without /dev/nvidia*: all normal.
-        _LOGGER.debug("pynvml is installed but no GPU is reachable", exc_info=True)
-        return None
-    if not handles:
-        return None
-
-    def probe():
-        tree = pids() if pids else set()
-        used, util, owned = [], [], []
-        for h in handles:
-            _collect(used, lambda h=h: pynvml.nvmlDeviceGetMemoryInfo(h).used)
-            _collect(util, lambda h=h: pynvml.nvmlDeviceGetUtilizationRates(h).gpu)
-            _collect(owned, lambda h=h: _tree_gpu_memory(pynvml, h, tree))
-        values = {}
-        if used:
-            values[GPU_NODE_MEM_MB] = round(sum(used) / _MB, 1)
-        if util:
-            values[GPU_NODE_UTIL_PERCENT] = round(float(sum(util)) / len(util), 1)
-        owned = [o for o in owned if o is not None]
-        if owned:
-            values[GPU_MEM_MB] = round(sum(owned) / _MB, 1)
-        return values
-
-    return probe
-
-
-def _collect(into, query):
-    try:
-        into.append(query())
-    except Exception:
-        _LOGGER.debug("An NVML query failed", exc_info=True)
-
-
-def _tree_gpu_memory(pynvml, handle, tree):
-    """Bytes the run's processes hold on *handle*, or None if none is listed.
-
-    None rather than 0 when nothing matches: inside a container NVML reports
-    host pids, and "unknown" must not read as "uses no GPU memory".
-    """
-    matched = [
-        p.usedGpuMemory or 0
-        for p in pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-        if p.pid in tree
-    ]
-    return sum(matched) if matched else None
-
-
 def build_collector(pid=None):
     """A callable returning ``{name: number}``, or None if nothing can be read.
 
@@ -300,7 +248,9 @@ def build_collector(pid=None):
     """
     process = _process_probe(pid)
     root = pid or os.getpid()
-    gpu = _gpu_probe(process.pids if process is not None else (lambda: {root}))
+    pynvml = _import_optional("pynvml")
+    tree = process.pids if process is not None else (lambda: {root})
+    gpu = gpu_probe(pynvml, tree) if pynvml is not None else None
     probes = [p for p in (process, gpu) if p is not None]
     if not probes:
         return None
@@ -328,8 +278,9 @@ class Sampler:
 
     Callers tick from a timer they already own — ``vmn-exp run``'s poll loop and
     the SDK's :class:`~vmn_exp.sdk.heartbeat.Heartbeat` thread — so the
-    cadence is the heartbeat's and no second thread leaks. (Should those two ever
-    share one heartbeat mechanism, ticking belongs inside it.)
+    cadence is the heartbeat's; the only other thread is a one-off that builds
+    the collector. (Should those two ever share one heartbeat mechanism,
+    ticking belongs inside it.)
 
     Args:
         record: called with a ``{name: number}`` mapping to persist a sample.
@@ -344,18 +295,31 @@ class Sampler:
         self._enabled = enabled
         self._pid = pid
         self._collector = collector
+        if enabled and collector is None:
+            # Off-thread, and started now so the first tick finds it ready:
+            # importing psutil and nvmlInit() can take seconds on a host with
+            # a sulking driver, and belong on neither start_run() nor a beat.
+            threading.Thread(
+                target=self._build, name="vmn-sysmetrics-init", daemon=True
+            ).start()
+
+    def _build(self):
+        try:
+            collector = build_collector(self._pid)
+        except Exception:
+            _LOGGER.debug("Building the system-metrics collector failed", exc_info=True)
+            collector = None
+        if collector is None:
+            self._enabled = False  # nothing to read; stop trying, stay quiet
+            return
+        # The probe's first CPU reading needs this long since it was primed;
+        # waited here so that a beat never sleeps for it.
+        time.sleep(MIN_SAMPLE_INTERVAL_SEC)
+        self._collector = collector
 
     def tick(self):
-        if not self._enabled:
-            return
-        if self._collector is None:
-            # Built on the first tick, not in __init__: importing psutil and
-            # calling nvmlInit() can take seconds on a host with a sulking
-            # driver, and neither belongs on a caller's start_run() path.
-            self._collector = build_collector(self._pid)
-            if self._collector is None:
-                self._enabled = False  # nothing to read; stop trying, stay quiet
-                return
+        if not self._enabled or self._collector is None:
+            return  # opted out, or the collector is still being built
         try:
             values = self._collector()
             if values:

@@ -9,7 +9,7 @@ import type { ExperimentRow } from "../../types";
 
 const row = (i: number, metrics: Record<string, number | null>): ExperimentRow => ({
   idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null,
-  branch: "main", base_version: "0.0.1", user_meta: null, metrics: metrics as Record<string, number>,
+  branch: "main", base_version: "0.0.1", metrics: metrics as Record<string, number>,
 });
 
 const originalMatchMedia = window.matchMedia;

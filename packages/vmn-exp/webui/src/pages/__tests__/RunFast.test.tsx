@@ -39,7 +39,7 @@ function detail(extra: Partial<ExperimentDetail> = {}): ExperimentDetail {
 
 const cachedRow: ExperimentRow = {
   idx: 2, verstr: VERSTR, code_verstr: VERSTR, timestamp: "2026-01-01T12:00:00Z",
-  note: "row note", branch: "feat/row", base_version: "0.0.1", user_meta: null,
+  note: "row note", branch: "feat/row", base_version: "0.0.1",
   params: { model: "resnet" }, metrics: { acc: 0.93 }, status: "running",
   duration_sec: 125, children: [],
 };
@@ -120,8 +120,8 @@ describe("Run polling", () => {
 describe("Run note editor", () => {
   it("saves a note through exp_add and shows it at once", async () => {
     m.experiment.mockResolvedValue(detail());
-    m.action.mockResolvedValue({ id: "j1", status: "running", command: [], exit_code: null, log: "", noop: false });
-    m.job.mockResolvedValue({ id: "j1", status: "succeeded", command: [], exit_code: 0, log: "", noop: false });
+    m.action.mockResolvedValue({ id: "j1", status: "running", command: [], exit_code: null, log: "" });
+    m.job.mockResolvedValue({ id: "j1", status: "succeeded", command: [], exit_code: 0, log: "" });
     renderRun();
     fireEvent.click(await screen.findByRole("button", { name: /edit note/i }));
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "better lr" } });
@@ -133,8 +133,8 @@ describe("Run note editor", () => {
 
   it("rolls the note back when the job fails", async () => {
     m.experiment.mockResolvedValue(detail());
-    m.action.mockResolvedValue({ id: "j1", status: "running", command: [], exit_code: null, log: "", noop: false });
-    m.job.mockResolvedValue({ id: "j1", status: "failed", command: [], exit_code: 1, log: "boom", noop: false });
+    m.action.mockResolvedValue({ id: "j1", status: "running", command: [], exit_code: null, log: "" });
+    m.job.mockResolvedValue({ id: "j1", status: "failed", command: [], exit_code: 1, log: "boom" });
     renderRun();
     fireEvent.click(await screen.findByRole("button", { name: /edit note/i }));
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "doomed" } });

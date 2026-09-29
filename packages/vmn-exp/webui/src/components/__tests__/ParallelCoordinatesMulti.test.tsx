@@ -7,7 +7,7 @@ import type { ExperimentRow, MetricsSchema } from "../../types";
 function row(i: number, metrics: Record<string, number>, params: Record<string, unknown> = {}): ExperimentRow {
   return {
     idx: i, verstr: `v${i}`, code_verstr: `v${i}`, timestamp: null, note: null,
-    branch: "main", base_version: "0.0.1", user_meta: null, params, metrics,
+    branch: "main", base_version: "0.0.1", params, metrics,
   };
 }
 

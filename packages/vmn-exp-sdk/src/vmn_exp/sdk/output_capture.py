@@ -93,8 +93,9 @@ class RunOutput:
     def stop(self):
         """Stop capturing and queue the last upload; returns its log entry."""
         self._capture.stop()
+        entry = self._artifact.seal()
         self._uploader.submit()
-        return self._artifact.artifact_entry()
+        return entry
 
     def close(self, timeout):
         return self._uploader.close(timeout)

@@ -6,7 +6,7 @@ import type { ExperimentRow, MetricsSchema } from "../../types";
 function makeRow(
   idx: number,
   metrics: Record<string, number | string>,
-  user_meta: Record<string, unknown> | null = null,
+  params: Record<string, unknown> = {},
 ): ExperimentRow {
   return {
     idx,
@@ -16,7 +16,7 @@ function makeRow(
     note: null,
     branch: "main",
     base_version: "1.0.0",
-    user_meta,
+    params,
     metrics,
   };
 }

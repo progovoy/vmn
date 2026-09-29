@@ -34,7 +34,7 @@ export function columnsToRows(data: ExperimentColumns): ExperimentRow[] {
     }
     return {
       idx: data.idx[i], verstr, code_verstr: verstr, timestamp: null, note: null,
-      branch, base_version: null, user_meta: null, params, metrics,
+      branch, base_version: null, params, metrics,
     };
   });
 }

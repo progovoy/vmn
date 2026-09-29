@@ -59,7 +59,7 @@ export default function Overlay() {
       .then((b) => b.series),
     [ws, app, loadedKeys],
   );
-  const joined = useJoinedSeries<Joined>(xMap, fetchJoined, data);
+  const { data: joined, error: joinError } = useJoinedSeries<Joined>(xMap, fetchJoined, data);
   const hasTimestamps = useMemo(
     () => loaded.length > 0 && loaded.every((r) => allTimestamped(r.series)), [loaded],
   );
@@ -105,6 +105,7 @@ export default function Overlay() {
       {data.missing.length > 0 && (
         <p style={{ color: "var(--text-3)", margin: "0 0 12px" }}>not found: {data.missing.join(", ")}</p>
       )}
+      {joinError && <div className="error">{joinError.message}</div>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />

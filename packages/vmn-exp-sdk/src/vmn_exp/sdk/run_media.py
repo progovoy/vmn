@@ -17,12 +17,12 @@ import json
 import logging
 import os
 import shutil
-import tempfile
 
 from vmn_exp.core.histogram import histogram
 from vmn_exp.core.png import array_to_png, png_file_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
+from vmn_exp.sdk.media_uploads import staging_dir
 from vmn_exp.sdk.run_artifacts import checked_artifact_name
 
 _LOGGER = logging.getLogger("vmn_exp.sdk")
@@ -82,8 +82,8 @@ def write_image(image, dest):
 
 
 class RunMedia:
-    """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``_save_artifact_file``
-    and ``_append``."""
+    """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``_media_uploads`` (a
+    :class:`~vmn_exp.sdk.media_uploads.MediaUploads`) and ``_append``."""
 
     def _media_step(self, kind, name, step):
         """*step*, checked, or the next free auto step of (*kind*, *name*)."""
@@ -102,13 +102,18 @@ class RunMedia:
         self._append(entry)
 
     def _store(self, name, produce):
-        """Save the file *produce(tmp path)* writes as artifact *name*; returns
-        ``(artifact name stored under, (width, height) of a PNG or None)``."""
-        with tempfile.TemporaryDirectory(prefix="vmn-media-") as tmp:
+        """Queue the file *produce(tmp path)* writes for storing as artifact
+        *name*; returns ``(artifact name, (width, height) of a PNG or None)``."""
+        tmp = staging_dir()
+        try:
             written = produce(os.path.join(tmp, os.path.basename(name)))
             stored = name[: -len(os.path.basename(name))] + os.path.basename(written)
-            self._save_artifact_file(written, checked_artifact_name(stored))
-            return stored, png_file_size(written) if stored.endswith(".png") else None
+            size = png_file_size(written) if stored.endswith(".png") else None
+            self._media_uploads.submit(tmp, written, checked_artifact_name(stored))
+        except BaseException:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
+        return stored, size
 
     def log_table(self, name, data, columns=None, step=None):
         doc, total = table_document(data, columns=columns)
