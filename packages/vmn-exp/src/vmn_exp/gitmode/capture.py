@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.code_store import code_key, store_code, stored_code
+from vmn_exp.core.code_store import code_key, publish_code, store_code, stored_code
 from vmn_exp.snapshot import (
     _compute_diff_hash,
     _format_dev_verstr,
@@ -69,10 +69,12 @@ def ensure_code(storage, vcs, captured):
         return None, _patch_summary(captured.identity)
     key = code_key(captured.code_verstr, captured.diff_hash)
     summary = stored_code(storage, vcs.name, key)
-    if summary is None:
-        payload = _with_untracked_payloads(vcs, captured.identity)
-        summary = _patch_summary(payload)
-        store_code(storage, vcs.name, key, payload, summary)
+    if summary is not None:
+        publish_code(storage, vcs.name, key)
+        return key, summary
+    payload = _with_untracked_payloads(vcs, captured.identity)
+    summary = _patch_summary(payload)
+    store_code(storage, vcs.name, key, payload, summary)
     return key, summary
 
 

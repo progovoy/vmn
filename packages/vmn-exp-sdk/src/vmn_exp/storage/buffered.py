@@ -74,6 +74,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         if metadata is None:
             return False
         self._local.save(app_name, verstr, metadata, {})
+        self._presence.mark(app_name, verstr)
         return True
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
