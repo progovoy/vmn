@@ -239,7 +239,7 @@ def test_metrics_notes_and_artifacts_land_in_the_log(app_layout):
     log = _log(app_layout, run.id)
     metrics = [e for e in log if e.get("type") == "metrics"]
     assert metrics[0]["values"] == {"loss": 0.5}
-    assert "step" not in metrics[0]
+    assert metrics[0]["step"] == 0
     assert metrics[1]["values"] == {"loss": 0.25}
     assert metrics[1]["step"] == 2
     assert metrics[2]["values"] == {"acc": 0.9, "f1": 0.8}
