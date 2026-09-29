@@ -2,7 +2,8 @@
 """Workspace registry for vmn-exp ui.
 
 A workspace is an isolated source of vmn data: a git checkout (its own working
-tree, .vmn/, lock and index) or a read-only S3 experiment store. Several
+tree, .vmn/, lock and index) or a read-only experiment store: ``s3`` (a
+bucket/prefix) or ``store`` (any storage URI). Several
 workspaces may be clones of the same remote — mutations in one never touch
 another. The registry persists in ``<data_dir>/workspaces.yml``.
 
@@ -28,8 +29,9 @@ _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 @dataclass
 class Workspace:
     name: str
-    kind: str = "git"  # "git" | "s3"
+    kind: str = "git"  # "git" | "s3" | "store"
     path: Optional[str] = None
+    store: Optional[str] = None  # a storage URI, for kind "store"
     bucket: Optional[str] = None
     prefix: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -153,6 +155,14 @@ class WorkspaceManager:
         self._save()
         return ws
 
+    def add_store(self, name, uri) -> Workspace:
+        """Register a read-only experiment store named by a storage URI."""
+        self._validate_new_name(name)
+        ws = Workspace(name=name, kind="store", store=uri)
+        self._workspaces[name] = ws
+        self._save()
+        return ws
+
     def remove(self, name):
         ws = self._workspaces.get(name)
         if ws is None:
@@ -163,3 +173,12 @@ class WorkspaceManager:
         # checkouts belong to the user and are left alone.
         if ws.path and self._is_managed(ws.path):
             shutil.rmtree(ws.path, ignore_errors=True)
+
+
+def workspace_storage(ws):
+    """A ``store`` workspace's experiment storage, else None."""
+    if ws.kind != "store":
+        return None
+    from vmn_exp.storage.open import open_storage
+
+    return open_storage(ws.store, subdir="experiments")

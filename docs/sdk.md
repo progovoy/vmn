@@ -176,14 +176,19 @@ with start_run() as run:            # app name comes from the metadata
 `app_name` may still be passed (or set via `VMN_APP_NAME`); otherwise the app the
 snapshot names is used.
 
-To record to S3 from a pod, set `VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`,
-default `vmn-experiments`, and `VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like).
-With `VMN_EXPERIMENT_DIR` too, entries are appended to that local scratch dir and the
-new lines are synced to the bucket every `sync_interval_sec`; with the bucket alone
-the run writes straight to S3. The job creates its own record — no prefix needs to
-exist beforehand — and `vmn-exp ui --s3-bucket <bucket>` reads it. `storage=` still
-overrides all of this. With neither a dir nor a bucket, `start_run()` raises a
-`ValueError` naming `VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_BUCKET`.
+To record to a shared store from a pod, set `VMN_EXPERIMENT_STORE` to a store URI —
+`s3://bucket/prefix`, `gs://bucket/prefix` (`[gcs]` extra), `az://container/prefix`
+(`[azure]` extra), `file:///mnt/nfs/exps` or a plugin scheme (see
+[Storage](experiments.md#storage-local-s3-gcs-azure-plugins)).
+`VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`, default `vmn-experiments`, and
+`VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like) is shorthand for an `s3://`
+URI; `VMN_EXPERIMENT_STORE` wins over it. With `VMN_EXPERIMENT_DIR` too, entries are
+appended to that local scratch dir and the new lines are synced to the store every
+`sync_interval_sec`; with the store alone the run writes straight to it. The job
+creates its own record — no prefix needs to exist beforehand — and
+`vmn-exp ui --store <uri>` reads it. `storage=` still overrides all of this. With
+neither a dir nor a store, `start_run()` raises a `ValueError` naming
+`VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_STORE`.
 
 ---
 
@@ -876,8 +881,16 @@ way as experiment runs:
 
 1. `VMN_SNAPSHOT_METADATA` set → container/snapshot mode
 2. `VMN_EXPERIMENT_DIR` set → that directory
-3. Otherwise → the current git checkout's `.vmn` root (with `VMN_EXPERIMENT_BUCKET`
-   and other env overrides applied)
+3. Otherwise → the current git checkout's `.vmn` root
+
+The local root found this way fronts the remote store, if any:
+`VMN_EXPERIMENT_STORE` (a URI; `resolve_experiment_storage(store=...)` in code),
+else the `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` shorthand for `s3://`.
+With no local root the store is used directly; a `file://` store *is* the root.
+The URI scheme picks the backend from the registry in `vmn_exp.storage.registry`
+(built-ins `file`, `s3`, `gs`, `az`; plugins via the `vmn_exp.storage`
+entry-point group). A backend whose SDK is missing raises `ImportError` naming
+the extra to install, e.g. `pip install 'vmn-exp-sdk[gcs]'`.
 
 ---
 
@@ -1004,7 +1017,7 @@ For recording-only environments (container images, CI workers, air-gapped
 training jobs), install just the metrics writer:
 
 ```sh
-pip install vmn-exp-sdk           # + [s3] to record to a bucket; pynvml for GPU sys_* metrics
+pip install vmn-exp-sdk           # + [s3]/[gcs]/[azure] to record to a bucket; pynvml for GPU sys_* metrics
 ```
 
 `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it

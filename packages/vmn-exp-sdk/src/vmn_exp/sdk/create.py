@@ -113,7 +113,7 @@ def snapshot_mode_storage():
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "
-            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_BUCKET (or pass storage=)."
+            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_STORE (or pass storage=)."
         )
 
 

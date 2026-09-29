@@ -5,6 +5,7 @@ The server never takes the repo lock — reads are lock-free and mutations run
 as `vmn` CLI subprocesses that acquire it themselves.
 """
 import os
+import re
 
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.ui.security import LOOPBACK_HOSTS
@@ -33,7 +34,7 @@ def _workspace_name(path):
 def build_manager(args):
     """Create the WorkspaceManager for a `vmn-exp ui` invocation.
 
-    Sources: every ``--repo`` path, an ``--s3-bucket`` source, and — when no
+    Sources: every ``--repo`` path, a ``--store``/``--s3-bucket`` source, and — when no
     explicit source is given — the repo enclosing the current directory.
     Re-attaching an already-registered source is a no-op.
     """
@@ -48,7 +49,8 @@ def build_manager(args):
     }
 
     repos = list(args.repo or [])
-    if not repos and not args.s3_bucket:
+    store = getattr(args, "store", None)
+    if not repos and not args.s3_bucket and not store:
         cwd_root = _cwd_repo_root()
         if cwd_root:
             repos.append(cwd_root)
@@ -76,7 +78,21 @@ def build_manager(args):
                 endpoint_url=args.endpoint_url,
             )
 
+    if store and store not in {w.store for w in manager.list()}:
+        _add_store_workspace(manager, store)
+
     return manager
+
+
+def _add_store_workspace(manager, uri):
+    from vmn_exp.storage.uri import parse_store_uri
+
+    parsed = parse_store_uri(uri)
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", f"{parsed.scheme}-{parsed.location}").strip("-")
+    name, suffix = base, 2
+    while manager.get(name):
+        name, suffix = f"{base}-{suffix}", suffix + 1
+    manager.add_store(name, uri)
 
 
 def handle_ui(args):
