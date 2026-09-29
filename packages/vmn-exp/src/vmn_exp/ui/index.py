@@ -60,9 +60,10 @@ def _db_path(db_dir, source, prefix=""):
 
 
 def s3_cache_path(db_dir, ws):
-    """Where an S3 workspace's index persists, one database per bucket+prefix."""
+    """Where a store workspace's index persists, one database per store."""
     os.makedirs(db_dir, exist_ok=True)
-    return _db_path(db_dir, repr((ws.endpoint_url, ws.bucket, ws.prefix)), "s3-")
+    source = ws.store or repr((ws.endpoint_url, ws.bucket, ws.prefix))
+    return _db_path(db_dir, source, "s3-")
 
 
 class WorkspaceIndex:

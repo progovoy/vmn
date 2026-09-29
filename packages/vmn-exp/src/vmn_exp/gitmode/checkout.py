@@ -13,7 +13,7 @@ from vmn_exp.core.writer import create_run, merge_conf_into_params
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
 from vmn_exp.sdk import _resolve_app_name
-from vmn_exp.sdk.create import _maybe_capture_env, pick_parent
+from vmn_exp.sdk.create import _maybe_capture_env, experiment_conf, pick_parent
 from vmn_exp.snapshot import _build_snapshot_metadata, _format_dev_verstr
 
 
@@ -29,11 +29,6 @@ def build_storage(vcs):
     return _get_experiment_storage(vcs, params)
 
 
-def checkout_storage(app_name):
-    """The experiment store of *app_name*'s checkout, as its conf.yml sets it."""
-    return build_storage(build_vcs(app_name))
-
-
 def create_in_checkout(
     app_name, note, create_data, parent, nested, storage, snapshot=True, name=None,
     capture_env=None, python_exe=None,
@@ -46,7 +41,7 @@ def create_in_checkout(
     vcs, status = tracked_vcs(app_name, root_path)
     captured, err = capture.capture_snapshot(vcs, snapshot=snapshot, status=status)
     if err is not None:
-        return app_name, storage, None, err
+        return app_name, storage, None, err, {}
     if storage is None:
         storage = build_storage(vcs)
     parent = pick_parent(storage, app_name, parent, nested)
@@ -60,7 +55,7 @@ def create_in_checkout(
     with get_repo_lock(root_path):
         verstr = _record(vcs, storage, captured, note, create_data, parent, name,
                          env=env)
-    return app_name, storage, verstr, None
+    return app_name, storage, verstr, None, experiment_conf(vcs)
 
 
 def _record(vcs, storage, captured, note, create_data, parent, name=None, env=None):

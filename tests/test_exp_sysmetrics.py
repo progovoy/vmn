@@ -6,7 +6,7 @@ process hung on a lock beats forever and reads ``running``. Sampling the
 process's own CPU and memory alongside the heartbeat is what makes "alive but
 flat at zero for an hour" visible.
 
-Sampling is opt-in and best-effort, so the contracts under test are mostly
+Sampling is on by default and best-effort, so the contracts under test are mostly
 negative: with no ``psutil``/``pynvml`` installed it must be a *silent* no-op,
 and a collector that raises must cost a sample, never the run or its heartbeat.
 """
@@ -105,7 +105,7 @@ def test_exp_run_records_system_metrics(app_layout, capfd, monkeypatch):
             app_layout.app_name,
             action="run",
             run_cmd=[_PY, "-c", "import time; time.sleep(2.4)"],
-            extra_args=["--system-metrics", "--heartbeat-interval", "1"],
+            extra_args=["--heartbeat-interval", "1"],
         )
         == 0
     )
@@ -145,7 +145,7 @@ def test_exp_run_samples_the_child_not_the_supervisor(app_layout, capfd, monkeyp
             app_layout.app_name,
             action="run",
             run_cmd=[_PY, "-c", script % pid_path],
-            extra_args=["--system-metrics", "--heartbeat-interval", "1"],
+            extra_args=["--heartbeat-interval", "1"],
         )
         == 0
     )
@@ -263,11 +263,11 @@ def test_raising_collector_breaks_neither_the_run_nor_the_heartbeat(
 
 
 # ---------------------------------------------------------------------------
-# off by default
+# on by default
 # ---------------------------------------------------------------------------
 
 
-def test_sdk_records_nothing_without_the_kwarg(app_layout, monkeypatch):
+def test_sdk_records_system_metrics_by_default(app_layout, monkeypatch):
     _bootstrap(app_layout)
     _use_fake_collector(monkeypatch)
 
@@ -275,11 +275,11 @@ def test_sdk_records_nothing_without_the_kwarg(app_layout, monkeypatch):
         verstr = run.id
         time.sleep(0.4)
 
-    assert _sys_entries(app_layout, verstr) == []
-    assert "sys_cpu_percent" not in _row(app_layout, verstr)["metrics"]
+    assert _sys_entries(app_layout, verstr)
+    assert _row(app_layout, verstr)["metrics"]["sys_cpu_percent"] == 12.5
 
 
-def test_exp_run_records_nothing_without_the_flag(app_layout, capfd, monkeypatch):
+def test_exp_run_records_system_metrics_by_default(app_layout, capfd, monkeypatch):
     _bootstrap(app_layout)
     _use_fake_collector(monkeypatch)
 
@@ -294,7 +294,22 @@ def test_exp_run_records_nothing_without_the_flag(app_layout, capfd, monkeypatch
         == 0
     )
     verstr = extract_dev_verstr(capfd.readouterr().out)
+    assert _sys_entries(app_layout, verstr)
+
+
+def test_default_run_without_optional_deps_is_silent(app_layout, monkeypatch, caplog):
+    """Default-on must not nag: a host missing psutil/pynvml logs no warning."""
+    _bootstrap(app_layout)
+    _no_optional_deps(monkeypatch)
+
+    with caplog.at_level(logging.DEBUG):
+        with start_run(app_layout.app_name, heartbeat_interval_sec=0.1) as run:
+            verstr = run.id
+            time.sleep(0.4)
+
+    assert _row(app_layout, verstr)["status"] == "succeeded"
     assert _sys_entries(app_layout, verstr) == []
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 # ---------------------------------------------------------------------------

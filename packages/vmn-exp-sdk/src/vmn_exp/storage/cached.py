@@ -19,7 +19,6 @@ from vmn_exp.storage.files import (
     is_volatile_file,
 )
 from vmn_exp.storage.local import LocalSnapshotStorage
-from vmn_exp.storage.s3 import S3SnapshotStorage
 
 
 class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
@@ -284,43 +283,3 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
             return self._remote.artifact_uri(app_name, verstr, path)
         return self._local.artifact_uri(app_name, verstr, path)
 
-
-def get_snapshot_storage(
-    backend,
-    vmn_root_path=None,
-    bucket=None,
-    prefix="vmn-snapshots",
-    endpoint_url=None,
-    subdir="snapshots",
-    buffer_logs=False,
-):
-    """The storage for *backend*. ``buffer_logs``: without a local dir, still
-    buffer logs locally (a private temp dir) and ship them as segments — for
-    writers; a pure-S3 reader has no use for it."""
-    local = None
-    remote = None
-
-    if vmn_root_path:
-        local = LocalSnapshotStorage(vmn_root_path, subdir=subdir)
-
-    if bucket:
-        remote = S3SnapshotStorage(bucket, prefix=prefix, endpoint_url=endpoint_url)
-
-    if backend == "local":
-        if not local:
-            raise ValueError("vmn_root_path is required for local backend")
-        return CachedSnapshotStorage(local, remote)
-    elif backend == "s3":
-        if not remote:
-            raise ValueError("--bucket is required for s3 backend")
-        if local:
-            return CachedSnapshotStorage(local, remote)
-        if buffer_logs:
-            from vmn_exp.storage.buffered import (
-                BufferedRemoteStorage,
-            )
-
-            return BufferedRemoteStorage(remote, subdir=subdir)
-        return remote
-    else:
-        raise ValueError(f"Unknown backend: {backend}")

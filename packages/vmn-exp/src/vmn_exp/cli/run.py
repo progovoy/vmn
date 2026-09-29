@@ -14,6 +14,7 @@ import tempfile
 import time
 
 from vmn_exp.cli import fork
+from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
     MetricsTailer,
@@ -193,7 +194,9 @@ def _create_experiment(vcs, storage, args):
 def experiment_run(vcs, params, storage, args, repo_lock=None):
     """Create an experiment, run a command, and record its outcome + metrics.
 
-    The child inherits stdio (output streams live) and these env vars:
+    The child's stdout/stderr stream live and are kept as the ``output.log``
+    artifact (see ``output_tee``; not with ``--no-capture-output``, where it
+    inherits stdio). It gets these env vars:
     VMN_EXPERIMENT_ID, VMN_APP_NAME, VMN_METRICS_FILE. Any ``key=value`` lines the
     child appends to VMN_METRICS_FILE are recorded as a metrics entry. Returns the
     child's exit code, ``128 + N`` when signal N ended it.
@@ -240,6 +243,8 @@ class _Supervision:
         self.sync = BackgroundSync(self._sync_once)
         self.forwarder = SignalForwarder(_kill_grace_sec(args))
         self.writer_id = get_writer_id()
+        self.output = output_artifact(storage, app_name, verstr, args)
+        self.tee = None
 
     def run(self, run_cmd):
         fd, self.metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
@@ -270,7 +275,8 @@ class _Supervision:
         env["VMN_APP_NAME"] = self.app_name or ""
         env["VMN_METRICS_FILE"] = self.metrics_path
         try:
-            proc = subprocess.Popen(run_cmd, env=env, cwd=_child_cwd())
+            stdio = popen_kwargs(env) if self.output else {"env": env}
+            proc = subprocess.Popen(run_cmd, cwd=_child_cwd(), **stdio)
         except FileNotFoundError:
             VMN_LOGGER.error("Command not found: " + run_cmd[0])
             return None
@@ -278,6 +284,8 @@ class _Supervision:
             VMN_LOGGER.error(f"Could not start {run_cmd[0]}: {exc}")
             return None
         self.forwarder.attach(proc)
+        if self.output:
+            self.tee = OutputTee(proc, self.output.write)
         return proc
 
     def _supervise(self, proc, run_cmd):
@@ -307,7 +315,7 @@ class _Supervision:
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
-            getattr(self.args, "system_metrics", False),
+            sysmetrics.enabled(getattr(self.args, "system_metrics", None), self.exp_conf),
             pid=proc.pid,
         )
 
@@ -348,6 +356,7 @@ class _Supervision:
         exit_code = shell_exit_code(returncode)
         duration = round(time.monotonic() - self.start, 3)
         self.guard("metrics ingestion", self._ingest_new)
+        self._record_output()
 
         final = {
             "state": "finished",
@@ -375,6 +384,19 @@ class _Supervision:
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
+
+    def _record_output(self):
+        """Drain the child's output; the final sync uploads it."""
+        if self.output is None:
+            return
+        if self.tee is not None:
+            self.tee.drain()
+        self.guard(
+            "output log entry",
+            lambda: append_to_log(
+                self.storage, self.app_name, self.verstr, self.output.artifact_entry()
+            ),
+        )
 
     def _publish(self, what, **updates):
         self.guard(
@@ -420,6 +442,8 @@ class _Supervision:
         _ingest_metric_records(self.storage, self.app_name, self.verstr, records)
 
     def _sync_once(self):
+        if self.output is not None:
+            self.guard("output log upload", self.output.upload)
         self.guard(
             "remote sync",
             self.storage.sync_log_to_remote,

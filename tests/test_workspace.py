@@ -44,15 +44,15 @@ def test_vmn_depends_on_neither_exp_package():
     assert not [r for r in _project("vmn")["dependencies"] if r.startswith("vmn-exp")]
 
 
-def test_the_sdk_needs_only_yaml_and_filelock():
+def test_the_sdk_needs_only_yaml_filelock_and_psutil():
     names = sorted(r.split(">")[0].split("=")[0] for r in _project("vmn-exp-sdk")["dependencies"])
-    assert names == ["PyYAML", "filelock"]
+    assert names == ["PyYAML", "filelock", "psutil"]
 
 
 @pytest.mark.parametrize("dist, extras", [
     ("vmn", {"changelog"}),
-    ("vmn-exp-sdk", {"s3", "sysmetrics"}),
-    ("vmn-exp", {"ui", "s3", "sysmetrics", "mlflow"}),
+    ("vmn-exp-sdk", {"s3"}),
+    ("vmn-exp", {"ui", "s3", "mlflow"}),
 ])
 def test_documented_extras_exist(dist, extras):
     assert extras <= set(_project(dist).get("optional-dependencies", {}))

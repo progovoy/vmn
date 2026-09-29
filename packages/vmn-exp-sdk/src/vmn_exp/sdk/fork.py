@@ -23,7 +23,7 @@ def check_modes(ref, fork_from, rewind_to_step):
 def locate_source(app_name, fork_from, fork_step, storage):
     """``(app_name, storage, source verstr, step)``, checked before anything is created."""
     ref, step = split_fork_ref(fork_from, fork_step)
-    app_name, storage, source, _ = resume.locate(app_name, ref, storage, action="fork")
+    app_name, storage, source, _, _ = resume.locate(app_name, ref, storage, action="fork")
     return app_name, storage, source, step
 
 

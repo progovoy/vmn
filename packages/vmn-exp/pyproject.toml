@@ -21,7 +21,8 @@ dependencies = [
 [project.optional-dependencies]
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "orjson>=3.9"]
 s3 = ["vmn-exp-sdk[s3]"]
-sysmetrics = ["vmn-exp-sdk[sysmetrics]"]
+gcs = ["vmn-exp-sdk[gcs]"]
+azure = ["vmn-exp-sdk[azure]"]
 mlflow = ["mlflow-skinny"]
 
 [project.scripts]

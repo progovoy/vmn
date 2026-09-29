@@ -44,19 +44,23 @@ def create_record(
     app_name, note, params, parent, nested, storage, snapshot, name=None,
     capture_env=None, python_exe=None,
 ):
-    """Create a new run's record; ``(app_name, storage, verstr)``."""
+    """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
+
+    *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one).
+    """
     _reject_reentry_without_nesting(nested)
     # Same shape as the CLI's `-f file` params, so latest_metrics and
     # `exp diff` pick them up unchanged.
     create_data = {"params": dict(params)} if params else None
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    exp_conf = {}
     if meta_path:
         app_name, storage, verstr, err = create_from_snapshot_meta(
             app_name, meta_path, note, create_data, parent, nested, storage, name,
             capture_env=capture_env,
         )
     else:
-        app_name, storage, verstr, err = gitmode().create_in_checkout(
+        app_name, storage, verstr, err, exp_conf = gitmode().create_in_checkout(
             app_name, note, create_data, parent, nested, storage, snapshot, name,
             capture_env=capture_env, python_exe=python_exe,
         )
@@ -65,7 +69,12 @@ def create_record(
             f"Failed to create an experiment for '{app_name}' (error {err}). "
             f"Run 'vmn-exp create {app_name}' to see what the CLI reports."
         )
-    return app_name, storage, verstr
+    return app_name, storage, verstr, exp_conf
+
+
+def experiment_conf(vcs):
+    """The ``experiment:`` section of *vcs*'s conf.yml, ``{}`` without one."""
+    return getattr(vcs, "experiment", None) or {}
 
 
 def _reject_reentry_without_nesting(nested):
@@ -104,7 +113,7 @@ def snapshot_mode_storage():
     except ValueError:
         raise ValueError(
             "No experiment store for a run without a git checkout: "
-            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_BUCKET (or pass storage=)."
+            "set VMN_EXPERIMENT_DIR and/or VMN_EXPERIMENT_STORE (or pass storage=)."
         )
 
 
@@ -180,7 +189,6 @@ def create_from_snapshot_meta(
 
 def _maybe_capture_env(vcs, capture_env_param, python_exe=None):
     """Return the captured env dict, or None when opted out or capture fails."""
-    exp_conf = getattr(vcs, "experiment", None) or {}
-    if not should_capture(capture_env_param, exp_conf):
+    if not should_capture(capture_env_param, experiment_conf(vcs)):
         return None
     return capture_env_safe(python_exe)

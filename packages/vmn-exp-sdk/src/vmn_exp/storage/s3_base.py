@@ -47,22 +47,28 @@ def app_keys(app_name):
     return [new] if new == legacy else [new, legacy]
 
 
+def boto3_client(endpoint_url=None):
+    try:
+        import boto3
+    except ImportError:
+        raise ImportError(
+            "boto3 is required for S3 snapshot storage. "
+            "Install it with: pip install 'vmn-exp-sdk[s3]'"
+        ) from None
+    return boto3.client("s3", **({"endpoint_url": endpoint_url} if endpoint_url else {}))
+
+
 class S3Base:
-    def __init__(self, bucket, prefix="vmn-snapshots", endpoint_url=None):
-        try:
-            import boto3
-        except ImportError:
-            raise ImportError(
-                "boto3 is required for S3 snapshot storage. "
-                "Install it with: pip install 'vmn-exp-sdk[s3]'"
-            )
+    """``client`` speaks the boto3 S3 client subset these halves use; other
+    object stores pass an adapter (:mod:`vmn_exp.storage.object_client`)."""
+
+    scheme = "s3"
+
+    def __init__(self, bucket, prefix="vmn-snapshots", endpoint_url=None, client=None):
         self.bucket = bucket
         self.prefix = prefix
         self.endpoint_url = endpoint_url
-        client_kwargs = {}
-        if endpoint_url:
-            client_kwargs["endpoint_url"] = endpoint_url
-        self._s3 = boto3.client("s3", **client_kwargs)
+        self._s3 = client or boto3_client(endpoint_url)
         self._record_prefixes = {}
         self._probes = {}
         self._legacy_owners = {}

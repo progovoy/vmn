@@ -55,7 +55,7 @@ If `model` has no non-deleted versions, bare `model` and `model@latest` raise a
 ## CLI
 
 All `vmn-exp model` sub-commands are git-free: they read/write experiment storage directly
-and never take the repo lock.  Pass `--dir`, `--bucket`, `--prefix`, `--endpoint-url` to
+and never take the repo lock.  Pass `--dir`, `--store <uri>` (or the `--bucket`/`--prefix`/`--endpoint-url` shorthand) to
 select a non-default storage root (same flags as `vmn-exp`).
 
 ### `vmn-exp model register <model> -v <run-ref>`

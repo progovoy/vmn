@@ -13,13 +13,18 @@ requires-python = ">=3.8"
 dependencies = [
     "PyYAML>=5.4.1",
     "filelock>=3.2.0",
+    # System metrics are on by default; CPU/RAM sampling needs it.
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
 s3 = ["boto3"]
-# GPU metrics also need pynvml, which stays out of every extra: it is useless
+# runs_dataframe() / get_metric_history()
+pandas = ["pandas"]
+gcs = ["google-cloud-storage>=2.7"]
+azure = ["azure-storage-blob>=12.14", "azure-identity"]
+# GPU metrics need pynvml, which stays out of every extra: it is useless
 # without a driver and would break installs on CPU-only hosts.
-sysmetrics = ["psutil>=5.9"]
 
 [project.urls]
 Homepage = "https://github.com/progovoy/vmn"
