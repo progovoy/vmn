@@ -5,6 +5,8 @@
   dataset: a local path is made absolute and hashed, a remote URI keeps the
   caller's digest (or none).
 * ``version_with_digest`` — the newest live version carrying a digest (dedupe).
+* ``register_dataset_version`` — ensure a dataset header, then reuse the
+  version with the same digest (``dedupe``) or claim a new one.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from vmn_exp.core.log import load_log
 from vmn_exp.registry.digest import local_digest
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
-from vmn_exp.registry.store import get_version, list_versions
+from vmn_exp.registry.store import ensure_model, get_version, list_versions, register_version
 
 
 def producer_output(storage, app, verstr, path) -> dict | None:
@@ -45,3 +47,14 @@ def version_with_digest(storage, name: str, digest: str) -> int | None:
         if meta.get("digest") == digest:
             return n
     return None
+
+
+def register_dataset_version(storage, name, fields, description=None, dedupe=True) -> int:
+    """The version number of dataset *name* carrying *fields* (``run_ref``,
+    ``artifact_path``, ``uri``, ``digest``, ``size``, ``files``)."""
+    ensure_model(storage, name, kind="dataset")
+    if dedupe and fields.get("digest"):
+        n = version_with_digest(storage, name, fields["digest"])
+        if n is not None:
+            return n
+    return register_version(storage, name, description=description, **fields)

@@ -23,9 +23,8 @@ Usage::
 """
 from __future__ import annotations
 
-from vmn_exp.registry.datasets import producer_output, reference_fields, version_with_digest
+from vmn_exp.registry.datasets import producer_output, reference_fields, register_dataset_version
 from vmn_exp.registry.log import set_alias as _log_set_alias
-from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.registry.view import resolve_ref
 from vmn_exp.sdk.models import _resolve_storage, _run_to_ref, check_model_name
 from vmn_exp.sdk.usage import resolved_version
@@ -62,10 +61,7 @@ def register_dataset(
     else:
         storage, fields = _copied_fields(run, app_name, artifact_path, digest, storage)
 
-    ensure_model(storage, name, kind="dataset")
-    n = version_with_digest(storage, name, fields["digest"]) if dedupe and fields["digest"] else None
-    if n is None:
-        n = register_version(storage, name, description=description, **fields)
+    n = register_dataset_version(storage, name, fields, description=description, dedupe=dedupe)
     if alias:
         _log_set_alias(storage, name, alias, n)
     return resolve_ref(storage, f"{name}@{n}")
