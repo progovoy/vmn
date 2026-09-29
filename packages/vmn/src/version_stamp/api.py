@@ -8,7 +8,7 @@ Boundary rules (see PLAN.md §2.2):
   R1  vmn_exp.* → version_stamp.* only via this module.
   R3  ``import version_stamp.api`` loads no experiment module and no ``git``.
 
-All 75 names are resolved lazily via PEP 562 ``__getattr__`` from the
+All 78 names are resolved lazily via PEP 562 ``__getattr__`` from the
 ``_LAZY_REGISTRY`` table below.  Each lookup caches the result in the module
 namespace so repeated accesses pay only one ``importlib.import_module`` call.
 
@@ -70,6 +70,10 @@ _LAZY_REGISTRY: dict[str, str] = {
     "register_dev_version_loader": "version_stamp.cli.plugin_api:register_dev_version_loader",
     "VMN_ARGS":                    "version_stamp.cli.constants:VMN_ARGS",
     "vmn_run":                     "version_stamp.cli.entry:vmn_run",
+    # --- worktree helpers (layout + detached worktrees), for vmn-exp rerun --
+    "island_layout":               "version_stamp.cli.worktree_create:_island_layout",
+    "create_dep_worktree":         "version_stamp.cli.worktree_git:create_dep_worktree",
+    "remove_registered_worktree":  "version_stamp.cli.worktree_git:remove_registered_worktree",
     # --- version_stamp.devversion.apply ------------------------------------
     "_apply_dep_patches":          "version_stamp.devversion.apply:_apply_dep_patches",
     "_apply_patches_to_workdir":   "version_stamp.devversion.apply:_apply_patches_to_workdir",

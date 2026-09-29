@@ -2,6 +2,7 @@
 import os
 import subprocess
 
+from version_stamp.core.constants import VMN_USER_NAME
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.untracked import (
     _ensure_trailing_newline,
@@ -10,36 +11,61 @@ from version_stamp.devversion.untracked import (
 
 
 def _apply_patches_to_workdir(dest, patches):
-    """Apply local_commits and working_tree patches to a workdir."""
-    if patches.get("local_commits"):
-        result = subprocess.run(
-            ["git", "am", "--3way"],
-            input=_ensure_trailing_newline(patches["local_commits"]),
-            capture_output=True,
-            text=True,
-            cwd=dest,
-        )
-        if result.returncode != 0:
-            VMN_LOGGER.warning(f"Failed to apply local commits: {result.stderr}")
+    """Apply local_commits, working_tree and untracked_files patches to a
+    workdir; the names of the steps that failed (empty when all applied)."""
+    steps = (
+        ("local_commits", _git_am),
+        ("working_tree", _git_apply),
+        ("untracked_files", _extract_untracked),
+    )
+    return [
+        name
+        for name, apply in steps
+        if patches.get(name) and not apply(dest, patches[name])
+    ]
 
-    if patches.get("working_tree"):
-        result = subprocess.run(
-            ["git", "apply"],
-            input=_ensure_trailing_newline(patches["working_tree"]),
-            capture_output=True,
-            text=True,
-            cwd=dest,
-        )
-        if result.returncode != 0:
-            VMN_LOGGER.warning(f"Failed to apply working tree patch: {result.stderr}")
 
-    if patches.get("untracked_files"):
-        try:
-            _extract_untracked_tarball(dest, patches["untracked_files"])
-        except Exception:
-            VMN_LOGGER.debug(
-                "Failed to extract untracked files in workdir", exc_info=True
-            )
+def _git_am(dest, patch):
+    cmd = ["git", *_fallback_identity(dest), "am", "--3way"]
+    return _run_with_patch(cmd, patch, dest, "local commits")
+
+
+def _fallback_identity(dest):
+    """``-c user.*`` options for a repo that has no committer identity."""
+    probe = subprocess.run(
+        ["git", "var", "GIT_COMMITTER_IDENT"], capture_output=True, cwd=dest
+    )
+    if probe.returncode == 0:
+        return []
+    return ["-c", f"user.name={VMN_USER_NAME}", "-c", f"user.email={VMN_USER_NAME}"]
+
+
+def _git_apply(dest, patch):
+    return _run_with_patch(["git", "apply"], patch, dest, "working tree patch")
+
+
+def _run_with_patch(cmd, patch, cwd, what):
+    """Run *cmd* on *patch*; whether it applied (a warning when not)."""
+    result = subprocess.run(
+        cmd,
+        input=_ensure_trailing_newline(patch),
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+    )
+    if result.returncode != 0:
+        VMN_LOGGER.warning(f"Failed to apply {what}: {result.stderr}")
+    return result.returncode == 0
+
+
+def _extract_untracked(dest, tarball):
+    try:
+        _extract_untracked_tarball(dest, tarball)
+    except Exception:
+        VMN_LOGGER.warning("Failed to extract untracked files in workdir")
+        VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
+        return False
+    return True
 
 
 def _apply_dep_patches(vcs, metadata, patches):
