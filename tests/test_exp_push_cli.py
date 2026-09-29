@@ -201,3 +201,28 @@ def test_running_collision_is_skipped(offline, capfd):
     lines = _lines(capfd)
     assert any(x.startswith(f"{verstr}  skipped (running") for x in lines)
     assert lines[-1] == "pushed 0, up-to-date 0, renamed 0, skipped 1, failed 0"
+
+
+def test_push_works_git_free(tmp_path, monkeypatch, capfd):
+    import yaml
+
+    from vmn_exp.cli.main import vmn_exp_run
+
+    image = tmp_path / "image"
+    image.mkdir()
+    (image / "vmn_metadata.yml").write_text(yaml.safe_dump(
+        {"verstr": "1.2.0-dev.abc1234.0000000", "app_name": "trainer",
+         "base_version": "1.2.0", "base_commit": "abc1234"}
+    ))
+    monkeypatch.chdir(image)
+    monkeypatch.delenv("VMN_WORKING_DIR", raising=False)
+    monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(image / "vmn_metadata.yml"))
+    monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path / "exps"))
+    monkeypatch.setenv("VMN_EXPERIMENT_STORE", URI)
+    monkeypatch.setenv("VMN_EXP_OFFLINE", "1")
+    assert vmn_exp_run(["exp", "create", "trainer"])[0] == 0
+    assert raw_keys() == []
+    capfd.readouterr()
+    assert vmn_exp_run(["exp", "push", "trainer"])[0] == 0
+    assert _lines(capfd)[-1].startswith("pushed 1,")
+    assert len(s3_storage().list_snapshots("trainer")) == 1
