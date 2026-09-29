@@ -27,10 +27,13 @@ snapshot capture.
 For a task-by-task walkthrough (submit, log, watch, compare, resume/rewind/fork,
 models), see [client-guide.md](client-guide.md).
 
-A run needs a git repo with a remote and a usable git identity: creating one
-commits a snapshot, so `user.name` and `user.email` must be set. In a container
-that means setting them in the image or via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` —
-otherwise the first `start_run` fails on git's "please tell me who you are".
+A run needs a git checkout; a remote is optional (its URL is recorded when
+there is one). Creating a run commits nothing — except the first `start_run` in
+a repo vmn does not track yet: that cold start commits vmn's init files and
+tags a `0.0.0` baseline, locally, and the annotated tag needs a usable git
+identity (`user.name` and `user.email`). In a container that means setting them
+in the image or via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` — otherwise that first
+`start_run` fails on git's "please tell me who you are".
 
 **Runnable versions of what follows live in
 [`examples/`](../examples/README.md)** — five standalone scripts (a minimal run,
