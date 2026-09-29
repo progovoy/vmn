@@ -352,6 +352,12 @@ def handle_experiment(vmn_ctx):
         return experiment_run(
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
         )
+    elif action == "rerun":
+        from vmn_exp.cli.rerun import experiment_rerun
+
+        return experiment_rerun(
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+        )
     elif action == "add":
         return experiment_add(vcs, params, storage, args)
     elif action == "list":

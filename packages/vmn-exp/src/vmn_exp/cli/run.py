@@ -243,11 +243,13 @@ class _Supervision:
     The child runs in *cwd* (default: where vmn was invoked); ``run_state.yml``
     records that cwd relative to *root* (the repo root; None records null).
     *extra_env* is applied last; a None value removes the variable.
+    *state_extra* adds fields to ``run_state.yml``.
     """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
-                 extra_env=None, on_tick=None, cwd=None, root=None):
+                 extra_env=None, on_tick=None, cwd=None, root=None, state_extra=None):
         self.storage = storage
+        self.state_extra = state_extra or {}
         self.cwd = cwd or _child_cwd()
         self.root = root
         self.extra_env = extra_env or {}
@@ -338,6 +340,7 @@ class _Supervision:
             "exit_code": None,
             "finished_at": None,
             "duration_sec": None,
+            **self.state_extra,
         }
         self._publish("run state")
 

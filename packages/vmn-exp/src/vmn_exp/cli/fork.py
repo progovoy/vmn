@@ -31,7 +31,9 @@ def seed(storage, app_name, verstr, source):
 
 
 def print_lineage(metadata, log):
-    """``show``'s fork origin and rewind lines."""
+    """``show``'s rerun and fork origin and rewind lines."""
+    if metadata.get("rerun_of"):
+        print(f"  Rerun of: {metadata['rerun_of']}")
     origin = metadata.get("forked_from")
     if origin:
         print(f"  Forked from: {origin.get('verstr')} @ step {origin.get('step')}")
