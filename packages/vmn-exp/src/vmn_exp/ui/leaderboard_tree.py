@@ -12,7 +12,15 @@ thousands of children costs O(changed children), not O(children).
 The rollup is exact for a forest. A parent cycle reached from a changed row
 makes :func:`derive_tree` answer None and the caller annotates from scratch.
 """
-from vmn_exp.core.tree import INNER, OUTER, SINGLE, _depth, children_by_parent, rollup_status
+from vmn_exp.core.tree import (
+    INNER,
+    OUTER,
+    SINGLE,
+    _depth,
+    children_by_parent,
+    count_statuses,
+    rollup_status,
+)
 
 
 def parent_in(edges, verstr):
@@ -195,15 +203,18 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
             "kind": kind_of(row, children),
             "depth": was.depth(verstr),
             "tree_status": tree_status[verstr] if verstr in tree_status else row["tree_status"],
+            "child_counts": count_statuses(was.row(c)["status"] for c in children),
         }
         if verstr in fresh:
             row.update(fields)
-        elif verstr in touched or (row["depth"], row["tree_status"]) != (
-            fields["depth"], fields["tree_status"]
-        ):
+        elif verstr in touched or _tree_fields_changed(row, fields):
             row = {**row, **fields}
         else:
             continue
         rows[position[verstr]] = row
         rebuilt.add(verstr)
     return rows, rebuilt
+
+
+def _tree_fields_changed(row, fields):
+    return any(row.get(key) != fields[key] for key in ("depth", "tree_status", "child_counts"))
