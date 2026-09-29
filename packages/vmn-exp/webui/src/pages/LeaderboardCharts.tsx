@@ -41,7 +41,7 @@ export default function LeaderboardCharts({
   paramCols: string[];
   schema: MetricsSchema | null;
   onBrush: (indices: number[] | null) => void;
-  importance?: ImportanceSource;
+  importance: ImportanceSource;
 }) {
   const common = { rows, metricCols, schema };
   return (
@@ -63,9 +63,7 @@ export default function LeaderboardCharts({
         {view === "scatter" && <MetricScatter {...common} paramCols={paramCols} />}
         {view === "parallel" && <ParallelCoordinates {...common} paramCols={paramCols} onBrush={onBrush} />}
         {view === "grouped" && <GroupedMetrics {...common} paramCols={paramCols} />}
-        {view === "importance" && importance && (
-          <ParamImportance {...common} {...importance} paramCols={paramCols} />
-        )}
+        {view === "importance" && <ParamImportance {...common} {...importance} paramCols={paramCols} />}
       </Suspense>
     </>
   );

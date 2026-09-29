@@ -40,7 +40,6 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
-from vmn_exp.core.importance import require_metric
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import readable, record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
@@ -200,8 +199,8 @@ def param_importance(
     """
     app_name, storage, _ = _resolve(app_name, storage)
     rows = filter_archived(_all_rows(app_name, storage), include_archived)
-    require_metric(rows, metric)
-    return _param_importance(filter_rows(filter_by_status(rows, status), query), metric)
+    matching = filter_rows(filter_by_status(rows, status), query)
+    return _param_importance(matching, metric, universe=rows)
 
 
 def _subtree_row(app_name, storage, verstr, snapshot):

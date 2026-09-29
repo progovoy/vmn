@@ -56,10 +56,12 @@ def _grow(idx, columns, y, unordered, tries, depth, rnd, gains):
                 best = split + (f,)
         if best is None:
             continue
-        gain, left, right, f = best
+        gain, ordered, size, left_bins, f = best
         gains[f] += gain
-        stack.append((left, level + 1))
-        stack.append((right, level + 1))
+        if left_bins is not None:  # unordered: bring the left bins to the front
+            ordered = sorted(ordered, key=lambda i: columns[f][i] not in left_bins)
+        stack.append((ordered[:size], level + 1))
+        stack.append((ordered[size:], level + 1))
 
 
 def _histogram(ordered, col, y):
@@ -72,7 +74,9 @@ def _histogram(ordered, col, y):
 
 
 def _best_split(node, col, y, unordered):
-    """``(gain, left rows, right rows)`` of the best split on *col*, or None."""
+    """The best split on *col* as ``(gain, rows sorted by bin, left size, left
+    bins)`` — left bins only for an unordered column — or None. Only the
+    winning candidate of a node gets partitioned."""
     ordered = sorted(node, key=col.__getitem__)
     hist = _histogram(ordered, col, y)
     if len(hist) < 2:
@@ -82,7 +86,7 @@ def _best_split(node, col, y, unordered):
     n = len(node)
     total = sum(b[2] for b in hist)
     base = total * total / n
-    best_gain, cut, n_left, s_left = 0.0, None, 0, 0.0
+    best_gain, cut, size, n_left, s_left = 0.0, None, 0, 0, 0.0
     for at, (_, count, s) in enumerate(hist[:-1]):
         n_left += count
         s_left += s
@@ -92,13 +96,8 @@ def _best_split(node, col, y, unordered):
         s_right = total - s_left
         gain = s_left * s_left / n_left + s_right * s_right / n_right - base
         if gain > best_gain:
-            best_gain, cut = gain, at
+            best_gain, cut, size = gain, at, n_left
     if cut is None:
         return None
-    if not unordered:
-        size = sum(b[1] for b in hist[: cut + 1])
-        return best_gain, ordered[:size], ordered[size:]
-    left_bins = {b[0] for b in hist[: cut + 1]}
-    left = [i for i in ordered if col[i] in left_bins]
-    right = [i for i in ordered if col[i] not in left_bins]
-    return best_gain, left, right
+    left_bins = {b[0] for b in hist[: cut + 1]} if unordered else None
+    return best_gain, ordered, size, left_bins

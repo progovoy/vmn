@@ -37,8 +37,14 @@ def require_metric(rows, metric):
         raise ValueError(f"Unknown metric '{metric}': no run carries it")
 
 
-def param_importance(rows, metric, max_rows=MAX_ROWS, seed=SEED):
-    """``[{param, importance, correlation, spearman, kind, n}]``, most important first."""
+def param_importance(rows, metric, universe=None, max_rows=MAX_ROWS, seed=SEED):
+    """``[{param, importance, correlation, spearman, kind, n}]``, most important first.
+
+    With *universe* (the rows before filtering), a *metric* none of them
+    carries is a ValueError, while a filter leaving no run with it gives ``[]``.
+    """
+    if universe is not None:
+        require_metric(universe, metric)
     rows = _sample(_scored(rows, metric), max_rows, seed)
     y = [row["metrics"][metric] for row in rows]
     params = [row.get("params") or {} for row in rows]

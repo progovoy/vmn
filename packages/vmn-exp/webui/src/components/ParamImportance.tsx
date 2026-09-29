@@ -121,7 +121,7 @@ function Drilldown({ entry, metric, rows, metricCols, paramCols, schema }: {
     return (
       <MetricScatter
         key={`${entry.param}:${metric}`} rows={rows} metricCols={metricCols}
-        paramCols={paramCols.includes(entry.param) ? paramCols : [...paramCols, entry.param]}
+        paramCols={paramCols}
         schema={schema} initialX={entry.param} initialY={metric}
       />
     );

@@ -36,7 +36,7 @@ import os
 import threading
 
 import vmn_exp.core.status as experiment_status
-from vmn_exp.core.importance import param_importance, require_metric
+from vmn_exp.core.importance import param_importance
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
@@ -52,6 +52,8 @@ from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import apply_filters, sort_rows
 
 BUCKET_SEC = 2
+# Importance results kept (each pins its scored runs' params dicts).
+IMPORTANCE_RESULTS = 8
 # Orders moved on across generations: the dashboard's mix of sorts and
 # queries at 100k rows, each a list of row references.
 LATEST_ORDERS = 64
@@ -239,7 +241,7 @@ class LeaderboardCache:
         self._deltas = DeltaLog()
         self._sorted = LRU(size)
         self._columns = LRU(size)
-        self._importance = LRU(size)
+        self._importance = LRU(IMPORTANCE_RESULTS)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
@@ -339,20 +341,24 @@ class LeaderboardCache:
     def importance(self, snapshot, schema, metric, status=None, query=None, archived=False):
         """Parameter importance for *metric* over the filtered rows.
 
-        Raises ``ValueError`` when no visible run carries *metric*,
-        ``QueryError`` on a bad *query*.
+        Memoized on what is scored — each scored run's verstr, metric value
+        and params — so a new generation or status bucket that changed none
+        of them (a live run still without the metric) costs a filter, not a
+        forest. Raises ``ValueError`` when no visible run carries *metric*,
+        ``QueryError`` on a bad *query*. *schema* never changes the answer.
         """
         base, bucket = self._base(snapshot)
-        params = (metric, status, query, archived)
-        return self._importance.get(
-            (base.token, bucket, _schema_key(schema)) + params,
-            lambda: self._importance_payload(snapshot, schema, *params),
+        rows = base.tail(bucket, 0, status, query, archived)
+        scored = tuple(
+            (row["verstr"], row["metrics"].get(metric), row.get("params"))
+            for row in rows if metric in row["metrics"]
         )
-
-    def _importance_payload(self, snapshot, schema, metric, status, query, archived):
-        require_metric(self._ordered(snapshot, schema, None, None, None, None, None, archived), metric)
-        rows = self._ordered(snapshot, schema, None, None, status, query, None, archived)
-        return param_importance(rows, metric)
+        key = (metric, tuple((v, m, id(p)) for v, m, p in scored))
+        universe = lambda: base.tail(bucket, 0, None, None, archived)  # noqa: E731
+        # The value keeps the params dicts alive, so their ids stay unique.
+        return self._importance.get(
+            key, lambda: (scored, param_importance(rows, metric, universe=universe()))
+        )[1]
 
     def etag(self, snapshot, schema, **params):
         """Changes whenever :meth:`page` could answer differently."""

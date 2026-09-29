@@ -91,8 +91,14 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   }), [setWidth, setOrder, ids]);
 
   const all = useMemo(() => rows ?? [], [rows]);
+  // Importance ranks every param, hidden ones too, so its drill-down needs them all.
+  const allParams = cols.suggestFacets.param_keys;
+  const chartParams = useMemo(
+    () => (view.chart === "importance" && allParams ? [...allParams] : cols.paramCols),
+    [view.chart, allParams, cols.paramCols],
+  );
   const chart = useChartRows(
-    ws, app, filter, view.chart, cols.metricCols, cols.paramCols, all, data.total,
+    ws, app, filter, view.chart, cols.metricCols, chartParams, all, data.total,
   );
   // A brush in the parallel view narrows the table; the chart keeps every row
   // so its brush indices stay meaningful.
@@ -203,7 +209,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
 
           <LeaderboardCharts
             view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
-            metricCols={cols.metricCols} paramCols={cols.paramCols} schema={schema} onBrush={onBrush}
+            metricCols={cols.metricCols} paramCols={chartParams} schema={schema} onBrush={onBrush}
             importance={{ ws, app, filter, defaultMetric: sortLabel }}
           />
 
