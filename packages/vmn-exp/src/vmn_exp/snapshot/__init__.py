@@ -32,6 +32,8 @@ from version_stamp.api import (  # noqa: F401
     # dev-version untracked
     _untracked_caps,
 )
+from version_stamp.api import build_record_metadata as _build_snapshot_metadata
+from version_stamp.api import patch_summary as _patch_summary  # noqa: F401
 
 
 def _relative_timestamp(iso_ts):
@@ -62,66 +64,6 @@ def _get_storage(vcs, params):
     merge_conf_into_params(vcs, storage_params)
     store = store_uri(storage_params, default_prefix="vmn-snapshots")
     return open_storage(store, vcs.vmn_root_path, subdir="snapshots")
-
-
-def _skipped_untracked(patches):
-    """Untracked paths left out by the size caps, deps prefixed by their path."""
-    skipped = list(patches.get("untracked_skipped", []))
-    for dep_path, dp in sorted(patches.get("deps", {}).items()):
-        skipped.extend(f"{dep_path}/{p}" for p in dp.get("untracked_skipped", []))
-    return skipped
-
-
-def _patch_summary(patches):
-    """What a record's metadata says about the patches it holds."""
-    summary = {
-        "has_working_tree_patch": "working_tree" in patches,
-        "has_local_commits_patch": "local_commits" in patches,
-        "has_untracked_files": "untracked_files" in patches,
-        "has_dep_patches": bool(patches.get("deps")),
-    }
-    skipped = _skipped_untracked(patches)
-    if skipped:
-        summary["untracked_skipped"] = skipped
-    return summary
-
-
-def _build_snapshot_metadata(
-    vcs,
-    verstr,
-    base_version,
-    commit_hash,
-    dirty_states,
-    patches,
-    ver_info,
-    note=None,
-):
-    be = vcs.backend
-    try:
-        remote_url = be.remote()
-    except Exception:
-        remote_url = None
-
-    metadata = {
-        "verstr": verstr,
-        "base_version": base_version,
-        "base_commit": commit_hash,
-        "branch": be.active_branch,
-        "remote": remote_url,
-        "timestamp": now_iso(),
-        "note": note,
-        "app_name": vcs.name,
-        "dirty_states": dirty_states,
-        **_patch_summary(patches),
-    }
-    diff_hash = _compute_diff_hash(patches)
-    if diff_hash:
-        metadata["diff_hash"] = diff_hash
-
-    changesets = ver_info["stamping"]["app"].get("changesets", {})
-    if changesets:
-        metadata["changesets"] = changesets
-    return metadata
 
 
 def _save_safety_snapshot(vcs, params, target_verstr):
