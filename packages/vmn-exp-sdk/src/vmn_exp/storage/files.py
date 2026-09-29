@@ -8,6 +8,7 @@ import tempfile
 from vmn_exp._base import valid_app_path, valid_path_component
 
 # Log file naming and parsing live in core, shared with the experiment index.
+from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     LEGACY_LOG_FILE,
     group_log_names,
@@ -115,12 +116,13 @@ def log_sizes_of(files):
 
 def flatten_logs(logs_by_writer):
     """The legacy ``log.yml`` entries (writer ``""``) first, then writers by name,
-    stably sorted by timestamp."""
+    stably sorted by timestamp — less what a rewind hides (see
+    :mod:`vmn_exp.core.rewind`)."""
     entries = []
     for writer in sorted(logs_by_writer):
         entries.extend(logs_by_writer[writer])
     entries.sort(key=lambda e: e.get("timestamp", ""))
-    return entries
+    return drop_rewound(entries)
 
 
 def _current_umask():

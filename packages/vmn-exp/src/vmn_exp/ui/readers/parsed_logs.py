@@ -22,10 +22,12 @@ from vmn_exp.core.fold import (
     fold_last_metric_at,
     fold_log,
     fold_metrics,
+    fold_rewinds,
     fold_values,
 )
 from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.media import MediaIndex
+from vmn_exp.core.rewind import REWIND
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.step_metric import join_series, metric_definitions
@@ -61,6 +63,8 @@ class LogSnapshot:
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.definitions = dict(parsed.definitions)
         self.media = parsed.media_view
+        # The fold keys a rewind by its log position (see fold_log).
+        self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
         self.memo = {}  # derived views (thinned series) of this exact snapshot
 
     def summarized_metrics(self, schema=None):
@@ -70,6 +74,13 @@ class LogSnapshot:
 
     def log(self):
         return self._entries[: self.total]
+
+    def rewinds(self):
+        """``[{"step", "timestamp"}]`` of the log's rewinds, in log order."""
+        return [
+            {"step": step, "timestamp": self._entries[pos].get("timestamp")}
+            for step, pos in self._rewinds
+        ]
 
     def tail(self, n):
         return self._entries[max(self.total - n, 0) : self.total]
@@ -196,7 +207,10 @@ def _read_growth(local, app_name, verstr, files, offsets):
 
 
 def _appends_in_order(entries, new_entries):
-    """Whether *new_entries* all sort after *entries* in the merged log."""
+    """Whether *new_entries* all sort after *entries* in the merged log — and
+    carry no rewind, which may hide some of *entries*."""
+    if entries and any(e.get("type") == REWIND for e in new_entries):
+        return False
     stamps = [e.get("timestamp", "") for e in new_entries]
     if not all(isinstance(ts, str) for ts in stamps):
         return False

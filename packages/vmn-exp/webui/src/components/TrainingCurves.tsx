@@ -15,13 +15,15 @@ type Series = Record<string, SeriesPoint[]>;
  *  0.1 and an accuracy around 0.9 never share a y axis), plus `sys_*` host
  *  metrics in their own section, hidden until asked for. A metric with a
  *  declared step metric (*stepMetrics*), or every one once an x metric is
- *  picked, is drawn from *fetchJoined*'s series against that metric. */
-function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoined }: {
+ *  picked, is drawn from *fetchJoined*'s series against that metric.
+ *  *markStep* (a fork point) is marked on every step chart. */
+function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep }: {
   series: Series;
   seriesTotal?: Record<string, number>;
   startedAt?: string | null;
   stepMetrics?: XMap;
   fetchJoined?: (xMap: XMap) => Promise<Series>;
+  markStep?: number | null;
 }) {
   const [alpha, setAlpha] = useState(0);
   const [xMode, setXMode] = useState<XMode>("step");
@@ -43,10 +45,13 @@ function TrainingCurves({ series, seriesTotal, startedAt, stepMetrics, fetchJoin
     () => xMetricMap(training, xMode, xChoice, stepMetrics), [training, xMode, xChoice, stepMetrics],
   );
   const joined = useJoinedSeries(xMap, fetchJoined, series);
-  const view = useMemo<GridView>(() => ({ xMode, origin, alpha, logY }), [xMode, origin, alpha, logY]);
+  const view = useMemo<GridView>(
+    () => ({ xMode, origin, alpha, logY, markStep }), [xMode, origin, alpha, logY, markStep],
+  );
   // Host samples carry no step: always plot them against run time.
   const sysView = useMemo<GridView>(
-    () => ({ ...view, xMode: xMode === "wall" ? "wall" : "relative", alpha: 0 }), [view, xMode],
+    () => ({ ...view, xMode: xMode === "wall" ? "wall" : "relative", alpha: 0, markStep: null }),
+    [view, xMode],
   );
   const trainColor = useMemo(() => (m: string) => seriesColor(training, m), [training]);
   const sysColor = useMemo(() => (m: string) => seriesColor(system, m), [system]);

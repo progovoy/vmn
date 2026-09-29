@@ -236,6 +236,20 @@ export interface ExperimentDetail {
   histograms?: Record<string, HistogramItem[]>;
   /** Steps logged per histogram key before thinning. */
   histograms_total?: Record<string, number>;
+  /** The run (and step) this run was forked from; a fork is not a child. */
+  forked_from?: ForkOrigin | null;
+  /** Rewinds of this run, in log order: history past `step` was hidden. */
+  rewinds?: RunRewind[];
+}
+
+export interface ForkOrigin {
+  verstr: string;
+  step: number | null;
+}
+
+export interface RunRewind {
+  step: number;
+  timestamp: string | null;
 }
 
 export interface MediaItem {

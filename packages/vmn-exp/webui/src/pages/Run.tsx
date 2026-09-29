@@ -22,6 +22,7 @@ import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
 import RunMediaSection from "./RunMedia";
 import RunProvenanceSection from "./RunProvenance";
+import { ForkOrigin } from "./RunFork";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
 function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
@@ -60,6 +61,7 @@ function RunBody({ ws, app, appName, detail }: {
       <TrainingCurves
         series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at}
         stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
+        markStep={detail.forked_from?.step}
       />
       <RunMediaSection ws={ws} app={app} detail={detail} />
       <div className="card-grid-wide">
@@ -135,6 +137,9 @@ export default function Run() {
         {summary.branch && <span className="badge">{summary.branch}</span>}
         <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
       </div>
+      {detail && (
+        <ForkOrigin forkedFrom={detail.forked_from} rewinds={detail.rewinds} runUrl={runUrl} />
+      )}
       <NoteEditor key={summary.verstr} ws={ws} app={app} verstr={summary.verstr} note={summary.note} />
       <TagEditor key={`tags-${summary.verstr}`} ws={ws} app={app} verstr={summary.verstr} tags={summary.tags} />
 
