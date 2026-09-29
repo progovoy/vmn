@@ -76,9 +76,33 @@ def store_uri(params, default_prefix="vmn-experiments"):
     return None
 
 
+_REMOTE_PARAMS = ("store", "bucket", "prefix", "endpoint_url")
+
+
+def drop_remote_if_offline(params, root):
+    """*params* without their remote store under ``VMN_EXP_OFFLINE``.
+
+    conf.yml is committed and shared with compute nodes that may have no
+    network, so offline mode must win over it. Offline, runs record to the
+    local root alone (``vmn exp push`` uploads them later): ValueError when
+    there is none. Never a silent fallback when a remote is unreachable.
+    """
+    from vmn_exp.core.writer import OFFLINE_ENV, offline_mode
+
+    if not offline_mode():
+        return params
+    if not root:
+        raise ValueError(
+            f"{OFFLINE_ENV} records to a local experiment dir: set "
+            "VMN_EXPERIMENT_DIR (or --experiment-dir/--dir, or run in a checkout)"
+        )
+    return {k: v for k, v in params.items() if k not in _REMOTE_PARAMS}
+
+
 def _open(root, params):
     from vmn_exp.storage.open import open_storage
 
+    params = drop_remote_if_offline(params, root)
     return open_storage(store_uri(params), root, subdir="experiments", buffer_logs=True)
 
 

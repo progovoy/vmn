@@ -35,6 +35,8 @@ _STORAGE_CONF_KEYS = {
 }
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
+OFFLINE_ENV = "VMN_EXP_OFFLINE"
+_TRUE_VALUES = ("1", "true", "yes", "on")
 
 # Storage params a pod can set without a conf.yml (see merge_env_into_params).
 STORAGE_ENV = {
@@ -44,6 +46,10 @@ STORAGE_ENV = {
     "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
 }
 
+
+def offline_mode():
+    """Whether ``VMN_EXP_OFFLINE`` asks to record to the local root only."""
+    return os.environ.get(OFFLINE_ENV, "").strip().lower() in _TRUE_VALUES
 
 
 _WRITER_ID = None
@@ -232,24 +238,34 @@ def _taken_verstrs(storage, app_name, code_verstr):
     return {m.get("verstr", "") for m in storage.list_snapshots(app_name)}
 
 
-def _run_verstr_candidates(code_verstr, taken):
-    """Free-looking names for a new run, in allocation order.
-
-    With VMN_WRITER_ID (K8s mode) the name carries the pod-unique suffix;
-    otherwise it is the ``.rN`` after the highest existing run of this code.
-    """
+def default_run_suffix():
+    """The suffix a new run's name carries unless told otherwise: the pod's
+    VMN_WRITER_ID (K8s mode), else the writer id when recording offline — an
+    offline run is named without seeing the remote, so ``.rN`` could collide
+    with another host's — else None (``.rN``)."""
     writer_id = os.environ.get(WRITER_ID_ENV)
     if writer_id:
-        base = code_verstr + "." + writer_id
+        return writer_id
+    return get_writer_id() if offline_mode() else None
+
+
+def _run_verstr_candidates(code_verstr, taken, suffix):
+    """Free-looking names for a new run, in allocation order.
+
+    With a *suffix* the name is ``<code_verstr>.<suffix>[.N]``; otherwise it
+    is the ``.rN`` after the highest existing run of this code.
+    """
+    if suffix:
+        base = code_verstr + "." + suffix
         names = (
             base if i == 1 else f"{base}.{i}" for i in range(1, _MAX_RUN_CANDIDATES)
         )
     else:
         runs = [1] if code_verstr in taken else []
         for v in taken:
-            suffix = v[len(code_verstr) + 2 :]
-            if v.startswith(code_verstr + ".r") and suffix.isdigit():
-                runs.append(int(suffix))
+            rest = v[len(code_verstr) + 2 :]
+            if v.startswith(code_verstr + ".r") and rest.isdigit():
+                runs.append(int(rest))
         first = max(runs) + 1 if runs else 1
         names = (
             code_verstr if n == 1 else f"{code_verstr}.r{n}"
@@ -278,16 +294,26 @@ def claim_record(storage, app_name, verstr, metadata):
     return _claim(storage, app_name, verstr, metadata, {})
 
 
-def allocate_run_verstr(storage, app_name, code_verstr, make_record=None):
+_DEFAULT_SUFFIX = object()
+
+
+def allocate_run_verstr(storage, app_name, code_verstr, make_record=None,
+                        suffix=_DEFAULT_SUFFIX):
     """Return the verstr for a new experiment run.
+
+    *suffix*: ``<code_verstr>.<suffix>[.N]`` names; None for plain ``.rN``
+    names whatever the environment says; by default
+    :func:`default_run_suffix`.
 
     With *make_record* — ``verstr -> (metadata, patches)`` — the name is also
     claimed: the record is created atomically under it, and a name another
     host claimed first (a shared bucket or directory) is skipped. Without it
     the first free-looking name is returned unclaimed.
     """
+    if suffix is _DEFAULT_SUFFIX:
+        suffix = default_run_suffix()
     taken = _taken_verstrs(storage, app_name, code_verstr)
-    for candidate in _run_verstr_candidates(code_verstr, taken):
+    for candidate in _run_verstr_candidates(code_verstr, taken, suffix):
         if make_record is None:
             if not storage.exists(app_name, candidate):
                 return candidate
