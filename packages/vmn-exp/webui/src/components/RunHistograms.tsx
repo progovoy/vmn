@@ -1,21 +1,24 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { get } from "../http";
-import type { HistogramPage } from "../types";
+import type { HistogramItem, HistogramPage } from "../types";
 import { histogramUrl } from "../util/media";
 import { HistogramKey } from "./MediaHistograms";
 
 /** Keys fetched and drawn before "show more": a watched model has hundreds. */
 export const HISTOGRAM_KEYS_SHOWN = 12;
 
-function FetchedHistogram({ ws, app, verstr, name, total }: {
+function FetchedHistogram({ ws, app, verstr, name, total, inline }: {
   ws: string; app: string; verstr: string; name: string; total: number;
+  inline?: HistogramItem[];
 }) {
   const url = histogramUrl(ws, app, verstr, name);
   // Refetched only when the key gains steps (the detail's poll moves `total`).
   const query = useQuery({
     queryKey: ["histogram", url, total], queryFn: () => get<HistogramPage>(url),
     staleTime: Infinity, placeholderData: keepPreviousData,
+    // A small run's detail inlines the steps: nothing to fetch.
+    initialData: inline && { name, steps: inline, total },
   });
   if (query.error) return <div className="error">{String(query.error)}</div>;
   const page = query.data;
@@ -24,9 +27,11 @@ function FetchedHistogram({ ws, app, verstr, name, total }: {
   return <HistogramKey name={name} items={page.steps} total={page.total} />;
 }
 
-/** A run's histograms, each key's steps fetched on its own. */
-export default function RunHistograms({ ws, app, verstr, totals }: {
+/** A run's histograms, each key's steps fetched on its own unless the
+ *  detail inlined them. */
+export default function RunHistograms({ ws, app, verstr, totals, inline }: {
   ws: string; app: string; verstr: string; totals: Record<string, number>;
+  inline?: Record<string, HistogramItem[]>;
 }) {
   const [shown, setShown] = useState(HISTOGRAM_KEYS_SHOWN);
   const names = Object.keys(totals);
@@ -37,7 +42,7 @@ export default function RunHistograms({ ws, app, verstr, totals }: {
       <div className="media-grid">
         {names.slice(0, shown).map((name) => (
           <FetchedHistogram key={name} ws={ws} app={app} verstr={verstr} name={name}
-            total={totals[name]} />
+            total={totals[name]} inline={inline?.[name]} />
         ))}
       </div>
       {hidden > 0 && (

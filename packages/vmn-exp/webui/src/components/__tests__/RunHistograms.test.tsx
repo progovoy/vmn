@@ -49,6 +49,16 @@ describe("RunHistograms", () => {
     expect(calls).toEqual(["/api/v1/workspaces/ws/apps/app/experiments/v1/histograms/gradients/w"]);
   });
 
+  it("draws steps the detail inlined without fetching them", async () => {
+    const calls = mockHistograms();
+    const inline = { h: [{ step: 5, bins: [0, 1, 2], counts: [1, 1] }] };
+    renderWithClient(
+      <RunHistograms ws="ws" app="app" verstr="v1" totals={{ h: 1 }} inline={inline} />,
+    );
+    expect(await screen.findByText("step 5")).toBeInTheDocument();
+    expect(calls).toEqual([]);
+  });
+
   it("fetches only the keys shown, more on request", async () => {
     const calls = mockHistograms();
     const totals = Object.fromEntries(

@@ -12,8 +12,9 @@ Importing this module does NOT import torch::
 Every *freq*-th forward call in training mode (the watch *step*) logs
 ``<prefix>parameters/<param>`` histograms and arms the gradient hooks; the
 gradients of that pass are logged as ``<prefix>gradients/<param>`` at the
-next forward call (or :meth:`Watcher.flush`). Gradient hooks may run on
-autograd engine threads, so they only stash their histogram; every
+next forward call (or :meth:`Watcher.flush`). Gradient hooks exist only
+while a step is armed; they may run on autograd engine threads, so they only
+stash their histogram; every
 ``log_histogram`` call happens on the training thread. The run is ``run`` or
 :func:`~vmn_exp.sdk.context.current_run` at the forward call; without one
 (e.g. ranks > 0) nothing is recorded. A failing hook never breaks training.
@@ -22,6 +23,7 @@ import logging
 import weakref
 
 from vmn_exp.core.best_effort import quiet
+from vmn_exp.core.histogram import equal_edges, positive_int, value_range
 
 _LOGGER = logging.getLogger("vmn_exp.integrations.torch_watch")
 _GUARD = quiet(_LOGGER)
@@ -47,13 +49,9 @@ def _tensor_histogram(tensor, bins):
     flat = flat[torch.isfinite(flat)]
     if flat.numel() == 0:
         return None
-    lo, hi = (float(v) for v in torch.stack(torch.aminmax(flat)).tolist())
-    if lo == hi:
-        lo, hi = lo - 0.5, hi + 0.5
+    lo, hi = value_range(*(float(v) for v in torch.stack(torch.aminmax(flat)).tolist()))
     counts = _counts_of(flat, bins, lo, hi).tolist()
-    width = (hi - lo) / bins
-    edges = [lo + i * width for i in range(bins)] + [hi]
-    return {"bins": edges, "counts": [int(c) for c in counts]}
+    return {"bins": equal_edges(lo, hi, bins), "counts": [int(c) for c in counts]}
 
 
 class Watcher:
@@ -66,18 +64,19 @@ class Watcher:
         self._calls = 0
         self._armed = None  # (run, step) whose gradients are being captured
         self._pending = {}  # param name -> gradient histogram
-        self._handles = [model.register_forward_pre_hook(self._on_forward)]
-        if self._grads:
-            self._handles += [
-                p.register_hook(self._grad_hook(name))
-                for name, p in model.named_parameters() if p.requires_grad
-            ]
+        self._grad_handles = []  # present only while armed
+        self._forward = model.register_forward_pre_hook(self._on_forward)
+
+    def _arm(self, run, model):
+        self._armed = (run, self._calls)
+        self._grad_handles = [
+            p.register_hook(self._grad_hook(name))
+            for name, p in model.named_parameters() if p.requires_grad
+        ]
 
     def _grad_hook(self, name):
         def hook(grad):
-            if self._armed is not None:
-                _GUARD("gradient histogram", self._stash, name, grad)
-            return None
+            _GUARD("gradient histogram", self._stash, name, grad)
 
         return hook
 
@@ -101,7 +100,7 @@ class Watcher:
         if self._params:
             self._log_parameters(run, model)
         if self._grads:
-            self._armed = (run, self._calls)
+            self._arm(run, model)
 
     def _log_parameters(self, run, model):
         import torch
@@ -110,27 +109,27 @@ class Watcher:
             for name, param in model.named_parameters():
                 binned = _tensor_histogram(param, self._bins)
                 if binned is not None:
-                    self._log(run, f"parameters/{name}", binned, self._calls)
+                    self._log(run, "parameters", name, binned, self._calls)
 
-    def _log(self, run, key, binned, step):
-        run.log_histogram(f"{self._prefix}{key}", binned, step=step)
+    def _log(self, run, kind, name, binned, step):
+        run.log_histogram(f"{self._prefix}{kind}/{name}", binned, step=step)
 
     def flush(self):
         """Log the gradient histograms captured since the last armed step."""
-        armed, self._armed = self._armed, None
-        pending, self._pending = self._pending, {}
-        if armed is None:
+        if self._armed is None:
             return
-        run, step = armed
+        (run, step), self._armed = self._armed, None
+        for handle in self._grad_handles:
+            handle.remove()
+        self._grad_handles = []
+        pending, self._pending = self._pending, {}
         for name, binned in pending.items():
-            _GUARD("gradient log", self._log, run, f"gradients/{name}", binned, step)
+            _GUARD("gradient log", self._log, run, "gradients", name, binned, step)
 
     def remove(self):
         """Flush, then detach every hook; idempotent."""
         self.flush()
-        for handle in self._handles:
-            handle.remove()
-        self._handles = []
+        self._forward.remove()
         model = self._model()
         if model is not None and _WATCHERS.get(model) is self:
             del _WATCHERS[model]
@@ -150,10 +149,8 @@ def watch(model, log="gradients", freq=1000, bins=64, run=None, prefix=""):
     """
     if log not in _MODES:
         raise ValueError(f"log must be one of {sorted(_MODES)}, got {log!r}")
-    if not isinstance(freq, int) or isinstance(freq, bool) or freq < 1:
-        raise ValueError(f"freq must be a positive integer, got {freq!r}")
-    if not isinstance(bins, int) or isinstance(bins, bool) or bins < 1:
-        raise ValueError(f"bins must be a positive integer, got {bins!r}")
+    positive_int(freq, "freq")
+    positive_int(bins, "bins")
     unwatch(model)
     watcher = Watcher(model, log, freq, bins, run, prefix)
     _WATCHERS[model] = watcher
@@ -163,8 +160,8 @@ def watch(model, log="gradients", freq=1000, bins=64, run=None, prefix=""):
 def unwatch(model_or_watcher):
     """Remove the hooks of a :class:`Watcher`, or of the one watching a model."""
     if isinstance(model_or_watcher, Watcher):
-        model_or_watcher.remove()
-        return
-    watcher = _WATCHERS.get(model_or_watcher)
+        watcher = model_or_watcher
+    else:
+        watcher = _WATCHERS.get(model_or_watcher)
     if watcher is not None:
         watcher.remove()

@@ -7,9 +7,10 @@ the run detail carries ``histograms_total`` (every name, its steps logged)
 and inlines the steps in ``histograms`` only while they are few; a client
 asks for each name it shows (:func:`histogram_of`).
 """
+from vmn_exp.core.media import MAX_HISTOGRAM_STEPS
 
 # Served steps (across names) a detail still inlines: one full key's worth.
-INLINE_HISTOGRAM_ITEMS = 100
+INLINE_HISTOGRAM_ITEMS = MAX_HISTOGRAM_STEPS
 
 
 def detail_media(media):
