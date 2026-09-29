@@ -30,6 +30,15 @@ from vmn_exp.registry.store import register_version
 from vmn_exp.registry.view import resolve_ref
 
 
+def check_model_name(name):
+    """ValueError unless *name* is a valid registry (model or dataset) name."""
+    if not valid_model_name(name):
+        raise ValueError(
+            f"Invalid model name {name!r}: use letters, digits, underscore, dot; "
+            "no hyphens; must not end with .vN."
+        )
+
+
 def _resolve_storage(storage=None):
     """Resolve experiment storage from env or the current checkout."""
     if storage is not None:
@@ -111,12 +120,7 @@ def register_model(
     dict
         The version metadata dict (``n``, ``run_ref``, ``artifact_path``, …).
     """
-    if not valid_model_name(name):
-        raise ValueError(
-            f"Invalid model name {name!r}: use letters, digits, underscore, dot; "
-            "no hyphens; must not end with .vN."
-        )
-
+    check_model_name(name)
     resolved_app, verstr, run_storage = _run_to_ref(run, app_name)
     storage = _resolve_storage(storage or run_storage)
 
@@ -170,7 +174,7 @@ def list_models(*, storage=None) -> list:
     return _list_models(storage)
 
 
-def download_model(ref, dst=None, *, storage=None) -> str:
+def download_model(ref, dst=None, *, storage=None, record=True) -> str:
     """Download the artifact referenced by *ref* and return its local path.
 
     Local storage returns the on-disk path directly; S3 storage downloads the
@@ -186,11 +190,22 @@ def download_model(ref, dst=None, *, storage=None) -> str:
         return the path of the copied file.
     storage:
         Explicit storage; resolved from env / checkout when omitted.
+    record:
+        When a run is open (:func:`~vmn_exp.sdk.current_run`), record that it
+        used this version (see :mod:`vmn_exp.sdk.usage`). Default True.
+
+    A reference dataset (no run behind it) raises :class:`ValueError`: the
+    registry holds only its URI, nothing to download.
     """
     storage = _resolve_storage(storage)
     meta = get_model_version(ref, storage=storage)
 
     run_ref = meta.get("run_ref")
+    if run_ref is None and meta.get("uri"):
+        raise ValueError(
+            f"{ref!r} is a reference dataset ({meta['uri']}): the registry "
+            "stores no copy to download."
+        )
     if not isinstance(run_ref, dict):
         raise ValueError(
             f"Model version for {ref!r} has no run_ref — cannot locate artifact."
@@ -206,6 +221,10 @@ def download_model(ref, dst=None, *, storage=None) -> str:
     verstr = run_ref["verstr"]
 
     local = _fetch_artifact(storage, app, verstr, artifact_path)
+    if record:
+        from vmn_exp.sdk.usage import record_current_use
+
+        record_current_use(storage, meta)
 
     if dst is not None:
         os.makedirs(dst, exist_ok=True)

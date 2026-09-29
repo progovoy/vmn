@@ -491,6 +491,18 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             storage=storage,
         )
 
+    def use_model(self, ref, *, storage=None):
+        """Record that this run used model *ref*; see :mod:`vmn_exp.sdk.usage`."""
+        from vmn_exp.sdk.usage import use_model
+
+        return use_model(ref, run=self, storage=storage)
+
+    def use_dataset(self, ref, *, storage=None):
+        """Record that this run used dataset *ref*; see :mod:`vmn_exp.sdk.usage`."""
+        from vmn_exp.sdk.usage import use_dataset
+
+        return use_dataset(ref, run=self, storage=storage)
+
     # Tags are mutable, and can be set on a finished run: each call appends a
     # `tags` entry, and readers fold them per key, last write wins.
     def set_tag(self, key, value):

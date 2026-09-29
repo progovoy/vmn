@@ -85,6 +85,20 @@ class NoOpRun:
         storage = resolve_experiment_storage()
         return fetch_artifact(storage, app_name or self.app_name, ref, path)[2]
 
+    def use_model(self, ref, *, storage=None):
+        """The version's metadata, as rank 0 gets it — no use is recorded."""
+        return self._resolved(ref, "model", storage)
+
+    def use_dataset(self, ref, *, storage=None):
+        return self._resolved(ref, "dataset", storage)
+
+    @staticmethod
+    def _resolved(ref, kind, storage):
+        from vmn_exp.sdk.models import _resolve_storage
+        from vmn_exp.sdk.usage import resolved_version
+
+        return resolved_version(_resolve_storage(storage), ref, kind)
+
     def _ignore(self, *args, **kwargs):
         return None
 
