@@ -17,7 +17,6 @@ import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.rewind import drop_rewound
-from vmn_exp.core.step_metric import join_all
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
@@ -55,13 +54,12 @@ def summary_metrics(log, schema=None):
     return fold_metrics(fold_log(log), schema)[0]
 
 
-def metric_series(log, x=None):
+def metric_series(log):
     """Fold a log into per-metric point lists for charting.
 
     Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order. With *x* (a metric name), every other metric's points are
-    joined on it instead: each carries ``x``, the x metric's value at the same
-    step, and points without one are dropped (see :mod:`vmn_exp.core.step_metric`).
+    log order (join them on an x metric with
+    :func:`~vmn_exp.core.step_metric.join_all`).
     """
     series = {}
     for entry in drop_rewound(log):
@@ -71,7 +69,7 @@ def metric_series(log, x=None):
         ts = entry.get("timestamp")
         for key, value in (entry.get("values") or {}).items():
             series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series if x is None else join_all(series, x)
+    return series
 
 
 def last_metric_at(log):

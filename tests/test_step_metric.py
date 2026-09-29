@@ -9,6 +9,7 @@ from vmn_exp.core.log import metric_series
 from vmn_exp.core.step_metric import (
     create_define_metric_entry,
     declared_step_metric,
+    join_all,
     join_series,
     metric_definitions,
     step_metrics,
@@ -36,7 +37,7 @@ def test_join_keys_points_by_the_x_value_at_the_same_step():
         _m(2, "t2", epoch=1.0),
         _m(2, "t3", loss=0.25),  # same step, a different call: joined
     ]
-    joined = metric_series(log, x="epoch")
+    joined = join_all(metric_series(log), "epoch")
     assert joined == {
         "loss": [
             {"step": 0, "ts": "t0", "value": 1.0, "x": 0.0},
@@ -61,7 +62,7 @@ def test_non_finite_x_values_drop_the_point():
 
 
 def test_join_on_a_missing_x_metric_is_empty():
-    assert metric_series([_m(0, "t0", loss=1.0)], x="epoch") == {"loss": []}
+    assert join_all(metric_series([_m(0, "t0", loss=1.0)]), "epoch") == {"loss": []}
 
 
 # -- declarations ---------------------------------------------------------------
