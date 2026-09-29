@@ -40,7 +40,7 @@ function makeRows(n: number): ExperimentRow[] {
     note: i === 0 ? "first" : null,
     branch: "main",
     base_version: "0.0.1",
-    user_meta: null,
+   
     metrics: { loss: 1.0 - i * 0.001, acc: 0.8 + i * 0.001 },
   }));
 }

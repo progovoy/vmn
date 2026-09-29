@@ -7,7 +7,7 @@ function row(
   idx: number,
   branch: string,
   metrics: Record<string, number>,
-  user_meta?: Record<string, unknown> | null,
+  params?: Record<string, unknown>,
 ): ExperimentRow {
   return {
     idx,
@@ -17,7 +17,7 @@ function row(
     note: null,
     branch,
     base_version: "1.0.0",
-    user_meta: user_meta ?? null,
+    params: params ?? {},
     metrics,
   };
 }

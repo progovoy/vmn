@@ -87,16 +87,11 @@ export function seriesColor(names: string[], name: string): string {
   return runColor([...names].sort().indexOf(name));
 }
 
-type ParamSource = {
-  params?: Record<string, unknown> | null;
-  user_meta?: Record<string, unknown> | null;
-};
+type ParamSource = { params?: Record<string, unknown> | null };
 
-/** The params a row carries: the verbatim `params` of an experiment, or the
- *  `user_meta` (snapshot `--meta`) of a row that has none. */
+/** The verbatim params a row carries. */
 export function rowParams(row: ParamSource): Record<string, unknown> {
-  if (row.params && Object.keys(row.params).length > 0) return row.params;
-  return row.user_meta ?? {};
+  return row.params ?? {};
 }
 
 /** One param of a row — the same source the table and every chart use. */

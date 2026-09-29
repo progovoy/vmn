@@ -4,9 +4,9 @@ import LeaderboardFilter from "../LeaderboardFilter";
 import type { ExperimentRow } from "../../types";
 
 const ROWS: ExperimentRow[] = [
-  { idx: 1, verstr: "1.0.0-dev.aaa", code_verstr: "1.0.0-dev.aaa", timestamp: null, note: "batch size 64", branch: "main", base_version: "1.0.0", user_meta: null, metrics: { loss: 0.5 } },
-  { idx: 2, verstr: "1.0.0-dev.bbb", code_verstr: "1.0.0-dev.bbb", timestamp: null, note: "learning rate 0.01", branch: "main", base_version: "1.0.0", user_meta: null, metrics: { loss: 0.3 } },
-  { idx: 3, verstr: "1.0.0-dev.ccc", code_verstr: "1.0.0-dev.ccc", timestamp: null, note: "new optimizer", branch: "feat/optim", base_version: "1.0.0", user_meta: null, metrics: { loss: 0.2 } },
+  { idx: 1, verstr: "1.0.0-dev.aaa", code_verstr: "1.0.0-dev.aaa", timestamp: null, note: "batch size 64", branch: "main", base_version: "1.0.0", metrics: { loss: 0.5 } },
+  { idx: 2, verstr: "1.0.0-dev.bbb", code_verstr: "1.0.0-dev.bbb", timestamp: null, note: "learning rate 0.01", branch: "main", base_version: "1.0.0", metrics: { loss: 0.3 } },
+  { idx: 3, verstr: "1.0.0-dev.ccc", code_verstr: "1.0.0-dev.ccc", timestamp: null, note: "new optimizer", branch: "feat/optim", base_version: "1.0.0", metrics: { loss: 0.2 } },
 ];
 
 describe("LeaderboardFilter", () => {

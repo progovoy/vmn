@@ -58,7 +58,7 @@ describe("Run header name and tags", () => {
     const client = createQueryClient();
     client.setQueryData(rowsKey("test", "my-app", {}), {
       rows: [{ idx: 1, verstr: V, code_verstr: V, timestamp: null, note: null, branch: null,
-        base_version: null, user_meta: null, metrics: {}, name: "from-row", tags: { a: "b" } }],
+        base_version: null, metrics: {}, name: "from-row", tags: { a: "b" } }],
       total: 1,
     });
     renderRun(client);

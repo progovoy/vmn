@@ -31,7 +31,7 @@ import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
-const job = (status: string) => ({ id: "j1", status, command: [], exit_code: status === "running" ? null : 0, log: "", noop: false });
+const job = (status: string) => ({ id: "j1", status, command: [], exit_code: status === "running" ? null : 0, log: "" });
 
 beforeEach(() => {
   vi.clearAllMocks();
