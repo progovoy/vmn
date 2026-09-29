@@ -130,6 +130,8 @@ def start_run(
     are recorded as ``sys_*`` metrics on every heartbeat unless opted out:
     ``system_metrics=False`` > ``VMN_SYSTEM_METRICS=0`` > conf
     ``experiment.system_metrics: false``. ``True`` overrides only the conf.
+    Inside a ``vmn-exp run`` that samples its child's tree they default off
+    (that supervisor already measures this process); ``True`` samples anyway.
 
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
     one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
@@ -194,7 +196,7 @@ def start_run(
         app_name,
         verstr,
         heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
-        system_metrics=sysmetrics.enabled(system_metrics, exp_conf),
+        system_metrics=sysmetrics.sdk_enabled(system_metrics, exp_conf),
         sync_interval_sec=sync_interval_sec,
         prior_state=prior_state,
         name=name,

@@ -28,6 +28,7 @@ Three things are deliberate:
 import importlib
 import logging
 import os
+import threading
 import time
 
 from vmn_exp.core.env import opted_in
@@ -63,6 +64,17 @@ _MB = float(1024 * 1024)
 
 #: Set to ``0``/``false``/``no``/``off`` to turn system metrics off.
 SYSTEM_METRICS_ENV = "VMN_SYSTEM_METRICS"
+#: Set by ``vmn-exp run`` in its child's env when it samples the child's tree.
+SUPERVISOR_SAMPLES_ENV = "VMN_EXP_SUPERVISOR_SAMPLES"
+
+# Enumerating the tree scans every process on the host: re-walk it only once
+# the time since the last walk is this many times what that walk cost.
+TREE_WALK_DUTY = 0.01
+# A child's USS parses its smaps; between reads it is estimated from its RSS.
+USS_EVERY_N_TICKS = 10
+
+# The clock the tree-walk budget reads; a seam for tests.
+_clock = time.monotonic
 
 
 def enabled(explicit, exp_conf=None):
@@ -72,6 +84,14 @@ def enabled(explicit, exp_conf=None):
     kwarg) > ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
     """
     return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
+
+
+def sdk_enabled(explicit, exp_conf=None):
+    """:func:`enabled`, but off by default under a ``vmn-exp run`` that
+    already samples this process's tree — explicit ``True`` still samples."""
+    if explicit is None and os.environ.get(SUPERVISOR_SAMPLES_ENV):
+        return False
+    return enabled(explicit, exp_conf)
 
 
 def _import_optional(name):
@@ -100,6 +120,10 @@ class _ProcessProbe:
     def __init__(self, root):
         self._root = root
         self._tracked = {root.pid: root}
+        self._walked_at = None
+        self._walk_cost = 0.0
+        self._ticks = 0
+        self._uss_ratio = {}  # pid -> USS / RSS at its last USS read
         # Prime every process's CPU interval; a first reading is always 0.0.
         for proc in self._tree()[0]:
             self._read_cpu(proc)
@@ -110,19 +134,31 @@ class _ProcessProbe:
         """The pids sampled last tick — the run's process tree."""
         return set(self._tracked)
 
+    def _walk_due(self):
+        if self._walked_at is None:
+            return True
+        return _clock() - self._walked_at >= self._walk_cost / TREE_WALK_DUTY
+
     def _tree(self):
         """This tick's processes (reusing held objects) and the newly seen pids."""
+        if not self._walk_due():
+            return list(self._tracked.values()), set()
         found = [self._root]
+        started = _clock()
         try:
             found.extend(self._root.children(recursive=True))
         except Exception:
             # The root exited, or we lost the right to look.
             _LOGGER.debug("Could not enumerate child processes", exc_info=True)
             found = list(self._tracked.values())
+        self._walked_at, self._walk_cost = started, _clock() - started
 
         new = {p.pid for p in found} - set(self._tracked)
         # Rebuilt rather than pruned, so a finished worker stops being sampled.
         self._tracked = {p.pid: self._tracked.get(p.pid, p) for p in found}
+        self._uss_ratio = {
+            pid: r for pid, r in self._uss_ratio.items() if pid in self._tracked
+        }
         return list(self._tracked.values()), new
 
     @staticmethod
@@ -131,6 +167,11 @@ class _ProcessProbe:
             return proc.cpu_percent(None)
         except Exception:
             return 0.0
+
+    def _forget(self, proc):
+        if proc is not self._root:
+            self._tracked.pop(proc.pid, None)
+            self._uss_ratio.pop(proc.pid, None)
 
     def _newborn_cpu(self, proc, elapsed):
         """CPU percent of a process first seen this tick.
@@ -148,21 +189,28 @@ class _ProcessProbe:
         except Exception:
             return 0.0
 
-    def _memory(self, proc):
-        """The root's RSS; a child's unique set size, falling back to its RSS."""
-        if proc is not self._root:
+    def _memory(self, proc, read_uss):
+        """The root's RSS; a child's unique set size — read when *read_uss* or
+        first seen, else its RSS scaled by the USS share last read."""
+        if proc is self._root:
+            return proc.memory_info().rss
+        if read_uss or proc.pid not in self._uss_ratio:
             try:
-                return proc.memory_full_info().uss
+                info = proc.memory_full_info()
+                self._uss_ratio[proc.pid] = info.uss / info.rss if info.rss else 1.0
+                return info.uss
             except Exception:
-                pass
-        return proc.memory_info().rss
+                self._uss_ratio[proc.pid] = 1.0
+        return proc.memory_info().rss * self._uss_ratio[proc.pid]
 
     def __call__(self):
         wait = MIN_SAMPLE_INTERVAL_SEC - (time.monotonic() - self._last_mono)
         if wait > 0:
-            time.sleep(wait)  # at most once, right after the probe was built
+            time.sleep(wait)  # only when called right after the probe was built
         procs, new = self._tree()
         elapsed = time.monotonic() - self._last_mono
+        read_uss = self._ticks % USS_EVERY_N_TICKS == 0
+        self._ticks += 1
         cpu = 0.0
         memory = 0
         for proc in procs:
@@ -172,9 +220,9 @@ class _ProcessProbe:
                         cpu += self._newborn_cpu(proc, elapsed)
                     else:
                         cpu += proc.cpu_percent(None)
-                    memory += self._memory(proc)
+                    memory += self._memory(proc, read_uss)
             except Exception:
-                continue  # exited between listing and reading: normal
+                self._forget(proc)  # exited between listing and reading: normal
         self._last_mono, self._last_wall = time.monotonic(), time.time()
         return {CPU_PERCENT: round(cpu, 1), RSS_MB: round(memory / _MB, 1)}
 
@@ -230,8 +278,9 @@ class Sampler:
 
     Callers tick from a timer they already own — ``vmn-exp run``'s poll loop and
     the SDK's :class:`~vmn_exp.sdk.heartbeat.Heartbeat` thread — so the
-    cadence is the heartbeat's and no second thread leaks. (Should those two ever
-    share one heartbeat mechanism, ticking belongs inside it.)
+    cadence is the heartbeat's; the only other thread is a one-off that builds
+    the collector. (Should those two ever share one heartbeat mechanism,
+    ticking belongs inside it.)
 
     Args:
         record: called with a ``{name: number}`` mapping to persist a sample.
@@ -246,18 +295,31 @@ class Sampler:
         self._enabled = enabled
         self._pid = pid
         self._collector = collector
+        if enabled and collector is None:
+            # Off-thread, and started now so the first tick finds it ready:
+            # importing psutil and nvmlInit() can take seconds on a host with
+            # a sulking driver, and belong on neither start_run() nor a beat.
+            threading.Thread(
+                target=self._build, name="vmn-sysmetrics-init", daemon=True
+            ).start()
+
+    def _build(self):
+        try:
+            collector = build_collector(self._pid)
+        except Exception:
+            _LOGGER.debug("Building the system-metrics collector failed", exc_info=True)
+            collector = None
+        if collector is None:
+            self._enabled = False  # nothing to read; stop trying, stay quiet
+            return
+        # The probe's first CPU reading needs this long since it was primed;
+        # waited here so that a beat never sleeps for it.
+        time.sleep(MIN_SAMPLE_INTERVAL_SEC)
+        self._collector = collector
 
     def tick(self):
-        if not self._enabled:
-            return
-        if self._collector is None:
-            # Built on the first tick, not in __init__: importing psutil and
-            # calling nvmlInit() can take seconds on a host with a sulking
-            # driver, and neither belongs on a caller's start_run() path.
-            self._collector = build_collector(self._pid)
-            if self._collector is None:
-                self._enabled = False  # nothing to read; stop trying, stay quiet
-                return
+        if not self._enabled or self._collector is None:
+            return  # opted out, or the collector is still being built
         try:
             values = self._collector()
             if values:

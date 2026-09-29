@@ -279,10 +279,18 @@ class _Supervision:
         return exit_code
 
     def _start(self, run_cmd):
+        from vmn_exp.sdk import sysmetrics  # exp's __init__ imports the CLI
+
+        self.samples_tree = sysmetrics.enabled(
+            getattr(self.args, "system_metrics", None), self.exp_conf
+        )
         env = dict(os.environ)
         env["VMN_EXPERIMENT_ID"] = self.verstr
         env["VMN_APP_NAME"] = self.app_name or ""
         env["VMN_METRICS_FILE"] = self.metrics_path
+        if self.samples_tree:
+            # An SDK run in the child must not sample the tree a second time.
+            env[sysmetrics.SUPERVISOR_SAMPLES_ENV] = "1"
         env.update(self.extra_env)
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
@@ -325,7 +333,7 @@ class _Supervision:
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
-            sysmetrics.enabled(getattr(self.args, "system_metrics", None), self.exp_conf),
+            self.samples_tree,
             pid=proc.pid,
         )
 
