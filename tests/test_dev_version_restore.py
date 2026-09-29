@@ -123,3 +123,16 @@ def test_goto_dev_version_over_dirty_work_saves_it(app_layout, capfd):
     assert "Current work saved as" in out.out + out.err
     assert _read(path) == "state A"
     assert len(_safety_snapshots(app_layout)) == 1
+
+
+def test_goto_dev_version_from_a_clean_tree_is_silent_and_saves_nothing(app_layout, capfd):
+    _bootstrap(app_layout)
+    path, verstr = _captured_state(app_layout, capfd, "clean.txt", "state A")
+    _checkout_clean(app_layout)
+
+    capfd.readouterr()
+    assert _goto(app_layout.app_name, version=verstr) == 0
+    out = capfd.readouterr()
+    assert "No local changes to snapshot" not in out.out + out.err
+    assert _read(path) == "state A"
+    assert _safety_snapshots(app_layout) == []

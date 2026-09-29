@@ -16,12 +16,6 @@ from collections import OrderedDict
 
 from vmn_exp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
 
-# Substrings a successful job's log can carry to mean "ran fine, but there
-# was nothing to do" - distinct from actually producing the thing the action
-# promised (e.g. a dev-version capture of a clean tree exits 0 and records
-# nothing).
-_NOOP_LOG_MARKERS = ("No local changes to snapshot (working tree is clean)",)
-
 # A job that waits on a credential prompt or a lock must not pin its workspace
 # forever: it fails after this long and frees the slot.
 DEFAULT_JOB_TIMEOUT_SEC = 30 * 60
@@ -171,7 +165,6 @@ class Job:
         self.status = "running"
         self.exit_code = None
         self.log = ""
-        self.noop = False
 
     def to_dict(self):
         return {
@@ -180,7 +173,6 @@ class Job:
             "status": self.status,
             "exit_code": self.exit_code,
             "log": self.log,
-            "noop": self.noop,
         }
 
 
@@ -250,8 +242,6 @@ class JobRunner:
             job.log = _tail((proc.stdout or "") + (proc.stderr or ""))
             job.exit_code = proc.returncode
             job.status = "succeeded" if proc.returncode == 0 else "failed"
-            if job.status == "succeeded":
-                job.noop = any(m in job.log for m in _NOOP_LOG_MARKERS)
         except subprocess.TimeoutExpired as e:
             output = _as_text(e.stdout) + _as_text(e.stderr)
             job.log = _tail(output + f"\nJob timed out after {self._timeout_sec}s")

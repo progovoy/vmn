@@ -140,13 +140,16 @@ def _save_safety_snapshot(vcs, params, target_verstr):
         dirty_states,
         ver_info,
         err,
-    ) = gather_create_data(vcs)
+    ) = gather_create_data(vcs, allow_clean=True)
     if err is not None:
+        return None
+    diff_hash = _compute_diff_hash(patches)
+    if diff_hash is None:
         return None
 
     storage = _get_storage(vcs, params)
     verstr = _unique_snapshot_verstr(
-        storage, vcs.name, base_version, commit_hash, _compute_diff_hash(patches)
+        storage, vcs.name, base_version, commit_hash, diff_hash
     )
     if verstr == target_verstr:
         return None
