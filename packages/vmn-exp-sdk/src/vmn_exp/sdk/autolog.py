@@ -74,6 +74,7 @@ from vmn_exp.sdk.autolog_adapter import (  # noqa: F401 - the extension API
     _key,
     _plain,
 )
+from vmn_exp.sdk.mode import is_disabled
 
 # Set on every wrapper, holding the function it replaced.
 _PATCH_MARKER = "_vmn_autolog_original"
@@ -141,7 +142,10 @@ def autolog(frameworks=None, log_models=False, training_score="auto"):
             the input has at most :data:`TRAINING_SCORE_MAX_ROWS` rows).
 
     Calling it again with other options reconfigures the installed wrappers.
+    Under ``VMN_MODE=disabled`` it patches nothing.
     """
+    if is_disabled():
+        return
     _CONFIG.update(log_models=bool(log_models), training_score=training_score)
     names = list(SUPPORTED_FRAMEWORKS) if frameworks is None else list(frameworks)
     for name in names:

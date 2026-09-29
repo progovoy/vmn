@@ -226,15 +226,21 @@ def _handle_ui(vmn_ctx):
 def _exp_run_without_repo(args):
     """Experiment commands that work without a git repo.
 
-    Handles: import-mlflow (always git-free) and from-snapshot mode.
+    Handles: run under VMN_MODE=disabled, import-mlflow (always git-free) and
+    from-snapshot mode.
 
     Returns an int exit code if handled, None to fall through to normal dispatch.
     """
+    is_experiment = getattr(args, "command", None) in ("experiment", "exp")
+    action = getattr(args, "action", None)
+    if is_experiment and action == "run":
+        from vmn_exp.cli.run_disabled import exec_if_disabled
+        result = exec_if_disabled(args)
+        if result is not None:
+            return result
+
     # import-mlflow is always git-free — intercept before from_snapshot check
-    if (
-        getattr(args, "command", None) in ("experiment", "exp")
-        and getattr(args, "action", None) == "import-mlflow"
-    ):
+    if is_experiment and action == "import-mlflow":
         from vmn_exp.importers.cli import import_mlflow_run_without_repo
         return import_mlflow_run_without_repo(args)
 

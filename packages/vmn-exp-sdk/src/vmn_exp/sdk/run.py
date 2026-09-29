@@ -51,6 +51,7 @@ from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F40
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
 from vmn_exp.sdk.metric_defs import MetricDefinitions
+from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
@@ -116,6 +117,7 @@ def start_run(
     fork_step=None,
     rewind_to_step=None,
     capture_output=False,
+    mode=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -159,7 +161,12 @@ def start_run(
     capped by ``VMN_EXP_OUTPUT_CAP_MB`` (default 10), uploaded every
     ``sync_interval_sec`` and at finish. Off by default: the process then
     writes to pipes, not its TTY.
+
+    ``mode="disabled"`` (or ``VMN_MODE=disabled``; an explicit *mode* wins)
+    returns a :class:`NoOpRun` without touching git or the store.
     """
+    if is_disabled(mode):
+        return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank():
         return NoOpRun(app_name)
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
@@ -219,6 +226,8 @@ def _record_resume_inputs(run, note, params):
 
 class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
+
+    disabled = False
 
     def __init__(
         self,
