@@ -309,7 +309,7 @@ class _Supervision:
         # The child is the workload, so it is the child's tree that gets measured.
         sampler = sysmetrics.Sampler(
             lambda values: self._ingest([(None, values)]),
-            getattr(self.args, "system_metrics", False),
+            sysmetrics.enabled(getattr(self.args, "system_metrics", None), self.exp_conf),
             pid=proc.pid,
         )
 

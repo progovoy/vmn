@@ -102,7 +102,7 @@ def start_run(
     nested=False,
     heartbeat_interval_sec=None,
     storage=None,
-    system_metrics=False,
+    system_metrics=None,
     sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
     snapshot=True,
     run_id=None,
@@ -121,8 +121,10 @@ def start_run(
     export``) no git checkout is needed: the run records against that snapshot
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
 
-    ``system_metrics=True`` records this process's CPU and memory (and GPU, with
-    ``pynvml``) as ``sys_*`` metrics on every heartbeat.
+    System metrics — this process's CPU and memory (and GPU, with ``pynvml``) —
+    are recorded as ``sys_*`` metrics on every heartbeat unless opted out:
+    ``system_metrics=False`` > ``VMN_SYSTEM_METRICS=0`` > conf
+    ``experiment.system_metrics: false``. ``True`` overrides only the conf.
 
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
     one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
@@ -157,9 +159,11 @@ def start_run(
     ref = resume.requested_run_id(run_id)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
-        app_name, storage, verstr, prior_state = resume.locate(app_name, ref, storage)
+        app_name, storage, verstr, prior_state, exp_conf = resume.locate(
+            app_name, ref, storage
+        )
     else:
-        app_name, storage, verstr = create_record(
+        app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, snapshot, name,
             capture_env=capture_env,
         )
@@ -169,7 +173,7 @@ def start_run(
         app_name,
         verstr,
         heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
-        system_metrics=system_metrics,
+        system_metrics=sysmetrics.enabled(system_metrics, exp_conf),
         sync_interval_sec=sync_interval_sec,
         prior_state=prior_state,
         name=name,

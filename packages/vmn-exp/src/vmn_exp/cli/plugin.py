@@ -127,9 +127,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--output-cap-mb", type=float, default=None,
                       help="run: size cap of output.log; past it the first and last "
                            "halves are kept (default: VMN_EXP_OUTPUT_CAP_MB or 10).")
-    pexp.add_argument("--system-metrics", action="store_true", default=False,
-                      help="Record the child process tree's CPU/memory as sys_* metrics "
-                           "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
+    pexp.add_argument("--no-system-metrics", dest="system_metrics", action="store_false",
+                      default=None,
+                      help="run: don't record the child process tree's CPU/memory/GPU as "
+                           "sys_* metrics. Overrides VMN_SYSTEM_METRICS and conf "
+                           "system_metrics settings.")
     pexp.add_argument("--interval", type=float, default=None,
                       help="watch: re-check every N seconds (default: check once, for cron)")
     pexp.add_argument("--within", default=None,

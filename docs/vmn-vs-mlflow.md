@@ -34,7 +34,7 @@ stronger on everything downstream of a finished run.
 | Per-step metric series + charts | Yes | Yes |
 | Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. spark, statsmodels, prophet, LLM libs) |
 | Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
-| System metrics (CPU/mem/GPU) | Yes, on the heartbeat (`vmn-exp-sdk[sysmetrics]`) | Yes |
+| System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
 | Run status | **Derived** — `created`/`running`/`stuck`/`succeeded`/`failed` | Stored; a dead run can stay `RUNNING` forever |
 | Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch >= "2.0"` | `search_runs` filter strings |

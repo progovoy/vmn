@@ -280,8 +280,10 @@ Two things only the SDK gives you: [autologging](sdk.md#autologging) — one
 hyperparameters and scores (and, with `log_models=True`, the fitted models) with
 no logging in your training code — and the [query
 language](sdk.md#the-query-language) for filtering runs on metrics and params.
-`--system-metrics` records the `sys_*` metrics [listed in the SDK
-guide](sdk.md#starting-a-run) for the child's process tree.
+`exp run` records the `sys_*` metrics [listed in the SDK
+guide](sdk.md#starting-a-run) for the child's process tree on every heartbeat,
+by default. `--no-system-metrics`, `VMN_SYSTEM_METRICS=0` or conf
+`experiment.system_metrics: false` turn it off (in that precedence).
 
 ---
 
