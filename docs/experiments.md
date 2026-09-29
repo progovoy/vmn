@@ -1063,6 +1063,15 @@ conf:
 - `goal: min` → best-first ascending. `goal: max` → best-first descending.
   A metric with no declared goal in the schema sorts as a plain ascending
   value sort — declare a `goal` to get goal-aware (best-first) ordering.
+- A glob key (`"val_*": {goal: min}`) sets the goal of every metric it
+  matches; an exact name beats it.
+- Runs can declare goals too (`run.define_metric(name, goal=)` or
+  `vmn-exp add --define-metric`): for names conf.yml does not declare, the
+  latest run's `goal` sets the sort direction of `list --sort`, `list_runs()`
+  and the UI leaderboard. conf.yml always wins.
+- `hidden: true` keeps a metric (or glob, `"grad_*": {hidden: true}`) out of
+  the UI's default leaderboard columns and chart grid; it still sorts,
+  queries and summarizes. Runs may declare it with `define_metric(hidden=True)`.
 - `primary: true` marks the metric used to sort `list` when `--sort` is omitted.
 - `step_metric: epoch` charts the metric (a name or a glob such as `val_*`)
   against `epoch` logged at the same step instead of the step itself — see
@@ -1080,6 +1089,8 @@ number per run. Which one is the metric's **summary policy**:
 | `last` | the latest value logged |
 | `min` | the smallest finite value logged |
 | `max` | the largest finite value logged |
+| `first` | the earliest value logged (by timestamp, across writers) |
+| `mean` | the mean of the finite values logged (`last` when there is none) |
 
 Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
 `goal: max` → `max`); a metric with neither is `last`. So with
@@ -1098,7 +1109,7 @@ conf:
 The summary value is what everything ranks and filters on: `list --sort`,
 `--query metrics.loss < 0.3`, `prune --query`, `compare`, `diff`, the UI
 leaderboard, and `list_runs()` rows. Every metric logged more than once also
-carries its full `metric_summary` (`{"last", "min", "max"}`) in `list --json`,
+carries its full `metric_summary` (`{"last", "min", "max", "first", "mean"}`) in `list --json`,
 `show --json`, `list_runs()`/`get_run()` rows and the UI run detail; `show`
 prints them where they differ:
 
@@ -1110,12 +1121,20 @@ prints them where they differ:
 - **Precedence**: a run's own definition — [`run.define_metric()`](sdk.md#metric-goals-and-summaries),
   recorded in its log — beats conf.yml, which beats the `last` default. In
   each, an exact metric name beats a glob key (`"val_*": {goal: min}`).
+  Another run's declaration never changes a run's summary — it only counts
+  for sort direction and hidden columns.
+- **After the fact**: `vmn-exp add my_app -v <ref> --define-metric val_loss
+  --goal min [--summary min|max|last|first|mean] [--step-metric epoch]
+  [--hidden]` appends the same `define_metric` entry `run.define_metric()`
+  does — handy for a `vmn-exp run` whose child only wrote `key=value` lines.
+  It needs at least one of the four options.
 - **Live**: conf.yml's policies apply when a run is read, so editing them
   re-ranks existing runs too (the index re-derives rows from its folded state,
   no log is re-read). An S3 workspace in `vmn-exp ui` has no conf.yml, so only
-  the runs' own definitions apply there.
-- **NaN/inf** stay in the log and may be a metric's `last`, but never its
-  `min`/`max`. A `min`/`max` metric with no finite value at all keeps its last
+  the runs' own definitions apply there (their goals still set the sort
+  direction).
+- **NaN/inf** stay in the log and may be a metric's `last` or `first`, but
+  never its `min`/`max` or part of its `mean`. A `min`/`max` metric with no finite value at all keeps its last
   (non-finite) value and sorts last.
 - Numeric params folded into `metrics` are single values: `min`/`max` of a
   param is the param itself.

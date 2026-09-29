@@ -226,7 +226,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_image(name, image, step=None, caption=None)` | an image, stored as PNG |
 | `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
-| `run.define_metric(name, step_metric=None, summary=None, goal=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — and which of its values the run ranks on — see [Metric goals and summaries](#metric-goals-and-summaries) |
+| `run.define_metric(name, step_metric=None, summary=None, goal=None, hidden=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — which of its values the run ranks on, which way it sorts and whether the UI hides it by default — see [Metric goals and summaries](#metric-goals-and-summaries) |
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
@@ -363,11 +363,18 @@ with start_run("my_app") as run:
         run.log_metrics({"val_loss": evaluate(), "lr": sched.lr}, step=epoch)
 ```
 
-- `summary` is `"min"`, `"max"` or `"last"`; without it, `goal="min"` means
-  `min` and `goal="max"` means `max`. Anything else raises `ValueError`.
+- `summary` is `"min"`, `"max"`, `"last"`, `"first"` (the earliest value by
+  timestamp) or `"mean"` (of the finite values); without it, `goal="min"`
+  means `min` and `goal="max"` means `max`. Anything else (including
+  `"none"`) raises `ValueError`.
+- `hidden=True` keeps the metric (or glob, e.g. `run.define_metric("grad_*",
+  hidden=True)`) out of the UI's default leaderboard columns and chart grid —
+  it still sorts, queries and summarizes as usual. It must be a bool.
 - It is the same `define_metric` call (and log entry) that declares a
   [`step_metric`](#custom-x-axis-step_metric):
-  `{"type": "define_metric", "name", "summary"?, "goal"?, "step_metric"?}`.
+  `{"type": "define_metric", "name", "summary"?, "goal"?, "step_metric"?, "hidden"?}`.
+  `vmn-exp add <app> -v <ref> --define-metric NAME [--goal] [--summary]
+  [--step-metric] [--hidden]` appends the same entry from the CLI.
   So it travels with the run — to S3, to other readers, to `vmn-exp ui` — and
   needs no conf.yml. Entries fold per field, last write wins: declaring a
   `step_metric` later keeps an earlier `summary`.
@@ -377,10 +384,17 @@ with start_run("my_app") as run:
   there too), which beats `last`.
 - `row["metrics"][name]` is then that value everywhere (`list_runs(sort=,
   query=)`, `vmn-exp list --sort`, `prune --query`, the leaderboard), and
-  `row["metric_summary"][name]` holds `{"last", "min", "max"}` for every metric
-  logged more than once. Non-finite values are never a min or max.
-- The run's `goal` sets which value it ranks on; the leaderboard's sort
-  *direction* still comes from conf.yml's `goal`.
+  `row["metric_summary"][name]` holds `{"last", "min", "max", "first", "mean"}`
+  for every metric logged more than once. Non-finite values are never a min,
+  max or part of the mean (`mean` is `None` without a finite value).
+- **Cross-run goals.** A run's `goal` (and `hidden`) also counts across runs
+  for names conf.yml does not declare: the *effective schema* is conf.yml
+  plus those declarations, the latest run's winning. It sets the sort
+  *direction* of `list_runs(sort=)`, `vmn-exp list --sort` and the UI
+  leaderboard, and the UI's hidden columns — so a store workspace without a
+  conf.yml still sorts `val_loss` best-first. It never changes which value
+  another run ranks on: summaries follow only the run's own definitions and
+  conf.yml. Glob goals (`"val_*": {goal: min}`) set the direction too.
 
 ### Tags
 
