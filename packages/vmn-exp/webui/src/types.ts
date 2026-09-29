@@ -202,6 +202,53 @@ export interface ExperimentDetail {
   inputs?: Record<string, InputEntry> | null;
   /** Source identifier when the run was imported from an external system. */
   imported_from?: string | null;
+  /** Logged images per key, one item per step (`run.log_image`). */
+  media?: Record<string, MediaItem[]>;
+  /** Logged tables per key, one item per step (`run.log_table`). */
+  tables?: Record<string, TableItem[]>;
+  /** Logged histograms per key; at most 100 evenly spaced steps each. */
+  histograms?: Record<string, HistogramItem[]>;
+  /** Steps logged per histogram key before thinning. */
+  histograms_total?: Record<string, number>;
+}
+
+export interface MediaItem {
+  step: number;
+  /** Artifact path of the image (`media/<key>/<step>.png`). */
+  path: string;
+  caption?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface TableItem {
+  step: number;
+  /** Artifact path of the columnar table document. */
+  path: string;
+  rows: number;
+  columns: string[];
+  total_rows?: number;
+}
+
+export interface HistogramItem {
+  step: number;
+  /** Bin edges: one more than `counts`. */
+  bins: number[];
+  counts: number[];
+}
+
+export interface TableColumn {
+  name: string;
+  type: "number" | "string" | "bool" | "null" | "mixed";
+}
+
+/** One page of a logged table from `/experiments/{v}/table/{path}`. */
+export interface TablePage {
+  columns: TableColumn[];
+  rows: unknown[][];
+  total: number;
+  offset: number;
+  truncated: boolean;
 }
 
 export interface VersionRow {
