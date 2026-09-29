@@ -14,4 +14,7 @@ Modules:
   - :mod:`.code_store`  code-object keys and read/write helpers
   - :mod:`.refs`        ``resolve_snapshot_ref`` (latest, ``@N``, prefixes)
   - :mod:`.stores`      ``SnapshotStores`` / ``open_snapshot_stores``
+  - :mod:`.create`      ``vmn snapshot create`` (thin record + shared code object)
+  - :mod:`.listing`     ``list`` / ``show`` / ``note``, ``relative_timestamp``
+  - :mod:`.delete`      ``delete`` (drops the code object once unreferenced)
 """

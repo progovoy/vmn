@@ -2,8 +2,6 @@
 import os
 import subprocess
 
-import pytest
-
 from helpers import _SRC_PATH, _PY, _bootstrap
 
 from version_stamp.cli import vmn_run
@@ -61,13 +59,26 @@ def test_vmn_exp_refuses_stamping_commands(app_layout):
     assert "vmn stamp" in proc.stderr
 
 
-def test_vmn_has_no_snapshot_command(app_layout, capfd):
+def test_vmn_snapshot_is_a_builtin_command(app_layout):
+    """`vmn snapshot` needs no plugin: it runs with vmn's own modules only."""
     _bootstrap(app_layout)
-    reset_logger()
-    with pytest.raises(SystemExit) as exc:
-        vmn_run(["snapshot", app_layout.app_name])
-    assert exc.value.code == 2
-    assert "invalid choice" in capfd.readouterr().err
+    env = {**os.environ, "VMN_WORKING_DIR": app_layout.repo_path,
+           "PYTHONPATH": _SRC_PATH}
+    script = (
+        "import sys\n"
+        "from version_stamp.cli import plugins, plugin_api\n"
+        "plugins._plugin_entry_points = lambda: []\n"
+        "from version_stamp.cli.entry import main\n"
+        "ret = main(['snapshot', 'list', sys.argv[1]])\n"
+        "assert plugin_api.find('snapshot') is None\n"
+        "assert not any(m.startswith('vmn_exp') for m in sys.modules), 'vmn_exp imported'\n"
+        "sys.exit(ret)\n"
+    )
+    proc = subprocess.run(
+        [_PY, "-c", script, app_layout.app_name], cwd=app_layout.repo_path,
+        env=env, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_vmn_exp_has_no_snapshot_command(app_layout):
@@ -77,7 +88,7 @@ def test_vmn_exp_has_no_snapshot_command(app_layout):
     assert "invalid choice" in proc.stderr
 
 
-def test_dirty_tree_hint_points_at_vmn_exp_create(app_layout, capfd):
+def test_dirty_tree_hint_points_at_vmn_snapshot_create(app_layout, capfd):
     _bootstrap(app_layout)
     app_layout.write_file_commit_and_push("test_repo_0", "f.txt", "x")
     with open(os.path.join(app_layout.repo_path, "f.txt"), "a") as f:
@@ -87,5 +98,5 @@ def test_dirty_tree_hint_points_at_vmn_exp_create(app_layout, capfd):
     assert vmn_run(["stamp", "-r", "patch", app_layout.app_name])[0] != 0
     captured = capfd.readouterr()
     output = captured.out + captured.err
-    assert f"vmn-exp create {app_layout.app_name}" in output
-    assert "vmn snapshot" not in output
+    assert f"'vmn snapshot create {app_layout.app_name}' to save your work" in output
+    assert "vmn-exp create" not in output

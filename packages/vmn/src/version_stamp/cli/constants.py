@@ -36,6 +36,7 @@ VMN_ARGS = {
     "config": "local",
     "worktrees": "local",
     "skill": "local",
+    "snapshot": "local",
 }
 
 _CONFIG_DESCRIPTIONS = AppConf.config_descriptions()
@@ -77,3 +78,8 @@ class RepoStatus:
 # `vmn worktrees` (alias `vmn wt`) actions, and those that need a name.
 WORKTREES_ACTIONS = ("create", "list", "remove", "freeze", "pull")
 WORKTREES_NAME_REQUIRED = frozenset({"create", "remove", "freeze"})
+
+# `vmn snapshot` actions (create is the default).
+SNAPSHOT_ACTIONS = ("create", "list", "show", "note", "diff", "export", "restore", "delete")
+# Built-in commands' actions that never mutate the checkout, so run lock-free.
+READ_ONLY_ACTIONS = {"snapshot": frozenset({"list", "show", "diff", "export"})}
