@@ -175,6 +175,26 @@ def test_ui_exp_create_build_command():
     assert cmd is None and err
 
 
+def test_ui_note_build_command_runs_vmn_exp():
+    """The note action runs the experiment command, which only vmn-exp has."""
+    from vmn_exp.ui.jobs import build_command
+
+    cmd, err = build_command(
+        "note", "my_app", {"verstr": "0.0.1-dev.abc.def", "note": "hi"}
+    )
+    assert err is None
+    assert cmd == [
+        "vmn-exp",
+        "experiment",
+        "add",
+        "my_app",
+        "-v",
+        "0.0.1-dev.abc.def",
+        "--note",
+        "hi",
+    ]
+
+
 def test_ui_exp_add_build_command():
     """exp_add appends metrics (and/or a note) to an existing experiment."""
     from vmn_exp.ui.jobs import build_command

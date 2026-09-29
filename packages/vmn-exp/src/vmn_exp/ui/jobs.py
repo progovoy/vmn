@@ -142,7 +142,7 @@ def build_command(action, app_name, body):
         if not verstr or note is None:
             return None, "verstr and note are required"
         return [
-            "vmn",
+            "vmn-exp",
             "experiment",
             "add",
             app_name,
