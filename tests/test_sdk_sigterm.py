@@ -48,7 +48,9 @@ def _wait_for_file(path, proc, timeout=60):
     while time.monotonic() < deadline:
         if os.path.exists(path):
             with open(path) as f:
-                return f.read().strip()
+                content = f.read().strip()
+            if content:  # the child creates the file before writing the id
+                return content
         if proc.poll() is not None:
             pytest.fail(f"child exited early: {proc.communicate()[0]}")
         time.sleep(0.05)

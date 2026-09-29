@@ -9,7 +9,9 @@ import subprocess
 import time
 
 from uiload import scenario
-from uiload.worker import EventLog, killed_command, prepare_snapshot_env, worker_command
+from uiload.worker import (
+    EventLog, is_stopped, killed_command, prepare_snapshot_env, worker_command,
+)
 
 SPAWN_BATCH = 50  # top-level jobs per tick: creation is serialized by the repo lock
 FROZEN_REAP_FACTOR = 3  # SIGKILL a never-resumed stuck process after 3 stale windows
@@ -117,7 +119,8 @@ class Spawner:
             group.stopped_t = self._stopped_at(group)
         if group.stopped_t is None:
             return
-        if group.behavior == "recovers" and now >= group.stopped_t + job["resume_after_sec"]:
+        if (group.behavior == "recovers" and now >= group.stopped_t + job["resume_after_sec"]
+                and is_stopped(group.proc.pid)):
             self.events.emit(group.job_id, "resumed", pid=group.proc.pid)
             group.proc.send_signal(signal.SIGCONT)
             group.stopped_t, group.resumed = None, True

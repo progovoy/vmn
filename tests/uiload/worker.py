@@ -103,6 +103,17 @@ def killed_command(job, root, app, run_dir, env, heartbeat_sec=1):
     ]
 
 
+def is_stopped(pid):
+    """Whether *pid* is stopped. A "stopping" job emits its event *before* it
+    SIGSTOPs itself, and a SIGCONT that lands first is lost for good."""
+    import psutil
+
+    try:
+        return psutil.Process(pid).status() == psutil.STATUS_STOPPED
+    except psutil.Error:
+        return False
+
+
 # -- events and metrics --------------------------------------------------------
 
 

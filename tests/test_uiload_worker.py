@@ -180,6 +180,7 @@ def test_recovers_after_sigcont(launched):
                 and e["job_id"] == "live-000006"][0]
     assert stopping["resume_after_sec"] == 0.5
     time.sleep(0.5)
+    _wait_for(lambda: worker.is_stopped(stopping["pid"]))
     os.kill(stopping["pid"], signal.SIGCONT)
     _wait_for(_status_is(root, "live-000006", "succeeded"))
     assert _events_of(run_dir, "live-000006") == ["started", "stopping", "finished"]
