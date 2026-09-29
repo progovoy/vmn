@@ -351,6 +351,10 @@ def handle_experiment(vmn_ctx):
         return experiment_export(vcs, params, storage, args)
     elif action == "prune":
         return experiment_prune(vcs, params, storage, args)
+    elif action == "importance":
+        from vmn_exp.cli.importance import experiment_importance
+
+        return experiment_importance(storage, _app_name(vcs, args), args)
     elif action == "watch":
         from vmn_exp.cli.watch import experiment_watch
 
