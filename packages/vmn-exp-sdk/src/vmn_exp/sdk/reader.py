@@ -37,6 +37,8 @@ from vmn_exp.core.log import (
     sort_by_metric,
 )
 from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.importance import param_importance as _param_importance
+from vmn_exp.core.importance import require_metric
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import readable, record_format_version
 from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
@@ -180,6 +182,24 @@ def list_runs(
     if last:
         rows = rows[-int(last) :]
     return sort_by_metric(rows, _metrics_schema(root_path, app_name), sort=sort)
+
+
+def param_importance(
+    app_name=None, metric=None, *, storage=None, query=None, status=None,
+    include_archived=False,
+):
+    """Which params drive *metric*: ``[{param, importance, correlation,
+    spearman, kind, n}]`` over the runs :func:`list_runs` would return for
+    the same *query*/*status*, most important first (see
+    :mod:`vmn_exp.core.importance`).
+
+    Raises ValueError when no run carries *metric*, ``QueryError`` on a bad
+    *query*.
+    """
+    app_name, storage, _ = _resolve(app_name, storage)
+    rows = filter_archived(_all_rows(app_name, storage), include_archived)
+    require_metric(rows, metric)
+    return _param_importance(filter_rows(filter_by_status(rows, status), query), metric)
 
 
 def _subtree_row(app_name, storage, verstr, snapshot):
