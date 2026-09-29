@@ -1,21 +1,15 @@
-/** The "sweep" section of a sweep's outer run: the spec, its trials (the
- *  run's inner jobs) and the best one so far. */
+/** The "sweep" section of a sweep's outer run: the spec, its trials and the
+ *  best one so far — all from the server's sweep endpoint, so the page and
+ *  `vmn-exp sweep status` agree. */
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api";
+import { fetchSweep, type SweepSpec, type SweepView } from "../apiSweep";
 import { rowsPrefix } from "../queries";
-import type { ExperimentRow } from "../types";
-import { fmtParam, fmtVal, paramValue } from "../util";
-import { finiteOrNull } from "../util/stats";
+import { fmtParam, fmtVal } from "../util";
 import StatusPill from "./StatusPill";
+import type { RunState } from "../types";
 
-export interface SweepSpec {
-  method: string;
-  metric: { name: string; goal: "min" | "max" };
-  parameters: Record<string, Record<string, unknown>>;
-  run_cap?: number;
-  early_terminate?: { type: string; min_iter?: number };
-}
+export type { SweepSpec };
 
 /** The sweep spec a run's metadata carries, or null for a plain run. */
 export function sweepSpecOf(metadata: Record<string, unknown>): SweepSpec | null {
@@ -25,24 +19,6 @@ export function sweepSpecOf(metadata: Record<string, unknown>): SweepSpec | null
 
 /** The leaderboard filter that selects a sweep's trials. */
 export const sweepQuery = (verstr: string) => `parent = "${verstr}"`;
-
-const trialNo = (r: ExperimentRow) => Number(r.tags?.sweep_trial ?? -1);
-const attemptNo = (r: ExperimentRow) => Number(r.tags?.sweep_attempt ?? 0);
-
-const metricOf = (spec: SweepSpec, r: ExperimentRow) => finiteOrNull(r.metrics?.[spec.metric.name]);
-
-export function bestTrial(spec: SweepSpec, rows: ExperimentRow[]): ExperimentRow | null {
-  let best: ExperimentRow | null = null;
-  let bestVal: number | null = null;
-  for (const r of rows) {
-    const v = metricOf(spec, r);
-    if (v !== null && (bestVal === null || (spec.metric.goal === "min" ? v < bestVal : v > bestVal))) {
-      best = r;
-      bestVal = v;
-    }
-  }
-  return best;
-}
 
 function describeParam(p: Record<string, unknown>): string {
   if ("value" in p) return String(p.value);
@@ -73,12 +49,11 @@ function SpecSummary({ spec }: { spec: SweepSpec }) {
   );
 }
 
-export function SweepCard({ spec, trials, boardUrl, runUrl }: {
-  spec: SweepSpec; verstr: string; trials: ExperimentRow[];
-  boardUrl: string; runUrl: (v: string) => string;
+export function SweepCard({ view, boardUrl, runUrl }: {
+  view: SweepView; boardUrl: string; runUrl: (v: string) => string;
 }) {
-  const ordered = [...trials].sort((a, b) => trialNo(a) - trialNo(b) || attemptNo(a) - attemptNo(b));
-  const best = bestTrial(spec, ordered);
+  const { spec, trials } = view;
+  const best = view.summary.best;
   const params = Object.keys(spec.parameters);
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -87,10 +62,10 @@ export function SweepCard({ spec, trials, boardUrl, runUrl }: {
       {best && (
         <div data-testid="sweep-best" style={{ marginTop: 12 }}>
           best trial: <Link className="mono" to={runUrl(best.verstr)}>{best.name || best.verstr}</Link>
-          {" "}{spec.metric.name} = <span className="metric best">{fmtVal(metricOf(spec, best))}</span>
+          {" "}{spec.metric.name} = <span className="metric best">{fmtVal(best.value)}</span>
         </div>
       )}
-      {ordered.length === 0 ? (
+      {trials.length === 0 ? (
         <div className="empty" style={{ padding: 12 }}>No trials yet — start one with vmn-exp sweep agent.</div>
       ) : (
         <table style={{ marginTop: 12 }}>
@@ -102,19 +77,23 @@ export function SweepCard({ spec, trials, boardUrl, runUrl }: {
             </tr>
           </thead>
           <tbody>
-            {ordered.map((r) => (
-              <tr key={r.verstr} data-testid="sweep-trial" className={r === best ? "best" : undefined}>
-                <td>{trialNo(r)}</td>
-                <td><Link className="mono" to={runUrl(r.verstr)}>{r.name || r.verstr}</Link></td>
+            {trials.map((t) => (
+              <tr key={t.verstr} data-testid="sweep-trial"
+                className={t.verstr === best?.verstr ? "best" : undefined}>
+                <td>{t.trial}</td>
+                <td><Link className="mono" to={runUrl(t.verstr)}>{t.name || t.verstr}</Link></td>
                 <td>
-                  {r.status && <StatusPill status={r.status} />}
-                  {r.tags?.stopped_early === "true" && <span className="badge">stopped early</span>}
+                  {t.status && <StatusPill status={t.status as RunState} />}
+                  {t.stopped_early && <span className="badge">stopped early</span>}
                 </td>
-                {params.map((p) => {
-                  const v = paramValue(r, p);
-                  return <td key={p} className="mono">{v === undefined ? "–" : fmtParam(v)}</td>;
-                })}
-                <td className="mono">{fmtVal(metricOf(spec, r))}</td>
+                {params.map((p) => (
+                  <td key={p} className="mono">{p in t.params ? fmtParam(t.params[p]) : "–"}</td>
+                ))}
+                <td className="mono">
+                  {t.metric_source !== t.verstr && t.value !== null ? (
+                    <Link to={runUrl(t.metric_source)} title={`from ${t.metric_source}`}>{fmtVal(t.value)}</Link>
+                  ) : fmtVal(t.value)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -127,21 +106,15 @@ export function SweepCard({ spec, trials, boardUrl, runUrl }: {
   );
 }
 
-/** Most trials a sweep section lists (the list endpoint's page cap). */
-const MAX_TRIALS = 1000;
-
-export default function SweepSection({ ws, app, verstr, spec, runUrl }: {
-  ws: string; app: string; verstr: string; spec: SweepSpec; runUrl: (v: string) => string;
+export default function SweepSection({ ws, app, verstr, runUrl }: {
+  ws: string; app: string; verstr: string; runUrl: (v: string) => string;
 }) {
-  const query = sweepQuery(verstr);
-  const trials = useQuery({
+  const sweep = useQuery({
     // Under the rows prefix, so whatever refreshes the app's lists refreshes this.
     queryKey: [...rowsPrefix(ws, app), "sweep", verstr],
-    queryFn: () => api.experimentsPaged(ws, app, { query, limit: MAX_TRIALS }),
+    queryFn: () => fetchSweep(ws, app, verstr),
   });
-  const boardUrl = `/ws/${ws}/app/${app}?q=${encodeURIComponent(query)}`;
-  return (
-    <SweepCard spec={spec} verstr={verstr} trials={trials.data?.rows ?? []}
-      boardUrl={boardUrl} runUrl={runUrl} />
-  );
+  if (!sweep.data) return null;
+  const boardUrl = `/ws/${ws}/app/${app}?q=${encodeURIComponent(sweepQuery(verstr))}`;
+  return <SweepCard view={sweep.data} boardUrl={boardUrl} runUrl={runUrl} />;
 }

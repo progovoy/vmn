@@ -229,7 +229,7 @@ statuses are derived.
 
 Full OpenAPI/Swagger docs at `/api/docs`. Everything is scoped by workspace:
 `/api/v1/workspaces`, `.../apps`, `.../apps/{app}/experiments`,
-`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments-columns`, `.../experiments-importance`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
+`.../experiments/{verstr}`, `.../experiments/{verstr}/lineage`, `.../experiments/{verstr}/sweep` (see docs/sweeps.md), `.../experiments-columns`, `.../experiments-importance`, `.../experiments-facets`, `.../series`, `.../experiments-diff`, `.../versions`, `.../tree`,
 `.../tree/root`, `.../deps`, and `/api/v1/jobs/{id}`.
 
 ### Experiment status fields

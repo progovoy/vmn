@@ -146,7 +146,7 @@ export default function Run() {
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
       {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}
       {sweepSpec && (
-        <SweepSection ws={ws} app={app} verstr={summary.verstr} spec={sweepSpec} runUrl={runUrl} />
+        <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl} />
       )}
 
       <div className="card-grid-2" style={{ marginBottom: 16 }}>

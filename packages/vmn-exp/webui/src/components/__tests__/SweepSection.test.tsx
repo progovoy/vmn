@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { ExperimentRow } from "../../types";
-import { SweepCard, bestTrial, sweepSpecOf, type SweepSpec } from "../SweepSection";
+import type { SweepSpec, SweepTrial, SweepView } from "../../apiSweep";
+import { SweepCard, sweepSpecOf } from "../SweepSection";
 
 const spec: SweepSpec = {
   method: "random",
@@ -16,33 +16,39 @@ const spec: SweepSpec = {
   early_terminate: { type: "median", min_iter: 3 },
 };
 
-function row(trial: number, status: string, loss: number | null, extra: Partial<ExperimentRow> = {}): ExperimentRow {
+function trial(n: number, status: string, value: number | null, extra: Partial<SweepTrial> = {}): SweepTrial {
+  const verstr = `0.0.1-dev.aaa.bbb.r${n + 2}`;
   return {
-    idx: trial + 2,
-    verstr: `0.0.1-dev.aaa.bbb.r${trial + 2}`,
-    code_verstr: "0.0.1-dev.aaa.bbb",
-    timestamp: null, note: null, branch: null, base_version: null, user_meta: null,
-    name: `sw-t${trial}`,
-    status: status as ExperimentRow["status"],
-    params: { lr: 0.001 * (trial + 1), bs: 16, opt: "adam" },
-    metrics: loss === null ? {} : { loss },
-    tags: { sweep_trial: String(trial), sweep_attempt: "0" },
-    ...extra,
+    verstr, name: `sw-t${n}`, trial: n, attempt: 0, status,
+    params: { lr: 0.001 * (n + 1), bs: 16, opt: "adam" },
+    value, metric_source: `${verstr}.nested`, stopped_early: false, ...extra,
   };
 }
 
 const trials = [
-  row(1, "succeeded", 0.4),
-  row(0, "succeeded", 0.2),
-  row(2, "running", 0.9, { tags: { sweep_trial: "2", sweep_attempt: "0", stopped_early: "true" } }),
-  row(3, "failed", null),
+  trial(0, "succeeded", 0.2),
+  trial(1, "succeeded", 0.4),
+  trial(2, "succeeded", 0.9, { stopped_early: true }),
+  trial(3, "failed", null),
 ];
 
-function renderCard(rows = trials, s = spec) {
+function view(t: SweepTrial[] = trials): SweepView {
+  const best = t.find((x) => x.value === 0.2);
+  return {
+    sweep: "0.0.1-dev.aaa.bbb",
+    spec,
+    trials: t,
+    summary: {
+      counts: { succeeded: 3, failed: 1 }, stopped_early: 1, trials: t.length,
+      best: best ? { verstr: best.verstr, name: best.name, trial: best.trial, value: 0.2, params: best.params } : null,
+    },
+  };
+}
+
+function renderCard(v: SweepView = view()) {
   return render(
     <MemoryRouter>
-      <SweepCard spec={s} verstr="0.0.1-dev.aaa.bbb" trials={rows}
-        boardUrl="/ws/w/app/my_app?q=x" runUrl={(v) => `/run/${v}`} />
+      <SweepCard view={v} boardUrl="/ws/w/app/my_app?q=x" runUrl={(r) => `/run/${r}`} />
     </MemoryRouter>,
   );
 }
@@ -55,39 +61,31 @@ describe("sweepSpecOf", () => {
   });
 });
 
-describe("bestTrial", () => {
-  it("follows the metric goal and skips trials without the metric", () => {
-    expect(bestTrial(spec, trials)?.name).toBe("sw-t0");
-    const max = { ...spec, metric: { name: "loss", goal: "max" as const } };
-    expect(bestTrial(max, trials)?.name).toBe("sw-t2");
-    expect(bestTrial(spec, [row(0, "running", null)])).toBeNull();
-  });
-});
-
 describe("SweepCard", () => {
   it("summarizes the spec", () => {
     renderCard();
     const head = screen.getByTestId("sweep-spec");
-    expect(head.textContent).toContain("random");
-    expect(head.textContent).toContain("loss");
-    expect(head.textContent).toContain("min");
-    expect(head.textContent).toContain("run cap 20");
-    expect(head.textContent).toContain("median");
-    expect(head.textContent).toContain("lr");
-    expect(head.textContent).toContain("log_uniform");
-    expect(head.textContent).toContain("16, 32");
+    for (const text of ["random", "loss", "min", "run cap 20", "median", "lr", "log_uniform", "16, 32"]) {
+      expect(head.textContent).toContain(text);
+    }
   });
 
-  it("lists trials in trial order with params and the target metric", () => {
+  it("lists the server's trials with params and the attributed metric", () => {
     renderCard();
     const rows = screen.getAllByTestId("sweep-trial");
     expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["0", "1", "2", "3"]);
     expect(rows[1].textContent).toContain("0.4");
     expect(rows[1].textContent).toContain("0.002");
-    expect(within(rows[0]).getByRole("link").getAttribute("href")).toBe(`/run/${trials[1].verstr}`);
+    expect(within(rows[0]).getAllByRole("link")[0].getAttribute("href")).toBe(`/run/${trials[0].verstr}`);
   });
 
-  it("highlights the best trial", () => {
+  it("links a metric that came from a nested run to that run", () => {
+    renderCard();
+    const cell = within(screen.getAllByTestId("sweep-trial")[0]).getByTitle(/from/i);
+    expect(cell.closest("a")?.getAttribute("href")).toBe(`/run/${trials[0].metric_source}`);
+  });
+
+  it("highlights the server's best trial", () => {
     renderCard();
     const rows = screen.getAllByTestId("sweep-trial");
     expect(rows[0].className).toContain("best");
@@ -108,7 +106,7 @@ describe("SweepCard", () => {
   });
 
   it("says so when no trial ran yet", () => {
-    renderCard([]);
+    renderCard(view([]));
     expect(screen.getByText(/no trials yet/i)).toBeInTheDocument();
   });
 });

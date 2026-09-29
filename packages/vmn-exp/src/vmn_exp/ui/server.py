@@ -19,6 +19,7 @@ from vmn_exp.ui import (
     routes_media,
     routes_models,
     routes_series,
+    routes_sweep,
     routes_tree,
 )
 from vmn_exp.ui.experiment_source import ExperimentSource
@@ -435,6 +436,7 @@ def create_app(
     routes_media.register(app, API_PREFIX, _series_storage)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs)
+    routes_sweep.register(app, API_PREFIX, _lineage_inputs)
     routes_models.register(
         app, API_PREFIX,
         lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),

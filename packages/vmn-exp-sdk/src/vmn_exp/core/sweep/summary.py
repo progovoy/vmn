@@ -25,6 +25,12 @@ def trial_rows(storage, app_name, sweep_verstr, spec):
     """Every run of the sweep (retries included), status-annotated, with the
     target metric attributed (see :func:`attribute_metric`)."""
     rows, run_states, observed = experiment_index.indexed_status_rows(storage, app_name)
+    return sweep_trials(spec, sweep_verstr, rows, run_states, observed)
+
+
+def sweep_trials(spec, sweep_verstr, rows, run_states, observed=None):
+    """:func:`trial_rows` over rows the caller already holds (``vmn-exp ui``
+    answers from its own index snapshot)."""
     annotated = annotate_rows(rows, run_states, observed)
     trials = [r for r in annotated if r.get("parent") == sweep_verstr]
     return attribute_metric(spec, trials, annotated)

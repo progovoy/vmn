@@ -178,9 +178,14 @@ trial), `trials`, `claimed`, `unstarted`, `stopped_early`, `run_cap`, `metric`
 and `best` (`verstr`, `name`, `trial`, `value`, `params`).
 
 In the UI, the sweep run's page has a **sweep** section: the spec, the trial
-table (status, params, metric; the best trial highlighted) and a link to the
-leaderboard filtered to `parent = "<sweep verstr>"`, where the parallel
-coordinates plot compares the trials.
+table (status, params, metric — linked to the nested run it came from; the best
+trial highlighted) and a link to the leaderboard filtered to
+`parent = "<sweep verstr>"`, where the parallel coordinates plot compares the
+trials. It reads `GET .../experiments/{verstr}/sweep` (ETag/304), which answers
+`{sweep, spec, summary, trials}` — `summary` is `status --json`'s, and each trial
+carries `trial`, `attempt`, `status`, `params`, `value`, `metric_source` and
+`stopped_early`, attributed exactly as the CLI does. A run that is not a sweep
+is a 404.
 
 ## Agent flags
 
