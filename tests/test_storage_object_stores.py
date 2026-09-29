@@ -152,6 +152,22 @@ def test_cache_identities_differ_per_scheme(store):
     assert store.is_remote()
 
 
+def test_alert_markers_round_trip_once_per_transition(store):
+    from types import SimpleNamespace
+
+    from vmn_exp.core.alerts.transitions import ALERTS_FILE, alert_transition
+
+    store.create_exclusive(APP, V1, _meta(V1), {})
+    sent = []
+    alerter = SimpleNamespace(send=lambda alert: sent.append(alert) or True)
+    state = {"state": "finished", "exit_code": 1, "finished_at": "2026-01-01T00:00:00Z"}
+
+    assert alert_transition(store, APP, V1, state, "failed", alerter)
+    assert not alert_transition(store, APP, V1, state, "failed", alerter)
+    assert len(sent) == 1
+    assert b"failed@" in store.load_file(APP, V1, ALERTS_FILE)
+
+
 def test_gcs_factory_builds_from_the_uri(monkeypatch):
     from vmn_exp.storage.registry import open_store
 
