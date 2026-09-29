@@ -2,12 +2,12 @@
 """``GET .../apps/{app}/experiments/{verstr}/sweep``: the sweep's spec, status
 summary and trials, their target metric attributed as ``vmn-exp sweep status``
 does (a trial's own, else its nested runs'). Rows come from the app's index
-snapshot; the spec from the sweep run's metadata."""
+snapshot — the sweep's subtree only; the spec from the sweep run's metadata."""
 from fastapi import HTTPException, Request
 
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, parse_spec
-from vmn_exp.core.sweep.summary import sweep_trials
+from vmn_exp.core.sweep.summary import snapshot_trials
 from vmn_exp.core.sweep.view import sweep_view
 from vmn_exp.ui.responses import json_response
 from vmn_exp.ui.security import safe_segment
@@ -33,10 +33,6 @@ def register(app, prefix, sweep_inputs):
         spec = _spec_of(storage, app_name, verstr)
         if spec is None:
             raise HTTPException(404, f"{verstr} is not a sweep of {app_name}")
-        snap = snapshot_for(app_name)
-        trials = sweep_trials(
-            spec, verstr, [dict(r) for r in snap.rows],
-            snap.run_states, snap.run_state_observed_at,
-        )
+        trials = snapshot_trials(spec, verstr, snapshot_for(app_name))
         payload = sweep_view(spec, verstr, trials, claimed_trials(storage, app_name, verstr))
         return json_response(payload, request=request)
