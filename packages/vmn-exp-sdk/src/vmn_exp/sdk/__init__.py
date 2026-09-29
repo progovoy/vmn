@@ -48,6 +48,7 @@ from vmn_exp.sdk.models import (  # noqa: E402
 )
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
 from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
+from vmn_exp.sdk.sweep import sweep_params  # noqa: E402
 
 __all__ = [
     "NoOpRun",
@@ -63,4 +64,5 @@ __all__ = [
     "remove_alias",
     "set_alias",
     "start_run",
+    "sweep_params",
 ]

@@ -205,3 +205,56 @@ def _log_best(outer_run, study) -> None:
             outer_run.log_params({f"best_{k}": v for k, v in best.params.items()})
     except Exception as exc:
         _LOGGER.debug("vmn: could not log best trial: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Sweep suggestions (``vmn-exp sweep`` with ``method: bayes``)
+# ---------------------------------------------------------------------------
+
+def suggest_params(parameters, goal, history, seed=None) -> dict:
+    """The next params TPE suggests for a sweep's normalized *parameters*.
+
+    *history* is ``[(params, value)]`` of the finished trials. The study lives
+    in memory only and is rebuilt per suggestion: storage stays the one source
+    of truth, so any agent anywhere can suggest without a shared Optuna DB.
+    """
+    from vmn_exp.core.sweep.spec import SpecError
+
+    try:
+        import optuna
+    except ImportError:
+        raise SpecError("bayes sweeps need optuna: pip install optuna")
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    distributions = {
+        name: _optuna_distribution(optuna, name, param, SpecError)
+        for name, param in parameters.items()
+    }
+    sampler = optuna.samplers.TPESampler(seed=None if seed is None else seed % 2**32)
+    study = optuna.create_study(
+        direction="minimize" if goal == "min" else "maximize", sampler=sampler
+    )
+    for params, value in history:
+        try:
+            study.add_trial(optuna.trial.create_trial(
+                params={k: params[k] for k in distributions if k in params},
+                distributions=distributions,
+                value=value,
+            ))
+        except ValueError:
+            _LOGGER.debug("vmn: skipping a trial outside the search space: %s", params)
+    return dict(study.ask(distributions).params)
+
+
+def _optuna_distribution(optuna, name, param, error):
+    dists = optuna.distributions
+    if "value" in param:
+        return dists.CategoricalDistribution([param["value"]])
+    if "values" in param:
+        return dists.CategoricalDistribution(list(param["values"]))
+    kind = param["distribution"]
+    if kind == "int_uniform":
+        return dists.IntDistribution(param["min"], param["max"])
+    if kind in ("uniform", "log_uniform"):
+        return dists.FloatDistribution(param["min"], param["max"], log=kind == "log_uniform")
+    raise error(f"bayes sweeps cannot sample parameter {name!r}: {kind} is not supported")
