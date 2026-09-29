@@ -7,6 +7,7 @@ rows nor bumps the generation (which would churn every ETag).
 import json
 import os
 
+import pytest
 import yaml
 from helpers import _storage
 
@@ -90,7 +91,8 @@ def test_snapshot_rows_leave_metric_summary_to_the_row_copies(app_layout):
     assert all("metric_summary" not in row for row in snap.rows)
     rows = {r["verstr"]: r for r in indexed_status_rows(storage, app)[0]}
     assert rows["0.0.1"]["metric_summary"] == {
-        "loss": {"last": 0.9, "min": 0.2, "max": 1.0}}
+        "loss": {"last": 0.9, "min": 0.2, "max": 1.0,
+                 "first": 1.0, "mean": pytest.approx(0.7)}}
     assert rows["0.0.2"]["metric_summary"] == {}
     assert snap.metric_summary("0.0.1") == rows["0.0.1"]["metric_summary"]
 
