@@ -50,16 +50,20 @@ def metric_definitions(log, into=None):
     return defs
 
 
-def _lookup(metric, declarations):
-    """The step metric *declarations* give *metric*: exact name, else the
-    latest-declared matching glob."""
-    exact = (declarations.get(metric) or {}).get("step_metric")
+def _step_of(declaration):
+    return (declaration or {}).get("step_metric")
+
+
+def lookup(metric, declarations, pick=_step_of):
+    """What *pick* reads from the declaration *declarations* give *metric*:
+    the exact name's, else the latest-declared matching glob's."""
+    exact = pick(declarations.get(metric))
     if exact:
         return exact
     for pattern in reversed(list(declarations)):
-        step = (declarations[pattern] or {}).get("step_metric")
-        if step and fnmatchcase(metric, pattern):
-            return step
+        found = pick(declarations[pattern])
+        if found and fnmatchcase(metric, pattern):
+            return found
     return None
 
 
@@ -67,7 +71,7 @@ def declared_step_metric(metric, definitions=None, schema=None):
     """The x metric declared for *metric* (run definitions, then the conf
     schema), or None. A metric is never its own x."""
     for declarations in (definitions or {}, schema or {}):
-        step = _lookup(metric, declarations)
+        step = lookup(metric, declarations)
         if step:
             return None if step == metric else step
     return None

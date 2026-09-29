@@ -209,7 +209,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
 | `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
-| `run.define_metric(name, step_metric=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) |
+| `run.define_metric(name, step_metric=None, summary=None, goal=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — and which of its values the run ranks on — see [Metric goals and summaries](#metric-goals-and-summaries) |
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
@@ -279,6 +279,38 @@ for step, batch in enumerate(loader):
   `vmn_exp.core.log.metric_series(log, x="epoch")` does the same on a raw log.
 - The UI picks the declared x metric by default and lets you choose any
   metric; see [ui.md](ui.md#custom-x-axis).
+
+### Metric goals and summaries
+
+A metric logged every epoch folds to one number per run: by default the last
+one. `run.define_metric()` picks another, like W&B's `define_metric(summary=)`:
+
+```python
+with start_run("my_app") as run:
+    run.define_metric("val_loss", goal="min")        # rank on the best (lowest) epoch
+    run.define_metric("lr", summary="last")
+    for epoch in range(epochs):
+        run.log_metrics({"val_loss": evaluate(), "lr": sched.lr}, step=epoch)
+```
+
+- `summary` is `"min"`, `"max"` or `"last"`; without it, `goal="min"` means
+  `min` and `goal="max"` means `max`. Anything else raises `ValueError`.
+- It is the same `define_metric` call (and log entry) that declares a
+  [`step_metric`](#custom-x-axis-step_metric):
+  `{"type": "define_metric", "name", "summary"?, "goal"?, "step_metric"?}`.
+  So it travels with the run — to S3, to other readers, to `vmn-exp ui` — and
+  needs no conf.yml. Entries fold per field, last write wins: declaring a
+  `step_metric` later keeps an earlier `summary`.
+- `name` may be a glob (`run.define_metric("val_*", goal="min")`); an exact
+  name beats a glob. A run's declaration beats the app's
+  [conf.yml schema](experiments.md#best-value-summaries-summary) (globs work
+  there too), which beats `last`.
+- `row["metrics"][name]` is then that value everywhere (`list_runs(sort=,
+  query=)`, `vmn-exp list --sort`, `prune --query`, the leaderboard), and
+  `row["metric_summary"][name]` holds `{"last", "min", "max"}` for every metric
+  logged more than once. Non-finite values are never a min or max.
+- The run's `goal` sets which value it ranks on; the leaderboard's sort
+  *direction* still comes from conf.yml's `goal`.
 
 ### Tags
 

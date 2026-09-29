@@ -740,7 +740,8 @@ bad `--query` exits 1. Read-only: no repo lock. From Python:
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, latest metrics, and the log timeline — the newest 50 entries, with a
+lines, metrics (each at its [summary value](#best-value-summaries-summary),
+with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
 ```sh
@@ -951,6 +952,55 @@ experiment:
   [sdk.md](sdk.md#custom-x-axis-step_metric).
 - Schema columns also fix the column order in `list`/`compare`; any extra
   metrics you logged appear after them, alphabetically.
+
+### Best-value summaries (`summary`)
+
+A run that logs a metric many times (a loss per epoch) folds it into one
+number per run. Which one is the metric's **summary policy**:
+
+| `summary` | The run's `metrics.<name>` is |
+|---|---|
+| `last` | the latest value logged |
+| `min` | the smallest finite value logged |
+| `max` | the largest finite value logged |
+
+Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
+`goal: max` → `max`); a metric with neither is `last`. So with
+`loss: {goal: min}` an overfitting run — loss 1.0, 0.2, then back up to 0.9 —
+ranks on 0.2, its best epoch, not on 0.9:
+
+```yaml
+experiment:
+  metrics:
+    loss:     {goal: min}                  # ranks on the minimum
+    val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
+    lr:       {summary: last}
+```
+
+The summary value is what everything ranks and filters on: `list --sort`,
+`--query metrics.loss < 0.3`, `prune --query`, `compare`, `diff`, the UI
+leaderboard, and `list_runs()` rows. Every metric logged more than once also
+carries its full `metric_summary` (`{"last", "min", "max"}`) in `list --json`,
+`show --json`, `list_runs()`/`get_run()` rows and the UI run detail; `show`
+prints them where they differ:
+
+```
+  Metrics:
+    loss: 0.2 (last 0.9, min 0.2, max 1)
+```
+
+- **Precedence**: a run's own definition — [`run.define_metric()`](sdk.md#metric-goals-and-summaries),
+  recorded in its log — beats conf.yml, which beats the `last` default. In
+  each, an exact metric name beats a glob key (`"val_*": {goal: min}`).
+- **Live**: conf.yml's policies apply when a run is read, so editing them
+  re-ranks existing runs too (the index re-derives rows from its folded state,
+  no log is re-read). An S3 workspace in `vmn-exp ui` has no conf.yml, so only
+  the runs' own definitions apply there.
+- **NaN/inf** stay in the log and may be a metric's `last`, but never its
+  `min`/`max`. A `min`/`max` metric with no finite value at all keeps its last
+  (non-finite) value and sorts last.
+- Numeric params folded into `metrics` are single values: `min`/`max` of a
+  param is the param itself.
 
 ---
 

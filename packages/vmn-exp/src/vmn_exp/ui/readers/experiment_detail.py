@@ -186,7 +186,9 @@ def experiment_detail(
     *resolve* resolves the ref before storage is asked (see :func:`_resolve`);
     *read_observed_at* is the run-state store write time loader. *x* joins
     the series on another metric (see :func:`thinned_series`);
-    ``step_metrics`` lists what the run and the metrics *schema* declare.
+    ``step_metrics`` lists what the run and the metrics *schema* declare;
+    ``metrics`` (each metric's summary value) and ``metric_summary`` follow
+    the run's and the *schema*'s summary policies.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -197,13 +199,15 @@ def experiment_detail(
     series, series_total = (
         thinned_series(snapshot, keys, max_points, x=x) if include_series else ({}, {})
     )
+    metrics, metric_summary = snapshot.summarized_metrics(schema)
     return {
         "metadata": metadata,
         "log": snapshot.log() if include_log else tail,
         "log_tail": tail,
         "log_total": snapshot.total,
         "params": snapshot.params,
-        "metrics": snapshot.metrics,
+        "metrics": metrics,
+        "metric_summary": metric_summary,
         "series": series,
         "series_total": series_total,
         "step_metrics": declared_step_metrics(snapshot, schema),

@@ -19,7 +19,17 @@ export interface AppConfig {
 /** Per-metric leaderboard config from conf.yml (experiment.metrics). */
 export interface MetricSpec {
   goal?: "min" | "max";
+  /** Which value the run ranks on; defaults from `goal` (else `last`). */
+  summary?: "min" | "max" | "last";
   primary?: boolean;
+}
+
+/** A metric logged more than once: its last value and finite min/max
+ *  (`null` when it never had a finite value). */
+export interface MetricSummary {
+  last: number | null;
+  min: number | null;
+  max: number | null;
 }
 
 export type MetricsSchema = Record<string, MetricSpec>;
@@ -203,7 +213,10 @@ export interface ExperimentDetail {
   step_metrics?: Record<string, string>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
+  /** Each metric's summary value (best, per its policy — see MetricSpec). */
   metrics: Record<string, number | string | null>;
+  /** last/min/max of every metric logged more than once. */
+  metric_summary?: Record<string, MetricSummary>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   /** Names may be nested paths (`plots/loss.png`). */
