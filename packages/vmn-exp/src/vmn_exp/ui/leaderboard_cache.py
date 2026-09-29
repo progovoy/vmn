@@ -345,7 +345,8 @@ class LeaderboardCache:
         and params — so a new generation or status bucket that changed none
         of them (a live run still without the metric) costs a filter, not a
         forest. Raises ``ValueError`` when no visible run carries *metric*,
-        ``QueryError`` on a bad *query*. *schema* never changes the answer.
+        ``QueryError`` on a bad *query*. Keyed by *schema* too: the rows'
+        metric values follow it.
         """
         base, bucket = self._base(snapshot)
         rows = base.tail(bucket, 0, status, query, archived)
@@ -353,7 +354,7 @@ class LeaderboardCache:
             (row["verstr"], row["metrics"].get(metric), row.get("params"))
             for row in rows if metric in row["metrics"]
         )
-        key = (metric, tuple((v, m, id(p)) for v, m, p in scored))
+        key = (_schema_key(schema), metric, tuple((v, m, id(p)) for v, m, p in scored))
         universe = lambda: base.tail(bucket, 0, None, None, archived)  # noqa: E731
         # The value keeps the params dicts alive, so their ids stay unique.
         return self._importance.get(

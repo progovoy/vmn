@@ -20,11 +20,11 @@ but never its min or max. A ``min``/``max`` policy on a metric without any
 finite value falls back to the last value, which then sorts last.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
-from vmn_exp.core.step_metric import _finite, create_define_metric_entry, lookup
+from vmn_exp.core.step_metric import lookup
+from vmn_exp.core.values import is_finite_number
 
 SUMMARIES = ("min", "max", "last")
 GOALS = ("min", "max")
-POLICY_FIELDS = ("summary", "goal")
 
 
 def summary_fields(summary=None, goal=None):
@@ -36,24 +36,6 @@ def summary_fields(summary=None, goal=None):
         raise ValueError(f"goal must be one of {GOALS}, got {goal!r}")
     fields = {"summary": summary, "goal": goal}
     return {k: v for k, v in fields.items() if v is not None}
-
-
-def define_metric_entry(name, summary=None, goal=None, **fields):
-    """A ``define_metric`` log entry declaring *name*'s summary and/or goal
-    (plus any other declaration *fields*, e.g. ``step_metric``)."""
-    if summary is None and goal is None:
-        raise ValueError("define_metric needs a summary and/or a goal")
-    return create_define_metric_entry(name, **summary_fields(summary, goal), **fields)
-
-
-def entry_definition(entry):
-    """``(name, {field: value})`` of the policy fields a ``define_metric``
-    entry sets, or None."""
-    name = entry.get("name")
-    if not isinstance(name, str) or not name:
-        return None
-    fields = {k: entry[k] for k in POLICY_FIELDS if entry.get(k) is not None}
-    return (name, fields) if fields else None
 
 
 def _policy_of(definition):
@@ -70,7 +52,7 @@ def _policy_of(definition):
 def _widen(bounds, value):
     """*bounds* widened by *value* — *bounds* itself when that changes nothing."""
     low, high = bounds
-    if not _finite(value) or (low is not None and low <= value <= high):
+    if not is_finite_number(value) or (low is not None and low <= value <= high):
         return bounds
     return (
         value if low is None or value < low else low,
@@ -112,14 +94,23 @@ def summarize(last_values, extrema, run_defs, schema):
         for name, seen in extrema.items()
         if _repeated(seen)
     }
-    if not run_defs and not schema:  # every metric is `last`
-        return last_values, summary
-    schema = schema or {}
-    metrics = {}
-    for name, last in last_values.items():
-        seen = extrema.get(name)
-        low, high = seen[:2] if _repeated(seen) else _widen((None, None), last)
-        policy = lookup(name, run_defs, _policy_of) or lookup(name, schema, _policy_of)
-        best = low if policy == "min" else high if policy == "max" else None
-        metrics[name] = last if best is None else best
-    return metrics, summary
+    return with_policies(last_values, summary, run_defs, schema), summary
+
+
+def with_policies(metrics, summary, run_defs, schema):
+    """*metrics* with each metric of *summary* at its policy's value — the
+    run's definitions first, then *schema*. Only a metric logged more than
+    once can differ from its last value, so the rest are left as they are;
+    *metrics* itself comes back when no value changes."""
+    if not summary or not (run_defs or schema):
+        return metrics
+    picked = {}
+    for name, seen in summary.items():
+        policy = lookup(name, run_defs or {}, _policy_of) or lookup(
+            name, schema or {}, _policy_of
+        )
+        best = seen[policy] if policy in GOALS else None
+        value = seen["last"] if best is None else best
+        if value is not metrics.get(name):
+            picked[name] = value
+    return {**metrics, **picked} if picked else metrics

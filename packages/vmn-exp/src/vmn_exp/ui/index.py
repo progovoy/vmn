@@ -33,8 +33,8 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None):
     the background and this returns at once; the default
     :class:`~vmn_exp.ui.refresher.InlineRefresher` refreshes it first,
     so a request sees every write before it. Falls back to a direct read when
-    the index fails. A *schema* other than None becomes the index's metrics
-    schema (see :meth:`ExperimentIndex.set_metric_schema`).
+    the index fails. Rows follow the metrics *schema* passed (see
+    :meth:`~vmn_exp.core.index_snapshot.IndexSnapshot.summarized`).
     """
     return _snapshot_of(
         lambda: experiment_index.shared_index(storage, app_name, cache_path),
@@ -50,9 +50,7 @@ def _snapshot_of(index_of, storage, app_name, refresher, schema=None):
         index = index_of()
         if refresher.full_sweep_sec is not None:
             index.full_sweep_sec = refresher.full_sweep_sec
-        if schema is not None:
-            index.set_metric_schema(schema)
-        return refresher.snapshot(index)
+        return refresher.snapshot(index).summarized(schema)
     except Exception:
         _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
         return experiment_index.direct_snapshot(storage, app_name, schema)

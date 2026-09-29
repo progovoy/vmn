@@ -22,10 +22,10 @@ from collections import Counter
 from vmn_exp.core.log import (
     DATE_SORTS,
     IDX_SORT,
-    _sortable,
     metric_sort_descending,
     primary_metric,
 )
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.tree import (
     children_by_parent,
     rollup_status,
@@ -179,7 +179,7 @@ def _ranked(value_of, position):
 def _metric_value(metric, descending):
     def value_of(row):
         value = row["metrics"].get(metric)
-        if not _sortable(value):
+        if not is_finite_number(value):
             return None
         return -value if descending else value
 

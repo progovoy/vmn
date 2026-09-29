@@ -5,7 +5,7 @@ A chart of every filtered run needs a few values per run, not whole rows, so
 ``.../experiments-columns`` answers ``{verstrs, idx, columns, total}`` with
 each column aligned to ``verstrs``.
 """
-from vmn_exp.core.log import _sortable
+from vmn_exp.core.values import is_finite_number
 
 COLUMNS_LIMIT = 20000
 MAX_COLUMNS_LIMIT = 50000
@@ -21,7 +21,7 @@ def clamp_columns_limit(limit):
 def _metric(name):
     def get(row):
         value = row["metrics"].get(name)
-        return value if _sortable(value) else None
+        return value if is_finite_number(value) else None
 
     return get
 

@@ -5,12 +5,13 @@ series is then keyed by that metric's value logged at the same step.
 """
 import pytest
 
+from vmn_exp.core.fold import fold_definitions, fold_log
 from vmn_exp.core.log import metric_series
 from vmn_exp.core.step_metric import (
     create_define_metric_entry,
     declared_step_metric,
+    join_all,
     join_series,
-    metric_definitions,
     step_metrics,
 )
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -37,7 +38,7 @@ def test_join_keys_points_by_the_x_value_at_the_same_step():
         _m(2, "t2", epoch=1.0),
         _m(2, "t3", loss=0.25),  # same step, a different call: joined
     ]
-    joined = metric_series(log, x="epoch")
+    joined = join_all(metric_series(log), "epoch")
     assert joined == {
         "loss": [
             {"step": 0, "ts": "t0", "value": 1.0, "x": 0.0},
@@ -62,7 +63,7 @@ def test_non_finite_x_values_drop_the_point():
 
 
 def test_join_on_a_missing_x_metric_is_empty():
-    assert metric_series([_m(0, "t0", loss=1.0)], x="epoch") == {"loss": []}
+    assert join_all(metric_series([_m(0, "t0", loss=1.0)]), "epoch") == {"loss": []}
 
 
 # -- declarations ---------------------------------------------------------------
@@ -74,7 +75,7 @@ def test_definitions_fold_per_name_last_write_wins():
         create_define_metric_entry("loss", step_metric="step2"),
         create_define_metric_entry("val_*", step_metric="global"),
     ]
-    defs = metric_definitions(log)
+    defs = fold_definitions(fold_log(log))
     assert defs["val_*"]["step_metric"] == "global"
     assert defs["loss"]["step_metric"] == "step2"
 
@@ -130,7 +131,7 @@ def test_define_metric_round_trips_through_storage_and_reader(storage):
     run.log_metrics({"val_loss": 0.1}, step=9)  # no epoch at step 9
     run.finish()
 
-    defs = metric_definitions(storage.load_merged_log(APP, VERSTR))
+    defs = fold_definitions(fold_log(storage.load_merged_log(APP, VERSTR)))
     assert defs == {"val_*": {"step_metric": "epoch"}}
 
     row = reader.get_run(APP, VERSTR, storage=storage)

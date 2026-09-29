@@ -13,12 +13,10 @@ storage backend (:func:`load_log`, :func:`list_artifacts`). No clock, no vcs, no
 CLI arguments — and, like the rest of ``core``, no imports from ``cli``, ``ui``
 or ``exp``.
 """
-import math
 import os
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.rewind import drop_rewound
-from vmn_exp.core.step_metric import join_all
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
     entry_params,
@@ -55,23 +53,24 @@ def summary_metrics(log, schema=None):
     return fold_metrics(fold_log(log), schema)[0]
 
 
-def metric_series(log, x=None):
+def metric_series(log):
     """Fold a log into per-metric point lists for charting.
 
     Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order. With *x* (a metric name), every other metric's points are
-    joined on it instead: each carries ``x``, the x metric's value at the same
-    step, and points without one are dropped (see :mod:`vmn_exp.core.step_metric`).
+    log order (join them on an x metric with
+    :func:`~vmn_exp.core.step_metric.join_all`). *log* is a merged log, which
+    already leaves out what a rewind hides (``load_log`` /
+    :func:`~vmn_exp.storage.files.flatten_logs`).
     """
     series = {}
-    for entry in drop_rewound(log):
+    for entry in log:
         if entry.get("type") != "metrics":
             continue
         step = entry.get("step")
         ts = entry.get("timestamp")
         for key, value in (entry.get("values") or {}).items():
             series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series if x is None else join_all(series, x)
+    return series
 
 
 def last_metric_at(log):
@@ -165,8 +164,8 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
 
     if descending is None:
         descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
-    ranked = [r for r in rows if _sortable(r["metrics"].get(metric))]
-    unranked = [r for r in rows if not _sortable(r["metrics"].get(metric))]
+    ranked = [r for r in rows if is_finite_number(r["metrics"].get(metric))]
+    unranked = [r for r in rows if not is_finite_number(r["metrics"].get(metric))]
     ranked.sort(key=lambda r: r["metrics"][metric], reverse=descending)
     return ranked + unranked
 
@@ -176,15 +175,6 @@ def _by_date(rows, field, newest_first):
     stamped = [r for r in rows if r.get(field)]
     stamped.sort(key=lambda r: r[field], reverse=newest_first)
     return stamped + [r for r in rows if not r.get(field)]
-
-
-def _sortable(value):
-    """Whether *value* can take a place in a metric ranking (NaN cannot)."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ from itertools import groupby
 from operator import mul
 
 from vmn_exp.core.forest import forest_importance
-from vmn_exp.core.log import _sortable
+from vmn_exp.core.values import is_finite_number
 
 MAX_ROWS = 5000
 MAX_BINS = 16
@@ -33,7 +33,7 @@ SEED = 0
 
 def require_metric(rows, metric):
     """ValueError unless some row carries *metric* as a finite number."""
-    if not any(_sortable(row["metrics"].get(metric)) for row in rows):
+    if not any(is_finite_number(row["metrics"].get(metric)) for row in rows):
         raise ValueError(f"Unknown metric '{metric}': no run carries it")
 
 
@@ -67,7 +67,7 @@ def param_importance(rows, metric, universe=None, max_rows=MAX_ROWS, seed=SEED):
 
 
 def _scored(rows, metric):
-    carrying = [row for row in rows if _sortable(row["metrics"].get(metric))]
+    carrying = [row for row in rows if is_finite_number(row["metrics"].get(metric))]
     return sorted(carrying, key=lambda row: row["verstr"])
 
 

@@ -86,7 +86,7 @@ def test_the_rows_match_a_direct_read(offloaded, live_store, clock):
         offloaded.refresh()
     rows, states = experiment_index.direct_rows(live_store.st, APP)
     snap = offloaded.snapshot()
-    assert [dict(r) for r in snap.rows] == rows
+    assert offloaded.rows() == rows  # the copies carry metric_summary
     assert snap.run_states == states
 
 

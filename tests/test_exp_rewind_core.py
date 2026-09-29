@@ -58,7 +58,7 @@ def test_repeated_rewinds_each_cut_what_came_before():
     log = [_m("a", s, float(s)) for s in range(1, 6)]  # 1..5
     log += [_rw("b", 2)] + [_m("c", s, 10.0 + s) for s in range(3, 8)]  # 3..7
     log += [_rw("d", 4)] + [_m("e", 5, 99.0)]
-    series = metric_series(log)["loss"]
+    series = metric_series(drop_rewound(log))["loss"]
     assert [(p["step"], p["value"]) for p in series] == [
         (1, 1.0), (2, 2.0), (3, 13.0), (4, 14.0), (5, 99.0)]
 

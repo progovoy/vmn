@@ -7,7 +7,8 @@
     {"type": "define_metric", "name": "val_*", "step_metric": "epoch", ...}
 
 *name* is an exact metric name or an ``fnmatch`` glob. Entries fold per name,
-last write wins per field, and any extra fields ride along untouched. The
+last write wins per field, and any extra fields ride along untouched (the
+run's fold keeps them: :func:`~vmn_exp.core.fold.fold_definitions`). The
 app's conf.yml can declare the same thing in its metrics schema
 (``experiment.metrics.<name>.step_metric``, next to ``goal:``); a run's own
 declarations win over the schema, and an exact name over a glob.
@@ -18,9 +19,9 @@ at the same step — or, for step-less points, in the same ``log_metrics`` call
 
 Pure functions over plain data, like the rest of ``core``.
 """
-import math
 from fnmatch import fnmatchcase
 
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.writer import create_log_entry
 
 DEFINE_METRIC = "define_metric"
@@ -37,17 +38,19 @@ def create_define_metric_entry(name, step_metric=None, **fields):
     return create_log_entry(DEFINE_METRIC, name=name, **fields)
 
 
-def metric_definitions(log, into=None):
-    """``{name: {field: value}}`` from a log's ``define_metric`` entries,
-    folded into *into* when given."""
-    defs = {} if into is None else into
-    for entry in log:
-        if entry.get("type") != DEFINE_METRIC or not isinstance(entry.get("name"), str):
-            continue
-        fields = {k: v for k, v in entry.items() if k not in ("type", "name", "timestamp")}
-        fields.pop("_writer", None)
-        defs.setdefault(entry["name"], {}).update(fields)
-    return defs
+_NOT_DECLARED = ("type", "name", "timestamp", "_writer")
+
+
+def entry_definition(entry):
+    """``(name, {field: value})`` a ``define_metric`` entry declares, or None.
+    The fold (:mod:`vmn_exp.core.fold`) keeps each field latest-wins."""
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    fields = {
+        k: v for k, v in entry.items() if k not in _NOT_DECLARED and v is not None
+    }
+    return (name, fields) if fields else None
 
 
 def _step_of(declaration):
@@ -88,23 +91,24 @@ def _join_key(point):
     return ("step", step) if step is not None else ("ts", point.get("ts"))
 
 
-def _finite(value):
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+def x_lookup(x_points):
+    """``{join key: x value}`` of an x metric's points, for :func:`join_on`."""
+    return {_join_key(p): p.get("value") for p in x_points}
+
+
+def join_on(points, x_at):
+    """*points* with ``x`` from the :func:`x_lookup` *x_at*; unmatched dropped."""
+    joined = []
+    for point in points:
+        x = x_at.get(_join_key(point))
+        if is_finite_number(x):
+            joined.append(dict(point, x=x))
+    return joined
 
 
 def join_series(points, x_points):
     """*points* with ``x`` from *x_points* at the same step; unmatched dropped."""
-    x_at = {_join_key(p): p.get("value") for p in x_points}
-    joined = []
-    for point in points:
-        x = x_at.get(_join_key(point))
-        if _finite(x):
-            joined.append(dict(point, x=x))
-    return joined
+    return join_on(points, x_lookup(x_points))
 
 
 def join_all(series, x):

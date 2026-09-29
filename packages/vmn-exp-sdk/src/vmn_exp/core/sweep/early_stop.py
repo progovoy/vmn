@@ -8,15 +8,16 @@ at least ``min_trials`` did. Strictly worse than that median: stop.
 import statistics
 
 from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.values import is_finite_number
 
 
 def step_points(points):
     """``[(step, value)]`` of a metric series; a point without a step is
-    numbered by its position in the log (1-based)."""
+    numbered by its position in the log (1-based). Only finite values count."""
     return [
         (p["step"] if p.get("step") is not None else i, p["value"])
         for i, p in enumerate(points, start=1)
-        if isinstance(p.get("value"), (int, float))
+        if is_finite_number(p.get("value"))
     ]
 
 

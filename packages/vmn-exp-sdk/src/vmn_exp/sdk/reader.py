@@ -30,8 +30,8 @@ import yaml
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import resolve_root_path
+from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
-    experiment_row,
     filter_archived,
     filter_by_status,
     list_artifacts,
@@ -44,7 +44,7 @@ from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import record_format_version
-from vmn_exp.core.step_metric import join_all, metric_definitions, step_metrics
+from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.status import (
@@ -258,15 +258,14 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
 
     log = _load_log(storage, app_name, verstr)
     schema = _metrics_schema(root_path, app_name)
-    row = experiment_row(target["idx"], target["meta"], log, schema=schema)
+    fold = fold_log(log)
+    row = fold_row(target["idx"], target["meta"], fold, schema=schema)
     row.update(status)
     row["format_version"] = record_format_version(target["meta"])
     row["log"] = log
     series = metric_series(log)
     row["series"] = series if x is None else join_all(series, x)
-    row["step_metrics"] = step_metrics(
-        series, metric_definitions(log), schema
-    )
+    row["step_metrics"] = step_metrics(series, fold_definitions(fold), schema)
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     row.update(media_index(log))
     return row
