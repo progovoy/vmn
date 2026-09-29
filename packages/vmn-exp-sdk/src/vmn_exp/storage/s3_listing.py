@@ -114,6 +114,15 @@ class S3Listing:
                 merged[key] = extra[key]
         return merged
 
+    def _app_keys(self):
+        base = self.prefix + "/"
+        return [cp[len(base) :].rstrip("/") for cp in self._common_prefixes(base)]
+
+    def _app_name_of(self, key):
+        # The tag form (``root/svc`` → ``root-svc``) is bijective: ``-`` is
+        # illegal in app names. A legacy ``root_svc`` key lists as it is.
+        return key.replace("-", "/")
+
     def _names_under(self, prefix):
         base = prefix + "/"
         return {

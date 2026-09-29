@@ -14,7 +14,6 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
-from version_stamp.api import tag_name_to_app_name
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
@@ -174,23 +173,9 @@ def get_experiment_from_storage(
 
 
 def list_apps_from_storage(storage):
-    """List apps from a storage backend (S3). Limited: no version counts or conf.
-
-    App keys are the tag form (``root/svc`` → ``root-svc``, bijective because
-    ``-`` is illegal in app names), so ``my_app`` is never shown as ``my/app``.
-    """
-    apps = set()
-    if hasattr(storage, "_s3") and hasattr(storage, "prefix"):
-        try:
-            for cp in storage._common_prefixes(storage.prefix + "/"):
-                app_key = cp[len(storage.prefix) + 1 :].rstrip("/")
-                if is_reserved_app(app_key):
-                    continue
-                apps.add(tag_name_to_app_name(app_key))
-        except Exception:
-            pass
+    """The apps of a store workspace. Limited: no version counts or conf."""
     rows = []
-    for name in sorted(apps):
+    for name in storage.list_apps():
         try:
             # Names only: counting must not fetch every run's metadata.
             exp_count = len(storage.list_verstrs(name))
