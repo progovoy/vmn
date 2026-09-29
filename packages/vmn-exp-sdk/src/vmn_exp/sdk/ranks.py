@@ -9,6 +9,8 @@ recording nothing, with no heartbeat thread and no git or storage access.
 """
 import os
 
+from vmn_exp.sdk.steps import StepCounter
+
 
 def as_int(value):
     try:
@@ -57,15 +59,21 @@ class NoOpRun:
         self.app_name = app_name
         self.disabled = disabled
         self.pid = os.getpid()
+        # Counted like a real run's, so `run.step` in user code works anywhere.
+        self._steps = StepCounter()
+
+    @property
+    def step(self):
+        return self._steps.next
 
     def finish(self, exit_code=0):
         return None
 
-    def log_metric(self, key, value, step=None):
-        return None
+    def log_metric(self, key, value, step=None, commit=True):
+        self._steps.take(step, commit)
 
-    def log_metrics(self, mapping, step=None):
-        return None
+    def log_metrics(self, mapping, step=None, commit=True):
+        self._steps.take(step, commit)
 
     def log_params(self, mapping):
         return None

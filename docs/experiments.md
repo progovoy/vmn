@@ -224,7 +224,9 @@ entry. The grammar is:
   `model=resnet`) as a [param](#structured-notes--params) instead, which keeps
   strings and bools verbatim.
 - An optional leading `step=N` builds a **per-step series** (a curve). Without
-  it, the values are recorded as scalars.
+  it, the values are recorded as scalars — the metrics file is never
+  auto-stepped (unlike the SDK's `log_metrics`, see
+  [sdk.md](sdk.md#steps)).
 - vmn **tails the file live** during the run, so metrics appear in `exp show`
   and the web UI *while the command is still running*, not just at the end.
 
