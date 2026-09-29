@@ -13,6 +13,7 @@ from vmn_exp.cli.provenance import _load_full_env
 from vmn_exp.core import rerun as core
 from vmn_exp.core.provenance import env_diff
 from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
+from vmn_exp.storage.files import safe_verstr
 from version_stamp.api import VMN_LOGGER, _predates_untracked_capture
 
 
@@ -34,7 +35,7 @@ def recipe(source):
 
 def _export_recipe(source):
     """The git-free way: export the run's tree, run the command inside it."""
-    out = source.verstr.replace("+", "_plus_")
+    out = safe_verstr(source.verstr)
     app = shlex.quote(source.app_name)
     cwd = source.invocation.cwd or "."
     return (
@@ -49,14 +50,13 @@ def print_recipe(source, as_json=False):
     data = recipe(source)
     if as_json:
         print(json.dumps(data))
-        return 0
+        return
     print(f"command:       {shlex.join(data['command'])}")
     print(f"cwd:           {data['cwd']}")
     print(f"code_verstr:   {data['code_verstr']}")
     print(f"code:          {data['code'] or '(clean tree)'}")
     print(f"recipe:        {data['recipe']}")
     print(f"export_recipe: {data['export_recipe']}")
-    return 0
 
 
 def print_plan(source, checkouts):
@@ -101,10 +101,12 @@ def _warnings(storage, source, env):
 
 
 def _still_running(storage, source):
-    if not source.run_state:
+    state = source.run_state
+    # Only a run claiming to run needs the store's write time to tell running from stuck.
+    if not state or state.get("state") != "running" or state.get("exit_code") is not None:
         return False
     observed = run_state_observed_at(storage, source.app_name, source.verstr)
-    return derive_status(source.run_state, observed_at=observed) == RUNNING
+    return derive_status(state, observed_at=observed) == RUNNING
 
 
 def _env_warnings(storage, source, env):
