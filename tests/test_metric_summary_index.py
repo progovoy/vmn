@@ -7,6 +7,7 @@ without re-reading any log, and a grown log keeps its summaries right.
 import json
 import os
 
+import pytest
 import yaml
 from helpers import _storage
 
@@ -76,7 +77,8 @@ def test_index_incremental_refresh_keeps_summaries_right(app_layout):
     rows = _indexed(app_layout, GOAL_MIN)
     assert _losses(rows) == {"0.0.1": 0.2, "0.0.2": 0.1}
     summary = next(r for r in rows if r["verstr"] == "0.0.2")["metric_summary"]["loss"]
-    assert summary == {"last": 0.7, "min": 0.1, "max": 0.8}
+    assert summary == {
+        "last": 0.7, "min": 0.1, "max": 0.8, "first": 0.8, "mean": pytest.approx(0.525)}
 
 
 def test_list_runs_ranks_on_the_conf_goal(app_layout):
@@ -102,4 +104,5 @@ def test_get_run_carries_the_summary(app_layout):
     _write_conf(app_layout, GOAL_MIN)
     run = get_run(app_layout.app_name, "@1")
     assert run["metrics"]["loss"] == 0.2
-    assert run["metric_summary"]["loss"] == {"last": 0.9, "min": 0.2, "max": 1.0}
+    assert run["metric_summary"]["loss"] == {
+        "last": 0.9, "min": 0.2, "max": 1.0, "first": 1.0, "mean": pytest.approx(0.7)}

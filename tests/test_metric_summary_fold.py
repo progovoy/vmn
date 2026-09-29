@@ -66,7 +66,8 @@ def test_summary_min_without_a_goal():
 
 def test_the_full_summary_is_exposed():
     row = _row(OVERFIT, {"loss": {"goal": "min"}})
-    assert row["metric_summary"]["loss"] == {"last": 0.9, "min": 0.4, "max": 1.0}
+    assert row["metric_summary"]["loss"] == {
+        "last": 0.9, "min": 0.4, "max": 1.0, "first": 1.0, "mean": pytest.approx(2.3 / 3)}
 
 
 def test_a_single_value_metric_carries_no_summary():
@@ -116,7 +117,7 @@ def test_a_later_definition_wins():
     assert _row(log)["metrics"]["loss"] == 1.0
 
 
-@pytest.mark.parametrize("kwargs", [{"summary": "mean"}, {"goal": "up"}])
+@pytest.mark.parametrize("kwargs", [{"summary": "median"}, {"goal": "up"}])
 def test_summary_fields_rejects_bad_policies(kwargs):
     with pytest.raises(ValueError):
         summary_fields(**kwargs)

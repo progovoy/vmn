@@ -69,4 +69,5 @@ def test_detail_carries_best_and_last(app_layout):
     overfit, _ = _seed(app_layout)
     detail = _client(app_layout).get(f"{_api(app_layout)}/{overfit}").json()
     assert detail["metrics"]["loss"] == 0.2
-    assert detail["metric_summary"]["loss"] == {"last": 0.9, "min": 0.2, "max": 1.0}
+    assert detail["metric_summary"]["loss"] == {
+        "last": 0.9, "min": 0.2, "max": 1.0, "first": 1.0, "mean": pytest.approx(0.7)}
