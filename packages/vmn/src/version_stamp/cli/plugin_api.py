@@ -116,3 +116,26 @@ def load_dev_version(vcs, params: dict, version: str) -> int:
         )
         return 1
     return _dev_version_loader(vcs, params, version)
+
+
+# ---------------------------------------------------------------------------
+# Snapshot store opener hook
+# ---------------------------------------------------------------------------
+
+_snapshot_store_opener: Optional[Callable] = None
+
+
+def register_snapshot_store_opener(fn: Callable) -> None:
+    """Register *fn* as the opener of configured (remote) snapshot stores.
+
+    ``fn(vcs, params) -> SnapshotStores | None`` (see
+    ``version_stamp.snapshot.stores``); None means nothing is configured and
+    the local stores apply. Registering again replaces the opener.
+    """
+    global _snapshot_store_opener
+    _snapshot_store_opener = fn
+
+
+def snapshot_store_opener() -> Optional[Callable]:
+    """The registered snapshot store opener, or None (vmn-exp not installed)."""
+    return _snapshot_store_opener
