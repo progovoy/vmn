@@ -19,6 +19,7 @@ import socket
 import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
@@ -85,7 +86,7 @@ def merge_env_into_params(params):
 def merge_conf_into_params(vcs, params):
     """Fill unset storage params: CLI flags, then ``VMN_EXPERIMENT_*``, then conf.yml."""
     merge_env_into_params(params)
-    exp_conf = getattr(vcs, "experiment", None) or {}
+    exp_conf = experiment_conf(vcs)
     storage_conf = (
         exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
     )

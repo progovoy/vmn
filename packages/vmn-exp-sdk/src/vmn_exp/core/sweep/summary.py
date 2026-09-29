@@ -3,37 +3,52 @@
 A trial row is an ordinary run row (status-annotated) whose ``parent`` is the
 sweep; its ``sweep_trial`` / ``sweep_attempt`` tags say which slot it fills.
 A retried trial is judged by its latest attempt. An early-stopped trial ends
-``succeeded`` and carries the tag ``stopped_early=true``.
+``succeeded``, its run state's ``end_reason`` ``stopped``.
 
 A trial's target metric is its own when it logged one, else its descendants'
 (a ``start_run()`` inside the trial nests a run under it): the only descendant
 carrying the metric, or the best of several by goal. ``metric_source`` names
 the run it came from, so the median rule reads that run's series.
 """
+import weakref
 from collections import Counter
 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.core.status import FAILED, STUCK, SUCCEEDED
+from vmn_exp.core.status import FAILED, STOPPED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_rows, children_by_parent, subtree_verstrs
 
-STOPPED_EARLY_TAG = "stopped_early"
 RETRYABLE = (FAILED, STUCK)
+_CHILDREN = weakref.WeakKeyDictionary()  # IndexSnapshot -> {parent: [child]}
 
 
-def trial_rows(storage, app_name, sweep_verstr, spec):
+def trial_rows(storage, app_name, sweep_verstr, spec, wait=True):
     """Every run of the sweep (retries included), status-annotated, with the
-    target metric attributed (see :func:`attribute_metric`)."""
-    rows, run_states, observed = experiment_index.indexed_status_rows(storage, app_name)
-    return sweep_trials(spec, sweep_verstr, rows, run_states, observed)
+    target metric attributed (see :func:`attribute_metric`). *wait*: refresh
+    the app's index first; False takes the current snapshot as is."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=wait)
+    return snapshot_trials(spec, sweep_verstr, snap)
 
 
-def sweep_trials(spec, sweep_verstr, rows, run_states, observed=None):
-    """:func:`trial_rows` over rows the caller already holds (``vmn-exp ui``
-    answers from its own index snapshot)."""
-    annotated = annotate_rows(rows, run_states, observed)
+def snapshot_trials(spec, sweep_verstr, snap):
+    """:func:`trial_rows` off an index snapshot. Only the sweep's subtree is
+    copied and annotated; the snapshot's parent map is built once per snapshot."""
+    members = (snap.row(v) for v in subtree_verstrs(sweep_verstr, snapshot_children(snap)))
+    annotated = annotate_rows(
+        [row for row in members if row is not None],
+        snap.run_states, snap.run_state_observed_at,
+    )
     trials = [r for r in annotated if r.get("parent") == sweep_verstr]
     return attribute_metric(spec, trials, annotated)
+
+
+def snapshot_children(snap):
+    """``{parent: [child]}`` of *snap*'s edges, memoized per snapshot."""
+    children_of = _CHILDREN.get(snap)
+    if children_of is None:
+        edges = ({"verstr": v, "parent": p} for v, p in snap.edges.items())
+        children_of = _CHILDREN[snap] = children_by_parent(edges)
+    return children_of
 
 
 def attribute_metric(spec, trials, rows):
@@ -74,7 +89,7 @@ def latest_attempts(rows):
 
 
 def stopped_early(row):
-    return (row.get("tags") or {}).get(STOPPED_EARLY_TAG) == "true"
+    return row.get("end_reason") == STOPPED
 
 
 def metric_value(spec, row):
@@ -107,9 +122,10 @@ def retry_slots(rows):
     )
 
 
-def summarize(spec, rows, claims=()):
+def summarize(spec, rows, claimed=()):
+    """*claimed* is :func:`~vmn_exp.core.sweep.claims.claimed_trials`' set."""
     latest = latest_attempts(rows)
-    claimed = {c["trial"] for c in claims}
+    claimed = set(claimed)
     best = best_trial(spec, list(latest.values()))
     return {
         "method": spec["method"],

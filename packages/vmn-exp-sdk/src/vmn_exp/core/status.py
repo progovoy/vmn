@@ -27,6 +27,10 @@ STUCK = "stuck"  # claims running, heartbeat went stale
 SUCCEEDED = "succeeded"  # finished, exit code 0
 FAILED = "failed"  # finished, non-zero exit code
 
+# run_state ``end_reason`` of a run its supervisor ended on purpose (sweep
+# early stopping): it did its job, whatever the child exited with.
+STOPPED = "stopped"
+
 DEFAULT_HEARTBEAT_INTERVAL_SEC = 30
 # A heartbeat may be late without the run being dead: a busy box, a slow S3
 # PUT. Allow several missed beats, and never less than a minute.
@@ -181,9 +185,7 @@ def derive_status(run_state, now=None, observed_at=None):
 
     exit_code = run_state.get("exit_code")
     if exit_code is not None:
-        # A run its supervisor stopped on purpose (sweep early stopping) did
-        # its job, whatever the child exited with once terminated.
-        ok = int(exit_code) == 0 or run_state.get("stopped_early") is True
+        ok = int(exit_code) == 0 or run_state.get("end_reason") == STOPPED
         return SUCCEEDED if ok else FAILED
     if run_state.get("state") != "running":
         return CREATED
@@ -219,6 +221,7 @@ def status_fields(run_state, now=None, observed_at=None):
     return {
         "status": status,
         "exit_code": run_state.get("exit_code"),
+        "end_reason": run_state.get("end_reason"),
         "started_at": run_state.get("started_at"),
         "finished_at": run_state.get("finished_at"),
         "heartbeat": run_state.get("heartbeat"),

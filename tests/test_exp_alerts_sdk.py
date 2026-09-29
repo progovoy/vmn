@@ -132,3 +132,15 @@ def test_exp_show_renders_an_alert_entry(app_layout, hook, capfd):
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="show", version=verstr) == 0
     assert "alert [error]: loss exploded: nan at step 12" in capfd.readouterr().out
+
+
+def test_the_run_alerts_with_the_conf_it_started_with(app_layout, hook, monkeypatch):
+    from vmn_exp.core.alerts import config
+
+    _bootstrap(app_layout)
+    reads = []
+    monkeypatch.setattr(config, "read_experiment_conf", lambda *a, **k: reads.append(a) or {})
+    with start_run(app_layout.app_name) as run:
+        assert run.alert("slow epoch") is True
+    assert hook.wait_for(1)
+    assert reads == []  # start_run already had the conf: none is re-read

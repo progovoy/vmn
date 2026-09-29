@@ -10,6 +10,7 @@ import time
 
 from vmn_exp.cli.prune import _parse_duration
 from vmn_exp.core.alerts import Alerter, load_alert_config, watch_app
+from vmn_exp.core.app_conf import experiment_conf
 from version_stamp.api import VMN_LOGGER
 
 DEFAULT_WITHIN = "1d"
@@ -21,7 +22,7 @@ def experiment_watch(vcs, storage, app_name, args):
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
-    alerter = Alerter(load_alert_config(app_name, getattr(vcs, "experiment", None)))
+    alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs)))
     if not alerter.wants("failed") and not alerter.wants("stuck"):
         VMN_LOGGER.error(
             "No alert sink is configured for 'failed' or 'stuck': set "

@@ -7,7 +7,6 @@ at least ``min_trials`` did. Strictly worse than that median: stop.
 """
 import statistics
 
-from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.values import is_finite_number
 
 
@@ -42,16 +41,13 @@ def _best_until(points, step, goal):
 
 
 class MedianStopper:
-    """Checks one running trial against its siblings, at most every
+    """The spec's median rule for one running trial, checked at most every
     ``check_interval_sec``; ``due(now)`` says when a check should run (the
     first one an interval after the trial started: nothing is logged before)."""
 
-    def __init__(self, spec, storage, app_name):
-        self.metric = spec["metric"]["name"]
+    def __init__(self, spec):
         self.goal = spec["metric"]["goal"]
         self.rule = spec["early_terminate"]
-        self.storage = storage
-        self.app_name = app_name
         self._next = None
 
     def due(self, now):
@@ -62,18 +58,12 @@ class MedianStopper:
         self._next = now + self.rule["check_interval_sec"]
         return True
 
-    def should_stop(self, own_verstr, sibling_verstrs):
-        """*sibling_verstrs* is a callable, only called (and the siblings' logs
-        only read) once the trial itself is past ``min_iter``."""
-        own = self._points(own_verstr)
-        if not own or max(s for s, _ in own) < self.rule["min_iter"]:
-            return False
-        others = [self._points(v) for v in sibling_verstrs() if v != own_verstr]
+    def past_min_iter(self, own):
+        """Whether the trial with points *own* is far enough to be judged."""
+        return bool(own) and max(s for s, _ in own) >= self.rule["min_iter"]
+
+    def should_stop(self, own, others):
         return median_should_stop(
             own, others, self.goal,
             min_iter=self.rule["min_iter"], min_trials=self.rule["min_trials"],
         )
-
-    def _points(self, verstr):
-        series = metric_series(load_log(self.storage, self.app_name, verstr))
-        return step_points(series.get(self.metric, []))

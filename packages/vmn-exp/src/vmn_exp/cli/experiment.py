@@ -30,6 +30,7 @@ from vmn_exp.cli.views import (
     metrics_schema,
     show_payload,
 )
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.snapshot import (
     _build_snapshot_metadata,
@@ -463,7 +464,7 @@ def _experiment_create_core(
         should_capture,
     )
 
-    exp_conf = getattr(vcs, "experiment", None) or {}
+    exp_conf = experiment_conf(vcs)
 
     if from_snapshot:
         app_name = _app_name(vcs)

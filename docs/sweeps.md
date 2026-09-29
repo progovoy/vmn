@@ -160,9 +160,10 @@ best values up to `s` (counting trials that reached `s`, at least
 SIGKILL after `--kill-grace-sec`. The check runs on a background thread, so
 slow storage never delays the trial's heartbeat. Steps are the `step=` values
 of the metrics lines (else the line's position). An early-stopped trial keeps
-the child's real `exit_code` and gets `stopped_early: true` in its
-`run_state.yml` — status derivation reads that as **succeeded** — plus the tag
-`stopped_early=true` for queries and `status`. `hyperband` is not supported.
+the child's real `exit_code` and gets `end_reason: stopped` in its
+`run_state.yml` — status derivation reads that as **succeeded**, and the run
+row carries it (`vmn-exp list --query 'end_reason = "stopped"'`). `status` counts
+stopped trials from that field. `hyperband` is not supported.
 
 ## Status
 

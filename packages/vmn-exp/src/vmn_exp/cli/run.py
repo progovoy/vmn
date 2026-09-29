@@ -24,7 +24,8 @@ from vmn_exp.cli.supervisor import (
     supervision_guard,
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
-from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC
+from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.writer import (
     append_to_log,
     create_log_entry,
@@ -230,8 +231,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if repo_lock is not None:
         repo_lock.release()
 
-    exp_conf = getattr(vcs, "experiment", None)
-    return _Supervision(storage, app_name, verstr, args, exp_conf).run(run_cmd)
+    return _Supervision(storage, app_name, verstr, args, experiment_conf(vcs)).run(run_cmd)
 
 
 class _Supervision:
@@ -361,8 +361,8 @@ class _Supervision:
     def request_stop(self):
         """End the child early, on purpose: SIGTERM now, SIGKILL after the grace.
 
-        The run state records ``stopped_early``, which status derivation reads
-        as a success whatever code the child exits with.
+        The run state records ``end_reason: stopped``, which status derivation
+        reads as a success whatever code the child exits with.
         """
         self.stopped_early = True
         self.forwarder.request_stop()
@@ -398,7 +398,7 @@ class _Supervision:
         if self.forwarder.received:
             final["received_signal"] = self.forwarder.received
         if self.stopped_early:
-            final["stopped_early"] = True
+            final["end_reason"] = STOPPED
         self._publish_final(final)
 
         self.guard(

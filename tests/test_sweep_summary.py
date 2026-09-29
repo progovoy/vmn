@@ -16,7 +16,8 @@ def _spec(goal="min", run_cap=None):
     return parse_spec(data)
 
 
-def _row(trial, status, loss=None, lr=0.5, tags=None, attempt=0, verstr=None):
+def _row(trial, status, loss=None, lr=0.5, tags=None, attempt=0, verstr=None,
+         end_reason=None):
     all_tags = {"sweep_trial": str(trial), "sweep_attempt": str(attempt)}
     all_tags.update(tags or {})
     metrics = {} if loss is None else {"loss": loss}
@@ -24,6 +25,7 @@ def _row(trial, status, loss=None, lr=0.5, tags=None, attempt=0, verstr=None):
         "verstr": verstr or f"v{trial}.{attempt}",
         "name": f"t{trial}",
         "status": status,
+        "end_reason": end_reason,
         "tags": all_tags,
         "params": {"lr": lr},
         "metrics": metrics,
@@ -47,10 +49,9 @@ def test_summary_counts_the_latest_attempt_of_each_trial():
         _row(0, "failed", attempt=0),
         _row(0, "succeeded", 0.3, attempt=1),
         _row(1, "running", 0.4),
-        _row(2, "succeeded", 0.9, tags={"stopped_early": "true"}),
+        _row(2, "succeeded", 0.9, end_reason="stopped"),
     ]
-    claims = [{"trial": 0}, {"trial": 0, "attempt": 1}, {"trial": 1}, {"trial": 2}, {"trial": 3}]
-    summary = summarize(_spec(run_cap=10), rows, claims)
+    summary = summarize(_spec(run_cap=10), rows, claimed={0, 1, 2, 3})
     assert summary["counts"] == {"succeeded": 2, "running": 1}
     assert summary["stopped_early"] == 1
     assert summary["trials"] == 3
@@ -62,12 +63,17 @@ def test_summary_counts_the_latest_attempt_of_each_trial():
     assert summary["best"]["params"] == {"lr": 0.5}
 
 
+def test_a_stopped_early_tag_is_not_what_counts_a_stop():
+    rows = [_row(0, "succeeded", 0.3, tags={"stopped_early": "true"})]
+    assert summarize(_spec(), rows)["stopped_early"] == 0
+
+
 def test_history_is_finished_trials_with_a_value():
     rows = [
         _row(0, "succeeded", 0.3, lr=0.1),
         _row(1, "running", 0.2, lr=0.2),
         _row(2, "failed", lr=0.3),
-        _row(3, "succeeded", 0.8, lr=0.4, tags={"stopped_early": "true"}),
+        _row(3, "succeeded", 0.8, lr=0.4, end_reason="stopped"),
     ]
     assert history(_spec(), rows) == [({"lr": 0.1}, 0.3), ({"lr": 0.4}, 0.8)]
 

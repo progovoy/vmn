@@ -9,6 +9,7 @@ from vmn_exp.core.sweep.claims import (
     attach_run,
     claim_next_trial,
     claim_retry,
+    claimed_trials,
     list_claims,
 )
 from vmn_exp.core.sweep.spec import parse_spec
@@ -68,6 +69,19 @@ def test_sweeps_do_not_share_slots(tmp_path):
     _drain(storage, spec, "a", a, sweep=SWEEP)
     _drain(storage, spec, "a", b, sweep=SWEEP + ".r2")
     assert [c["trial"] for c in a] == [c["trial"] for c in b] == [0, 1]
+
+
+def test_claimed_trials_come_from_the_listing_alone(tmp_path, monkeypatch):
+    storage, spec = _local(tmp_path), _grid(run_cap=3)
+    _drain(storage, spec, "a", [])
+    claim_retry(storage, APP, SWEEP, 1, agent="a")
+
+    def no_loads(*_args, **_kwargs):
+        raise AssertionError("claimed_trials must not load a claim")
+
+    monkeypatch.setattr(storage, "load_metadata", no_loads)
+    monkeypatch.setattr(storage, "load", no_loads)
+    assert claimed_trials(storage, APP, SWEEP) == {0, 1, 2}
 
 
 def test_claims_are_listed_with_their_run(tmp_path):

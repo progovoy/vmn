@@ -12,14 +12,19 @@ import threading
 import time
 
 from vmn_exp.cli.run import _create_experiment, _Supervision
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.background import Coalescing
+from vmn_exp.core.status import FAILED, SUCCEEDED
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
 from vmn_exp.core.sweep.early_stop import MedianStopper
-from vmn_exp.core.sweep.summary import STOPPED_EARLY_TAG, history, retry_slots, trial_rows
-from vmn_exp.core.writer import append_to_log, create_tags_entry, get_writer_id
+from vmn_exp.core.sweep.peer_points import PeerPoints
+from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
+from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
+
+_FINISHED = (SUCCEEDED, FAILED)  # a finished trial's points never change
 
 
 def run_agent(vcs, storage, args, sweep, spec, repo_lock=None):
@@ -90,7 +95,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
     check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
         if spec.get("early_terminate") else None
     supervision = _Supervision(storage, vcs.name, verstr, trial_args,
-                               getattr(vcs, "experiment", None), extra_env=env, on_tick=check)
+                               experiment_conf(vcs), extra_env=env, on_tick=check)
     try:
         supervision.run(trial_args.run_cmd)
     finally:
@@ -102,14 +107,16 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
 class _EarlyStopCheck:
     """The median rule for one trial, as a supervision hook.
 
-    The check reads storage (the sweep's rows, every sibling's log), so it runs
+    The check reads storage (the sweep's rows, the siblings' logs), so it runs
     on a background worker: the supervision loop only schedules it and acts on
-    its verdict, and never waits for storage between heartbeats.
+    its verdict, and never waits for storage between heartbeats. Siblings'
+    points are cached (:class:`PeerPoints`): a finished one is read once.
     """
 
     def __init__(self, spec, storage, app_name, sweep, verstr):
         self._spec = spec
-        self._stopper = MedianStopper(spec, storage, app_name)
+        self._stopper = MedianStopper(spec)
+        self._points = PeerPoints(storage, app_name, spec["metric"]["name"])
         self._storage, self._app_name = storage, app_name
         self._sweep, self._verstr = sweep, verstr
         self._verdict = threading.Event()
@@ -120,8 +127,6 @@ class _EarlyStopCheck:
             return
         if self._verdict.is_set():
             VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early (median rule)")
-            append_to_log(self._storage, self._app_name, self._verstr,
-                          create_tags_entry({STOPPED_EARLY_TAG: "true"}))
             supervision.request_stop()
         elif self._stopper.due(time.monotonic()):
             self._worker.submit()
@@ -132,8 +137,14 @@ class _EarlyStopCheck:
     def _check(self, _item):
         # Compare the runs that carry the metric: a trial's own, or the run a
         # start_run() inside it nested under it.
-        rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec)
-        sources = {r["verstr"]: r["metric_source"] for r in rows}
-        own = sources.pop(self._verstr, self._verstr)
-        if self._stopper.should_stop(own, lambda: list(sources.values())):
+        rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec, wait=False)
+        own_row = next((r for r in rows if r["verstr"] == self._verstr), None)
+        own = self._points.of(own_row["metric_source"] if own_row else self._verstr)
+        if not self._stopper.past_min_iter(own):
+            return
+        others = [
+            self._points.of(r["metric_source"], finished=r.get("status") in _FINISHED)
+            for r in rows if r["verstr"] != self._verstr
+        ]
+        if self._stopper.should_stop(own, others):
             self._verdict.set()

@@ -180,11 +180,12 @@ def test_median_rule_stops_a_trial_behind_the_others(app_layout, tmp_path, capsy
     assert _vmn_exp("sweep", "agent", app_layout.app_name, sweep) == 0
 
     fast0, fast1, slow = _trials(app_layout, sweep)
-    assert "stopped_early" not in fast0["tags"]
-    assert slow["tags"]["stopped_early"] == "true"
+    assert fast0["end_reason"] is None
+    assert slow["end_reason"] == "stopped"
+    assert "stopped_early" not in slow["tags"]
     assert slow["status"] == "succeeded"
     state = load_run_state(_storage(app_layout), app_layout.app_name, slow["verstr"])
-    assert state["stopped_early"] is True
+    assert state["end_reason"] == "stopped"
     assert state["duration_sec"] < 10  # 60 steps * 0.25s had it run out
     status = _status(app_layout, sweep, capsys)
     assert status["stopped_early"] == 1

@@ -7,6 +7,7 @@ import threading
 import time
 
 from vmn_exp._base import VMN_LOGGER, now_iso
+from vmn_exp.core.background import join_all
 from vmn_exp.core.best_effort import BestEffort
 
 LEVELS = ("info", "warn", "error")
@@ -81,11 +82,9 @@ class Alerter:
 
     def drain(self, timeout):
         """Wait up to *timeout* seconds for the alerts still being delivered."""
-        deadline = time.monotonic() + timeout
         with self._lock:
             threads = list(self._threads)
-        for thread in threads:
-            thread.join(max(0.0, deadline - time.monotonic()))
+        join_all(threads, timeout)
 
 
 def _send_one(sink, alert, timeout):

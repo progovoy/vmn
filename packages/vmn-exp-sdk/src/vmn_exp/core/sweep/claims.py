@@ -19,6 +19,7 @@ from vmn_exp._base import now_iso
 from vmn_exp.core.sweep.spec import trial_limit
 from vmn_exp.core.sweep.suggest import suggest
 from vmn_exp.core.writer import claim_record, get_writer_id
+from vmn_exp.storage.s3_base import parallel_map
 
 SWEEP_APP = "vmn-sweeps"
 _MAX_ATTEMPTS = 1000
@@ -38,7 +39,7 @@ def claim_next_trial(storage, app_name, sweep_verstr, spec, agent=None, history=
     past = history() if history and spec["method"] == "bayes" else ()
     n = 0
     for _ in range(_MAX_ATTEMPTS):
-        taken = {trial for trial, _attempt in _slots(storage, app_name, sweep_verstr)}
+        taken = claimed_trials(storage, app_name, sweep_verstr)
         # Never retry an index already lost: listings may lag a winner's claim.
         n = max(max(taken, default=-1) + 1, n)
         if limit is not None and n >= limit:
@@ -79,11 +80,17 @@ def attach_run(storage, claim, run_verstr):
     storage.update_metadata(app, claim["verstr"], {"run": run_verstr})
 
 
+def claimed_trials(storage, app_name, sweep_verstr):
+    """``{trial}`` of every claimed index, in-flight claims included — one
+    listing, no claim read."""
+    return {trial for trial, _attempt in _slots(storage, app_name, sweep_verstr)}
+
+
 def list_claims(storage, app_name, sweep_verstr):
     """Every complete claim of the sweep, ordered by (trial, attempt)."""
     app = claims_app(app_name, sweep_verstr)
-    metas = (storage.load_metadata(app, _record(trial, attempt))
-             for trial, attempt in sorted(_slots(storage, app_name, sweep_verstr)))
+    names = [_record(t, a) for t, a in sorted(_slots(storage, app_name, sweep_verstr))]
+    metas = parallel_map(lambda name: storage.load_metadata(app, name), names)
     return [meta for meta in metas if meta is not None]
 
 

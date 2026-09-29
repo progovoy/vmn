@@ -9,6 +9,7 @@ Non-finite metrics are written as ``null`` so the output is strict JSON.
 import json
 import math
 
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.record_format import record_format_version
@@ -21,10 +22,7 @@ PATCH_TYPES = ("working_tree", "local_commits")
 def metrics_schema(vcs):
     """``experiment.metrics`` from the app's conf.yml, if any: sort direction
     and summary policies (see :mod:`vmn_exp.core.metric_summary`)."""
-    exp_conf = getattr(vcs, "experiment", None)
-    if isinstance(exp_conf, dict):
-        return exp_conf.get("metrics") or {}
-    return {}
+    return experiment_conf(vcs).get("metrics") or {}
 
 
 def patch_lines(patches):
