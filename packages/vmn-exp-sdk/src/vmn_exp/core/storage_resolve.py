@@ -93,11 +93,14 @@ def _try_repo_root() -> "str | None":
         return None
 
 
+def experiment_dir(vcs, params):
+    """The local store root: ``--dir``, ``$VMN_EXPERIMENT_DIR``, else the repo root."""
+    return (params.get("experiment_dir") or os.environ.get("VMN_EXPERIMENT_DIR")
+            or (vcs.vmn_root_path if vcs else None))
+
+
 def _get_experiment_storage(vcs, params):
-    experiment_dir = params.get("experiment_dir") or os.environ.get(
-        "VMN_EXPERIMENT_DIR"
-    )
-    return _open(experiment_dir or (vcs.vmn_root_path if vcs else None), params)
+    return _open(experiment_dir(vcs, params), params)
 
 
 def add_storage_flags(parser):

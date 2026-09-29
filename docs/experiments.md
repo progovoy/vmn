@@ -307,6 +307,8 @@ the experiment's `metadata.yml` (same directory locally, same key prefix on S3):
 ```yaml
 state: running          # "running" while alive, "finished" after the child exits
 command: [python, train.py]
+runner: exp run         # "exp run", or "sdk" for a start_run() run
+cwd: src                # the child's cwd relative to the repo root ("." at the root)
 pid: 12345
 host: somebox
 started_at: 2026-09-21T12:00:00Z
@@ -755,7 +757,8 @@ exits 1 with the offending offset. Provenance fields are also queryable:
 for each logged input), `outputs.<path>.digest|size|path` (each artifact, image or table the run
 logged; quote a dotted path: `outputs."model.pkl".digest`), `env.<key>` and `env.packages.<pkg>` (environment
 summary), `imported_from` (set on runs imported from external tools) and
-`forked_from`/`forked_from_step` (a fork's source verstr and step).
+`forked_from`/`forked_from_step` (a fork's source verstr and step) and
+`rerun_of` (the run a [`rerun`](#rerun) reran).
 
 `--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
 JSON array instead of the table — one object per run with the keys of an SDK
@@ -810,7 +813,7 @@ bad `--query` exits 1. Read-only: no repo lock. From Python:
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, `Forked from: <verstr> @ step N` for a fork and a `Rewound to step N`
+lines, `Rerun of: <verstr>` for a [rerun](#rerun), `Forked from: <verstr> @ step N` for a fork and a `Rewound to step N`
 line per rewind, metrics (each at its [summary value](#best-value-summaries-summary),
 with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
@@ -1023,6 +1026,97 @@ here and continue it from the SDK with `start_run(run_id=<ref>)` — or do both 
 one call, `start_run(run_id=<ref>, rewind_to_step=N)` (see
 [sdk.md](sdk.md#rewinding-a-run)) — or fork it into a new run with
 `vmn-exp run my_app --fork-from <ref> --fork-step N -- <cmd>`.
+
+### `rerun`
+
+Run a run's recorded command again, against that run's own code — dirty
+edits, local commits, untracked files and deps included — as a new run:
+
+```sh
+vmn-exp rerun my_app -v @3                        # the recorded command, recorded cwd
+vmn-exp rerun my_app -v @3 -- python train.py --lr 0.01   # another command, same code
+vmn-exp rerun my_app -v @3 --dry-run              # print the plan, create nothing
+vmn-exp rerun my_app -v @3 --print [--json]       # print what a job would run
+```
+
+The run is required (`-v <ref>` or `--latest`). Its code is restored into a
+throwaway workspace — a fresh `vmn-rerun-<app>-*` directory in `$TMPDIR`, or
+`--worktree-dir DIR` (missing or empty, outside the repo) — as detached
+worktrees at the recorded commits (a clone from the recorded remote when a
+commit is not local), with the recorded deps at their relative paths and the
+captured patches applied. Anything that doesn't restore exactly — a patch that
+doesn't apply, a dep that can't be checked out, a missing code object — is an
+error, and nothing is created. The live checkout is never touched. The
+workspace is removed when the command ends (also on SIGTERM);
+`--keep-worktree` keeps it, prints its path and records it as `workdir` in
+`run_state.yml`.
+
+The command runs in the recorded `cwd` inside the workspace (`--cwd PATH`,
+relative to the restored app root, overrides it; a run recorded before `cwd`
+existed runs from the app root). `-- <cmd>` replaces the recorded command.
+Absolute paths into the live repo in the command are pointed into the
+workspace. Supervision is exactly [`run`](#run)'s: heartbeat, `output.log`,
+signal forwarding, the child's exit code as the exit code, the new verstr
+printed, and the repo lock released once the record is claimed. The run flags
+`--note`, `--name`, `--parent`, `--no-env`, `--input`, `-f`,
+`--heartbeat-interval`, `--kill-grace-sec`, `--no-system-metrics`,
+`--sync-interval`, `--no-capture-output` and `--output-cap-mb` apply;
+`--fork-from` is refused.
+
+The new run records `rerun_of: <verstr>` and copies the original's code
+identity instead of snapshotting the workspace, so it shares the original's
+code object and is named `<code_verstr>.rN` under the same code — which keeps
+that code alive when [`prune`](#prune) deletes the original.
+`vmn-exp list my_app --query 'rerun_of = "<verstr>"'` lists a run's reruns.
+The original's create params are copied (tags and inputs are not); a sweep
+trial's params are re-exported as `VMN_SWEEP_PARAMS`, but the rerun is not a
+trial. The child's `VMN_EXPERIMENT_DIR` points at the original store, so runs
+the command creates (an SDK `start_run()`, a nested `vmn-exp run`) land there as
+inner runs of the rerun.
+
+It warns when the rerun can't match the original: an environment that differs
+from the one captured with the run (python, platform, packages), untracked files
+that were too large to capture, a source run still `running`, a sweep trial.
+
+Refused, with nothing created: runs without code (imports, a missing code
+object), runs that never ran a command (`create`-only — pass one after `--`),
+and SDK runs without `--`: an SDK run records its script's arguments, not the
+interpreter, so rerun it as `vmn-exp rerun my_app -v X -- python train.py`. Its
+metrics then land on the inner run the script opens. `rerun` needs a checkout;
+it is refused in `--from-snapshot` / `VMN_SNAPSHOT_METADATA` mode.
+
+Gitignored files (datasets, `.env`, checkpoints) are not part of a run's code
+and are not in the workspace — point the command at them with absolute paths.
+
+#### Reruns on a cluster
+
+vmn does not schedule jobs — your Kubernetes job, Condor submit file or Slurm
+script does. `--print` tells it what to run, without executing or creating
+anything:
+
+```sh
+vmn-exp rerun my_app -v @3 --print
+# command:       python train.py --lr 0.1
+# cwd:           src
+# code_verstr:   0.0.3-dev.abc1234.def5678
+# code:          0.0.3-dev.abc1234.def5678.<diff hash>
+# recipe:        vmn-exp rerun my_app -v 0.0.3-dev.abc1234.def5678
+# export_recipe: vmn-exp export my_app -v ... -o ... && cd ... && VMN_SNAPSHOT_METADATA=... vmn-exp run my_app -- python train.py --lr 0.1
+```
+
+`--print --json` prints the same as one JSON object (`rerun_of`, `app`,
+`command` as a list, `cwd`, `code_verstr`, `code`, `base_commit`, `recipe`,
+`export_recipe`) for a submit script to read.
+
+- **Nodes with the repo**: the job runs the recipe,
+  `vmn-exp rerun my_app -v <verstr>`, in a checkout that reaches the same
+  store (a shared `--store`/`VMN_EXPERIMENT_STORE`, or the same directory).
+- **Nodes without git**: export the run's tree once —
+  `vmn-exp export my_app -v <verstr> -o dir` — ship `dir` (an image, a shared
+  volume), and have the job run the printed command in `dir/<cwd>` with
+  `VMN_SNAPSHOT_METADATA=dir/vmn_metadata.yml` (or `vmn-exp run my_app
+  --from-snapshot dir -- <command>`), as `export_recipe` spells out. That run
+  is a normal git-free run of the exported code, not a linked rerun.
 
 ---
 

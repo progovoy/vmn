@@ -72,6 +72,13 @@ all work on SDK runs with no extra steps, and mixing the CLI and the SDK in one
 project is fine — `vmn-exp add` a hand-measured number to a run your training
 script opened.
 
+One difference: an SDK run records its script's arguments (`sys.argv`), not the
+interpreter, with `runner: sdk` in `run_state.yml`. So
+[`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out —
+`vmn-exp rerun my_app -v <ref> -- python train.py` — and the script's
+`start_run()` then opens an inner run of the rerun record, which is where its
+metrics land.
+
 ---
 
 ## Starting a run

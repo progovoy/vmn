@@ -23,6 +23,7 @@ import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./
 import RunMediaSection from "./RunMedia";
 import RunProvenanceSection from "./RunProvenance";
 import { ForkOrigin } from "./RunFork";
+import { RerunHints } from "./RunRerun";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
 function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
@@ -70,6 +71,8 @@ function RunBody({ ws, app, appName, detail }: {
           <div className="eyebrow">reproduce</div>
           <div className="cli-hint">vmn-exp restore {appName} -v {verstr}</div>
           <div className="cli-hint">vmn-exp export {appName} -v {verstr}</div>
+          <RerunHints boardBase={`/ws/${ws}/app/${app}`} appName={appName} verstr={verstr}
+            command={detail.status?.command} />
         </div>
       </div>
       {detail.artifacts && detail.artifacts.length > 0 && (
@@ -138,7 +141,7 @@ export default function Run() {
         <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
       </div>
       {detail && (
-        <ForkOrigin forkedFrom={detail.forked_from} rewinds={detail.rewinds} runUrl={runUrl} />
+        <ForkOrigin forkedFrom={detail.forked_from} rerunOf={detail.rerun_of} rewinds={detail.rewinds} runUrl={runUrl} />
       )}
       <NoteEditor key={summary.verstr} ws={ws} app={app} verstr={summary.verstr} note={summary.note} />
       <TagEditor key={`tags-${summary.verstr}`} ws={ws} app={app} verstr={summary.verstr} tags={summary.tags} />

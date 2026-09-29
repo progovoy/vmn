@@ -34,6 +34,7 @@ EXPERIMENT_ACTIONS = [
     "lineage",
     "importance",
     "rewind",
+    "rerun",
 ]
 
 
@@ -89,7 +90,19 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--older-than", default=None,
                       help="Prune experiments older than duration (e.g., 30d)")
     pexp.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
-                      help="prune: print what would be deleted, delete nothing")
+                      help="prune: print what would be deleted, delete nothing; "
+                           "rerun: print the plan, create nothing")
+    pexp.add_argument("--print", dest="print_only", action="store_true", default=False,
+                      help="rerun: print the resolved command, cwd, code identity and a "
+                           "recipe (with --json as JSON); runs and creates nothing")
+    pexp.add_argument("--keep-worktree", action="store_true", default=False,
+                      help="rerun: keep the workspace the run's code was restored into")
+    pexp.add_argument("--worktree-dir", default=None, metavar="DIR",
+                      help="rerun: restore the run's code here (missing or empty, "
+                           "outside the repo; default: a fresh dir in $TMPDIR)")
+    pexp.add_argument("--cwd", dest="rerun_cwd", default=None, metavar="PATH",
+                      help="rerun: run the command here, relative to the restored app "
+                           "root (default: the recorded cwd)")
     pexp.add_argument("--force", action="store_true", default=False,
                       help="prune: also delete runs that are still running")
     pexp.add_argument("--local-only", action="store_true", default=False,
@@ -265,13 +278,6 @@ def _exp_run_without_repo(args):
         experiment_storage_params,
     )
 
-    if getattr(args, "writer_id", None):
-        os.environ["VMN_WRITER_ID"] = args.writer_id
-
-    params = experiment_storage_params(None, args)
-    storage = _get_experiment_storage(None, params)
-    action = args.action
-
     dispatch = {
         "create": experiment_create,
         "run": experiment_run,
@@ -284,15 +290,18 @@ def _exp_run_without_repo(args):
     }
 
     handler = dispatch.get(action)
-    if handler is not None:
-        return handler(None, params, storage, args)
+    if handler is None:
+        VMN_LOGGER.error(
+            "Action '%s' requires a git repository "
+            "(not available in --from-snapshot mode)",
+            action,
+        )
+        return 1
 
-    VMN_LOGGER.error(
-        "Action '%s' requires a git repository "
-        "(not available in --from-snapshot mode)",
-        action,
-    )
-    return 1
+    if getattr(args, "writer_id", None):
+        os.environ["VMN_WRITER_ID"] = args.writer_id
+    params = experiment_storage_params(None, args)
+    return handler(None, params, _get_experiment_storage(None, params), args)
 
 
 # ---------------------------------------------------------------------------
