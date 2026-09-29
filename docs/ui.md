@@ -123,8 +123,10 @@ Mutations are asynchronous jobs:
 1. `POST /api/v1/workspaces/{ws}/apps/{app}/actions/{action}` with a JSON body
    → `202` + `{"id": ...}`. Actions: `stamp`, `release`, `goto`, `restore`,
    `prune`, `note`, `exp_create`, `exp_add`, `exp_tag`, `exp_archive`,
-   `exp_unarchive` and `exp_rewind` (body `{"verstr", "step"}`; runs
-   [`vmn-exp rewind`](experiments.md#rewind)).
+   `exp_unarchive`, `exp_rewind` (body `{"verstr", "step"}`; runs
+   [`vmn-exp rewind`](experiments.md#rewind)) and `exp_push` (body
+   `{"verstrs": [...]}`, empty or omitted for every local run; runs
+   [`vmn-exp push`](experiments.md#offline-recording-and-push)).
 2. `GET /api/v1/jobs/{id}` → status (`running`/`succeeded`/`failed`), exit code,
    and the captured log.
 

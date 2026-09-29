@@ -62,12 +62,13 @@ If vmn saves you an afternoon, a ⭐ helps other teams find it.
 | Adopt without replacing build tooling | Version backends update npm, Cargo, Poetry, PEP 621, Jinja2, or regex-selected files. |
 
 vmn treats a version as a handle to recorded source state, not only as a
-string. The same model supports releases and measured runs:
+string. The same model supports releases, working snapshots, and measured runs:
 
 | State | Command | Captures |
 | --- | --- | --- |
 | Release | `vmn stamp` → `vmn goto` | Committed application and dependency revisions |
-| Measured | `vmn-exp` → `vmn goto` | Release state plus local commits, tracked changes, untracked files, and the run's metrics, parameters, artifacts, and history |
+| Working | `vmn snapshot` | Release state plus local commits, tracked changes, and untracked files |
+| Measured | `vmn-exp` → `vmn goto` | Working state plus the run's metrics, parameters, artifacts, and history |
 
 > **Scope:** vmn restores recorded source revisions. It does not rebuild
 > artifacts, capture toolchains or runtime infrastructure, sign tags, or deploy
@@ -95,7 +96,7 @@ vmn ships as three packages; install only what you need:
 
 | Package | What you get |
 |---|---|
-| `vmn` | Versioning: `stamp`, `release`, `show`, `goto`, … |
+| `vmn` | Versioning: `stamp`, `release`, `show`, `goto`, `snapshot`, … |
 | `vmn-exp` | Experiment tracking on top of vmn: the `vmn-exp` CLI, model registry, and the dashboard (`vmn-exp[ui]`) |
 | `vmn-exp-sdk` | Just the metrics writer for training jobs: `start_run()`, no git needed |
 
@@ -208,7 +209,7 @@ extensions:
 1.6.0-rc.23                   prerelease
 1.6.7.4                       optional fourth hotfix segment
 1.6.0-rc.23+build01           build metadata
-1.6.0-dev.a1b2c3d.e4f5g6h     recorded working state (an experiment run)
+1.6.0-dev.a1b2c3d.e4f5g6h     recorded working state (a snapshot or experiment run)
 ```
 
 Enable Conventional Commits, changelog generation, GitHub Releases, branch
@@ -300,6 +301,41 @@ vmn stamp --pull -r patch my_app
 Start an established migration with `--dry-run`; then add branch policy before
 enabling automatic stamps.
 
+## Working-state snapshots
+
+Between releases, capture and restore your exact working state — uncommitted
+changes, local commits, and untracked files, across every dependency — as a
+named version, without committing:
+
+```sh
+vmn snapshot create my_app --note "parser refactor"   # prints 1.2.0-dev.a1b2c3d.e4f5g6h
+vmn snapshot restore my_app --latest                  # your current work is auto-saved first
+```
+
+<details>
+<summary><strong>Snapshot actions</strong></summary>
+
+`vmn snapshot [create|list|show|note|delete|restore|export|diff] <app>`
+(`create` is the default). Refs are a full verstr, a unique prefix, `@N` or
+`--latest`.
+
+```sh
+vmn snapshot list my_app --last 5
+vmn snapshot diff my_app -v @2                   # vs your working tree; --to <ref|version>
+vmn snapshot export my_app -v @2                 # -> ./<verstr>.tar.gz, or -o <dir>
+vmn snapshot restore my_app -v @2                # refuses to drop oversized untracked files without --force
+vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_app     # also works (with vmn-exp installed)
+```
+
+Snapshots are thin records in `.vmn/<app>/snapshots/` that share code objects
+with experiment runs. With `vmn-exp` installed, `--store <uri>` (or
+`VMN_EXPERIMENT_STORE`, or conf `experiment.storage.uri`) keeps them in a
+team store; `--local` overrides it.
+
+</details>
+
+See [docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md).
+
 ## Experiments: recorded working state
 
 Between releases, `vmn-exp` records your exact working state — uncommitted
@@ -314,6 +350,8 @@ vmn goto -v <dev-version> my_app      # or: vmn-exp restore my_app --latest
 This extends the same state-recovery model as `goto` to uncommitted work; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
 New to it? The [client guide](https://github.com/progovoy/vmn/blob/master/docs/client-guide.md) walks one project through submit, log, watch, compare, reproduce, resume/rewind/fork and models.
 Hyperparameter sweeps run server-less across many agents with `vmn-exp sweep`; see [docs/sweeps.md](https://github.com/progovoy/vmn/blob/master/docs/sweeps.md).
+Nodes with no route to the store record with `VMN_EXP_OFFLINE=1` and upload
+later with `vmn-exp push my_app`; see [offline recording and push](https://github.com/progovoy/vmn/blob/master/docs/experiments.md#offline-recording-and-push).
 Python workloads can log in-process instead of shelling out — `from
 vmn_exp.sdk import start_run`, plus `autolog()` for scikit-learn
 hyperparameters and scores, and a query language for filtering runs on metrics
@@ -357,6 +395,7 @@ you want into your `CLAUDE.md` or `AGENTS.md`.
 | `vmn release` | Promote a prerelease to a final release |
 | `vmn show` | Read version, status, or effective configuration |
 | `vmn goto` | Restore recorded application and dependency revisions |
+| `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
 | `vmn-exp` | Record, compare, export, or restore experiment runs (working state plus metrics) |
 | `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps on private branches (create, pull, freeze, remove) |
 | `vmn skill` | Output or install the AI agent skill block |
@@ -371,6 +410,7 @@ Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
 
 - [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
 - [Driving the UI fleet columns (for AI agents)](https://github.com/progovoy/vmn/blob/master/docs/ai-fleet-tracking.md)
+- [Working-state snapshots](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md)
 - [Experiment tracking: client guide](https://github.com/progovoy/vmn/blob/master/docs/client-guide.md)
 - [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
 - [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)

@@ -29,6 +29,7 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 - [Structured notes & params](#structured-notes--params)
 - [Metrics schema (sorting & goals)](#metrics-schema-sorting--goals)
 - [Storage (local, S3, GCS, Azure, plugins)](#storage-local-s3-gcs-azure-plugins)
+- [Offline recording and push](#offline-recording-and-push)
 - [Web UI](#web-ui)
 
 ---
@@ -1134,6 +1135,18 @@ vmn-exp rerun my_app -v @3 --print
   --from-snapshot dir -- <command>`), as `export_recipe` spells out. That run
   is a normal git-free run of the exported code, not a linked rerun.
 
+### `push`
+
+Upload local runs (typically recorded under `VMN_EXP_OFFLINE`) to the remote
+store under the same names, renaming on a collision. Resumable; `-v`
+(repeatable) picks runs, `--dry-run` previews, `--json` prints the outcomes.
+See [Offline recording and push](#offline-recording-and-push).
+
+```sh
+vmn-exp push my_app
+vmn-exp push my_app -v @3 --dry-run
+```
+
 ---
 
 ## Structured notes & params
@@ -1324,7 +1337,11 @@ factory)` does the same at runtime. The contract:
   `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
 - **`create_exclusive` must be atomic**: of any number of hosts racing for one
   verstr exactly one gets `True`; everyone else gets `False` and allocates the
-  next name. The base-class default (check, then save) is *not* safe on a shared
+  next name. A store `vmn-exp push` can target also takes
+  `create_exclusive(..., claim_token=)`: the token is stored with the claim,
+  and a claim holding the same token but no `metadata.yml` is the caller's own
+  crashed attempt and is resumed (`True`); empty or foreign claims and
+  existing records stay taken. The base-class default (check, then save) is *not* safe on a shared
   store — use the store's conditional create (`O_EXCL` mkdir, S3
   `If-None-Match: *`, GCS `if_generation_match=0`, Azure `overwrite=False`).
   `update_metadata` should likewise be a compare-and-swap on the object version.
@@ -1393,6 +1410,66 @@ the GCS and Azure backends are built.
   SDK reader skip a record whose version is newer than the installed vmn-exp
   supports, with a warning to upgrade, rather than mis-read it. `show --json`
   prints the field.
+
+## Offline recording and push
+
+Compute nodes often have no route to the bucket, while the committed conf.yml
+names one. `VMN_EXP_OFFLINE=1` (also `true`/`yes`/`on`) makes every storage
+factory — `vmn-exp create`/`run`/..., `start_run()`, and `vmn snapshot` — drop
+the remote store and record to the local root only (the checkout's
+`.vmn/<app>/experiments/`, or `--experiment-dir`/`VMN_EXPERIMENT_DIR`). It
+beats `--store`, `VMN_EXPERIMENT_STORE` and conf; without a local root it fails
+rather than silently falling back. Code objects stay local too.
+
+An offline run can't see which names other hosts took, so it is named
+`<code_verstr>.<writer_id>[.N]` rather than `.rN` — the writer id is
+`VMN_WRITER_ID`, else `HOSTNAME`, else the host name (e.g. `1.6.0-dev.a1b2c3d.e4f5g6h.gpu07`, then `….gpu07.2`).
+
+Later, from a host that can reach the store, upload them with `vmn-exp push`:
+
+```sh
+VMN_EXP_OFFLINE=1 vmn-exp run my_app -- python train.py      # on the node
+vmn-exp push my_app                                          # later: every local run
+vmn-exp push my_app -v @3 -v 1.6.0-dev.a1b2c3d.e4f5g6h.gpu07 # just these (repeatable)
+vmn-exp push my_app --store s3://ml-exps/team --dry-run      # preview, write nothing remote
+```
+
+```text
+1.6.0-dev.a1b2c3d.e4f5g6h.gpu07  new
+1.6.0-dev.a1b2c3d.e4f5g6h.gpu07.2  up-to-date
+1.6.0-dev.a1b2c3d.e4f5g6h  new -> 1.6.0-dev.a1b2c3d.e4f5g6h.r3
+pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
+```
+
+- **Target**: `--store` (or `--bucket`/`--prefix`/`--endpoint-url`) >
+  `VMN_EXPERIMENT_STORE` > conf `experiment.storage.uri`. `VMN_EXP_OFFLINE`
+  never hides it here, so push works from the same shell. It must be a remote
+  store (`s3://`, `gs://`, `az://`); a `file://` target is refused (rsync the
+  experiments dir instead), and so is having no remote configured.
+- **Same name**: each run is pushed under its local verstr, parents before
+  children: the code object (only when the remote lacks it), the record, the
+  other top-level files, each writer's log from where the remote copy ends,
+  and missing or resized artifacts. `archived`/`note` merge three-way against
+  what was last pushed; on a conflict the remote wins, with a warning.
+- **Resumable**: a failed or interrupted push is simply run again. A ledger per
+  remote under `.vmn/<app>/experiments/.push/<remote id>/` records what was
+  sent, so an unchanged run costs no remote call (`up-to-date`) and a changed
+  one ships only what is new (`update`).
+- **Collisions**: when the remote holds a different run under the same name,
+  the run is renamed on *both* sides to the next free `<code_verstr>.rN` (its
+  local directory, `verstr`, a `renamed_from` field, and its children's
+  `parent`) and then pushed. A running or stuck run, a run a local model
+  version references, and a sweep's outer run are never renamed: they are
+  `skipped`, with the reason.
+- **Output**: one line per run — `<verstr>  <status>` with status `new`,
+  `update`, `up-to-date`, `skipped` or `failed` (`collision` in a `--dry-run`),
+  `-> <new name>` after a rename, and the reason in parentheses — then
+  `pushed N, up-to-date M, renamed R, skipped S, failed F`. `--json` prints the
+  outcomes as a list of `{verstr, status, detail, warnings, renamed_from}`. The
+  exit code is 1 when any run failed.
+- Push takes the repo lock (it may rename local runs) and works git-free
+  (`VMN_SNAPSHOT_METADATA` + `VMN_EXPERIMENT_DIR`) as well as in a checkout.
+  The web UI runs it as the `exp_push` job action ([ui.md](ui.md#actions)).
 
 ---
 

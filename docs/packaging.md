@@ -70,6 +70,11 @@ subpackage belongs to exactly one distribution.
   storage and record format live in `vmn_exp` (the SDK needs them), so `vmn`
   alone cannot restore one; installing `vmn-exp` adds it. The plugin hook
   replaced the hardcoded `BUILTIN_PLUGINS` list rather than being removed.
+- **`vmn snapshot`** is built in (`version_stamp.snapshot`): it records and
+  restores working state in local stores with `vmn` alone. `vmn-exp` registers
+  a snapshot store opener (`plugin_api.register_snapshot_store_opener`) so
+  `--store`/`VMN_EXPERIMENT_STORE`/conf `experiment.storage.uri` put snapshots
+  in a remote store. See [snapshots.md](snapshots.md).
 - `version_stamp.api` becomes vmn's public, versioned contract:
   - documented;
   - covered by contract tests;

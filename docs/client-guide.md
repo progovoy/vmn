@@ -168,6 +168,29 @@ In each pod, set `VMN_SNAPSHOT_METADATA=/workspace/code/vmn_metadata.yml`,
 the outer run), then call `start_run()`. For the full cluster walkthrough, see
 [experiment-tracking-guide.md](experiment-tracking-guide.md).
 
+### Nodes without network: record offline, push later
+
+When the compute nodes can't reach the store (air-gapped partitions, no
+egress), set `VMN_EXP_OFFLINE=1` there. Runs then record only to the local
+root (the checkout, or `VMN_EXPERIMENT_DIR`), ignoring the store conf.yml
+names, and carry the node's writer id in their names so hosts never pick the
+same one. Push them from a machine that can reach the store:
+
+```sh
+# on the node (the job script)
+export VMN_EXP_OFFLINE=1 VMN_EXPERIMENT_DIR=/scratch/exps
+vmn-exp run my_app -- python train.py
+
+# later, from the checkout on a login node that sees /scratch and the bucket
+VMN_EXPERIMENT_DIR=/scratch/exps vmn-exp push my_app --dry-run
+VMN_EXPERIMENT_DIR=/scratch/exps vmn-exp push my_app
+```
+
+Push is resumable (run it again after a failure; unchanged runs are skipped as
+`up-to-date`) and renames a run on both sides if the remote already holds a
+different run under its name. Details:
+[Offline recording and push](experiments.md#offline-recording-and-push).
+
 ---
 
 ## 4. Inside the job: the SDK
@@ -318,6 +341,10 @@ dirty, the work is saved as a dev version before it is replaced, and the
 `vmn goto -v <saved> my_app` command that brings it back is printed. The two
 commands differ in the ref they accept and in how they find the store; see
 [Restore vs goto](experiments.md#restore-vs-goto).
+
+To save work in progress without recording a run, use `vmn snapshot create
+my_app` (and `vmn snapshot restore my_app -v <ref>`); snapshots share the
+store and code objects with runs. See [snapshots.md](snapshots.md).
 
 ---
 
