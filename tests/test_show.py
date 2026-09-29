@@ -4,6 +4,8 @@ import subprocess
 
 import yaml
 
+from version_stamp import version as version_mod
+
 from helpers import (
     _add_buildmetadata_to_version,
     _goto,
@@ -546,7 +548,9 @@ def test_show_on_local_only_branch_0_commits_after(app_layout, capfd):
     assert "outgoing" in res["dirty"]
 
 
-def test_show_no_log_in_stdout(app_layout, capfd):
+def test_show_no_log_in_stdout(app_layout, capfd, monkeypatch):
+    # handle_show logs its probe line only on a dev build (version 0.0.0)
+    monkeypatch.setattr(version_mod, "version", "0.0.0")
     _run_vmn_init()
     _init_app(app_layout.app_name)
     _stamp_app(f"{app_layout.app_name}", "patch")
