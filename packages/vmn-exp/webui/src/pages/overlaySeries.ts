@@ -9,7 +9,7 @@ import { pollIntervalMs } from "../util";
 import { runOrigin } from "../util/chartData";
 
 /** Per-metric point budget per run once several runs share a chart. */
-const OVERLAY_POINTS = 1000;
+export const OVERLAY_POINTS = 1000;
 
 type Series = Record<string, SeriesPoint[]>;
 
@@ -25,6 +25,16 @@ export interface OverlayRunData {
 export interface OverlayData {
   runs: OverlayRunData[];
   missing: string[];
+  /** Declared x-axis metric per metric; the first run declaring one wins. */
+  stepMetrics: Record<string, string>;
+}
+
+function mergeStepMetrics(perRun: Record<string, Record<string, string>> = {}, runs: string[]) {
+  const merged: Record<string, string> = {};
+  for (const v of runs) {
+    for (const [m, x] of Object.entries(perRun[v] ?? {})) merged[m] ??= x;
+  }
+  return merged;
 }
 
 function toRun(key: string, series: Series, status?: Partial<RunStatus> | null): OverlayRunData {
@@ -46,6 +56,7 @@ async function loadBatch(ws: string, app: string, runs: string[]): Promise<Overl
   return {
     runs: runs.filter((v) => batch.series[v]).map((v) => toRun(v, batch.series[v], statuses[v])),
     missing: batch.missing ?? [],
+    stepMetrics: mergeStepMetrics(batch.step_metrics, runs),
   };
 }
 

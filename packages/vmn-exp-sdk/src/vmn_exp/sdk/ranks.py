@@ -67,9 +67,6 @@ class NoOpRun:
     def log_params(self, mapping):
         return None
 
-    def define_metric(self, name, summary=None, goal=None):
-        return None
-
     def log_note(self, text):
         return None
 
@@ -82,7 +79,7 @@ class NoOpRun:
     def _ignore(self, *args, **kwargs):
         return None
 
-    set_tag = set_tags = remove_tag = _ignore
+    set_tag = set_tags = remove_tag = define_metric = alert = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
 
     def __enter__(self):

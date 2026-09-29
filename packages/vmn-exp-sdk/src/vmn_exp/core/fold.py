@@ -124,9 +124,14 @@ def _apply_metric_values(fold, entry, key):
 
 
 def _apply_definition(fold, entry, key):
+    """Fold a ``define_metric`` entry's policy fields, each latest-wins."""
     definition = entry_definition(entry)
-    if definition is not None:
-        _keep_latest(fold.setdefault("metric_defs", {}), *definition, key)
+    if definition is None:
+        return
+    name, fields = definition
+    declared = fold.setdefault("metric_defs", {}).setdefault(name, {})
+    for field, value in fields.items():
+        _keep_latest(declared, field, value, key)
 
 
 def _apply(fold, entry, key):
@@ -178,6 +183,14 @@ def fold_values(fold, field):
     return {name: wrapped[0] for name, wrapped in fold[field].items()}
 
 
+def _definitions(fold):
+    """``{name: {field: value}}`` of the run's folded ``define_metric`` fields."""
+    return {
+        name: {field: wrapped[0] for field, wrapped in fields.items()}
+        for name, fields in (fold.get("metric_defs") or {}).items()
+    }
+
+
 def fold_metrics(fold, schema=None):
     """``(metrics, metric_summary)`` of a fold — see :func:`summarize`.
 
@@ -186,7 +199,7 @@ def fold_metrics(fold, schema=None):
     return summarize(
         fold_values(fold, "metrics"),
         fold.get("extrema") or {},
-        fold_values(fold, "metric_defs") if fold.get("metric_defs") else {},
+        _definitions(fold),
         schema,
     )
 

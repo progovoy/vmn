@@ -214,17 +214,16 @@ def create_app(
         """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
-        s3_storage = _exp_storage_for(ws)
-        schema = {} if s3_storage else source.metrics_schema(ws, app_name)
-        return source.snapshot(ws, app_name, s3_storage, schema), schema
+        schema = _app_schema(ws, app_name)
+        return source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
+
+    def _app_schema(ws, app_name):
+        """The app's conf.yml metrics schema; none on S3."""
+        return {} if _exp_storage_for(ws) else source.metrics_schema(ws, app_name)
 
     def _detail_options(ws, app_name):
-        """Refs, edges (and in the background, run states) from the app's
-        snapshot, and the metrics schema the run's metrics are summarized by."""
-        s3_storage = _exp_storage_for(ws)
-        options = source.detail_options(ws, source.snapshot(ws, app_name, s3_storage))
-        options["metric_schema"] = {} if s3_storage else source.metrics_schema(ws, app_name)
-        return options
+        """Refs, edges (and in the background, run states) from the app's snapshot."""
+        return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
@@ -238,6 +237,7 @@ def create_app(
         include_log: bool = False,
         keys: str = None,
         series: bool = True,
+        x: str = None,
     ):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
@@ -250,6 +250,8 @@ def create_app(
             include_log=include_log,
             keys=key_list(keys),
             include_series=series,
+            x=x or None,
+            schema=_app_schema(ws, app_name),
             **_detail_options(ws, app_name),
         )
         if err:
@@ -327,10 +329,7 @@ def create_app(
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):
         ws = _experiment_workspace(ws_name)
-        s3_storage = _exp_storage_for(ws)
-        if s3_storage:
-            return {}  # No app conf available for S3 workspaces
-        return source.metrics_schema(ws, _app_name(app_tag))
+        return _app_schema(ws, _app_name(app_tag))
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
     def list_versions(ws_name: str, app_tag: str):
@@ -427,7 +426,8 @@ def create_app(
         return payload
 
     def _series_storage(ws_name, app_tag):
-        return _any_exp_storage(_experiment_workspace(ws_name)), _app_name(app_tag)
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return _any_exp_storage(ws), app_name, _app_schema(ws, app_name)
 
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)

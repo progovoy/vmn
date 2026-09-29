@@ -176,3 +176,42 @@ def test_incremental_chunks_fold_to_the_same_summaries(seed):
     want = experiment_row(1, META, merged, schema=schema)
     assert _same(got["metrics"], want["metrics"]), (got["metrics"], want["metrics"])
     assert _same(got["metric_summary"], want["metric_summary"])
+
+
+# -- one define_metric for every per-metric declaration (step_metric too) ----
+
+
+def _declare(sec, name, **fields):
+    return {"timestamp": f"2026-01-01T00:01:{sec:02d}Z", "type": "define_metric",
+            "name": name, **fields}
+
+
+def test_a_declaration_without_a_summary_keeps_the_earlier_one():
+    """Entries fold per field: a later ``step_metric``-only declaration does
+    not wipe the summary an earlier one set."""
+    log = OVERFIT + [_declare(0, "loss", summary="min"),
+                     _declare(1, "loss", step_metric="epoch")]
+    assert _row(log)["metrics"]["loss"] == 0.4
+
+
+def test_a_run_glob_declaration_applies_to_matching_metrics():
+    log = [_m(i, {"val_loss": v}) for i, v in enumerate((1.0, 0.4, 0.9))]
+    log.append(_declare(0, "val_*", goal="min"))
+    assert _row(log)["metrics"]["val_loss"] == 0.4
+
+
+def test_an_exact_run_declaration_beats_a_run_glob():
+    log = [_m(i, {"val_loss": v}) for i, v in enumerate((1.0, 0.4, 0.9))]
+    log += [_declare(0, "val_loss", summary="last"), _declare(1, "val_*", goal="min")]
+    assert _row(log)["metrics"]["val_loss"] == 0.9
+
+
+def test_a_schema_glob_applies_to_matching_metrics():
+    log = [_m(i, {"val_loss": v}) for i, v in enumerate((1.0, 0.4, 0.9))]
+    assert _row(log, {"val_*": {"goal": "min"}})["metrics"]["val_loss"] == 0.4
+
+
+def test_define_metric_entry_is_the_shared_define_metric_entry():
+    entry = define_metric_entry("loss", summary="min", step_metric="epoch")
+    assert (entry["type"], entry["name"], entry["summary"], entry["step_metric"]) == (
+        "define_metric", "loss", "min", "epoch")

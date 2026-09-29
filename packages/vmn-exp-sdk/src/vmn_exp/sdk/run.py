@@ -24,7 +24,6 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
-from vmn_exp.core.metric_summary import define_metric_entry
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
@@ -50,7 +49,9 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
+from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 
@@ -63,6 +64,8 @@ DEFAULT_SYNC_INTERVAL_SEC = 30
 # unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
 FINAL_UPLOAD_TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
+# How long finish() waits for run.alert() deliveries still in flight.
+ALERT_DRAIN_SEC = 5
 
 # A run that reached interpreter exit still open was abandoned. Most of the
 # time that is just an mlflow-style "forgot to call finish()" — the process
@@ -179,7 +182,7 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-class Run(RunArtifacts):
+class Run(MetricDefinitions, RunArtifacts, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     def __init__(
@@ -314,6 +317,7 @@ class Run(RunArtifacts):
                 **final_state,
             )
             self._log_sync.submit(get_writer_id())
+            self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
         finally:
             context.unregister(self)
         return True
@@ -360,13 +364,6 @@ class Run(RunArtifacts):
         if step is not None:
             entry["step"] = step
         self._append(entry)
-
-    def define_metric(self, name, summary=None, goal=None):
-        """Rank metric *name* on its ``summary`` — ``"min"``, ``"max"`` or
-        ``"last"`` (default: from *goal*, ``"min"``/``"max"``) — in every
-        reader. Recorded as a ``define_metric`` log entry, so it travels with
-        the run and beats the app's conf.yml schema; a later call wins."""
-        self._append(define_metric_entry(name, summary=summary, goal=goal))
 
     def log_params(self, mapping):
         # A `params` entry, not a rewrite of the `create` entry: the log is

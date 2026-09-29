@@ -144,6 +144,9 @@ export interface SeriesPoint {
   step: number | null;
   ts: string | null;
   value: number;
+  /** The x metric's value at this point's step, when the series was joined
+   *  on another metric (`x=` on the series endpoints). */
+  x?: number;
 }
 
 export interface LogEntry {
@@ -193,6 +196,8 @@ export interface ExperimentDetail {
   log_total?: number;
   /** Points per metric before server-side downsampling. */
   series_total?: Record<string, number>;
+  /** Metrics that declare an x-axis metric (`define_metric` or conf.yml). */
+  step_metrics?: Record<string, string>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
   /** Each metric's summary value (best, per its policy — see MetricSpec). */

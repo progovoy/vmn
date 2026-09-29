@@ -117,3 +117,23 @@ def test_prune_query_selects_on_the_best_value(app_layout, capfd):
     out = capfd.readouterr().out
     assert err == 0
     assert overfit in out and steady not in out, out
+
+
+def test_one_define_metric_call_sets_summary_and_step_metric(app_layout):
+    _bootstrap(app_layout)
+    with start_run(app_layout.app_name) as run:
+        run.define_metric("loss", step_metric="epoch", summary="min")
+        for step, loss in enumerate([1.0, 0.2, 0.9]):
+            run.log_metrics({"loss": loss, "epoch": step}, step=step)
+        verstr = run.id
+    log = _storage(app_layout).load_merged_log(app_layout.app_name, verstr)
+    defs = [e for e in log if e.get("type") == "define_metric"]
+    assert [(d["summary"], d["step_metric"]) for d in defs] == [("min", "epoch")]
+    assert _rows(app_layout)[0]["metrics"]["loss"] == 0.2
+
+
+def test_define_metric_rejects_an_unknown_goal(app_layout):
+    _bootstrap(app_layout)
+    with start_run(app_layout.app_name) as run:
+        with pytest.raises(ValueError):
+            run.define_metric("loss", goal="up")

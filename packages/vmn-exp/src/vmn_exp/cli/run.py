@@ -21,6 +21,7 @@ from vmn_exp.cli.supervisor import (
     signal_name,
     supervision_guard,
 )
+from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC
 from vmn_exp.core.writer import (
     append_to_log,
@@ -216,14 +217,16 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     if repo_lock is not None:
         repo_lock.release()
 
-    return _Supervision(storage, app_name, verstr, args).run(run_cmd)
+    exp_conf = getattr(vcs, "experiment", None)
+    return _Supervision(storage, app_name, verstr, args, exp_conf).run(run_cmd)
 
 
 class _Supervision:
     """One supervised child: start it, watch it, and record how it ended."""
 
-    def __init__(self, storage, app_name, verstr, args):
+    def __init__(self, storage, app_name, verstr, args, exp_conf=None):
         self.storage = storage
+        self.exp_conf = exp_conf
         self.app_name = app_name
         self.verstr = verstr
         self.args = args
@@ -363,6 +366,7 @@ class _Supervision:
             ),
         )
         self.sync.final(_FINAL_SYNC_TIMEOUT_SEC)
+        self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
 
@@ -393,6 +397,14 @@ class _Supervision:
                     time.sleep(1)
         VMN_LOGGER.warning(
             f"Experiment {self.verstr}: could not record the final run state"
+        )
+
+    def _alert_if_failed(self):
+        alerter = Alerter(load_alert_config(self.app_name, self.exp_conf))
+        alert_if_failed(
+            self.storage, self.app_name, self.verstr,
+            getattr(self, "run_state", None), alerter,
+            run_name=getattr(self.args, "run_name", None),
         )
 
     def _ingest_new(self):

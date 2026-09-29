@@ -17,6 +17,7 @@ import math
 import os
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.step_metric import join_all
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
     entry_params,
@@ -53,11 +54,13 @@ def summary_metrics(log, schema=None):
     return fold_metrics(fold_log(log), schema)[0]
 
 
-def metric_series(log):
+def metric_series(log, x=None):
     """Fold a log into per-metric point lists for charting.
 
     Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order.
+    log order. With *x* (a metric name), every other metric's points are
+    joined on it instead: each carries ``x``, the x metric's value at the same
+    step, and points without one are dropped (see :mod:`vmn_exp.core.step_metric`).
     """
     series = {}
     for entry in log:
@@ -67,7 +70,7 @@ def metric_series(log):
         ts = entry.get("timestamp")
         for key, value in (entry.get("values") or {}).items():
             series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series
+    return series if x is None else join_all(series, x)
 
 
 def last_metric_at(log):
