@@ -18,7 +18,6 @@ from vmn_exp.core.fold import fold_inputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.refs import placement_snapshot
-from vmn_exp.core.step_metric import step_metrics
 from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
@@ -210,7 +209,7 @@ def experiment_detail(
         "metric_summary": metric_summary,
         "series": series,
         "series_total": series_total,
-        "step_metrics": declared_step_metrics(snapshot, schema),
+        "step_metrics": snapshot.step_metrics(schema),
         "artifacts": list_artifacts(storage, app_name, verstr),
         **snapshot.media,
         "status": status_detail(
@@ -275,11 +274,6 @@ def _thin(snapshot, names, x_of, per_metric):
     return {k: series[k] for k in names}, {k: totals[k] for k in names}
 
 
-def declared_step_metrics(snapshot, schema=None):
-    """``{metric: x metric}`` the run's definitions and *schema* declare."""
-    return step_metrics(snapshot.series_keys(), snapshot.definitions, schema)
-
-
 def run_series(
     storage, app_name, verstr, keys=None, max_points=DEFAULT_MAX_POINTS, budget=None,
     x=None, schema=None,
@@ -290,7 +284,7 @@ def run_series(
         return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
-    return series, totals, declared_step_metrics(snapshot, schema)
+    return series, totals, snapshot.step_metrics(schema)
 
 
 def log_page(

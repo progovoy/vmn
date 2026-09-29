@@ -10,9 +10,10 @@ import random
 
 import pytest
 
-from vmn_exp.core.fold import apply_entries, fold_row, new_fold
+from vmn_exp.core.fold import apply_entries, fold_definitions, fold_log, fold_row, new_fold
 from vmn_exp.core.log import experiment_row, sort_by_metric
-from vmn_exp.core.metric_summary import define_metric_entry
+from vmn_exp.core.metric_summary import summary_fields
+from vmn_exp.core.step_metric import create_define_metric_entry
 from vmn_exp.core.query import filter_rows
 
 META = {"verstr": "0.0.1-dev.aaa.bbb", "timestamp": "2026-01-01T00:00:00Z"}
@@ -32,6 +33,10 @@ def _losses(*values):
 
 
 OVERFIT = _losses(1.0, 0.4, 0.9)  # loss goes down, then back up
+
+
+def define_metric_entry(name, summary=None, goal=None):
+    return create_define_metric_entry(name, **summary_fields(summary, goal))
 
 
 def _row(log, schema=None):
@@ -111,10 +116,10 @@ def test_a_later_definition_wins():
     assert _row(log)["metrics"]["loss"] == 1.0
 
 
-@pytest.mark.parametrize("kwargs", [{"summary": "mean"}, {"goal": "up"}, {}])
-def test_define_metric_entry_rejects_bad_policies(kwargs):
+@pytest.mark.parametrize("kwargs", [{"summary": "mean"}, {"goal": "up"}])
+def test_summary_fields_rejects_bad_policies(kwargs):
     with pytest.raises(ValueError):
-        define_metric_entry("loss", **kwargs)
+        summary_fields(**kwargs)
 
 
 def test_numeric_params_still_fold_into_metrics():
@@ -211,7 +216,12 @@ def test_a_schema_glob_applies_to_matching_metrics():
     assert _row(log, {"val_*": {"goal": "min"}})["metrics"]["val_loss"] == 0.4
 
 
-def test_define_metric_entry_is_the_shared_define_metric_entry():
-    entry = define_metric_entry("loss", summary="min", step_metric="epoch")
-    assert (entry["type"], entry["name"], entry["summary"], entry["step_metric"]) == (
-        "define_metric", "loss", "min", "epoch")
+def test_one_fold_keeps_every_declared_field_latest_wins():
+    """Summary policies and step metrics fold together: the fold is the one
+    place a run's declarations are read from."""
+    log = [_declare(0, "loss", summary="min", color="red"),
+           _declare(1, "loss", step_metric="epoch"),
+           _declare(2, "loss", summary="max")]
+    assert fold_definitions(fold_log(log)) == {
+        "loss": {"summary": "max", "step_metric": "epoch", "color": "red"}
+    }

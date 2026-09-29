@@ -15,8 +15,8 @@ Pure: no storage, no clock.
 """
 import math
 
-from vmn_exp.core.metric_summary import entry_definition, summarize, track_extrema
-from vmn_exp.core.step_metric import DEFINE_METRIC
+from vmn_exp.core.metric_summary import summarize, track_extrema
+from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 from vmn_exp.core.rewind import is_rewound, rewind_step
 
 
@@ -155,7 +155,7 @@ def _apply_metric_values(fold, entry, key):
 
 
 def _apply_definition(fold, entry, key):
-    """Fold a ``define_metric`` entry's policy fields, each latest-wins."""
+    """Fold a ``define_metric`` entry's fields, each latest-wins."""
     definition = entry_definition(entry)
     if definition is None:
         return
@@ -230,8 +230,9 @@ def fold_values(fold, field):
     return {name: wrapped[0] for name, wrapped in fold[field].items()}
 
 
-def _definitions(fold):
-    """``{name: {field: value}}`` of the run's folded ``define_metric`` fields."""
+def fold_definitions(fold):
+    """``{name: {field: value}}`` of the run's folded ``define_metric`` fields
+    — summary policies and step metrics alike."""
     return {
         name: {field: wrapped[0] for field, wrapped in fields.items()}
         for name, fields in (fold.get("metric_defs") or {}).items()
@@ -246,7 +247,7 @@ def fold_metrics(fold, schema=None):
     return summarize(
         fold_values(fold, "metrics"),
         fold.get("extrema") or {},
-        _definitions(fold) if fold.get("metric_defs") else {},
+        fold_definitions(fold) if fold.get("metric_defs") else {},
         schema,
     )
 

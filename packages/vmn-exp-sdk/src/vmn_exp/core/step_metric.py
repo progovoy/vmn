@@ -7,7 +7,8 @@
     {"type": "define_metric", "name": "val_*", "step_metric": "epoch", ...}
 
 *name* is an exact metric name or an ``fnmatch`` glob. Entries fold per name,
-last write wins per field, and any extra fields ride along untouched. The
+last write wins per field, and any extra fields ride along untouched (the
+run's fold keeps them: :func:`~vmn_exp.core.fold.fold_definitions`). The
 app's conf.yml can declare the same thing in its metrics schema
 (``experiment.metrics.<name>.step_metric``, next to ``goal:``); a run's own
 declarations win over the schema, and an exact name over a glob.
@@ -37,17 +38,19 @@ def create_define_metric_entry(name, step_metric=None, **fields):
     return create_log_entry(DEFINE_METRIC, name=name, **fields)
 
 
-def metric_definitions(log, into=None):
-    """``{name: {field: value}}`` from a log's ``define_metric`` entries,
-    folded into *into* when given."""
-    defs = {} if into is None else into
-    for entry in log:
-        if entry.get("type") != DEFINE_METRIC or not isinstance(entry.get("name"), str):
-            continue
-        fields = {k: v for k, v in entry.items() if k not in ("type", "name", "timestamp")}
-        fields.pop("_writer", None)
-        defs.setdefault(entry["name"], {}).update(fields)
-    return defs
+_NOT_DECLARED = ("type", "name", "timestamp", "_writer")
+
+
+def entry_definition(entry):
+    """``(name, {field: value})`` a ``define_metric`` entry declares, or None.
+    The fold (:mod:`vmn_exp.core.fold`) keeps each field latest-wins."""
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    fields = {
+        k: v for k, v in entry.items() if k not in _NOT_DECLARED and v is not None
+    }
+    return (name, fields) if fields else None
 
 
 def _step_of(declaration):

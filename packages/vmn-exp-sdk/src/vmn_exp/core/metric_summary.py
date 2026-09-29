@@ -20,12 +20,11 @@ but never its min or max. A ``min``/``max`` policy on a metric without any
 finite value falls back to the last value, which then sorts last.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
-from vmn_exp.core.step_metric import create_define_metric_entry, lookup
+from vmn_exp.core.step_metric import lookup
 from vmn_exp.core.values import is_finite_number
 
 SUMMARIES = ("min", "max", "last")
 GOALS = ("min", "max")
-POLICY_FIELDS = ("summary", "goal")
 
 
 def summary_fields(summary=None, goal=None):
@@ -37,24 +36,6 @@ def summary_fields(summary=None, goal=None):
         raise ValueError(f"goal must be one of {GOALS}, got {goal!r}")
     fields = {"summary": summary, "goal": goal}
     return {k: v for k, v in fields.items() if v is not None}
-
-
-def define_metric_entry(name, summary=None, goal=None, **fields):
-    """A ``define_metric`` log entry declaring *name*'s summary and/or goal
-    (plus any other declaration *fields*, e.g. ``step_metric``)."""
-    if summary is None and goal is None:
-        raise ValueError("define_metric needs a summary and/or a goal")
-    return create_define_metric_entry(name, **summary_fields(summary, goal), **fields)
-
-
-def entry_definition(entry):
-    """``(name, {field: value})`` of the policy fields a ``define_metric``
-    entry sets, or None."""
-    name = entry.get("name")
-    if not isinstance(name, str) or not name:
-        return None
-    fields = {k: entry[k] for k in POLICY_FIELDS if entry.get(k) is not None}
-    return (name, fields) if fields else None
 
 
 def _policy_of(definition):

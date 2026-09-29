@@ -5,13 +5,13 @@ series is then keyed by that metric's value logged at the same step.
 """
 import pytest
 
+from vmn_exp.core.fold import fold_definitions, fold_log
 from vmn_exp.core.log import metric_series
 from vmn_exp.core.step_metric import (
     create_define_metric_entry,
     declared_step_metric,
     join_all,
     join_series,
-    metric_definitions,
     step_metrics,
 )
 from vmn_exp.snapshot import CachedSnapshotStorage, LocalSnapshotStorage
@@ -74,7 +74,7 @@ def test_definitions_fold_per_name_last_write_wins():
         create_define_metric_entry("loss", step_metric="step2"),
         create_define_metric_entry("val_*", step_metric="global"),
     ]
-    defs = metric_definitions(log)
+    defs = fold_definitions(fold_log(log))
     assert defs["val_*"]["step_metric"] == "global"
     assert defs["loss"]["step_metric"] == "step2"
 
@@ -130,7 +130,7 @@ def test_define_metric_round_trips_through_storage_and_reader(storage):
     run.log_metrics({"val_loss": 0.1}, step=9)  # no epoch at step 9
     run.finish()
 
-    defs = metric_definitions(storage.load_merged_log(APP, VERSTR))
+    defs = fold_definitions(fold_log(storage.load_merged_log(APP, VERSTR)))
     assert defs == {"val_*": {"step_metric": "epoch"}}
 
     row = reader.get_run(APP, VERSTR, storage=storage)

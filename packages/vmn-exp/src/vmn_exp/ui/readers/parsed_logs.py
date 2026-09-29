@@ -19,6 +19,7 @@ from collections import OrderedDict
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import flatten_logs
 from vmn_exp.core.fold import (
+    fold_definitions,
     fold_last_metric_at,
     fold_log,
     fold_metrics,
@@ -30,7 +31,7 @@ from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.rewind import REWIND
 from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
-from vmn_exp.core.step_metric import join_series, metric_definitions
+from vmn_exp.core.step_metric import join_series, step_metrics
 from vmn_exp.ui.readers.series import SeriesThinner, downsample
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
@@ -61,7 +62,6 @@ class LogSnapshot:
         self.metrics = fold_values(parsed.fold, "metrics")
         self._metric_fold = _metric_parts(parsed.fold)
         self.last_metric_at = fold_last_metric_at(parsed.fold)
-        self.definitions = dict(parsed.definitions)
         self.media = parsed.media_view
         # The fold keys a rewind by its log position (see fold_log).
         self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
@@ -71,6 +71,10 @@ class LogSnapshot:
         """``(metrics, metric_summary)`` under the metrics *schema* — see
         :func:`~vmn_exp.core.fold.fold_metrics`."""
         return fold_metrics(self._metric_fold, schema)
+
+    def step_metrics(self, schema=None):
+        """``{metric: x metric}`` the run's definitions and *schema* declare."""
+        return step_metrics(self._counts, fold_definitions(self._metric_fold), schema)
 
     def log(self):
         return self._entries[: self.total]
@@ -128,7 +132,6 @@ class _Parsed:
     def __init__(self):
         self.entries, self.series, self.counts = [], {}, {}
         self.fold = fold_log([])
-        self.definitions = {}
         self.media = MediaIndex()
         self.media_view = self.media.view()
         self.offsets = None  # {log file: bytes consumed} when incremental
@@ -144,7 +147,6 @@ class _Parsed:
 
     def extend(self, new_entries):
         fold_log(new_entries, self.fold, start=len(self.entries))
-        metric_definitions(new_entries, into=self.definitions)
         if self.media.add(new_entries):
             self.media_view = self.media.view()
         self.entries.extend(new_entries)
