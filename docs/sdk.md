@@ -85,6 +85,7 @@ start_run(
     name=None,
     tags=None,
     capture_env=None,
+    capture_output=False,
 )
 ```
 
@@ -105,6 +106,7 @@ start_run(
 | `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn-exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
 | `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
 | `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
+| `capture_output` | `True` tees this process's stdout/stderr into the run's `output.log` artifact — the same artifact [`vmn-exp run`](experiments.md#console-output-outputlog) keeps. Captured at the file-descriptor level (fds 1 and 2), so `print`, logging handlers, C extensions and subprocesses are all kept, and everything still reaches the original streams. Capped like the CLI (`$VMN_EXP_OUTPUT_CAP_MB`, default 10; first and last halves kept), uploaded off-thread every `sync_interval_sec` and at `finish()` (SIGTERM and interpreter exit included); the fds are restored at finish. Off by default: redirecting a host process's descriptors means it writes to pipes rather than its TTY, which an interactive debugger or a notebook kernel may not expect. Under `vmn-exp run` the CLI already keeps the output, so leave it off there |
 
 The system metrics (`system_metrics=True` here, `--system-metrics` on `vmn-exp
 run`, which measures the child's process tree instead):

@@ -120,6 +120,13 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--kill-grace-sec", type=float, default=None,
                       help="Seconds a child gets to exit after a forwarded signal "
                            "before it is killed during 'run'.")
+    pexp.add_argument("--no-capture-output", dest="capture_output", action="store_false",
+                      default=True,
+                      help="run: don't keep the command's stdout/stderr as the output.log "
+                           "artifact (it still streams to the terminal).")
+    pexp.add_argument("--output-cap-mb", type=float, default=None,
+                      help="run: size cap of output.log; past it the first and last "
+                           "halves are kept (default: VMN_EXP_OUTPUT_CAP_MB or 10).")
     pexp.add_argument("--system-metrics", action="store_true", default=False,
                       help="Record the child process tree's CPU/memory as sys_* metrics "
                            "during 'run'. Needs 'pip install vmn-exp-sdk[sysmetrics]'.")
