@@ -12,12 +12,17 @@ lineage is a join over rows: no log is read. Two kinds of edge:
   is the tag form (``/`` → ``-``; app names never contain ``-``).
 * **digest** — any other input whose digest equals an output's sha256.
 
+A ``vmn-registry://<name>@<N>`` input (a reference dataset, which no run
+made) is no edge: it is listed in ``datasets`` instead.
+
 Downstream is searched within the run's own app; upstream follows ``vmn://``
 URIs into other apps too.
 
 Pure: no storage, no clock.
 """
 from collections import deque
+
+from vmn_exp.registry.names import parse_registry_uri
 
 SCHEME = "vmn://"
 DEFAULT_LIMIT = 100
@@ -79,7 +84,7 @@ class LineageIndex:
                 self.uri_consumers.setdefault(ref[:2], []).append(entry)
                 continue
             digest = normalize_digest(inp.get("digest"))
-            if digest:
+            if digest and not parse_registry_uri(inp.get("uri")):
                 self.digest_consumers.setdefault(digest, []).append((verstr, name, inp))
 
 
@@ -95,6 +100,8 @@ def _upstream_edges(app_name, row, index):
         ref = parse_artifact_uri(inp.get("uri"))
         if ref:
             edges.append((ref[:2], _link(name, ref[2], inp.get("digest"), "uri")))
+            continue
+        if parse_registry_uri(inp.get("uri")):
             continue
         for verstr, path in index.producers.get(normalize_digest(inp.get("digest")), ()):
             edges.append(((app_name, verstr), _link(name, path, inp.get("digest"), "digest")))
@@ -129,6 +136,12 @@ def _node(key, row, depth, status_of):
     if row is not None and status_of is not None:
         node["status"] = status_of(app_name, verstr)
     return node
+
+
+def run_node(key, index_for, depth=1, status_of=None):
+    """The lineage node of run *key* = ``(app, verstr)``, ``found`` or not."""
+    index = index_for(key[0])
+    return _node(key, index.rows.get(key[1]) if index else None, depth, status_of)
 
 
 class _Walk:
@@ -170,15 +183,23 @@ class _Walk:
                     node["links"].append(link)
 
 
-def resolve_lineage(app_name, verstr, index_for, depth=1, limit=DEFAULT_LIMIT, status_of=None):
-    """``{"upstream", "downstream", "truncated"}`` of run *verstr* of *app_name*.
+def resolve_lineage(
+    app_name, verstr, index_for, depth=1, limit=DEFAULT_LIMIT, status_of=None, registry=None
+):
+    """``{"upstream", "downstream", "datasets", "truncated"}`` of run *verstr*
+    of *app_name*.
 
     *index_for(app)* returns that app's :class:`LineageIndex` (or None).
     Nodes carry ``app``, ``verstr``, ``name``, ``timestamp``, ``status``
     (from *status_of(app, verstr)* when given), ``depth`` (1 = direct),
     ``found`` (False: a ``vmn://`` URI names a run that is not there) and
     ``links`` (``{input, artifact, digest, via}``). Each direction keeps at
-    most *limit* nodes. Raises KeyError when the run itself is unknown.
+    most *limit* nodes. *datasets* lists the run's ``vmn-registry://`` inputs.
+
+    *registry* (``models_of(app, verstr)`` → the live versions registered from
+    a run; ``version_live(name, n)``) adds ``model``/``version``/``kind`` to
+    each upstream ``uri`` link naming a registered artifact, and each
+    dataset's ``found``. Raises KeyError when the run itself is unknown.
     """
     index = index_for(app_name)
     if index is None or verstr not in index.rows:
@@ -189,8 +210,49 @@ def resolve_lineage(app_name, verstr, index_for, depth=1, limit=DEFAULT_LIMIT, s
         for edges in (_upstream_edges, _downstream_edges)
     ]
     upstream, downstream = (w.run(max(int(depth), 1)) for w in walks)
+    if registry is not None:
+        annotate_versions(upstream, registry.models_of)
     return {
         "upstream": upstream,
         "downstream": downstream,
+        "datasets": registry_inputs(index.rows[verstr], registry),
         "truncated": any(w.truncated for w in walks),
     }
+
+
+def annotate_versions(nodes, models_of):
+    """Give each ``uri`` link of *nodes* the ``model``/``version``/``kind`` of
+    the registered version made from its artifact: the one its input is named
+    after (``<name>@<N>``, what ``use_model`` records), else the first."""
+    for node in nodes:
+        uri_links = [link for link in node["links"] if link["via"] == "uri"]
+        versions = models_of(node["app"], node["verstr"]) if uri_links else ()
+        for link in uri_links:
+            match = _version_of(link, versions)
+            if match:
+                link.update(model=match["model"], version=match["version"], kind=match["kind"])
+
+
+def _version_of(link, versions):
+    made = [v for v in versions if v.get("artifact_path") == link["artifact"]]
+    named = [v for v in made if f"{v['model']}@{v['version']}" == link["input"]]
+    return (named or made or [None])[0]
+
+
+def registry_inputs(row, registry=None):
+    """``[{model, version, kind, input, digest, found}]`` of *row*'s
+    ``vmn-registry://`` inputs; ``found`` is None without a *registry*."""
+    datasets = []
+    for name, inp in sorted((row.get("inputs") or {}).items()):
+        ref = parse_registry_uri((inp or {}).get("uri"))
+        if ref is None:
+            continue
+        datasets.append({
+            "model": ref[0],
+            "version": ref[1],
+            "kind": inp.get("kind") or "dataset",
+            "input": name,
+            "digest": inp.get("digest"),
+            "found": registry.version_live(*ref) if registry is not None else None,
+        })
+    return datasets
