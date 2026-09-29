@@ -91,6 +91,37 @@ describe("LineageView", () => {
     expect(screen.getByText(/no linked runs/i)).toBeInTheDocument();
   });
 
+  it("badges a link to a registered version with its model page", () => {
+    renderView({
+      ...LINEAGE,
+      upstream: [node("p1", {
+        links: [{
+          input: "clf@2", artifact: "model.pkl", digest: null, via: "uri",
+          model: "clf", version: 2, kind: "model",
+        }],
+      })],
+    });
+    expect(screen.getByRole("link", { name: "model clf v2" })).toHaveAttribute(
+      "href", "/ws/test/models/clf",
+    );
+  });
+
+  it("lists the datasets a run used, a gone version unlinked", () => {
+    renderView({
+      ...LINEAGE, upstream: [], downstream: [], models: [],
+      datasets: [
+        { model: "ds", version: 1, kind: "dataset", input: "ds@1", digest: "sha256:ab", found: true },
+        { model: "old", version: 2, kind: "dataset", input: "old@2", digest: null, found: false },
+      ],
+    });
+    expect(screen.queryByText(/no linked runs/i)).toBeNull();
+    expect(screen.getByText("datasets")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ds v1" })).toHaveAttribute("href", "/ws/test/models/ds");
+    expect(screen.queryByRole("link", { name: "old v2" })).toBeNull();
+    expect(screen.getByText("old v2")).toBeInTheDocument();
+    expect(screen.getByText("missing")).toBeInTheDocument();
+  });
+
   it("flags a truncated answer", () => {
     renderView({ ...LINEAGE, truncated: true });
     expect(screen.getByText(/truncated/i)).toBeInTheDocument();

@@ -17,11 +17,29 @@ export function runLog(
   );
 }
 
+/** Models and datasets share the registry; absent = model (older servers). */
+export type ModelKind = "model" | "dataset";
+
 export interface LineageLink {
   input: string;
   artifact: string;
   digest: string | null;
   via: "uri" | "digest";
+  /** Set when the artifact is a registered version's (e.g. via `use_model`). */
+  model?: string;
+  version?: number;
+  kind?: ModelKind;
+}
+
+/** A reference dataset (`vmn-registry://` input) the run used. */
+export interface LineageDataset {
+  model: string;
+  version: number;
+  kind: ModelKind;
+  input: string;
+  digest: string | null;
+  /** False once the version is deleted or gone; null when unknown. */
+  found: boolean | null;
 }
 
 export interface LineageNode {
@@ -37,6 +55,7 @@ export interface LineageNode {
 
 export interface LineageModel {
   model: string;
+  kind?: ModelKind;
   version: number;
   aliases: string[];
   status: string;
@@ -48,11 +67,13 @@ export interface Lineage {
   verstr: string;
   upstream: LineageNode[];
   downstream: LineageNode[];
+  datasets?: LineageDataset[];
   models: LineageModel[];
   truncated: boolean;
 }
 
-/** The runs a run consumed from / fed, and the model versions registered from it. */
+/** The runs a run consumed from / fed, the reference datasets it used and
+ *  the versions registered from it. */
 export function runLineage(ws: string, app: string, verstr: string, depth: number): Promise<Lineage> {
   return get<Lineage>(
     `/workspaces/${ws}/apps/${appTag(app)}/experiments/` +

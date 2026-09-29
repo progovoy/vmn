@@ -112,7 +112,7 @@ def test_get_lineage_upstream_downstream_and_models(store, tmp_path):
     assert [n["verstr"] for n in down["downstream"]] == [consumer.id]
     assert down["downstream"][0]["links"][0]["via"] == "uri"
     assert down["models"] == [{
-        "model": "clf", "version": 1, "aliases": ["prod"],
+        "model": "clf", "kind": "model", "version": 1, "aliases": ["prod"],
         "status": "active", "artifact_path": "model.pkl",
     }]
     assert down["app"] == APP and down["verstr"] == producer.id

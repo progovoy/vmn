@@ -1004,7 +1004,7 @@ with start_run("my_app", name="eval") as evaluate:
 
 get_lineage("my_app", evaluate.id, depth=2)
 # {"app": "my_app", "verstr": "...", "upstream": [...], "downstream": [...],
-#  "models": [...], "truncated": False}
+#  "datasets": [...], "models": [...], "truncated": False}
 ```
 
 `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)`
@@ -1021,12 +1021,31 @@ links runs through what they consumed and produced:
   URI is `vmn://<app>/<verstr>/<path>` (what `use_artifact` records; `<app>` is
   the tag form, `/` → `-`) names its producer, in any app; any other input
   matches every run of the same app with an output of the same digest
-  (compared without the `sha256:` prefix, case-insensitively);
+  (compared without the `sha256:` prefix, case-insensitively). Each node's
+  `links` are `{"input", "artifact", "digest", "via"}`; a `vmn://` link to an
+  artifact a live registry version was registered from (what `use_model` /
+  `use_dataset` of a run-backed version record) also carries `"model"`,
+  `"version"` and `"kind"` — the version its input is named after
+  (`<name>@<N>`), else the first registered from that artifact;
 - **downstream** are the runs of the same app that consumed this run's outputs,
   by the same two rules;
+- **datasets** are the reference datasets the run used — its
+  `vmn-registry://<name>@<N>` inputs, which no run produced, so they are no
+  run node and never match by digest: `{"model", "version", "kind", "input",
+  "digest", "found"}` (`found` is False once the version is deleted);
 - **models** are the live model versions registered from the run:
   `{"model", "kind", "version", "aliases", "status", "artifact_path"}` (`kind`
   is `model` or `dataset`).
+
+The other direction — which run made a version and which runs used it — is
+`vmn_exp.registry.lineage.version_lineage(storage, name, n)`:
+`{"model", "version", "kind", "status", "producer", "consumers"}`, where
+`producer` is the run node of the version's run (None for a reference dataset)
+and `consumers` the runs recorded in its `<name>-uses` record, first use first.
+It answers for deleted versions too (`status: "deleted"`); a pruned consumer
+is a node with `found: False`. Raises KeyError for a version that never
+existed. Downstream links stay within one app, so this is how consumers in
+other apps are found.
 
 Each node is `{"app", "verstr", "name", "timestamp", "status", "depth", "found",
 "links"}`; `depth` counts hops (1 = direct), `found` is False for a `vmn://`

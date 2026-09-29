@@ -6,6 +6,7 @@ import { apiModels } from "../apiModels";
 import type { ModelVersion, AuditEntry } from "../apiModels";
 import { relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
+import VersionLineagePanel from "../components/VersionLineage";
 
 // ---------------------------------------------------------------------------
 // Alias move dialog
@@ -177,7 +178,7 @@ export default function ModelDetailPage() {
   return (
     <>
       <Link className="back-link" to={`/ws/${ws}/models`}>← models</Link>
-      <PageHead title={modelName} what="model" mono />
+      <PageHead title={modelName} what={query.data.kind ?? "model"} mono />
       {query.data.description && (
         <p style={{ color: "var(--text-2)", marginBottom: 16 }}>{query.data.description}</p>
       )}
@@ -207,6 +208,10 @@ export default function ModelDetailPage() {
           </tbody>
         </table>
       </div>
+
+      {versions.length > 0 && (
+        <VersionLineagePanel ws={ws} model={modelName} versions={versions.map((v) => v.version)} />
+      )}
 
       <AuditLog entries={audit} />
 

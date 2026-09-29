@@ -415,14 +415,13 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return _any_exp_storage(ws), app_name, _app_schema(ws, app_name)
 
-    def _lineage_inputs(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+    def _workspace_lineage_inputs(ws_name):
+        ws = _experiment_workspace(ws_name)
         store_storage = _exp_storage_for(ws)
-        return (
-            app_name,
-            lambda name: source.snapshot(ws, name, store_storage),
-            _any_exp_storage(ws),
-        )
+        return lambda name: source.snapshot(ws, name, store_storage), _any_exp_storage(ws)
+
+    def _lineage_inputs(ws_name, app_tag):
+        return (_app_name(app_tag), *_workspace_lineage_inputs(ws_name))
 
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
@@ -432,6 +431,7 @@ def create_app(
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
+    routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_models.register(
         app, API_PREFIX,

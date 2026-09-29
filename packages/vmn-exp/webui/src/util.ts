@@ -116,3 +116,4 @@ export function metricGoal(
 
 /** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */
 export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;
+export const modelHref = (ws: string, model: string) => `/ws/${ws}/models/${encodeURIComponent(model)}`;

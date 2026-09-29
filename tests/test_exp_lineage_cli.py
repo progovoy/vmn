@@ -82,3 +82,25 @@ def test_lineage_unknown_ref(app_layout, capfd):
     _create(app_layout)
     rc, _ = _run(capfd, app_layout, version="@9")
     assert rc == 1
+
+
+def test_lineage_cli_prints_used_model_and_datasets(app_layout, capfd, tmp_path):
+    from vmn_exp.registry.names import registry_uri
+    from vmn_exp.registry.store import ensure_model, register_version
+    from vmn_exp.sdk.datasets import register_dataset
+
+    _, train, _ = _chain(app_layout, tmp_path)
+    storage = _storage(app_layout)
+    ensure_model(storage, "clf")
+    register_version(storage, "clf", {"app": app_layout.app_name, "verstr": train},
+                     artifact_path="model.pkl")
+    data = tmp_path / "ref.csv"
+    data.write_text("x\n")
+    register_dataset("ds", str(data), storage=storage)
+    uri = artifact_ref_uri(app_layout.app_name, train, "model.pkl")
+    serve = _create(app_layout, "--input", f"clf={uri}", "--input", f"ds={registry_uri('ds', 1)}")
+
+    rc, out = _run(capfd, app_layout, version=serve)
+    assert rc == 0
+    assert "clf <- model.pkl (uri)  model clf v1" in out
+    assert "Datasets:" in out and "ds v1  (input ds)" in out

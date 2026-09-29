@@ -148,6 +148,12 @@ def models_for_run(storage, app: str, verstr: str) -> list:
     return [dict(m) for m in _run_models(storage).get((app, verstr), ())]
 
 
+def run_models(storage) -> dict:
+    """``{(app, verstr): [version entry]}`` of every run with live versions
+    (shared cache: read, never mutate)."""
+    return _run_models(storage)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
