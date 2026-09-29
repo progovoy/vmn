@@ -102,10 +102,12 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         return True
 
     def cache_identity(self):
-        return ("s3", self.endpoint_url, self.bucket, self.prefix)
+        return (self.scheme, self.endpoint_url, self.bucket, self.prefix)
 
     def index_cache_path(self, app_name):
-        return s3_index_cache_path(self.endpoint_url, self.bucket, self.prefix, app_name)
+        # The endpoint slot tells stores apart; S3 keeps its historical key.
+        where = self.endpoint_url if self.scheme == "s3" else f"{self.scheme}:"
+        return s3_index_cache_path(where, self.bucket, self.prefix, app_name)
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)
@@ -169,6 +171,6 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         return resp["Body"].iter_chunks(_ARTIFACT_CHUNK), resp["ContentLength"]
 
     def artifact_uri(self, app_name, verstr, path):
-        """Stable ``s3://`` URI referencing artifact *path* for this record."""
+        """Stable ``<scheme>://`` URI referencing artifact *path* for this record."""
         key = f"{self._record_prefix(app_name, verstr)}/artifacts/{path}"
-        return f"s3://{self.bucket}/{key}"
+        return f"{self.scheme}://{self.bucket}/{key}"

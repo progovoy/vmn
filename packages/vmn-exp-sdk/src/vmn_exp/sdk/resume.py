@@ -15,6 +15,7 @@ from vmn_exp.core.status import load_run_state, parse_iso
 from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.sdk.create import (
     SNAPSHOT_METADATA_ENV,
+    experiment_conf,
     gitmode,
     snapshot_app_names,
     snapshot_mode_storage,
@@ -36,16 +37,20 @@ def requested_run_id(run_id):
 
 
 def locate(app_name, ref, storage):
-    """``(app_name, storage, verstr, prior_state)``; ValueError if not found."""
+    """``(app_name, storage, verstr, prior_state, exp_conf)``; ValueError if not
+    found."""
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    exp_conf = {}
     if meta_path:
         app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
         storage = storage or snapshot_mode_storage()
     else:
         checkout = gitmode()
         app_name = _resolve_app_name(app_name, checkout.stamped_apps)
+        vcs = checkout.build_vcs(app_name)
+        exp_conf = experiment_conf(vcs)
         if storage is None:
-            storage = checkout.checkout_storage(app_name)
+            storage = checkout.build_storage(vcs)
 
     verstr, err = _resolve_verstr(storage, app_name, ref, kind="experiment")
     # The resolver passes stamped (non-dev) versions through unchecked.
@@ -53,7 +58,8 @@ def locate(app_name, ref, storage):
         err = "no such experiment"
     if err:
         raise ValueError(f"Cannot resume run '{ref}' of '{app_name}': {err}")
-    return app_name, storage, verstr, load_run_state(storage, app_name, verstr) or {}
+    prior_state = load_run_state(storage, app_name, verstr) or {}
+    return app_name, storage, verstr, prior_state, exp_conf
 
 
 def resumed_state(prior, fresh):

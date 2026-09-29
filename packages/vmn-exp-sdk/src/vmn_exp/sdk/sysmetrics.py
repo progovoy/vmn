@@ -17,15 +17,20 @@ Three things are deliberate:
   every ``values`` dict (``core.experiment_log.latest_metrics``), and the query
   language resolves ``metrics.<key>`` as a two-part path, so a nested
   ``sys.cpu_percent`` would name nothing. ``autolog`` keys the same way.
-* **nothing here is a hard dependency.** ``psutil`` and ``pynvml`` are imported
-  lazily and independently; whichever is missing contributes no metrics, and
-  with neither installed sampling is a *silent* no-op — it runs once per
-  heartbeat, so a warning per tick would be worse than no metrics at all.
+* **on by default, and silent when it cannot read.** ``psutil`` is a dependency
+  of vmn-exp-sdk and ``pynvml`` an optional one; both are still imported lazily
+  and independently, so whichever is missing contributes no metrics, and with
+  neither sampling is a *silent* no-op — it runs on every run's heartbeat, so a
+  warning per run would be worse than no metrics at all. Opt out with
+  ``start_run(system_metrics=False)``, ``vmn-exp run --no-system-metrics``,
+  ``VMN_SYSTEM_METRICS=0`` or conf ``experiment.system_metrics: false``.
 """
 import importlib
 import logging
 import os
 import time
+
+from vmn_exp.core.env import opted_in
 
 # Stdlib logging, not VMN_LOGGER: this is reached from the SDK too, which never
 # calls init_stamp_logger.
@@ -54,6 +59,18 @@ SYS_METRIC_NAMES = (
 MIN_SAMPLE_INTERVAL_SEC = 0.1
 
 _MB = float(1024 * 1024)
+
+#: Set to ``0``/``false``/``no``/``off`` to turn system metrics off.
+SYSTEM_METRICS_ENV = "VMN_SYSTEM_METRICS"
+
+
+def enabled(explicit, exp_conf=None):
+    """Whether a run samples system metrics: on unless something opts out.
+
+    Precedence: explicit (``False`` from ``--no-system-metrics`` or the SDK
+    kwarg) > ``VMN_SYSTEM_METRICS`` > conf ``experiment.system_metrics`` > True.
+    """
+    return opted_in(explicit, SYSTEM_METRICS_ENV, "system_metrics", exp_conf)
 
 
 def _import_optional(name):
@@ -316,8 +333,8 @@ class Sampler:
 
     Args:
         record: called with a ``{name: number}`` mapping to persist a sample.
-        enabled: False makes every tick a no-op, which is the default for a run
-            that did not ask for system metrics.
+        enabled: False makes every tick a no-op — a run that opted out
+            (see :func:`enabled`).
         pid: the process to measure, with its children; None means this process.
         collector: an explicit collector, bypassing :func:`build_collector`.
     """

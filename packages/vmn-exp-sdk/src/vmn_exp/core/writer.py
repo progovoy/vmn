@@ -23,21 +23,23 @@ from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
 
-# Storage conf keys that an app's conf.yml may supply, and the CLI defaults that
-# count as "unset" for merging purposes.
-_STORAGE_CONF_KEYS = (
-    "bucket",
-    "prefix",
-    "endpoint_url",
-    "experiment_dir",
-    "writer_id",
-)
+# Storage params an app's conf.yml may supply (param -> conf key), and the CLI
+# defaults that count as "unset" for merging purposes.
+_STORAGE_CONF_KEYS = {
+    "store": "uri",
+    "bucket": "bucket",
+    "prefix": "prefix",
+    "endpoint_url": "endpoint_url",
+    "experiment_dir": "experiment_dir",
+    "writer_id": "writer_id",
+}
 _DEFAULT_PARAM_VALUES = ("vmn-experiments",)
 
 WRITER_ID_ENV = "VMN_WRITER_ID"
 
 # Storage params a pod can set without a conf.yml (see merge_env_into_params).
 STORAGE_ENV = {
+    "store": "VMN_EXPERIMENT_STORE",
     "bucket": "VMN_EXPERIMENT_BUCKET",
     "prefix": "VMN_EXPERIMENT_PREFIX",
     "endpoint_url": "VMN_EXPERIMENT_ENDPOINT_URL",
@@ -87,9 +89,9 @@ def merge_conf_into_params(vcs, params):
     storage_conf = (
         exp_conf.get("storage", {}) or getattr(vcs, "snapshot_storage", None) or {}
     )
-    for key in _STORAGE_CONF_KEYS:
+    for key, conf_key in _STORAGE_CONF_KEYS.items():
         if _is_unset(params, key):
-            conf_val = storage_conf.get(key)
+            conf_val = storage_conf.get(conf_key)
             if conf_val:
                 params[key] = conf_val
 

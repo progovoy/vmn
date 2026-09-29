@@ -6,7 +6,7 @@ The root is resolved once per storage object."""
 import os
 
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.storage.cached import get_snapshot_storage
+from vmn_exp.storage.open import get_snapshot_storage
 
 
 def _count_realpath(monkeypatch):
