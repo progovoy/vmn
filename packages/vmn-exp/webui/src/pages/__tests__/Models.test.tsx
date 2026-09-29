@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { renderWithClient } from "../../test-utils";
 
@@ -84,6 +84,31 @@ describe("Models page", () => {
     });
     const link = screen.getByRole("link", { name: "my-model" });
     expect(link.getAttribute("href")).toContain("my-model");
+  });
+
+  it("badges each row with its kind", async () => {
+    mockedApiModels.listModels.mockResolvedValue({
+      models: [{ ...MODELS[0], kind: "model" }, { ...MODELS[1], name: "train", kind: "dataset" }],
+    });
+
+    renderModels();
+
+    expect(await screen.findByText("train")).toBeInTheDocument();
+    expect(screen.getByText("dataset")).toHaveClass("badge");
+    expect(screen.getByText("model")).toHaveClass("badge");
+  });
+
+  it("filters by kind through the API", async () => {
+    mockedApiModels.listModels.mockResolvedValue({ models: MODELS });
+
+    renderModels();
+
+    await screen.findByText("my-model");
+    expect(mockedApiModels.listModels).toHaveBeenLastCalledWith("myws", undefined);
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "dataset" } });
+    await waitFor(() =>
+      expect(mockedApiModels.listModels).toHaveBeenLastCalledWith("myws", "dataset"),
+    );
   });
 
   it("shows empty state when there are no models", async () => {

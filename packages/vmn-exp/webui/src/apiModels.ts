@@ -5,11 +5,14 @@
  *
  * Endpoints
  * ---------
- * GET  /workspaces/{ws}/models
+ * GET  /workspaces/{ws}/models[?kind=model|dataset]
  *   -> { models: ModelRow[] }
  *
  * GET  /workspaces/{ws}/models/{name}
  *   -> ModelDetail
+ *
+ * GET  /workspaces/{ws}/models/{name}/versions/{n}/lineage
+ *   -> VersionLineage
  *
  * POST /workspaces/{ws}/models/{name}/versions
  *   body: RegisterVersionBody
@@ -29,14 +32,19 @@
  * Mutations return 403 when the server is running in read-only mode.
  */
 import { get, post, del } from "./http";
+import type { LineageNode } from "./apiRun";
 
 // ---------------------------------------------------------------------------
 // JSON shapes
 // ---------------------------------------------------------------------------
 
+/** Models and datasets share the registry; absent = model (older servers). */
+export type ModelKind = "model" | "dataset";
+
 /** One row in the models table. */
 export interface ModelRow {
   name: string;
+  kind?: ModelKind;
   description: string | null;
   latest_version: number | null;
   /** Top-level alias → version number map. */
@@ -68,10 +76,23 @@ export interface AuditEntry {
 
 export interface ModelDetail {
   name: string;
+  kind?: ModelKind;
   description: string | null;
   versions: ModelVersion[];
   aliases: Record<string, number>;
   audit: AuditEntry[];
+}
+
+/** Who made one version and which runs used it. */
+export interface VersionLineage {
+  model: string;
+  version: number;
+  kind: ModelKind;
+  status: string;
+  /** The run the version was registered from; null for a reference dataset. */
+  producer: LineageNode | null;
+  /** Runs recorded using it (`use_model`/`use_dataset`), first use first. */
+  consumers: LineageNode[];
 }
 
 /** Body for registering a new model version. */
@@ -99,11 +120,16 @@ function modelsBase(ws: string) {
 }
 
 export const apiModels = {
-  listModels: (ws: string) =>
-    get<{ models: ModelRow[] }>(modelsBase(ws)),
+  listModels: (ws: string, kind?: ModelKind) =>
+    get<{ models: ModelRow[] }>(modelsBase(ws) + (kind ? `?kind=${kind}` : "")),
 
   getModel: (ws: string, name: string) =>
     get<ModelDetail>(`${modelsBase(ws)}/${encodeURIComponent(name)}`),
+
+  versionLineage: (ws: string, name: string, version: number) =>
+    get<VersionLineage>(
+      `${modelsBase(ws)}/${encodeURIComponent(name)}/versions/${version}/lineage`,
+    ),
 
   registerVersion: (ws: string, name: string, body: RegisterVersionBody) =>
     post<{ version: number }>(
