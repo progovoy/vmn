@@ -59,21 +59,35 @@ class S3Records:
             for key in app_keys(app_name)
         )
 
-    def create_exclusive(self, app_name, verstr, metadata, patches):
+    def create_exclusive(self, app_name, verstr, metadata, patches, claim_token=None):
+        """Create the record only if *verstr* is free; True when created.
+
+        The ``.claim`` object's body is *claim_token* (empty without one). A
+        claim that carries the same non-empty token but has no metadata yet
+        is this claimer's own crashed attempt, and is resumed; any other
+        claim, and any existing metadata, means taken.
+        """
         # A record written before claims existed has metadata but no claim.
         if self._has_metadata_anywhere(app_name, verstr):
             return False
         prefix = self._key_prefix(app_name, verstr)
-        try:
-            # The conditional PUT is the claim: exactly one writer wins it.
-            self._put(f"{prefix}/{CLAIM_FILE}", b"", IfNoneMatch="*")
-        except Exception as e:
-            if is_taken(e):
-                return False
-            raise
+        if not self._claim(prefix, claim_token):
+            return False
         self._put_record_body(prefix, patches)
         self._put_metadata(prefix, metadata)
         return True
+
+    def _claim(self, prefix, claim_token):
+        key = f"{prefix}/{CLAIM_FILE}"
+        token = (claim_token or "").encode("utf-8")
+        try:
+            # The conditional PUT is the claim: exactly one writer wins it.
+            self._put(key, token, IfNoneMatch="*")
+            return True
+        except Exception as e:
+            if not is_taken(e):
+                raise
+        return bool(token) and self._get_or_raise(key) == token
 
     def delete(self, app_name, verstr):
         prefix = self._record_prefix(app_name, verstr)
