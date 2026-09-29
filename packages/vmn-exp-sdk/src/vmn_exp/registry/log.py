@@ -13,8 +13,9 @@ import os
 import subprocess
 
 from vmn_exp.core.writer import flush_log, get_writer_id
-from vmn_exp.registry.fold import fold_registry, now_iso as _reg_ts, next_ts
-from vmn_exp.registry.names import REGISTRY_APP
+from vmn_exp.core.record_format import stamped
+from vmn_exp.registry.fold import fold_registry, fold_uses, now_iso as _reg_ts, next_ts
+from vmn_exp.registry.names import REGISTRY_APP, uses_record_name
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +175,37 @@ def set_version_status(
             )
     entry = _build_entry(entries, "status", actor, version=version, status=status)
     _append_entry(storage, model, entry)
+
+
+def record_use(
+    storage,
+    model: str,
+    version: int,
+    app: str,
+    verstr: str,
+    *,
+    actor: dict | None = None,
+) -> None:
+    """Record that run *verstr* of *app* used *version* of *model*.
+
+    Appends to the sibling record ``<model>-uses``, never to the model's own
+    log, so the model's audit and the registry's run-models cache stay put.
+    A run already recorded for *version* writes nothing.
+    """
+    record = uses_record_name(model)
+    header = {"model": model, "type": "uses_header", "timestamp": _reg_ts()}
+    storage.create_exclusive(REGISTRY_APP, record, stamped(header), {})
+    entries = read_entries(storage, record)
+    if any(u["app"] == app and u["verstr"] == verstr
+           for u in fold_uses(entries).get(version, ())):
+        return
+    run = {"app": app, "verstr": verstr}
+    _append_entry(storage, record, _build_entry(entries, "use", actor, version=version, run=run))
+
+
+def read_uses(storage, model: str) -> dict:
+    """``{version: [{app, verstr, ts}]}`` of the runs recorded using *model*."""
+    return fold_uses(read_entries(storage, uses_record_name(model)))
 
 
 # ---------------------------------------------------------------------------

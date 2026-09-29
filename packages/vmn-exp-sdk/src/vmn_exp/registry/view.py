@@ -28,8 +28,11 @@ import weakref
 
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
-from vmn_exp.registry.names import REGISTRY_APP, parse_ref
-from vmn_exp.registry.store import get_version, list_models, list_versions
+from vmn_exp.registry.names import REGISTRY_APP, is_uses_record, parse_ref
+from vmn_exp.registry.store import get_version, list_models, list_versions, model_kind
+
+
+_VERSION_ROW_FIELDS = ("run_ref", "artifact_path", "uri", "digest", "size", "files")
 
 
 def model_state(storage, model: str) -> dict:
@@ -39,8 +42,10 @@ def model_state(storage, model: str) -> dict:
 
         {
             "header":   metadata dict from ensure_model,
+            "kind":     "model" | "dataset" (None without a header),
             "versions": [
-                {"n": int, "run_ref": ..., "artifact_path": ...,
+                {"n": int, "run_ref": ..., "artifact_path": ..., "uri": ...,
+                 "digest": ..., "size": ..., "files": ...,
                  "status": str, "aliases": [str]},
                 ...
             ],
@@ -60,17 +65,17 @@ def model_state(storage, model: str) -> dict:
 
     versions = []
     for n in list_versions(storage, model):
-        meta = get_version(storage, model, n)
+        meta = get_version(storage, model, n) or {}
         versions.append({
             "n": n,
-            "run_ref": meta.get("run_ref") if meta else None,
-            "artifact_path": meta.get("artifact_path") if meta else None,
+            **{field: meta.get(field) for field in _VERSION_ROW_FIELDS},
             "status": fold["status"].get(n, "active"),
             "aliases": sorted(alias_by_version.get(n, [])),
         })
 
     return {
         "header": header,
+        "kind": model_kind(storage, model),
         "versions": versions,
         "aliases": fold["aliases"],
         "audit": fold["audit"],
@@ -126,7 +131,7 @@ def registered_runs(storage) -> set:
 
 
 def models_for_run(storage, app: str, verstr: str) -> list:
-    """``[{model, version, aliases, status, artifact_path}]`` registered from
+    """``[{model, kind, version, aliases, status, artifact_path}]`` registered from
     run *verstr* of *app* (deleted versions left out), model/version-ordered."""
     return [dict(m) for m in _run_models(storage).get((app, verstr), ())]
 
@@ -140,8 +145,15 @@ _RUN_MODELS_LOCK = threading.Lock()
 
 
 def _run_models(storage):
-    """``{(app, verstr): [version entry]}``, cached on the registry listing."""
-    listing = storage.list_files(REGISTRY_APP)
+    """``{(app, verstr): [version entry]}``, cached on the registry listing.
+
+    Usage records are left out of the key: recording a use changes no
+    version, so it must not force a rescan."""
+    listing = {
+        name: files
+        for name, files in storage.list_files(REGISTRY_APP).items()
+        if not is_uses_record(name)
+    }
     with _RUN_MODELS_LOCK:
         cached = _RUN_MODELS.get(storage)
     if listing and cached is not None and cached[0] == listing:
@@ -155,12 +167,13 @@ def _run_models(storage):
 
 def _scan_run_models(storage):
     run_models = {}
-    for model, n, meta, fold in _live_versions(storage):
+    for model, kind, n, meta, fold in _live_versions(storage):
         run_ref = meta.get("run_ref")
         if not isinstance(run_ref, dict) or not (run_ref.get("app") and run_ref.get("verstr")):
             continue
         run_models.setdefault((run_ref["app"], run_ref["verstr"]), []).append({
             "model": model,
+            "kind": kind,
             "version": n,
             "aliases": sorted(a for a, v in fold["aliases"].items() if v == n),
             "status": fold["status"].get(n, "active"),
@@ -170,15 +183,16 @@ def _scan_run_models(storage):
 
 
 def _live_versions(storage):
-    """``(model, n, version metadata, registry fold)`` of every non-deleted version."""
+    """``(model, kind, n, version metadata, registry fold)`` of every non-deleted version."""
     for model in list_models(storage):
+        kind = model_kind(storage, model)
         fold = fold_registry(read_entries(storage, model))
         for n in list_versions(storage, model):
             if fold["status"].get(n) == "deleted":
                 continue
             meta = get_version(storage, model, n)
             if meta:
-                yield model, n, meta, fold
+                yield model, kind, n, meta, fold
 
 
 def _version_or_raise(storage, model: str, n: int, fold: dict, ref: str) -> dict:

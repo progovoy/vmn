@@ -9,10 +9,12 @@ Version record:       ``<model>.v<N>``  — immutable; claimed atomically via
 
 Public surface
 --------------
-ensure_model(storage, model, description=None, actor=None)
-register_version(storage, model, run_ref, artifact_path=None, description=None, actor=None) -> int
+ensure_model(storage, model, description=None, actor=None, kind="model")
+model_kind(storage, model) -> "model" | "dataset" | None
+register_version(storage, model, run_ref=None, artifact_path=None, description=None,
+                 actor=None, uri=None, digest=None, size=None, files=None) -> int
 list_versions(storage, model) -> [int]
-list_models(storage) -> [str]
+list_models(storage, kind=None) -> [str]
 get_version(storage, model, n) -> metadata dict | None
 
 Timestamps come from ``vmn_exp.registry.fold.now_iso``; vmn_exp modules may
@@ -23,6 +25,7 @@ from __future__ import annotations
 from vmn_exp.core.record_format import readable, stamped
 from vmn_exp.registry.fold import now_iso
 from vmn_exp.registry.names import (
+    KINDS,
     REGISTRY_APP,
     parse_version_record,
     valid_model_name,
@@ -32,28 +35,48 @@ from vmn_exp.registry.names import (
 _MAX_REGISTER_RETRIES = 200
 
 
-def ensure_model(storage, model, description=None, actor=None):
+def ensure_model(storage, model, description=None, actor=None, kind="model"):
     """Create the model header record if absent.  Idempotent.
 
     ``create_exclusive`` is atomic: concurrent callers both succeed — the
-    second one gets False and does nothing.
+    second one gets False and does nothing.  *kind* is ``model`` or
+    ``dataset``; an existing header of the other kind raises ``ValueError``
+    (a header without ``kind`` is a model).
     """
-    metadata = {"model": model, "type": "model_header", "timestamp": now_iso()}
+    if kind not in KINDS:
+        raise ValueError(f"Unknown registry kind {kind!r}; use one of {KINDS}")
+    metadata = {"model": model, "type": "model_header", "kind": kind, "timestamp": now_iso()}
     if description is not None:
         metadata["description"] = description
     if actor is not None:
         metadata["actor"] = actor
-    # Return value ignored: False = record already exists, that is fine.
-    storage.create_exclusive(REGISTRY_APP, model, stamped(metadata), {})
+    if storage.create_exclusive(REGISTRY_APP, model, stamped(metadata), {}):
+        return
+    existing = model_kind(storage, model)
+    if existing is not None and existing != kind:
+        raise ValueError(f"{model!r} is registered as a {existing}, not a {kind}")
+
+
+def model_kind(storage, model) -> str | None:
+    """``model``/``dataset`` of *model*'s header; None when it has none."""
+    header, _ = storage.load(REGISTRY_APP, model)
+    if not isinstance(header, dict):
+        return None
+    return header.get("kind") or "model"
 
 
 def register_version(
     storage,
     model,
-    run_ref,
+    run_ref=None,
     artifact_path=None,
     description=None,
     actor=None,
+    *,
+    uri=None,
+    digest=None,
+    size=None,
+    files=None,
 ) -> int:
     """Atomically claim the next version number for *model* and return it.
 
@@ -66,19 +89,20 @@ def register_version(
     4. Attempt ``create_exclusive``; on collision re-read the listing and
        jump to the new max+1.  Bounded to ``_MAX_REGISTER_RETRIES``.
 
+    *run_ref* is optional: a reference dataset has none, only its
+    *uri*/*digest*/*size*/*files*.
+
     Raises ``RuntimeError`` after too many collisions (should not happen
     unless more than 200 concurrent writers race on the same model).
     """
     all_names = list(storage.list_record_names(REGISTRY_APP))
     n = max(_taken_version_numbers(all_names, model), default=0) + 1
 
-    metadata_base = stamped({"model": model, "run_ref": run_ref, "timestamp": now_iso()})
-    if artifact_path is not None:
-        metadata_base["artifact_path"] = artifact_path
-    if description is not None:
-        metadata_base["description"] = description
-    if actor is not None:
-        metadata_base["actor"] = actor
+    metadata_base = stamped(_version_metadata(
+        model, run_ref=run_ref, artifact_path=artifact_path,
+        description=description, actor=actor,
+        uri=uri, digest=digest, size=size, files=files,
+    ))
 
     attempts = 0
     while attempts < _MAX_REGISTER_RETRIES:
@@ -107,16 +131,20 @@ def list_versions(storage, model) -> list:
     )
 
 
-def list_models(storage) -> list:
-    """Sorted list of model names that have complete header records."""
+def list_models(storage, kind=None) -> list:
+    """Sorted list of model names that have complete header records, only
+    those of *kind* (``model``/``dataset``) when given."""
     all_names = list(storage.list_record_names(REGISTRY_APP))
-    return sorted(
+    names = sorted(
         name
         for name in all_names
         if parse_version_record(name) is None
         and valid_model_name(name)
         and storage.exists(REGISTRY_APP, name)
     )
+    if kind is None:
+        return names
+    return [name for name in names if model_kind(storage, name) == kind]
 
 
 def get_version(storage, model, n) -> dict | None:
@@ -129,6 +157,13 @@ def get_version(storage, model, n) -> dict | None:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _version_metadata(model, **fields):
+    """A version record's fields, the ``None`` ones left out."""
+    metadata = {"model": model, "timestamp": now_iso()}
+    metadata.update((k, v) for k, v in fields.items() if v is not None)
+    return metadata
 
 
 def _version_names_for_model(all_names, model):

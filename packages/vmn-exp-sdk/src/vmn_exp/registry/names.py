@@ -99,3 +99,41 @@ def parse_ref(ref: str) -> tuple[str, str, object]:
             return model, 'version', int(qualifier)
         return model, 'alias', qualifier
     return ref, 'latest', None
+
+
+# ---------------------------------------------------------------------------
+# Kinds, registry URIs and the usage record
+# ---------------------------------------------------------------------------
+
+KINDS = ("model", "dataset")
+
+REGISTRY_SCHEME = "vmn-registry://"
+_REGISTRY_URI_RE = re.compile(r'^(.+)@([1-9]\d*)$')
+
+# A model's usage log lives in the sibling record ``<model>-uses``; model
+# names never contain ``-``, so it can never collide with a model.
+_USES_SUFFIX = "-uses"
+
+
+def registry_uri(name: str, n: int) -> str:
+    """``vmn-registry://<name>@<N>`` — always pinned to a number, never an alias."""
+    return f"{REGISTRY_SCHEME}{name}@{n}"
+
+
+def parse_registry_uri(uri) -> tuple[str, int] | None:
+    """``(name, n)`` of a ``vmn-registry://<name>@<N>`` URI, else None."""
+    if not isinstance(uri, str) or not uri.startswith(REGISTRY_SCHEME):
+        return None
+    m = _REGISTRY_URI_RE.match(uri[len(REGISTRY_SCHEME):])
+    if m is None or not valid_model_name(m.group(1)):
+        return None
+    return m.group(1), int(m.group(2))
+
+
+def uses_record_name(model: str) -> str:
+    """Record name of *model*'s usage log."""
+    return f"{model}{_USES_SUFFIX}"
+
+
+def is_uses_record(name: str) -> bool:
+    return name.endswith(_USES_SUFFIX)
