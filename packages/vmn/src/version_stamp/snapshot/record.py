@@ -102,7 +102,7 @@ def same_state(stored_meta, diff_hash, changesets):
     """Whether *stored_meta* records this exact state: the same full diff hash
     and, unless *changesets* is None (a legacy caller), the same repo commits.
     A record without a ``diff_hash`` never matches."""
-    if not stored_meta.get("diff_hash") or stored_meta["diff_hash"] != diff_hash:
+    if not diff_hash or stored_meta.get("diff_hash") != diff_hash:
         return False
     if changesets is None:
         return True

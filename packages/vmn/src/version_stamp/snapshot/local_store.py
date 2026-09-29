@@ -69,13 +69,23 @@ def _write_patches(directory, patches):
         atomic_write(path, content if binary else content.encode("utf-8"))
 
 
+def _read_file(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+
+
+def _write_metadata(record_dir, metadata):
+    atomic_write(os.path.join(record_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True))
+
+
 def _read_patches(directory):
     patches = {}
     for key, filename, binary in PATCH_FILES:
-        path = os.path.join(directory, filename)
-        if os.path.isfile(path):
-            with open(path, "rb") as f:
-                data = f.read()
+        data = _read_file(os.path.join(directory, filename))
+        if data is not None:
             patches[key] = data if binary else data.decode("utf-8")
     return patches
 
@@ -124,25 +134,19 @@ class LocalRecordStore:
             dep_dir = os.path.join(record_dir, "deps", safe_dep_name(dep_path))
             Path(dep_dir).mkdir(parents=True, exist_ok=True)
             _write_patches(dep_dir, dep_patches)
-        atomic_write(
-            os.path.join(record_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True)
-        )
+        _write_metadata(record_dir, metadata)
 
     def load_file(self, app_name, verstr, filename):
-        path = os.path.join(self._record_dir(app_name, verstr), filename)
-        if not os.path.isfile(path):
-            return None
-        with open(path, "rb") as f:
-            return f.read()
+        return _read_file(os.path.join(self._record_dir(app_name, verstr), filename))
 
     def load_metadata(self, app_name, verstr):
         return parse_record_metadata(self.load_file(app_name, verstr, METADATA_FILE))
 
     def load_record(self, app_name, verstr):
-        raw = self.load_file(app_name, verstr, METADATA_FILE)
+        record_dir = self._record_dir(app_name, verstr)
+        raw = _read_file(os.path.join(record_dir, METADATA_FILE))
         if raw is None:
             return None, None
-        record_dir = self._record_dir(app_name, verstr)
         patches = _read_patches(record_dir)
         deps = _read_dep_patches(record_dir)
         if deps:
@@ -161,27 +165,31 @@ class LocalRecordStore:
         except ValueError:
             return False
 
-    def _record_names(self, app_name):
+    def _record_dirs(self, app_name):
         base = self._base_dir(app_name)
         if not os.path.isdir(base):
             return []
         return [
-            entry.name
+            entry
             for entry in os.scandir(base)
             if entry.is_dir() and os.path.isfile(os.path.join(entry.path, METADATA_FILE))
         ]
 
     def list_verstrs(self, app_name):
-        return [unsafe_verstr(name) for name in self._record_names(app_name)]
+        return [unsafe_verstr(entry.name) for entry in self._record_dirs(app_name)]
 
     list_record_names = list_verstrs
 
     def list_snapshots(self, app_name):
-        found = (self.load_metadata(app_name, v) for v in self.list_verstrs(app_name))
+        found = (
+            parse_record_metadata(_read_file(os.path.join(entry.path, METADATA_FILE)))
+            for entry in self._record_dirs(app_name)
+        )
         return sorted((m for m in found if m is not None), key=lambda m: m.get("timestamp", ""))
 
     def update_metadata(self, app_name, verstr, updates):
-        raw = self.load_file(app_name, verstr, METADATA_FILE)
+        record_dir = self._record_dir(app_name, verstr)
+        raw = _read_file(os.path.join(record_dir, METADATA_FILE))
         if raw is None:
             return False
         metadata = yaml_safe_load(raw)
@@ -190,8 +198,7 @@ class LocalRecordStore:
                 metadata.pop(key, None)
             else:
                 metadata[key] = value
-        path = os.path.join(self._record_dir(app_name, verstr), METADATA_FILE)
-        atomic_write(path, yaml.dump(metadata, sort_keys=True))
+        _write_metadata(record_dir, metadata)
         return True
 
     def update_note(self, app_name, verstr, note):
