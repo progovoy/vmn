@@ -1,4 +1,4 @@
-"""ui job actions that edit a run: tags, the archived flag and rewinds.
+"""ui job actions that edit a run: tags, the archived flag, rewinds and pushes.
 
 Everything here ends up as argv for a ``vmn`` subprocess, so every input is
 checked strictly: one path component per verstr, printable bounded tag keys
@@ -88,3 +88,13 @@ def exp_rewind_command(app_name, body):
         return None, "step must be an integer >= 0"
     return ["vmn-exp", "experiment", "rewind", app_name, "-v", verstr,
             "--step", str(step)], None
+
+
+def exp_push_command(app_name, body):
+    """``vmn-exp push <app> [-v <verstr>...]`` (every local run without verstrs)."""
+    verstrs = body.get("verstrs") or []
+    if not isinstance(verstrs, list) or not all(_valid_verstr(v) for v in verstrs):
+        return None, "verstrs must be a list of valid verstrs"
+    return ["vmn-exp", "experiment", "push", app_name] + [
+        arg for v in verstrs for arg in ("-v", v)
+    ], None
