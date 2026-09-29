@@ -820,3 +820,16 @@ tr.row.archived .run-link { text-decoration: line-through; text-decoration-color
 .lb-table .tree-roll { flex-shrink: 0; }
 td.fleet-cell { font-family: var(--mono); font-size: 12px; }
 td.fleet-failed:not(:empty) { color: var(--text-2); }
+
+/* Run page media: image tiles, histograms, logged tables */
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.media-tile { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.media-tile-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.media-tile figcaption { font-size: 12px; opacity: 0.8; }
+.media-step { width: 100%; }
+.media-table { margin-bottom: 12px; }
+.media-pager { display: flex; gap: 12px; align-items: center; margin-top: 6px; font-size: 12px; }
+.hist-bar { fill: var(--accent); }
+.hist-cell { fill: var(--accent); }
+.hist-axis { font-size: 10px; fill: currentColor; opacity: 0.7; }
+.media-card .muted { opacity: 0.7; font-size: 12px; }

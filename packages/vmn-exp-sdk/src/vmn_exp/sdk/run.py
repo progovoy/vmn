@@ -54,6 +54,7 @@ from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts
+from vmn_exp.sdk.run_media import RunMedia
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 
 # Stdlib logging, not VMN_LOGGER: an SDK user never calls init_stamp_logger, and
@@ -195,7 +196,7 @@ def _record_resume_inputs(run, note, params):
         run.log_note(note)
 
 
-class Run(MetricDefinitions, RunArtifacts, RunAlerts):
+class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     def __init__(
@@ -416,8 +417,11 @@ class Run(MetricDefinitions, RunArtifacts, RunAlerts):
         info = compute_artifact_info(path)
         if name is not None:
             info["path"] = name
-        save_artifact(self._storage, self.app_name, self.id, path, name=name)
+        self._save_artifact_file(path, name)
         self._append(create_log_entry("artifact", **info))
+
+    def _save_artifact_file(self, path, name):
+        save_artifact(self._storage, self.app_name, self.id, path, name=name)
 
     def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
         """Register this run as a model version in the registry.

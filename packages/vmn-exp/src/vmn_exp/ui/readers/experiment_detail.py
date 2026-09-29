@@ -212,6 +212,7 @@ def experiment_detail(
         "series_total": series_total,
         "step_metrics": declared_step_metrics(snapshot, schema),
         "artifacts": list_artifacts(storage, app_name, verstr),
+        **snapshot.media,
         "status": status_detail(
             storage,
             app_name,
