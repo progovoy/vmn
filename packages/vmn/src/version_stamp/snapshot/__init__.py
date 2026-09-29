@@ -17,4 +17,8 @@ Modules:
   - :mod:`.create`      ``vmn snapshot create`` (thin record + shared code object)
   - :mod:`.listing`     ``list`` / ``show`` / ``note``, ``relative_timestamp``
   - :mod:`.delete`      ``delete`` (drops the code object once unreferenced)
+  - :mod:`.load`        ``load_snapshot`` (refuses missing code), ``stamped_state``
+  - :mod:`.restore`     ``restore`` (auto-saves the replaced work first)
+  - :mod:`.export`      ``export`` (materialized tree to a dir or tarball)
+  - :mod:`.diff`        ``diff`` (vs the working state, a snapshot or a stamped version)
 """
