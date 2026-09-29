@@ -15,6 +15,8 @@ An image or table entry is also the run's record of its file as an output
 (like an ``artifact`` entry: ``row["outputs"]``, lineage, ``use_artifact``);
 ``sha256``/``size`` are of the encoded bytes, hashed here before the
 background upload (:mod:`vmn_exp.sdk.media_uploads`) stores exactly them.
+The entry is built (and timestamped) here but logged only once its file is
+stored; a file that fails to store is never logged.
 
 *step* defaults to one past the name's last logged step (0 at first). numpy, Pillow and pandas
 are optional and imported only when an input needs them.
@@ -25,7 +27,6 @@ import logging
 import os
 import shutil
 
-from vmn_exp.core.fold import OUTPUT_FAILED
 from vmn_exp.core.histogram import histogram
 from vmn_exp.core.png import array_to_png, png_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
@@ -95,8 +96,7 @@ class RunMedia:
 
     Media files are stored as artifacts without an ``artifact`` log entry of
     their own: the table/image entry is their record, as media and as an
-    output. It is appended before the file is queued, so the retraction a
-    failed upload appends always comes after it.
+    output. The uploader appends it once the file is stored.
     """
 
     def _media_step(self, kind, name, step):
@@ -107,31 +107,23 @@ class RunMedia:
             raise ValueError(f"step must be a non-negative integer, got {step!r}")
         return step
 
-    def _logged(self, kind, name, step, entry):
-        """Append *entry*; later auto steps of (*kind*, *name*) follow *step*."""
+    def _step_taken(self, kind, name, step):
+        """Later auto steps of (*kind*, *name*) follow *step*."""
         if not hasattr(self, "_media_steps"):
             self._media_steps = {}
         key = (kind, name)
         self._media_steps[key] = max(self._media_steps.get(key, 0), step + 1)
-        self._append(entry)
-
-    def _retract_output(self, path, exc):
-        """``on_failed`` of the uploads: the file *path* will never be stored."""
-        self._outputs_retracted = True
-        self._append(create_log_entry(OUTPUT_FAILED, path=path, error=str(exc)))
 
     def _close_media_uploads(self, timeout):
-        """Wait for the queued files; True when a file was retracted, so the
-        final log sync must run again to carry the retraction."""
+        """Wait for the queued files, whose entries are appended as they land."""
         if not self._media_uploads.close(timeout):
             _LOGGER.warning(f"vmn: the final media files of run {self.id} are still uploading")
-        return getattr(self, "_outputs_retracted", False)
 
     def _store(self, kind, name, step, path, produce, **fields):
-        """Log the *kind* entry of the file *produce(tmp path)* writes, then
-        queue that file for storing as artifact *path* (its name may take the
-        written file's extension). ``(width, height)`` of a PNG goes into the
-        entry, with the stored bytes' ``sha256`` and ``size``."""
+        """Queue the file *produce(tmp path)* writes for storing as artifact
+        *path* (its name may take the written file's extension); its *kind*
+        entry is appended once it is stored. ``(width, height)`` of a PNG goes
+        into the entry, with the stored bytes' ``sha256`` and ``size``."""
         tmp = staging_dir()
         try:
             written = produce(os.path.join(tmp, os.path.basename(path)))
@@ -146,11 +138,11 @@ class RunMedia:
                 kind, name=name, step=step, path=stored,
                 sha256=hashlib.sha256(data).hexdigest(), size=len(data), **fields,
             )
-            self._logged(kind, name, step, entry)
+            self._step_taken(kind, name, step)
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
-        self._media_uploads.submit(tmp, written, stored)
+        self._media_uploads.submit(tmp, written, stored, lambda: self._append(entry))
 
     def log_table(self, name, data, columns=None, step=None):
         doc, total = table_document(data, columns=columns)
@@ -186,4 +178,5 @@ class RunMedia:
             return
         step = self._media_step("histogram", name, step)
         entry = create_log_entry("histogram", name=name, step=step, **binned)
-        self._logged("histogram", name, step, entry)
+        self._step_taken("histogram", name, step)
+        self._append(entry)

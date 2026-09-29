@@ -272,7 +272,7 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             "vmn-exp-sync",
         )
         self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
-        self._media_uploads = MediaUploads(self._save_artifact_file, self._retract_output)
+        self._media_uploads = MediaUploads(self._save_artifact_file)
         self._output = (
             RunOutput(storage, app_name, verstr) if capture_output else None
         )
@@ -328,17 +328,28 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         self._finish(exit_code)
 
     def _finish(self, exit_code, **final_state):
-        if self._record_final(exit_code, **final_state):
-            self._close_remote_writers(_final_upload_deadline())
+        deadline = _final_upload_deadline()
+        if self._record_final(exit_code, deadline, **final_state):
+            self._close_remote_writers(deadline)
 
-    def _record_final(self, exit_code, **final_state):
+    def _record_final(self, exit_code, deadline, **final_state):
         """Write the run's last log entries and final state locally, queue their
-        upload and close the run. False if it was finished already."""
+        upload and close the run. False if it was finished already.
+
+        Media files are waited for (until *deadline*) first: their entries are
+        appended as they are stored, so they must land before the final flush.
+        """
         if self._finished:
             return False
         self._finished = True
 
         try:
+            # Before the heartbeat stops: a long final upload is not a stuck run.
+            self._record_guard(
+                "media files",
+                self._close_media_uploads,
+                max(0.0, deadline - time.monotonic()),
+            )
             self._heartbeat.stop()
             duration = self._duration()
             self._record_guard(
@@ -376,10 +387,7 @@ class Run(MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
 
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
-        # in turn would double the worst case. Media files first: one that
-        # fails is retracted in the log, which then has to sync once more.
-        if self._close_media_uploads(max(0.0, deadline - time.monotonic())):
-            self._log_sync.submit(get_writer_id())
+        # in turn would double the worst case.
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
         if self._output is not None:
             writers.append(("output log", self._output))
@@ -544,14 +552,16 @@ def _finalize_open_runs(exit_code=None, **final_state):
     """
     if exit_code is None:
         exit_code = ABANDONED_EXIT_CODE if _uncaught_exception_seen else 0
-    # Every run's final state first, then one shared wait for all the uploads:
-    # a hung remote must not spend the whole budget on the first run.
+    # One shared deadline for every run's uploads: a hung remote must not
+    # spend the whole budget on each run in turn. Media files are waited for
+    # while recording (their entries must precede the final flush); the rest
+    # of the uploads after every run's final state is written.
+    deadline = _final_upload_deadline()
     recorded = [
         run
         for run in reversed(context.open_runs())
-        if _quietly(run._record_final, exit_code, **final_state)
+        if _quietly(run._record_final, exit_code, deadline, **final_state)
     ]
-    deadline = _final_upload_deadline()
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
 

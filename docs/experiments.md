@@ -655,8 +655,8 @@ a dot or slash: `outputs."model.pkl".digest = "sha256:..."`,
 keeps outputs beside its rows, not on them, so the `vmn-exp ui` list and
 leaderboard pages never ship them (per-step images would bloat every row);
 `?q=` queries, the run detail (`outputs`) and lineage still read them. A
-logged image/table can precede its file (it uploads in the background); one
-that fails to store is retracted by an `output_failed` log entry — see
+logged image/table is recorded only once its file is stored (it uploads in
+the background); one that fails to store is never recorded — see
 [sdk.md](sdk.md#tables-images-and-histograms).
 Runs link when one's input is another's output:
 

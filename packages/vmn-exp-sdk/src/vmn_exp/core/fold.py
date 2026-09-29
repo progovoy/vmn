@@ -139,23 +139,18 @@ def _apply_inputs(fold, entry, key):
 
 # Entries that record a stored file of the run: an artifact, or a logged
 # image/table (whose entry carries the file's sha256 and size itself).
+# An image/table entry is logged only once its file is stored.
 OUTPUT_TYPES = ("artifact", "image", "table")
-# Appended when a logged media file could not be stored: it retracts the
-# output its image/table entry recorded.
-OUTPUT_FAILED = "output_failed"
 
 
 def _apply_outputs(fold, entry, key):
-    """Fold one output entry: the latest upload of a path wins; a retraction
-    is a write too (a tombstone, left out by :func:`fold_outputs_dict`)."""
+    """Fold one output entry: the latest upload of a path wins."""
     path = entry.get("path")
     if not path:
         return
-    value = None
-    if entry.get("type") != OUTPUT_FAILED:
-        sha = entry.get("sha256")
-        value = {"path": path, "digest": f"sha256:{sha}" if sha else None,
-                 "size": entry.get("size")}
+    sha = entry.get("sha256")
+    value = {"path": path, "digest": f"sha256:{sha}" if sha else None,
+             "size": entry.get("size")}
     _keep_latest(fold.setdefault("outputs", {}), path, value, key)
 
 
@@ -189,7 +184,7 @@ def _apply(fold, entry, key):
         _apply_tags(fold, entry, key)
     elif etype == "input":
         _apply_inputs(fold, entry, key)
-    elif etype in OUTPUT_TYPES or etype == OUTPUT_FAILED:
+    elif etype in OUTPUT_TYPES:
         _apply_outputs(fold, entry, key)
     elif etype == DEFINE_METRIC:
         _apply_definition(fold, entry, key)
@@ -283,12 +278,8 @@ def fold_inputs_dict(fold):
 
 def fold_outputs_dict(fold):
     """``{path: {path, digest, size}}`` of the files a run produced (its
-    artifacts, images and tables), retracted ones left out."""
-    return {
-        path: wrapped[0]
-        for path, wrapped in fold.get("outputs", {}).items()
-        if wrapped[0] is not None
-    }
+    artifacts, images and tables)."""
+    return {path: wrapped[0] for path, wrapped in fold.get("outputs", {}).items()}
 
 
 def fold_last_metric_at(fold):
