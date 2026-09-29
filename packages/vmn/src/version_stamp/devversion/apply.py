@@ -27,10 +27,7 @@ def _apply_patches_to_workdir(dest, patches):
 
 def _git_am(dest, patch):
     cmd = ["git", *_fallback_identity(dest), "am", "--3way"]
-    result = _run_with_patch(cmd, patch, dest)
-    if result.returncode != 0:
-        VMN_LOGGER.warning(f"Failed to apply local commits: {result.stderr}")
-    return result.returncode == 0
+    return _run_with_patch(cmd, patch, dest, "local commits")
 
 
 def _fallback_identity(dest):
@@ -44,20 +41,21 @@ def _fallback_identity(dest):
 
 
 def _git_apply(dest, patch):
-    result = _run_with_patch(["git", "apply"], patch, dest)
-    if result.returncode != 0:
-        VMN_LOGGER.warning(f"Failed to apply working tree patch: {result.stderr}")
-    return result.returncode == 0
+    return _run_with_patch(["git", "apply"], patch, dest, "working tree patch")
 
 
-def _run_with_patch(cmd, patch, cwd):
-    return subprocess.run(
+def _run_with_patch(cmd, patch, cwd, what):
+    """Run *cmd* on *patch*; whether it applied (a warning when not)."""
+    result = subprocess.run(
         cmd,
         input=_ensure_trailing_newline(patch),
         capture_output=True,
         text=True,
         cwd=cwd,
     )
+    if result.returncode != 0:
+        VMN_LOGGER.warning(f"Failed to apply {what}: {result.stderr}")
+    return result.returncode == 0
 
 
 def _extract_untracked(dest, tarball):

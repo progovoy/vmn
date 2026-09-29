@@ -69,9 +69,12 @@ class Checkout:
 @dataclass
 class Workdir:
     root: str
-    app_root: str
     checkouts: list = field(default_factory=list)
     owns_root: bool = True
+
+    @property
+    def app_root(self):
+        return next(c.dest for c in self.checkouts if c.name == ".")
 
     def cleanup(self):
         """Remove every checkout (and the root when this created it)."""
@@ -94,6 +97,10 @@ def plan_workdir(vcs, metadata, patches, parent_dir=None):
     if err:
         return [], err
     root = os.path.abspath(parent_dir or _default_parent_pattern(vcs, metadata))
+    return _plan(vcs, metadata, patches, root)
+
+
+def _plan(vcs, metadata, patches, root):
     sources = _sources(metadata)
     deps = {name: {"rel_path": name} for name in sources if name != "."}
     layout = island_layout(vcs.vmn_root_path, deps, root)
@@ -189,16 +196,15 @@ def _patches_of(name, patches):
 
 def _make_root(vcs, metadata, parent_dir):
     if not parent_dir:
-        root = tempfile.mkdtemp(prefix=_default_prefix(vcs, metadata))
-        return Workdir(root=root, app_root=root)
+        return Workdir(root=tempfile.mkdtemp(prefix=_default_prefix(vcs, metadata)))
     root = os.path.abspath(parent_dir)
     owns_root = not os.path.exists(root)
     os.makedirs(root, exist_ok=True)
-    return Workdir(root=root, app_root=root, owns_root=owns_root)
+    return Workdir(root=root, owns_root=owns_root)
 
 
 def _populate(vcs, metadata, patches, workdir):
-    checkouts, err = plan_workdir(vcs, metadata, patches, workdir.root)
+    checkouts, err = _plan(vcs, metadata, patches, workdir.root)
     if err:
         return err
     for repo in {c.local_repo for c in checkouts if c.local_repo}:
@@ -207,8 +213,6 @@ def _populate(vcs, metadata, patches, workdir):
         err = _materialize(checkout, workdir)
         if err:
             return err
-        if checkout.name == ".":
-            workdir.app_root = checkout.dest
     return None
 
 
