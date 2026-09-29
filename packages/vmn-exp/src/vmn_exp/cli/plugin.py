@@ -31,6 +31,7 @@ from version_stamp.api import (
 EXPERIMENT_ACTIONS = [
     "create", "run", "add", "list", "show", "compare", "diff", "restore",
     "export", "prune", "tag", "archive", "unarchive", "import-mlflow", "watch",
+    "importance",
 ]
 
 
@@ -56,7 +57,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--remove", action="append", default=None,
                       help="tag: remove this tag key (repeatable)")
     pexp.add_argument("--archived", action="store_true", default=False,
-                      help="list: include archived runs")
+                      help="list/importance: include archived runs")
     pexp.add_argument("-v", "--version", action="append", default=None,
                       help="Version string(s). Repeatable for compare; prune deletes exactly "
                            "the named run(s) instead of applying --keep/--older-than.")
@@ -67,6 +68,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)")
     pexp.add_argument("--attach", default=None, help="File to attach as artifact")
     pexp.add_argument("--sort", default=None, help="Sort list by metric name")
+    pexp.add_argument("--metric", default=None,
+                      help="importance: the metric whose driving params to rank")
     pexp.add_argument("--top", type=int, default=None,
                       help="Show top N results in list")
     pexp.add_argument("--last", type=int, default=None,
@@ -91,12 +94,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--full-log", action="store_true", default=False,
                       help="show: print every log entry (default: the last 50)")
     pexp.add_argument("--query", default=None,
-                      help="list: filter rows by query (e.g. 'metrics.loss < 0.5'); "
+                      help="list/importance: filter rows by query (e.g. 'metrics.loss < 0.5'); "
                            "prune: select candidates by query (dry-run unless --yes/-y)")
     pexp.add_argument("--yes", "-y", action="store_true", default=False,
                       help="prune --query: confirm deletion")
     pexp.add_argument("--json", action="store_true", default=False,
-                      help="list/show: print machine-readable JSON")
+                      help="list/show/importance: print machine-readable JSON")
     pexp.add_argument("--from-snapshot", default=None,
                       help="Path to vmn_metadata.yml or directory containing it. "
                            "Records against a tree from 'vmn-exp export' (no git required). "
@@ -353,7 +356,8 @@ def register_all() -> None:
         handle=_handle_experiment,
         access="local",
         read_only_actions=frozenset(
-            {"list", "show", "compare", "diff", "export", "import-mlflow", "watch"}
+            {"list", "show", "compare", "diff", "export", "import-mlflow", "watch",
+             "importance"}
         ),
         split_after_double_dash=True,
         run_without_repo=_exp_run_without_repo,

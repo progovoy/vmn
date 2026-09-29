@@ -144,3 +144,36 @@ def test_incremental_fold_with_rewinds_matches_the_merged_log(seed):
 
     expected = experiment_row(3, META, flatten_logs(writers))
     assert fold_row(3, META, fold) == expected
+    schema = {"loss": {"goal": "min"}, "acc": {"goal": "max"}}
+    expected = experiment_row(3, META, flatten_logs(writers), schema=schema)
+    assert fold_row(3, META, fold, schema=schema) == expected
+
+
+# -- best-value summaries ------------------------------------------------------
+
+MIN_LOSS = {"loss": {"goal": "min"}}
+
+
+def test_rewound_entries_do_not_count_toward_min_and_max():
+    log = [_m("t1", 1, 1.0), _m("t2", 2, 0.1), _m("t3", 3, 9.0), _rw("t4", 1),
+           _m("t5", 2, 0.5)]
+    row = experiment_row(1, META, log, schema=MIN_LOSS)
+    assert row["metrics"]["loss"] == 0.5
+    assert row["metric_summary"]["loss"]["min"] == 0.5
+    assert row["metric_summary"]["loss"]["max"] == 1.0
+
+
+def test_the_refolded_index_fold_forgets_rewound_extrema():
+    old = [_m("t1", 1, 1.0), _m("t2", 2, 0.1)]
+    new = [_rw("t3", 1), _m("t4", 2, 0.5)]
+    fold = new_fold()
+    apply_entries(fold, "old", 0, old)
+    apply_entries(fold, "new", 0, new)
+    assert needs_refold(fold)
+    fold = new_fold(fold_rewinds(fold))
+    apply_entries(fold, "old", 0, old)
+    apply_entries(fold, "new", 0, new)
+    row = fold_row(1, META, fold, schema=MIN_LOSS)
+    assert row["metrics"]["loss"] == 0.5
+    merged = flatten_logs({"old": old, "new": new})
+    assert row == experiment_row(1, META, merged, schema=MIN_LOSS)

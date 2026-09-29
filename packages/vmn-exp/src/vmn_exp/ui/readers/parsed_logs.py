@@ -21,6 +21,7 @@ from vmn_exp.storage.files import flatten_logs
 from vmn_exp.core.fold import (
     fold_last_metric_at,
     fold_log,
+    fold_metrics,
     fold_rewinds,
     fold_values,
 )
@@ -36,6 +37,16 @@ DEFAULT_MAX_ENTRIES = 128
 MAX_THINNERS = 256
 
 
+def _metric_parts(fold):
+    """What :func:`fold_metrics` reads, copied at this poll: the fold itself
+    keeps growing under a snapshot."""
+    return {
+        "metrics": dict(fold["metrics"]),
+        "extrema": dict(fold.get("extrema") or {}),
+        "metric_defs": {n: dict(f) for n, f in (fold.get("metric_defs") or {}).items()},
+    }
+
+
 class LogSnapshot:
     """One poll's view of a parsed log: the first ``total`` entries."""
 
@@ -47,11 +58,17 @@ class LogSnapshot:
         self._counts = dict(parsed.counts)
         self.params = fold_values(parsed.fold, "params")
         self.metrics = fold_values(parsed.fold, "metrics")
+        self._metric_fold = _metric_parts(parsed.fold)
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.definitions = dict(parsed.definitions)
         # The fold keys a rewind by its log position (see fold_log).
         self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
         self.memo = {}  # derived views (thinned series) of this exact snapshot
+
+    def summarized_metrics(self, schema=None):
+        """``(metrics, metric_summary)`` under the metrics *schema* — see
+        :func:`~vmn_exp.core.fold.fold_metrics`."""
+        return fold_metrics(self._metric_fold, schema)
 
     def log(self):
         return self._entries[: self.total]

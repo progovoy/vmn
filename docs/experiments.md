@@ -717,12 +717,46 @@ An app with no runs prints `[]`.
 costs one listing plus whatever changed — never a re-read of every record. So
 does resolving `@N`, `latest` and prefixes.
 
+### `importance`
+
+Which params drive a metric — the CLI face of the dashboard's Importance panel.
+
+```sh
+vmn-exp importance my_app --metric loss
+vmn-exp importance my_app --metric loss --query 'status = "succeeded"' --json
+```
+
+```
+param    importance                        correlation  kind         n
+lr            0.912  ##################         +0.954  numeric      240
+opt           0.061  #                               -  categorical  240
+dropout       0.027  #                          -0.081  numeric      236
+```
+
+For the runs `list --query` would show (archived ones only with `--archived`)
+that carry the metric, every param with at least two distinct values gets:
+
+- `importance` — its share of the impurity decrease of a small random forest
+  fitted to predict the metric from the params (50 trees, depth 6, fixed seed,
+  so the same runs always give the same answer). The column sums to 1.
+- `correlation` — Pearson correlation with the metric (`spearman`, the rank
+  correlation, is in `--json`). Categorical params have no order, so theirs is
+  `-`/`null`; bools count as 0/1.
+- `kind` (`numeric`, `bool`, `categorical`) and `n`, the runs carrying both the
+  param and the metric. A run missing a numeric param counts as its median;
+  a missing categorical value is a category of its own.
+
+Past 5000 runs a deterministic sample of 5000 is scored. An unknown metric or a
+bad `--query` exits 1. Read-only: no repo lock. From Python:
+[`reader.param_importance`](sdk.md#reading-runs-back).
+
 ### `show`
 
 Full details for one experiment: metadata, a `Status:` line (exit code,
 duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
 lines, `Forked from: <verstr> @ step N` for a fork and a `Rewound to step N`
-line per rewind, latest metrics, and the log timeline — the newest 50 entries, with a
+line per rewind, metrics (each at its [summary value](#best-value-summaries-summary),
+with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
 line saying how many earlier ones were hidden. `--full-log` prints all of them.
 
 ```sh
@@ -934,6 +968,55 @@ experiment:
 - Schema columns also fix the column order in `list`/`compare`; any extra
   metrics you logged appear after them, alphabetically.
 
+### Best-value summaries (`summary`)
+
+A run that logs a metric many times (a loss per epoch) folds it into one
+number per run. Which one is the metric's **summary policy**:
+
+| `summary` | The run's `metrics.<name>` is |
+|---|---|
+| `last` | the latest value logged |
+| `min` | the smallest finite value logged |
+| `max` | the largest finite value logged |
+
+Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
+`goal: max` → `max`); a metric with neither is `last`. So with
+`loss: {goal: min}` an overfitting run — loss 1.0, 0.2, then back up to 0.9 —
+ranks on 0.2, its best epoch, not on 0.9:
+
+```yaml
+experiment:
+  metrics:
+    loss:     {goal: min}                  # ranks on the minimum
+    val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
+    lr:       {summary: last}
+```
+
+The summary value is what everything ranks and filters on: `list --sort`,
+`--query metrics.loss < 0.3`, `prune --query`, `compare`, `diff`, the UI
+leaderboard, and `list_runs()` rows. Every metric logged more than once also
+carries its full `metric_summary` (`{"last", "min", "max"}`) in `list --json`,
+`show --json`, `list_runs()`/`get_run()` rows and the UI run detail; `show`
+prints them where they differ:
+
+```
+  Metrics:
+    loss: 0.2 (last 0.9, min 0.2, max 1)
+```
+
+- **Precedence**: a run's own definition — [`run.define_metric()`](sdk.md#metric-goals-and-summaries),
+  recorded in its log — beats conf.yml, which beats the `last` default. In
+  each, an exact metric name beats a glob key (`"val_*": {goal: min}`).
+- **Live**: conf.yml's policies apply when a run is read, so editing them
+  re-ranks existing runs too (the index re-derives rows from its folded state,
+  no log is re-read). An S3 workspace in `vmn-exp ui` has no conf.yml, so only
+  the runs' own definitions apply there.
+- **NaN/inf** stay in the log and may be a metric's `last`, but never its
+  `min`/`max`. A `min`/`max` metric with no finite value at all keeps its last
+  (non-finite) value and sorts last.
+- Numeric params folded into `metrics` are single values: `min`/`max` of a
+  param is the param itself.
+
 ---
 
 ## Storage (local, S3, GCS, Azure, plugins)
@@ -1066,7 +1149,8 @@ the GCS and Azure backends are built.
 `vmn-exp ui` (from `pip install "vmn-exp[ui]"`) serves a dashboard over the same files:
 a sortable experiment leaderboard, per-run detail with **live training/perf
 curves** (from `step=` series), side-by-side compare with a real code diff, and
-an artifact browser. Each run gets a color-coded
+an artifact browser. The leaderboard's **Importance** chart ranks the params
+driving a metric (see [`importance`](#importance)). Each run gets a color-coded
 [status](#run-status-did-my-job-die) pill, inner runs nest under their outer run,
 and the page auto-refreshes while anything is unfinished. See
 [docs/ui.md](ui.md) for the full tour and the API fields.

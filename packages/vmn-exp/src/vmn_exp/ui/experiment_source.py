@@ -75,12 +75,15 @@ class ExperimentSource:
                 self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir)
             return self._indexes[ws.name]
 
-    def snapshot(self, ws, app_name, s3_storage=None):
-        """The app's current :class:`IndexSnapshot`."""
+    def snapshot(self, ws, app_name, s3_storage=None, schema=None):
+        """The app's current :class:`IndexSnapshot`, its rows summarized by the
+        metrics *schema* when one is given."""
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
-            return ui_index.app_snapshot(s3_storage, app_name, cache_path, self.refresher)
-        return self.workspace_index(ws).snapshot(app_name, self.refresher)
+            return ui_index.app_snapshot(
+                s3_storage, app_name, cache_path, self.refresher, schema
+            )
+        return self.workspace_index(ws).snapshot(app_name, self.refresher, schema)
 
     def metrics_schema(self, ws, app_name):
         """The git workspace app's metrics schema, parsed once per conf change."""

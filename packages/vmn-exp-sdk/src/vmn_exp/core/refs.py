@@ -22,7 +22,7 @@ KIND = "experiment"
 _LATEST_WORDS = ("latest", "@latest")
 
 
-def _listed_snapshot(storage, app_name):
+def _listed_snapshot(storage, app_name, schema=None):
     """An :class:`IndexSnapshot` of placement fields only, from a metadata-only
     listing — the fallback when the index is unavailable."""
     rows = [

@@ -213,8 +213,8 @@ def create_app(
         """``(snapshot, metrics schema)`` of an app; no app conf on S3."""
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
-        snapshot = source.snapshot(ws, app_name, _exp_storage_for(ws))
-        return snapshot, _app_schema(ws, app_name)
+        schema = _app_schema(ws, app_name)
+        return source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
     def _app_schema(ws, app_name):
         """The app's conf.yml metrics schema; none on S3."""

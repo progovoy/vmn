@@ -275,6 +275,17 @@ class ExperimentIndex:
             self.app_name, self.generation, self._order or [], self._records, touched
         )
 
+    def set_metric_schema(self, schema):
+        """Summarize rows by the app's metrics *schema* (see
+        :mod:`vmn_exp.core.metric_summary`). A different schema re-derives
+        every row from its fold — no log is read again — as a new generation."""
+        if (schema or None) == self._rows.schema:
+            return  # the common case: no lock, so a request never waits on a refresh
+        with self._lock:
+            if self._rows.set_schema(schema) and self._snapshot is not None:
+                self.generation += 1
+                self._snapshot = self._build_snapshot()
+
     def snapshot(self):
         """The current :class:`IndexSnapshot`; the first call loads the index."""
         return self._snapshot or self._first_load()
@@ -356,17 +367,19 @@ def direct_rows(
     with_create_note=False,
     read_log=load_log,
     read_run_state=load_run_state,
+    schema=None,
 ):
     """``(rows, run_states)`` by reading every record — the index's reference.
 
     *read_log* / *read_run_state* are the caller's loaders; a None
-    *read_run_state* skips the run states (``{}``).
+    *read_run_state* skips the run states (``{}``). *schema* is the app's
+    metrics schema.
     """
     rows = []
     metas = [m for m in storage.list_snapshots(app_name) if readable(m)]
     for idx, meta in enumerate(metas, 1):
         log = read_log(storage, app_name, meta["verstr"])
-        row = experiment_row(idx, meta, log)
+        row = experiment_row(idx, meta, log, schema=schema)
         if with_create_note:
             create = next((e for e in log if e.get("type") == "create"), None)
             row["create_note"] = (create or {}).get("note")
@@ -377,9 +390,9 @@ def direct_rows(
     return rows, states
 
 
-def direct_snapshot(storage, app_name):
+def direct_snapshot(storage, app_name, schema=None):
     """An :class:`IndexSnapshot` (generation 0) built by reading every record."""
-    rows, states = direct_rows(storage, app_name, with_create_note=True)
+    rows, states = direct_rows(storage, app_name, with_create_note=True, schema=schema)
     notes = {row["verstr"]: row.pop("create_note") for row in rows}
     observed = observed_at_by_verstr(storage, app_name, states)
     return IndexSnapshot.build(app_name, 0, rows, states, notes, observed)
@@ -393,28 +406,35 @@ def indexed_snapshot(
     full_sweep_sec=None,
     wait=False,
     fallback=direct_snapshot,
+    schema=None,
 ):
     """The shared index's :class:`IndexSnapshot`, refreshed when older than
     *max_age_sec* — or, with *wait*, refreshed now even if another thread's
     refresh has to finish first. *full_sweep_sec* is passed on to
-    :func:`shared_index`. If the index fails, ``fallback(storage, app_name)``
-    answers instead; a None *fallback* returns None."""
+    :func:`shared_index`; a *schema* other than None becomes the index's
+    metrics schema (:meth:`ExperimentIndex.set_metric_schema`). If the index
+    fails, ``fallback(storage, app_name, schema)`` answers instead; a None
+    *fallback* returns None."""
     try:
         index = shared_index(storage, app_name, cache_path, full_sweep_sec)
+        if schema is not None:
+            index.set_metric_schema(schema)
         if wait:
             return index.refresh().snapshot()
         return index.refresh_if_stale(max_age_sec)
     except Exception:
         _LOGGER.debug("Experiment index unavailable", exc_info=True)
-        return fallback(storage, app_name) if fallback else None
+        return fallback(storage, app_name, schema) if fallback else None
 
 
-def indexed_status_rows(storage, app_name, with_create_note=False, cache_path=None):
+def indexed_status_rows(
+    storage, app_name, with_create_note=False, cache_path=None, schema=None
+):
     """``(rows, run_states, observed_at)`` from an up-to-date snapshot — fresh
     row copies (see :meth:`ExperimentIndex.rows`), the run states and
     ``{verstr: run_state.yml store write time}``, the ``observed_at`` a status
-    derivation takes."""
-    snap = indexed_snapshot(storage, app_name, cache_path, wait=True)
+    derivation takes. *schema*: see :func:`indexed_snapshot`."""
+    snap = indexed_snapshot(storage, app_name, cache_path, wait=True, schema=schema)
     return (
         _row_copies(snap, with_create_note),
         dict(snap.run_states),

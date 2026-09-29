@@ -143,7 +143,7 @@ export default function Run() {
       <div className="card-grid-2" style={{ marginBottom: 16 }}>
         {detail ? <MetadataCard detail={detail} /> : <Skeleton />}
         <ParamsCard params={summary.params} />
-        <MetricsCard metrics={summary.metrics} schema={schema}>
+        <MetricsCard metrics={summary.metrics} summary={summary.metricSummary} schema={schema}>
           {detail && (
             <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
           )}
