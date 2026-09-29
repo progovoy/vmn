@@ -42,10 +42,10 @@ export function histogramBars(
   });
 }
 
-type MediaFields = Pick<ExperimentDetail, "media" | "tables" | "histograms">;
+type MediaFields = Pick<ExperimentDetail, "media" | "tables" | "histograms" | "histograms_total">;
 
 export function hasMedia(detail: MediaFields): boolean {
-  return [detail.media, detail.tables, detail.histograms].some(
+  return [detail.media, detail.tables, detail.histograms, detail.histograms_total].some(
     (index) => index != null && Object.keys(index).length > 0,
   );
 }
@@ -57,6 +57,11 @@ export interface TableQuery {
   order?: "asc" | "desc";
 }
 
+const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
+
+const experimentPath = (ws: string, app: string, verstr: string) =>
+  `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}`;
+
 /** The API path (below `/api/v1`) of one page of a logged table. */
 export function tablePageUrl(
   ws: string, app: string, verstr: string, path: string, q: TableQuery,
@@ -66,8 +71,10 @@ export function tablePageUrl(
     qs.set("sort", q.sort);
     qs.set("order", q.order ?? "asc");
   }
-  return (
-    `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}` +
-    `/table/${path.split("/").map(encodeURIComponent).join("/")}?${qs}`
-  );
+  return `${experimentPath(ws, app, verstr)}/table/${encodePath(path)}?${qs}`;
+}
+
+/** The API path (below `/api/v1`) of one histogram key's served steps. */
+export function histogramUrl(ws: string, app: string, verstr: string, name: string): string {
+  return `${experimentPath(ws, app, verstr)}/histograms/${encodePath(name)}`;
 }

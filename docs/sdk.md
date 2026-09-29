@@ -224,7 +224,7 @@ Every call appends to the run's log; nothing is ever rewritten.
 | `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
 | `run.log_table(name, data, columns=None, step=None)` | a table — see [Tables, images and histograms](#tables-images-and-histograms) |
 | `run.log_image(name, image, step=None, caption=None)` | an image, stored as PNG |
-| `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job |
+| `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job (or a precomputed `{"bins", "counts"}`) |
 | `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
 | `run.define_metric(name, step_metric=None, summary=None, goal=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — and which of its values the run ranks on — see [Metric goals and summaries](#metric-goals-and-summaries) |
 
@@ -283,7 +283,7 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
 |---|---|---|---|
 | `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns", "sha256", "size"}` (+ `total_rows` when truncated) |
 | `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height", "sha256", "size"}` |
-| `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
+| `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors), or a precomputed `{"bins": edges, "counts": counts}` mapping (`len(bins) == len(counts) + 1`, else `ValueError`; `bins=` unused) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
 
 - Tables keep at most **10,000 rows** (`vmn_exp.core.tables.MAX_TABLE_ROWS`);
   longer ones are truncated with a warning. Cells are made JSON-safe: numpy
@@ -505,7 +505,8 @@ Raw PyTorch has no training entry point to wrap: you write the loop, so there is
 no `fit()`. The candidate hooks are worse than nothing — `Module.__call__` fires
 on every forward pass, `Optimizer.step` on every batch, and neither can tell an
 epoch from a step or knows which loss you care about. Raw-torch users log
-explicitly in their own loop, which costs two lines:
+metrics explicitly in their own loop, which costs two lines (for gradient and
+parameter histograms, see [PyTorch — `watch`](#pytorch--watch)):
 
 ```python
 with start_run("my_app", params={"lr": lr, "batch_size": 32}) as run:
@@ -1222,6 +1223,45 @@ are stripped; the rest of each result dict is logged as metrics.  The outer run'
 `tree_status` rolls up to `failed` if any trial failed.
 
 See also: [docs/models.md](models.md) for registering the model after a sweep.
+
+### PyTorch — `watch`
+
+The equivalent of `wandb.watch(model)` for a plain torch loop: gradient and/or
+parameter histograms of every parameter tensor (unrelated to the `vmn-exp
+watch` alerts command). Importing the module does not import torch.
+
+```python
+from vmn_exp.integrations.torch_watch import watch, unwatch
+
+with start_run("my_app") as run:
+    watcher = watch(model, log="gradients", freq=1000, bins=64)
+    for batch in loader:
+        loss = model(batch).mean(); loss.backward(); optimizer.step()
+    unwatch(model)  # or watcher.remove(): logs what is pending, drops the hooks
+```
+
+- `log="gradients"` (default), `"parameters"` or `"all"`; `run=` (default
+  `current_run()` at each forward call) and `prefix=` (prepended to keys).
+- Keys: `gradients/<param>` and `parameters/<param>` (`named_parameters()`
+  names), ordinary `histogram` entries, so they show in the run page's Media
+  section and `get_run(...)["histograms"]`.
+- The step is the model's **training-mode forward count**: every `freq`-th
+  forward call with `model.training` set logs the parameters (before that
+  step's update) and captures that pass's gradients, which are logged at the
+  next forward call or `watcher.flush()`. Eval-mode forwards do not count. It
+  is not your metrics' step.
+- Histograms are computed on the tensor's device (`torch.histc`, CPU fallback);
+  only a logged step pays the device-to-host copy of `bins` counts. Gradients
+  are never modified. A hook that fails is logged at debug and never breaks
+  `backward()`.
+- Without an open run nothing is recorded; under DDP only rank 0 records (other
+  ranks get a no-op run). `watch()` on a watched model replaces its watcher.
+- Caveats: with AMP `GradScaler` the hooks see *scaled* gradients; FSDP-sharded
+  or `torch.compile`d models may give partial or missing histograms.
+- Size: a 64-bin entry is ~1.9 KB of log. ResNet-50 (~161 tensors) is ~310 KB
+  per logged step per mode: ~31 MB over 100k steps for gradients at the default
+  `freq=1000`, ~62 MB for `"all"`, ~310 MB at `freq=100`. Lower `bins` or raise
+  `freq` for big models.
 
 ---
 

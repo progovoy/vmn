@@ -10,6 +10,11 @@
 
 Sorting is server-side over the whole table (at most 10k rows). Images need no
 route of their own: the artifact download serves them as ``image/png``.
+
+``GET .../experiments/{verstr}/histograms/{name}`` answers one histogram key's
+served steps, ``{"name", "steps": [{"step", "bins", "counts"}], "total"}``
+(the run detail lists the names in ``histograms_total``; see
+:mod:`vmn_exp.ui.readers.histograms`).
 """
 import json
 
@@ -18,6 +23,8 @@ from fastapi import HTTPException, Request
 from vmn_exp.core.tables import table_page
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui.http_params import clamp_page
+from vmn_exp.ui.readers.experiment_detail import run_media
+from vmn_exp.ui.readers.histograms import histogram_of
 from vmn_exp.ui.responses import json_response
 
 DEFAULT_TABLE_PAGE = 100
@@ -68,3 +75,18 @@ def register(app, prefix, storage_for, segment):
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return json_response(page, request=request)
+
+    @app.get(
+        f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+        "/experiments/{verstr}/histograms/{name:path}"
+    )
+    def experiment_histogram(request: Request, ws_name: str, app_tag: str, verstr: str, name: str):
+        storage, app_name = storage_for(ws_name, app_tag)[:2]
+        segment(verstr)
+        media = run_media(storage, app_name, verstr)
+        if media is None:
+            raise HTTPException(404, f"Experiment {verstr} not found")
+        found = histogram_of(media, name)
+        if found is None:
+            raise HTTPException(404, f"Histogram {name} not found")
+        return json_response(found, request=request)

@@ -25,6 +25,7 @@ from vmn_exp.core.status import (
 )
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
@@ -211,7 +212,7 @@ def experiment_detail(
         "series_total": series_total,
         "step_metrics": snapshot.step_metrics(schema),
         "artifacts": list_artifacts(storage, app_name, verstr),
-        **snapshot.media,
+        **detail_media(snapshot.media),
         "status": status_detail(
             storage,
             app_name,
@@ -286,6 +287,14 @@ def run_series(
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
     return series, totals, snapshot.step_metrics(schema)
+
+
+def run_media(storage, app_name, verstr):
+    """The media view (every histogram's served steps) of an existing run, or
+    None when it is gone."""
+    if storage.load_metadata(app_name, verstr) is None:
+        return None
+    return _PARSED.get(storage, app_name, verstr, _load_log).media
 
 
 def log_page(

@@ -238,9 +238,10 @@ export interface ExperimentDetail {
   media?: Record<string, MediaItem[]>;
   /** Logged tables per key, one item per step (`run.log_table`). */
   tables?: Record<string, TableItem[]>;
-  /** Logged histograms per key; at most 100 evenly spaced steps each. */
+  /** Logged histograms per key; at most 100 evenly spaced steps each. Empty
+   *  when the run has many: fetch each key from `.../histograms/{name}`. */
   histograms?: Record<string, HistogramItem[]>;
-  /** Steps logged per histogram key before thinning. */
+  /** Every histogram key with its steps logged before thinning. */
   histograms_total?: Record<string, number>;
   /** The run (and step) this run was forked from; a fork is not a child. */
   forked_from?: ForkOrigin | null;
@@ -281,6 +282,14 @@ export interface HistogramItem {
   /** Bin edges: one more than `counts`. */
   bins: number[];
   counts: number[];
+}
+
+/** One histogram key's served steps from `/experiments/{v}/histograms/{name}`. */
+export interface HistogramPage {
+  name: string;
+  steps: HistogramItem[];
+  /** Steps logged before thinning. */
+  total: number;
 }
 
 export interface TableColumn {

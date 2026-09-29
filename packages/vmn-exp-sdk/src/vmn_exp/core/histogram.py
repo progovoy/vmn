@@ -3,9 +3,11 @@
 
 numpy computes them when installed; the pure-Python path gives the same bins
 (``len(bins) == len(counts) + 1``, equal widths, the last bin closed on the
-right, a constant widened to ``value +- 0.5``).
+right, a constant widened to ``value +- 0.5``). A ready
+``{"bins": edges, "counts": counts}`` mapping is checked and passed through.
 """
 import math
+from collections.abc import Mapping
 
 
 def _numpy():
@@ -58,8 +60,21 @@ def _pure(values, bins):
     return {"bins": edges, "counts": counts}
 
 
+def precomputed(binned):
+    """A caller's own ``{"bins", "counts"}``, checked: one more edge than counts."""
+    edges, counts = binned.get("bins"), binned.get("counts")
+    if edges is None or counts is None or not counts or len(edges) != len(counts) + 1:
+        raise ValueError("a precomputed histogram needs len(bins) == len(counts) + 1")
+    return {"bins": [float(e) for e in edges], "counts": [int(c) for c in counts]}
+
+
 def histogram(values, bins=64):
-    """The histogram of *values*' finite entries, or None when there are none."""
+    """The histogram of *values*' finite entries, or None when there are none.
+
+    *values* may be a precomputed ``{"bins", "counts"}`` mapping (*bins* unused).
+    """
+    if isinstance(values, Mapping):
+        return precomputed(values)
     if not isinstance(bins, int) or isinstance(bins, bool) or bins < 1:
         raise ValueError(f"bins must be a positive integer, got {bins!r}")
     values = _as_array_like(values)

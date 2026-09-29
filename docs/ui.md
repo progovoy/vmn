@@ -392,8 +392,8 @@ Every list is sorted; `metric_keys` includes numeric params (they fold into
 | `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
 | `step_metrics` | `{metric: x metric}` for every metric that declares one (`run.define_metric(..., step_metric=)` or `step_metric:` in the conf.yml metrics schema) |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
-| `media` / `tables` / `histograms` | logged images, tables and histograms per name, one item per step (see [Media](#media)) |
-| `histograms_total` | `{name: steps logged}`; `histograms` keeps at most 100 evenly spaced steps per name |
+| `media` / `tables` / `histograms` | logged images, tables and histograms per name, one item per step (see [Media](#media)); `histograms` is `{}` once the run's histograms serve more than 100 steps in all — fetch each name from `.../histograms/{name}` |
+| `histograms_total` | `{name: steps logged}` for every histogram name; at most 100 evenly spaced steps are served per name |
 
 Older log entries page through `GET .../experiments/{verstr}/log?offset=&limit=`,
 which answers `{"entries": [...], "total": N}` oldest first.
@@ -469,6 +469,14 @@ that stacks every step on a shared x range.
   Sorting covers the whole table (missing cells last in both orders);
   `limit` is capped at 1000. An unknown path is a `404`; a file that is not a
   logged table, or an unknown sort column, a `400`.
+- `GET .../experiments/{verstr}/histograms/{name}` answers one histogram key's
+  served steps (at most 100, evenly spaced, first and last included):
+  `{"name", "steps": [{"step", "bins", "counts"}], "total"}`, with an ETag.
+  Names may contain `/` (`gradients/fc.weight`). An unknown run or name is a
+  `404`. The run detail lists every name in `histograms_total` but inlines
+  steps only for small runs, so a model watched with
+  [`torch_watch.watch`](sdk.md#pytorch--watch) (hundreds of keys) does not
+  bloat each poll; the run page fetches the keys it shows, 12 at a time.
 
 ### Lineage
 

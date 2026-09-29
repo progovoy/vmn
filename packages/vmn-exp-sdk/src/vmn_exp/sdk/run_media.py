@@ -9,7 +9,9 @@
   ``media/<name>/<step>.png`` and logs ``{"type": "image", "name", "step",
   "path", "caption", "width", "height", "sha256", "size"}``.
 * ``log_histogram(name, values, step=None, bins=64)`` bins the finite values
-  here and logs ``{"type": "histogram", "name", "step", "bins", "counts"}``.
+  here and logs ``{"type": "histogram", "name", "step", "bins", "counts"}``;
+  *values* may instead be a precomputed ``{"bins": edges, "counts": counts}``
+  (``len(bins) == len(counts) + 1``).
 
 An image or table entry is also the run's record of its file as an output
 (like an ``artifact`` entry: ``row["outputs"]``, lineage, ``use_artifact``);
