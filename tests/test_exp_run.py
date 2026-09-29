@@ -30,6 +30,8 @@ from vmn_exp.sdk import Run, start_run
 _RUN_STATE_KEYS = {
     "state",
     "command",
+    "runner",
+    "cwd",
     "pid",
     "host",
     "started_at",
