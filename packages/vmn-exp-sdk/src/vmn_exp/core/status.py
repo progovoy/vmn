@@ -181,7 +181,10 @@ def derive_status(run_state, now=None, observed_at=None):
 
     exit_code = run_state.get("exit_code")
     if exit_code is not None:
-        return SUCCEEDED if int(exit_code) == 0 else FAILED
+        # A run its supervisor stopped on purpose (sweep early stopping) did
+        # its job, whatever the child exited with once terminated.
+        ok = int(exit_code) == 0 or run_state.get("stopped_early") is True
+        return SUCCEEDED if ok else FAILED
     if run_state.get("state") != "running":
         return CREATED
 

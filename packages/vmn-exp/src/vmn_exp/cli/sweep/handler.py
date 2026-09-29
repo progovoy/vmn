@@ -1,12 +1,11 @@
 """``vmn-exp sweep create`` and ``status``, and the command's dispatch."""
-import json
-
 from vmn_exp.cli.experiment import (
     _experiment_create_core,
     _resolve_parent,
     auto_init,
     experiment_storage_params,
 )
+from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.sweep.claims import list_claims
@@ -80,7 +79,7 @@ def sweep_status(storage, app_name, sweep, spec, args):
                         list_claims(storage, app_name, sweep))
     summary["sweep"] = sweep
     if args.json:
-        print(json.dumps(summary, indent=2, sort_keys=True, default=str))
+        print(dumps(summary))
     else:
         print(format_status(summary))
     return 0

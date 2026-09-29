@@ -42,7 +42,8 @@ def _best_until(points, step, goal):
 
 class MedianStopper:
     """Checks one running trial against its siblings, at most every
-    ``check_interval_sec``; ``due(now)`` says when a check should run."""
+    ``check_interval_sec``; ``due(now)`` says when a check should run (the
+    first one an interval after the trial started: nothing is logged before)."""
 
     def __init__(self, spec, storage, app_name):
         self.metric = spec["metric"]["name"]
@@ -53,15 +54,22 @@ class MedianStopper:
         self._next = None
 
     def due(self, now):
-        if self._next is None or now >= self._next:
+        if self._next is None:
             self._next = now + self.rule["check_interval_sec"]
-            return True
-        return False
+        if now < self._next:
+            return False
+        self._next = now + self.rule["check_interval_sec"]
+        return True
 
     def should_stop(self, own_verstr, sibling_verstrs):
-        others = [self._points(v) for v in sibling_verstrs if v != own_verstr]
+        """*sibling_verstrs* is a callable, only called (and the siblings' logs
+        only read) once the trial itself is past ``min_iter``."""
+        own = self._points(own_verstr)
+        if not own or max(s for s, _ in own) < self.rule["min_iter"]:
+            return False
+        others = [self._points(v) for v in sibling_verstrs() if v != own_verstr]
         return median_should_stop(
-            self._points(own_verstr), others, self.goal,
+            own, others, self.goal,
             min_iter=self.rule["min_iter"], min_trials=self.rule["min_trials"],
         )
 

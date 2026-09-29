@@ -8,40 +8,33 @@ snapshots the checkout) and supervised without it — the same split as
 import copy
 import json
 import os
+import threading
 import time
 
-from vmn_exp.cli.experiment import _experiment_create_core
-from vmn_exp.cli.run import _detect_python_exe, _Supervision
+from vmn_exp.cli.run import _create_experiment, _Supervision
+from vmn_exp.core.background import Coalescing
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
-from vmn_exp.core.sweep.command import trial_command
+from vmn_exp.core.sweep.command import require_command, trial_command
 from vmn_exp.core.sweep.early_stop import MedianStopper
-from vmn_exp.core.sweep.spec import SpecError
-from vmn_exp.core.sweep.summary import (
-    STOPPED_EARLY_TAG,
-    history,
-    latest_attempts,
-    retryable_trials,
-    trial_of,
-    trial_rows,
-)
+from vmn_exp.core.sweep.summary import STOPPED_EARLY_TAG, history, retry_slots, trial_rows
 from vmn_exp.core.writer import append_to_log, create_tags_entry, get_writer_id
+from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
 
 
 def run_agent(vcs, storage, args, sweep, spec, repo_lock=None):
-    if not (getattr(args, "run_cmd", None) or spec.get("command") or spec.get("program")):
-        # Checked before claiming: a claim without a run would waste its slot.
-        raise SpecError("No command: give the spec a command: or program:, "
-                        "or pass one after -- to sweep agent")
+    # Checked before claiming: a claim without a run would waste its slot.
+    require_command(spec, getattr(args, "run_cmd", None))
     if repo_lock is not None:
         repo_lock.release()  # re-taken only around each trial's creation
     agent = f"{get_writer_id()}:{os.getpid()}"
+    base_name = (storage.load_metadata(vcs.name, sweep) or {}).get("name") or "sweep"
     ran = 0
     while args.count is None or ran < args.count:
         claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed)
         if claim is None:
             break
-        supervision = _run_trial(vcs, storage, args, sweep, spec, claim, repo_lock)
+        supervision = _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock)
         if supervision is None:
             return 1
         ran += 1
@@ -54,83 +47,90 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None):
 
 
 def _next_claim(storage, app_name, sweep, spec, agent, retry_failed):
+    rows = None
+
+    def current_rows():
+        nonlocal rows
+        if rows is None:
+            rows = trial_rows(storage, app_name, sweep)
+        return rows
+
     if retry_failed:
-        rows = trial_rows(storage, app_name, sweep)
-        latest = latest_attempts(rows)
-        for trial in retryable_trials(rows):
-            attempt = trial_of(latest[trial])[1] + 1
+        for trial, attempt in retry_slots(current_rows()):
             claim = claim_retry(storage, app_name, sweep, trial, agent, attempt=attempt)
             if claim is not None:
                 return claim
-    return claim_next_trial(
-        storage, app_name, sweep, spec, agent=agent,
-        history=lambda: history(spec, trial_rows(storage, app_name, sweep)),
-    )
+    return claim_next_trial(storage, app_name, sweep, spec, agent=agent,
+                            history=lambda: history(spec, current_rows()))
 
 
-def _run_trial(vcs, storage, args, sweep, spec, claim, repo_lock):
+def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
     trial, attempt, params = claim["trial"], claim["attempt"], claim["params"]
-    command = trial_command(spec, params, override=getattr(args, "run_cmd", None))
-    name = _trial_name(storage, vcs.name, sweep, trial, attempt)
-    verstr = _create_trial_run(vcs, storage, args, sweep, claim, name, command, repo_lock)
-    if verstr is None:
-        return None
-    attach_run(storage, claim, verstr)
-
     trial_args = copy.copy(args)
-    trial_args.run_name = name
-    env = {
-        "VMN_SWEEP_ID": sweep,
-        "VMN_SWEEP_TRIAL": str(trial),
-        "VMN_SWEEP_PARAMS": json.dumps(params),
-    }
-    hook = _early_stop_hook(spec, storage, vcs.name, sweep, verstr)
-    supervision = _Supervision(storage, vcs.name, verstr, trial_args,
-                               getattr(vcs, "experiment", None), extra_env=env, on_tick=hook)
-    supervision.run(command)
-    return supervision
+    trial_args.run_cmd = trial_command(spec, params, override=getattr(args, "run_cmd", None))
+    trial_args.run_name = f"{base_name}-t{trial}" + (f".a{attempt}" if attempt else "")
+    trial_args.parent, trial_args.note, trial_args.file = sweep, None, None
+    tags = {"sweep": sweep, "sweep_trial": str(trial), "sweep_attempt": str(attempt)}
 
-
-def _create_trial_run(vcs, storage, args, sweep, claim, name, command, repo_lock):
-    tags = {
-        "sweep": sweep,
-        "sweep_trial": str(claim["trial"]),
-        "sweep_attempt": str(claim["attempt"]),
-    }
     if repo_lock is not None:
         repo_lock.acquire()
     try:
-        verstr, err = _experiment_create_core(
-            vcs, storage, parent=sweep, name=name,
-            extra_create_data={"params": claim["params"], "tags": tags},
-            capture_env=getattr(args, "capture_env", None),
-            python_exe=_detect_python_exe(command),
+        _, verstr, err = _create_experiment(
+            vcs, storage, trial_args, extra_create_data={"params": params, "tags": tags}
         )
     finally:
         if repo_lock is not None:
             repo_lock.release()
-    return None if err is not None else verstr
-
-
-def _trial_name(storage, app_name, sweep, trial, attempt):
-    base = (storage.load_metadata(app_name, sweep) or {}).get("name") or "sweep"
-    return f"{base}-t{trial}" + (f".a{attempt}" if attempt else "")
-
-
-def _early_stop_hook(spec, storage, app_name, sweep, verstr):
-    """A supervision hook applying the median rule, or None without one."""
-    if not spec.get("early_terminate"):
+    if err is not None:
         return None
-    stopper = MedianStopper(spec, storage, app_name)
+    attach_run(storage, claim, verstr)
 
-    def tick(supervision):
-        if supervision.stopped_early or not stopper.due(time.monotonic()):
-            return
-        siblings = [r["verstr"] for r in trial_rows(storage, app_name, sweep)]
-        if not stopper.should_stop(verstr, siblings):
-            return
-        VMN_LOGGER.info(f"Sweep {sweep}: stopping {verstr} early (median rule)")
-        append_to_log(storage, app_name, verstr, create_tags_entry({STOPPED_EARLY_TAG: "true"}))
-        supervision.request_stop()
+    env = {"VMN_SWEEP_ID": sweep, "VMN_SWEEP_TRIAL": str(trial),
+           SWEEP_PARAMS_ENV: json.dumps(params)}
+    check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
+        if spec.get("early_terminate") else None
+    supervision = _Supervision(storage, vcs.name, verstr, trial_args,
+                               getattr(vcs, "experiment", None), extra_env=env, on_tick=check)
+    try:
+        supervision.run(trial_args.run_cmd)
+    finally:
+        if check is not None:
+            check.close()
+    return supervision
 
-    return tick
+
+class _EarlyStopCheck:
+    """The median rule for one trial, as a supervision hook.
+
+    The check reads storage (the sweep's rows, every sibling's log), so it runs
+    on a background worker: the supervision loop only schedules it and acts on
+    its verdict, and never waits for storage between heartbeats.
+    """
+
+    def __init__(self, spec, storage, app_name, sweep, verstr):
+        self._stopper = MedianStopper(spec, storage, app_name)
+        self._storage, self._app_name = storage, app_name
+        self._sweep, self._verstr = sweep, verstr
+        self._verdict = threading.Event()
+        self._worker = Coalescing(self._check, "vmn-sweep-early-stop")
+
+    def __call__(self, supervision):
+        if supervision.stopped_early:
+            return
+        if self._verdict.is_set():
+            VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early (median rule)")
+            append_to_log(self._storage, self._app_name, self._verstr,
+                          create_tags_entry({STOPPED_EARLY_TAG: "true"}))
+            supervision.request_stop()
+        elif self._stopper.due(time.monotonic()):
+            self._worker.submit()
+
+    def close(self):
+        self._worker.close(timeout=0)
+
+    def _check(self, _item):
+        if self._stopper.should_stop(self._verstr, self._siblings):
+            self._verdict.set()
+
+    def _siblings(self):
+        return [r["verstr"] for r in trial_rows(self._storage, self._app_name, self._sweep)]

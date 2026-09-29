@@ -117,9 +117,10 @@ run under it; the sweep only reads the trial run's own metrics.
 
 ## Claims: how agents coordinate
 
-Trial slots are records of the reserved pseudo-app `vmn-sweeps`, named
-`<app>~<sweep verstr>.t<N>` (`/` in the app becomes `~`). An agent lists the
-slots, takes `max(N) + 1` (stopping at the trial limit), draws that trial's
+Trial slots are records `t<N>` of the sweep's own pseudo-app
+`vmn-sweeps/<app>~<sweep verstr>` (`/` in the app becomes `~`; the whole
+`vmn-sweeps` tree is reserved and hidden from app listings), so a listing only
+ever reads one sweep's slots. An agent lists them, takes `max(N) + 1` (stopping at the trial limit), draws that trial's
 params, and creates the record with `create_exclusive` — an `O_EXCL` mkdir
 locally/on NFS, a conditional `If-None-Match: *` PUT on S3 (and the equivalent
 on GCS/Azure). Exactly one agent wins; a loser re-lists and tries the next
@@ -138,7 +139,7 @@ Trial runs are created under the repo lock (they snapshot the checkout, like
   heartbeat is stale), are **not** retried by default.
   `vmn-exp sweep agent --retry-failed` first re-runs each such trial — same
   params, a new run tagged `sweep_attempt=K` — claiming the retry slot
-  `....t<N>.a<K>` atomically, so two retrying agents never re-run it twice.
+  `t<N>.a<K>` atomically, so two retrying agents never re-run it twice.
   `status` judges a trial by its latest attempt.
 * A claim whose run was never created (the agent died between the two) counts
   as `unstarted` in `status`; it is not retried.
@@ -152,11 +153,12 @@ every `check_interval_sec`: at the trial's latest step `s >= min_iter`, if its
 best value up to `s` is strictly worse than the median of the other trials'
 best values up to `s` (counting trials that reached `s`, at least
 `min_trials` of them), the agent stops it — SIGTERM through the supervisor,
-SIGKILL after `--kill-grace-sec`. Steps are the `step=` values of the metrics
-lines (else the line's position). An early-stopped trial ends **succeeded**
-with `stopped_early: true` and the child's real code as `child_exit_code` in
-its `run_state.yml`, plus the tag `stopped_early=true`. `hyperband` is not
-supported.
+SIGKILL after `--kill-grace-sec`. The check runs on a background thread, so
+slow storage never delays the trial's heartbeat. Steps are the `step=` values
+of the metrics lines (else the line's position). An early-stopped trial keeps
+the child's real `exit_code` and gets `stopped_early: true` in its
+`run_state.yml` — status derivation reads that as **succeeded** — plus the tag
+`stopped_early=true` for queries and `status`. `hyperband` is not supported.
 
 ## Status
 

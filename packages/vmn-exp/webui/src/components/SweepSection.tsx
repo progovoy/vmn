@@ -3,8 +3,10 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import { rowsPrefix } from "../queries";
 import type { ExperimentRow } from "../types";
-import { fmtVal } from "../util";
+import { fmtParam, fmtVal, paramValue } from "../util";
+import { finiteOrNull } from "../util/stats";
 import StatusPill from "./StatusPill";
 
 export interface SweepSpec {
@@ -27,18 +29,17 @@ export const sweepQuery = (verstr: string) => `parent = "${verstr}"`;
 const trialNo = (r: ExperimentRow) => Number(r.tags?.sweep_trial ?? -1);
 const attemptNo = (r: ExperimentRow) => Number(r.tags?.sweep_attempt ?? 0);
 
-function metricOf(spec: SweepSpec, r: ExperimentRow): number | null {
-  const v = r.metrics?.[spec.metric.name];
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
+const metricOf = (spec: SweepSpec, r: ExperimentRow) => finiteOrNull(r.metrics?.[spec.metric.name]);
 
 export function bestTrial(spec: SweepSpec, rows: ExperimentRow[]): ExperimentRow | null {
   let best: ExperimentRow | null = null;
+  let bestVal: number | null = null;
   for (const r of rows) {
     const v = metricOf(spec, r);
-    if (v === null) continue;
-    const b = best && metricOf(spec, best);
-    if (b === null || b === undefined || (spec.metric.goal === "min" ? v < b : v > b)) best = r;
+    if (v !== null && (bestVal === null || (spec.metric.goal === "min" ? v < bestVal : v > bestVal))) {
+      best = r;
+      bestVal = v;
+    }
   }
   return best;
 }
@@ -109,7 +110,10 @@ export function SweepCard({ spec, trials, boardUrl, runUrl }: {
                   {r.status && <StatusPill status={r.status} />}
                   {r.tags?.stopped_early === "true" && <span className="badge">stopped early</span>}
                 </td>
-                {params.map((p) => <td key={p} className="mono">{fmtParam(r.params?.[p])}</td>)}
+                {params.map((p) => {
+                  const v = paramValue(r, p);
+                  return <td key={p} className="mono">{v === undefined ? "–" : fmtParam(v)}</td>;
+                })}
                 <td className="mono">{fmtVal(metricOf(spec, r))}</td>
               </tr>
             ))}
@@ -123,10 +127,6 @@ export function SweepCard({ spec, trials, boardUrl, runUrl }: {
   );
 }
 
-function fmtParam(v: unknown): string {
-  return typeof v === "number" ? fmtVal(v) : v === undefined ? "–" : String(v);
-}
-
 /** Most trials a sweep section lists (the list endpoint's page cap). */
 const MAX_TRIALS = 1000;
 
@@ -135,7 +135,8 @@ export default function SweepSection({ ws, app, verstr, spec, runUrl }: {
 }) {
   const query = sweepQuery(verstr);
   const trials = useQuery({
-    queryKey: ["sweep-trials", ws, app, verstr],
+    // Under the rows prefix, so whatever refreshes the app's lists refreshes this.
+    queryKey: [...rowsPrefix(ws, app), "sweep", verstr],
     queryFn: () => api.experimentsPaged(ws, app, { query, limit: MAX_TRIALS }),
   });
   const boardUrl = `/ws/${ws}/app/${app}?q=${encodeURIComponent(query)}`;

@@ -24,16 +24,19 @@ _PLACEHOLDER = re.compile(r"\$\{([A-Za-z0-9_.]+)\}")
 
 def trial_command(spec, params, override=None):
     """The argv for a trial with *params*; *override* is ``agent -- cmd...``."""
-    template = override or spec.get("command")
-    if not template:
-        if not spec.get("program"):
-            raise SpecError("No command: give the spec a command: or program:, "
-                            "or pass one after -- to sweep agent")
-        template = DEFAULT_TEMPLATE
+    require_command(spec, override)
+    template = override or spec.get("command") or DEFAULT_TEMPLATE
     argv = []
     for token in template:
         argv.extend(_expand(token, params, spec))
     return argv
+
+
+def require_command(spec, override=None):
+    """SpecError unless a trial has a command to run."""
+    if not (override or spec.get("command") or spec.get("program")):
+        raise SpecError("No command: give the spec a command: or program:, "
+                        "or pass one after -- to sweep agent")
 
 
 def _expand(token, params, spec):

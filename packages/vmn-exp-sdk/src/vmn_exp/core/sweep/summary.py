@@ -5,10 +5,10 @@ sweep; its ``sweep_trial`` / ``sweep_attempt`` tags say which slot it fills.
 A retried trial is judged by its latest attempt. An early-stopped trial ends
 ``succeeded`` and carries the tag ``stopped_early=true``.
 """
-import math
 from collections import Counter
 
 from vmn_exp.core import index as experiment_index
+from vmn_exp.core.log import _sortable
 from vmn_exp.core.status import FAILED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_rows
 
@@ -42,14 +42,12 @@ def stopped_early(row):
 
 def metric_value(spec, row):
     value = (row.get("metrics") or {}).get(spec["metric"]["name"])
-    ok = isinstance(value, (int, float)) and math.isfinite(value)
-    return value if ok else None
+    return value if _sortable(value) else None
 
 
 def best_trial(spec, rows):
     """The row with the best finite target metric, or None."""
-    scored = [(metric_value(spec, r), r) for r in rows]
-    scored = [(v, r) for v, r in scored if v is not None]
+    scored = [(v, r) for v, r in ((metric_value(spec, r), r) for r in rows) if v is not None]
     if not scored:
         return None
     pick = min if spec["metric"]["goal"] == "min" else max
@@ -58,15 +56,16 @@ def best_trial(spec, rows):
 
 def history(spec, rows):
     """``[(params, value)]`` of the succeeded trials — what bayes learns from."""
-    finished = [r for r in rows if r.get("status") == SUCCEEDED]
-    return [(r.get("params") or {}, metric_value(spec, r)) for r in finished
-            if metric_value(spec, r) is not None]
+    finished = ((r.get("params") or {}, metric_value(spec, r))
+                for r in rows if r.get("status") == SUCCEEDED)
+    return [(params, value) for params, value in finished if value is not None]
 
 
-def retryable_trials(rows):
-    """Trial indices whose latest attempt failed or got stuck (not stopped early)."""
+def retry_slots(rows):
+    """``[(trial, next attempt)]`` of the trials whose latest attempt failed
+    or got stuck (and was not stopped early)."""
     return sorted(
-        trial for trial, row in latest_attempts(rows).items()
+        (trial, trial_of(row)[1] + 1) for trial, row in latest_attempts(rows).items()
         if row.get("status") in RETRYABLE and not stopped_early(row)
     )
 

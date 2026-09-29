@@ -147,8 +147,11 @@ def _detect_python_exe(run_cmd):
     return None
 
 
-def _create_experiment(vcs, storage, args):
-    """Create the run's experiment record. Returns ``(app_name, verstr, err)``."""
+def _create_experiment(vcs, storage, args, extra_create_data=None):
+    """Create the run's experiment record. Returns ``(app_name, verstr, err)``.
+
+    *extra_create_data* (params, tags, ...) wins over what ``--file`` holds.
+    """
     import vmn_exp.cli.experiment as cli
 
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
@@ -160,6 +163,7 @@ def _create_experiment(vcs, storage, args):
         for key in ("params", "hypothesis", "tags"):
             if key in notes_data:
                 extra[key] = notes_data[key]
+    extra.update(extra_create_data or {})
 
     app_name = cli._app_name(vcs, args)
     parent, err = cli._resolve_parent(storage, app_name, args)
@@ -343,8 +347,8 @@ class _Supervision:
     def request_stop(self):
         """End the child early, on purpose: SIGTERM now, SIGKILL after the grace.
 
-        The run then records ``stopped_early`` and succeeds, whatever code the
-        child exits with (kept as ``child_exit_code``).
+        The run state records ``stopped_early``, which status derivation reads
+        as a success whatever code the child exits with.
         """
         self.stopped_early = True
         self.forwarder.request_stop()
@@ -380,8 +384,7 @@ class _Supervision:
         if self.forwarder.received:
             final["received_signal"] = self.forwarder.received
         if self.stopped_early:
-            final.update(stopped_early=True, child_exit_code=exit_code, exit_code=0)
-            exit_code = 0
+            final["stopped_early"] = True
         self._publish_final(final)
 
         self.guard(
