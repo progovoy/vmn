@@ -2,9 +2,10 @@
 """Which value of a metric a row ranks on: its summary policy.
 
 The fold keeps each metric's last value and, once a second value arrives, its
-finite ``(min, max)``. A metric's *summary policy* picks one of the three for
+finite min, max, count and exact sum, and its earliest value. A metric's *summary
+policy* picks one of ``last``/``min``/``max``/``first``/``mean`` for
 ``row["metrics"]`` — so sorting, ``--query metrics.x``, the leaderboard and
-compare all rank on the best value, not merely the latest.
+compare all rank on the chosen value, not merely the latest.
 
 The policy comes from, in order: the run's own ``define_metric`` log entries
 (``run.define_metric()`` in the SDK, the same entry that declares a
@@ -15,16 +16,21 @@ matching one), and an explicit ``summary`` beats one derived from ``goal``
 (``goal: min`` -> ``min``, ``goal: max`` -> ``max``). Declarations fold per
 field, last write wins, so declaring a ``step_metric`` later keeps the summary.
 
-Non-finite values (NaN/inf) stay in the log and may be a metric's last value,
-but never its min or max. A ``min``/``max`` policy on a metric without any
-finite value falls back to the last value, which then sorts last.
+``first`` is the earliest value by the fold key (timestamp, writer, position),
+so writers may fold in any order. Non-finite values (NaN/inf) stay in the log
+and may be a metric's last or first value, but never its min, max or part of
+its mean. A ``min``/``max``/``mean`` policy on a metric without any finite
+value falls back to the last value, which then sorts last.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
+import math
+
 from vmn_exp.core.step_metric import lookup
 from vmn_exp.core.values import is_finite_number
 
-SUMMARIES = ("min", "max", "last")
+SUMMARIES = ("min", "max", "last", "first", "mean")
 GOALS = ("min", "max")
+_BEST = ("min", "max", "first", "mean")  # the policies that can beat "last"
 
 
 def summary_fields(summary=None, goal=None):
@@ -49,48 +55,118 @@ def _policy_of(definition):
     return goal if goal in GOALS else None
 
 
-def _widen(bounds, value):
-    """*bounds* widened by *value* — *bounds* itself when that changes nothing."""
-    low, high = bounds
-    if not is_finite_number(value) or (low is not None and low <= value <= high):
-        return bounds
+_EMPTY = (None, None, 0)
+
+
+def _add_exact(partials, value):
+    """Shewchuk's non-overlapping *partials* (the ``math.fsum`` recipe) with
+    *value* added: their exact sum, so the mean does not depend on the order
+    writers fold in. A handful of floats at most in practice."""
+    out = []
+    for other in partials:
+        if abs(value) < abs(other):
+            value, other = other, value
+        high = value + other
+        low = other - (high - value)
+        if low:
+            out.append(low)
+        value = high
+    out.append(value)
+    return tuple(out)
+
+
+def _widen(seen, value):
+    """*seen* — ``(min, max, n, *partial sums)`` of the finite values so far —
+    widened by *value*; *seen* itself when *value* is not finite."""
+    if not is_finite_number(value):
+        return seen
+    low, high, n = seen[:3]
     return (
         value if low is None or value < low else low,
         value if high is None or value > high else high,
-    )
+        n + 1,
+    ) + _add_exact(seen[3:], value)
 
 
 def _repeated(seen):
-    """Whether an extrema entry holds ``(min, max)``: the metric was logged twice."""
+    """Whether an extrema entry holds ``(min, max, n, *sums)``: the metric was
+    logged twice."""
     return isinstance(seen, (list, tuple))
 
 
-def track_extrema(extrema, name, value):
-    """Widen *name*'s entry in *extrema* by one logged *value*.
+def _keep_first(firsts, name, value, key):
+    """Keep ``(value, *key)`` under *name* unless an earlier key holds it."""
+    current = firsts.get(name)
+    if current is None or key < tuple(current[1:]):
+        firsts[name] = (value,) + key
+
+
+def _key_of(fold, name):
+    """The fold key of *name*'s ``metrics`` entry, or None."""
+    current = fold["metrics"].get(name)
+    return tuple(current[1:]) if current is not None else None
+
+
+def track_extrema(fold, name, value, key):
+    """Widen *name*'s ``extrema`` entry in *fold* by one logged *value* at
+    fold *key*, keeping its earliest value in ``firsts``.
 
     A metric logged once keeps that value bare — the float the fold already
     holds, so most rows cost no more than before; the second value turns it
-    into ``(min, max)``. Only logged values count: a numeric param folded into
-    ``metrics`` under the same name never widens the bounds.
+    into ``(min, max, n, *sums)`` and seeds ``firsts``. The bare value's key
+    is the one its ``metrics`` entry (not yet updated with *value*) holds —
+    unless a same-named param holds that entry, in which case ``firsts`` got
+    the bare value when the param took it (see :func:`note_param`). Only
+    logged values count: a numeric param never widens the bounds.
     """
+    extrema = fold.setdefault("extrema", {})
     seen = extrema.get(name)
     if seen is None:
         extrema[name] = value
+        held = _key_of(fold, name)
+        if held is not None and key < held:  # a later param holds metrics[name]
+            fold.setdefault("firsts", {})[name] = (value,) + key
         return
-    bounds = seen if _repeated(seen) else _widen((None, None), seen)
-    widened = _widen(bounds, value)
-    if widened is not seen:
-        extrema[name] = tuple(widened)
+    firsts = fold.setdefault("firsts", {})
+    if not _repeated(seen):
+        if name not in firsts:
+            firsts[name] = (seen,) + _key_of(fold, name)
+        seen = _widen(_EMPTY, seen)
+    _keep_first(firsts, name, value, key)
+    extrema[name] = _widen(tuple(seen), value)
 
 
-def summarize(last_values, extrema, run_defs, schema):
+def note_param(fold, name, key):
+    """Before a numeric param at fold *key* takes ``metrics[name]``: keep a
+    metric logged once so far (its value and key) in ``firsts``, which is
+    the only place its key would survive."""
+    seen = (fold.get("extrema") or {}).get(name)
+    if seen is None or _repeated(seen) or name in (fold.get("firsts") or {}):
+        return
+    held = _key_of(fold, name)
+    if held is not None and key >= held:
+        fold.setdefault("firsts", {})[name] = (seen,) + held
+
+
+def _summary_of(last, seen, first):
+    low, high, n = seen[:3]
+    return {
+        "last": last, "min": low, "max": high,
+        "first": last if first is None else first[0],
+        "mean": math.fsum(seen[3:]) / n if n else None,
+    }
+
+
+def summarize(last_values, extrema, run_defs, schema, firsts=None):
     """``(metrics, metric_summary)`` of a fold's metrics.
 
     *metrics* maps each metric to its policy's value; *metric_summary* maps
-    each metric seen more than once to ``{"last", "min", "max"}``.
+    each metric seen more than once to ``{"last", "min", "max", "first",
+    "mean"}`` (*firsts* being the fold's earliest values).
     """
+    firsts = firsts or {}
     summary = {
-        name: {"last": last_values[name], "min": seen[0], "max": seen[1]}
+        name: _summary_of(last_values[name], seen, firsts.get(name))
         for name, seen in extrema.items()
         if _repeated(seen)
     }
@@ -109,7 +185,7 @@ def with_policies(metrics, summary, run_defs, schema):
         policy = lookup(name, run_defs or {}, _policy_of) or lookup(
             name, schema or {}, _policy_of
         )
-        best = seen[policy] if policy in GOALS else None
+        best = seen[policy] if policy in _BEST else None
         value = seen["last"] if best is None else best
         if value is not metrics.get(name):
             picked[name] = value

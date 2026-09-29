@@ -86,7 +86,10 @@ function summaryLine(parts: MetricSummary | undefined): string | null {
   if (!parts) return null;
   const shown = [parts.last, parts.min, parts.max].map(fmtVal);
   if (new Set(shown).size === 1) return null;
-  return `last ${shown[0]} · min ${shown[1]} · max ${shown[2]}`;
+  const line = [`last ${shown[0]}`, `min ${shown[1]}`, `max ${shown[2]}`];
+  if (parts.first != null) line.push(`first ${fmtVal(parts.first)}`);
+  if (parts.mean != null) line.push(`mean ${fmtVal(parts.mean)}`);
+  return line.join(" · ");
 }
 
 /** Each metric's summary value (its best, per the metric's policy), with

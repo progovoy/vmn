@@ -44,14 +44,14 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_record import refresh_record, update_record
-from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
+from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache, _put_sparse
 from vmn_exp.core.index_store import IndexStore
 from vmn_exp.core.index_sweep import (
     DEFAULT_FULL_SWEEP_SEC,
     METADATA_FILE,
     Sweep,
 )
-from vmn_exp.core.index_views import lean_row
+from vmn_exp.core.index_views import lean_row, run_declared, runs_declared_schema
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.log import load_log
@@ -389,6 +389,19 @@ def direct_rows(
     return rows, _run_states(storage, app_name, rows, read_run_state)
 
 
+def direct_view(
+    storage, app_name, read_log=load_log, read_run_state=load_run_state, schema=None,
+):
+    """``(rows, run_states, declared schema)``: :func:`direct_rows` plus what
+    the runs declare (:meth:`IndexSnapshot.declared_schema`)."""
+    rows, declared = [], {}
+    for idx, meta, fold in _direct_folds(storage, app_name, read_log):
+        rows.append(fold_row(idx, meta, fold, schema=schema))
+        _put_sparse(declared, meta["verstr"], run_declared(fold))
+    merged = runs_declared_schema(declared, {r["verstr"]: r for r in rows}.get)
+    return rows, _run_states(storage, app_name, rows, read_run_state), merged
+
+
 def _direct_folds(storage, app_name, read_log):
     metas = storage.list_snapshots(app_name)
     for idx, meta in enumerate(metas, 1):
@@ -402,17 +415,18 @@ def _run_states(storage, app_name, rows, read_run_state=load_run_state):
 def direct_snapshot(storage, app_name, schema=None):
     """An :class:`IndexSnapshot` (generation 0) built by reading every record,
     summarized by *schema* like :func:`indexed_snapshot`'s."""
-    rows, notes, parts, outputs = [], {}, {}, {}
+    rows, notes, parts, outputs, declared = [], {}, {}, {}, {}
     for idx, meta, fold in _direct_folds(storage, app_name, load_log):
-        row, notes[meta["verstr"]], part, made = lean_row(idx, meta, fold)
+        verstr = meta["verstr"]
+        row, notes[verstr], *sparse = lean_row(idx, meta, fold)
         rows.append(row)
-        if part:
-            parts[meta["verstr"]] = part
-        if made:
-            outputs[meta["verstr"]] = made
+        for values, value in zip((parts, outputs, declared), sparse):
+            _put_sparse(values, verstr, value)
     states = _run_states(storage, app_name, rows)
     observed = observed_at_by_verstr(storage, app_name, states)
-    snap = IndexSnapshot.build(app_name, 0, rows, states, notes, observed, parts, outputs)
+    snap = IndexSnapshot.build(
+        app_name, 0, rows, states, notes, observed, parts, outputs, declared
+    )
     return snap.summarized(schema)
 
 
@@ -449,9 +463,18 @@ def indexed_status_rows(
     row copies (see :meth:`ExperimentIndex.rows`), the run states and
     ``{verstr: run_state.yml store write time}``, the ``observed_at`` a status
     derivation takes. *schema*: see :func:`indexed_snapshot`."""
+    return indexed_status_view(storage, app_name, with_create_note, cache_path, schema)[:3]
+
+
+def indexed_status_view(
+    storage, app_name, with_create_note=False, cache_path=None, schema=None
+):
+    """:func:`indexed_status_rows` plus the snapshot's declared schema
+    (:meth:`IndexSnapshot.declared_schema`)."""
     snap = indexed_snapshot(storage, app_name, cache_path, wait=True, schema=schema)
     return (
         _row_copies(snap, with_create_note),
         dict(snap.run_states),
         dict(snap.run_state_observed_at),
+        snap.declared_schema(),
     )

@@ -16,6 +16,7 @@ or ``exp``.
 import os
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
@@ -82,16 +83,26 @@ def metric_sort_descending(schema, key):
     """Whether metric ``key`` sorts best-first as descending (higher is better).
 
     Driven by ``goal: min|max`` in the metrics schema (``max`` = higher-is-better
-    = descending). Unspecified metrics default to higher-is-better.
+    = descending) — the exact name's, else a matching glob's
+    (:func:`~vmn_exp.core.metric_schema.metric_goal`). Unspecified metrics
+    default to higher-is-better.
     """
-    entry = (schema or {}).get(key, {}) or {}
-    goal = entry.get("goal")
-    if goal is None:
-        return True
-    if goal not in ("min", "max"):
-        VMN_LOGGER.warning(f"Invalid goal '{goal}' for metric '{key}'; using 'max'")
-        goal = "max"
-    return goal == "max"
+    goal = metric_goal(schema, key)
+    if goal is not None:
+        return goal == "max"
+    invalid = ((schema or {}).get(key) or {}).get("goal")
+    if invalid is not None:
+        VMN_LOGGER.warning(f"Invalid goal '{invalid}' for metric '{key}'; using 'max'")
+    return True
+
+
+def sort_descending(schema, metric):
+    """The direction *metric* sorts in when the caller forces none: its goal's
+    (exact name or glob), else descending for an exact schema entry without
+    one, else ascending."""
+    if metric_goal(schema, metric) is None and metric not in (schema or {}):
+        return False
+    return metric_sort_descending(schema, metric)
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +151,9 @@ DATE_SORTS = (TIMESTAMP_SORT, "started_at", "finished_at")
 def sort_by_metric(rows, schema, sort=None, descending=None):
     """Order rows like ``vmn-exp list``: by *sort*, else by the primary metric.
 
-    A metric's direction comes from its own schema entry; a metric absent from
-    the schema sorts ascending. *descending* forces the direction. Rows whose
+    A metric's direction comes from its schema entry or a matching glob's
+    goal (:func:`sort_descending`); a metric absent from the schema sorts
+    ascending. *descending* forces the direction. Rows whose
     value is missing, None, non-finite or non-numeric sort last in either
     direction, in their original order. ``sort="timestamp"`` orders by creation
     time, ``started_at``/``finished_at`` by the run's start/end (undated rows
@@ -163,7 +175,7 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
         return rows[::-1] if descending else rows
 
     if descending is None:
-        descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
+        descending = sort_descending(schema, metric)
     ranked = [r for r in rows if is_finite_number(r["metrics"].get(metric))]
     unranked = [r for r in rows if not is_finite_number(r["metrics"].get(metric))]
     ranked.sort(key=lambda r: r["metrics"][metric], reverse=descending)

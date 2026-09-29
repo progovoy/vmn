@@ -22,8 +22,8 @@ from collections import Counter
 from vmn_exp.core.log import (
     DATE_SORTS,
     IDX_SORT,
-    metric_sort_descending,
     primary_metric,
+    sort_descending,
 )
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.tree import (
@@ -209,7 +209,7 @@ def order_key(schema, sort, descending, metric_present, position):
         sign = -1 if descending else 1
         return (lambda row: sign * position[row["verstr"]]), False
     if descending is None:
-        descending = metric in (schema or {}) and metric_sort_descending(schema, metric)
+        descending = sort_descending(schema, metric)
     return _ranked(_metric_value(metric, descending), position), True
 
 

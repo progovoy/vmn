@@ -15,7 +15,7 @@ Pure: no storage, no clock.
 """
 import math
 
-from vmn_exp.core.metric_summary import summarize, track_extrema
+from vmn_exp.core.metric_summary import note_param, summarize, track_extrema
 from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 from vmn_exp.core.rewind import is_rewound, rewind_step
 
@@ -50,7 +50,7 @@ def new_fold(rewinds=()):
         "params": {},
         "metrics": {},
         "tags": {},
-        "extrema": {},  # {metric: value, then (min, max)}, see metric_summary
+        "extrema": {},  # {metric: value, then (min, max, n, *sums)}, see metric_summary
         "metric_defs": {},
         "last_metric": None,
         "create_note": None,
@@ -155,9 +155,9 @@ def _apply_outputs(fold, entry, key):
 
 
 def _apply_metric_values(fold, entry, key):
-    metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
+    metrics = fold["metrics"]
     for name, value in (entry.get("values") or {}).items():
-        track_extrema(extrema, name, value)
+        track_extrema(fold, name, value, key)
         _keep_latest(metrics, name, value, key)
 
 
@@ -192,6 +192,7 @@ def _apply(fold, entry, key):
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
         if number is not None:
+            note_param(fold, name, key)
             _keep_latest(fold["metrics"], name, number, key)
     if etype == "metrics":
         _apply_metric_values(fold, entry, key)
@@ -256,6 +257,7 @@ def fold_metrics(fold, schema=None):
         fold.get("extrema") or {},
         fold_definitions(fold) if fold.get("metric_defs") else {},
         schema,
+        fold.get("firsts"),
     )
 
 

@@ -290,6 +290,16 @@ at most 1000 rows from `offset`. `sort` is a metric name, `timestamp`, or
 the run's own `started_at`/`finished_at` (dates sort newest first); `order=asc|desc` overrides the direction the metric's schema
 goal implies. Runs without the metric stay last in either direction.
 
+That schema is the app's *effective* metrics schema, which
+`GET .../apps/{app}/metrics-schema` returns: conf.yml's `experiment.metrics`
+plus the `goal`/`hidden` runs declare with `run.define_metric()` for names
+conf.yml does not declare (the latest run wins; exact names beat globs). A
+store workspace has no conf.yml, so there it is just the runs' declarations.
+It sets sort direction and which metrics the dashboard hides by default
+(leaderboard columns — toggle one in the column picker to show it — and a
+collapsed "hidden metrics" section of the run's training curves); each run's
+`metrics` values still follow only its own definitions and conf.yml.
+
 ```sh
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
   "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?sort=loss&order=asc&limit=50"
@@ -391,6 +401,8 @@ Every list is sorted; `metric_keys` includes numeric params (they fold into
 | `series` | each metric thinned independently to at most `max_points` points (default 2000, max 20000) with min/max buckets, so spikes survive; first and last point always kept. `keys=loss,acc` returns only those metrics, `series=0` none. A response carries at most 200,000 points in all: with many metrics, `max_points` is lowered for each |
 | `series_total` | `{metric: points before thinning}` (restricted by `keys` like `series`) |
 | `step_metrics` | `{metric: x metric}` for every metric that declares one (`run.define_metric(..., step_metric=)` or `step_metric:` in the conf.yml metrics schema) |
+| `hidden_metrics` | the run's metrics marked hidden (`run.define_metric(..., hidden=True)`, else `hidden:` in the conf.yml metrics schema), sorted |
+| `metric_summary` | `{metric: {last, min, max, first, mean}}` for every metric logged more than once |
 | `patches` | which patch kinds the snapshot holds, read from its metadata flags |
 | `media` / `tables` / `histograms` | logged images, tables and histograms per name, one item per step (see [Media](#media)); `histograms` is `{}` once the run's histograms serve more than 100 steps in all — fetch each name from `.../histograms/{name}` |
 | `histograms_total` | `{name: steps logged}` for every histogram name; at most 100 evenly spaced steps are served per name |

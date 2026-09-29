@@ -20,16 +20,22 @@ export interface AppConfig {
 export interface MetricSpec {
   goal?: "min" | "max";
   /** Which value the run ranks on; defaults from `goal` (else `last`). */
-  summary?: "min" | "max" | "last";
+  summary?: "min" | "max" | "last" | "first" | "mean";
   primary?: boolean;
+  /** Kept out of default columns and chart grids (conf.yml or a run's
+   *  `define_metric(hidden=True)`); still sortable and queryable. */
+  hidden?: boolean;
 }
 
-/** A metric logged more than once: its last value and finite min/max
- *  (`null` when it never had a finite value). */
+/** A metric logged more than once: its last and first value, finite
+ *  min/max and the mean of its finite values (`null` when it never had a
+ *  finite value). Older servers send no first/mean. */
 export interface MetricSummary {
   last: number | null;
   min: number | null;
   max: number | null;
+  first?: number | null;
+  mean?: number | null;
 }
 
 export type MetricsSchema = Record<string, MetricSpec>;
@@ -215,6 +221,8 @@ export interface ExperimentDetail {
   series_total?: Record<string, number>;
   /** Metrics that declare an x-axis metric (`define_metric` or conf.yml). */
   step_metrics?: Record<string, string>;
+  /** Metrics the run's `define_metric` or conf.yml marks hidden. */
+  hidden_metrics?: string[];
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
   /** Each metric's summary value (best, per its policy — see MetricSpec). */

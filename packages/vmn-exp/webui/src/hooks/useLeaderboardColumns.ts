@@ -10,6 +10,7 @@ import { sameValue } from "../util/stableRows";
 import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { orderedKeys } from "../util/columnOrder";
+import { schemaHides } from "../util/hiddenMetrics";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -61,7 +62,11 @@ export function useLeaderboardColumns(
   );
   const metricCols = useMemo(() => splitKey(metricNames), [metricNames]);
   const paramCols = useMemo(() => splitKey(paramNames), [paramNames]);
-  const visibleMetrics = useMemo(() => metricCols.filter((c) => !hidden.has(`m:${c}`)), [metricCols, hidden]);
+  // A schema-hidden metric starts hidden, so toggling its `m:` key shows it.
+  const visibleMetrics = useMemo(
+    () => metricCols.filter((c) => hidden.has(`m:${c}`) === schemaHides(schema, c)),
+    [metricCols, hidden, schema],
+  );
   const visibleParams = useMemo(() => paramCols.filter((c) => !hidden.has(`p:${c}`)), [paramCols, hidden]);
 
   // Combined key list for ordering: m:name for metrics, p:name for params.
