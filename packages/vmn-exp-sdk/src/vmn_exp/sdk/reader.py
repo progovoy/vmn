@@ -238,7 +238,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     series = metric_series(log)
     row["series"] = series if x is None else join_all(series, x)
     row["step_metrics"] = step_metrics(
-        series, metric_definitions(log), _metrics_schema(root_path, app_name)
+        series, metric_definitions(log), schema
     )
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     return row

@@ -278,6 +278,8 @@ class ExperimentIndex:
         """Summarize rows by the app's metrics *schema* (see
         :mod:`vmn_exp.core.metric_summary`). A different schema re-derives
         every row from its fold — no log is read again — as a new generation."""
+        if (schema or None) == self._rows.schema:
+            return  # the common case: no lock, so a request never waits on a refresh
         with self._lock:
             if self._rows.set_schema(schema) and self._snapshot is not None:
                 self.generation += 1

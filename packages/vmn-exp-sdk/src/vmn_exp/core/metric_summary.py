@@ -20,16 +20,11 @@ but never its min or max. A ``min``/``max`` policy on a metric without any
 finite value falls back to the last value, which then sorts last.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
-import math
-import re
-from fnmatch import fnmatchcase
-
-from vmn_exp.core.step_metric import DEFINE_METRIC, create_define_metric_entry  # noqa: F401
+from vmn_exp.core.step_metric import _finite, create_define_metric_entry, lookup
 
 SUMMARIES = ("min", "max", "last")
 GOALS = ("min", "max")
 POLICY_FIELDS = ("summary", "goal")
-_GLOB = re.compile(r"[*?\[]")
 
 
 def summary_fields(summary=None, goal=None):
@@ -72,39 +67,20 @@ def _policy_of(definition):
     return goal if goal in GOALS else None
 
 
-def _globs(declarations):
-    """The glob patterns of *declarations*, latest-declared first."""
-    return [p for p in reversed(list(declarations)) if _GLOB.search(p)]
-
-
-def _declared(metric, declarations, globs):
-    policy = _policy_of(declarations.get(metric))
-    if policy:
-        return policy
-    for pattern in globs:
-        if fnmatchcase(metric, pattern):
-            policy = _policy_of(declarations[pattern])
-            if policy:
-                return policy
-    return None
-
-
-def _finite(value):
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
-
-
 def _widen(bounds, value):
+    """*bounds* widened by *value* — *bounds* itself when that changes nothing."""
     low, high = bounds
-    if not _finite(value):
-        return low, high
+    if not _finite(value) or (low is not None and low <= value <= high):
+        return bounds
     return (
         value if low is None or value < low else low,
         value if high is None or value > high else high,
     )
+
+
+def _repeated(seen):
+    """Whether an extrema entry holds ``(min, max)``: the metric was logged twice."""
+    return isinstance(seen, (list, tuple))
 
 
 def track_extrema(extrema, name, value):
@@ -119,16 +95,10 @@ def track_extrema(extrema, name, value):
     if seen is None:
         extrema[name] = value
         return
-    bounds = tuple(seen) if isinstance(seen, (list, tuple)) else _widen((None, None), seen)
-    extrema[name] = _widen(bounds, value)
-
-
-def _bounds(seen, last):
-    """``(min, max, logged more than once)`` for an extrema entry."""
-    if isinstance(seen, (list, tuple)):
-        return seen[0], seen[1], True
-    low, high = _widen((None, None), last if seen is None else seen)
-    return low, high, False
+    bounds = seen if _repeated(seen) else _widen((None, None), seen)
+    widened = _widen(bounds, value)
+    if widened is not seen:
+        extrema[name] = tuple(widened)
 
 
 def summarize(last_values, extrema, run_defs, schema):
@@ -137,24 +107,19 @@ def summarize(last_values, extrema, run_defs, schema):
     *metrics* maps each metric to its policy's value; *metric_summary* maps
     each metric seen more than once to ``{"last", "min", "max"}``.
     """
-    if not run_defs and not schema:  # every metric is `last`: skip the policy lookups
-        return last_values, {
-            name: {"last": last_values[name], "min": seen[0], "max": seen[1]}
-            for name, seen in extrema.items()
-            if isinstance(seen, (list, tuple))
-        }
+    summary = {
+        name: {"last": last_values[name], "min": seen[0], "max": seen[1]}
+        for name, seen in extrema.items()
+        if _repeated(seen)
+    }
+    if not run_defs and not schema:  # every metric is `last`
+        return last_values, summary
     schema = schema or {}
-    run_globs, schema_globs = _globs(run_defs), _globs(schema)
-    metrics, summary = {}, {}
+    metrics = {}
     for name, last in last_values.items():
-        low, high, repeated = _bounds(extrema.get(name), last)
-        if repeated:
-            summary[name] = {"last": last, "min": low, "max": high}
-        policy = (
-            _declared(name, run_defs, run_globs)
-            or _declared(name, schema, schema_globs)
-            or "last"
-        )
+        seen = extrema.get(name)
+        low, high = seen[:2] if _repeated(seen) else _widen((None, None), last)
+        policy = lookup(name, run_defs, _policy_of) or lookup(name, schema, _policy_of)
         best = low if policy == "min" else high if policy == "max" else None
         metrics[name] = last if best is None else best
     return metrics, summary

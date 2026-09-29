@@ -15,12 +15,8 @@ Pure: no storage, no clock.
 """
 import math
 
-from vmn_exp.core.metric_summary import (
-    DEFINE_METRIC,
-    entry_definition,
-    summarize,
-    track_extrema,
-)
+from vmn_exp.core.metric_summary import entry_definition, summarize, track_extrema
+from vmn_exp.core.step_metric import DEFINE_METRIC
 
 
 def entry_params(entry):
@@ -199,7 +195,7 @@ def fold_metrics(fold, schema=None):
     return summarize(
         fold_values(fold, "metrics"),
         fold.get("extrema") or {},
-        _definitions(fold),
+        _definitions(fold) if fold.get("metric_defs") else {},
         schema,
     )
 

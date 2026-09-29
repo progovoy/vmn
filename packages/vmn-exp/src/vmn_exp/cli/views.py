@@ -47,7 +47,8 @@ def show_payload(
     return run
 
 
-def _number(value):
+def format_number(value):
+    """A metric value for display: floats to 4 significant digits."""
     return f"{value:.4g}" if isinstance(value, float) else str(value)
 
 
@@ -56,11 +57,11 @@ def format_metric_lines(metrics, summary):
     max differ adds them: ``loss: 0.2 (last 0.9, min 0.2, max 1)``."""
     lines = []
     for name, value in sorted(metrics.items()):
-        line = f"{name}: {_number(value)}"
+        line = f"{name}: {format_number(value)}"
         parts = summary.get(name)
-        if parts and len({_number(v) for v in parts.values()}) > 1:
+        if parts and len({format_number(v) for v in parts.values()}) > 1:
             line += " (" + ", ".join(
-                f"{k} {_number(parts[k])}" for k in ("last", "min", "max")
+                f"{k} {format_number(parts[k])}" for k in ("last", "min", "max")
             ) + ")"
         lines.append(line)
     return lines

@@ -21,7 +21,13 @@ from vmn_exp.cli.run import (  # noqa: F401
     _parse_metrics,
     experiment_run,
 )
-from vmn_exp.cli.views import dumps, format_metric_lines, metrics_schema, show_payload
+from vmn_exp.cli.views import (
+    dumps,
+    format_metric_lines,
+    format_number,
+    metrics_schema,
+    show_payload,
+)
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.snapshot import (
     _build_snapshot_metadata,
@@ -919,16 +925,12 @@ def experiment_compare(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _fmt_val(v):
-    return f"{v:.4g}" if isinstance(v, float) else str(v)
-
-
 def _print_delta_line(label, d1, d2):
     parts = []
     for k in sorted(set(d1) | set(d2)):
         a, b = d1.get(k), d2.get(k)
         if a != b:
-            parts.append(f"{k} {_fmt_val(a)} -> {_fmt_val(b)}")
+            parts.append(f"{k} {format_number(a)} -> {format_number(b)}")
     if parts:
         print(f"{label}: " + "   ".join(parts))
 
