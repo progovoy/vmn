@@ -10,9 +10,15 @@ own entries — from step + 1 on — always fold over them. A fork is not a chil
 
 Without a step the whole (rewind-filtered) history is copied and the fork point
 is the source's last step.
+
+A rewind (:func:`rewind_run`) is the in-place counterpart: it appends a
+``rewind`` marker to an existing run (see :mod:`vmn_exp.core.rewind`).
 """
+import operator
+
 from vmn_exp.core.resolve_ref import _resolve_verstr
-from vmn_exp.core.rewind import entry_step
+from vmn_exp.core.rewind import create_rewind_entry, entry_step
+from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
 from vmn_exp.core.writer import append_entries_to_log
 
 STEP_SUFFIX = "?_step="
@@ -97,3 +103,29 @@ def seed_fork(storage, app_name, verstr, source, step=None):
 def next_step(step):
     """The first step a run continuing after *step* logs."""
     return 0 if step is None else step + 1
+
+
+def _rewind_step(step):
+    try:
+        valid = not isinstance(step, bool) and operator.index(step) >= 0
+    except TypeError:
+        valid = False
+    if not valid:
+        raise ValueError(f"Invalid rewind step '{step}': expected an integer >= 0")
+    return operator.index(step)
+
+
+def rewind_run(storage, app_name, verstr, step, prior_state):
+    """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``).
+
+    Refused while the run is live elsewhere: its writer would keep logging
+    steps the rewind is about to hide.
+    """
+    step = _rewind_step(step)
+    observed = run_state_observed_at(storage, app_name, verstr)
+    if prior_state and derive_status(prior_state, observed_at=observed) == RUNNING:
+        raise RuntimeError(
+            f"Run '{verstr}' is running (host {prior_state.get('host')}, pid "
+            f"{prior_state.get('pid')}); finish it before rewinding it."
+        )
+    append_entries_to_log(storage, app_name, verstr, [create_rewind_entry(step)])

@@ -711,6 +711,9 @@ without a step (params, notes, tags) are never rewound. Rewinding again later
 cuts again from the new marker. A run that is live elsewhere (`running`, with a
 fresh heartbeat) is refused with `RuntimeError` — its writer would keep logging
 the steps being rewound. `vmn-exp show` prints each `Rewound to step N` line.
+To rewind a finished run without reopening it, use the CLI:
+`vmn-exp rewind my_app -v <ref> --step 250` (see
+[experiments.md](experiments.md#rewind)).
 
 ### Distributed training (DDP, torchrun, Slurm)
 

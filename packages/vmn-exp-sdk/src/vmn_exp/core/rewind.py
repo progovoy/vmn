@@ -70,3 +70,12 @@ def rewinds_of(log):
         for e in log
         if isinstance(e, dict) and rewind_step(e) is not None
     ]
+
+
+def count_hidden(log, step):
+    """How many of *log*'s visible entries a rewind to *step* would hide."""
+    after_all = [[step, 1]]  # a marker sorting after every entry (key (0,))
+    return sum(
+        1 for e in drop_rewound(log)
+        if isinstance(e, dict) and is_rewound(after_all, e, (0,))
+    )

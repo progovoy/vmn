@@ -515,8 +515,8 @@ run's metrics and params up to step N — all of them without `--fork-step`;
 no `parent`: it is `single` unless nested some other way, and it never counts
 in its source's `tree_status`. Rows carry `forked_from`/`forked_from_step`, so
 `vmn-exp list my_app --query 'forked_from = "<verstr>"'` lists a run's forks.
-Rewinding a run (history past a step hidden by a `rewind` log entry) is SDK
-only — see [Forking and rewinding](sdk.md#forking-a-run).
+Rewinding a run hides its own history past a step instead — see
+[`rewind`](#rewind).
 
 ### What `exp list` looks like
 
@@ -948,6 +948,33 @@ disk, under the ETag on S3); unarchiving removes it. `vmn-exp list` and the SDK'
 shows them), as does the web UI unless asked with `archived=1`; the query language
 matches `archived = true`. From Python: `vmn_exp.sdk.manage.archive_run` /
 `unarchive_run` (see [sdk.md](sdk.md#changing-stored-runs-archive-unarchive-tags)).
+
+### `rewind`
+
+Hide a run's history past a step, in place, without reopening the run:
+
+```sh
+vmn-exp rewind my_app -v @3 --step 250
+# rewound 0.0.3-dev.abc1234.def5678 to step 250 (hid 42 entries)
+```
+
+`-v` takes any ref (verstr, unique prefix, `@N`, `latest`), or use `--latest`;
+`--step` is an integer >= 0. Nothing is deleted: the run's log gets a
+`{"type": "rewind", "step": 250}` entry, and every reader (`show`, `list`, the
+index, the UI's series, `list_runs`) ignores each entry with a step past 250
+written before it. Entries without a step (params, notes, tags) are never
+hidden, and `show` prints a `Rewound to step N` line per rewind. A run that
+derives as `running` is refused — its writer would keep logging the steps being
+hidden. It writes like `tag`/`add`: it takes the repo lock, honours
+`--store`/`--bucket`/`--dir`, and works without a checkout too (with
+`VMN_SNAPSHOT_METADATA`). The web UI's `exp_rewind` job action (body
+`{"verstr", "step"}`) runs this command.
+
+`vmn-exp run` does not reopen runs. To redo a run from a checkpoint, rewind it
+here and continue it from the SDK with `start_run(run_id=<ref>)` — or do both in
+one call, `start_run(run_id=<ref>, rewind_to_step=N)` (see
+[sdk.md](sdk.md#rewinding-a-run)) — or fork it into a new run with
+`vmn-exp run my_app --fork-from <ref> --fork-step N -- <cmd>`.
 
 ---
 

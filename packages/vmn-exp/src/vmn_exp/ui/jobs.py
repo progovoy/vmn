@@ -14,7 +14,11 @@ import threading
 import uuid
 from collections import OrderedDict
 
-from vmn_exp.ui.jobs_exp_meta import exp_archive_command, exp_tag_command
+from vmn_exp.ui.jobs_exp_meta import (
+    exp_archive_command,
+    exp_rewind_command,
+    exp_tag_command,
+)
 
 # A job that waits on a credential prompt or a lock must not pin its workspace
 # forever: it fails after this long and frees the slot.
@@ -150,6 +154,9 @@ def build_command(action, app_name, body):
 
     if action == "exp_tag":
         return exp_tag_command(app_name, body)
+
+    if action == "exp_rewind":
+        return exp_rewind_command(app_name, body)
 
     if action in ("exp_archive", "exp_unarchive"):
         return exp_archive_command(action.split("_", 1)[1], app_name, body)

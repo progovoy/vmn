@@ -33,6 +33,7 @@ EXPERIMENT_ACTIONS = [
     "export", "prune", "tag", "archive", "unarchive", "import-mlflow", "watch",
     "lineage",
     "importance",
+    "rewind",
 ]
 
 
@@ -148,6 +149,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--fork-step", type=int, default=None, metavar="N",
                       help="create/run: with --fork-from, copy history up to step N "
                            "(default: all of it)")
+    pexp.add_argument("--step", type=int, default=None, metavar="N",
+                      help="rewind: hide the run's history past step N")
     add_experiment_storage_flags(pexp)
     # import-mlflow flags
     _mlf = pexp.add_mutually_exclusive_group()
@@ -248,6 +251,7 @@ def _exp_run_without_repo(args):
         experiment_create,
         experiment_list,
         experiment_prune,
+        experiment_rewind,
         experiment_run,
         experiment_show,
         experiment_storage_params,
@@ -268,6 +272,7 @@ def _exp_run_without_repo(args):
         "show": experiment_show,
         "compare": experiment_compare,
         "prune": experiment_prune,
+        "rewind": experiment_rewind,
     }
 
     handler = dispatch.get(action)

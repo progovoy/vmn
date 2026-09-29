@@ -5,10 +5,7 @@ A fork is a new run seeded with another run's history up to a step (see
 :mod:`vmn_exp.core.fork`); a rewind reopens a run and appends a ``rewind``
 marker that hides its history past a step (see :mod:`vmn_exp.core.rewind`).
 """
-from vmn_exp.core.fork import next_step, seed_fork, split_fork_ref
-from vmn_exp.core.rewind import create_rewind_entry
-from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
-from vmn_exp.core.writer import append_entries_to_log
+from vmn_exp.core.fork import next_step, rewind_run, seed_fork, split_fork_ref
 from vmn_exp.sdk import resume
 
 
@@ -33,16 +30,6 @@ def seed(storage, app_name, verstr, source, step):
 
 
 def rewind(storage, app_name, verstr, prior_state, step):
-    """Hide *verstr*'s history past *step*; returns the step it continues from.
-
-    Refused while the run is live elsewhere: its writer would keep logging
-    steps the rewind is about to hide.
-    """
-    observed = run_state_observed_at(storage, app_name, verstr)
-    if prior_state and derive_status(prior_state, observed_at=observed) == RUNNING:
-        raise RuntimeError(
-            f"Run '{verstr}' is running (host {prior_state.get('host')}, pid "
-            f"{prior_state.get('pid')}); finish it before rewinding it."
-        )
-    append_entries_to_log(storage, app_name, verstr, [create_rewind_entry(step)])
-    return next_step(int(step))
+    """Hide *verstr*'s history past *step*; returns the step it continues from."""
+    rewind_run(storage, app_name, verstr, step, prior_state)
+    return next_step(step)
