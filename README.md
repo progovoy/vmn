@@ -312,6 +312,7 @@ vmn goto -v <dev-version> my_app      # or: vmn-exp restore my_app --latest
 ```
 
 This extends the same state-recovery model as `goto` to uncommitted work; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
+Hyperparameter sweeps run server-less across many agents with `vmn-exp sweep`; see [docs/sweeps.md](https://github.com/progovoy/vmn/blob/master/docs/sweeps.md).
 Python workloads can log in-process instead of shelling out — `from
 vmn_exp.sdk import start_run`, plus `autolog()` for scikit-learn
 hyperparameters and scores, and a query language for filtering runs on metrics

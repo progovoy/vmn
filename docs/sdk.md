@@ -625,6 +625,14 @@ Either way you get the same outer/inner structure — including `kind` and the
 `tree_status` rollup — that a [CLI sweep](experiments.md#outer--inner-jobs-sweeps)
 produces.
 
+### Sweep trials: `sweep_params()`
+
+Inside a trial that [`vmn-exp sweep agent`](sweeps.md) launched,
+`from vmn_exp.sdk import sweep_params` returns the trial's params (a fresh dict
+from `$VMN_SWEEP_PARAMS`; `{}` outside a sweep). Report the sweep's metric
+through `$VMN_METRICS_FILE`: a `start_run()` in the trial opens a nested run,
+whose metrics the sweep does not read.
+
 ### Threads, forks and `current_run()`
 
 `from vmn_exp.sdk.run import current_run` returns the run the calling code

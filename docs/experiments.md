@@ -461,6 +461,10 @@ logged, never raised into the run, and never changes its exit code.
 
 ## Outer & inner jobs (sweeps)
 
+For a managed search — grid/random/bayes over a spec, many agents, early
+stopping — use [`vmn-exp sweep`](sweeps.md). This section is the underlying
+nesting mechanism.
+
 `exp run` exports `VMN_EXPERIMENT_ID` to its child. Any experiment created
 **while that variable is set** records it as its `parent`. So a sweep script
 that itself calls `vmn-exp run` per trial automatically produces one **outer**
