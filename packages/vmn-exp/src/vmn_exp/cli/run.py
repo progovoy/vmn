@@ -242,6 +242,7 @@ class _Supervision:
 
     The child runs in *cwd* (default: where vmn was invoked); ``run_state.yml``
     records that cwd relative to *root* (the repo root; None records null).
+    *extra_env* is applied last; a None value removes the variable.
     """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
@@ -301,6 +302,7 @@ class _Supervision:
             # An SDK run in the child must not sample the tree a second time.
             env[sysmetrics.SUPERVISOR_SAMPLES_ENV] = "1"
         env.update(self.extra_env)
+        env = {k: v for k, v in env.items() if v is not None}
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
             proc = subprocess.Popen(run_cmd, cwd=self.cwd, **stdio)

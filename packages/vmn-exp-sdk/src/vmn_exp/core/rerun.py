@@ -151,18 +151,18 @@ def _remap_path(path, live_root, work_root):
     if path == live_root:
         return work_root
     if path.startswith(live_root + os.sep):
-        return os.path.join(work_root, path[len(live_root) + 1:])
+        return os.path.join(work_root, os.path.relpath(path, live_root))
     return path
 
 
 def child_env(work_cwd, experiment_dir, sweep_params=None):
     """The rerun child's env overrides.
 
-    ``VMN_RESUME_RUN_ID`` is blanked, not removed (``extra_env`` can only
-    override); resume reads an empty value as unset. A sweep trial's params
-    are re-exported, its trial identity is not — a rerun is not a trial.
+    ``VMN_RESUME_RUN_ID`` maps to None: ``_Supervision`` removes it. A sweep
+    trial's params are re-exported, its trial identity is not — a rerun is
+    not a trial.
     """
-    env = {"VMN_WORKING_DIR": work_cwd, "VMN_RESUME_RUN_ID": ""}
+    env = {"VMN_WORKING_DIR": work_cwd, "VMN_RESUME_RUN_ID": None}
     if experiment_dir:
         env["VMN_EXPERIMENT_DIR"] = experiment_dir
     if sweep_params is not None:

@@ -1,7 +1,6 @@
 """Pure helpers behind ``vmn-exp rerun`` (``vmn_exp.core.rerun``)."""
+import json
 import os
-
-import pytest
 
 from vmn_exp.core import rerun
 from vmn_exp.core.code_store import CODE_MISSING
@@ -50,7 +49,6 @@ def test_template_keeps_code_identity_fields_and_code_key():
     template = _template()
     for key, value in CODE_FIELDS.items():
         assert template[key] == value
-    assert template["code"] == CODE_FIELDS["code"]
 
 
 def test_template_drops_run_identity():
@@ -218,8 +216,8 @@ def test_child_env_sets_working_dir_experiment_dir_and_drops_resume_id():
     env = rerun.child_env("/w/repo/src", "/live/repo")
     assert env["VMN_WORKING_DIR"] == "/w/repo/src"
     assert env["VMN_EXPERIMENT_DIR"] == "/live/repo"
-    # extra_env can only override: an empty value is what resume treats as unset.
-    assert env["VMN_RESUME_RUN_ID"] == ""
+    # None in extra_env removes the variable from the child's env.
+    assert env["VMN_RESUME_RUN_ID"] is None
     assert "VMN_SWEEP_PARAMS" not in env
 
 
@@ -228,8 +226,6 @@ def test_child_env_without_experiment_dir_leaves_it_alone():
 
 
 def test_child_env_reexports_sweep_params():
-    import json
-
     env = rerun.child_env("/w", "/r", sweep_params={"lr": 0.1})
     assert json.loads(env["VMN_SWEEP_PARAMS"]) == {"lr": 0.1}
     assert "VMN_SWEEP_ID" not in env and "VMN_SWEEP_TRIAL" not in env

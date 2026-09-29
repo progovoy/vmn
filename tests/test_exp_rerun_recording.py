@@ -7,7 +7,7 @@ import os
 import pytest
 from helpers import _PY, _bootstrap, _exec_script, _exp, _storage
 
-from vmn_exp.core.code_store import code_key, store_code
+from vmn_exp.core.code_store import code_key, find_code_key, store_code
 from vmn_exp.core.fold import fold_row, new_fold
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.query import filter_rows
@@ -31,8 +31,6 @@ def _store(storage, key):
 
 
 def test_find_code_key_by_code_verstr_prefix(tmp_path):
-    from vmn_exp.core.code_store import find_code_key
-
     storage = LocalSnapshotStorage(str(tmp_path))
     _store(storage, code_key("0.0.1-dev.abc.fff", "f" * 64))
     _store(storage, code_key("0.0.1-dev.abc.fffx", "e" * 64))
@@ -42,8 +40,6 @@ def test_find_code_key_by_code_verstr_prefix(tmp_path):
 
 
 def test_find_code_key_none_when_missing_or_ambiguous(tmp_path):
-    from vmn_exp.core.code_store import find_code_key
-
     storage = LocalSnapshotStorage(str(tmp_path))
     assert find_code_key(storage, "app", "v") is None
     _store(storage, code_key("v", "a" * 64))
@@ -90,10 +86,22 @@ def test_webui_query_suggest_knows_rerun_of():
 
 # -- run state: vmn-exp run ----------------------------------------------------------
 
-def _latest_state(app_layout):
+def _latest(app_layout):
     storage = _storage(app_layout)
-    verstr = sorted(storage.list_record_names(app_layout.app_name))[-1]
+    return storage, sorted(storage.list_record_names(app_layout.app_name))[-1]
+
+
+def _latest_state(app_layout):
+    storage, verstr = _latest(app_layout)
     return load_run_state(storage, app_layout.app_name, verstr)
+
+
+def _created_run(app_layout):
+    """``(storage, verstr, args)`` of a fresh, never-run experiment."""
+    _bootstrap(app_layout)
+    assert _exp(app_layout.app_name) == 0
+    args = argparse.Namespace(note=None, capture_output=False, system_metrics=False)
+    return _latest(app_layout) + (args,)
 
 
 def _job(app_layout):
@@ -123,15 +131,11 @@ def test_run_state_records_runner_and_repo_relative_cwd(app_layout, monkeypatch)
 def test_supervision_cwd_param_overrides_child_cwd(app_layout, tmp_path):
     from vmn_exp.cli.run import _Supervision
 
-    _bootstrap(app_layout)
-    assert _exp(app_layout.app_name) == 0
-    storage = _storage(app_layout)
-    verstr = sorted(storage.list_record_names(app_layout.app_name))[-1]
+    storage, verstr, args = _created_run(app_layout)
     root = tmp_path / "work"
     child_dir = root / "src"
     child_dir.mkdir(parents=True)
     probe = "import os; open('where.txt', 'w').write(os.getcwd())"
-    args = argparse.Namespace(note=None, capture_output=False, system_metrics=False)
 
     sup = _Supervision(storage, app_layout.app_name, verstr, args,
                        cwd=str(child_dir), root=str(root))
@@ -147,13 +151,21 @@ def test_supervision_cwd_param_overrides_child_cwd(app_layout, tmp_path):
 def test_supervision_without_root_records_null_cwd(app_layout):
     from vmn_exp.cli.run import _Supervision
 
-    _bootstrap(app_layout)
-    assert _exp(app_layout.app_name) == 0
-    storage = _storage(app_layout)
-    verstr = sorted(storage.list_record_names(app_layout.app_name))[-1]
-    args = argparse.Namespace(note=None, capture_output=False, system_metrics=False)
+    storage, verstr, args = _created_run(app_layout)
     assert _Supervision(storage, app_layout.app_name, verstr, args).run([_PY, "-c", "0"]) == 0
     assert load_run_state(storage, app_layout.app_name, verstr)["cwd"] is None
+
+
+def test_supervision_extra_env_none_removes_the_variable(app_layout, tmp_path, monkeypatch):
+    from vmn_exp.cli.run import _Supervision
+
+    storage, verstr, args = _created_run(app_layout)
+    monkeypatch.setenv("VMN_RESUME_RUN_ID", "stale")
+    probe = "import os; open('env.txt', 'w').write(repr(os.environ.get('VMN_RESUME_RUN_ID')))"
+    sup = _Supervision(storage, app_layout.app_name, verstr, args,
+                       extra_env={"VMN_RESUME_RUN_ID": None}, cwd=str(tmp_path))
+    assert sup.run([_PY, "-c", probe]) == 0
+    assert (tmp_path / "env.txt").read_text() == "None"
 
 
 # -- run state: SDK ------------------------------------------------------------------
