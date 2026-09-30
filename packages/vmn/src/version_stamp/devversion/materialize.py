@@ -6,6 +6,7 @@ import tempfile
 
 import yaml
 
+from version_stamp.core.git_cmd import git_stdout, run_git
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.apply import _apply_patches_to_workdir, dep_base_commit
 from version_stamp.devversion.clone import (  # noqa: F401 (re-exported)
@@ -85,13 +86,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
 
     if _predates_untracked_capture(metadata) and local_repo:
         try:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True,
-                text=True,
-                cwd=vcs.vmn_root_path,
-            )
-            current_head = result.stdout.strip()
+            current_head = git_stdout(vcs.vmn_root_path, ["rev-parse", "HEAD"]) or ""
             if current_head.startswith(base_commit[:7]) or base_commit.startswith(
                 current_head[:7]
             ):
@@ -208,12 +203,9 @@ def render_tree_diff(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
         )
         if names is None:
             return None, "Failed to materialize snapshots for diff"
-        result = subprocess.run(
-            ["git", "diff", "--no-index", "--", *names],
-            capture_output=True,
-            text=True,
-            cwd=parent,
-        )
+        result = run_git(parent, ["diff", "--no-index", "--", *names], text=True)
+        if result is None:
+            return None, "git diff could not be run"
         if result.returncode > 1:
             return None, f"git diff failed: {result.stderr.strip()}"
         return result.stdout, None

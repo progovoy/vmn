@@ -5,10 +5,10 @@ import json
 import os
 import shutil
 import stat as stat_module
-import subprocess
 import tarfile
 import tempfile
 
+from version_stamp.core.git_cmd import run_git
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import sha256_file
 
@@ -111,12 +111,8 @@ def _untracked_caps():
 
 def _untracked_stats(repo_path):
     """``[(rel_path, abs_path, stat)]`` of untracked, non-ignored regular files."""
-    result = subprocess.run(
-        ["git", "ls-files", "-z", "--others", "--exclude-standard"],
-        capture_output=True,
-        cwd=repo_path,
-    )
-    if result.returncode != 0:
+    result = run_git(repo_path, ["ls-files", "-z", "--others", "--exclude-standard"])
+    if result is None or result.returncode != 0:
         return []
 
     candidates = []

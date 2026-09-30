@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """Git backend mixin: tag lookup, version info retrieval."""
-import os
-
-import yaml
-
 from version_stamp.backends.base import VMNBackend
-from version_stamp.compat.tag_format_039 import (
-    parse_automatic_tag_message,
-    try_tag_with_dot_zero_suffix,
-)
 from version_stamp.core.constants import (
     MAX_COMMIT_SEARCH_ITERATIONS,
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
@@ -39,8 +31,7 @@ class GitTagsMixin:
         else:
             cmd_suffix = "--branches"
 
-        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
-        if shallow:
+        if self._is_shallow():
             self.perform_cached_fetch()
             (
                 tag_names,
@@ -106,8 +97,7 @@ class GitTagsMixin:
             return tag_names, cobj, ver_infos
 
         tag_name_prefix = VMNBackend.app_name_to_tag_name(app_name)
-        cmd = ["--sort", "taggerdate", "--list", f"{tag_name_prefix}_*"]
-        tag_names = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
+        tag_names = self._list_tags(f"{tag_name_prefix}_*")
 
         if not tag_names:
             return tag_names, cobj, ver_infos
@@ -166,13 +156,7 @@ class GitTagsMixin:
 
     @measure_runtime_decorator
     def get_latest_available_tags(self, tag_prefix_filter):
-        cmd = ["--sort", "taggerdate", "--list", tag_prefix_filter]
-        tag_names = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
-
-        if not tag_names:
-            return None
-
-        return tag_names
+        return self._list_tags(tag_prefix_filter) or None
 
     @measure_runtime_decorator
     def get_latest_available_tag(self, tag_prefix_filter):
@@ -181,28 +165,6 @@ class GitTagsMixin:
             return None
 
         return tnames[-1]
-
-    @measure_runtime_decorator
-    def get_tag_object_from_tag_name(self, tname):
-        try:
-            o = self._be.tag(f"refs/tags/{tname}")
-        except Exception:
-            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
-            tname, o = try_tag_with_dot_zero_suffix(self._be, tname)
-            if o is None:
-                return tname, None
-
-        try:
-            if o.commit.author.name != VMN_USER_NAME:
-                return tname, None
-        except Exception:
-            VMN_LOGGER.debug("Exception info: ", exc_info=True)
-            return tname, None
-
-        if o.tag is None:
-            return tname, None
-
-        return tname, o
 
     @measure_runtime_decorator
     def get_all_commit_tags_log_impl(self, hexsha, tags, app_name):
@@ -231,17 +193,7 @@ class GitTagsMixin:
             except Exception:
                 VMN_LOGGER.debug(f"Skipped on {hexsha} commit")
 
-        for tname in cleaned_tags:
-            tname, ver_info_c = self.parse_tag_message(tname)
-            if ver_info_c["ver_info"] is None:
-                VMN_LOGGER.debug(
-                    f"Probably non-vmn tag - {tname} with tag msg: {ver_info_c['ver_info']}. Skipping ",
-                    exc_info=True,
-                )
-                continue
-
-            ver_infos[tname] = ver_info_c
-
+        ver_infos.update(self._parse_vmn_tags(cleaned_tags))
         return ver_infos
 
     @measure_runtime_decorator
@@ -251,20 +203,7 @@ class GitTagsMixin:
 
         cmd = ["--points-at", hexsha]
         tags = _clean_split_result(self._be.git.tag(*cmd).split("\n"))
-
-        ver_infos = {}
-        for t in tags:
-            t, ver_info_c = self.parse_tag_message(t)
-            if ver_info_c["ver_info"] is None:
-                VMN_LOGGER.debug(
-                    f"Probably non-vmn tag - {t} with tag msg: {ver_info_c['ver_info']}. Skipping ",
-                    exc_info=True,
-                )
-                continue
-
-            ver_infos[t] = ver_info_c
-
-        return ver_infos
+        return self._parse_vmn_tags(tags)
 
     @measure_runtime_decorator
     def get_all_brother_tags(self, tag_name):
@@ -303,39 +242,3 @@ class GitTagsMixin:
             return tag_name, {}
 
         return tag_name, ver_infos
-
-    @measure_runtime_decorator
-    def parse_tag_message(self, tag_name):
-        tag_name, tag_obj = self.get_tag_object_from_tag_name(tag_name)
-
-        ret = {"ver_info": None, "tag_object": tag_obj, "commit_object": None}
-        if not tag_obj:
-            return tag_name, ret
-
-        commit_tag_obj = tag_obj.commit
-        if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
-            VMN_LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
-            return tag_name, ret
-
-        ret["commit_object"] = commit_tag_obj
-
-        # TODO:: Check API commit version
-        # safe_load discards any text before the YAML document (if present)
-        ver_info = yaml.safe_load(tag_obj.object.message)
-        if ver_info is None:
-            return tag_name, ret
-
-        if not isinstance(ver_info, dict):
-            ver_info_039 = parse_automatic_tag_message(self._be, tag_name, ver_info)
-            if ver_info_039 is not None:
-                ver_info = ver_info_039
-            if ver_info is None or not isinstance(ver_info, dict):
-                return tag_name, ret
-
-        if "vmn_info" not in ver_info:
-            VMN_LOGGER.debug(f"vmn_info key was not found in tag {tag_name}")
-            return tag_name, ret
-
-        ret["ver_info"] = ver_info
-
-        return tag_name, ret

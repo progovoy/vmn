@@ -1,9 +1,10 @@
 """Git operations used by worktree-island lifecycle management."""
 import os
 import shutil
-import subprocess
 
+from version_stamp.core import git_cmd
 from version_stamp.core.constants import ISLAND_BRANCH_PREFIX, VMN_READONLY_REMOTE
+from version_stamp.core.git_cmd import git_stdout as _git_stdout
 from version_stamp.core.logging import VMN_LOGGER
 
 # A plain path, not "host:path": a colon makes git try ssh and print a
@@ -11,13 +12,9 @@ from version_stamp.core.logging import VMN_LOGGER
 READONLY_PUSH_URL = "/vmn-readonly/island-branches-are-not-pushable"
 
 
-def run_git(repo_path, args, stdin=None):
-    cmd = ["git", "-C", str(repo_path)] + args
-    try:
-        return subprocess.run(cmd, input=stdin, capture_output=True, text=True)
-    except Exception as exc:
-        VMN_LOGGER.debug(f"git command failed: {cmd} - {exc}")
-        return None
+def run_git(repo_path, args, stdin=None, text=True):
+    """git in *repo_path*; text output unless *text* is False (patches)."""
+    return git_cmd.run_git(repo_path, args, stdin=stdin, text=text)
 
 
 def git_current_branch(repo_path):
@@ -27,8 +24,9 @@ def git_current_branch(repo_path):
     return None
 
 
-def git_remote_url(repo_path, remote="origin"):
-    return _git_stdout(repo_path, ["remote", "get-url", remote])
+def git_remote_url(repo_path, remote=None):
+    """The URL of *remote*, by default the repo's primary (non-mirror) one."""
+    return git_cmd.remote_url(repo_path, remote)
 
 
 def branch_upstream(repo_path, branch):
@@ -55,11 +53,14 @@ def git_head(repo_path):
 
 
 def is_dirty(repo_path):
+    """Tracked edits or untracked files (GitBackend's pending check ignores
+    untracked ones)."""
     return bool(_git_stdout(repo_path, ["status", "--porcelain"]))
 
 
-def ensure_readonly_remote(repo_path, source_remote="origin"):
-    """Create or refresh the read-only mirror of *source_remote*.
+def ensure_readonly_remote(repo_path, source_remote=None):
+    """Create or refresh the read-only mirror of *source_remote* (default: the
+    primary remote).
 
     It fetches from the same URL but its push URL cannot work, and it has no
     fetch refspecs until fetch_readonly_branch adds them. False when the repo
@@ -157,61 +158,13 @@ def shallow_clone_dep(dep_info, dest_path, branch_name=None):
     if not remote:
         VMN_LOGGER.error("No remote URL for shallow clone")
         return 1
-
-    cmd = ["git", "clone", "--depth", "1"]
-    recorded_branch = dep_info.get("branch")
-    if recorded_branch:
-        cmd += ["--branch", recorded_branch]
-    cmd += [remote, str(dest_path)]
-    if _run_command(cmd) != 0:
-        return 1
-
-    target_hash = dep_info.get("hash")
-    if target_hash and _git_stdout(dest_path, ["rev-parse", "HEAD"]) != target_hash:
-        if (
-            _run_command(
-                [
-                    "git",
-                    "-C",
-                    str(dest_path),
-                    "fetch",
-                    "--depth",
-                    "1",
-                    "origin",
-                    target_hash,
-                ]
-            )
-            != 0
-        ):
-            return 1
-
-    if branch_name:
-        checkout = ["checkout", "-b", branch_name]
-    else:
-        checkout = ["checkout", "--detach"]
-    checkout.append(target_hash or "HEAD")
-    if _run_command(["git", "-C", str(dest_path), *checkout]) != 0:
-        return 1
-
-    if target_hash and _git_stdout(dest_path, ["rev-parse", "HEAD"]) != target_hash:
-        VMN_LOGGER.error(f"Shallow dependency did not reach {target_hash}")
-        return 1
-    return 0
-
-
-def _run_command(cmd):
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        return 0
-    VMN_LOGGER.error(f"Git command failed ({' '.join(cmd)}): {result.stderr.strip()}")
-    return 1
-
-
-def _git_stdout(repo_path, args):
-    result = run_git(repo_path, args)
-    if result and result.returncode == 0:
-        return result.stdout.strip()
-    return None
+    return git_cmd.clone_at_commit(
+        dest_path,
+        remote,
+        dep_info.get("hash"),
+        branch=dep_info.get("branch"),
+        new_branch=branch_name,
+    )
 
 
 def cleanup_island(

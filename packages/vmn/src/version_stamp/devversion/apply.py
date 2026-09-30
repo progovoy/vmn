@@ -1,8 +1,8 @@
 """Apply snapshot patches to a working tree."""
 import os
-import subprocess
 
 from version_stamp.core.constants import VMN_USER_NAME
+from version_stamp.core.git_cmd import git_ok, run_git
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.untracked import (
     _ensure_trailing_newline,
@@ -27,44 +27,36 @@ def _apply_patches_to_workdir(dest, patches, three_way=False):
 
 
 def _git_am(dest, patch):
-    cmd = ["git", *_fallback_identity(dest), "am", "--3way"]
-    if _run_with_patch(cmd, patch, dest, "local commits"):
+    args = [*_fallback_identity(dest), "am", "--3way"]
+    if _run_with_patch(args, patch, dest, "local commits"):
         return True
-    subprocess.run(["git", "am", "--abort"], capture_output=True, cwd=dest)
+    run_git(dest, ["am", "--abort"])
     return False
 
 
 def _fallback_identity(dest):
     """``-c user.*`` options for a repo that has no committer identity."""
-    probe = subprocess.run(
-        ["git", "var", "GIT_COMMITTER_IDENT"], capture_output=True, cwd=dest
-    )
-    if probe.returncode == 0:
+    if git_ok(dest, ["var", "GIT_COMMITTER_IDENT"]):
         return []
     return ["-c", f"user.name={VMN_USER_NAME}", "-c", f"user.email={VMN_USER_NAME}"]
 
 
 def _git_apply(dest, patch):
-    return _run_with_patch(["git", "apply"], patch, dest, "working tree patch")
+    return _run_with_patch(["apply"], patch, dest, "working tree patch")
 
 
 def _git_apply_3way(dest, patch):
-    cmd = ["git", "apply", "--3way"]
-    return _run_with_patch(cmd, patch, dest, "working tree patch")
+    return _run_with_patch(["apply", "--3way"], patch, dest, "working tree patch")
 
 
-def _run_with_patch(cmd, patch, cwd, what):
-    """Run *cmd* on *patch*; whether it applied (a warning when not)."""
-    result = subprocess.run(
-        cmd,
-        input=_ensure_trailing_newline(patch),
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-    )
-    if result.returncode != 0:
-        VMN_LOGGER.warning(f"Failed to apply {what}: {result.stderr}")
-    return result.returncode == 0
+def _run_with_patch(args, patch, cwd, what):
+    """Run git *args* on *patch*; whether it applied (a warning when not)."""
+    result = run_git(cwd, args, stdin=_ensure_trailing_newline(patch), text=True)
+    if result is None or result.returncode != 0:
+        stderr = result.stderr if result else "git could not be run"
+        VMN_LOGGER.warning(f"Failed to apply {what}: {stderr}")
+        return False
+    return True
 
 
 def _extract_untracked(dest, tarball):
@@ -102,17 +94,12 @@ def _checkout_dep(vcs, dep_path, dep_hash):
     except RuntimeError as exc:
         VMN_LOGGER.error(f"Dep {dep_path}: {exc}")
         return False
-    result = subprocess.run(
-        ["git", "checkout", "--quiet", "--detach", dep_hash],
-        capture_output=True,
-        text=True,
-        cwd=full_path,
-    )
-    if result.returncode != 0:
-        VMN_LOGGER.error(
-            f"Failed to checkout dep {dep_path} at {dep_hash[:7]}: {result.stderr}"
-        )
-    return result.returncode == 0
+    result = run_git(full_path, ["checkout", "--quiet", "--detach", dep_hash], text=True)
+    if result is None or result.returncode != 0:
+        stderr = result.stderr if result else "git could not be run"
+        VMN_LOGGER.error(f"Failed to checkout dep {dep_path} at {dep_hash[:7]}: {stderr}")
+        return False
+    return True
 
 
 def _restore_dep(vcs, dep_path, dep_hash, patches):
@@ -172,14 +159,12 @@ def _apply_snapshot_patches(vcs, params, metadata, patches):
 
 def _reset_repo(repo_path):
     """Discard tracked + untracked working-tree changes (keeps ignored data)."""
-    for cmd in (["git", "reset", "--hard"], ["git", "clean", "-fd"]):
-        result = subprocess.run(cmd, cwd=repo_path, capture_output=True)
-        if result.returncode != 0:
-            stderr = (
-                result.stderr.decode().strip() if result.stderr else "unknown error"
-            )
+    for args in (["reset", "--hard"], ["clean", "-fd"]):
+        result = run_git(repo_path, args, text=True)
+        if result is None or result.returncode != 0:
+            stderr = (result.stderr.strip() if result else "") or "unknown error"
             raise RuntimeError(
-                f"Failed to reset working tree ({' '.join(cmd)}): {stderr}"
+                f"Failed to reset working tree (git {' '.join(args)}): {stderr}"
             )
 
 

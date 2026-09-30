@@ -27,14 +27,20 @@ def carry_changes(source_path, dest_path):
 
 
 def _apply_tracked_diff(source_path, dest_path):
-    diff = run_git(source_path, ["diff", "--binary", "HEAD"])
+    diff = run_git(source_path, ["diff", "--binary", "HEAD"], text=False)
     if diff is None or diff.returncode != 0:
         return False
     if not diff.stdout:
         return True
-    applied = run_git(dest_path, ["apply", "--whitespace=nowarn"], stdin=diff.stdout)
+    applied = run_git(
+        dest_path, ["apply", "--whitespace=nowarn"], stdin=diff.stdout, text=False
+    )
     if applied is None or applied.returncode != 0:
-        message = applied.stderr.strip() if applied else "git could not be run"
+        message = (
+            applied.stderr.decode(errors="replace").strip()
+            if applied
+            else "git could not be run"
+        )
         VMN_LOGGER.error(f"Failed to carry tracked changes into {dest_path}: {message}")
         return False
     return True
