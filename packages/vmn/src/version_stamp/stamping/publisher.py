@@ -428,9 +428,10 @@ class VersionControlStamper(IVersionsStamper):
             err = 2
             self._push_tags(tags)
         except Exception as exc:
-            VMN_LOGGER.error(
-                f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
-            )
+            if err == -1:
+                VMN_LOGGER.error(
+                    f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
+                )
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
             self._revert(prev_changeset, tags if err in (1, 2) else ())
             return err
