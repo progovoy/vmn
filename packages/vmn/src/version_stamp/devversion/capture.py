@@ -28,7 +28,10 @@ def _generate_patches(backend, lightweight=False):
     patches = {}
 
     try:
-        wt_diff = backend._be.git.diff("HEAD")
+        # Unstripped: a binary patch must end with its blank line.
+        wt_diff = backend._be.git.diff(
+            "--binary", "HEAD", strip_newline_in_stdout=False
+        )
         if wt_diff.strip():
             patches["working_tree"] = _ensure_trailing_newline(wt_diff)
     except Exception:
@@ -164,6 +167,14 @@ def _unique_snapshot_verstr(
     return verstr
 
 
+def _base_commit(backend, patches):
+    """The commit a snapshot's patches apply to: the upstream when local
+    commits are carried as a patch (they are replayed on top), else HEAD."""
+    if patches.get("local_commits"):
+        return backend._be.git.rev_parse(backend.remote_active_branch)
+    return backend.changeset()
+
+
 def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
     """Gather common data needed by snapshot/experiment create.
 
@@ -221,9 +232,8 @@ def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
         base_version = ver_info["stamping"]["app"]["_version"]
 
     be = vcs.backend
-    commit_hash = be.changeset()
-
     patches = _generate_patches(be, lightweight=lightweight)
+    commit_hash = _base_commit(be, patches)
     dep_patches = _generate_dep_patches(vcs, lightweight=lightweight)
     if dep_patches:
         patches["deps"] = dep_patches
