@@ -7,21 +7,6 @@ instance-level interface that concrete backends must implement.
 """
 from abc import ABC, abstractmethod
 
-from version_stamp.core.version_math import (
-    app_name_to_tag_name,
-    deserialize_tag_name,
-    deserialize_vmn_tag_name,
-    deserialize_vmn_version,
-    gen_unique_id,
-    get_base_vmn_version,
-    get_root_app_name_from_name,
-    get_utemplate_formatted_version,
-    serialize_vmn_base_version,
-    serialize_vmn_tag_name,
-    serialize_vmn_version,
-    tag_name_to_app_name,
-)
-
 
 class VMNBackend(ABC):
     def __init__(self, btype):
@@ -29,23 +14,6 @@ class VMNBackend(ABC):
 
     def type(self):
         return self._type
-
-    # ── Static helpers re-exported from version_math ─────────────
-    # Keep them as static methods on the class so existing callers
-    # like ``VMNBackend.serialize_vmn_tag_name(...)`` keep working.
-
-    app_name_to_tag_name = staticmethod(app_name_to_tag_name)
-    tag_name_to_app_name = staticmethod(tag_name_to_app_name)
-    gen_unique_id = staticmethod(gen_unique_id)
-    get_utemplate_formatted_version = staticmethod(get_utemplate_formatted_version)
-    get_root_app_name_from_name = staticmethod(get_root_app_name_from_name)
-    serialize_vmn_tag_name = staticmethod(serialize_vmn_tag_name)
-    serialize_vmn_version = staticmethod(serialize_vmn_version)
-    serialize_vmn_base_version = staticmethod(serialize_vmn_base_version)
-    get_base_vmn_version = staticmethod(get_base_vmn_version)
-    deserialize_tag_name = staticmethod(deserialize_tag_name)
-    deserialize_vmn_version = staticmethod(deserialize_vmn_version)
-    deserialize_vmn_tag_name = staticmethod(deserialize_vmn_tag_name)
 
     # ── Abstract interface ───────────────────────────────────────
 

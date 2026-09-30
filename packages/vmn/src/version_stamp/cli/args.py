@@ -4,7 +4,6 @@ import argparse
 import sys
 
 from version_stamp import version as version_mod
-from version_stamp.backends.base import VMNBackend
 from version_stamp.cli.completion import SUPPORTED_SHELLS
 from version_stamp.cli.constants import (
     VMN_ARGS,
@@ -17,6 +16,7 @@ from version_stamp.core.constants import (
     VMN_VERSTR_REGEX,
 )
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.version_math import deserialize_vmn_version
 from version_stamp.cli.snapshot_cmd import add_arg_snapshot  # noqa: F401
 
 
@@ -573,7 +573,7 @@ def verify_user_input_version(args, key):
         return
 
     try:
-        props = VMNBackend.deserialize_vmn_version(val)
+        props = deserialize_vmn_version(val)
     except Exception:
         if "root" not in args or not args.root:
             err = f"Version must be in format: {VMN_VERSION_FORMAT}"

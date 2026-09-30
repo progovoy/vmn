@@ -6,7 +6,6 @@ from multiprocessing import Pool
 
 import yaml
 
-from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.factory import get_client
 from version_stamp.backends.git import GitBackend
 from version_stamp.cli.constants import LOG_FILENAME
@@ -23,6 +22,12 @@ from version_stamp.core.logging import (
     measure_runtime_decorator,
 )
 from version_stamp.core.utils import resolve_root_path
+from version_stamp.core.version_math import (
+    deserialize_vmn_tag_name,
+    gen_unique_id,
+    get_base_vmn_version,
+    get_utemplate_formatted_version,
+)
 from version_stamp.stamping.publisher import VersionControlStamper
 from version_stamp.stamping.repo_status import (
     READ_ONLY_EXPECTED,
@@ -133,12 +138,12 @@ def _build_dev_version(base_version, dev_commit, dev_diff_hash):
 
 def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data.update(ver_info["stamping"]["app"])
-    props = VMNBackend.deserialize_vmn_tag_name(tag_name)
+    props = deserialize_vmn_tag_name(tag_name)
     verstr = props.verstr
-    data["version"] = VMNBackend.get_utemplate_formatted_version(
+    data["version"] = get_utemplate_formatted_version(
         verstr, vcs.template, vcs.hide_zero_hotfix
     )
-    data["unique_id"] = VMNBackend.gen_unique_id(
+    data["unique_id"] = gen_unique_id(
         verstr, data["changesets"]["."]["hash"]
     )
     is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
@@ -158,7 +163,7 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
             out = data["_version"]
 
         if params.get("display_unique_id"):
-            out = VMNBackend.gen_unique_id(out, data["changesets"]["."]["hash"])
+            out = gen_unique_id(out, data["changesets"]["."]["hash"])
 
         if is_dev:
             out = _build_dev_version(
@@ -323,11 +328,11 @@ def gen(vcs, params, verstr_range=None):
             elif vcs.repo_name == k:
                 data["changesets"][k]["state"] = dirty_states
 
-    data["version"] = VMNBackend.get_utemplate_formatted_version(
+    data["version"] = get_utemplate_formatted_version(
         data["_version"], vcs.template, vcs.hide_zero_hotfix
     )
 
-    data["base_version"] = VMNBackend.get_base_vmn_version(
+    data["base_version"] = get_base_vmn_version(
         data["_version"],
         vcs.hide_zero_hotfix,
     )
