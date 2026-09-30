@@ -153,19 +153,15 @@ def _get_repo_status(
         status.err_msgs["pending"] = err
         status.state.add("pending")
 
-    err = be.check_for_outgoing_changes()
-    if err:
-        # TODO:: Check for errcode instead of startswith
-        if err.startswith("Detached head"):
-            status.detached = True
-            status.err_msgs["detached"] = err
-            status.state.add("detached")
-        else:
-            # Outgoing changes cannot be in detached head
-            # TODO: is it really?
-            status.outgoing = True
-            status.err_msgs["outgoing"] = err
-            status.state.add("outgoing")
+    kind, err = be.outgoing_change_state()
+    if kind == "detached":
+        status.detached = True
+        status.err_msgs["detached"] = err
+        status.state.add("detached")
+    elif kind == "outgoing":
+        status.outgoing = True
+        status.err_msgs["outgoing"] = err
+        status.state.add("outgoing")
 
     if "name" in vcs.current_version_info["stamping"]["app"]:
         verstr = vcs.verstr_from_file
