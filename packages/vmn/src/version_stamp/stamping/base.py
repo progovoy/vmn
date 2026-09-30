@@ -147,7 +147,8 @@ class IVersionsStamper:
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
 
-                self.set_template(self.template)
+        if isinstance(self.template, str):
+            self.set_template(self.template)
 
         if self.root_app_conf_path is not None and os.path.isfile(
             self.root_app_conf_path
@@ -255,8 +256,11 @@ class IVersionsStamper:
 
             props = VMNBackend.deserialize_tag_name(tag)
 
-            # can happen in case of a root app
-            if props.app_name != app_name:
+            # can happen in case of a root app. Compared in tag form: root
+            # tags deserialize to the dashed name (a-b for a/b).
+            if VMNBackend.app_name_to_tag_name(
+                props.app_name
+            ) != VMNBackend.app_name_to_tag_name(app_name):
                 continue
 
             cleaned_app_tag = tag
@@ -334,6 +338,21 @@ class IVersionsStamper:
         tag_app_name = VMNBackend.app_name_to_tag_name(self.name)
         return f"{tag_app_name}_{verstr}"
 
+    def _version_backend_handler(self, prefix, backend):
+        handler = getattr(self, f"{prefix}{backend}", None)
+        if handler is None:
+            VMN_LOGGER.warning(f"Unsupported version backend {backend}")
+        return handler
+
+    def _add_version_backend_files(self, files):
+        for backend, backend_conf in self.version_backends.items():
+            if backend in self._STRUCTURED_BACKEND_SPEC:
+                self._add_files_simple_backend(files, backend_conf)
+                continue
+            handler = self._version_backend_handler("_add_files_", backend)
+            if handler is not None:
+                handler(files, backend_conf)
+
     @measure_runtime_decorator
     def initialize_backend_attrs(self):
         self_base = os.path.basename(self.vmn_root_path)
@@ -345,20 +364,7 @@ class IVersionsStamper:
             return
 
         version_files_to_track_diff = []
-        for backend in self.version_backends:
-            try:
-                backend_conf = self.version_backends[backend]
-                if backend in self._STRUCTURED_BACKEND_SPEC:
-                    self._add_files_simple_backend(
-                        version_files_to_track_diff, backend_conf
-                    )
-                else:
-                    handler = getattr(self, f"_add_files_{backend}")
-                    handler(version_files_to_track_diff, backend_conf)
-            except AttributeError:
-                VMN_LOGGER.warning(f"Unsupported version backend {backend}")
-                continue
-
+        self._add_version_backend_files(version_files_to_track_diff)
         version_files_to_track_diff = list(dict.fromkeys(version_files_to_track_diff))
 
         self.last_user_changeset = self.backend.get_last_user_changeset(
@@ -560,8 +566,7 @@ class IVersionsStamper:
             )
 
         initialprerelease_count = {}
-        tag_name_prefix = VMNBackend.serialize_vmn_tag_name(self.name, base_version)
-        tag_name_prefix = f"{tag_name_prefix}-*"
+        tag_name_prefix = f"{self.get_tag_name(base_version)}-*"
         tag = self.backend.get_latest_available_tag(tag_name_prefix)
 
         # Means we found existing prerelease
@@ -614,22 +619,16 @@ class IVersionsStamper:
         if not self.version_backends:
             return
 
-        for backend in self.version_backends:
-            try:
-                if warn_vmn_version_file_backend(backend):
-                    continue
-
-                backend_conf = self.version_backends[backend]
-                if backend in self._STRUCTURED_BACKEND_SPEC:
-                    self._write_version_to_structured(
-                        version_number, backend_conf, backend
-                    )
-                else:
-                    handler = getattr(self, f"_write_version_to_{backend}")
-                    handler(version_number, backend_conf)
-            except AttributeError:
-                VMN_LOGGER.warning(f"Unsupported version backend {backend}")
+        for backend, backend_conf in self.version_backends.items():
+            if warn_vmn_version_file_backend(backend):
                 continue
+
+            if backend in self._STRUCTURED_BACKEND_SPEC:
+                self._write_version_to_structured(version_number, backend_conf, backend)
+                continue
+            handler = self._version_backend_handler("_write_version_to_", backend)
+            if handler is not None:
+                handler(version_number, backend_conf)
 
     def _write_version_to_structured(self, verstr, backend_conf, backend_name):
         spec = self._STRUCTURED_BACKEND_SPEC[backend_name]
@@ -847,6 +846,8 @@ class IVersionsStamper:
             conf_dict = {
                 key: getattr(self, attr) for key, attr in self._CONF_KEY_TO_ATTR.items()
             }
+            # Without a conf file the (already parsed) template is the default
+            conf_dict["template"] = VMN_DEFAULT_CONF["template"]
             # Remove the internal "." entry from deps before writing
             conf_dict["deps"] = copy.deepcopy(self.configured_deps)
             conf_dict["deps"].pop(".", None)
@@ -866,7 +867,7 @@ class IVersionsStamper:
         if self.root_conf_file_exists:
             return
 
-        pathlib.Path(os.path.dirname(self.app_conf_path)).mkdir(
+        pathlib.Path(os.path.dirname(self.root_app_conf_path)).mkdir(
             parents=True, exist_ok=True
         )
 

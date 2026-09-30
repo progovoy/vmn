@@ -620,10 +620,7 @@ def handle_release(vmn_ctx):
             vmn_ctx.vcs.hide_zero_hotfix,
         )
 
-        tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
-            vmn_ctx.vcs.name,
-            base_ver,
-        )
+        tag_formatted_app_name = vmn_ctx.vcs.get_tag_name(base_ver)
 
         if tag_formatted_app_name in ver_infos:
             VMN_LOGGER.info(base_ver)
