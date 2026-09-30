@@ -41,7 +41,8 @@ Invocation = collections.namedtuple("Invocation", "command cwd runner")
 CODE_IDENTITY_FIELDS = (
     "base_version", "base_commit", "branch", "remote", "app_name", "dirty_states",
     "has_working_tree_patch", "has_local_commits_patch", "has_untracked_files",
-    "has_dep_patches", "diff_hash", "untracked_skipped", "changesets", "code",
+    "has_dep_patches", "diff_hash", "untracked_skipped", "changesets",
+    "dep_base_commits", "code",
 )
 # Dirty states whose code lives in patches (a snapshot only has it in a code object).
 _PATCHED_STATES = {"pending", "outgoing", "dirty_deps"}

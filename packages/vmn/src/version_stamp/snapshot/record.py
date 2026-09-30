@@ -9,7 +9,7 @@ Public:
     dirty_states, patches, ver_info, note=None, code=None, diff_hash=None)
     -> dict`` — adds ``code_verstr`` (the 7-char dev verstr the code object is
     named by) and, with *code* ``(key, summary)``, the ``code:`` reference.
-  - ``same_state(stored_meta, diff_hash, changesets) -> bool``.
+  - ``same_state(stored_meta, diff_hash, changesets, dep_bases=None) -> bool``.
 """
 from version_stamp.core.utils import now_iso
 from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
@@ -88,18 +88,8 @@ def build_record_metadata(
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:
         metadata["changesets"] = changesets
-    dep_bases = _dep_base_commits(patches)
-    if dep_bases:
-        metadata["dep_base_commits"] = dep_bases
+    if patches.get("dep_base_commits"):
+        metadata["dep_base_commits"] = patches["dep_base_commits"]
     if code and code[0]:
         metadata["code"] = code[0]
     return metadata
-
-
-def _dep_base_commits(patches):
-    """``{dep_path: commit}`` the captured deps' patches apply to."""
-    return {
-        dep_path: dp["base_commit"]
-        for dep_path, dp in patches.get("deps", {}).items()
-        if dp.get("base_commit")
-    }

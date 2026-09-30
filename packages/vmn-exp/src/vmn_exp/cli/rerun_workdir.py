@@ -16,7 +16,8 @@ legacy run's are its own, and a run whose object is gone carries
 ``code_missing`` and is refused. The recorded ``changesets`` place each dep
 at its path relative to the app, as islands do (``island_layout``), so
 ``../repo1`` resolves inside the workspace. Every checkout is a detached
-``git worktree`` of the local repo at the recorded hash, or a clone from the
+``git worktree`` of the local repo at the recorded commit (a dep's
+``dep_base_commits`` entry, else its changeset hash), or a clone from the
 recorded remote when the commit is not local. Any failure — a dep that can't
 be materialized, a patch step that doesn't apply — is fatal and removes
 whatever was built: running the wrong code silently is worse than not
@@ -42,6 +43,7 @@ from version_stamp.api import (
     _git_ok,
     _resolve_remote,
     create_dep_worktree,
+    dep_base_commit,
     island_layout,
     remove_registered_worktree,
 )
@@ -172,7 +174,7 @@ def _sources(metadata):
     sources = {".": (metadata["base_commit"], metadata.get("remote"))}
     for name, info in (metadata.get("changesets") or {}).items():
         if name != ".":
-            sources[name] = (info.get("hash"), info.get("remote"))
+            sources[name] = (dep_base_commit(metadata, name, info), info.get("remote"))
     return sources
 
 

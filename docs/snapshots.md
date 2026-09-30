@@ -29,6 +29,10 @@ that is already saved returns the same version (same verstr and timestamp, so
 its `@N` stays put) and only updates `--note`/`--meta` when given. When
 `vmn stamp` refuses because of uncommitted changes, its hint points here.
 
+A tree with unpushed commits is based on its upstream commit: the dev verstr
+names the upstream, and the local commits are carried as a patch replayed on
+top, so the snapshot restores in any clone of the remote.
+
 ## Actions
 
 `vmn snapshot [action] <app>`; `create` is the default.
@@ -54,7 +58,9 @@ or hold up, a `vmn stamp` in the same checkout.
 
 The checkout is reset to the snapshot's base commit (detached, as `vmn goto`
 leaves it), then its local commits, working-tree patch and untracked files are
-applied, and the same for each dependency. First, the work it replaces is
+applied. Each dependency is checked out at its recorded base (the commit it
+sat at when the snapshot was taken, or its upstream when it had unpushed
+commits — not necessarily the stamped one) and patched the same way. First, the work it replaces is
 saved as a snapshot noted `auto-saved before restore` (unless it already is
 the target), and the command that brings it back is printed:
 
@@ -65,7 +71,8 @@ Current work saved as 1.2.0-dev.a1b2c3d.9f8e7d6 — restore it anytime with: vmn
 The resets (of the app and of each dependency) delete untracked files, and
 untracked files over the size caps (`VMN_SNAPSHOT_MAX_FILE_MB`, default 50;
 `VMN_SNAPSHOT_MAX_TOTAL_MB`, default 200) cannot go into that safety snapshot.
-A restore that would lose such files, in the app or a dependency, is refused
+Dependency untracked files are guarded by the same caps: a restore that would
+lose such files, in the app or a dependency, is refused
 and lists them: move them away, raise the caps, or pass `--force` to restore
 anyway and lose them. (`create` also leaves over-cap files out, records them
 as `untracked_skipped` and warns.)
@@ -119,7 +126,8 @@ A snapshot is a thin record referencing a content-addressed *code object*:
 ```text
 .vmn/<app>/snapshots/<verstr>/metadata.yml
     # verstr, base version and commit, timestamp, note, user_meta,
-    # dirty states, dep changesets, diff_hash, code_verstr, and code: <key>
+    # dirty states, dep changesets, dep_base_commits, diff_hash,
+    # code_verstr, and code: <key>
 .vmn/vmn-code/<app>/experiments/<code_verstr>.<diff hash>/
     # the code object: working_tree.patch, local_commits.patch,
     # untracked_files.tar.gz, deps/<dep>/..., metadata.yml written last
@@ -128,7 +136,8 @@ A snapshot is a thin record referencing a content-addressed *code object*:
 (`/` in a root app's name becomes `~` in the `vmn-code` path.) Snapshots of
 the same tree share one code object, and `delete` removes it only when nothing
 else references it. Dependency state feeds into the content hash, so two
-snapshots differing only inside a dep get different version strings. Every
+snapshots differing only inside a dep get different version strings; so do
+snapshots whose deps sit at different commits. Every
 storage directory carries a `.gitignore` of `*`.
 
 ## All flags

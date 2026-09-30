@@ -23,7 +23,7 @@ CURRENT = "current"
 
 def _current_state(vcs):
     """The working state as a snapshot would record it, patches included."""
-    _, commit_hash, patches, _, ver_info, err = gather_create_data(vcs, allow_clean=True)
+    _, commit_hash, patches, _, ver_info, err = gather_create_data(vcs)
     if err is not None:
         return None
     metadata = {

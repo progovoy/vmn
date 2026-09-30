@@ -10,9 +10,6 @@ from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: F401
 from vmn_exp.storage.open import open_storage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
     VMN_LOGGER,
-    # dev-version apply
-    _apply_snapshot_patches,
-    _reset_worktree,
     # dev-version capture
     _compute_diff_hash,
     _compute_verstr,

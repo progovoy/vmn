@@ -20,6 +20,7 @@ from version_stamp.devversion.clone import (  # noqa: F401 (re-exported)
     _shallow_clone_at,
 )
 from version_stamp.devversion.untracked import copy_untracked_files
+from version_stamp.snapshot.identity import safe_dep_name, safe_verstr
 
 
 def _resolve_remote(remote, vcs):
@@ -122,8 +123,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
             VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
             continue
 
-        safe_dep = dep_path.replace(os.sep, "_").replace("/", "_")
-        dp = dep_patches.get(safe_dep) or dep_patches.get(dep_path)
+        dp = dep_patches.get(safe_dep_name(dep_path)) or dep_patches.get(dep_path)
         if dp and _patches_failed(dep_dest, dp, f"dependency {dep_path}"):
             return 1
 
@@ -132,21 +132,6 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         yaml.dump(metadata, f, sort_keys=True)
 
     return 0
-
-
-def _write_snapshot_to_dir(directory, metadata, patches):
-    """Write snapshot metadata and patches to a directory (fallback)."""
-    with open(os.path.join(directory, "metadata.yml"), "w") as f:
-        yaml.dump(metadata, f, sort_keys=True)
-    if patches.get("working_tree"):
-        with open(os.path.join(directory, "working_tree.patch"), "w") as f:
-            f.write(patches["working_tree"])
-    if patches.get("local_commits"):
-        with open(os.path.join(directory, "local_commits.patch"), "w") as f:
-            f.write(patches["local_commits"])
-    if patches.get("untracked_files"):
-        with open(os.path.join(directory, "untracked_files.tar.gz"), "wb") as f:
-            f.write(patches["untracked_files"])
 
 
 def get_git_difftool(vcs):
@@ -176,8 +161,8 @@ def _materialize_for_diff(vcs, verstr, meta, patches, dest):
 def _materialize_pair(vcs, parent, verstr1, meta1, patches1, verstr2, meta2, patches2):
     """Materialize both sides into distinct dirs under *parent*; their names
     (relative to *parent*), or None when either side failed."""
-    name1 = verstr1.replace("+", "_plus_")
-    name2 = verstr2.replace("+", "_plus_")
+    name1 = safe_verstr(verstr1)
+    name2 = safe_verstr(verstr2)
     if name1 == name2:
         name2 += "_b"
     for verstr, meta, patches, name in (

@@ -63,15 +63,30 @@ def _changeset_hashes(changesets):
     return {path: (info or {}).get("hash") for path, info in (changesets or {}).items()}
 
 
-def same_state(stored_meta, diff_hash, changesets):
+def _repo_positions(changesets, dep_bases):
+    """``{path: commit}`` of every repo: a dep's base when recorded, else its
+    changeset hash — so a dep at its stamp commit reads the same either way."""
+    positions = _changeset_hashes(changesets)
+    positions.update((path, sha) for path, sha in (dep_bases or {}).items() if sha)
+    return positions
+
+
+def same_state(stored_meta, diff_hash, changesets, dep_bases=None):
     """Whether *stored_meta* records this exact state: the same full diff hash
-    and, unless *changesets* is None (a legacy caller), the same repo commits.
+    and, unless *changesets* is None (a legacy caller), the same repo commits
+    — each dep at its *dep_bases* commit when the record carries
+    ``dep_base_commits`` (older records compare changesets only).
     A record without a ``diff_hash`` never matches."""
     if not diff_hash or stored_meta.get("diff_hash") != diff_hash:
         return False
     if changesets is None:
         return True
-    return _changeset_hashes(stored_meta.get("changesets")) == _changeset_hashes(changesets)
+    stored_changesets = stored_meta.get("changesets")
+    if "dep_base_commits" not in stored_meta:
+        return _changeset_hashes(stored_changesets) == _changeset_hashes(changesets)
+    return _repo_positions(
+        stored_changesets, stored_meta["dep_base_commits"]
+    ) == _repo_positions(changesets, dep_bases)
 
 
 def _stored_metadata(storage, app_name, verstr):
@@ -87,14 +102,16 @@ def _stored_metadata(storage, app_name, verstr):
 
 
 def _unique_snapshot_verstr(
-    storage, app_name, base_version, commit_hash, diff_hash, changesets=None
+    storage, app_name, base_version, commit_hash, diff_hash, changesets=None,
+    dep_bases=None,
 ):
     """The shortest dev verstr that is free or already holds this exact state.
 
     A snapshot never overwrites a different one: on a prefix collision (or a
     legacy record that carries no ``diff_hash`` to compare) the diff hash is
     extended instead. With *changesets*, a record of the same diff at other
-    repo commits is a collision too; without them only the diff counts.
+    repo commits (or with deps at other *dep_bases*) is a collision too;
+    without them only the diff counts.
     """
     verstr = _format_dev_verstr(base_version, commit_hash, diff_hash)
     if not diff_hash:
@@ -102,6 +119,6 @@ def _unique_snapshot_verstr(
     for hash_len in _DIFF_HASH_LENGTHS:
         verstr = _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len)
         exists, stored = _stored_metadata(storage, app_name, verstr)
-        if not exists or same_state(stored, diff_hash, changesets):
+        if not exists or same_state(stored, diff_hash, changesets, dep_bases):
             return verstr
     return verstr

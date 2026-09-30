@@ -59,7 +59,7 @@ def capture_identity(vcs, status=None):
     not stamped. *status* is a repo status the caller already has (see
     ``gather_create_data``)."""
     base_version, commit_hash, identity, dirty_states, ver_info, err = (
-        gather_create_data(vcs, allow_clean=True, lightweight=True, status=status)
+        gather_create_data(vcs, lightweight=True, status=status)
     )
     if err is not None:
         return None, err
