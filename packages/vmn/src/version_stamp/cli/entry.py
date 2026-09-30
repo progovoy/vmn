@@ -6,7 +6,6 @@ import pathlib
 import sys
 from pprint import pformat
 
-from version_stamp.backends.factory import get_client
 from version_stamp.cli.args import parse_user_commands
 
 # Import all command handlers so dynamic dispatch works
@@ -46,6 +45,7 @@ from version_stamp.core.logging import (
 )
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.stamping.publisher import VersionControlStamper
+from version_stamp.stamping.repo_status import dep_backend
 
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
 
@@ -92,7 +92,12 @@ class VMNContainer:
         if "root" in self.args:
             root = self.args.root
 
-        initial_params = {"root": root, "name": None, "root_path": root_path}
+        initial_params = {
+            "root": root,
+            "name": None,
+            "root_path": root_path,
+            "read_only": getattr(self.args, "command", None) == "show",
+        }
 
         if "name" in self.args and self.args.name:
             if getattr(self.args, "validate_app_name", True):
@@ -325,14 +330,7 @@ def _vmn_run(args, root_path, lock=None):
             for repo in common_deps:
                 full_path = os.path.join(vmnc.vcs.vmn_root_path, repo)
 
-                dep_be, err = get_client(full_path, vmnc.vcs.be_type)
-                if err:
-                    err_str = f"Failed to create backend {err}. Exiting"
-                    VMN_LOGGER.error(err_str)
-                    raise RuntimeError(err_str)
-
-                dep_be.prepare_for_remote_operation()
-                del dep_be
+                dep_backend(vmnc.vcs, full_path).prepare_for_remote_operation()
 
     # Plugin-managed commands (experiment/exp, ui, model) dispatch via the registry.
     from version_stamp.cli.plugin_api import find as _find_plugin_spec_vmn

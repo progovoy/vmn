@@ -112,8 +112,9 @@ class GitBackend(
     VMNBackend,
 ):
     @measure_runtime_decorator
-    def __init__(self, repo_path, inherit_env=False):
+    def __init__(self, repo_path, inherit_env=False, read_only=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
+        self.read_only = read_only
 
         self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
 
@@ -125,8 +126,12 @@ class GitBackend(
         # commands fail fast (see cli/entry.py).
         self.selected_remote = select_remote(self._be)
         self.repo_path = repo_path
+        self.remote_active_branch = None
         self.active_branch = self.get_active_branch()
-        self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
+        if self.remote_active_branch is None:
+            self.remote_active_branch = self.get_remote_tracking_branch(
+                self.active_branch
+            )
         self.detached_head = self.in_detached_head()
 
     @measure_runtime_decorator

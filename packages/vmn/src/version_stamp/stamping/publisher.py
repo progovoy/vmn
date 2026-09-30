@@ -369,21 +369,23 @@ class VersionControlStamper(IVersionsStamper):
         return f"{root_version}"
 
     def get_files_to_add_to_index(self, paths):
-        changed = [
-            os.path.join(self.vmn_root_path, item.a_path.replace("/", os.sep))
-            for item in self.backend._be.index.diff(None)
-        ]
-        untracked = [
-            os.path.join(self.vmn_root_path, item.replace("/", os.sep))
-            for item in self.backend._be.untracked_files
-        ]
+        """The paths git status lists (modified or untracked), in paths order."""
+        rel_paths = [os.path.relpath(p, self.vmn_root_path) for p in paths]
+        out = self.backend._be.git.status(
+            "--porcelain", "-z", "--untracked-files=all", "--", *rel_paths
+        )
+        entries = iter(out.split("\0"))
+        listed = set()
+        for entry in entries:
+            if not entry:
+                continue
+            listed.add(os.path.normpath(entry[3:]))
+            if entry[0] in "RC":
+                next(entries, None)  # a rename/copy is followed by its source
 
-        version_files = []
-        for path in paths:
-            if path in changed or path in untracked:
-                version_files.append(path)
-
-        return version_files
+        return [
+            p for p, rel in zip(paths, rel_paths) if os.path.normpath(rel) in listed
+        ]
 
     @measure_runtime_decorator
     def publish_stamp(self, app_version, root_app_version):

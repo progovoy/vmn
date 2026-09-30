@@ -75,6 +75,10 @@ class GitBranchMixin:
 
             out = f"{self.selected_remote.name}/{remote_branches[0]}"
 
+            if self.read_only:
+                self.remote_active_branch = out
+                return remote_branches[0]
+
             local_branch_name = (
                 f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
             )

@@ -79,6 +79,23 @@ def repo_initialized(be, vmn_root_path):
     )
 
 
+def dep_backend(vcs, path):
+    """The backend of the repo at path, built once per stamper (vcs)."""
+    backends = vars(vcs).setdefault(
+        "_dep_backends", {os.path.realpath(vcs.vmn_root_path): vcs.backend}
+    )
+    key = os.path.realpath(path)
+    if key not in backends:
+        read_only = {"read_only": True} if getattr(vcs, "read_only", False) else {}
+        be, err = get_client(path, vcs.be_type, **read_only)
+        if err:
+            err_str = f"Failed to create backend {err}. Exiting"
+            VMN_LOGGER.error(err_str)
+            raise RuntimeError(err_str)
+        backends[key] = be
+    return backends[key]
+
+
 def _status_or_fail(vcs, expected_status, optional_status=frozenset(), **kwargs):
     """The repo status, or None (logged) when it does not meet the expectations."""
     status = _get_repo_status(vcs, expected_status, optional_status, **kwargs)
@@ -200,11 +217,7 @@ def _get_repo_status(
             status.repos[repo] = copy.deepcopy(default_dep_status)
             full_path = os.path.join(vcs.vmn_root_path, repo)
 
-            dep_be, err = get_client(full_path, vcs.be_type)
-            if err:
-                err_str = f"Failed to create backend {err}. Exiting"
-                VMN_LOGGER.error(err_str)
-                raise RuntimeError(err_str)
+            dep_be = dep_backend(vcs, full_path)
 
             err = dep_be.check_for_pending_changes()
             if err:
