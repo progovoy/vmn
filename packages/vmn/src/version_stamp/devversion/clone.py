@@ -8,12 +8,6 @@ from version_stamp.core import git_cmd
 # Seconds a git subprocess may take while materializing a snapshot: local
 # operations are quick, network ones must not hang an export or a ui diff.
 _LOCAL_GIT_TIMEOUT_SEC = 120
-_NETWORK_GIT_TIMEOUT_SEC = git_cmd.NETWORK_GIT_TIMEOUT_SEC
-
-
-def _git(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC):
-    """Run git; a CompletedProcess, or None when it timed out."""
-    return git_cmd.run_git(cwd, args, timeout=timeout, text=True)
 
 
 def _git_ok(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC, what=None):
@@ -43,13 +37,8 @@ def _clone_local_at(dest, repo_path, commit_hash):
     return 0
 
 
-def _shallow_clone_at(dest, remote, commit_hash):
-    """Create a shallow clone at a specific commit."""
-    return git_cmd.clone_at_commit(dest, remote, commit_hash)
-
-
 def _clone_at(dest, local_repo, remote, commit_hash):
     """Materialize *commit_hash* from the local repo when it has it, else remote."""
     if _commit_exists(local_repo, commit_hash):
         return _clone_local_at(dest, local_repo, commit_hash)
-    return _shallow_clone_at(dest, remote, commit_hash)
+    return git_cmd.clone_at_commit(dest, remote, commit_hash)

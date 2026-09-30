@@ -3,11 +3,13 @@ import os
 
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.untracked import (
+    _collect_untracked_tarball,
     _ensure_trailing_newline,
     _hash_untracked_content,
-    untracked_payload,
+    _untracked_stats,
+    payload_from_tarball,
 )
-from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
+from version_stamp.snapshot.identity import (  # noqa: F401  (tests import two from here)
     _DIFF_HASH_LENGTHS,
     _compute_diff_hash,
     _format_dev_verstr,
@@ -48,11 +50,14 @@ def _generate_patches(backend, lightweight=False):
             VMN_LOGGER.debug("Failed to generate local commits patch", exc_info=True)
 
     try:
-        content_hash = _hash_untracked_content(backend.repo_path)
+        stats = _untracked_stats(backend.repo_path)
+        content_hash = _hash_untracked_content(backend.repo_path, stats)
         if content_hash:
             patches["untracked_hash"] = content_hash
         if not lightweight:
-            patches.update(untracked_payload(backend.repo_path))
+            patches.update(
+                payload_from_tarball(*_collect_untracked_tarball(backend.repo_path, stats))
+            )
     except Exception:
         VMN_LOGGER.debug("Failed to collect untracked files", exc_info=True)
 
@@ -78,23 +83,35 @@ def _dep_backends(vcs):
     return backends
 
 
+def _dep_patch_sets(vcs, lightweight):
+    """``(dep_path, backend, patches)`` of every dep on disk."""
+    for dep_path, dep_be in _dep_backends(vcs).items():
+        try:
+            dp = _generate_patches(dep_be, lightweight=lightweight)
+        except Exception:
+            _log_dep_failure(dep_path)
+            continue
+        yield dep_path, dep_be, dp
+
+
+def _log_dep_failure(dep_path):
+    VMN_LOGGER.debug(f"Failed to generate patches for dep {dep_path}", exc_info=True)
+
+
 def _generate_dep_patches(vcs, lightweight=False):
     """``{dep_path: patches}`` of the dirty deps."""
-    return _capture_deps(vcs, lightweight)[0]
+    return {path: dp for path, _, dp in _dep_patch_sets(vcs, lightweight) if dp}
 
 
 def _capture_deps(vcs, lightweight=False):
     """``(dep patches, dep base commits)``: the patches of the dirty deps and
     the commit every dep on disk sits at (see :func:`_base_commit`)."""
     dep_patches, dep_bases = {}, {}
-    for dep_path, dep_be in _dep_backends(vcs).items():
+    for dep_path, dep_be, dp in _dep_patch_sets(vcs, lightweight):
         try:
-            dp = _generate_patches(dep_be, lightweight=lightweight)
             dep_bases[dep_path] = _base_commit(dep_be, dp)
         except Exception:
-            VMN_LOGGER.debug(
-                f"Failed to generate patches for dep {dep_path}", exc_info=True
-            )
+            _log_dep_failure(dep_path)
             continue
         if dp:
             dep_patches[dep_path] = dp

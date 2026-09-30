@@ -25,12 +25,9 @@ from dataclasses import dataclass
 
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion import untracked
-from version_stamp.devversion.capture import (
-    _compute_diff_hash,
-    _format_dev_verstr,
-    gather_create_data,
-)
+from version_stamp.devversion.capture import gather_create_data
 from version_stamp.snapshot.code_store import code_key, publish_code, store_code, stored_code
+from version_stamp.snapshot.identity import _compute_diff_hash, _format_dev_verstr
 from version_stamp.snapshot.record import patch_summary
 
 

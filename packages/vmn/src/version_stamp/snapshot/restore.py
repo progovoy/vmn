@@ -25,7 +25,7 @@ from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.apply import _apply_snapshot_patches, _reset_worktree
 from version_stamp.devversion.clone import _commit_exists
 from version_stamp.devversion.untracked import untracked_over_caps
-from version_stamp.snapshot.capture import capture_identity
+from version_stamp.snapshot.capture import _repos_with_untracked, capture_identity
 from version_stamp.snapshot.create import snapshot_verstr, store_snapshot
 from version_stamp.snapshot.load import load_snapshot
 
@@ -46,32 +46,33 @@ def _refuse_dropping(dropped):
 
 def _reset_deps(vcs, metadata):
     """The configured deps with a checkout that restoring *metadata* resets."""
-    configured = getattr(vcs, "configured_deps", None) or {}
     return [
         dep_path
         for dep_path in metadata.get("changesets") or {}
-        if dep_path != "." and dep_path in configured
+        if dep_path != "." and dep_path in vcs.configured_deps
         and os.path.isdir(os.path.join(vcs.vmn_root_path, dep_path))
     ]
 
 
-def _dropped_untracked(vcs, metadata):
-    """Untracked paths the resets would delete that a snapshot cannot hold."""
-    dropped = untracked_over_caps(vcs.vmn_root_path)
-    for dep_path in _reset_deps(vcs, metadata):
-        dep_root = os.path.join(vcs.vmn_root_path, dep_path)
-        dropped.extend(f"{dep_path}/{p}" for p in untracked_over_caps(dep_root))
+def _dropped_untracked(vcs, identity, reset_deps):
+    """Untracked paths the resets would delete that a snapshot cannot hold
+    (only the repos *identity* saw untracked files in are scanned)."""
+    repos = _repos_with_untracked(vcs, identity)
+    dropped = untracked_over_caps(vcs.vmn_root_path) if None in repos else []
+    for dep_path in reset_deps:
+        if dep_path in repos:
+            dropped.extend(f"{dep_path}/{p}" for p in untracked_over_caps(repos[dep_path]))
     return dropped
 
 
-def _save_current_work(vcs, stores, metadata, force):
+def _save_current_work(vcs, stores, metadata, reset_deps, force):
     """``(saved verstr or None, error code or None)``."""
     captured, err = capture_identity(vcs)
     if err is not None:
         return None, err
     if not captured.diff_hash:
         return None, None
-    dropped = [] if force else _dropped_untracked(vcs, metadata)
+    dropped = [] if force else _dropped_untracked(vcs, captured.identity, reset_deps)
     if dropped:
         return None, _refuse_dropping(dropped)
     verstr = snapshot_verstr(stores.records, vcs.name, captured)
@@ -105,7 +106,8 @@ def restore_record(vcs, params, stores, record, hint):
     """Save the current work into *stores*, then put *record* in the checkout."""
     if not params.get("deps_only") and _base_commit_missing(vcs, record[0]):
         return 1
-    saved, err = _save_current_work(vcs, stores, record[0], params.get("force"))
+    reset_deps = _reset_deps(vcs, record[0])
+    saved, err = _save_current_work(vcs, stores, record[0], reset_deps, params.get("force"))
     if err:
         return err
     if saved:
@@ -115,7 +117,7 @@ def restore_record(vcs, params, stores, record, hint):
         )
     if not params.get("deps_only") and _reset(vcs):
         return 1
-    return _apply_snapshot_patches(vcs, params, *record)
+    return _apply_snapshot_patches(vcs, params, *record, reset_deps)
 
 
 def snapshot_restore(vcs, params, stores, verstr):
