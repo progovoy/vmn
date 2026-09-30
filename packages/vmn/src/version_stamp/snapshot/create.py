@@ -23,8 +23,8 @@ import sys
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.capture import _unique_snapshot_verstr
 from version_stamp.snapshot.capture import capture_identity, ensure_code
+from version_stamp.snapshot.identity import _unique_snapshot_verstr
 from version_stamp.snapshot.record import build_record_metadata
 
 CLEAN_TREE = "No local changes to snapshot (working tree is clean)"

@@ -1,19 +1,20 @@
 """Patch generation, diff-hash computation, and verstr formatting for dev versions."""
-import hashlib
 import os
 import sys
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import yaml_safe_load
 from version_stamp.devversion.untracked import (
     _ensure_trailing_newline,
     _hash_untracked_content,
     untracked_payload,
 )
-
-# Diff-hash prefix lengths tried, shortest first, when a verstr is taken by a
-# snapshot with different content (a 7-hex prefix is only 28 bits).
-_DIFF_HASH_LENGTHS = (7, 12, 16, 24, 32, 64)
+from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
+    _DIFF_HASH_LENGTHS,
+    _compute_diff_hash,
+    _format_dev_verstr,
+    _stored_metadata,
+    _unique_snapshot_verstr,
+)
 
 
 def _generate_patches(backend, lightweight=False):
@@ -90,82 +91,16 @@ def _generate_dep_patches(vcs, lightweight=False):
     return dep_patches
 
 
-def _compute_diff_hash(patches):
-    """Full sha256 hex over a snapshot's content, or None for a clean tree."""
-    h = hashlib.sha256()
-    has_content = False
-    for key in ("working_tree", "local_commits"):
-        if patches.get(key):
-            h.update(patches[key].encode())
-            has_content = True
-    if patches.get("untracked_hash"):
-        h.update(patches["untracked_hash"])
-        has_content = True
-
-    for dep_path in sorted(patches.get("deps", {})):
-        dp = patches["deps"][dep_path]
-        for key in ("working_tree", "local_commits"):
-            if dp.get(key):
-                h.update(dp[key].encode())
-                has_content = True
-        if dp.get("untracked_hash"):
-            h.update(dp["untracked_hash"])
-            has_content = True
-
-    return h.hexdigest() if has_content else None
-
-
-def _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len=7):
-    diff_part = diff_hash[:hash_len] if diff_hash else "0000000"
-    return f"{base_version}-dev.{commit_hash[:7]}.{diff_part}"
-
-
 def _compute_verstr(base_version, commit_hash, patches, hash_len=7):
     return _format_dev_verstr(
         base_version, commit_hash, _compute_diff_hash(patches), hash_len
     )
 
 
-def _stored_metadata(storage, app_name, verstr):
-    """``(exists, metadata dict)`` of the snapshot stored at *verstr*."""
-    raw = storage.load_file(app_name, verstr, "metadata.yml")
-    if raw is None:
-        return False, {}
-    try:
-        meta = yaml_safe_load(raw)
-    except Exception:
-        meta = None
-    return True, meta if isinstance(meta, dict) else {}
-
-
 def _stored_diff_hash(storage, app_name, verstr):
     """``(exists, diff_hash)`` of the snapshot stored at *verstr*."""
     exists, meta = _stored_metadata(storage, app_name, verstr)
     return exists, meta.get("diff_hash")
-
-
-def _unique_snapshot_verstr(
-    storage, app_name, base_version, commit_hash, diff_hash, changesets=None
-):
-    """The shortest dev verstr that is free or already holds this exact state.
-
-    A snapshot never overwrites a different one: on a prefix collision (or a
-    legacy record that carries no ``diff_hash`` to compare) the diff hash is
-    extended instead. With *changesets*, a record of the same diff at other
-    repo commits is a collision too; without them only the diff counts.
-    """
-    # Imported here: version_stamp.snapshot.record imports this module.
-    from version_stamp.snapshot.record import same_state
-
-    verstr = _format_dev_verstr(base_version, commit_hash, diff_hash)
-    if not diff_hash:
-        return verstr
-    for hash_len in _DIFF_HASH_LENGTHS:
-        verstr = _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len)
-        exists, stored = _stored_metadata(storage, app_name, verstr)
-        if not exists or same_state(stored, diff_hash, changesets):
-            return verstr
-    return verstr
 
 
 def _base_commit(backend, patches):

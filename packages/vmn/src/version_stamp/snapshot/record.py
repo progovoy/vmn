@@ -10,10 +10,15 @@ Public:
     ``code_verstr`` (the 7-char dev verstr the code object is named by).
   - ``same_state(stored_meta, diff_hash, changesets) -> bool``.
 """
-import os
-
-from version_stamp.core.utils import now_iso, valid_path_component
-from version_stamp.devversion.capture import _compute_diff_hash, _format_dev_verstr
+from version_stamp.core.utils import now_iso
+from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
+    _compute_diff_hash,
+    _format_dev_verstr,
+    safe_dep_name,
+    safe_verstr,
+    same_state,
+    unsafe_verstr,
+)
 
 METADATA_FILE = "metadata.yml"
 # (patches key, file name, binary?)
@@ -22,21 +27,6 @@ PATCH_FILES = (
     ("local_commits", "local_commits.patch", False),
     ("untracked_files", "untracked_files.tar.gz", True),
 )
-
-
-def safe_verstr(verstr):
-    """*verstr* as a record directory name; ValueError if it would walk."""
-    if not valid_path_component(verstr):
-        raise ValueError(f"Invalid record name: {verstr!r}")
-    return verstr.replace("+", "_plus_")
-
-
-def unsafe_verstr(name):
-    return name.replace("_plus_", "+")
-
-
-def safe_dep_name(dep_path):
-    return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
 def skipped_untracked(patches):
@@ -104,18 +94,3 @@ def _dep_base_commits(patches):
         for dep_path, dp in patches.get("deps", {}).items()
         if dp.get("base_commit")
     }
-
-
-def _changeset_hashes(changesets):
-    return {path: (info or {}).get("hash") for path, info in (changesets or {}).items()}
-
-
-def same_state(stored_meta, diff_hash, changesets):
-    """Whether *stored_meta* records this exact state: the same full diff hash
-    and, unless *changesets* is None (a legacy caller), the same repo commits.
-    A record without a ``diff_hash`` never matches."""
-    if not diff_hash or stored_meta.get("diff_hash") != diff_hash:
-        return False
-    if changesets is None:
-        return True
-    return _changeset_hashes(stored_meta.get("changesets")) == _changeset_hashes(changesets)
