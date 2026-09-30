@@ -6,7 +6,6 @@ import re
 
 import git
 
-from version_stamp.backends.iterators import CommitInfoIterator, CommitMessageIterator
 from version_stamp.compat.tag_format_039 import try_commit_with_dot_zero_suffix
 from version_stamp.core.constants import INIT_COMMIT_MESSAGE, VMN_USER_NAME
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
@@ -230,8 +229,10 @@ class GitHistoryMixin:
         return self._be.iter_commits(f"{from_hex}..{to_hex}")
 
     def get_commits_range_iter(self, tag_name, to_hex="HEAD"):
-        return CommitMessageIterator(self._iter_commits_in_range(tag_name, to_hex))
+        commits = self._iter_commits_in_range(tag_name, to_hex)
+        return (commit.message.strip() for commit in commits)
 
     def get_commits_info_iter(self, tag_name, to_hex="HEAD"):
         """Like get_commits_range_iter but yields (message, short_hash) tuples."""
-        return CommitInfoIterator(self._iter_commits_in_range(tag_name, to_hex))
+        commits = self._iter_commits_in_range(tag_name, to_hex)
+        return ((c.message.strip(), c.hexsha[:7]) for c in commits)
