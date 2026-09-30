@@ -19,10 +19,12 @@ from version_stamp.cli.constants import (
     _ROOT_CONFIG_DESCRIPTIONS,
     INIT_FILENAME,
 )
+from version_stamp.cli.worktree_git import git_current_branch
 from version_stamp.core.constants import BRANCH_CONF_DIR
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import (
+    _conf_basename,
     branch_conf_canonical_path,
     resolve_branch_conf_path,
 )
@@ -96,7 +98,7 @@ def _resolve_conf_target(vmn_ctx):
             seed_source, _ = resolve_branch_conf_path(app_dir, branch, root=root)
         return conf_path, descriptions, seed_source
 
-    conf_path = os.path.join(app_dir, "root_conf.yml" if root else "conf.yml")
+    conf_path = os.path.join(app_dir, _conf_basename(root))
     return conf_path, descriptions, None
 
 
@@ -520,19 +522,7 @@ def _set_dep_pin(dep_conf, kind, value):
         dep_conf[kind] = value
 
 
-def _get_dep_branch(full_path):
-    try:
-        import git
-
-        client = git.Repo(full_path, search_parent_directories=True)
-        if not client.head.is_detached:
-            branch = client.active_branch.name
-        else:
-            branch = None
-        client.close()
-        return branch
-    except (git.InvalidGitRepositoryError, git.GitCommandNotFound, OSError):
-        return None
+_get_dep_branch = git_current_branch
 
 
 def _sync_dep_branches(raw_conf, vmn_root_path):

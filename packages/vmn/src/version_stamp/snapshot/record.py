@@ -6,14 +6,20 @@ Public:
     ``unsafe_verstr(name) -> str``, ``safe_dep_name(dep_path) -> str``.
   - ``skipped_untracked(patches) -> list``, ``patch_summary(patches) -> dict``.
   - ``build_record_metadata(vcs, verstr, base_version, commit_hash,
-    dirty_states, patches, ver_info, note=None) -> dict`` — adds
-    ``code_verstr`` (the 7-char dev verstr the code object is named by).
+    dirty_states, patches, ver_info, note=None, code=None, diff_hash=None)
+    -> dict`` — adds ``code_verstr`` (the 7-char dev verstr the code object is
+    named by) and, with *code* ``(key, summary)``, the ``code:`` reference.
   - ``same_state(stored_meta, diff_hash, changesets) -> bool``.
 """
-import os
-
-from version_stamp.core.utils import now_iso, valid_path_component
-from version_stamp.devversion.capture import _compute_diff_hash, _format_dev_verstr
+from version_stamp.core.utils import now_iso
+from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
+    _compute_diff_hash,
+    _format_dev_verstr,
+    safe_dep_name,
+    safe_verstr,
+    same_state,
+    unsafe_verstr,
+)
 
 METADATA_FILE = "metadata.yml"
 # (patches key, file name, binary?)
@@ -22,21 +28,6 @@ PATCH_FILES = (
     ("local_commits", "local_commits.patch", False),
     ("untracked_files", "untracked_files.tar.gz", True),
 )
-
-
-def safe_verstr(verstr):
-    """*verstr* as a record directory name; ValueError if it would walk."""
-    if not valid_path_component(verstr):
-        raise ValueError(f"Invalid record name: {verstr!r}")
-    return verstr.replace("+", "_plus_")
-
-
-def unsafe_verstr(name):
-    return name.replace("_plus_", "+")
-
-
-def safe_dep_name(dep_path):
-    return dep_path.replace(os.sep, "_").replace("/", "_")
 
 
 def skipped_untracked(patches):
@@ -69,8 +60,11 @@ def _remote_url(backend):
 
 
 def build_record_metadata(
-    vcs, verstr, base_version, commit_hash, dirty_states, patches, ver_info, note=None
+    vcs, verstr, base_version, commit_hash, dirty_states, patches, ver_info,
+    note=None, code=None, diff_hash=None,
 ):
+    """*diff_hash* is hashed from *patches* unless given; *code* is
+    ``ensure_code``'s ``(key, summary)`` of the stored code object."""
     metadata = {
         "verstr": verstr,
         "base_version": base_version,
@@ -83,7 +77,10 @@ def build_record_metadata(
         "dirty_states": dirty_states,
         **patch_summary(patches),
     }
-    diff_hash = _compute_diff_hash(patches)
+    if code:
+        metadata.update(code[1])
+    if diff_hash is None:
+        diff_hash = _compute_diff_hash(patches)
     if diff_hash:
         metadata["diff_hash"] = diff_hash
         metadata["code_verstr"] = _format_dev_verstr(base_version, commit_hash, diff_hash)
@@ -94,6 +91,8 @@ def build_record_metadata(
     dep_bases = _dep_base_commits(patches)
     if dep_bases:
         metadata["dep_base_commits"] = dep_bases
+    if code and code[0]:
+        metadata["code"] = code[0]
     return metadata
 
 
@@ -104,18 +103,3 @@ def _dep_base_commits(patches):
         for dep_path, dp in patches.get("deps", {}).items()
         if dp.get("base_commit")
     }
-
-
-def _changeset_hashes(changesets):
-    return {path: (info or {}).get("hash") for path, info in (changesets or {}).items()}
-
-
-def same_state(stored_meta, diff_hash, changesets):
-    """Whether *stored_meta* records this exact state: the same full diff hash
-    and, unless *changesets* is None (a legacy caller), the same repo commits.
-    A record without a ``diff_hash`` never matches."""
-    if not diff_hash or stored_meta.get("diff_hash") != diff_hash:
-        return False
-    if changesets is None:
-        return True
-    return _changeset_hashes(stored_meta.get("changesets")) == _changeset_hashes(changesets)

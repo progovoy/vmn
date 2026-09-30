@@ -2,11 +2,14 @@
 """Print a vibe-coding skill block for AI agents."""
 
 import os
-import stat
-import tempfile
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.core.utils import (
+    MalformedBlockError,
+    atomic_write,
+    resolve_root_path,
+    upsert_marked_block,
+)
 
 VMN_TEXT = r"""# vmn — versioning & experiment tracking
 
@@ -243,29 +246,9 @@ def print_skill():
     return 0
 
 
-def _atomic_write(path, content):
-    """Replace ``path`` only after its complete new content is on disk."""
-    parent = os.path.dirname(path) or os.curdir
-    os.makedirs(parent, exist_ok=True)
-    fd, temporary_path = tempfile.mkstemp(
-        dir=parent,
-        prefix=f".{os.path.basename(path)}.",
-    )
-    try:
-        with os.fdopen(fd, "w") as temporary_file:
-            temporary_file.write(content)
-            temporary_file.flush()
-            os.fsync(temporary_file.fileno())
-        if os.path.exists(path):
-            mode = stat.S_IMODE(os.stat(path).st_mode)
-            os.chmod(temporary_path, mode)
-        os.replace(temporary_path, path)
-    except Exception:
-        try:
-            os.unlink(temporary_path)
-        except FileNotFoundError:
-            pass
-        raise
+def _write_creating_parent(path, content):
+    os.makedirs(os.path.dirname(path) or os.curdir, exist_ok=True)
+    atomic_write(path, content)
 
 
 def _install_claude(path, force):
@@ -279,7 +262,7 @@ def _install_claude(path, force):
         "---\n\n"
         f"{_skill_body()}\n"
     )
-    _atomic_write(path, content)
+    _write_creating_parent(path, content)
     VMN_LOGGER.info(f"Wrote vmn Agent Skill to {path}")
     return 0
 
@@ -291,32 +274,13 @@ def _install_block(path):
         with open(path) as f:
             existing = f.read()
 
-    begin_count = existing.count(BEGIN_MARKER)
-    end_count = existing.count(END_MARKER)
-    if (begin_count, end_count) not in ((0, 0), (1, 1)):
-        VMN_LOGGER.error(f"Refusing to update {path}: malformed vmn skill markers.")
+    try:
+        new, verb = upsert_marked_block(existing, BEGIN_MARKER, END_MARKER, block)
+    except MalformedBlockError as exc:
+        VMN_LOGGER.error(f"Refusing to update {path}: malformed vmn skill {exc}.")
         return 1
 
-    if begin_count:
-        start = existing.index(BEGIN_MARKER)
-        end_start = existing.index(END_MARKER)
-        if end_start < start:
-            VMN_LOGGER.error(
-                f"Refusing to update {path}: malformed vmn skill marker order."
-            )
-            return 1
-        end = end_start + len(END_MARKER)
-        new = existing[:start] + block + existing[end:]
-        verb = "Updated"
-    elif existing.strip():
-        new = f"{existing.rstrip()}\n\n{block}"
-        verb = "Appended"
-    else:
-        new = block
-        verb = "Wrote"
-
-    new = new.rstrip("\n") + "\n"
-    _atomic_write(path, new)
+    _write_creating_parent(path, new)
     VMN_LOGGER.info(f"{verb} vmn skill block in {path}")
     return 0
 

@@ -114,6 +114,7 @@ _EXPECTED_ALL = [
     "register_snapshot_store_opener",
     "LocalRecordStore",
     "relative_timestamp",
+    "export_tree",
 ]
 
 _REPO_ROOT = Path(__file__).parent.parent

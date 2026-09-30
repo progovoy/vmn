@@ -18,12 +18,16 @@ base dir carries a ``.gitignore`` of ``*``. Every write is atomic.
 """
 import os
 import shutil
-import tempfile
 from pathlib import Path
 
 import yaml
 
-from version_stamp.core.utils import parse_record_metadata, valid_app_path, yaml_safe_load
+from version_stamp.core.utils import (
+    atomic_write,
+    parse_record_metadata,
+    valid_app_path,
+    yaml_safe_load,
+)
 from version_stamp.snapshot.code_store import resolve_code
 from version_stamp.snapshot.record import (
     METADATA_FILE,
@@ -32,29 +36,6 @@ from version_stamp.snapshot.record import (
     safe_verstr,
     unsafe_verstr,
 )
-
-
-def _current_umask():
-    mask = os.umask(0)
-    os.umask(mask)
-    return mask
-
-
-def atomic_write(path, data):
-    """Readers see the old file or the new one; mode as ``open()`` would give."""
-    directory, name = os.path.split(path)
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data.encode("utf-8") if isinstance(data, str) else data)
-        os.chmod(tmp, 0o666 & ~_current_umask())
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def _write_patches(directory, patches):

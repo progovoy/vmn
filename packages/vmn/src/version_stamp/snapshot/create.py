@@ -23,8 +23,8 @@ import sys
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.capture import _unique_snapshot_verstr
 from version_stamp.snapshot.capture import capture_identity, ensure_code
+from version_stamp.snapshot.identity import _unique_snapshot_verstr
 from version_stamp.snapshot.record import build_record_metadata
 
 CLEAN_TREE = "No local changes to snapshot (working tree is clean)"
@@ -63,11 +63,8 @@ def _changesets(captured):
 def _new_record(vcs, verstr, captured, code, summary, note, user_meta):
     metadata = build_record_metadata(
         vcs, verstr, captured.base_version, captured.commit_hash,
-        captured.dirty_states, captured.identity, captured.ver_info, note=note,
-    )
-    metadata.update(summary)
-    metadata.update(
-        diff_hash=captured.diff_hash, code_verstr=captured.code_verstr, code=code
+        captured.dirty_states, captured.identity, captured.ver_info,
+        note=note, code=(code, summary), diff_hash=captured.diff_hash,
     )
     if user_meta:
         metadata["user_meta"] = user_meta

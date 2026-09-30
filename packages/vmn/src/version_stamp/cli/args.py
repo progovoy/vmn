@@ -5,6 +5,7 @@ import sys
 
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
+from version_stamp.cli.completion import SUPPORTED_SHELLS
 from version_stamp.cli.constants import (
     VMN_ARGS,
     WORKTREES_ACTIONS,
@@ -62,7 +63,7 @@ def parse_user_commands(command_line):
         nargs="?",
         const=None,
         default=argparse.SUPPRESS,
-        choices=["bash", "zsh", "fish", "tcsh"],
+        choices=SUPPORTED_SHELLS,
         metavar="SHELL",
         help="Print shell completion setup and exit. "
         "Optionally specify shell (bash/zsh/fish/tcsh); auto-detects if omitted.",
@@ -72,7 +73,7 @@ def parse_user_commands(command_line):
         nargs="?",
         const=None,
         default=argparse.SUPPRESS,
-        choices=["bash", "zsh", "fish", "tcsh"],
+        choices=SUPPORTED_SHELLS,
         metavar="SHELL",
         help="Install shell completion by appending to your shell rc file. "
         "Optionally specify shell; auto-detects if omitted.",
@@ -82,7 +83,7 @@ def parse_user_commands(command_line):
         nargs="?",
         const=None,
         default=argparse.SUPPRESS,
-        choices=["bash", "zsh", "fish", "tcsh"],
+        choices=SUPPORTED_SHELLS,
         metavar="SHELL",
         help="Remove shell completion from your shell rc file. "
         "Optionally specify shell; auto-detects if omitted.",

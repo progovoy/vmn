@@ -10,6 +10,7 @@ keeps both copies in step.
 
 Modules:
   - :mod:`.record`      record fields, file names, ``build_record_metadata``, ``same_state``
+  - :mod:`.identity`    record names, diff hashes, dev verstrs (a leaf module)
   - :mod:`.local_store` ``LocalRecordStore`` (the local backend)
   - :mod:`.code_store`  code-object keys and read/write helpers
   - :mod:`.refs`        ``resolve_snapshot_ref`` (latest, ``@N``, prefixes)

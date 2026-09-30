@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Dev-version capture and restore: the building block behind experiments
 and ``vmn goto -v <dev-version>``."""
-import datetime
-
 # The dev-version helpers live in version_stamp.devversion; the names below
 # stay importable from here for experiment code.
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
@@ -37,27 +35,6 @@ from version_stamp.api import patch_summary as _patch_summary  # noqa: F401
 
 # The command that brings back the work a dev-version restore saved.
 GOTO_HINT = "vmn goto -v {verstr} {app}"
-
-
-def _relative_timestamp(iso_ts):
-    """Convert ISO timestamp to relative format like '2m ago', '3h ago', '5d ago'."""
-    try:
-        dt = datetime.datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
-        now = datetime.datetime.now(datetime.timezone.utc)
-        delta = now - dt
-        seconds = int(delta.total_seconds())
-        if seconds < 0:
-            return iso_ts
-        if seconds < 60:
-            return f"{seconds}s ago"
-        if seconds < 3600:
-            return f"{seconds // 60}m ago"
-        if seconds < 86400:
-            return f"{seconds // 3600}h ago"
-        return f"{seconds // 86400}d ago"
-    except Exception:
-        VMN_LOGGER.debug("Failed to parse timestamp %s", iso_ts, exc_info=True)
-        return iso_ts
 
 
 def _get_storage(vcs, params):

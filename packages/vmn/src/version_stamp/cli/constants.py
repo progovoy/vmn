@@ -9,6 +9,7 @@ from version_stamp.core.constants import (
     LOCK_FILENAME,
 )
 from version_stamp.core.models import AppConf
+from version_stamp.devversion.untracked import _UNTRACKED_CACHE_FILE
 
 INIT_FILENAME = "conf.yml"
 LOG_FILENAME = "vmn.log"
@@ -19,7 +20,7 @@ IGNORED_FILES = [
     f"{LOG_FILENAME}*",
     CACHE_FILENAME,
     GLOBAL_LOG_FILENAME,
-    "untracked_hash.cache",
+    _UNTRACKED_CACHE_FILE,
     "*/snapshots/",
     "*/experiments/",
 ]
