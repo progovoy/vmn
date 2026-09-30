@@ -63,15 +63,18 @@ if [ ${ci_coverage} = 'yes' ]; then
         COVERAGE='--cov-report term --cov-report html --cov=version_stamp --cov=vmn_exp'
 fi
 
-SPECIFIC_TEST=''
-if [ ${specific_test} != 'none' ]; then
-	SPECIFIC_TEST="-k ${specific_test}"
+K_EXPR=''
+if [ "${specific_test}" != 'none' ]; then
+	K_EXPR="(${specific_test})"
 fi
-
-SKIP_TEST=''
-if [ ${skip_test} != 'none' ]; then
-	SKIP_TEST="-k not ${skip_test}"
+if [ "${skip_test}" != 'none' ]; then
+	K_EXPR="${K_EXPR:+${K_EXPR} and }not (${skip_test})"
 fi
+K_ARGS=()
+if [ -n "${K_EXPR}" ]; then
+	K_ARGS=(-k "${K_EXPR}")
+fi
+html_report_suffix=${html_report_suffix//[^A-Za-z0-9_.-]/_}
 
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
@@ -95,7 +98,7 @@ fi
 
 echo "Will run:"
 export PYTHONPATH=${CUR_DIR}/../packages/vmn/src:${CUR_DIR}/../packages/vmn-exp-sdk/src:${CUR_DIR}/../packages/vmn-exp/src
-cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} ${SPECIFIC_TEST} "${SKIP_TEST}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
+cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
 
 echo "${cmd}"
 eval "${cmd}"
