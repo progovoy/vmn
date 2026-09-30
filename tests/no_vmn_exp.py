@@ -17,7 +17,3 @@ class VmnExpBlocker(importlib.abc.MetaPathFinder):
 def block():
     if not any(isinstance(f, VmnExpBlocker) for f in sys.meta_path):
         sys.meta_path.insert(0, VmnExpBlocker())
-
-
-def unblock():
-    sys.meta_path[:] = [f for f in sys.meta_path if not isinstance(f, VmnExpBlocker)]
