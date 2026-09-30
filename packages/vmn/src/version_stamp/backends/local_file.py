@@ -14,6 +14,10 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import yaml_safe_load
+from version_stamp.core.version_math import (
+    deserialize_vmn_tag_name,
+    serialize_vmn_tag_name,
+)
 
 
 def _is_stamp_record(path):
@@ -127,7 +131,7 @@ class LocalFileBackend(VMNBackend):
         return actual_deps_state
 
     def get_tag_version_info(self, tag_name):
-        tagd = VMNBackend.deserialize_vmn_tag_name(tag_name)
+        tagd = deserialize_vmn_tag_name(tag_name)
         is_root = "root" in tagd.types
 
         path = self._resolve_version_file(
@@ -173,7 +177,7 @@ class LocalFileBackend(VMNBackend):
                 else:
                     ver = data["stamping"]["app"]["_version"]
 
-                tag_name = VMNBackend.serialize_vmn_tag_name(app_name, ver)
+                tag_name = serialize_vmn_tag_name(app_name, ver)
                 tag_names.append(tag_name)
                 ver_infos = {
                     tag_name: {

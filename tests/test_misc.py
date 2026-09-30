@@ -6,10 +6,10 @@ import time
 import filelock
 import yaml
 
-from version_stamp.backends.base import VMNBackend
 from version_stamp.core.constants import VER_FILE_NAME
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
+from version_stamp.core.version_math import get_utemplate_formatted_version
 from version_stamp.stamping.base import IVersionsStamper
 
 from helpers import (
@@ -25,19 +25,19 @@ from helpers import (
 
 
 def test_version_template():
-    formated_version = VMNBackend.get_utemplate_formatted_version(
+    formated_version = get_utemplate_formatted_version(
         "2.0.9", IVersionsStamper.parse_template("[{major}][-{prerelease}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = VMNBackend.get_utemplate_formatted_version(
+    formated_version = get_utemplate_formatted_version(
         "2.0.9.0", IVersionsStamper.parse_template("[{major}][-{hotfix}]"), True
     )
 
     assert formated_version == "2"
 
-    formated_version = VMNBackend.get_utemplate_formatted_version(
+    formated_version = get_utemplate_formatted_version(
         "2.0.9.0", IVersionsStamper.parse_template("[{major}][-{hotfix}]"), False
     )
 

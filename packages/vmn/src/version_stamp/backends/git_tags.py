@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Git backend mixin: tag lookup, version info retrieval."""
-from version_stamp.backends.base import VMNBackend
 from version_stamp.core.constants import (
     MAX_COMMIT_SEARCH_ITERATIONS,
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
@@ -10,6 +9,10 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import _clean_split_result
+from version_stamp.core.version_math import (
+    app_name_to_tag_name,
+    serialize_vmn_tag_name,
+)
 
 
 class GitTagsMixin:
@@ -96,7 +99,7 @@ class GitTagsMixin:
 
             return tag_names, cobj, ver_infos
 
-        tag_name_prefix = VMNBackend.app_name_to_tag_name(app_name)
+        tag_name_prefix = app_name_to_tag_name(app_name)
         tag_names = self._list_tags(f"{tag_name_prefix}_*")
 
         if not tag_names:
@@ -182,7 +185,7 @@ class GitTagsMixin:
             try:
                 commit_obj = self.get_commit_object_from_commit_hex(hexsha)
                 verstr = commit_obj.message.split(" version ")[1].strip()
-                tagname = VMNBackend.serialize_vmn_tag_name(app_name, verstr)
+                tagname = serialize_vmn_tag_name(app_name, verstr)
                 tagname, ver_info_c = self.parse_tag_message(tagname)
                 if ver_info_c["tag_object"]:
                     ver_infos[tagname] = ver_info_c

@@ -2,13 +2,13 @@ import os
 import re
 import sys
 
-from version_stamp.backends.base import VMNBackend
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.constants import (
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
 )
 from version_stamp.core.logging import reset_logger
+from version_stamp.core.version_math import get_base_vmn_version
 from vmn_exp.cli.main import vmn_exp_run
 
 DEV_VERSION_RE = re.compile(r"^.+-dev\.[0-9a-f]{7}\.[0-9a-f]{7}(?:\.r\d+)?$")
@@ -107,7 +107,7 @@ def _release_app(app_name, version=None, stamp=False):
         )
     else:
         tag_name, ver_infos = vmn_ctx.vcs.get_version_info_from_verstr(
-            VMNBackend.get_base_vmn_version(
+            get_base_vmn_version(
                 version, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         )

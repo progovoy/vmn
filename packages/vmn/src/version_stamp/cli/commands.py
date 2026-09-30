@@ -7,7 +7,6 @@ import time
 from packaging import version as pversion
 
 from version_stamp import version as version_mod
-from version_stamp.backends.base import VMNBackend
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
 from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.changelog import release_mode_for_commit
@@ -16,7 +15,10 @@ from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import WrongTagFormatException
 from version_stamp.core.version_math import (
     compare_release_modes,
+    deserialize_vmn_version,
+    get_base_vmn_version,
     parse_conventional_commit_message,
+    serialize_vmn_version,
 )
 from version_stamp.stamping.init import (
     _init_app,
@@ -76,7 +78,7 @@ def _is_root_version(verstr):
     """A bare root-app integer, which ``--ov`` can't stamp (that is ``--orv``)."""
     if verstr is None:
         return False
-    return "root" in VMNBackend.deserialize_vmn_version(verstr).types
+    return "root" in deserialize_vmn_version(verstr).types
 
 
 def _log_cli_release_mode(vcs):
@@ -273,7 +275,7 @@ def handle_stamp(vmn_ctx):
 
     initial_version = _determine_initial_version(vmn_ctx)
 
-    props = VMNBackend.deserialize_vmn_version(initial_version)
+    props = deserialize_vmn_version(initial_version)
     is_from_release = props.prerelease == "release"
 
     # optional_release_mode should advance only in case the starting_from
@@ -284,7 +286,7 @@ def handle_stamp(vmn_ctx):
         )
 
         try:
-            base_verstr = VMNBackend.get_base_vmn_version(
+            base_verstr = get_base_vmn_version(
                 verstr, hide_zero_hotfix=vmn_ctx.vcs.hide_zero_hotfix
             )
         except WrongTagFormatException as e:
@@ -308,9 +310,9 @@ def handle_stamp(vmn_ctx):
         else:
             # In case some prerelease version exists, we want to
             # "start" from this version as if the release_mode was not specified
-            props = VMNBackend.deserialize_vmn_version(verstr)
+            props = deserialize_vmn_version(verstr)
 
-            initial_version = VMNBackend.serialize_vmn_version(
+            initial_version = serialize_vmn_version(
                 base_verstr,
                 prerelease=props.prerelease,
                 rcn=prerelease_count[props.prerelease] - 1,
@@ -356,7 +358,7 @@ def _retrieve_stamp_updates(vcs):
 
 def _determine_initial_version(vmn_ctx):
     initial_version = vmn_ctx.vcs.verstr_from_file
-    base_ver = VMNBackend.get_base_vmn_version(
+    base_ver = get_base_vmn_version(
         initial_version,
         vmn_ctx.vcs.hide_zero_hotfix,
     )
@@ -375,7 +377,7 @@ def _validate_and_resolve_version(ver, status, command_name, hint=""):
     appended to the "specify a version" error.
     """
     if ver:
-        props = VMNBackend.deserialize_vmn_version(ver)
+        props = deserialize_vmn_version(ver)
         if props.buildmetadata is not None:
             VMN_LOGGER.error(
                 f"Failed to {command_name} {ver}. "
@@ -455,7 +457,7 @@ def handle_release(vmn_ctx):
         return err
 
     # Validate that we're releasing from a prerelease
-    props = VMNBackend.deserialize_vmn_version(ver)
+    props = deserialize_vmn_version(ver)
     if vmn_ctx.args.stamp and props.prerelease == "release":
         VMN_LOGGER.error(
             f"Cannot use --stamp to release {ver}. "
@@ -466,7 +468,7 @@ def handle_release(vmn_ctx):
     try:
         tag_name, ver_infos, ver_info = _extract_ver_info(vmn_ctx.vcs, ver)
 
-        base_ver = VMNBackend.get_base_vmn_version(
+        base_ver = get_base_vmn_version(
             ver,
             vmn_ctx.vcs.hide_zero_hotfix,
         )
