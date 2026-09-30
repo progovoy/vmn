@@ -2,10 +2,14 @@
 
 The work it replaces is saved first, as a snapshot noted
 ``auto-saved before restore`` (unless it already is the target), and a hint
-names the command that brings it back. The reset deletes untracked files, so a
-restore that would lose ones over the snapshot size caps is refused unless
-``params["force"]``. Then the worktree is reset to the snapshot's base commit
-and its patches (and its deps') are applied — detached, as ``vmn goto`` does.
+names the command that brings it back. The resets (of the app and of each
+configured dep) delete untracked files, so a restore that would lose ones over
+the snapshot size caps is refused unless ``params["force"]``. Then the worktree is reset to the snapshot's base commit
+and its patches are applied — detached, as ``vmn goto`` does; each recorded
+dep is reset, checked out at its base commit (``dep_base_commits``, else its
+changeset hash) and patched. A base commit
+missing from the repo fails before anything is touched; any step that does not
+apply makes the restore fail.
 
 ``params["deps_only"]`` leaves the app checkout alone and only applies deps.
 
@@ -15,8 +19,11 @@ already loaded ``(metadata, patches)``; ``vmn-exp restore`` and ``vmn goto -v
 <dev>`` use it too, through ``version_stamp.api``),
 ``snapshot_restore(vcs, params, stores, verstr) -> int``.
 """
+import os
+
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.apply import _apply_snapshot_patches, _reset_worktree
+from version_stamp.devversion.clone import _commit_exists
 from version_stamp.devversion.untracked import untracked_over_caps
 from version_stamp.snapshot.capture import capture_identity
 from version_stamp.snapshot.create import snapshot_verstr, store_snapshot
@@ -37,18 +44,38 @@ def _refuse_dropping(dropped):
     return 1
 
 
-def _save_current_work(vcs, stores, target, force):
+def _reset_deps(vcs, metadata):
+    """The configured deps with a checkout that restoring *metadata* resets."""
+    configured = getattr(vcs, "configured_deps", None) or {}
+    return [
+        dep_path
+        for dep_path in metadata.get("changesets") or {}
+        if dep_path != "." and dep_path in configured
+        and os.path.isdir(os.path.join(vcs.vmn_root_path, dep_path))
+    ]
+
+
+def _dropped_untracked(vcs, metadata):
+    """Untracked paths the resets would delete that a snapshot cannot hold."""
+    dropped = untracked_over_caps(vcs.vmn_root_path)
+    for dep_path in _reset_deps(vcs, metadata):
+        dep_root = os.path.join(vcs.vmn_root_path, dep_path)
+        dropped.extend(f"{dep_path}/{p}" for p in untracked_over_caps(dep_root))
+    return dropped
+
+
+def _save_current_work(vcs, stores, metadata, force):
     """``(saved verstr or None, error code or None)``."""
     captured, err = capture_identity(vcs)
     if err is not None:
         return None, err
     if not captured.diff_hash:
         return None, None
-    dropped = [] if force else untracked_over_caps(vcs.vmn_root_path)
+    dropped = [] if force else _dropped_untracked(vcs, metadata)
     if dropped:
         return None, _refuse_dropping(dropped)
     verstr = snapshot_verstr(stores.records, vcs.name, captured)
-    if verstr == target:
+    if verstr == metadata.get("verstr"):
         return None, None
     store_snapshot(vcs, stores, captured, verstr, note=SAFETY_NOTE)
     return verstr, None
@@ -63,10 +90,22 @@ def _reset(vcs):
     return 0
 
 
+def _base_commit_missing(vcs, metadata):
+    base_commit = metadata.get("base_commit")
+    if _commit_exists(vcs.vmn_root_path, base_commit):
+        return False
+    VMN_LOGGER.error(
+        f"Base commit {str(base_commit)[:7]} of {metadata.get('verstr')} is not "
+        "in the local repository; fetch it (git fetch) and retry. Nothing was changed."
+    )
+    return True
+
+
 def restore_record(vcs, params, stores, record, hint):
     """Save the current work into *stores*, then put *record* in the checkout."""
-    target = record[0].get("verstr")
-    saved, err = _save_current_work(vcs, stores, target, params.get("force"))
+    if not params.get("deps_only") and _base_commit_missing(vcs, record[0]):
+        return 1
+    saved, err = _save_current_work(vcs, stores, record[0], params.get("force"))
     if err:
         return err
     if saved:

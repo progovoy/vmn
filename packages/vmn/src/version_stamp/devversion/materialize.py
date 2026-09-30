@@ -7,99 +7,18 @@ import tempfile
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.apply import _apply_patches_to_workdir
+from version_stamp.devversion.apply import _apply_patches_to_workdir, dep_base_commit
+from version_stamp.devversion.clone import (  # noqa: F401 (re-exported)
+    _LOCAL_GIT_TIMEOUT_SEC,
+    _NETWORK_GIT_TIMEOUT_SEC,
+    _clone_at,
+    _clone_local_at,
+    _commit_exists,
+    _git,
+    _git_ok,
+    _shallow_clone_at,
+)
 from version_stamp.devversion.untracked import copy_untracked_files
-
-# Seconds a git subprocess may take while materializing a snapshot: local
-# operations are quick, network ones must not hang an export or a ui diff.
-_LOCAL_GIT_TIMEOUT_SEC = 120
-_NETWORK_GIT_TIMEOUT_SEC = 300
-
-
-def _git(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC):
-    """Run git; a CompletedProcess, or None when it timed out."""
-    try:
-        return subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        VMN_LOGGER.error(f"git {' '.join(args[:2])} timed out after {timeout}s")
-        return None
-
-
-def _git_ok(args, cwd=None, timeout=_LOCAL_GIT_TIMEOUT_SEC, what=None):
-    result = _git(args, cwd=cwd, timeout=timeout)
-    if result is not None and result.returncode == 0:
-        return True
-    if what and result is not None:
-        VMN_LOGGER.error(f"{what} failed: {result.stderr}")
-    return False
-
-
-def _commit_exists(repo_path, commit_hash):
-    """Whether *commit_hash* is in the local repository at *repo_path*."""
-    if not repo_path or not commit_hash or not os.path.isdir(repo_path):
-        return False
-    return _git_ok(["cat-file", "-e", f"{commit_hash}^{{commit}}"], cwd=repo_path)
-
-
-def _clone_local_at(dest, repo_path, commit_hash):
-    """Check *commit_hash* out of a local repository — no network involved."""
-    if not _git_ok(
-        ["clone", "--shared", "--no-checkout", "--quiet", repo_path, dest],
-        what="git clone (local)",
-    ):
-        return 1
-    if not _git_ok(
-        ["checkout", "--quiet", commit_hash],
-        cwd=dest,
-        what=f"git checkout {commit_hash[:7]}",
-    ):
-        return 1
-    return 0
-
-
-def _shallow_clone_at(dest, remote, commit_hash):
-    """Create a shallow clone at a specific commit."""
-    os.makedirs(dest, exist_ok=True)
-    if not _git_ok(["init"], cwd=dest, what=f"git init in {dest}"):
-        return 1
-
-    if _git_ok(
-        ["fetch", "--depth", "1", remote, commit_hash],
-        cwd=dest,
-        timeout=_NETWORK_GIT_TIMEOUT_SEC,
-    ) and _git_ok(["checkout", "FETCH_HEAD"], cwd=dest):
-        return 0
-
-    VMN_LOGGER.warning(
-        f"Shallow fetch failed for {commit_hash[:7]}, falling back to full clone"
-    )
-    shutil.rmtree(dest, ignore_errors=True)
-    if not _git_ok(
-        ["clone", "--no-checkout", remote, dest],
-        timeout=_NETWORK_GIT_TIMEOUT_SEC,
-        what="git clone",
-    ):
-        return 1
-
-    if not _git_ok(
-        ["checkout", commit_hash], cwd=dest, what=f"git checkout {commit_hash[:7]}"
-    ):
-        return 1
-
-    return 0
-
-
-def _clone_at(dest, local_repo, remote, commit_hash):
-    """Materialize *commit_hash* from the local repo when it has it, else remote."""
-    if _commit_exists(local_repo, commit_hash):
-        return _clone_local_at(dest, local_repo, commit_hash)
-    return _shallow_clone_at(dest, remote, commit_hash)
 
 
 def _resolve_remote(remote, vcs):
@@ -131,6 +50,16 @@ def _strip_git_dirs(root_path):
             dirnames.remove(".git")
 
 
+def _patches_failed(dest, patches, what):
+    failed = _apply_patches_to_workdir(dest, patches)
+    if failed:
+        VMN_LOGGER.error(
+            f"Failed to apply the patches of {what} ({', '.join(failed)}); "
+            "refusing to materialize a partial tree"
+        )
+    return bool(failed)
+
+
 def _materialize_workdir(vcs, metadata, patches, output_path):
     """Materialize a patch snapshot into a complete working directory."""
     base_commit = metadata.get("base_commit")
@@ -151,7 +80,8 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
     if err:
         return err
 
-    _apply_patches_to_workdir(output_path, patches)
+    if _patches_failed(output_path, patches, "the snapshot"):
+        return 1
 
     if _predates_untracked_capture(metadata) and local_repo:
         try:
@@ -180,7 +110,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         if dep_path == ".":
             continue
 
-        dep_hash = dep_info.get("hash")
+        dep_hash = dep_base_commit(metadata, dep_path, dep_info)
         dep_remote = dep_info.get("remote")
         if not dep_hash or not dep_remote:
             VMN_LOGGER.warning(
@@ -199,8 +129,8 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
 
         safe_dep = dep_path.replace(os.sep, "_").replace("/", "_")
         dp = dep_patches.get(safe_dep) or dep_patches.get(dep_path)
-        if dp:
-            _apply_patches_to_workdir(dep_dest, dp)
+        if dp and _patches_failed(dep_dest, dp, f"dependency {dep_path}"):
+            return 1
 
     meta_path = os.path.join(output_path, "vmn_metadata.yml")
     with open(meta_path, "w") as f:
@@ -248,6 +178,24 @@ def _materialize_for_diff(vcs, verstr, meta, patches, dest):
     return True
 
 
+def _materialize_pair(vcs, parent, verstr1, meta1, patches1, verstr2, meta2, patches2):
+    """Materialize both sides into distinct dirs under *parent*; their names
+    (relative to *parent*), or None when either side failed."""
+    name1 = verstr1.replace("+", "_plus_")
+    name2 = verstr2.replace("+", "_plus_")
+    if name1 == name2:
+        name2 += "_b"
+    for verstr, meta, patches, name in (
+        (verstr1, meta1, patches1, name1),
+        (verstr2, meta2, patches2, name2),
+    ):
+        if not _materialize_for_diff(
+            vcs, verstr, meta, patches, os.path.join(parent, name)
+        ):
+            return None
+    return name1, name2
+
+
 def render_tree_diff(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
     """Real file-level diff text between two materialized snapshot workdirs.
 
@@ -255,24 +203,19 @@ def render_tree_diff(vcs, verstr1, meta1, patches1, verstr2, meta2, patches2):
     """
     parent = tempfile.mkdtemp(prefix="vmn-diff-")
     try:
-        name1 = verstr1.replace("+", "_plus_")
-        name2 = verstr2.replace("+", "_plus_")
-        if name1 == name2:
-            name2 += "_b"
-        ok1 = _materialize_for_diff(
-            vcs, verstr1, meta1, patches1, os.path.join(parent, name1)
+        names = _materialize_pair(
+            vcs, parent, verstr1, meta1, patches1, verstr2, meta2, patches2
         )
-        ok2 = _materialize_for_diff(
-            vcs, verstr2, meta2, patches2, os.path.join(parent, name2)
-        )
-        if not ok1 or not ok2:
+        if names is None:
             return None, "Failed to materialize snapshots for diff"
         result = subprocess.run(
-            ["git", "diff", "--no-index", "--", name1, name2],
+            ["git", "diff", "--no-index", "--", *names],
             capture_output=True,
             text=True,
             cwd=parent,
         )
+        if result.returncode > 1:
+            return None, f"git diff failed: {result.stderr.strip()}"
         return result.stdout, None
     finally:
         shutil.rmtree(parent, ignore_errors=True)
@@ -299,20 +242,13 @@ def _diff_with_external_tool(
     """Materialize both snapshots as workdirs and launch external diff tool."""
     tmpdir = tempfile.mkdtemp(prefix="vmn-diff-")
     try:
-        left_dir = os.path.join(tmpdir, verstr1.replace("+", "_plus_"))
-        right_dir = os.path.join(tmpdir, verstr2.replace("+", "_plus_"))
-
-        left_ok = _materialize_workdir(vcs, meta1, patches1, left_dir) == 0
-        right_ok = _materialize_workdir(vcs, meta2, patches2, right_dir) == 0
-
-        if not left_ok or not right_ok:
-            if not left_ok:
-                os.makedirs(left_dir, exist_ok=True)
-                _write_snapshot_to_dir(left_dir, meta1, patches1)
-            if not right_ok:
-                os.makedirs(right_dir, exist_ok=True)
-                _write_snapshot_to_dir(right_dir, meta2, patches2)
-
+        names = _materialize_pair(
+            vcs, tmpdir, verstr1, meta1, patches1, verstr2, meta2, patches2
+        )
+        if names is None:
+            VMN_LOGGER.error("Failed to materialize snapshots for diff")
+            return 1
+        left_dir, right_dir = (os.path.join(tmpdir, name) for name in names)
         result = subprocess.run([tool, left_dir, right_dir])
         return result.returncode
     finally:

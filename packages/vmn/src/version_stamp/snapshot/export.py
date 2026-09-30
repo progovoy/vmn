@@ -22,9 +22,12 @@ _TARBALL_SUFFIXES = (".tar.gz", ".tgz")
 
 
 def _export_dir(vcs, record, dest):
+    existed = os.path.exists(dest)
     err = _materialize_workdir(vcs, *record, dest)
     if not err:
         _strip_git_dirs(dest)
+    elif not existed:
+        shutil.rmtree(dest, ignore_errors=True)
     return err
 
 

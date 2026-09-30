@@ -31,41 +31,46 @@ class GitBranchMixin:
 
         return active_branch
 
+    def _branches_under(self, hexsha, ref_prefix):
+        """Names (prefix stripped) of the refs under ref_prefix containing hexsha."""
+        out = self._be.git.for_each_ref(
+            "--contains", hexsha, "--format=%(refname)", ref_prefix
+        )
+        names = (ref[len(ref_prefix) :] for ref in out.splitlines())
+        return [name for name in names if name and name != "HEAD"]
+
+    @measure_runtime_decorator
+    def branches_containing(self, hexsha):
+        """Local and selected-remote branches (remote prefix stripped) with hexsha."""
+        branches = self._branches_under(hexsha, "refs/heads/")
+        if self.selected_remote is not None:
+            remote_prefix = f"refs/remotes/{self.selected_remote.name}/"
+            for name in self._branches_under(hexsha, remote_prefix):
+                if name not in branches:
+                    branches.append(name)
+        return branches
+
     @measure_runtime_decorator
     def get_branch_from_changeset(self, hexsha):
-        out = self._be.git.branch("--contains", hexsha)
-
-        branches = out.splitlines()
-
-        # Clean up each branch name by stripping whitespace and the '*' character
-        active_branches = []
-        for branch in branches:
-            cleaned_branch = branch.strip().lstrip("*").strip()
-            if "HEAD detached" not in cleaned_branch:
-                active_branches.append(cleaned_branch)
+        active_branches = self._branches_under(hexsha, "refs/heads/")
 
         if len(active_branches) > 1:
             VMN_LOGGER.info(
-                f"{self._be.head.commit.hexsha} is "
+                f"{hexsha} is "
                 f"related to multiple branches: {active_branches}. "
                 "Using the first one as the active branch"
             )
 
         if not active_branches:
-            out = self._be.git.branch("-r", "--contains", hexsha)
-            # Filter out symbolic refs (e.g., "origin/HEAD -> origin/main")
-            remote_branches = [
-                stripped
-                for b in out.split("\n")
-                if (stripped := b.strip()) and "->" not in stripped
-            ]
-            out = remote_branches[0] if remote_branches else None
-
-            if not out:
+            remote_branches = []
+            if self.selected_remote is not None:
+                remote_branches = self._branches_under(
+                    hexsha, f"refs/remotes/{self.selected_remote.name}/"
+                )
+            if not remote_branches:
                 raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
 
-            assert self.selected_remote is not None
-            assert out.startswith(self.selected_remote.name)
+            out = f"{self.selected_remote.name}/{remote_branches[0]}"
 
             local_branch_name = (
                 f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"

@@ -63,32 +63,14 @@ def _hash_untracked_content(repo_path):
     ``(size, mtime_ns)`` at ``.vmn/untracked_hash.cache`` so repeat calls (e.g.
     ``show --dev``) stay fast without re-reading unchanged files.
     """
-    result = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        cwd=repo_path,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
+    candidates = _untracked_stats(repo_path)
+    if not candidates:
         return None
 
     cache = _load_untracked_cache(repo_path)
     new_cache = {}
     h = hashlib.sha256()
-    file_count = 0
-    for rel_path in sorted(result.stdout.strip().split("\n")):
-        if not rel_path:
-            continue
-        if rel_path.startswith(".vmn/") or rel_path == ".vmn":
-            continue
-        abs_path = os.path.join(repo_path, rel_path)
-        try:
-            st = os.stat(abs_path)
-            if not stat_module.S_ISREG(st.st_mode):
-                continue
-        except OSError:
-            continue
-
+    for rel_path, abs_path, st in sorted(candidates):
         cached = cache.get(rel_path)
         if cached and cached[0] == st.st_size and cached[1] == st.st_mtime_ns:
             content_sha = cached[2]
@@ -96,10 +78,6 @@ def _hash_untracked_content(repo_path):
             content_sha = sha256_file(abs_path)
         new_cache[rel_path] = [st.st_size, st.st_mtime_ns, content_sha]
         h.update(f"{rel_path}\0{content_sha}\n".encode())
-        file_count += 1
-
-    if file_count == 0:
-        return None
 
     _store_untracked_cache(repo_path, new_cache)
     return h.digest()
@@ -131,29 +109,33 @@ def _untracked_caps():
     )
 
 
-def _untracked_candidates(repo_path):
-    """``[(rel_path, abs_path, size)]`` of untracked, non-ignored regular files."""
+def _untracked_stats(repo_path):
+    """``[(rel_path, abs_path, stat)]`` of untracked, non-ignored regular files."""
     result = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
+        ["git", "ls-files", "-z", "--others", "--exclude-standard"],
         capture_output=True,
-        text=True,
         cwd=repo_path,
     )
     if result.returncode != 0:
         return []
 
     candidates = []
-    for rel_path in result.stdout.strip().split("\n"):
+    for rel_path in map(os.fsdecode, result.stdout.split(b"\0")):
         if not rel_path or rel_path.startswith(".vmn/") or rel_path == ".vmn":
             continue
         abs_path = os.path.join(repo_path, rel_path)
         try:
             st = os.stat(abs_path)
             if stat_module.S_ISREG(st.st_mode):
-                candidates.append((rel_path, abs_path, st.st_size))
+                candidates.append((rel_path, abs_path, st))
         except OSError:
             pass
     return candidates
+
+
+def _untracked_candidates(repo_path):
+    """``[(rel_path, abs_path, size)]`` of untracked, non-ignored regular files."""
+    return [(rel, path, st.st_size) for rel, path, st in _untracked_stats(repo_path)]
 
 
 def _within_caps(candidates):
@@ -215,11 +197,34 @@ def _collect_untracked_tarball(repo_path):
         return buf.read(), skipped
 
 
+def _inside(root, path):
+    return os.path.commonpath([root, path]) == root
+
+
+def _check_member(root, member):
+    """Raise when *member* would land (or link) outside *root*."""
+    target = os.path.realpath(os.path.join(root, member.name))
+    if os.path.isabs(member.name) or not _inside(root, target):
+        raise tarfile.TarError(f"Refusing tar member outside dest: {member.name}")
+    if member.issym() or member.islnk():
+        base = os.path.dirname(target) if member.issym() else root
+        link = os.path.realpath(os.path.join(base, member.linkname))
+        if os.path.isabs(member.linkname) or not _inside(root, link):
+            raise tarfile.TarError(f"Refusing tar link outside dest: {member.name}")
+
+
 def _extract_untracked_tarball(dest, tarball_bytes):
-    """Extract untracked files tarball into dest directory."""
+    """Extract untracked files tarball into dest, refusing escaping members."""
     buf = io.BytesIO(tarball_bytes)
     with tarfile.open(mode="r:gz", fileobj=buf) as tar:
-        tar.extractall(path=dest)
+        root = os.path.realpath(dest)
+        members = tar.getmembers()
+        for member in members:
+            _check_member(root, member)
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(path=dest, members=members, filter="data")
+        else:
+            tar.extractall(path=dest, members=members)
 
 
 def _list_tarball_members(tarball_bytes):

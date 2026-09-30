@@ -220,7 +220,7 @@ class GitTagsMixin:
             try:
                 commit_obj = self.get_commit_object_from_commit_hex(hexsha)
                 verstr = commit_obj.message.split(" version ")[1].strip()
-                tagname = f"{app_name}_{verstr}"
+                tagname = VMNBackend.serialize_vmn_tag_name(app_name, verstr)
                 tagname, ver_info_c = self.parse_tag_message(tagname)
                 if ver_info_c["tag_object"]:
                     ver_infos[tagname] = ver_info_c
@@ -270,6 +270,8 @@ class GitTagsMixin:
     def get_all_brother_tags(self, tag_name):
         try:
             sha = self.changeset(tag=tag_name)
+            if sha is None:
+                return {}
             ver_infos = self.get_all_commit_tags(sha)
         except Exception:
             VMN_LOGGER.debug(
@@ -277,7 +279,7 @@ class GitTagsMixin:
                 f"Logged exception: ",
                 exc_info=True,
             )
-            return []
+            return {}
 
         return ver_infos
 
@@ -298,7 +300,7 @@ class GitTagsMixin:
         ver_infos = self.get_all_brother_tags(tag_name)
         if tag_name not in ver_infos:
             VMN_LOGGER.debug(f"Could not find version info for {tag_name}")
-            return tag_name, None
+            return tag_name, {}
 
         return tag_name, ver_infos
 

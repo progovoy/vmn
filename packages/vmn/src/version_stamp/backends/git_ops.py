@@ -10,6 +10,23 @@ from version_stamp.core.constants import TAG_CHRONOLOGICAL_SPACING_SECONDS
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 
 
+def _strip_prefix(s, prefix):
+    return s[len(prefix) :] if s.startswith(prefix) else s
+
+
+def _push_error_mentions(exc, *markers):
+    """Whether git's stderr (or a non-git error's message) names a marker.
+
+    str() of a GitCommandError embeds the command line, so only its stderr
+    is searched.
+    """
+    if isinstance(exc, git.exc.GitCommandError):
+        text = str(exc.stderr or "")
+    else:
+        text = str(exc)
+    return any(marker in text for marker in markers)
+
+
 class GitOpsMixin:
     """Methods for basic git operations. Mixed into GitBackend."""
 
@@ -80,7 +97,7 @@ class GitOpsMixin:
                 [
                     "git",
                     "update-ref",
-                    f"refs/remotes/{self.remote_active_branch}",
+                    f"refs/remotes/{self.selected_remote.name}/{remote_branch_name}",
                     "HEAD",
                 ]
             )
@@ -90,31 +107,28 @@ class GitOpsMixin:
                 exc_info=True,
             )
 
-    def _push_with_ci_skip_fallback(self, refspec):
-        """Push a refspec, trying with -o ci.skip first, falling back to without."""
-        push_target = self._get_push_target()
+    def _run_push(self, options, refspecs):
+        self._be.git.execute(
+            ["git", "push", "--porcelain", *options, self._get_push_target(), *refspecs]
+        )
+
+    def _push_with_ci_skip_fallback(self, refspecs, options=()):
+        """Push refspecs with -o ci.skip, retrying without it if unsupported."""
         try:
-            self._be.git.execute(
-                [
-                    "git",
-                    "push",
-                    "--porcelain",
-                    "-o",
-                    "ci.skip",
-                    push_target,
-                    refspec,
-                ]
-            )
-        except Exception:
-            self._be.git.execute(
-                [
-                    "git",
-                    "push",
-                    "--porcelain",
-                    push_target,
-                    refspec,
-                ]
-            )
+            self._run_push([*options, "-o", "ci.skip"], refspecs)
+        except Exception as exc:
+            if not _push_error_mentions(exc, "push option", "ci.skip"):
+                raise
+            self._run_push(options, refspecs)
+
+    def _push_atomically(self, refspecs):
+        """Push all refspecs in one atomic push, non-atomic if unsupported."""
+        try:
+            self._push_with_ci_skip_fallback(refspecs, options=("--atomic",))
+        except Exception as exc:
+            if not _push_error_mentions(exc, "does not support --atomic"):
+                raise
+            self._push_with_ci_skip_fallback(refspecs)
 
     @measure_runtime_decorator
     def tag(self, tags, messages, ref="HEAD", push=False):
@@ -132,7 +146,7 @@ class GitOpsMixin:
                 continue
 
             try:
-                self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
+                self._push_with_ci_skip_fallback([f"refs/tags/{tag}"])
             except Exception:
                 tag_err_str = f"Failed to tag {tag}. Reverting.."
                 VMN_LOGGER.error(tag_err_str)
@@ -160,24 +174,21 @@ class GitOpsMixin:
         if self.remote_active_branch is None:
             raise RuntimeError("Will not push remote branch does not exist")
 
-        remote_branch_name_no_remote_name = "".join(
-            self.remote_active_branch.split(f"{self.selected_remote.name}/")
+        remote_branch_name = _strip_prefix(
+            self.remote_active_branch, f"{self.selected_remote.name}/"
         )
+        refspecs = [f"refs/heads/{self.active_branch}:{remote_branch_name}"]
+        refspecs.extend(f"refs/tags/{tag}" for tag in tags)
 
         try:
-            self._push_with_ci_skip_fallback(
-                f"refs/heads/{self.active_branch}:{remote_branch_name_no_remote_name}"
-            )
+            self._push_atomically(refspecs)
         except Exception:
             err_str = "Push has failed. Please verify that 'git push' works"
             VMN_LOGGER.error(err_str, exc_info=True)
             raise RuntimeError(err_str)
 
         if self._push_user and self._push_token:
-            self._update_remote_tracking_ref(remote_branch_name_no_remote_name)
-
-        for tag in tags:
-            self._push_with_ci_skip_fallback(f"refs/tags/{tag}")
+            self._update_remote_tracking_ref(remote_branch_name)
 
     @measure_runtime_decorator
     def pull(self):
@@ -191,12 +202,16 @@ class GitOpsMixin:
             VMN_LOGGER.info(
                 f"{self.repo_path}: in detached HEAD – fetching instead of pulling"
             )
-            self._be.git.execute(
-                ["git", "fetch", self.selected_remote.name, "--tags", "--prune"]
-            )
+            self._fetch("--tags", "--prune")
             return
 
         self.selected_remote.pull(ff_only=True)
+
+    def _fetch(self, *args):
+        """git fetch from the selected remote; a no-op without one."""
+        if self.selected_remote is None:
+            return
+        self._be.git.execute(["git", "fetch", *args, self.selected_remote.name])
 
     @measure_runtime_decorator
     def commit(self, message, user, include=None):
