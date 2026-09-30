@@ -786,7 +786,9 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `include_archived=True`.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
-  `platform`, `packages_count`, …).
+  `platform`, `packages_count`, …) and `env.packages.<pkg>` for the key packages
+  `torch`, `tensorflow`, `jax`, `numpy`, `transformers` (string values, so
+  prefer `=`: `env.packages.torch = "2.0.0"`; other packages never match).
 - `inputs.<name>.uri|digest|kind` and `outputs.<path>.path|digest|size`
   ([lineage](#lineage)).
 - Quote a key containing `/`, `.` or `-`: `metrics."train/loss"`,

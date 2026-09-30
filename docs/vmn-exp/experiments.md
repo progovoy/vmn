@@ -480,7 +480,10 @@ When the `run` command is a Python interpreter (`python`, `python3.x`) or a
 `.py` script, that interpreter's packages are probed (5 s timeout, falling
 back to the current env). Best-effort; never blocks a run. Opt out:
 `--no-env` > `VMN_CAPTURE_ENV=0` > conf `experiment.capture_env: false`.
-Queries read `env.<key>` (summary fields).
+Queries read `env.<key>` (summary fields) and `env.packages.<pkg>` for the
+summary's key packages only (`torch`, `tensorflow`, `jax`, `numpy`,
+`transformers`; other packages live in `env.yml` and never match). Versions are
+strings, so compare with `=`: `env.packages.torch = "2.0.0"`.
 
 ### `add`
 

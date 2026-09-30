@@ -97,6 +97,31 @@ def test_env_none_packages_returns_null():
     assert compile_query("env.packages.torch = null")(row)
 
 
+def _real_env_row():
+    from vmn_exp.core.env import env_summary
+    from vmn_exp.core.fold import fold_row, new_fold
+
+    captured = {
+        "python": {"version": "3.11.0"},
+        "platform": {"system": "Linux", "machine": "x86_64"},
+        "packages": {"torch": "2.0.0", "numpy": "1.26.4", "requests": "2.31.0"},
+    }
+    meta = {"verstr": "0.0.1-dev.a", "env": env_summary(captured)}
+    return fold_row(1, meta, new_fold())
+
+
+def test_env_packages_key_package_matches_real_row():
+    rows = [_real_env_row()]
+    assert filter_rows(rows, 'env.packages.torch = "2.0.0"') == rows
+    assert filter_rows(rows, 'env.packages.numpy = "1.26.4"') == rows
+
+
+def test_env_packages_non_key_package_not_in_real_row():
+    rows = [_real_env_row()]
+    assert filter_rows(rows, 'env.packages.requests = "2.31.0"') == []
+    assert filter_rows(rows, "env.packages.requests = null") == rows
+
+
 # ---------------------------------------------------------------------------
 # imported_from (bare ROW_FIELD)
 # ---------------------------------------------------------------------------

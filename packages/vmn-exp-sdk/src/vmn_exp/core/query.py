@@ -238,11 +238,15 @@ def _getter(name, pos):
         if p0 in NESTED_SUBFIELDS:
             return _nested_getter(p0, p1, p2, pos)
         if p0 == "env" and p1 == "packages":
-            return lambda row: (
-                ((row.get("env") or {}).get("packages")) or {}
-            ).get(p2)
+            return lambda row: _env_packages(row).get(p2)
         _fail(f"unknown field '{name}'", pos)
     _fail(f"unknown field '{name}'", pos)
+
+
+def _env_packages(row):
+    """Rows carry ``env_summary()``, whose packages are the ``key_packages``."""
+    env = row.get("env") or {}
+    return env.get("packages") or env.get("key_packages") or {}
 
 
 def _nested_getter(prefix, key, sub, pos):
