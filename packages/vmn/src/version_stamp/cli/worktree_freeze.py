@@ -88,7 +88,9 @@ def _repin(dep_conf, dep_branch):
 
 
 def _warn_if_unpublished(path, branch):
-    remote = primary_remote(path) or "origin"
+    remote = primary_remote(path)
+    if remote is None:
+        return
     ref = f"refs/remotes/{remote}/{branch}"
     result = run_git(path, ["rev-parse", "--verify", "--quiet", ref])
     if result is None or result.returncode != 0:

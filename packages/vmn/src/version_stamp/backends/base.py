@@ -79,4 +79,4 @@ class VMNBackend(ABC):
 
     @abstractmethod
     def get_tag_version_info(self, tag_name):
-        ...
+        """``(tag_name, ver_infos)``; ``ver_infos`` is always a dict ({} if none)."""

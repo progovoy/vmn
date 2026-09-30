@@ -31,24 +31,27 @@ class GitBranchMixin:
 
         return active_branch
 
-    def _branches_under(self, hexsha, ref_prefix):
-        """Names (prefix stripped) of the refs under ref_prefix containing hexsha."""
+    def _branches_under(self, hexsha, *ref_prefixes):
+        """Names (prefix stripped) of the refs under ref_prefixes containing
+        hexsha, in ref_prefixes order, without duplicates."""
         out = self._be.git.for_each_ref(
-            "--contains", hexsha, "--format=%(refname)", ref_prefix
-        )
-        names = (ref[len(ref_prefix) :] for ref in out.splitlines())
-        return [name for name in names if name and name != "HEAD"]
+            "--contains", hexsha, "--format=%(refname)", *ref_prefixes
+        ).splitlines()
+        names = []
+        for prefix in ref_prefixes:
+            for ref in out:
+                name = ref[len(prefix) :] if ref.startswith(prefix) else None
+                if name and name != "HEAD" and name not in names:
+                    names.append(name)
+        return names
 
     @measure_runtime_decorator
     def branches_containing(self, hexsha):
         """Local and selected-remote branches (remote prefix stripped) with hexsha."""
-        branches = self._branches_under(hexsha, "refs/heads/")
+        prefixes = ["refs/heads/"]
         if self.selected_remote is not None:
-            remote_prefix = f"refs/remotes/{self.selected_remote.name}/"
-            for name in self._branches_under(hexsha, remote_prefix):
-                if name not in branches:
-                    branches.append(name)
-        return branches
+            prefixes.append(f"refs/remotes/{self.selected_remote.name}/")
+        return self._branches_under(hexsha, *prefixes)
 
     @measure_runtime_decorator
     def get_branch_from_changeset(self, hexsha):

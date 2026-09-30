@@ -216,27 +216,25 @@ def _resolve_rc_path(shell):
 
 
 def _strip_managed_block(content):
+    """*content* without its first managed block (lenient: uninstall only)."""
     start = content.find(COMPLETION_MARKER)
-    if start < 0:
+    end = content.find(COMPLETION_END_MARKER, max(start, 0))
+    if start < 0 or end < 0:
         return content
-    end = content.find(COMPLETION_END_MARKER, start)
-    if end < 0:
+    return _strip_span(content, (start, end + len(COMPLETION_END_MARKER)))
+
+
+def _strip_span(content, span):
+    """*content* without *span* (None: unchanged), and one newline each side."""
+    if span is None:
         return content
-    end += len(COMPLETION_END_MARKER)
+    start, end = span
     if end < len(content) and content[end] == "\n":
         end += 1
     before = content[:start]
     if before.endswith("\n"):
         before = before[:-1]
     return before + content[end:]
-
-
-def _has_malformed_completion_block(content):
-    try:
-        marked_block_span(content, COMPLETION_MARKER, COMPLETION_END_MARKER)
-    except MalformedBlockError:
-        return True
-    return False
 
 
 def install_completion(shell=None):
@@ -256,13 +254,15 @@ def install_completion(shell=None):
             with open(rc_path, encoding="utf-8") as f:
                 content = f.read()
         content = strip_legacy_completion(content, shell)
-        if _has_malformed_completion_block(content):
+        try:
+            span = marked_block_span(content, COMPLETION_MARKER, COMPLETION_END_MARKER)
+        except MalformedBlockError:
             print(
                 f"Malformed vmn completion block in {rc_path}; refusing to edit",
                 file=sys.stderr,
             )
             return 1
-        content = _strip_managed_block(content)
+        content = _strip_span(content, span)
 
         if shell == "zsh" and "compinit" not in content:
             compinit_guard = "autoload -Uz compinit && compinit\n"

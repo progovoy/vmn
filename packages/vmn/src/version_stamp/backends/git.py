@@ -17,7 +17,11 @@ import git
 
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.git_branch import GitBranchMixin
-from version_stamp.backends.git_history import GitHistoryMixin
+from version_stamp.backends.git_history import (
+    GitHistoryMixin,
+    remote_location,
+    select_remote,
+)
 from version_stamp.backends.git_ops import GitOpsMixin
 from version_stamp.backends.git_tag_parse import GitTagParseMixin
 from version_stamp.backends.git_tags import GitTagsMixin
@@ -26,10 +30,8 @@ from version_stamp.core.constants import (
     END_CHAR,
     GIT_CACHE_TTL_MINUTES,
     VMN_BE_TYPE_GIT,
-    VMN_READONLY_REMOTE,
     VMN_USER_NAME,
 )
-from version_stamp.core.git_cmd import remote_url
 from version_stamp.core.logging import (
     VMN_LOGGER,
     get_call_stack,
@@ -121,8 +123,7 @@ class GitBackend(
         # Currently just selecting the first one. None when no remote is
         # configured — local read commands still work; remote-requiring
         # commands fail fast (see cli/entry.py).
-        remotes = [r for r in self._be.remotes if r.name != VMN_READONLY_REMOTE]
-        self.selected_remote = remotes[0] if remotes else None
+        self.selected_remote = select_remote(self._be)
         self.repo_path = repo_path
         self.active_branch = self.get_active_branch()
         self.remote_active_branch = self.get_remote_tracking_branch(self.active_branch)
@@ -179,9 +180,7 @@ class GitBackend(
         try:
             hash = client.head.commit.hexsha
             # None when no remote is configured — the repo entry is kept.
-            remote = remote_url(client.working_dir)
-            if remote and os.path.isdir(remote):
-                remote = os.path.relpath(remote, client.working_dir)
+            remote = remote_location(select_remote(client), client.working_dir)
         except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None

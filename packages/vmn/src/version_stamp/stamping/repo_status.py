@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The repo status vmn commands check before acting: tracking, dirtiness, deps."""
 import copy
+import functools
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Set
@@ -215,17 +216,18 @@ def _get_repo_status(
                 status.repos[repo]["pending"] = True
                 status.repos[repo]["state"].add("pending")
 
+            outgoing = functools.cache(dep_be.check_for_outgoing_changes)
             for pin in _DEP_PIN_CHECKS:
                 if pin not in vcs.configured_deps[repo]:
                     continue
                 err_msg = _dep_pin_error(
-                    pin, repo, full_path, dep_be, vcs.configured_deps[repo][pin]
+                    pin, repo, dep_be, vcs.configured_deps[repo][pin], outgoing
                 )
                 if err_msg:
                     _mark_unsynced(status, repo, pin, err_msg)
 
             if not dep_be.in_detached_head():
-                err = dep_be.check_for_outgoing_changes()
+                err = outgoing()
                 if err:
                     status.repos[repo]["outgoing"] = True
                     status.repos[repo]["state"].add("outgoing")

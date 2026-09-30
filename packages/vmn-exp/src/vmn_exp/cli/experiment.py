@@ -273,7 +273,7 @@ def auto_init(vmn_ctx):
             VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
             return 1
 
-    err, _ = auto_init_if_needed(vmn_ctx, extra_optional=DIRTY_OK)
+    err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
     return err or None
 
 

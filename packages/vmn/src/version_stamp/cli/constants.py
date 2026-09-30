@@ -2,7 +2,6 @@
 """CLI-level constants and data structures."""
 from version_stamp.core.constants import (
     GLOBAL_LOG_FILENAME,
-    LOCK_FILE_ENV,  # noqa: F401  (re-exported: callers import it from here)
     LOCK_FILENAME,
 )
 from version_stamp.core.models import AppConf
