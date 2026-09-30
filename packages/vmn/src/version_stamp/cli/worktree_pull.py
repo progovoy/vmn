@@ -1,9 +1,12 @@
 """`vmn wt pull`: rebase each private island branch onto its source branch."""
-import json
 import os
 
 from version_stamp.cli.worktree_git import git_current_branch, is_dirty, run_git
-from version_stamp.cli.worktree_state import ISLAND_MANIFEST_FILENAME, island_dir
+from version_stamp.cli.worktree_state import (
+    ISLAND_MANIFEST_FILENAME,
+    island_dir,
+    read_manifest,
+)
 from version_stamp.core.logging import VMN_LOGGER
 
 
@@ -11,8 +14,10 @@ def worktree_pull(vmn_ctx):
     manifest_path = _find_manifest(vmn_ctx)
     if manifest_path is None:
         return 1
-    with open(manifest_path) as stream:
-        manifest = json.load(stream)
+    manifest = read_manifest(manifest_path)
+    if manifest is None:
+        VMN_LOGGER.error(f"Cannot read island manifest {manifest_path}")
+        return 1
 
     repos = [manifest["main_repo"], *manifest.get("deps", {}).values()]
     failed = [repo["path"] for repo in repos if not _pull_repo(repo)]
