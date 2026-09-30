@@ -1,246 +1,82 @@
 # Migrating from standard-version to vmn
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
-> This guide helps you migrate from [standard-version](https://github.com/conventional-changelog/standard-version), which was deprecated and archived in May 2023.
+[standard-version](https://github.com/conventional-changelog/standard-version)
+was deprecated and archived in May 2023. [vmn](https://github.com/progovoy/vmn)
+covers its core loop (Conventional Commits → bump → changelog → commit → tag)
+for any language, and adds multi-repo dependency tracking, `vmn goto` state
+recovery, root apps for microservices, and hotfix versions. See the
+[README](https://github.com/progovoy/vmn#readme) for the full feature set.
 
-## Why Migrate
-
-standard-version was archived by its maintainers in 2023. The repository is
-read-only, no new releases will be published, and open issues will not be
-addressed. If you rely on standard-version today, you are running unsupported
-software.
-
-vmn is an actively maintained alternative that offers:
-
-- **Language-agnostic versioning** that works beyond the Node.js ecosystem
-- **Git-tag-based source of truth** with structured YAML metadata in annotated tags
-- **Multi-repo dependency tracking** for products that span several repositories
-- **State recovery** via `vmn goto` to check out the exact repo state at any version
-- **Root app / microservice topology** for versioning parent apps and child services
-- **4-segment hotfix versions** (`major.minor.patch.hotfix`) for hotfix workflows
-- **Offline / air-gapped support** via a local file backend
-- **CI-agnostic** operation: works in GitHub Actions, GitLab CI, Jenkins, Bitbucket Pipelines, or locally
-
-## Concept Mapping
+## Concept mapping
 
 | standard-version | vmn | Notes |
 | --- | --- | --- |
-| `.versionrc` / `.versionrc.json` | `.vmn/{app}/conf.yml` | Per-app configuration |
-| `"version"` in `package.json` | Git tag (source of truth) | vmn's npm backend can also update `package.json` |
-| `--release-as major` | `-r major` | Same for `minor`, `patch` |
-| `--release-as 1.2.3` | `--ov 1.2.3` (`--override-version`) | Normally vmn increments; `--ov` forces an absolute version |
-| `--prerelease alpha` | `--pr alpha` | Prerelease tagging |
-| `--dry-run` | `--dry-run` | Preview without changes |
-| `--first-release` | Nothing -- the first `vmn stamp` auto-initializes | `vmn init-app -v <version> my_app` if you need a specific starting version |
-| `--tag-prefix v` | Tag format is `{app_name}_{version}` | vmn uses its own tag convention |
-| `CHANGELOG.md` generation | Changelog config in `conf.yml` | vmn supports changelog generation |
-| `--skip.changelog` | Omit changelog config | Changelog is opt-in in vmn |
-| `--skip.tag` | `--dry-run` | vmn always tags on stamp; use dry-run to skip |
-| `--commit-all` | vmn commits `.vmn/` changes automatically | Handled internally |
-| lifecycle hooks (`prebump`, etc.) | Not built-in | Use CI pipeline steps around `vmn stamp` |
+| `.versionrc` / `.versionrc.json` | `.vmn/<app>/conf.yml` | Per-app configuration |
+| `"version"` in `package.json` | Git tag (source of truth) | The `npm` backend keeps `package.json` in sync |
+| Conventional Commits bump | Same, on by default | `vmn stamp my_app` picks the mode |
+| `--release-as major` | `-r major` | Same for `minor`, `patch`; `hotfix` adds a fourth segment |
+| `--release-as 1.2.3` | `--ov 1.2.2 -r patch` | `--ov` sets the version the bump starts from |
+| `--prerelease alpha` | `--pr alpha` | Promote later with `vmn release` |
+| `--dry-run` | `--dry-run` | |
+| `--first-release` | Nothing, or `vmn init-app -v <version> my_app` | The first stamp auto-initializes |
+| `--tag-prefix v` | Not configurable | Tags are `<app>_<version>` |
+| `CHANGELOG.md` generation | `changelog.path` in conf.yml | Opt-in |
+| `--skip.changelog` | Omit `changelog` | |
+| `--skip.tag` / `--skip.commit` | Not available | Tags are the source of truth; use `--dry-run` to preview |
+| `--commit-all` | Not needed | vmn commits its own files and backend files |
+| Lifecycle hooks (`prebump`, ...) | Not built in | Run steps around `vmn stamp` in CI or a script |
+| `git push --follow-tags` | Not needed | vmn pushes the commit and tags |
 
-## Step-by-Step Migration
+## Step by step
 
-### 1. Install vmn
+1. **Install:** `pipx install vmn` (no Node.js needed).
+2. **Start at your current version:** vmn does not read `v1.2.3` tags; both
+   tag sets can coexist. Seed the app once:
 
-```bash
-pip install vmn
-# or: pipx install vmn
-# or: uvx vmn
-```
+   ```bash
+   vmn init-app -v 1.4.2 my_app   # next stamp continues from 1.4.2
+   ```
 
-### 2. Initialize vmn
+3. **Configure** `.vmn/my_app/conf.yml`:
 
-The first `vmn stamp` auto-initializes both the repository and the app, so you
-can skip straight to stamping. Run the explicit commands only if you want the
-`.vmn/` scaffolding in place before your first version -- for example to seed a
-starting version:
+   ```yaml
+   conf:
+     version_backends:
+       npm:
+         path: package.json
+     changelog:
+       path: CHANGELOG.md
+   ```
 
-```bash
-vmn init                       # once per repository
-vmn init-app -v 1.4.2 my_app   # once per app; -v sets the starting version
-```
+   Other backends (`pep621`, `cargo`, `poetry`, Jinja2, regex selectors) are in
+   the README's [configuration reference](https://github.com/progovoy/vmn#configuration).
+   Combine as many as you need.
 
-This registers `my_app` for versioning. vmn will create
-`.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
+4. **Stamp:**
 
-### 3. Configure Version Backends
+   ```bash
+   vmn stamp my_app            # mode from Conventional Commits
+   vmn stamp -r minor my_app   # or explicitly
+   ```
 
-If standard-version was updating `package.json`, configure vmn's npm backend:
+   vmn updates the backends, prepends the changelog entry, commits, tags and
+   pushes.
 
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    npm:
-      path: package.json
-```
-
-For Python projects, use the pep621 backend:
-
-```yaml
-conf:
-  version_backends:
-    pep621:
-      path: pyproject.toml
-```
-
-For Rust projects, use the cargo backend:
-
-```yaml
-conf:
-  version_backends:
-    cargo:
-      path: Cargo.toml
-```
-
-You can combine multiple backends if your project has several files that need
-version updates.
-
-### 4. Enable Conventional Commits (Optional)
-
-If you relied on standard-version's automatic release mode detection from
-conventional commit messages, enable the same behavior in vmn:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  conventional_commits: true
-```
-
-With this enabled, `vmn stamp my_app` (without `-r`) reads commit messages
-since the last stamp and automatically selects major, minor, or patch.
-
-### 5. Stamp Your First vmn Version
-
-```bash
-# Explicit release mode
-vmn stamp -r patch my_app
-
-# Or, with conventional commits enabled
-vmn stamp my_app
-```
-
-vmn creates an annotated git tag, updates configured version backends, commits
-the changes, and pushes.
-
-### 6. Remove standard-version Configuration
-
-```bash
-# Remove config files
-rm -f .versionrc .versionrc.json .versionrc.js
-
-# Uninstall the package
-npm uninstall standard-version
-# or remove from devDependencies manually
-```
-
-### 7. Update CI Pipelines
-
-Replace standard-version commands in your CI configuration:
-
-**Before (standard-version):**
-
-```yaml
-# GitHub Actions example
-- run: npx standard-version
-- run: git push --follow-tags
-```
-
-**After (vmn):**
-
-```yaml
-# GitHub Actions example
-- run: pip install vmn
-- run: vmn stamp -r patch my_app
-```
-
-vmn handles the git commit, tag, and push internally (unless `--dry-run` is
-used).
-
-### 8. Update npm Scripts (If Applicable)
-
-**Before:**
-
-```json
-{
-  "scripts": {
-    "release": "standard-version",
-    "release:minor": "standard-version --release-as minor",
-    "release:major": "standard-version --release-as major"
-  }
-}
-```
-
-**After:**
-
-```json
-{
-  "scripts": {
-    "release": "vmn stamp -r patch my_app",
-    "release:minor": "vmn stamp -r minor my_app",
-    "release:major": "vmn stamp -r major my_app"
-  }
-}
-```
-
-## Command Mapping Quick Reference
-
-| standard-version command | vmn equivalent |
-| --- | --- |
-| `npx standard-version` | `vmn stamp -r patch my_app` |
-| `npx standard-version --release-as minor` | `vmn stamp -r minor my_app` |
-| `npx standard-version --release-as major` | `vmn stamp -r major my_app` |
-| `npx standard-version --prerelease alpha` | `vmn stamp -r patch --pr alpha my_app` |
-| `npx standard-version --dry-run` | `vmn stamp -r patch --dry-run my_app` |
-| `npx standard-version --first-release` | `vmn stamp -r patch my_app` (auto-inits) |
+5. **Remove** `.versionrc*` and `npm uninstall standard-version`.
+6. **CI and npm scripts:** replace `npx standard-version && git push
+   --follow-tags` with `vmn stamp my_app` (install with `pip install vmn`),
+   and e.g. `"release:minor": "vmn stamp -r minor my_app"`.
 
 ## FAQ
 
-### Can I keep my existing git tags?
+**What happens to my existing CHANGELOG.md?** With `changelog.path` pointing
+at it, vmn inserts each new entry below the file's `# ` title, so the
+standard-version history stays below it. Without `changelog`, vmn never touches
+it.
 
-Yes. vmn uses its own tag format (`{app_name}_{version}`), so it will not
-conflict with tags created by standard-version (typically `v1.2.3`). Both sets
-of tags can coexist in the same repository.
+**Monorepo?** Use one app name per package (`vmn stamp package_a`), or a root
+app for services (`vmn stamp my_platform/service_a`; `vmn show --root
+my_platform` prints the composition version).
 
-### What happens to my CHANGELOG.md?
-
-vmn does not modify files created by standard-version. Your existing
-`CHANGELOG.md` will remain untouched. If you configure vmn's changelog support,
-future entries will be appended according to vmn's format.
-
-### Can I use vmn in a monorepo?
-
-Yes. Use a separate app name per package -- each is auto-initialized on its
-first stamp:
-
-```bash
-vmn stamp -r patch package_a
-vmn stamp -r minor package_b
-```
-
-For microservice topologies, use the root-app feature -- each service keeps its
-own semver while the root gets an auto-incrementing integer:
-
-```bash
-vmn stamp -r patch my_platform/service_a
-vmn stamp -r minor my_platform/service_b
-vmn show --root my_platform
-```
-
-### Does vmn support lifecycle hooks?
-
-vmn does not have built-in lifecycle hooks like standard-version's `prebump`
-or `postcommit`. Instead, wrap `vmn stamp` in your CI pipeline or a shell
-script to run pre- and post-stamp steps.
-
-### Do I need Node.js to run vmn?
-
-No. vmn is a Python CLI. Install it with `pip`, `pipx`, or `uvx`. It has no
-Node.js dependency.
-
-## Further Reading
-
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
-- [standard-version deprecation notice](https://github.com/conventional-changelog/standard-version#deprecated)
+**Custom commit message?** `-e "[skip ci]"` appends to vmn's commit message;
+the message itself is not configurable.

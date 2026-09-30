@@ -15,28 +15,20 @@ real app in your repo.
 
 ## One-time setup
 
-vmn tracks versions in git, so it needs **a git repo with a remote**. Any
-existing repo of yours works — just run the scripts from inside it. For a
-throwaway repo, a local bare clone is a perfectly good remote:
+vmn tracks versions in git, so run the scripts from inside **a git repo with
+at least one commit and a git identity** (`user.name`/`user.email`). No remote
+is needed: the SDK never pushes. A throwaway repo works:
 
 ```sh
-git init --bare /tmp/vmn-demo-remote.git
-git clone /tmp/vmn-demo-remote.git /tmp/vmn-demo
-cd /tmp/vmn-demo
+git init /tmp/vmn-demo && cd /tmp/vmn-demo
 git commit --allow-empty -m "initial commit"
-git push -u origin HEAD
-```
-
-Then install the experiment platform (`pip install vmn-exp`, which brings `vmn`)
-and run the examples from that directory:
-
-```sh
+pip install vmn-exp            # brings vmn and vmn-exp-sdk
 python /path/to/vmn/examples/01_minimal.py
 ```
 
 The first script you run cold-starts vmn tracking: it initializes `.vmn/` and
-stamps a `0.0.0` baseline for `vmn_examples` before recording. No `vmn init`
-needed, and nothing to undo — deleting `.vmn/` removes it all.
+commits and tags a local `0.0.0` baseline for `vmn_examples` before recording.
+No `vmn init` needed.
 
 ## Afterwards
 
@@ -44,7 +36,7 @@ needed, and nothing to undo — deleting `.vmn/` removes it all.
 vmn-exp list vmn_examples            # every run, with the sweep as a tree
 vmn-exp show vmn_examples --latest   # one run: params, metrics, curves, artifacts
 vmn-exp compare vmn_examples         # runs side by side
-vmn-exp ui                               # the dashboard, at http://127.0.0.1:8265
+vmn-exp ui                           # the dashboard (vmn-exp[ui]), at http://127.0.0.1:8265
 ```
 
 Re-running any script is safe: it appends new runs and never rewrites old ones.

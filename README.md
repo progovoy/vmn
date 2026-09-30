@@ -17,26 +17,17 @@
 <p align="center"><img src="demo/vmn-goto.gif" alt="vmn stamp, then vmn goto restoring the app and both dependency repos" width="820"></p>
 
 Production broke after last Tuesday's 2.1.0 deploy. Your product is four repos.
-Which commit of each one actually shipped?
-
-Without vmn, that is an afternoon of CI logs and container tags. With vmn:
+Which commit of each one actually shipped? Without vmn, that is an afternoon of
+CI logs and container tags. With vmn:
 
 ```sh
 vmn goto -v 2.1.0 my_platform   # every repo back at the commit that shipped
 ```
 
-Try it in any Git repository:
-
-```sh
-pipx install vmn
-
-vmn stamp -r patch my_app       # 0.0.1
-vmn goto -v 0.0.1 my_app        # restore the app and every configured dependency
-```
-
-vmn stores release metadata as readable YAML in annotated Git tags. Each tag
-records the application revision, dependency revisions, previous version, and
-release context. There is no vmn server and no external metadata database.
+vmn stores release metadata as readable YAML in annotated Git tags: the
+application revision, every dependency's revision and remote, the previous
+version, and release context. There is no vmn server and no external metadata
+database.
 
 > Developed continuously since 2019, vmn is used in daily production workflows
 > by teams at large companies managing multi-repository products. vmn versions
@@ -47,7 +38,8 @@ If vmn saves you an afternoon, a ⭐ helps other teams find it.
 
 [Quick start](#quick-start) · [Why vmn](#why-vmn) ·
 [Multi-repository recovery](#multi-repository-recovery) ·
-[Operations](#production-operation) · [Commands](#command-map) ·
+[Release models](#release-models) · [Configuration](#configuration) ·
+[Operations](#production-operation) · [Commands](#command-reference) ·
 [Documentation](#documentation)
 
 ## Why vmn
@@ -61,14 +53,12 @@ If vmn saves you an afternoon, a ⭐ helps other teams find it.
 | Work without a hosted control plane | A standard Git remote is enough; internal and air-gapped Git servers are supported. |
 | Adopt without replacing build tooling | Version backends update npm, Cargo, Poetry, PEP 621, Jinja2, or regex-selected files. |
 
-vmn treats a version as a handle to recorded source state, not only as a
-string. The same model supports releases, working snapshots, and measured runs:
+A version is a handle to recorded source state, not only a string:
 
 | State | Command | Captures |
 | --- | --- | --- |
 | Release | `vmn stamp` → `vmn goto` | Committed application and dependency revisions |
 | Working | `vmn snapshot` | Release state plus local commits, tracked changes, and untracked files |
-| Measured | `vmn-exp` → `vmn goto` | Working state plus the run's metrics, parameters, artifacts, and history |
 
 > **Scope:** vmn restores recorded source revisions. It does not rebuild
 > artifacts, capture toolchains or runtime infrastructure, sign tags, or deploy
@@ -77,50 +67,32 @@ string. The same model supports releases, working snapshots, and measured runs:
 
 ## Quick start
 
-### Requirements
-
-- Python 3.8 or newer
-- Git 2.10 or newer; Git 2.17+ is recommended
-- A Git repository with at least one commit and a writable remote
-
-Install vmn as an isolated command-line tool:
+Requirements: Python 3.8+, Git 2.10+ (2.17+ recommended), and a Git repository
+with at least one commit and a writable remote.
 
 ```sh
-pipx install vmn
-# Alternative: uv tool install vmn
-
-vmn --completion-install   # bash/zsh/fish/tcsh; auto-detects shell
+pipx install vmn            # or: uv tool install vmn
+vmn --completion-install    # optional: bash/zsh/fish/tcsh, auto-detected
 ```
-
-vmn ships as three packages; install only what you need:
-
-| Package | What you get |
-|---|---|
-| `vmn` | Versioning: `stamp`, `release`, `show`, `goto`, `snapshot`, … |
-| `vmn-exp` | Experiment tracking on top of vmn: the `vmn-exp` CLI, model registry, and the dashboard (`vmn-exp[ui]`) |
-| `vmn-exp-sdk` | Just the metrics writer for training jobs: `start_run()`, no git needed |
-
-`pip install "vmn-exp[ui]"` brings all three. Coming from vmn 0.10 or earlier,
-`vmn exp`/`model`/`ui` are now `vmn-exp …`; see
-[docs/packaging.md](https://github.com/progovoy/vmn/blob/master/docs/packaging.md#installing).
 
 Inside any Git repository:
 
 ```sh
-vmn stamp -r patch my_app       # 0.0.1; initializes on first use
-vmn show my_app                 # 0.0.1
+vmn stamp -r patch my_app          # 0.0.1; initializes the repo and app on first use
+vmn show my_app                    # 0.0.1
 
 # After committing the next change:
-vmn stamp -r minor my_app       # 0.1.0
+vmn stamp -r minor my_app          # 0.1.0
 
 # After committing another change:
 vmn stamp -r patch --pr rc my_app  # 0.1.1-rc.1
-vmn release my_app              # 0.1.1
+vmn release my_app                 # 0.1.1
 ```
 
-A successful stamp creates a version commit, creates annotated tags, and
-pushes the branch and tags. Use `--dry-run` to inspect the operation first.
-Repeated stamping of an already-versioned state is idempotent.
+A stamp creates a version commit and annotated tags, then pushes the branch and
+tags. `--dry-run` previews it. Stamping an already-versioned state is
+idempotent. No separate `vmn init` is needed; `init` and `init-app -v <version>`
+remain for migrations and non-default starting versions.
 
 Inspect the source of truth directly:
 
@@ -130,25 +102,10 @@ git cat-file -p my_app_0.1.0
 vmn show --verbose my_app
 ```
 
-No separate `vmn init` is required. Explicit `init` and `init-app` commands
-remain available for migrations and non-default starting versions.
-
 ## Multi-repository recovery
 
-Your product spans 4 repos. Production broke after the 2.1.0 deploy last
-Tuesday. You need the exact source state — not just one repo, all of them — to
-reproduce and fix the bug. One command:
-
-```sh
-vmn goto -v 2.1.0 my_platform
-```
-
-Every configured dependency is restored to its recorded revision, cloning any
-that are missing locally. No container archaeology, no CI log diving.
-
-### Setup
-
-Declare sibling dependency repositories in `.vmn/my_app/conf.yml`:
+Declare dependency repositories in `.vmn/my_app/conf.yml`, keyed by their
+directory relative to the app repository:
 
 ```yaml
 conf:
@@ -158,67 +115,101 @@ conf:
         vcs_type: git
       service_api:
         vcs_type: git
+        branch: main       # optional pin, checked before every stamp
 ```
 
-Stamping records the exact revision and remote for every dependency:
+Every stamp records each dependency's exact revision and remote. Later, from
+any revision:
 
 ```sh
-vmn stamp -r minor my_app
-
-# Later, from any other revision:
 vmn goto -v 1.4.0 my_app
 ```
 
-`goto` restores all recorded repositories and can clone a missing dependency.
-Use `--pull` when the requested refs are not available locally, or
-`--deps-only` to leave the application repository unchanged.
+`goto` checks out every recorded repository and clones any that are missing.
+`--pull` fetches first when the version is not available locally;
+`--deps-only` leaves the application repository unchanged; without `-v` it
+returns to the tip of the current branch.
 
-To work on the application and its dependencies side by side without moving
-your main checkout, `vmn wt` (alias of `vmn worktrees`) builds an island: git
-worktrees for the application and every dependency, laid out like the originals,
-next to an `island.json` manifest. Each checkout starts on a private
+<details>
+<summary><strong>Dependency keys</strong></summary>
+
+| Key | Meaning |
+| --- | --- |
+| `vcs_type` | `git` |
+| `remote` | Clone URL; auto-detected from the existing checkout when omitted |
+| `branch` | Stamping requires the dep to be on this branch |
+| `tag` | Stamping requires the dep to be at this tag |
+| `hash` | Stamping requires the dep to be at this commit |
+
+A dependency with uncommitted changes blocks `stamp`. Do not embed credentials
+in remote URLs: dependency remotes are part of release metadata. Use SSH, a Git
+credential helper, or vmn's per-command push credentials.
+
+</details>
+
+### Islands: app and deps side by side
+
+`vmn wt` (alias of `vmn worktrees`) builds an *island*: git worktrees for the
+application and every dependency, laid out like the originals, plus an
+`island.json` manifest. Each checkout starts on a private
 `island/<name>/<branch>` branch that follows its source branch but cannot be
-pushed, and stamping is refused on it.
+pushed; stamping is refused on it.
 
 ```sh
-vmn wt create my_app --island-name feat   # from the current commits
+vmn wt create my_app --island-name feat                   # from the current commits
 vmn wt create my_app --island-name feat --carry-changes   # ...plus uncommitted work
-vmn wt pull                               # rebase onto the source branches
-vmn wt freeze my_app                      # pin deps to the branches they are on
+vmn wt pull                                               # rebase onto the source branches
+vmn wt freeze my_app                                      # pin deps to the branches they are on
 vmn wt remove feat
 ```
 
 To share the work, check out a real branch in each repo you changed
-(`git checkout -b feature/x`, then `git push -u origin feature/x`) and run
-`vmn wt freeze` in the application. It records those dependency branches in
-the current branch's conf, so a colleague who checks out `feature/x` and runs
+(`git checkout -b feature/x && git push -u origin feature/x`) and run
+`vmn wt freeze` in the application. It pins those dependency branches in the
+current branch's conf, so a colleague who checks out `feature/x` and runs
 `vmn wt create` gets the same dependency state. `-fv 2.1.0` builds an island at
 a recorded version instead.
 
-Do not embed credentials in Git remote URLs: dependency remotes are part of
-release metadata. Use SSH, a Git credential helper, or vmn's per-command push
-credentials instead.
-
 ## Release models
-
-vmn supports SemVer-based release and prerelease workflows plus explicit vmn
-extensions:
 
 ```text
 1.6.0                         release
 1.6.0-rc.23                   prerelease
 1.6.7.4                       optional fourth hotfix segment
-1.6.0-rc.23+build01           build metadata
-1.6.0-dev.a1b2c3d.e4f5g6h     recorded working state (a snapshot or experiment run)
+1.6.0-rc.23+build01           build metadata (vmn add)
+1.6.0-dev.a1b2c3d.e4f5g6h     recorded working state (a snapshot)
 ```
 
-Enable Conventional Commits, changelog generation, GitHub Releases, branch
-policy, and version embedding in the app configuration:
+**How the release mode is chosen**, first match wins:
+
+1. `-r <mode>` (strict: always bumps) or `--orm <mode>` (optional: only
+   advances if no prerelease exists at the target) on the command line.
+2. Conventional Commits since the last version — **on by default**: `fix:` →
+   patch, `feat:` → minor, `type!:` or a `BREAKING CHANGE` footer → major.
+3. `default_release_mode` from conf.yml.
+
+Modes from 2 and 3 are applied as `--orm` or `-r` per `release_mode_policy`
+(`optional` by default, or `strict`). During a prerelease sequence, `vmn stamp
+--pr rc my_app` needs no mode at all.
+
+For independently deployed services, use a root app:
+
+```sh
+vmn stamp -r patch platform/auth       # auth 0.0.1; platform 1
+vmn stamp -r minor platform/billing    # billing 0.1.0; platform 2
+vmn show --root platform               # 2
+```
+
+## Configuration
+
+Per-app configuration lives in `.vmn/<app>/conf.yml` under a top-level `conf:`
+key; root apps have `.vmn/<root>/root_conf.yml`. Edit it with the TUI
+(`vmn config my_app`, `--vim` for `$EDITOR`) or create it non-interactively
+with `vmn config gen my_app`.
 
 ```yaml
 conf:
-  conventional_commits: true
-  default_release_mode: optional
+  release_mode_policy: optional
   changelog:
     path: CHANGELOG.md
   github_release:
@@ -230,36 +221,84 @@ conf:
       path: pyproject.toml
 ```
 
-With `conventional_commits` enabled, `fix:` selects patch, `feat:` selects
-minor, and a `type!:` header selects major. GitHub Release creation requires
-the `gh` CLI and `GITHUB_TOKEN` or `GH_TOKEN`; it is best-effort and warns
-rather than failing an otherwise successful stamp.
+<details>
+<summary><strong>All conf.yml keys</strong></summary>
 
-For independently deployed services, use a root app:
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `template` | `[{major}][.{minor}][.{patch}][.{hotfix}][-{prerelease}][.{rcn}][-dev.{dev_commit}.{dev_diff_hash}][+{buildmetadata}]` | Display format; `[...]` sections drop out when their field is empty |
+| `hide_zero_hotfix` | `true` | Show `1.2.3` rather than `1.2.3.0` |
+| `conventional_commits` | `true` | Detect the release mode from commit messages |
+| `release_mode_policy` | `optional` | Apply a detected/default mode as `--orm` (`optional`) or `-r` (`strict`) |
+| `default_release_mode` | unset | `major`/`minor`/`patch`/`hotfix` fallback when nothing else resolves a mode |
+| `changelog` | unset | `{path: CHANGELOG.md}`: insert a Conventional-Commits entry below the file's title on each stamp |
+| `github_release` | unset | `{draft: true\|false}`: create a GitHub Release on stamp (body from the changelog entry, else the commits); needs `gh` and `GITHUB_TOKEN`/`GH_TOKEN`; best-effort, warns instead of failing |
+| `policies.whitelist_release_branches` | unset | Branches allowed to stamp non-prerelease versions and to `vmn release` |
+| `deps` | the app repo only | Dependency repositories (see [Dependency keys](#multi-repository-recovery)) |
+| `version_backends` | none | Files to write the version into (below) |
+| `create_snapshots` | `false` | Also write a version file per stamp, readable with `vmn show --from-file` |
+| `extra_info` | `false` | Record host/environment information in the stamp metadata |
+| `experiment` | none | vmn-exp settings (storage URI, metrics, alerts); ignored by core vmn |
 
-```sh
-vmn stamp -r patch platform/auth       # auth 0.0.1; platform 1
-vmn stamp -r minor platform/billing    # billing 0.1.0; platform 2
-vmn show --root platform               # 2
+Root apps: `root_conf.yml` accepts `external_services`, recorded in each root
+version. Deprecated keys (`create_verinfo_files`, `default_release_mode:
+optional|strict`) are migrated automatically.
+
+</details>
+
+<details>
+<summary><strong>Version backends</strong></summary>
+
+| Backend | Writes |
+| --- | --- |
+| `npm: {path: package.json}` | `version` |
+| `cargo: {path: Cargo.toml}` | `package.version` |
+| `poetry: {path: pyproject.toml}` | `tool.poetry.version` |
+| `pep621: {path: pyproject.toml}` | `project.version` |
+| `generic_jinja` | Renders Jinja2 templates to output files |
+| `generic_selectors` | Regex search-and-replace inside existing files |
+
+```yaml
+conf:
+  version_backends:
+    generic_jinja:
+      - input_file_path: version.py.j2
+        output_file_path: mypkg/_version.py
+        custom_keys_path: custom.yml       # optional extra template values
+    generic_selectors:
+      - paths_section:
+          - input_file_path: chart/Chart.yaml
+            output_file_path: chart/Chart.yaml
+        selectors_section:
+          - regex_selector: '(version: ){{VMN_VERSION_REGEX}}'
+            regex_sub: '\1{{version}}'
 ```
+
+In `regex_selector`, `{{VMN_VERSION_REGEX}}` expands to a pattern matching any
+vmn version; it has capture groups of its own, so in `regex_sub` refer only to
+groups placed before it. Templates see the stamp metadata (`version`, `base_version`,
+`changesets`, `root_*` for root apps, ...), plus `release_notes` when
+`git-cliff` is installed (`pip install "vmn[changelog]"`). `vmn gen -t <tmpl>
+-o <out> my_app` renders the same data on demand.
+
+</details>
 
 ### Branch-specific configuration
 
-Integration branches can override dep pinning without touching the main config:
+Integration branches can override configuration, typically dep pins, without
+touching the main conf:
 
 ```sh
-vmn config gen my_app --branch                  # create branch conf for current branch
-vmn config gen my_app --branch --sync-dep-branches  # auto-pin deps to their checked-out branches
-vmn config my_app --branch                      # edit interactively
+vmn config gen my_app --branch                      # seeded from the effective conf
+vmn config gen my_app --branch --sync-dep-branches  # pin deps to their checked-out branches
+vmn config my_app --branch                          # edit interactively
 ```
 
-Branch confs are resolved automatically at stamp time. The canonical layout is
-`.vmn/<app>/branch_conf/<branch>/conf.yml` (branch slashes become directories).
+The canonical layout is `.vmn/<app>/branch_conf/<branch>/conf.yml` (slashes in
+the branch name become directories; root apps use `root_conf.yml`). Legacy
+`<branch>_conf.yml` files are still read and are migrated on the next stamp.
 
 ## Production operation
-
-vmn is designed for release automation where failure must be visible and
-recoverable:
 
 - `--dry-run` previews a stamp without committing or tagging.
 - Dirty, detached, outgoing, and dependency states are checked before release.
@@ -267,10 +306,12 @@ recoverable:
 - Release-branch allowlists restrict stable stamps to configured branches.
 - `--pull` fetches remote state and retries version conflicts.
 - vmn rolls back newly created local release state when publication fails.
-- Release metadata remains readable with standard Git and YAML tooling.
+- `--git-push-user`/`--git-push-token` (or `VMN_GIT_PUSH_USER`/`_TOKEN`)
+  authenticate the push through an ephemeral HTTPS URL; the remote config is
+  never modified.
 - No internet access is required when an internal or local Git remote is used.
 
-For GitHub Actions, use the official [vmn-action](https://github.com/marketplace/actions/automated-versioning):
+For GitHub Actions, use [vmn-action](https://github.com/marketplace/actions/automated-versioning):
 
 ```yaml
 steps:
@@ -290,79 +331,49 @@ steps:
   - run: echo "Stamped ${{ steps.vmn.outputs.verstr }}"
 ```
 
-For other CI systems, fetch complete history and tags, serialize stamps for the
-same app, and provide write access to the remote:
+Elsewhere, fetch complete history and tags, serialize stamps for the same app,
+and give the job write access to the remote:
 
 ```sh
 pip install vmn
 vmn stamp --pull -r patch my_app
 ```
 
-Start an established migration with `--dry-run`; then add branch policy before
+Start an established migration with `--dry-run`, then add branch policy before
 enabling automatic stamps.
 
 ## Working-state snapshots
 
-Between releases, capture and restore your exact working state — uncommitted
+Between releases, save and restore your exact working state — uncommitted
 changes, local commits, and untracked files, across every dependency — as a
 named version, without committing:
 
 ```sh
 vmn snapshot create my_app --note "parser refactor"   # prints 1.2.0-dev.a1b2c3d.e4f5g6h
+vmn snapshot list my_app --last 5
+vmn snapshot diff my_app -v @2                        # vs your working tree; --to <ref|version>
 vmn snapshot restore my_app --latest                  # your current work is auto-saved first
 ```
 
-<details>
-<summary><strong>Snapshot actions</strong></summary>
+Actions are `create` (default), `list`, `show`, `note`, `delete`, `restore`,
+`export` and `diff`. The app must be stamped once first. With vmn-exp
+installed, `--store <uri>` keeps snapshots in a shared experiment store and
+`vmn goto -v <snapshot>` restores them. See
+[docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md).
 
-`vmn snapshot [create|list|show|note|delete|restore|export|diff] <app>`
-(`create` is the default). Refs are a full verstr, a unique prefix, `@N` or
-`--latest`.
+## Experiment tracking (vmn-exp)
 
-```sh
-vmn snapshot list my_app --last 5
-vmn snapshot diff my_app -v @2                   # vs your working tree; --to <ref|version>
-vmn snapshot export my_app -v @2                 # -> ./<verstr>.tar.gz, or -o <dir>
-vmn snapshot restore my_app -v @2                # refuses to drop oversized untracked files without --force
-vmn goto -v 1.2.0-dev.a1b2c3d.e4f5g6h my_app     # also works (with vmn-exp installed)
-```
-
-Snapshots are thin records in `.vmn/<app>/snapshots/` that share code objects
-with experiment runs. With `vmn-exp` installed, `--store <uri>` (or
-`VMN_EXPERIMENT_STORE`, or conf `experiment.storage.uri`) keeps them in a
-team store; `--local` overrides it.
-
-</details>
-
-See [docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md).
-
-## Experiments: recorded working state
-
-Between releases, `vmn-exp` records your exact working state — uncommitted
-changes, local commits, and untracked files — as a dev version, with the
-run's metrics alongside:
+`vmn-exp` is a separate, optional product built on vmn: it records training and
+evaluation runs as working-state versions with their metrics, params and
+artifacts, plus a model registry, sweeps and a web dashboard.
 
 ```sh
-vmn-exp create my_app --note "parser refactor"
-vmn goto -v <dev-version> my_app      # or: vmn-exp restore my_app --latest
+pip install vmn-exp         # "vmn-exp[ui]" adds the dashboard
 ```
 
-This extends the same state-recovery model as `goto` to uncommitted work; see [docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
-New to it? The [client guide](https://github.com/progovoy/vmn/blob/master/docs/client-guide.md) walks one project through submit, log, watch, compare, reproduce, resume/rewind/fork and models.
-Hyperparameter sweeps run server-less across many agents with `vmn-exp sweep`; see [docs/sweeps.md](https://github.com/progovoy/vmn/blob/master/docs/sweeps.md).
-Nodes with no route to the store record with `VMN_EXP_OFFLINE=1` and upload
-later with `vmn-exp push my_app`; see [offline recording and push](https://github.com/progovoy/vmn/blob/master/docs/experiments.md#offline-recording-and-push).
-Python workloads can log in-process instead of shelling out — `from
-vmn_exp.sdk import start_run`, plus `autolog()` for scikit-learn
-hyperparameters and scores, and a query language for filtering runs on metrics
-and params; see
-[docs/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/sdk.md).
-Five runnable scripts — a minimal run, a training loop, a nested sweep, queries
-and autologging — live in
-[examples/](https://github.com/progovoy/vmn/blob/master/examples/README.md).
-
-Install `vmn-exp[ui]` for a local web dashboard with stamp-tree views and
-run comparison.
+See the [vmn-exp documentation](https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/README.md).
+Coming from vmn 0.10 or earlier: `vmn exp`/`model`/`ui` are now `vmn-exp …`
+([packaging](https://github.com/progovoy/vmn/blob/master/docs/packaging.md#installing)).
 
 ## AI agent integration
 
@@ -370,24 +381,16 @@ run comparison.
 
 ```sh
 vmn skill                               # print the skill block
-vmn skill --install                     # .claude/skills/vmn/SKILL.md
+vmn skill --install                     # .claude/skills/vmn/SKILL.md (--force overwrites)
 vmn skill --install --target cursor     # .cursorrules
 vmn skill --install --target agents     # AGENTS.md
 ```
 
-Re-running `--install` updates vmn's section and leaves the rest of your
-instructions untouched.
+Re-running `--install` for cursor/agents updates only vmn's section. Optional,
+opinionated development rules for agents (TDD, worktrees, minimal diffs, ...)
+live in [docs/agent-methodology.md](https://github.com/progovoy/vmn/blob/master/docs/agent-methodology.md).
 
-Agents that run sweeps and want the `vmn-exp ui` leaderboard's fleet columns
-(total / waiting / running / done / failed) to track them: see
-[docs/ai-fleet-tracking.md](docs/ai-fleet-tracking.md) for which call moves each column.
-
-Optional, opinionated development rules for agents (TDD, testability,
-worktrees, minimal diffs, ...) live in
-[docs/agent-methodology.md](docs/agent-methodology.md) — paste the sections
-you want into your `CLAUDE.md` or `AGENTS.md`.
-
-## Command map
+## Command reference
 
 | Command | Purpose |
 | --- | --- |
@@ -396,33 +399,107 @@ you want into your `CLAUDE.md` or `AGENTS.md`.
 | `vmn show` | Read version, status, or effective configuration |
 | `vmn goto` | Restore recorded application and dependency revisions |
 | `vmn snapshot` | Capture, inspect, compare, export, or restore working state |
-| `vmn-exp` | Record, compare, export, or restore experiment runs (working state plus metrics) |
-| `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps on private branches (create, pull, freeze, remove) |
-| `vmn skill` | Output or install the AI agent skill block |
+| `vmn worktrees` (`wt`) | Islands: worktrees of the app and its deps (create, list, pull, freeze, remove) |
 | `vmn add` | Attach build metadata to an existing version |
 | `vmn gen` | Render a file from a Jinja2 template |
-| `vmn config` | List or edit global, app, root-app, and branch configuration |
-| `vmn-exp ui` | Run the optional web dashboard |
+| `vmn config` | List apps, or edit global, app, root-app, and branch configuration |
+| `vmn skill` | Output or install the AI agent skill block |
+| `vmn init` / `vmn init-app` | Explicit initialization (optional; `stamp` auto-inits) |
 
-Run `vmn --help` or `vmn <command> --help` for the authoritative flag reference.
+<details>
+<summary><strong>Flags</strong></summary>
+
+**`vmn stamp <app>`**
+
+| Flag | Meaning |
+| --- | --- |
+| `-r, --release-mode` | `major`/`minor`/`patch`/`hotfix`; always bumps |
+| `--orm, --optional-release-mode` | Bump only if no prerelease already exists at the target |
+| `--pr, --prerelease <id>` | Prerelease, e.g. `rc` → `0.0.1-rc.1` |
+| `--ov, --override-version <v>` | Bump from `<v>` instead of the current version (`--ov 1.0.0 -r patch` → `1.0.1`) |
+| `--orv, --override-root-version <n>` | Bump the root app from `<n>` |
+| `--pull` | Pull first; retry on a version conflict |
+| `--dry-run` | Preview without committing, tagging or pushing |
+| `-e, --extra-commit-message <s>` | Append to the version commit message (e.g. `[ci skip]`) |
+| `--dont-check-vmn-version` | Skip the check that this vmn is not older than the one that stamped last |
+| `--git-push-user`, `--git-push-token` | Push credentials (both required) |
+
+**`vmn release <app>`**: tags the prerelease's commit as the final version
+and pushes the tag. `-v <version>` names the prerelease (default: the one at
+HEAD); `-s, --stamp` instead runs the full stamp flow (new commit, backends
+updated). Takes `--git-push-user`/`--git-push-token`.
+
+**`vmn show <app>`**
+
+| Flag | Meaning |
+| --- | --- |
+| `-v <version>` | Show a specific version instead of the current one |
+| `--verbose` | Full stamp metadata as YAML |
+| `--raw` | Version without the template applied |
+| `-t, --template <t>` | Format with a different template |
+| `--root` | Root app version |
+| `--type` | Release type (`release` or the prerelease id) |
+| `-u, --unique` | Version plus the commit hash |
+| `--dev` | Working-state version of a dirty tree |
+| `--conf` | Effective configuration |
+| `--from-file` | Read from `.vmn/` files instead of git (with `create_snapshots`) |
+| `--ignore-dirty` | Do not report dirty states |
+
+**`vmn goto <app>`**: `-v <version>` (default: tip of the current branch),
+`--root` (`-v` is a root version), `--deps-only`, `--pull`, `--force` (dev
+versions: restore even if oversized untracked files would be lost).
+
+**`vmn add <app>`**: `--bm, --buildmetadata <s>` (required), `-v <version>`
+(default: the version at HEAD), `--vmp, --version-metadata-path <yml>`,
+`--vmu, --version-metadata-url <url>`.
+
+**`vmn gen <app>`**: `-t, --template <j2>` and `-o, --output <file>`
+(required), `-v <version>`, `-c, --custom-values <yml>`, `--verify-version`
+(refuse on a dirty tree or when HEAD is not at the version).
+
+**`vmn config [gen] [app]`**: no app lists managed apps; `--vim` (`$EDITOR`),
+`--root` (`root_conf.yml`), `--global` (`.vmn/conf.yml`), `--branch`,
+`--sync-dep-branches` (with `gen --branch`). `gen` never overwrites.
+
+**`vmn worktrees [create|list|pull|freeze|remove] [name]`**: `create` (the
+default) takes `--island-name`, `-fv, --from-version`, `-fb, --from-branch`,
+`--base-path` (default `../vmn-islands`), `--shallow-deps`, `--carry-changes`.
+
+**`vmn init-app <app>`**: `-v <version>` (start from, default `0.0.0`),
+`--dry-run`, `--orm optional|strict` (sets `release_mode_policy`).
+
+**`vmn snapshot`**: see [docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md#actions).
+
+**Global**: `--version`, `--debug`, `--completion [SHELL]`,
+`--completion-install [SHELL]`, `--completion-uninstall [SHELL]`.
+
+</details>
+
+<details>
+<summary><strong>Environment variables</strong></summary>
+
+| Variable | Effect |
+| --- | --- |
+| `VMN_WORKING_DIR` | Run as if started in this directory |
+| `VMN_LOCK_FILE_PATH` | Lock file path (default `.vmn/vmn.lock`) |
+| `VMN_GIT_PUSH_USER` / `VMN_GIT_PUSH_TOKEN` | Fallbacks for `--git-push-user` / `--git-push-token` |
+| `GITHUB_TOKEN` / `GH_TOKEN` | Needed for `github_release` |
+| `VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB` | Caps on untracked files captured into a snapshot (default 50 / 200) |
+| `EDITOR` | Editor for `vmn config --vim` (default `vim`) |
+
+</details>
 
 ## Documentation
 
-- [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
-- [Driving the UI fleet columns (for AI agents)](https://github.com/progovoy/vmn/blob/master/docs/ai-fleet-tracking.md)
 - [Working-state snapshots](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md)
-- [Experiment tracking: client guide](https://github.com/progovoy/vmn/blob/master/docs/client-guide.md)
-- [Experiment tracking](https://github.com/progovoy/vmn/blob/master/docs/experiments.md)
-- [Python SDK](https://github.com/progovoy/vmn/blob/master/docs/sdk.md)
-- [Model registry](https://github.com/progovoy/vmn/blob/master/docs/models.md)
-- [Web UI](https://github.com/progovoy/vmn/blob/master/docs/ui.md)
-- [vmn vs MLflow](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-mlflow.md)
+- [AI agent skill reference](https://github.com/progovoy/vmn/blob/master/docs/agent-skill.md)
+- [Packaging and installation](https://github.com/progovoy/vmn/blob/master/docs/packaging.md)
 - [vmn vs semantic-release](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-semantic-release.md)
 - [vmn vs release-please](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-release-please.md)
 - [vmn vs setuptools-scm](https://github.com/progovoy/vmn/blob/master/docs/vmn-vs-setuptools-scm.md)
 - [Migrating from standard-version](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-standard-version.md)
 - [Migrating from bump2version](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-bump2version.md)
-- [Migrating from MLflow](https://github.com/progovoy/vmn/blob/master/docs/migrating-from-mlflow.md)
+- [vmn-exp (experiment tracking)](https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/README.md)
 
 ## Project
 
