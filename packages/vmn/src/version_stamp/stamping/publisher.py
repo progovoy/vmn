@@ -282,7 +282,9 @@ class VersionControlStamper(IVersionsStamper):
                 )
                 raise RuntimeError()
 
-        current_version, prerelease_count = self.gen_advanced_version(from_verstr)
+        current_version, prerelease_count = self.advance_version(
+            from_verstr, self.release_mode
+        )
 
         info = {}
         if self.extra_info:
