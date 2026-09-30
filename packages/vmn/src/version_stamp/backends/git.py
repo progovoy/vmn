@@ -55,8 +55,12 @@ def _custom_git_execute(self, *args, **kwargs):
         )
 
     original_execute = self.__class__._execute
-    originally_extended_output = "with_extended_output" in kwargs
-    kwargs["with_extended_output"] = True
+    # A process handle's streams belong to the caller (e.g. Repo.clone_from
+    # reads stderr for its error message), so they are never read here.
+    as_process = kwargs.get("as_process", False)
+    originally_extended_output = kwargs.get("with_extended_output", False)
+    if not as_process:
+        kwargs["with_extended_output"] = True
 
     start_time = time.perf_counter()
     ret = original_execute(self, *args, **kwargs)
@@ -65,18 +69,10 @@ def _custom_git_execute(self, *args, **kwargs):
     ret_code = 0
     sout = ""
     serr = ""
-    if not originally_extended_output:
-        if isinstance(ret, tuple):
-            ret_code = ret[0]
-            sout = ret[1]
-            serr = ret[2]
+    if not as_process and isinstance(ret, tuple):
+        ret_code, sout, serr = ret
+        if not originally_extended_output:
             ret = sout
-    elif not isinstance(ret, tuple):
-        sout = ret.stdout.read()
-        serr = ret.stderr.read()
-        ret_code = 0
-        if serr:
-            ret_code = 1
 
     time_took = end_time - start_time
 
@@ -88,6 +84,15 @@ def _custom_git_execute(self, *args, **kwargs):
         )
 
     return ret
+
+
+def _cache_expired(vmn_cache_path):
+    if not os.path.exists(vmn_cache_path):
+        return True
+    ttl_start = datetime.datetime.now() - datetime.timedelta(
+        minutes=GIT_CACHE_TTL_MINUTES
+    )
+    return datetime.datetime.fromtimestamp(os.path.getmtime(vmn_cache_path)) < ttl_start
 
 
 git.cmd.Git._execute = git.cmd.Git.execute
@@ -123,23 +128,14 @@ class GitBackend(
     @measure_runtime_decorator
     def perform_cached_fetch(self, force=False):
         vmn_cache_path = os.path.join(self.repo_path, ".vmn", "vmn.cache")
-        if not os.path.exists(vmn_cache_path) or force:
-            pathlib.Path(os.path.join(self.repo_path, ".vmn")).mkdir(
-                parents=True, exist_ok=True
-            )
-            pathlib.Path(vmn_cache_path).touch()
+        if not force and not _cache_expired(vmn_cache_path):
+            return
 
-            self._be.git.execute(["git", "fetch", "--tags"])
-        else:
-            minutes_ago = datetime.datetime.now() - datetime.timedelta(
-                minutes=GIT_CACHE_TTL_MINUTES
-            )
-            filemtime = datetime.datetime.fromtimestamp(
-                os.path.getmtime(vmn_cache_path)
-            )
-            if filemtime < minutes_ago:
-                pathlib.Path(vmn_cache_path).touch()
-                self._be.git.execute(["git", "fetch", "--tags"])
+        pathlib.Path(os.path.join(self.repo_path, ".vmn")).mkdir(
+            parents=True, exist_ok=True
+        )
+        pathlib.Path(vmn_cache_path).touch()
+        self._fetch("--tags")
 
     def __del__(self):
         self._be.close()
