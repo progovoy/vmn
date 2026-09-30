@@ -7,6 +7,7 @@ Safe to remove when: all repos have been re-stamped with vmn >= 0.8.4
 (no 0.3.9-era tags remain that users need to `show`/`goto`).
 """
 from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.utils import yaml_safe_load
 
 
 def try_tag_with_dot_zero_suffix(repo_backend, tag_name):
@@ -46,12 +47,10 @@ def parse_automatic_tag_message(repo_backend, tag_name, ver_info):
 
     Returns the parsed ver_info dict, or None if not a 0.3.9 tag.
     """
-    import yaml
-
     if not str(ver_info).startswith("Automatic"):
         return None
 
-    commit_msg = yaml.safe_load(repo_backend.commit(tag_name).message)
+    commit_msg = yaml_safe_load(repo_backend.commit(tag_name).message)
     if commit_msg is not None and "stamping" in commit_msg:
         commit_msg["stamping"]["app"]["prerelease"] = "release"
         commit_msg["stamping"]["app"]["prerelease_count"] = {}

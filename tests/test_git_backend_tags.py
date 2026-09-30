@@ -46,3 +46,53 @@ def test_rebased_root_app_commit_recovers_its_tags(app_layout):
 
     assert "root_app-service1_0.0.1" in ver_infos
     assert "root_app_1" in ver_infos
+
+
+def test_tag_message_with_leading_comment_parses_like_plain_yaml(app_layout):
+    backend = _stamped_backend(app_layout, app_layout.app_name)
+    tag_name = f"{app_layout.app_name}_0.0.1"
+    message = _out(app_layout.repo_path, "tag", "-l", "--format=%(contents)", tag_name)
+    prefixed = f"{app_layout.app_name}_9.9.9"
+    _out(
+        app_layout.repo_path,
+        "tag", "-a", prefixed, tag_name, "-m", f"# leading note\n---\n{message}",
+    )
+
+    _, plain = backend.parse_tag_message(tag_name)
+    _, with_prefix = backend.parse_tag_message(prefixed)
+
+    assert with_prefix["ver_info"] is not None
+    assert with_prefix["ver_info"] == plain["ver_info"]
+
+
+def _count_grep_logs(backend, monkeypatch):
+    calls = []
+
+    def counting_log(git_cmd, *args, **kwargs):
+        if any(str(a).startswith("--grep=") for a in args):
+            calls.append(args)
+        return git_cmd._call_process("log", *args, **kwargs)
+
+    monkeypatch.setattr(type(backend._be.git), "log", counting_log, raising=False)
+    return calls
+
+
+def test_walk_back_past_untagged_stamp_commits_streams_one_git_log(
+    app_layout, monkeypatch
+):
+    app_name = app_layout.app_name
+    backend = _stamped_backend(app_layout, app_name)
+    for version in ("0.0.2", "0.0.3"):
+        app_layout.write_file_commit_and_push("test_repo_0", "f1.txt", version)
+        assert _stamp_app(app_name, "patch")[0] == 0
+        _out(app_layout.repo_path, "tag", "-d", f"{app_name}_{version}")
+    calls = _count_grep_logs(backend, monkeypatch)
+
+    tag_names, cobj, ver_infos = backend.get_latest_stamp_tags(app_name, False)
+
+    assert tag_names == [f"{app_name}_0.0.1"]
+    assert cobj.hexsha == _out(
+        app_layout.repo_path, "rev-list", "-n1", f"{app_name}_0.0.1"
+    )
+    # the top stamp commit, then one streamed walk back from its parent
+    assert len(calls) == 2

@@ -148,7 +148,7 @@ class LocalFileBackend(VMNBackend):
                             "commit_object": None,
                         }
                     }
-                    ver_infos[tag_name]["ver_info"] = yaml.safe_load(f)
+                    ver_infos[tag_name]["ver_info"] = yaml_safe_load(f)
             except Exception:
                 VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
 
@@ -167,7 +167,7 @@ class LocalFileBackend(VMNBackend):
         tag_names = []
         if files:
             with open(files[0]) as f:
-                data = yaml.safe_load(f)
+                data = yaml_safe_load(f)
                 if root_context:
                     ver = data["stamping"]["root_app"]["version"]
                 else:

@@ -12,6 +12,12 @@ from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import _clean_split_result
 
 
+def _parse_vmn_commit_line(line):
+    """``(hexsha, decorations)`` of a ``%H,,,%D`` git log line."""
+    commit_hex, decorations = line.split(",,,", 1)
+    return commit_hex, _clean_split_result(decorations.split(","))
+
+
 class GitTagsMixin:
     """Methods for tag/version lookup. Mixed into GitBackend."""
 
@@ -52,38 +58,61 @@ class GitTagsMixin:
     @staticmethod
     def _sorted_tag_names_from_ver_infos(ver_infos, filter_none=False):
         """Extract tag names from ver_infos, sorted newest first by tagged_date."""
-        tag_objects = [
-            vi["tag_object"]
+        tagged = [
+            vi
             for vi in ver_infos.values()
             if not filter_none or vi["tag_object"] is not None
         ]
-        tag_objects.sort(key=lambda t: t.object.tagged_date, reverse=True)
-        return [t.name for t in tag_objects]
+        tagged.sort(key=lambda vi: vi["tagged_date"], reverse=True)
+        return [vi["tag_object"].name for vi in tagged]
 
     @measure_runtime_decorator
     def _get_first_reachable_vmn_stamp_tag_list(self, app_name, cmd_suffix, msg_filter):
         cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
-        bug_limit = MAX_COMMIT_SEARCH_ITERATIONS
-        bug_limit_c = 0
-        while not ver_infos and bug_limit_c < bug_limit:
-            if cobj is None:
-                break
-
-            cmd_suffix = f"{cobj.hexsha}~1"
-            cobj, ver_infos = self._get_top_vmn_commit(app_name, cmd_suffix, msg_filter)
-
-            bug_limit_c += 1
-            if bug_limit_c == bug_limit:
-                VMN_LOGGER.warning(
-                    "Probable bug: vmn failed to find "
-                    f"vmn's commit after {bug_limit} iterations."
-                )
-                ver_infos = {}
-                break
+        if not ver_infos and cobj is not None:
+            cobj, ver_infos = self._walk_back_to_tagged_vmn_commit(
+                app_name, f"{cobj.hexsha}~1", msg_filter
+            )
 
         tag_names = self._sorted_tag_names_from_ver_infos(ver_infos)
 
         return tag_names, cobj, ver_infos
+
+    def _walk_back_to_tagged_vmn_commit(self, app_name, start, msg_filter):
+        """First vmn commit from *start* back whose tags parse, in one git log."""
+        commit_hex = None
+        searched = 0
+        for commit_hex, tags in self._stream_vmn_commits(
+            msg_filter, start, MAX_COMMIT_SEARCH_ITERATIONS
+        ):
+            searched += 1
+            ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
+            if ver_infos:
+                return self.get_commit_object_from_commit_hex(commit_hex), ver_infos
+
+        if searched < MAX_COMMIT_SEARCH_ITERATIONS:
+            return None, {}
+
+        VMN_LOGGER.warning(
+            "Probable bug: vmn failed to find "
+            f"vmn's commit after {MAX_COMMIT_SEARCH_ITERATIONS} iterations."
+        )
+        return self.get_commit_object_from_commit_hex(commit_hex), {}
+
+    def _stream_vmn_commits(self, msg_filter, start, max_count):
+        """Yield ``(hexsha, decorations)`` of vmn commits, newest first."""
+        proc = self._be.git.log(
+            *self._vmn_commit_log_args(msg_filter, f"-n{max_count}", start),
+            as_process=True,
+        )
+        try:
+            for raw_line in proc.stdout:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if line:
+                    yield _parse_vmn_commit_line(line)
+        finally:
+            proc.proc.kill()
+            proc.proc.wait()
 
     @measure_runtime_decorator
     def _get_shallow_first_reachable_vmn_stamp_tag_list(
@@ -103,12 +132,13 @@ class GitTagsMixin:
             return tag_names, cobj, ver_infos
 
         latest_tag = tag_names[-1]
-        head_date = self._be.head.commit.committed_date
+        head_commit = self._be.head.commit
+        head_date = head_commit.committed_date
         for tname in reversed(tag_names):
             tname, o = self.get_tag_object_from_tag_name(tname)
             if o:
                 if (
-                    self._be.head.commit.hexsha != o.commit.hexsha
+                    head_commit.hexsha != o.commit.hexsha
                     and head_date < o.object.tagged_date
                 ):
                     continue
@@ -122,37 +152,39 @@ class GitTagsMixin:
             VMN_LOGGER.error(f"Failed to get tag object from tag name: {latest_tag}")
             return [], cobj, ver_infos
 
-        ver_infos = self.get_all_commit_tags(found_tag.commit.hexsha)
+        found_commit = found_tag.commit
+        ver_infos = self.get_all_commit_tags(found_commit.hexsha)
         final_list_of_tag_names = self._sorted_tag_names_from_ver_infos(
             ver_infos, filter_none=True
         )
 
-        return final_list_of_tag_names, found_tag.commit, ver_infos
+        return final_list_of_tag_names, found_commit, ver_infos
 
     @measure_runtime_decorator
     def _get_top_vmn_commit(self, app_name, cmd_suffix, msg_filter):
-        cmd = [
-            f"--grep={msg_filter}",
-            "-1",
-            f"--author={VMN_USER_NAME}",
-            "--pretty=%H,,,%D",
-            "--decorate=short",
-            cmd_suffix,
-        ]
+        cmd = self._vmn_commit_log_args(msg_filter, "-1", cmd_suffix)
         log_res = _clean_split_result(self._be.git.log(*cmd).split("\n"))
 
         if not log_res:
             return None, {}
 
-        items = log_res[0].split(",,,")
-        tags = _clean_split_result(items[1].split(","))
-
-        commit_hex = items[0]
+        commit_hex, tags = _parse_vmn_commit_line(log_res[0])
         ver_infos = self.get_all_commit_tags_log_impl(commit_hex, tags, app_name)
 
         cobj = self.get_commit_object_from_commit_hex(commit_hex)
 
         return cobj, ver_infos
+
+    @staticmethod
+    def _vmn_commit_log_args(msg_filter, limit, start):
+        return [
+            f"--grep={msg_filter}",
+            limit,
+            f"--author={VMN_USER_NAME}",
+            "--pretty=%H,,,%D",
+            "--decorate=short",
+            start,
+        ]
 
     @measure_runtime_decorator
     def get_latest_available_tags(self, tag_prefix_filter):
