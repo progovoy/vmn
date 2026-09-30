@@ -1,7 +1,8 @@
 """The ``vmn-exp`` command: experiments, the model registry and the UI.
 
 ``vmn-exp create app`` / ``vmn-exp run app -- cmd`` run experiment actions;
-``vmn-exp model ...``, ``vmn-exp sweep ...`` and ``vmn-exp ui`` reach the other commands. It runs on vmn's CLI machinery (repo lock, app resolution)
+``vmn-exp model ...``, ``vmn-exp sweep ...`` and ``vmn-exp ui`` reach the other commands;
+``vmn-exp skill`` prints/installs the AI-agent skill block. It runs on vmn's CLI machinery (repo lock, app resolution)
 through ``version_stamp.api``, with only its own commands registered.
 """
 import sys
@@ -21,6 +22,10 @@ def _to_vmn_argv(argv):
 
 def vmn_exp_run(argv):
     """``(exit code, container)`` for *argv*, as ``vmn_run`` returns them."""
+    if argv and argv[0] == "skill":
+        from vmn_exp.cli.skill import run_skill
+
+        return run_skill(argv[1:]), None
     register_all()
     if argv and argv[0] in VMN_ARGS and argv[0] not in EXPERIMENT_ACTIONS:
         print(

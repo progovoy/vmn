@@ -214,10 +214,25 @@ def test_install_skill_rejects_non_directory_root(tmp_path, caplog):
     assert "not a directory" in caplog.text.lower()
 
 
-def test_skill_explains_how_to_drive_the_ui_fleet_columns(capfd):
+def test_skill_is_core_only(capfd):
     assert vmn_run(["skill"])[0] == 0
     out = capfd.readouterr().out
-    assert "total / waiting / running / done / failed" in out
-    assert "--parent" in out
-    assert "start_run(" in out and "run_id=" in out
-    assert "docs/vmn-exp/ai-fleet-tracking.md" in out
+    assert "`vmn-exp " not in out.replace("`vmn-exp skill`", "")
+    assert "vmn-exp run" not in out and "vmn-exp model" not in out
+    assert "start_run" not in out
+    assert "total / waiting / running / done / failed" not in out
+    assert "experiment tracking" not in out.splitlines()[0].lower()
+
+
+def test_skill_points_to_vmn_exp_skill_in_one_line(capfd):
+    assert vmn_run(["skill"])[0] == 0
+    lines = [ln for ln in capfd.readouterr().out.splitlines() if "vmn-exp" in ln]
+    assert len(lines) == 1
+    assert "`vmn-exp skill`" in lines[0]
+
+
+def test_install_claude_description_is_core_only(tmp_path):
+    assert install_skill("claude", root=str(tmp_path)) == 0
+    content = (tmp_path / ".claude" / "skills" / "vmn" / "SKILL.md").read_text()
+    front_matter = content.split("---")[1]
+    assert "experiment" not in front_matter.lower()

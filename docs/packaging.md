@@ -87,8 +87,9 @@ subpackage belongs to exactly one distribution.
 - The full experiment platform: the `vmn-exp` command (experiment actions
   directly — `vmn-exp run app -- cmd` — plus `model` and `ui`),
   the dashboard, and the MLflow importer.
-- *Differs from the design:* `vmn skill` still carries the experiment section
-  (now with `vmn-exp` commands); there is no separate `vmn-exp skill`.
+- `vmn-exp skill` prints/installs the experiment skill block for AI agents
+  (`vmn skill` is core-only and points at it); it reuses vmn's install
+  machinery through `version_stamp.api.run_skill` with its own name and markers.
 - `vmn_exp.gitmode` holds the git-dependent parts of the SDK: cold start
   (`_init_app`, `handle_init`) and snapshot capture. `start_run()` loads it only
   when needed.

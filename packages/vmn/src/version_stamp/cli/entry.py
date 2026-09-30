@@ -160,11 +160,9 @@ def vmn_run(command_line=None):
         return uninstall_completion(args.completion_uninstall), None
 
     if args.command == "skill":
-        from version_stamp.cli.skill import install_skill, print_skill
+        from version_stamp.cli.skill import run_skill
 
-        if args.install:
-            return install_skill(args.target, args.force), None
-        return print_skill(), None
+        return run_skill(args.install, args.target, args.force), None
 
     # Commands that need no git repo are handled via the plugin's run_without_repo.
     # This covers: vmn ui (long-running server) and vmn exp --from-snapshot mode.

@@ -2,7 +2,7 @@
 
 `vmn-exp ui` shows five management columns on every **outer run** (a run that has
 inner runs): **total**, **waiting**, **running**, **done**, **failed**. This page
-tells an agent which call moves each one. `vmn skill` prints a short version of it.
+tells an agent which call moves each one. `vmn-exp skill` prints a short version of it.
 
 There is no API that sets these numbers. Each is counted from the inner runs'
 states on every refresh, so you change a column by moving an inner run through
