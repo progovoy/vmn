@@ -10,7 +10,7 @@ Built-ins: ``file`` (local disk), ``s3``, ``gs`` (``vmn-exp-sdk[gcs]``) and
 A factory is called as ``factory(uri, subdir=...)`` with the parsed
 :class:`~vmn_exp.storage.uri.StoreURI` and ``"experiments"``/``"snapshots"``,
 and returns a :class:`~vmn_exp.storage.base.SnapshotStorage`. See
-docs/experiments.md ("Storage backends") for the contract it must meet.
+docs/vmn-exp/experiments.md ("Storage backends") for the contract it must meet.
 """
 from importlib import import_module
 from importlib.metadata import entry_points

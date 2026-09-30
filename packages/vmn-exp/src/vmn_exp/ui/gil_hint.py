@@ -16,7 +16,7 @@ HINT = (
     "This store has %d runs and this Python has the GIL enabled, which caps the "
     "ui at one core. For a much faster ui, run it on a free-threaded Python:\n\n"
     "  uvx --python 3.14t --from 'vmn-exp[ui]' vmn-exp ui ...\n\n"
-    "(see docs/ui.md, 'Large stores: run the UI on free-threaded Python')"
+    "(see docs/vmn-exp/ui.md, 'Large stores: run the UI on free-threaded Python')"
 )
 
 

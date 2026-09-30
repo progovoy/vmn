@@ -1,4 +1,4 @@
-"""The sweep spec: validation and normalization (see docs/sweeps.md).
+"""The sweep spec: validation and normalization (see docs/vmn-exp/sweeps.md).
 
 The normalized spec is what the sweep's metadata stores and what every agent
 reads, so it only holds plain YAML values. Parameters are always walked in

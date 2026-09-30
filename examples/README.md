@@ -41,5 +41,5 @@ vmn-exp ui                           # the dashboard (vmn-exp[ui]), at http://12
 
 Re-running any script is safe: it appends new runs and never rewrites old ones.
 
-Full reference: [`docs/sdk.md`](../docs/sdk.md) for the SDK,
-[`docs/experiments.md`](../docs/experiments.md) for the CLI.
+Full reference: [`docs/vmn-exp/sdk.md`](../docs/vmn-exp/sdk.md) for the SDK,
+[`docs/vmn-exp/experiments.md`](../docs/vmn-exp/experiments.md) for the CLI.

@@ -480,7 +480,7 @@ def test_plain_torch_is_deliberately_not_a_framework():
     The user writes the loop, so there is no ``fit`` — and the candidates
     (``Module.__call__``, ``Optimizer.step``) fire per batch or per forward pass
     and would flood the log while still not knowing an epoch from a step. Raw
-    torch users call ``run.log_metric`` in their own loop; see docs/sdk.md.
+    torch users call ``run.log_metric`` in their own loop; see docs/vmn-exp/sdk.md.
     """
     pytest.importorskip("torch")
 

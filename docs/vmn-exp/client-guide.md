@@ -54,7 +54,7 @@ pip install pynvml                 # optional: GPU sys_* metrics
 ```
 
 `vmn-exp` is the experiment command; `vmn` stays the versioning command. See
-[packaging.md](packaging.md#installing).
+[packaging.md](../packaging.md#installing).
 
 No `init` step is needed. The first run in a repo sets up vmn tracking and
 stamps a `0.0.0` baseline, so it needs a git identity (`user.name`,
@@ -374,7 +374,7 @@ straight to S3. A dirty tree is saved as a snapshot first, and the
 
 To save work in progress without recording a run, use `vmn snapshot create
 my_app` (and `vmn snapshot restore my_app -v <ref>`); snapshots share the
-store and code objects with runs. See [snapshots.md](snapshots.md).
+store and code objects with runs. See [snapshots.md](../snapshots.md).
 
 ---
 

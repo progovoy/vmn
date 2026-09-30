@@ -152,13 +152,13 @@ storage directory carries a `.gitignore` of `*`.
 
 ## With vmn-exp installed
 
-[vmn-exp](experiments.md) (experiment tracking) builds on snapshots: an
+[vmn-exp](vmn-exp/experiments.md) (experiment tracking) builds on snapshots: an
 experiment run is a snapshot plus an append-only metrics log, and runs share
 the code objects above. Installing it adds:
 
 - **A shared store**: `--store <uri>` > `VMN_EXPERIMENT_STORE` > conf
   `experiment.storage.uri` (`s3://`, `gs://`, `az://`, `file://`; see
-  [Storage](experiments.md#storage-local-s3-gcs-azure-plugins)) puts records in
+  [Storage](vmn-exp/experiments.md#storage-local-s3-gcs-azure-plugins)) puts records in
   the store's `snapshots` subdir and code objects next to the runs', so
   teammates can list, diff, export and restore each other's snapshots.
   `--local` forces the local store; `VMN_EXP_OFFLINE=1` keeps snapshots local
@@ -168,7 +168,7 @@ the code objects above. Installing it adds:
   `@N`) restores a snapshot. `vmn goto -v <dev-version>` and `vmn-exp restore`
   run this same restore (auto-save, size-cap refusal, `--force`), with the hint
   `vmn goto -v <saved> <app>`; see
-  [Restore vs goto](experiments.md#restore-vs-goto).
+  [Restore vs goto](vmn-exp/experiments.md#restore-vs-goto).
 
 Use a plain snapshot to save and restore code state; use a vmn-exp run to
 record a command's metrics and compare runs. `vmn-exp snapshot` is not a

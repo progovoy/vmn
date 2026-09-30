@@ -111,7 +111,7 @@ pod.finish()               # running -> done    (exit_code=0)
 `start_run("<app_name>", nested=True)` inside the outer run (or
 `vmn-exp run <app_name> --parent <ref> -- <cmd>`) starts a pod straight in
 `running`. Use `with start_run(...) as pod:` so a crash records `failed`.
-Full guide: docs/ai-fleet-tracking.md
+Full guide: docs/vmn-exp/ai-fleet-tracking.md
 
 ### Saving uncommitted work
 

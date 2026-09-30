@@ -13,4 +13,4 @@ vmn-exp ui
 
 Jobs that only record metrics need just
 [`vmn-exp-sdk`](https://pypi.org/project/vmn-exp-sdk/). See
-[docs/experiments.md](https://github.com/progovoy/vmn/blob/master/docs/experiments.md).
+[docs/vmn-exp](https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/README.md).

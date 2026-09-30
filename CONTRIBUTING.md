@@ -48,7 +48,7 @@ Tests require Docker and run in parallel (29 workers by default) using pytest-xd
 - `packages/vmn-exp/webui/` — React/Vite source for the UI; `npm run build` writes into `vmn_exp/ui/static/`
 - `version_stamp/version.py` — vmn's own version string
 - `tests/` — Test suite with Docker-based isolated git environments
-- `docs/` — Long-form guides (`experiments.md`, `ui.md`) and migration guides
+- `docs/` — Core vmn guides and migration guides; `docs/vmn-exp/` holds the vmn-exp (experiment tracking) docs
 
 ## Working on the Web UI
 

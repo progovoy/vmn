@@ -220,4 +220,4 @@ def test_skill_explains_how_to_drive_the_ui_fleet_columns(capfd):
     assert "total / waiting / running / done / failed" in out
     assert "--parent" in out
     assert "start_run(" in out and "run_id=" in out
-    assert "docs/ai-fleet-tracking.md" in out
+    assert "docs/vmn-exp/ai-fleet-tracking.md" in out

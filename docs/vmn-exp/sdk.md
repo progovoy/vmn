@@ -22,7 +22,7 @@ Recording from a git checkout also needs `vmn-exp`, which provides snapshot
 capture; git-free jobs need only the SDK (see [Slim install](#slim-install)).
 For a task-by-task walkthrough see [client-guide.md](client-guide.md).
 Runnable scripts (minimal run, training loop, nested sweep, queries,
-autologging) live in [`examples/`](../examples/README.md); they record to the
+autologging) live in [`examples/`](../../examples/README.md); they record to the
 app `vmn_examples`.
 
 - [CLI or SDK?](#cli-or-sdk)
@@ -1003,4 +1003,4 @@ needs `vmn-exp`; in a slim install `start_run()` in a checkout raises a
 `RuntimeError` pointing at `pip install vmn-exp` or the git-free variables
 ([Runs without a git checkout](#runs-without-a-git-checkout-containers)). A
 missing store extra raises `ImportError` naming it. See
-[packaging.md](packaging.md) for the package split.
+[packaging.md](../packaging.md) for the package split.

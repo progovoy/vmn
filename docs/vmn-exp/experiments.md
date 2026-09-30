@@ -15,7 +15,7 @@ New here? [client-guide.md](client-guide.md) walks through a project end to
 end. This page is the CLI reference. Elsewhere: the Python SDK
 ([sdk.md](sdk.md)), the web UI and HTTP API ([ui.md](ui.md)), the model and
 dataset registry ([models.md](models.md)), sweeps ([sweeps.md](sweeps.md)),
-`vmn snapshot` ([snapshots.md](snapshots.md)).
+`vmn snapshot` ([snapshots.md](../snapshots.md)).
 
 - [Mental model](#mental-model)
 - [Recording an experiment](#recording-an-experiment)
@@ -576,7 +576,7 @@ vmn-exp diff my_app -v @1 -v @3 --tool delta
 ### `restore`
 
 Put this checkout at a run's exact code (default: latest). A dirty tree is
-**auto-saved first** as a [snapshot](snapshots.md) noted `auto-saved before
+**auto-saved first** as a [snapshot](../snapshots.md) noted `auto-saved before
 restore`, and the `vmn goto -v <saved> <app>` that brings it back is printed.
 The restore deletes untracked files, so when some exceed the snapshot size
 caps (and so could not be saved) it refuses and names them; `--force`

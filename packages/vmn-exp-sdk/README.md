@@ -17,4 +17,4 @@ with start_run("my_app") as run:   # VMN_SNAPSHOT_METADATA + VMN_EXPERIMENT_DIR/
 
 Creating runs from a git checkout, the `vmn-exp` CLI and the dashboard live in
 [`vmn-exp`](https://pypi.org/project/vmn-exp/). See
-[docs/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/sdk.md).
+[docs/vmn-exp/sdk.md](https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/sdk.md).

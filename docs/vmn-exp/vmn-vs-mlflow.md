@@ -185,7 +185,7 @@ and the differences to know before porting a script.
 ## Further reading
 
 - [Client guide](client-guide.md) · [vmn-exp tracking guide](experiments.md)
-- [vmn Python SDK](sdk.md) · [runnable examples](../examples/README.md)
+- [vmn Python SDK](sdk.md) · [runnable examples](../../examples/README.md)
 - [vmn-exp model registry](models.md)
 - [Migrating from MLflow](migrating-from-mlflow.md)
 - [vmn-exp ui](ui.md)
