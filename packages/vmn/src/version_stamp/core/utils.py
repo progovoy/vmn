@@ -2,6 +2,8 @@
 import datetime
 import hashlib
 import os
+import stat
+import tempfile
 
 import yaml
 
@@ -65,6 +67,70 @@ def sha256_file(abs_path):
         for chunk in iter(lambda: f.read(1 << 16), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _current_umask():
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
+def atomic_write(path, data):
+    """Replace *path* with *data* (str as UTF-8, or bytes) atomically.
+
+    Readers see the old file or the new one. An existing file keeps its mode;
+    a new one gets the mode a plain ``open()`` would give under the umask.
+    """
+    directory, name = os.path.split(path)
+    fd, tmp = tempfile.mkstemp(dir=directory or os.curdir, prefix=f".{name}.", suffix=".tmp")
+    os.close(fd)
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data.encode("utf-8") if isinstance(data, str) else data)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(path):
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+        else:
+            mode = 0o666 & ~_current_umask()
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+class MalformedBlockError(ValueError):
+    """A managed marker block is unbalanced, duplicated or out of order."""
+
+
+def marked_block_span(content, begin, end):
+    """``(start, stop)`` of the single *begin*..*end* block, None when absent."""
+    counts = (content.count(begin), content.count(end))
+    if counts == (0, 0):
+        return None
+    if counts != (1, 1):
+        raise MalformedBlockError("markers")
+    start, end_start = content.index(begin), content.index(end)
+    if end_start < start:
+        raise MalformedBlockError("marker order")
+    return start, end_start + len(end)
+
+
+def upsert_marked_block(content, begin, end, block):
+    """``(new_content, verb)``: *block* replaces the managed block in place, else
+    is appended after a blank line (or is the whole file when it was blank)."""
+    span = marked_block_span(content, begin, end)
+    if span:
+        new, verb = content[: span[0]] + block + content[span[1] :], "Updated"
+    elif content.strip():
+        new, verb = f"{content.rstrip()}\n\n{block}", "Appended"
+    else:
+        new, verb = block, "Wrote"
+    return new.rstrip("\n") + "\n", verb
 
 
 def _clean_split_result(items):

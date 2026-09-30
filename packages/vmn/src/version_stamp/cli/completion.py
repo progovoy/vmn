@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Shell completion support for vmn using argcomplete."""
 import os
-import stat
 import sys
-import tempfile
 
 from version_stamp.compat.completion import strip_legacy_completion
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.core.constants import BRANCH_CONF_DIR, VER_FILE_NAME
+from version_stamp.core.utils import (
+    MalformedBlockError,
+    atomic_write,
+    marked_block_span,
+    resolve_root_path,
+)
 
 SUPPORTED_SHELLS = ("bash", "zsh", "fish", "tcsh")
 COMPLETION_MARKER = "# vmn shell completion"
@@ -27,14 +31,14 @@ def _complete_apps(prefix):
         return []
 
     vmn_dir = os.path.join(root, ".vmn")
-    ver_filename = "last_known_app_version.yml"
+    ver_filename = VER_FILE_NAME
     apps = []
 
     for dirpath, dirnames, filenames in os.walk(vmn_dir):
         dirnames[:] = [
             name
             for name in dirnames
-            if not name.startswith(".") and name != "branch_conf"
+            if not name.startswith(".") and name != BRANCH_CONF_DIR
         ]
         if ver_filename in filenames:
             rel = os.path.relpath(dirpath, vmn_dir)
@@ -229,35 +233,11 @@ def _strip_managed_block(content):
 
 
 def _has_malformed_completion_block(content):
-    starts = content.count(COMPLETION_MARKER)
-    ends = content.count(COMPLETION_END_MARKER)
-    if starts != ends or starts > 1:
-        return True
-    if starts == 0:
-        return False
-    start_after_end = content.index(COMPLETION_MARKER) > content.index(
-        COMPLETION_END_MARKER
-    )
-    return starts == 1 and start_after_end
-
-
-def _atomic_write(path, content):
-    directory = os.path.dirname(path)
-    fd, temp_path = tempfile.mkstemp(prefix=".vmn-completion-", dir=directory)
-    os.close(fd)
     try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        if os.path.exists(path):
-            mode = stat.S_IMODE(os.stat(path).st_mode)
-            os.chmod(temp_path, mode)
-        os.replace(temp_path, path)
-    except Exception:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
+        marked_block_span(content, COMPLETION_MARKER, COMPLETION_END_MARKER)
+    except MalformedBlockError:
+        return True
+    return False
 
 
 def install_completion(shell=None):
@@ -294,7 +274,7 @@ def install_completion(shell=None):
             f"{COMPLETION_END_MARKER}\n"
         )
         os.makedirs(os.path.dirname(rc_path), exist_ok=True)
-        _atomic_write(rc_path, content + block)
+        atomic_write(rc_path, content + block)
     except OSError as exc:
         print(f"Failed to install completion in {rc_path}: {exc}", file=sys.stderr)
         return 1
@@ -321,7 +301,7 @@ def uninstall_completion(shell=None):
             print(f"Completion not installed in {rc_path}")
             return 0
         new_content = _strip_managed_block(content)
-        _atomic_write(rc_path, new_content)
+        atomic_write(rc_path, new_content)
     except OSError as exc:
         print(f"Failed to uninstall completion from {rc_path}: {exc}", file=sys.stderr)
         return 1
