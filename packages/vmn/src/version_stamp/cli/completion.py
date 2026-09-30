@@ -31,7 +31,6 @@ def _complete_apps(prefix):
         return []
 
     vmn_dir = os.path.join(root, ".vmn")
-    ver_filename = VER_FILE_NAME
     apps = []
 
     for dirpath, dirnames, filenames in os.walk(vmn_dir):
@@ -40,7 +39,7 @@ def _complete_apps(prefix):
             for name in dirnames
             if not name.startswith(".") and name != BRANCH_CONF_DIR
         ]
-        if ver_filename in filenames:
+        if VER_FILE_NAME in filenames:
             rel = os.path.relpath(dirpath, vmn_dir)
             apps.append(rel.replace(os.sep, "/"))
 
