@@ -206,7 +206,7 @@ def deserialize_tag_name(some_tag):
     match = re.search(VMN_ROOT_TAG_REGEX, some_tag)
     if match is not None:
         gdict = match.groupdict()
-        app_name = gdict["app_name"]
+        app_name = tag_name_to_app_name(gdict["app_name"])
     else:
         match = re.search(VMN_TAG_REGEX, some_tag)
         if match is None:

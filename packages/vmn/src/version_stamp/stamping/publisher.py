@@ -11,8 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from version_stamp.backends.base import VMNBackend
 from version_stamp.compat.branch_conf import migrate_branch_confs
+from version_stamp.core.changelog import group_commits
 from version_stamp.core.constants import (
     BRANCH_CONF_DIR,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
@@ -21,7 +21,14 @@ from version_stamp.core.constants import (
     VMN_USER_NAME,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.version_math import parse_conventional_commit_message
+from version_stamp.core.version_math import (
+    app_name_to_tag_name,
+    deserialize_tag_name,
+    deserialize_vmn_version,
+    get_base_vmn_version,
+    get_utemplate_formatted_version,
+    serialize_vmn_version,
+)
 from version_stamp.stamping.base import IVersionsStamper
 
 
@@ -39,6 +46,34 @@ def _tag_complies(tag, regex):
         VMN_LOGGER.error(f"Tag {tag} doesn't comply with: {regex} format")
         return False
     return True
+
+
+_CHANGELOG_PRIORITY_LABELS = ["Features", "Bug Fixes"]
+
+
+def _changelog_sections(grouped):
+    """``(label, entries)`` for CHANGELOG.md: Breaking Changes, Features, Bug
+    Fixes, then the rest alphabetically. Non-conventional commits (no type)
+    are left out of the file."""
+    by_label = {}
+    for group in grouped["groups"]:
+        entries = [entry for entry in group["commits"] if entry["type"] is not None]
+        if entries:
+            by_label[group["label"]] = entries
+
+    sections = []
+    if grouped["breaking"]:
+        sections.append(("Breaking Changes", grouped["breaking"]))
+    rest = sorted(set(by_label) - set(_CHANGELOG_PRIORITY_LABELS))
+    for label in _CHANGELOG_PRIORITY_LABELS + rest:
+        if label in by_label:
+            sections.append((label, by_label[label]))
+    return sections
+
+
+def _changelog_line(entry):
+    prefix = f"**{entry['scope']}:** " if entry["scope"] else ""
+    return f"- {prefix}{entry['description']} ({entry['hash']})"
 
 
 class VersionControlStamper(IVersionsStamper):
@@ -59,21 +94,16 @@ class VersionControlStamper(IVersionsStamper):
             return None
 
         tag_formatted_app_name = self.get_tag_name(verstr)
-        base_verstr = VMNBackend.get_base_vmn_version(verstr, self.hide_zero_hotfix)
+        base_verstr = get_base_vmn_version(verstr, self.hide_zero_hotfix)
         release_tag_formatted_app_name = self.get_tag_name(base_verstr)
 
         if self.selected_tag != tag_formatted_app_name:
-            # Get version info for tag
-            tag_formatted_app_name, ver_infos = self.backend.get_tag_version_info(
-                tag_formatted_app_name
-            )
+            tag_formatted_app_name, ver_infos = self._tag_info(tag_formatted_app_name)
             if not ver_infos:
                 VMN_LOGGER.error(
                     f"Failed to get version info for tag: {tag_formatted_app_name}"
                 )
                 return None
-
-            self.enhance_ver_info(ver_infos)
         else:
             ver_infos = self.ver_infos_from_repo
 
@@ -138,7 +168,7 @@ class VersionControlStamper(IVersionsStamper):
                 raise RuntimeError(err_msg)
 
         tmp = ver_info["stamping"]["app"]
-        base_verstr = VMNBackend.get_base_vmn_version(
+        base_verstr = get_base_vmn_version(
             tmp["_version"],
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
@@ -148,7 +178,7 @@ class VersionControlStamper(IVersionsStamper):
         ver_info["stamping"]["app"]["_version"] = base_verstr
         ver_info["stamping"]["app"][
             "version"
-        ] = VMNBackend.get_utemplate_formatted_version(
+        ] = get_utemplate_formatted_version(
             base_verstr, self.template, self.hide_zero_hotfix
         )
         ver_info["stamping"]["app"]["prerelease"] = "release"
@@ -167,8 +197,8 @@ class VersionControlStamper(IVersionsStamper):
 
     @measure_runtime_decorator
     def add_metadata_to_version(self, tag_name, ver_info):
-        props = VMNBackend.deserialize_tag_name(tag_name)
-        res_ver = VMNBackend.serialize_vmn_version(
+        props = deserialize_tag_name(tag_name)
+        res_ver = serialize_vmn_version(
             props.verstr,
             buildmetadata=self.params["buildmetadata"],
             hide_zero_hotfix=self.hide_zero_hotfix,
@@ -182,7 +212,7 @@ class VersionControlStamper(IVersionsStamper):
         ver_info["stamping"]["app"]["_version"] = res_ver
         ver_info["stamping"]["app"][
             "version"
-        ] = VMNBackend.get_utemplate_formatted_version(
+        ] = get_utemplate_formatted_version(
             res_ver, self.template, self.hide_zero_hotfix
         )
         ver_info["stamping"]["app"]["prerelease"] = "metadata"
@@ -198,13 +228,7 @@ class VersionControlStamper(IVersionsStamper):
             with open(path) as f:
                 ver_info["stamping"]["app"]["version_metadata"] = yaml.safe_load(f)
 
-        (
-            buildmetadata_tag_name,
-            tag_ver_infos,
-        ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
-        tag_ver_infos = tag_ver_infos or {}
-
-        self.enhance_ver_info(tag_ver_infos)
+        buildmetadata_tag_name, tag_ver_infos = self._tag_info(buildmetadata_tag_name)
 
         if buildmetadata_tag_name in tag_ver_infos:
             if tag_ver_infos[buildmetadata_tag_name]["ver_info"] != ver_info:
@@ -228,7 +252,7 @@ class VersionControlStamper(IVersionsStamper):
 
     @measure_runtime_decorator
     def stamp_app_version(self, from_verstr):
-        props = VMNBackend.deserialize_vmn_version(from_verstr)
+        props = deserialize_vmn_version(from_verstr)
         initialprerelease = props.prerelease
 
         if initialprerelease == "release" and self.release_mode is None:
@@ -240,18 +264,9 @@ class VersionControlStamper(IVersionsStamper):
             raise RuntimeError()
 
         if initialprerelease != "release" and self.release_mode is None:
-            base_version = VMNBackend.get_base_vmn_version(
-                from_verstr,
-                hide_zero_hotfix=self.hide_zero_hotfix,
+            release_tag_formatted_app_name, ver_infos = self.release_tag_info(
+                from_verstr
             )
-            (
-                release_tag_formatted_app_name,
-                ver_infos,
-            ) = self.backend.get_tag_version_info(self.get_tag_name(base_version))
-            ver_infos = ver_infos or {}
-
-            self.enhance_ver_info(ver_infos)
-
             if (
                 release_tag_formatted_app_name in ver_infos
                 and ver_infos[release_tag_formatted_app_name] is not None
@@ -274,7 +289,7 @@ class VersionControlStamper(IVersionsStamper):
             info["env"] = dict(os.environ)
 
         release_mode = self.release_mode
-        cur_props = VMNBackend.deserialize_vmn_version(current_version)
+        cur_props = deserialize_vmn_version(current_version)
 
         if cur_props.prerelease != "release":
             release_mode = "prerelease"
@@ -311,7 +326,7 @@ class VersionControlStamper(IVersionsStamper):
         release_mode,
         prerelease_count,
     ):
-        props = VMNBackend.deserialize_vmn_version(current_version)
+        props = deserialize_vmn_version(current_version)
 
         self.current_version_info["stamping"]["app"]["_version"] = current_version
         self.current_version_info["stamping"]["app"]["prerelease"] = props.prerelease
@@ -336,40 +351,11 @@ class VersionControlStamper(IVersionsStamper):
         if self.root_app_name is None:
             return None
 
-        tag_name, ver_infos = self.get_first_reachable_version_info(
-            self.root_app_name,
-            root_context=True,
-            type=RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
+        root_version, services = self._next_root_state(
+            RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
+            allow_missing=False,
+            override_version=override_version,
         )
-
-        self.enhance_ver_info(ver_infos)
-
-        if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
-            VMN_LOGGER.error(
-                f"Version information for {self.root_app_name} was not found"
-            )
-            raise RuntimeError()
-
-        # TODO: think about this case
-        if "version" not in ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]:
-            VMN_LOGGER.error(
-                f"Root app name is {self.root_app_name} and app name is {self.name}. "
-                f"However no version information for root was found"
-            )
-            raise RuntimeError()
-
-        old_version = int(
-            ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"]
-        )
-        if override_version is None:
-            override_version = old_version
-
-        root_version = int(override_version) + 1
-
-        root_app = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]
-        services = copy.deepcopy(root_app["services"])
-
-        services[self.name] = self.current_version_info["stamping"]["app"]["_version"]
 
         self.current_version_info["stamping"]["root_app"].update(
             {
@@ -480,7 +466,7 @@ class VersionControlStamper(IVersionsStamper):
         """The tags a stamp creates, or None when one breaks the tag format."""
         tags = [(self.get_tag_name(app_version), VMN_TAG_REGEX)]
         if self.root_app_name is not None:
-            root_tag_app_name = VMNBackend.app_name_to_tag_name(self.root_app_name)
+            root_tag_app_name = app_name_to_tag_name(self.root_app_name)
             tags.append((f"{root_tag_app_name}_{root_app_version}", VMN_ROOT_TAG_REGEX))
 
         if not all(_tag_complies(tag, regex) for tag, regex in tags):
@@ -594,84 +580,26 @@ class VersionControlStamper(IVersionsStamper):
 
         changelog_path = self._changelog_path()
 
-        # Collect commits grouped by type
-        type_labels = {
-            "feat": "Features",
-            "fix": "Bug Fixes",
-            "perf": "Performance Improvements",
-            "refactor": "Refactoring",
-            "docs": "Documentation",
-            "style": "Style",
-            "test": "Tests",
-            "build": "Build",
-            "ci": "CI",
-            "chore": "Chores",
-            "revert": "Reverts",
-        }
-
-        breaking_changes = []
-        grouped_commits = {}
-
         try:
-            for msg, short_hash in self.backend.get_commits_info_iter(
-                self.selected_tag
-            ):
-                try:
-                    res = parse_conventional_commit_message(msg)
-                except ValueError:
-                    continue
-
-                description = res["description"].strip()
-                scope = res.get("scope")
-                is_breaking = res.get("bc") == "!"
-
-                # Check footer for BREAKING CHANGE
-                footer = res.get("footer") or ""
-                if "BREAKING CHANGE" in footer or "BREAKING-CHANGE" in footer:
-                    is_breaking = True
-
-                prefix = f"**{scope}:** " if scope else ""
-                entry = f"- {prefix}{description} ({short_hash})"
-
-                if is_breaking:
-                    breaking_changes.append(entry)
-                else:
-                    commit_type = res["type"].strip()
-                    label = type_labels.get(commit_type, "Other Changes")
-                    grouped_commits.setdefault(label, []).append(entry)
+            grouped = group_commits(
+                self.backend.get_commits_info_iter(self.selected_tag)
+            )
         except Exception:
             VMN_LOGGER.debug("Failed to iterate commits for changelog", exc_info=True)
             return
 
-        if not grouped_commits and not breaking_changes:
+        sections = _changelog_sections(grouped)
+        if not sections:
             VMN_LOGGER.debug(
                 "No conventional commits found, skipping changelog generation"
             )
             return
 
-        # Build the changelog entry
         today = datetime.date.today().isoformat()
         lines = [f"## [{app_version}] - {today}", ""]
-
-        # Section ordering: Breaking Changes first, then Features, Bug Fixes, rest
-        section_order = ["Breaking Changes", "Features", "Bug Fixes"]
-
-        if breaking_changes:
-            lines.append("### Breaking Changes")
-            lines.extend(breaking_changes)
-            lines.append("")
-
-        for section in section_order:
-            if section == "Breaking Changes":
-                continue
-            if section in grouped_commits:
-                lines.append(f"### {section}")
-                lines.extend(grouped_commits.pop(section))
-                lines.append("")
-
-        for section in sorted(grouped_commits.keys()):
-            lines.append(f"### {section}")
-            lines.extend(grouped_commits[section])
+        for label, entries in sections:
+            lines.append(f"### {label}")
+            lines.extend(_changelog_line(entry) for entry in entries)
             lines.append("")
 
         new_entry = "\n".join(lines)
