@@ -1,4 +1,5 @@
 import os
+import sys
 
 import yaml
 
@@ -222,3 +223,78 @@ def test_jinja2_gen_rn_custom_file(app_layout, capfd):
 
     with open(opath, "r") as f:
         assert "prevent racing of requests" in f.read().lower()
+
+
+def _fake_git_cliff(tmp_path, monkeypatch, exit_code):
+    """Put a git-cliff beside the interpreter that leaves a marker when run."""
+    marker = tmp_path / "git_cliff_ran"
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    script = bindir / "git-cliff"
+    script.write_text(f"#!/bin/sh\ntouch {marker}\necho cliff-broke >&2\nexit {exit_code}\n")
+    script.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(bindir / "python"))
+    return marker
+
+
+def _gen_from_template(app_layout, content):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    err, _, _ = _stamp_app(app_layout.app_name, "patch")
+    assert err == 0
+    app_layout.write_file_commit_and_push(
+        "test_repo_0", "f1.txt", "content", commit_msg="fix: something"
+    )
+    app_layout.write_file_commit_and_push("test_repo_0", "f1.jinja2", content)
+
+    repo = app_layout._repos["test_repo_0"]["path"]
+    opath = os.path.join(repo, "jinja_out.txt")
+    err = _gen(app_layout.app_name, os.path.join(repo, "f1.jinja2"), opath)
+    return err, opath
+
+
+def test_jinja2_gen_skips_git_cliff_when_template_has_no_release_notes(
+    app_layout, tmp_path, monkeypatch
+):
+    marker = _fake_git_cliff(tmp_path, monkeypatch, exit_code=0)
+
+    err, opath = _gen_from_template(app_layout, "VERSION: {{version}}\n")
+
+    assert err == 0
+    assert not marker.exists()
+    with open(opath) as f:
+        assert f.read() == "VERSION: 0.0.1\n"
+
+
+def test_jinja2_gen_warns_and_renders_empty_notes_when_git_cliff_fails(
+    app_layout, tmp_path, monkeypatch, capfd
+):
+    marker = _fake_git_cliff(tmp_path, monkeypatch, exit_code=1)
+    capfd.readouterr()
+
+    err, opath = _gen_from_template(app_layout, "RN:[{{release_notes}}]\n")
+
+    assert err == 0
+    assert marker.exists()
+    with open(opath) as f:
+        assert f.read() == "RN:[]\n"
+    assert "cliff-broke" in capfd.readouterr().err
+
+
+def test_jinja2_gen_prefers_the_git_cliff_installed_next_to_vmn(
+    app_layout, tmp_path, monkeypatch
+):
+    # pipx and non-activated venvs install git-cliff beside the interpreter,
+    # not on PATH.
+    bindir = tmp_path / "venv_bin"
+    bindir.mkdir()
+    script = bindir / "git-cliff"
+    script.write_text("#!/bin/sh\necho notes-from-venv\n")
+    script.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(bindir / "python"))
+
+    err, opath = _gen_from_template(app_layout, "{{release_notes}}")
+
+    assert err == 0
+    with open(opath) as f:
+        assert f.read() == "notes-from-venv\n"

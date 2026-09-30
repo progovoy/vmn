@@ -758,6 +758,7 @@ class IVersionsStamper:
             if "custom_keys_path" in item:
                 custom_path = os.path.join(self.vmn_root_path, item["custom_keys_path"])
 
+            input_path = os.path.join(self.vmn_root_path, item["input_file_path"])
             tmplt_value = create_data_dict_for_jinja2(
                 self.get_tag_name(
                     self.current_version_info["stamping"]["app"]["previous_version"]
@@ -766,11 +767,12 @@ class IVersionsStamper:
                 self.backend.repo_path,
                 self.current_version_info,
                 custom_path,
+                input_path,
             )
 
             gen_jinja2_template_from_data(
                 tmplt_value,
-                os.path.join(self.vmn_root_path, item["input_file_path"]),
+                input_path,
                 os.path.join(self.vmn_root_path, item["output_file_path"]),
             )
 

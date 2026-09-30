@@ -20,10 +20,8 @@ dependencies = [
     "Jinja2>=3.0.3",
     "questionary>=2.0.0",
     "rich>=12.0.0",
+    "git-cliff>=2.5.0,<3",
 ]
-
-[project.optional-dependencies]
-changelog = ["git-cliff==2.5.0"]
 
 [project.scripts]
 vmn = "version_stamp.cli:main"

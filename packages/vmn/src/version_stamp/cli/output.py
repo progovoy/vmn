@@ -375,6 +375,7 @@ def gen(vcs, params, verstr_range=None):
         vcs.backend.repo_path,
         ver_infos[tag_name]["ver_info"],
         params["custom_values"],
+        params["jinja_template"],
     )
 
     gen_jinja2_template_from_data(

@@ -50,7 +50,6 @@ def test_the_sdk_needs_only_yaml_filelock_and_psutil():
 
 
 @pytest.mark.parametrize("dist, extras", [
-    ("vmn", {"changelog"}),
     ("vmn-exp-sdk", {"s3"}),
     ("vmn-exp", {"ui", "s3", "mlflow"}),
 ])
@@ -63,6 +62,13 @@ def test_no_distribution_pulls_in_a_training_framework(dist):
     # autolog patches the framework the user already has.
     heavy = [r for r in _requirements(dist) if r.lower().startswith(HEAVY)]
     assert heavy == []
+
+
+def test_git_cliff_uses_a_range_not_an_exact_pin():
+    # Jinja2 templates' {{ release_notes }} need it; an exact pin would fight
+    # other packages' constraints.
+    [cliff] = [r for r in _project("vmn")["dependencies"] if r.startswith("git-cliff")]
+    assert "==" not in cliff and ">=" in cliff and "<" in cliff
 
 
 def test_gitpython_uses_a_range_not_an_exact_pin():

@@ -51,7 +51,7 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
-| `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, … (as today); extra `changelog` |
+| `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, … (as today) |
 | `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `mlflow` |
 | `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extra `s3` |
 
