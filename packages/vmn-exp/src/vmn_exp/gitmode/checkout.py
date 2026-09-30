@@ -68,7 +68,6 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
     *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
     references the stored code object instead of carrying the patches.
     """
-    key, summary = code
     code_verstr = captured.code_verstr
     template = _build_snapshot_metadata(
         vcs,
@@ -79,10 +78,9 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
         captured.identity,
         captured.ver_info,
         note=note,
+        code=code,
+        diff_hash=captured.diff_hash,
     )
-    template.update(summary)
-    if key:
-        template["code"] = key
     return create_run(
         storage,
         vcs.name,

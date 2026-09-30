@@ -6,8 +6,9 @@ Public:
     ``unsafe_verstr(name) -> str``, ``safe_dep_name(dep_path) -> str``.
   - ``skipped_untracked(patches) -> list``, ``patch_summary(patches) -> dict``.
   - ``build_record_metadata(vcs, verstr, base_version, commit_hash,
-    dirty_states, patches, ver_info, note=None) -> dict`` — adds
-    ``code_verstr`` (the 7-char dev verstr the code object is named by).
+    dirty_states, patches, ver_info, note=None, code=None, diff_hash=None)
+    -> dict`` — adds ``code_verstr`` (the 7-char dev verstr the code object is
+    named by) and, with *code* ``(key, summary)``, the ``code:`` reference.
   - ``same_state(stored_meta, diff_hash, changesets) -> bool``.
 """
 from version_stamp.core.utils import now_iso
@@ -59,8 +60,11 @@ def _remote_url(backend):
 
 
 def build_record_metadata(
-    vcs, verstr, base_version, commit_hash, dirty_states, patches, ver_info, note=None
+    vcs, verstr, base_version, commit_hash, dirty_states, patches, ver_info,
+    note=None, code=None, diff_hash=None,
 ):
+    """*diff_hash* is hashed from *patches* unless given; *code* is
+    ``ensure_code``'s ``(key, summary)`` of the stored code object."""
     metadata = {
         "verstr": verstr,
         "base_version": base_version,
@@ -73,7 +77,10 @@ def build_record_metadata(
         "dirty_states": dirty_states,
         **patch_summary(patches),
     }
-    diff_hash = _compute_diff_hash(patches)
+    if code:
+        metadata.update(code[1])
+    if diff_hash is None:
+        diff_hash = _compute_diff_hash(patches)
     if diff_hash:
         metadata["diff_hash"] = diff_hash
         metadata["code_verstr"] = _format_dev_verstr(base_version, commit_hash, diff_hash)
@@ -84,6 +91,8 @@ def build_record_metadata(
     dep_bases = _dep_base_commits(patches)
     if dep_bases:
         metadata["dep_base_commits"] = dep_bases
+    if code and code[0]:
+        metadata["code"] = code[0]
     return metadata
 
 
