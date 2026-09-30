@@ -34,6 +34,22 @@ def _is_breaking(parsed):
     return "BREAKING CHANGE" in footer or "BREAKING-CHANGE" in footer
 
 
+_TYPE_RELEASE_MODES = {
+    "fix": "patch",
+    "feat": "minor",
+    "breaking change": "major",
+    "BREAKING CHANGE": "major",
+    "micro": "hotfix",
+}
+
+
+def release_mode_for_commit(parsed):
+    """The release mode a parsed conventional commit asks for, or None."""
+    if _is_breaking(parsed):
+        return "major"
+    return _TYPE_RELEASE_MODES.get(parsed.get("type"))
+
+
 def _entry(parsed, short_hash):
     return {
         "type": (parsed.get("type") or "").strip(),

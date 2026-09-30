@@ -18,6 +18,7 @@ from version_stamp.cli.constants import (
     RepoStatus,
 )
 from version_stamp.compat.release_mode import normalize_release_mode
+from version_stamp.core.changelog import release_mode_for_commit
 from version_stamp.core.constants import (
     INIT_COMMIT_MESSAGE,
     RELATIVE_TO_GLOBAL_TYPE,
@@ -152,6 +153,13 @@ def _describe_release_mode_policy(policy):
     return "applied as a strict release mode (-r behavior)"
 
 
+def _is_root_version(verstr):
+    """A bare root-app integer, which ``--ov`` can't stamp (that is ``--orv``)."""
+    if verstr is None:
+        return False
+    return "root" in VMNBackend.deserialize_vmn_version(verstr).types
+
+
 def _log_cli_release_mode(vcs):
     if vcs.release_mode is not None:
         flag, mode = "-r/--release-mode", vcs.release_mode
@@ -237,23 +245,6 @@ def handle_stamp(vmn_ctx):
         ):
             max_release_mode = None
             max_release_trigger = None
-            mapping = {
-                "fix": "patch",
-                "feat": "minor",
-                "breaking change": "major",
-                "BREAKING CHANGE": "major",
-                "micro": "hotfix",
-                "perf": "",
-                "refactor": "",
-                "docs": "",
-                "style": "",
-                "test": "",
-                "build": "",
-                "ci": "",
-                "chore": "",
-                "revert": "",
-                "config": "",
-            }
             for m in vmn_ctx.vcs.backend.get_commits_range_iter(
                 vmn_ctx.vcs.selected_tag
             ):
@@ -262,16 +253,14 @@ def handle_stamp(vmn_ctx):
                 except ValueError:
                     continue
 
-                if res["type"] not in mapping or mapping[res["type"]] == "":
+                mode = release_mode_for_commit(res)
+                if mode is None:
                     continue
 
-                if res["bc"] == "!":
-                    res["type"] = "breaking change"
-
                 if max_release_mode is None or compare_release_modes(
-                    mapping[res["type"]], max_release_mode
+                    mode, max_release_mode
                 ):
-                    max_release_mode = mapping[res["type"]]
+                    max_release_mode = mode
                     max_release_trigger = f"{res['type']}: {res['description']}"
 
             _log_conventional_commits_release_mode(
@@ -296,17 +285,12 @@ def handle_stamp(vmn_ctx):
 
     assert vmn_ctx.vcs.release_mode is None or vmn_ctx.vcs.optional_release_mode is None
 
-    if vmn_ctx.vcs.override_version is not None:
-        try:
-            props = VMNBackend.deserialize_vmn_version(vmn_ctx.vcs.override_version)
-        except Exception:
-            err = (
-                f"Provided override {vmn_ctx.vcs.override_version} doesn't comply with: "
-                f"{VMN_VERSION_FORMAT} format"
-            )
-            VMN_LOGGER.error(err)
-
-            raise RuntimeError(err)
+    if _is_root_version(vmn_ctx.vcs.override_version):
+        VMN_LOGGER.error(
+            f"Version must be in format: {VMN_VERSION_FORMAT}. "
+            f"Use --orv to override a root app version"
+        )
+        return 1
 
     optional_status = {"version_not_matched", "detached"}
     expected_status = {
@@ -833,6 +817,57 @@ def _on_configured_branch(path, branch_name, configured_branch):
     return tracked == configured_branch and head_contained_in_upstream(path)
 
 
+def _branch_pin_error(repo, full_path, dep_be, branch):
+    branch_name = dep_be.get_active_branch()
+    if _on_configured_branch(full_path, branch_name, branch):
+        return None
+    return (
+        f"{repo} repository is on a different branch: "
+        f"{branch_name} than what is required by the configuration: {branch}"
+    )
+
+
+def _tag_pin_error(repo, full_path, dep_be, tag):
+    if dep_be.changeset(tag=tag) == dep_be.changeset():
+        return None
+    return f"Repository in not on the requested tag by the configuration for {repo}."
+
+
+def _hash_pin_error(repo, full_path, dep_be, changeset):
+    if changeset == dep_be.changeset():
+        return None
+    return f"Repository in not on the requested hash by the configuration for {repo}."
+
+
+_DEP_PIN_CHECKS = {
+    "branch": _branch_pin_error,
+    "tag": _tag_pin_error,
+    "hash": _hash_pin_error,
+}
+
+
+def _dep_pin_error(pin, repo, full_path, dep_be, value):
+    """Why dep ``repo`` is off its configured ``pin`` (branch/tag/hash), or None."""
+    try:
+        return _DEP_PIN_CHECKS[pin](repo, full_path, dep_be, value)
+    except Exception:
+        VMN_LOGGER.debug(f"Failed to check the {pin} of {repo}", exc_info=True)
+        return (
+            f"Failed to verify that {repo} repository is on the {pin}: {value} "
+            f"required by the configuration"
+        )
+
+
+def _mark_unsynced(status, repo, pin, err_msg):
+    status.deps_synced_with_conf = False
+    status.err_msgs[
+        "deps_synced_with_conf"
+    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
+    status.state.discard("deps_synced_with_conf")
+    status.repos[repo][f"{pin}_synced_error"] = True
+    status.repos[repo]["state"].add("not_synced_with_conf")
+
+
 @measure_runtime_decorator
 def _get_repo_status(
     vcs, expected_status, optional_status=set(), suppress_errors=frozenset()
@@ -938,65 +973,14 @@ def _get_repo_status(
                 status.repos[repo]["pending"] = True
                 status.repos[repo]["state"].add("pending")
 
-            if "branch" in vcs.configured_deps[repo]:
-                try:
-                    branch_name = dep_be.get_active_branch()
-                    err_msg = (
-                        f"{repo} repository is on a different branch: "
-                        f"{branch_name} than what is required by the configuration: "
-                        f"{vcs.configured_deps[repo]['branch']}"
-                    )
-                    assert _on_configured_branch(
-                        full_path, branch_name, vcs.configured_deps[repo]["branch"]
-                    )
-                except Exception:
-                    status.deps_synced_with_conf = False
-                    status.err_msgs[
-                        "deps_synced_with_conf"
-                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status.state:
-                        status.state.remove("deps_synced_with_conf")
-
-                    status.repos[repo]["branch_synced_error"] = True
-                    status.repos[repo]["state"].add("not_synced_with_conf")
-
-            if "tag" in vcs.configured_deps[repo]:
-                try:
-                    err_msg = (
-                        f"Repository in not on the requested tag by the configuration "
-                        f"for {repo}."
-                    )
-                    c1 = dep_be.changeset(tag=vcs.configured_deps[repo]["tag"])
-                    c2 = dep_be.changeset()
-                    assert c1 == c2
-                except Exception:
-                    status.deps_synced_with_conf = False
-                    status.err_msgs[
-                        "deps_synced_with_conf"
-                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status.state:
-                        status.state.remove("deps_synced_with_conf")
-
-                    status.repos[repo]["tag_synced_error"] = True
-                    status.repos[repo]["state"].add("not_synced_with_conf")
-
-            if "hash" in vcs.configured_deps[repo]:
-                try:
-                    err_msg = (
-                        f"Repository in not on the requested hash by the configuration "
-                        f"for {repo}."
-                    )
-                    assert vcs.configured_deps[repo]["hash"] == dep_be.changeset()
-                except Exception:
-                    status.deps_synced_with_conf = False
-                    status.err_msgs[
-                        "deps_synced_with_conf"
-                    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
-                    if "deps_synced_with_conf" in status.state:
-                        status.state.remove("deps_synced_with_conf")
-
-                    status.repos[repo]["hash_synced_error"] = True
-                    status.repos[repo]["state"].add("not_synced_with_conf")
+            for pin in _DEP_PIN_CHECKS:
+                if pin not in vcs.configured_deps[repo]:
+                    continue
+                err_msg = _dep_pin_error(
+                    pin, repo, full_path, dep_be, vcs.configured_deps[repo][pin]
+                )
+                if err_msg:
+                    _mark_unsynced(status, repo, pin, err_msg)
 
             if not dep_be.in_detached_head():
                 err = dep_be.check_for_outgoing_changes()
@@ -1112,7 +1096,7 @@ def _init_app(versions_be_ifc, starting_version, extra_optional=None):
 
     if err:
         VMN_LOGGER.error("Failed to init app")
-        raise RuntimeError()
+        return 1
 
     return 0
 
