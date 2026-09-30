@@ -864,8 +864,10 @@ with start_run("my_app") as run:
   `eval/<name>` and `test/<name>` (`epoch` → `train/epoch`; `total_flos` and
   runtime/throughput keys dropped). Query them quoted: `metrics."eval/f1"`.
 - Records only on the world-process-zero rank, and only inside an open run.
-- Checkpoints are not stored; log them yourself with
-  `run.log_artifacts(checkpoint_dir, prefix="checkpoint")`.
+- Checkpoints are not stored by default. With `VmnCallback(log_checkpoints=True)`,
+  each `on_save` uploads the checkpoint just saved
+  (`<output_dir>/checkpoint-<global_step>`) as artifacts under `checkpoint-<N>/`;
+  earlier checkpoints are not re-uploaded.
 
 ### Optuna — `start_study_run` + `StudyTracker`
 

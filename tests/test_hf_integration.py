@@ -387,3 +387,62 @@ def test_real_hf_trainer_autologs(tmp_path, monkeypatch):
     assert any(q(row) for row in rows), (
         f"query did not match any row; rows={rows!r}"
     )
+
+
+def test_vmn_callback_log_checkpoints_uploads_saved_checkpoint_dir(
+    tmp_path, monkeypatch
+):
+    """on_save with log_checkpoints=True uploads the just-saved checkpoint dir
+    into a real git-free run (and not older checkpoints)."""
+    import yaml
+
+    from vmn_exp.sdk import start_run
+    from vmn_exp.sdk.reader import get_run
+    from vmn_exp.storage.local import LocalSnapshotStorage
+
+    image = tmp_path / "image"
+    image.mkdir()
+    exp_dir = tmp_path / "experiments"
+    exp_dir.mkdir()
+    meta = {
+        "verstr": "0.1.0-dev.abc1234.0000000",
+        "app_name": "hf_ckpt_test",
+        "base_version": "0.1.0",
+        "base_commit": "abc1234",
+    }
+    (image / "vmn_metadata.yml").write_text(yaml.safe_dump(meta))
+    monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(image / "vmn_metadata.yml"))
+    monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(exp_dir))
+    monkeypatch.delenv("VMN_WORKING_DIR", raising=False)
+
+    out = tmp_path / "trainer_out"
+    for step in (1, 2):
+        ckpt = out / f"checkpoint-{step}"
+        ckpt.mkdir(parents=True)
+        (ckpt / "config.json").write_text("{}")
+        (ckpt / "model.bin").write_bytes(b"weights-%d" % step)
+
+    fake_transformers = types.ModuleType("transformers")
+
+    class _FakeTrainerCallback:
+        pass
+
+    fake_transformers.TrainerCallback = _FakeTrainerCallback
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    import vmn_exp.integrations.hf as hf_mod
+
+    monkeypatch.setattr(hf_mod, "_vmn_callback_class", None)
+    try:
+        cb = hf_mod.VmnCallback(log_checkpoints=True)
+        args = _make_stub_args(output_dir=str(out))
+        with start_run() as run:
+            cb.on_save(args, _make_stub_state(step=2), _make_stub_control())
+    finally:
+        hf_mod._vmn_callback_class = None
+
+    storage = LocalSnapshotStorage(str(exp_dir), subdir="experiments")
+    artifacts = get_run("hf_ckpt_test", run.id, storage=storage)["artifacts"]
+    paths = [a["name"] for a in artifacts]
+    assert "checkpoint-2/model.bin" in paths
+    assert "checkpoint-2/config.json" in paths
+    assert not any("checkpoint-1" in p for p in paths)
