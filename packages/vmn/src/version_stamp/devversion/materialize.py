@@ -1,4 +1,5 @@
 """Materialize a snapshot into a complete working directory."""
+import functools
 import os
 import shutil
 import subprocess
@@ -7,6 +8,7 @@ import tempfile
 import yaml
 
 from version_stamp.core.git_cmd import clone_at_commit as _shallow_clone_at  # noqa: F401 (tests)
+from version_stamp.core.constants import POOL_SIZE_CLONES
 from version_stamp.core.git_cmd import git_stdout, run_git
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.apply import (
@@ -16,6 +18,7 @@ from version_stamp.devversion.apply import (
 )
 from version_stamp.devversion.clone import _LOCAL_GIT_TIMEOUT_SEC  # noqa: F401 (tests)
 from version_stamp.devversion.clone import _clone_at
+from version_stamp.devversion.ordered_pool import replay, run_ordered
 from version_stamp.devversion.untracked import copy_untracked_files
 from version_stamp.snapshot.identity import safe_verstr
 
@@ -59,6 +62,23 @@ def _patches_failed(dest, patches, what):
     return bool(failed)
 
 
+def _clone_dep(vcs, metadata, local_repo, output_path, dep_path, dep_info):
+    """Clone one dependency inside *output_path*; its dest dir, or None when
+    it was skipped or failed (a warning is logged)."""
+    dep_hash = dep_base_commit(metadata, dep_path, dep_info)
+    dep_remote = dep_info.get("remote")
+    if not dep_hash or not dep_remote:
+        VMN_LOGGER.warning(f"Dependency {dep_path} missing hash or remote, skipping")
+        return None
+
+    dep_local = os.path.join(local_repo, dep_path) if local_repo else None
+    dep_dest = os.path.join(output_path, dep_path)
+    if _clone_at(dep_dest, dep_local, _resolve_remote(dep_remote, vcs), dep_hash):
+        VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
+        return None
+    return dep_dest
+
+
 def _materialize_workdir(vcs, metadata, patches, output_path):
     """Materialize a patch snapshot into a complete working directory."""
     base_commit = metadata.get("base_commit")
@@ -97,28 +117,24 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         except Exception:
             VMN_LOGGER.debug("Failed to copy untracked files", exc_info=True)
 
-    changesets = metadata.get("changesets", {})
-    for dep_path, dep_info in changesets.items():
-        if dep_path == ".":
-            continue
-
-        dep_hash = dep_base_commit(metadata, dep_path, dep_info)
-        dep_remote = dep_info.get("remote")
-        if not dep_hash or not dep_remote:
-            VMN_LOGGER.warning(
-                f"Dependency {dep_path} missing hash or remote, skipping"
+    deps = [
+        (dep_path, dep_info)
+        for dep_path, dep_info in metadata.get("changesets", {}).items()
+        if dep_path != "."
+    ]
+    clones = run_ordered(
+        [
+            functools.partial(
+                _clone_dep, vcs, metadata, local_repo, output_path, dep_path, dep_info
             )
+            for dep_path, dep_info in deps
+        ],
+        min(len(deps), POOL_SIZE_CLONES),
+    )
+    for (dep_path, _), (dep_dest, held_logs) in zip(deps, clones):
+        replay(held_logs)
+        if not dep_dest:
             continue
-
-        dep_remote = _resolve_remote(dep_remote, vcs)
-        dep_local = os.path.join(local_repo, dep_path) if local_repo else None
-
-        dep_dest = os.path.join(output_path, dep_path)
-        err = _clone_at(dep_dest, dep_local, dep_remote, dep_hash)
-        if err:
-            VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
-            continue
-
         dp = _dep_patches_of(patches, dep_path)
         if dp and _patches_failed(dep_dest, dp, f"dependency {dep_path}"):
             return 1
@@ -161,13 +177,26 @@ def _materialize_pair(vcs, parent, verstr1, meta1, patches1, verstr2, meta2, pat
     name2 = safe_verstr(verstr2)
     if name1 == name2:
         name2 += "_b"
-    for verstr, meta, patches, name in (
-        (verstr1, meta1, patches1, name1),
-        (verstr2, meta2, patches2, name2),
-    ):
-        if not _materialize_for_diff(
-            vcs, verstr, meta, patches, os.path.join(parent, name)
-        ):
+    sides = run_ordered(
+        [
+            functools.partial(
+                _materialize_for_diff,
+                vcs,
+                verstr,
+                meta,
+                patches,
+                os.path.join(parent, name),
+            )
+            for verstr, meta, patches, name in (
+                (verstr1, meta1, patches1, name1),
+                (verstr2, meta2, patches2, name2),
+            )
+        ],
+        2,
+    )
+    for ok, held_logs in sides:
+        replay(held_logs)
+        if not ok:
             return None
     return name1, name2
 
