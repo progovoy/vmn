@@ -27,7 +27,6 @@ log folding it shares with the CLI and the ui lives in
 import os
 
 import vmn_exp.core.index as experiment_index
-from vmn_exp._base import resolve_root_path
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
@@ -44,6 +43,7 @@ from vmn_exp.core.media import media_index
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import record_format_version
+from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
 from vmn_exp.core.status import (
@@ -54,9 +54,7 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
-from vmn_exp.storage.open import open_storage
-
-EXPERIMENTS_DIR = "experiments"
+from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
 
 
 # ---------------------------------------------------------------------------
@@ -64,21 +62,25 @@ EXPERIMENTS_DIR = "experiments"
 # ---------------------------------------------------------------------------
 
 
-def _experiment_storage(root_path):
-    """The checkout's local experiments. An S3 workspace passes its own storage."""
-    return open_storage(vmn_root_path=root_path, subdir=EXPERIMENTS_DIR)
+def _app_candidates(storage):
+    """Apps a reader may default to: the exported snapshot's app in git-free
+    mode, else the apps with runs in *storage*."""
+    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
+    return (meta_path and snapshot_app_names(meta_path)) or storage.list_apps()
 
 
 def _resolve(app_name, storage):
-    """Fill in the app name and storage from the current repo.
+    """Fill in the app name and storage where :func:`start_run` records.
 
+    Storage defaults to :func:`resolve_experiment_storage`
+    (``VMN_EXPERIMENT_DIR`` > the checkout, fronting ``VMN_EXPERIMENT_STORE``).
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
-    caller supplied both, since then no checkout is involved (an S3 workspace,
-    say) and there is no conf.yml to read.
+    caller supplied both or no checkout is found: there is no conf.yml to read.
     """
-    root_path = None if (app_name and storage) else resolve_root_path()
-    app_name = _resolve_app_name(app_name, lambda: _experiment_storage(root_path).list_apps())
-    return app_name, storage or _experiment_storage(root_path), root_path
+    root_path = None if (app_name and storage) else _try_repo_root()
+    storage = storage or resolve_experiment_storage(repo_root=root_path or False)
+    app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage))
+    return app_name, storage, root_path
 
 
 def _metrics_schema(root_path, app_name):

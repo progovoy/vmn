@@ -174,9 +174,8 @@ Where it records:
   `sync_interval_sec`. Store alone: the run writes straight to it.
 - Neither (and no `storage=`): `ValueError`.
 
-Readers do not read these variables; pass them a storage, e.g.
-`list_runs("my_model", storage=resolve_experiment_storage())` (see
-[Reading runs back](#reading-runs-back)).
+Readers honour the same variables, so `list_runs()` in the job finds its own
+runs (see [Reading runs back](#reading-runs-back)).
 
 ---
 
@@ -642,15 +641,14 @@ for run in list_runs("my_app", query='metrics.loss < 0.5 and params.optimizer = 
 best = get_run("my_app", ref="latest")
 ```
 
-All readers resolve `app_name=None` like `start_run()` (among apps with
-experiments). Without `storage=` they read the local experiments of the
-checkout found from the cwd (or `$VMN_WORKING_DIR`). For a git-free dir or a
-remote store, pass one:
-`storage=vmn_exp.core.storage_resolve.resolve_experiment_storage()` honours
-`VMN_EXPERIMENT_DIR`/`VMN_EXPERIMENT_STORE`/the bucket shorthand, or takes
-`dir=`/`store=` explicitly. Outside a checkout pass `app_name` too: only with
-both given is no checkout looked up (and then no conf.yml metrics schema is
-applied).
+Without `storage=` readers read where `start_run()` records:
+`VMN_EXPERIMENT_DIR`, else the checkout found from the cwd (or
+`$VMN_WORKING_DIR`), fronting `VMN_EXPERIMENT_STORE`/the bucket shorthand —
+`vmn_exp.core.storage_resolve.resolve_experiment_storage()`, which also takes
+`dir=`/`store=` explicitly. No checkout is needed. `app_name=None` resolves like
+`start_run()`: `VMN_APP_NAME`, then the app of `VMN_SNAPSHOT_METADATA`, then
+the sole app with runs in that storage. The conf.yml metrics schema applies
+only when a checkout is found and `app_name`/`storage` are not both given.
 
 | Function | Returns |
 |---|---|
