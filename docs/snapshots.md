@@ -65,10 +65,11 @@ target), and the command that brings it back is printed:
 Current work saved as 1.2.0-dev.a1b2c3d.9f8e7d6 — restore it anytime with: vmn snapshot restore my_app -v 1.2.0-dev.a1b2c3d.9f8e7d6
 ```
 
-The reset deletes untracked files, and untracked files over the size caps
+The resets (of the app and of each dependency) delete untracked files, and
+untracked files over the size caps
 (`VMN_SNAPSHOT_MAX_FILE_MB`, default 50, `VMN_SNAPSHOT_MAX_TOTAL_MB`, default
 200) cannot go into that safety snapshot. When a restore would lose such
-files it is refused and lists them; move them away, raise the caps, or pass
+files, in the app or a dependency, it is refused and lists them; move them away, raise the caps, or pass
 `--force` to restore anyway and lose them.
 
 > **Note:** unlike `vmn goto`, a restore does *not* clone a missing dependency

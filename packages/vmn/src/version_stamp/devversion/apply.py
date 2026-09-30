@@ -83,6 +83,13 @@ def _dep_patches_of(patches, dep_path):
     return dep_patches.get(safe) or dep_patches.get(dep_path) or {}
 
 
+def dep_base_commit(metadata, dep_path, dep_info):
+    """The commit *dep_path*'s patches apply to: the one captured with them
+    (``dep_base_commits``), else — older records — its changeset hash."""
+    captured = (metadata.get("dep_base_commits") or {}).get(dep_path)
+    return captured or (dep_info or {}).get("hash")
+
+
 def _checkout_dep(vcs, dep_path, dep_hash):
     """Put the dep checkout at *dep_hash* (detached); whether it worked.
 
@@ -108,12 +115,11 @@ def _checkout_dep(vcs, dep_path, dep_hash):
     return result.returncode == 0
 
 
-def _restore_dep(vcs, dep_path, dep_info, patches):
+def _restore_dep(vcs, dep_path, dep_hash, patches):
     """Whether *dep_path* was restored (a missing checkout is skipped)."""
     if not os.path.isdir(os.path.join(vcs.vmn_root_path, dep_path)):
         VMN_LOGGER.warning(f"Dep directory {dep_path} not found, skipping")
         return True
-    dep_hash = (dep_info or {}).get("hash")
     if dep_hash and not _checkout_dep(vcs, dep_path, dep_hash):
         return False
     full_path = os.path.join(vcs.vmn_root_path, dep_path)
@@ -126,13 +132,16 @@ def _restore_dep(vcs, dep_path, dep_info, patches):
 
 
 def _apply_dep_patches(vcs, metadata, patches):
-    """Check every recorded dep out at its hash and apply its patches; the
-    paths of the deps that could not be restored."""
+    """Check every recorded dep out at its base commit and apply its patches;
+    the paths of the deps that could not be restored."""
     changesets = metadata.get("changesets") or {}
     return [
         dep_path
         for dep_path, dep_info in changesets.items()
-        if dep_path != "." and not _restore_dep(vcs, dep_path, dep_info, patches)
+        if dep_path != "."
+        and not _restore_dep(
+            vcs, dep_path, dep_base_commit(metadata, dep_path, dep_info), patches
+        )
     ]
 
 

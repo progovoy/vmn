@@ -91,7 +91,19 @@ def build_record_metadata(
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:
         metadata["changesets"] = changesets
+    dep_bases = _dep_base_commits(patches)
+    if dep_bases:
+        metadata["dep_base_commits"] = dep_bases
     return metadata
+
+
+def _dep_base_commits(patches):
+    """``{dep_path: commit}`` the captured deps' patches apply to."""
+    return {
+        dep_path: dp["base_commit"]
+        for dep_path, dp in patches.get("deps", {}).items()
+        if dp.get("base_commit")
+    }
 
 
 def _changeset_hashes(changesets):
