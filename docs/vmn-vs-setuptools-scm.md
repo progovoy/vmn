@@ -1,206 +1,91 @@
 # vmn vs setuptools-scm
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
-> This page compares vmn with [setuptools-scm](https://github.com/pypa/setuptools-scm) to help Python developers choose the right tool.
+[setuptools-scm](https://github.com/pypa/setuptools-scm) derives a Python
+package's version from git tags at build time: `python -m build` asks git where
+HEAD is relative to the last tag, and there is no explicit release step.
 
-## Overview
+[vmn](https://github.com/progovoy/vmn) is explicit: `vmn stamp` computes the
+next version, writes it into your files, and records it in an annotated git tag
+with YAML metadata, including the exact revision of every dependency
+repository. It is not tied to Python.
 
-**setuptools-scm** extracts Python package versions from git tags at build time.
-It hooks into setuptools (or hatchling) so that `python -m build` automatically
-derives the version string from `git describe`. There is no explicit "stamp"
-step; the version is inferred from the repository state.
-
-**vmn** takes an explicit approach: you run a command to stamp a version, and vmn
-creates an annotated git tag with structured YAML metadata. vmn is not tied to
-Python and works with any language or build system.
-
-## Feature Comparison
+## Feature comparison
 
 | Feature | vmn | setuptools-scm |
 | --- | --- | --- |
-| Language support | Any (Python, Node, Rust, Go, ...) | Python only |
-| Build system integration | Separate CLI tool | setuptools, hatchling, flit |
-| Version source of truth | Annotated git tags with YAML metadata | `git describe` output |
-| Version determination | Explicit (`vmn stamp -r patch`) | Implicit (derived at build time) |
-| Conventional commits | Supported (optional) | Not supported |
-| Manual release mode | `vmn stamp -r patch/minor/major` | Manual `git tag` |
+| Language support | Any | Python |
+| Build system integration | Separate CLI; writes the version into files | setuptools, hatchling (via hatch-vcs), others |
+| Version source of truth | Annotated git tags with YAML metadata | Nearest git tag + distance |
+| Version determination | Explicit stamp | Derived at build time |
+| Release mode | `-r major/minor/patch/hotfix`, or Conventional Commits (on by default) | Manual `git tag` |
 | Multi-repo dependency tracking | Built-in | Not available |
 | Root app / microservice topology | Built-in (`root_app/service`) | Not available |
-| State recovery (`goto`) | `vmn goto -v 1.2.3 app` | Not available |
+| State recovery | `vmn goto -v 1.2.3 app` | Not available |
 | 4-segment hotfix versions | `major.minor.patch.hotfix` | Not supported |
-| Prerelease support | Built-in (`--pr` flag) | Dev versions from distance to tag |
-| Version auto-embedding | package.json, Cargo.toml, pyproject.toml, Jinja2 | `_version.py` or `pyproject.toml` |
-| pyproject.toml integration | pep621 version backend | Native (build-time write) |
-| Dirty version handling | Stamps are always clean | Appends `.d{date}` for dirty trees |
-| CI requirement | None (works locally) | None (works locally) |
-| Offline / air-gapped use | Local file backend | Works offline (git-only) |
+| Prereleases | `--pr <id>`, promoted with `vmn release` | Dev versions from distance to tag |
+| Between-release versions | `vmn show --dev` / `vmn snapshot` (`1.2.0-dev.<commit>.<diff>`) | `1.2.4.dev3+g<hash>[.d<date>]` on every build |
+| Writing the version into files | npm, Cargo, Poetry, PEP 621, Jinja2, regex selectors | `_version.py` / package metadata |
+| Network | Any Git remote, including internal/air-gapped | None (local git only) |
 
-## When vmn Is a Better Fit
+## When vmn is a better fit
 
-### You version more than Python packages
+- **More than Python.** Rust, Go and Node services get the same workflow.
+- **You want to decide the version.** `vmn stamp -r patch my_app` bumps, tags,
+  and updates your files in one step; nothing depends on how far HEAD is from
+  a tag at build time.
+- **Products that span repositories.** vmn records every dependency's commit
+  at stamp time, and `vmn goto` restores all of them.
+- **Microservices and hotfix lines.** Root apps and the fourth version segment.
 
-setuptools-scm is designed exclusively for the Python packaging ecosystem. If
-your project includes services written in Rust, Go, Node.js, or any other
-language, vmn versions all of them with the same tool and the same workflow.
+## When setuptools-scm is a better fit
 
-### You want explicit version control
-
-setuptools-scm infers the version from git state. Between tags, it produces
-development versions like `1.2.3.dev4+gabc1234`. This is convenient for
-automated builds but means you do not control exactly which version string
-appears until you manually create a git tag.
-
-vmn gives you explicit control: `vmn stamp -r patch my_app` increments the
-version, creates the tag, and optionally writes the version into your project
-files, all in one atomic operation.
-
-### You manage multi-repo dependencies
-
-vmn records the exact commit hash of every tracked dependency repository when
-a version is stamped. setuptools-scm has no concept of cross-repo dependencies.
-
-### You need state recovery
-
-`vmn goto -v 1.2.3 my_app` restores every tracked repository to the exact
-commit recorded at stamp time. setuptools-scm does not track this information.
-
-### You use microservice or root-app topologies
-
-vmn's root-app concept lets you version a parent application together with
-its child services, recording which service versions compose each release.
-
-### You need hotfix versioning
-
-vmn supports a fourth version segment (`major.minor.patch.hotfix`) for hotfix
-workflows that do not map to standard three-segment semver.
-
-### You want conventional commits integration
-
-vmn can read conventional commit messages to automatically determine the release
-mode (major, minor, or patch) without manual input. setuptools-scm does not
-analyze commit messages.
-
-## When setuptools-scm Is a Better Fit
-
-- You work exclusively in the Python ecosystem and want zero-configuration
-  version management that "just works" with setuptools or hatchling.
-- You prefer implicit versioning where every build gets a unique version
-  string derived from git state, including development builds.
-- You want tight integration with Python build tools (`pyproject.toml`
-  `[tool.setuptools_scm]`) with no additional CLI to learn.
-- You need every intermediate commit to produce a valid, installable Python
-  package version automatically.
-
-## Quick Start with vmn
-
-Install vmn and stamp your first version in under a minute:
-
-```bash
-# Install
-pip install vmn
-# or: pipx install vmn
-# or: uvx vmn
-
-# Stamp a patch release -- this auto-initializes the repo and the app
-# on first run, so `vmn init` / `vmn init-app` are optional.
-vmn stamp -r patch my_app
-
-# Show the current version
-vmn show my_app
-
-# Check out the repo state at a specific version
-vmn goto -v 1.0.1 my_app
-```
-
-### Writing the Version into pyproject.toml
-
-vmn can embed the version directly into `pyproject.toml`, achieving a similar
-result to setuptools-scm's build-time version injection:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    pep621:
-      path: pyproject.toml
-```
-
-After each `vmn stamp`, the `version` field in your `[project]` table is
-updated automatically.
-
-### Using vmn with hatchling
-
-If you use hatchling as your build backend, you can pair vmn with the
-[hatch-vcs](https://github.com/ofek/hatch-vcs) plugin or simply rely on
-vmn's pep621 backend to write the version into `pyproject.toml` before each
-build.
-
-### Optional: Enable Conventional Commits
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  conventional_commits: true
-```
-
-Then stamp without specifying `-r`:
-
-```bash
-vmn stamp my_app
-# vmn reads commits since the last stamp and picks major/minor/patch
-```
+- You are purely in the Python packaging ecosystem and want zero-configuration
+  versions with no extra CLI.
+- You want every build of every commit to get a unique, installable version.
 
 ## Migrating from setuptools-scm
 
-1. **Install vmn:** `pip install vmn`
-2. **Initialize:** nothing to do -- the first `vmn stamp` auto-initializes
-   the repo and the app (`vmn init` / `vmn init-app` remain available if you
-   want an explicit step, e.g. to seed a starting version with `-v`).
-3. **Stamp your current version:** If you already have git tags in the format
-   setuptools-scm uses (e.g., `v1.2.3`), you can stamp a new vmn version to
-   establish a baseline: `vmn stamp -r patch my_app`.
-4. **Configure the pep621 backend** in `.vmn/my_app/conf.yml` so vmn writes
-   the version into `pyproject.toml` on each stamp.
-5. **Update pyproject.toml:** Remove the `[tool.setuptools_scm]` section and
-   the `setuptools-scm` build dependency. Set a static `version` field under
-   `[project]` (vmn will maintain it).
-6. **Update your build workflow:** Before `python -m build`, run
-   `vmn stamp -r <mode> my_app` (or rely on conventional commits).
+1. **Install:** `pipx install vmn` (see the
+   [README quick start](https://github.com/progovoy/vmn#quick-start)).
+2. **Start at your current version:** vmn does not read `v1.2.3` tags. Seed
+   the app once with `vmn init-app -v 1.2.3 my_app`.
+3. **Let vmn maintain `pyproject.toml`:** replace the dynamic version with a
+   static one and add the `pep621` backend:
 
-### Before (setuptools-scm)
+   ```toml
+   # pyproject.toml, before
+   [build-system]
+   requires = ["setuptools>=64", "setuptools-scm>=8"]
 
-```toml
-# pyproject.toml
-[build-system]
-requires = ["setuptools>=64", "setuptools-scm>=8"]
+   [project]
+   dynamic = ["version"]
 
-[project]
-dynamic = ["version"]
+   [tool.setuptools_scm]
+   ```
 
-[tool.setuptools_scm]
-```
+   ```toml
+   # pyproject.toml, after
+   [build-system]
+   requires = ["setuptools>=64"]
 
-### After (vmn)
+   [project]
+   version = "1.2.3"  # maintained by vmn
+   ```
 
-```toml
-# pyproject.toml
-[build-system]
-requires = ["setuptools>=64"]
+   ```yaml
+   # .vmn/my_app/conf.yml
+   conf:
+     version_backends:
+       pep621:
+         path: pyproject.toml
+   ```
 
-[project]
-version = "1.2.3"  # maintained by vmn
-```
+   A generated `_version.py` can be kept with a `generic_jinja` backend (see
+   the README's
+   [version backends](https://github.com/progovoy/vmn#configuration)).
+4. **Build:** run `vmn stamp my_app` (or `-r <mode>`) before `python -m build`.
 
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    pep621:
-      path: pyproject.toml
-```
+## Further reading
 
-## Further Reading
-
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
+- [vmn README](https://github.com/progovoy/vmn#readme) (configuration and command reference)
 - [setuptools-scm documentation](https://setuptools-scm.readthedocs.io/)

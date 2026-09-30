@@ -1,159 +1,86 @@
 # vmn vs semantic-release
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
-> This page compares vmn with [semantic-release](https://github.com/semantic-release/semantic-release) to help you choose the right tool.
+[semantic-release](https://github.com/semantic-release/semantic-release)
+automates version management and package publishing, mainly for Node.js: it
+reads Conventional Commits in CI, picks the next version, generates release
+notes and publishes to npm (or other registries via plugins).
 
-## Overview
+[vmn](https://github.com/progovoy/vmn) stamps versions as annotated git tags
+with YAML metadata, works with any language, records the exact revision of
+every dependency repository, and leaves publishing to your pipeline.
 
-**semantic-release** automates version management and package publishing for
-Node.js projects. It reads conventional commit messages, determines the next
-version, generates release notes, and publishes artifacts to npm (or other
-registries via plugins).
-
-**vmn** takes a different approach: it stamps explicit semantic versions as
-annotated git tags with rich metadata, works with any language, and leaves
-publishing decisions to you.
-
-## Feature Comparison
+## Feature comparison
 
 | Feature | vmn | semantic-release |
 | --- | --- | --- |
-| Language support | Any (Python, Node, Rust, Go, ...) | Primarily Node.js; others via plugins |
-| Runtime dependency | Python 3 | Node.js |
-| Version source of truth | Annotated git tags with YAML metadata | Git tags (created after publish) |
-| Conventional commits | Supported (optional) | Required |
-| Manual release mode | `vmn stamp -r patch/minor/major` | Not supported (fully automated) |
+| Language support | Any | Primarily Node.js; others via plugins |
+| Runtime | Python 3.8+ | Node.js |
+| Version source of truth | Annotated git tags with YAML metadata | Git tags |
+| Conventional Commits | On by default; `-r` overrides | Required |
+| Manual release mode | `vmn stamp -r major/minor/patch/hotfix` | Not supported (fully automated) |
 | Multi-repo dependency tracking | Built-in (`deps` in conf.yml) | Not available |
 | Root app / microservice topology | Built-in (`root_app/service`) | Not available |
-| State recovery (`goto`) | `vmn goto -v 1.2.3 app` | Not available |
+| State recovery | `vmn goto -v 1.2.3 app` | Not available |
 | 4-segment hotfix versions | `major.minor.patch.hotfix` | Not supported |
-| Prerelease support | Built-in (`--pr` flag) | Via branches configuration |
-| Version auto-embedding | package.json, Cargo.toml, pyproject.toml, Jinja2 templates | package.json (npm publish) |
-| Changelog generation | Supported | Built-in |
-| CI requirement | None (works locally) | Designed for CI |
-| Plugin system | None needed | Extensive (publish, analyze, etc.) |
-| Offline / air-gapped use | Local file backend | Not supported |
-| Git host | Any | Any (via plugins) |
+| Prereleases | `--pr <id>`, promoted with `vmn release` | Via branch configuration |
+| Writing the version into files | npm, Cargo, Poetry, PEP 621, Jinja2, regex selectors | package.json (npm plugin) |
+| Changelog / GitHub Releases | `changelog.path`, `github_release` in conf.yml | Built-in |
+| Package publishing | Not included | Built-in via plugins |
+| Where it runs | Locally or in any CI | Designed for CI |
+| Plugin system | None | Extensive (analyze, publish, notify, ...) |
+| Git host | Any, including internal/air-gapped servers | Any (via plugins) |
 
-## When vmn Is a Better Fit
+## When vmn is a better fit
 
-### You work across multiple languages
+- **Several languages.** semantic-release needs a Node.js runtime and npm
+  configuration even for non-JS projects; vmn is one `pipx install` and treats
+  a Python library, a Rust binary and a Go service the same way.
+- **Products that span repositories.** vmn records the commit of every
+  dependency at stamp time and `vmn goto` restores all of them. No
+  semantic-release plugin does this.
+- **Human-chosen versions.** `vmn stamp -r minor` works from a laptop or CI;
+  Conventional Commits are a default, not a requirement.
+- **Microservices.** Root apps give each service its own version plus a
+  monotonic version of the whole composition.
+- **Hotfix lines.** A fourth segment (`1.6.7.4`) for hotfixes that do not fit
+  three-segment SemVer.
 
-semantic-release is rooted in the Node.js ecosystem. While plugins exist for
-other languages, the tool still requires a Node.js runtime and npm
-configuration. vmn is a single `pip install` away and works identically whether
-you are versioning a Python library, a Rust binary, or a Go service.
+## When semantic-release is a better fit
 
-### You manage multi-repo dependencies
-
-If your product spans several git repositories, vmn can track the exact commit
-of every dependency at the moment a version is stamped. No semantic-release
-plugin offers this capability.
-
-### You need state recovery
-
-`vmn goto -v 1.2.3 my_app` checks out every tracked repository to the exact
-state recorded when version 1.2.3 was stamped. This is invaluable for
-reproducing bugs or auditing past releases.
-
-### You want to stamp versions locally
-
-vmn does not require CI. Developers can stamp versions from their local machine,
-which is useful during early development, in air-gapped environments, or when
-CI pipelines are not yet configured.
-
-### You use a microservice topology
-
-vmn's root-app concept lets you version a parent application and its child
-services together, tracking which service versions compose a given root-app
-release.
-
-### You need hotfix versioning
-
-vmn supports a fourth version segment (`major.minor.patch.hotfix`) for
-hotfix workflows that do not fit the standard three-segment semver model.
-
-## When semantic-release Is a Better Fit
-
-- You want fully automated, zero-touch releases driven entirely by commit
-  messages with no manual version decisions.
-- You need deep npm integration (automated npm publish, GitHub Releases,
-  changelogs) out of the box.
-- Your team is already invested in the semantic-release plugin ecosystem.
-- You prefer a mature, widely adopted tool with a large community
-  (23k+ GitHub stars).
-
-## Quick Start with vmn
-
-Install vmn and stamp your first version in under a minute:
-
-```bash
-# Install
-pip install vmn
-# or: pipx install vmn
-# or: uvx vmn
-
-# Stamp a patch release -- this auto-initializes the repo and the app
-# on first run, so `vmn init` / `vmn init-app` are optional.
-vmn stamp -r patch my_app
-
-# Show the current version
-vmn show my_app
-
-# Check out the repo state at a specific version
-vmn goto -v 1.0.1 my_app
-```
-
-### Optional: Enable Conventional Commits
-
-If you want vmn to detect the release mode automatically from commit messages
-(similar to semantic-release), add this to `.vmn/my_app/conf.yml`:
-
-```yaml
-conf:
-  conventional_commits: true
-```
-
-Then stamp without specifying `-r`:
-
-```bash
-vmn stamp my_app
-# vmn reads commits since the last stamp and picks major/minor/patch
-```
-
-### Auto-Embed Versions
-
-Write the version into your project files automatically:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    npm:
-      path: package.json
-    pep621:
-      path: pyproject.toml
-    cargo:
-      path: Cargo.toml
-```
+- You want zero-touch releases driven entirely by commit messages.
+- You need npm publishing and its plugin ecosystem out of the box.
+- Your team is already invested in semantic-release plugins.
 
 ## Migrating from semantic-release
 
-1. **Install vmn:** `pip install vmn`
-2. **Initialize:** nothing to do -- the first `vmn stamp` auto-initializes
-   the repo and the app (`vmn init` / `vmn init-app` remain available if you
-   want an explicit step, e.g. to seed a starting version with `-v`).
-3. **Start at your current version:** vmn will pick up existing version tags
-   or you can stamp a new version to establish a baseline.
-4. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
-   semantic-release publish plugins that write version numbers into files.
-5. **Remove semantic-release config:** Delete `.releaserc`, `.releaserc.json`,
-   or `release.config.js` and uninstall the Node.js dependencies.
-6. **Update CI:** Replace the semantic-release step with `vmn stamp -r <mode> my_app`
-   (or use conventional commits for automatic mode detection).
+1. **Install:** `pipx install vmn` (see the
+   [README quick start](https://github.com/progovoy/vmn#quick-start)).
+2. **Start at your current version:** vmn tags are `<app>_<version>` and it
+   does not read semantic-release's `v1.2.3` tags. Seed the app once with
+   `vmn init-app -v 1.2.3 my_app`; the next stamp continues from there.
+3. **Commit messages:** Conventional Commits already drive the release mode, so
+   `vmn stamp my_app` picks major/minor/patch from commits since the last stamp.
+4. **Files:** configure `version_backends` in `.vmn/my_app/conf.yml` to replace
+   plugins that wrote the version into files:
 
-## Further Reading
+   ```yaml
+   conf:
+     version_backends:
+       npm:
+         path: package.json
+     changelog:
+       path: CHANGELOG.md
+     github_release:
+       draft: false
+   ```
 
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
+5. **Remove** `.releaserc*` / `release.config.js` and the semantic-release
+   dependencies.
+6. **CI:** replace the semantic-release step with `vmn stamp --pull my_app`
+   (or [vmn-action](https://github.com/marketplace/actions/automated-versioning)),
+   and keep `npm publish` as a separate step if you publish packages.
+
+## Further reading
+
+- [vmn README](https://github.com/progovoy/vmn#readme) (configuration and command reference)
 - [semantic-release documentation](https://semantic-release.gitbook.io/)

@@ -16,8 +16,10 @@ For a side-by-side feature comparison see [vmn vs MLflow](vmn-vs-mlflow.md).
 ## Importing existing MLflow runs
 
 `vmn-exp import-mlflow` reads an MLflow FileStore or a live tracking server and
-writes the runs into your vmn-exp storage.  No git checkout is required;
-the command never takes the repo lock.
+writes the runs into your vmn-exp storage.  No git checkout is required, the
+command never takes the repo lock, and every imported run lands in the one
+`<app>` you name (run one import per `--experiment` to split experiments into
+separate apps).
 
 ### From a local `mlruns/` directory
 
@@ -55,7 +57,7 @@ vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
 
 | MLflow concept | vmn concept |
 |---|---|
-| Experiment | App name (`<app>`) |
+| Experiment | The `<app>` you import into; the name is kept in `imported_from.experiment_name` |
 | Run | Experiment run |
 | Run ID (UUID) | Used to compute a deterministic verstr `0.0.0-mlflow.<id[:12]>` |
 | Params | `params.*` entries in the run log |
@@ -65,8 +67,7 @@ vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
 | Artifacts | Copied into the run's artifact directory (unless `--skip-artifacts`) |
 | Dataset inputs | `inputs.*` entries |
 | Parent run ID | `parent` field on the inner run |
-| Run status | `run_state.yml` — RUNNING → `stuck`, FAILED → `failed`, FINISHED → `succeeded`, KILLED → `failed` |
-| `end_time` absent | State is `stuck` |
+| Run status | `run_state.yml` — FINISHED → `succeeded`; FAILED, KILLED → `failed`; RUNNING, SCHEDULED → `stuck` |
 
 ### Run identity and idempotent re-import
 
@@ -84,14 +85,15 @@ resumed — the run log is appended to, not duplicated.
 
 Imported runs have no code snapshot and no git ref.  `vmn-exp restore` and `vmn
 exp diff` will refuse with a message explaining that the run has no associated
-code.  `vmn-exp show` displays `imported_from: mlflow/<run_id>` to make this
-clear.
+code, naming the source (`imported from mlflow run <run_id>; no code snapshot`,
+plus the MLflow source commit when it was recorded).
 
 ### Registry
 
 MLflow's model registry is not automatically imported.  After importing runs,
-you can register model versions manually using the verstr from
-`vmn-exp show my_app --query "imported_from ~ mlflow"`:
+register model versions manually; an imported run's verstr is
+`0.0.0-mlflow.<first 12 chars of the MLflow run id>` (`vmn-exp list my_app`
+shows them):
 
 ```sh
 vmn-exp model register my_model \
@@ -153,10 +155,11 @@ with start_run("my_app") as run:
 
 ### Differences to be aware of
 
-**A run needs a git repo.**  Creating a run snapshots the working tree, which
-means a git-level write.  Set `user.name` and `user.email` in containers or via
-`GIT_AUTHOR_*` / `GIT_COMMITTER_*` environment variables.  There is no
-equivalent of `mlflow.set_tracking_uri("http://...")` — clients write to files.
+**A run needs a git repo and a git identity.**  Creating a run snapshots the
+working tree; the first run in a fresh repo commits and tags a local baseline
+(never pushed, so no remote is required).  Set `user.name` and `user.email` in
+containers or via `GIT_AUTHOR_*` / `GIT_COMMITTER_*`.  Jobs without a checkout
+run git-free from a `vmn-exp export` bundle (`VMN_SNAPSHOT_METADATA`).
 
 **`run.id` is a verstr, not a UUID.**  It is the same string `vmn-exp restore`
 and `vmn goto` take.  It encodes HEAD + the uncommitted patch set.
@@ -176,10 +179,12 @@ with start_run("my_app") as run:
 `sklearn_r2_score`), so the query language's two-part `metrics.<name>` paths
 resolve them.
 
-**No tracking server, no HTTP remote.**  All clients write to a shared filesystem
-path or to an S3 bucket.  If your workers need credentials for S3, set
-`VMN_EXPERIMENT_BUCKET` (and optionally `VMN_EXPERIMENT_PREFIX`,
-`VMN_EXPERIMENT_ENDPOINT_URL`).
+**No tracking server, no HTTP remote.**  There is no equivalent of
+`mlflow.set_tracking_uri("http://...")`: clients write straight to a store —
+a shared directory or `s3://`, `gs://`, `az://` — chosen by
+`VMN_EXPERIMENT_STORE` (or `--store`, or conf `experiment.storage.uri`).
+Workers with no store access record with `VMN_EXP_OFFLINE=1` and upload later
+with `vmn-exp push`.
 
 ### Autologging
 
@@ -229,7 +234,7 @@ See [docs/models.md](models.md) for the full vmn-exp model registry reference.
 
 ## Further reading
 
-- [vmn-exp tracking guide](experiments.md)
+- [Client guide](client-guide.md) · [vmn-exp tracking guide](experiments.md)
 - [vmn Python SDK](sdk.md)
 - [vmn-exp model registry](models.md)
 - [vmn vs MLflow](vmn-vs-mlflow.md)

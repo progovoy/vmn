@@ -1,167 +1,71 @@
 # vmn vs release-please
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
-> This page compares vmn with [release-please](https://github.com/googleapis/release-please) to help you choose the right tool.
+[release-please](https://github.com/googleapis/release-please) automates
+releases through GitHub pull requests: as Conventional Commits land on the main
+branch it opens (or updates) a "Release PR" that bumps versions and the
+changelog; merging it creates the GitHub Release.
 
-## Overview
+[vmn](https://github.com/progovoy/vmn) stamps versions directly as annotated
+git tags with YAML metadata, from the command line, with any git host, and
+records the exact revision of every dependency repository.
 
-**release-please** is a Google-maintained tool that automates releases by
-opening GitHub Pull Requests. When conventional commits land on the main branch,
-release-please creates (or updates) a "Release PR" that bumps the version and
-updates the changelog. Merging the PR triggers a GitHub Release.
-
-**vmn** stamps versions directly as annotated git tags with rich metadata. It
-works from the command line, with any git host, and adds capabilities like
-multi-repo dependency tracking and repository state recovery.
-
-## Feature Comparison
+## Feature comparison
 
 | Feature | vmn | release-please |
 | --- | --- | --- |
-| Language support | Any (Python, Node, Rust, Go, ...) | Any (via release-type config) |
-| Git host | Any (GitHub, GitLab, Bitbucket, self-hosted) | GitHub only (GitLab support experimental) |
-| Release mechanism | Direct CLI command + git tags | Pull Request bot |
-| Runtime dependency | Python 3 | Node.js |
-| Conventional commits | Supported (optional) | Required |
-| Manual release mode | `vmn stamp -r patch/minor/major` | Not supported |
+| Language support | Any | Any (via release-type config) |
+| Git host | Any, including internal/air-gapped servers | GitHub (GitLab support experimental) |
+| Release mechanism | CLI command → commit + tags | Release PR bot |
+| Review step before release | Your own PR flow | The Release PR |
+| Runtime | Python 3.8+ | Node.js |
+| Conventional Commits | On by default; `-r` overrides | Required |
+| Manual release mode | `vmn stamp -r major/minor/patch/hotfix` | Not supported |
 | Multi-repo dependency tracking | Built-in | Not available |
-| Root app / microservice topology | Built-in (`root_app/service`) | Manifest plugin (monorepo, not multi-repo) |
-| State recovery (`goto`) | `vmn goto -v 1.2.3 app` | Not available |
+| Monorepo / services | Root app + independently versioned services | Manifest with linked components (monorepo only) |
+| State recovery | `vmn goto -v 1.2.3 app` | Not available |
 | 4-segment hotfix versions | `major.minor.patch.hotfix` | Not supported |
-| Prerelease support | Built-in (`--pr` flag) | Via prerelease branches |
-| Version auto-embedding | package.json, Cargo.toml, pyproject.toml, Jinja2 templates | Updates version files per release-type |
-| Changelog generation | Supported | Built-in (core feature) |
-| CI requirement | None (works locally) | GitHub Actions or CI |
-| Offline / air-gapped use | Local file backend | Not supported |
-| Monorepo support | Root app + child services | Manifest plugin with linked components |
+| Prereleases | `--pr <id>`, promoted with `vmn release` | Via prerelease configuration |
+| Writing the version into files | npm, Cargo, Poetry, PEP 621, Jinja2, regex selectors | Per release-type |
+| Changelog / GitHub Releases | `changelog.path`, `github_release` in conf.yml | Built-in (core feature) |
+| Where it runs | Locally or in any CI | GitHub Actions or CI |
 
-## When vmn Is a Better Fit
+## When vmn is a better fit
 
-### You are not on GitHub
+- **You are not on GitHub.** release-please depends on the GitHub API; vmn only
+  needs git, so GitLab, Bitbucket and self-hosted or air-gapped servers work
+  the same.
+- **You want to release when you decide.** One command, from CI or a laptop,
+  instead of accumulating commits in a bot PR.
+- **Products that span repositories.** vmn records the commit and remote of
+  every dependency at stamp time, and `vmn goto` restores all of them.
+- **Multi-repo microservices.** Root apps version services that live in
+  different repositories; release-please's manifest covers a single monorepo.
+- **Hotfix lines.** A fourth segment (`1.6.7.4`) outside three-segment SemVer.
 
-release-please is tightly coupled to GitHub. It uses the GitHub API to create
-pull requests, manage releases, and track state. If your code lives on GitLab,
-Bitbucket, or a self-hosted git server, vmn works identically because it only
-needs git.
+## When release-please is a better fit
 
-### You want direct control over versioning
-
-release-please follows an opinionated PR-based workflow: commits accumulate,
-a bot opens a PR, and merging that PR creates the release. vmn lets you stamp
-a version whenever you choose, from CI or from your laptop, with a single
-command.
-
-### You manage multi-repo dependencies
-
-vmn can record the exact commit hash and remote of every dependent repository
-at stamp time. release-please does not track cross-repository state.
-
-### You need state recovery
-
-`vmn goto -v 1.2.3 my_app` checks out every tracked repository to the precise
-state recorded when version 1.2.3 was stamped. release-please has no equivalent.
-
-### You use a microservice topology
-
-vmn's root-app concept versions a parent application alongside its child
-services, recording which service versions were active in each root-app release.
-release-please's manifest plugin supports monorepos but not multi-repo service
-topologies.
-
-### You need hotfix versioning
-
-vmn provides a fourth version segment (`major.minor.patch.hotfix`) for
-hotfix workflows that fall outside standard three-segment semver.
-
-### You work in air-gapped environments
-
-vmn's local file backend allows version management without any network access,
-which is critical for air-gapped or classified environments.
-
-## When release-please Is a Better Fit
-
-- You want a fully automated, PR-based release workflow on GitHub with no
-  manual version decisions.
-- You rely on automatically generated, well-formatted changelogs as a core
-  part of your release process.
-- Your team prefers a review step (the Release PR) before any version is
-  finalized.
-- You are already using Google's release tooling and want consistency across
-  your organization.
-
-## Quick Start with vmn
-
-Install vmn and stamp your first version in under a minute:
-
-```bash
-# Install
-pip install vmn
-# or: pipx install vmn
-# or: uvx vmn
-
-# Stamp a patch release -- this auto-initializes the repo and the app
-# on first run, so `vmn init` / `vmn init-app` are optional.
-vmn stamp -r patch my_app
-
-# Show the current version
-vmn show my_app
-
-# Check out the repo state at a specific version
-vmn goto -v 1.0.1 my_app
-```
-
-### Optional: Enable Conventional Commits
-
-If you want vmn to detect the release mode automatically from commit messages
-(similar to release-please), add this to `.vmn/my_app/conf.yml`:
-
-```yaml
-conf:
-  conventional_commits: true
-```
-
-Then stamp without specifying `-r`:
-
-```bash
-vmn stamp my_app
-# vmn reads commits since the last stamp and picks major/minor/patch
-```
-
-### Auto-Embed Versions
-
-Write the version into your project files automatically:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    npm:
-      path: package.json
-    pep621:
-      path: pyproject.toml
-    cargo:
-      path: Cargo.toml
-```
+- You want a fully automated, PR-based release flow on GitHub.
+- You want the Release PR as the review step before any version is final.
+- You already standardize on Google's release tooling.
 
 ## Migrating from release-please
 
-1. **Install vmn:** `pip install vmn`
-2. **Initialize:** nothing to do -- the first `vmn stamp` auto-initializes
-   the repo and the app (`vmn init` / `vmn init-app` remain available if you
-   want an explicit step, e.g. to seed a starting version with `-v`).
-3. **Start at your current version:** vmn will discover existing version tags
-   or you can stamp a new version to establish a baseline.
-4. **Configure version backends** in `.vmn/my_app/conf.yml` to replace any
-   version-file updates that release-please was performing.
-5. **Remove release-please config:** Delete `release-please-config.json`,
-   `.release-please-manifest.json`, and the GitHub Actions workflow that runs
-   release-please.
-6. **Update CI:** Replace the release-please action with
-   `vmn stamp -r <mode> my_app` (or use conventional commits for automatic
-   mode detection).
+1. **Install:** `pipx install vmn` (see the
+   [README quick start](https://github.com/progovoy/vmn#quick-start)).
+2. **Start at your current version:** vmn tags are `<app>_<version>` and it
+   does not read release-please's tags or manifest. Seed each app once with
+   `vmn init-app -v <current> <app>` (for a monorepo, one app per component,
+   or `root/service` names for a root app).
+3. **Files:** configure `version_backends` (plus `changelog.path` and
+   `github_release` if you want them) in `.vmn/<app>/conf.yml` for the
+   version-file updates release-please performed.
+4. **Remove** `release-please-config.json`, `.release-please-manifest.json` and
+   the release-please workflow.
+5. **CI:** stamp on merge to the main branch with `vmn stamp --pull <app>`
+   (Conventional Commits pick the mode) or
+   [vmn-action](https://github.com/marketplace/actions/automated-versioning).
 
-## Further Reading
+## Further reading
 
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
+- [vmn README](https://github.com/progovoy/vmn#readme) (configuration and command reference)
 - [release-please documentation](https://github.com/googleapis/release-please)

@@ -1,299 +1,86 @@
 # Migrating from bump2version to vmn
 
-> [vmn](https://github.com/progovoy/vmn) is a language-agnostic, git-tag-based versioning CLI.
-> This guide helps you migrate from [bump2version](https://github.com/c4urself/bump2version) (and its predecessor bumpversion), which are no longer actively maintained.
+[bump2version](https://github.com/c4urself/bump2version) (and the original
+bumpversion, which uses the same configuration) is no longer actively
+maintained. [vmn](https://github.com/progovoy/vmn) replaces its bump → rewrite
+files → commit → tag loop for any language, keeps the version in git tags
+instead of a `current_version` field, and adds Conventional Commits,
+multi-repo dependency tracking and `vmn goto` state recovery. See the
+[README](https://github.com/progovoy/vmn#readme) for the full feature set.
 
-## Why Migrate
-
-bump2version (and the original bumpversion) have seen minimal maintenance for
-years. Open issues and pull requests go unaddressed, and the tools do not
-support modern Python packaging conventions like `pyproject.toml` natively.
-
-vmn is an actively maintained alternative that offers:
-
-- **Git-tag-based source of truth**: no `current_version` field to keep in sync
-- **Language-agnostic**: works with Python, Node.js, Rust, Go, and any other language
-- **Multi-repo dependency tracking** for products spanning several repositories
-- **State recovery** via `vmn goto` to check out the exact repo state at any version
-- **Root app / microservice topology** for versioning parent apps and child services
-- **4-segment hotfix versions** (`major.minor.patch.hotfix`) for hotfix workflows
-- **Conventional commits** for automatic release mode detection
-- **Offline / air-gapped support** via a local file backend
-- **CI-agnostic**: works in GitHub Actions, GitLab CI, Jenkins, Bitbucket Pipelines, or locally
-
-## Concept Mapping
+## Concept mapping
 
 | bump2version | vmn | Notes |
 | --- | --- | --- |
-| `.bumpversion.cfg` / `setup.cfg [bumpversion]` | `.vmn/{app}/conf.yml` | Per-app configuration |
-| `current_version = 1.2.3` | Git tag (source of truth) | No version in config files |
-| `[bumpversion:file:setup.py]` | `version_backends: {pep621: {path: pyproject.toml}}` | Auto-embed version in files |
-| `[bumpversion:file:package.json]` | `version_backends: {npm: {path: package.json}}` | Auto-embed version in files |
-| `part = major/minor/patch` | `-r major/minor/patch` | Release mode argument |
-| `--allow-dirty` | Not applicable (vmn manages git state) | vmn commits changes automatically |
-| `--dry-run` | `--dry-run` | Preview without changes |
-| `--tag / --no-tag` | vmn always creates tags | Tags are the core mechanism |
-| `--commit / --no-commit` | vmn always commits | Part of the stamp workflow |
-| `tag_name = v{new_version}` | Tag format: `{app_name}_{version}` | vmn uses its own convention |
-| `commit_message` config | Not configurable | vmn generates structured commits |
-| `search` / `replace` patterns | Version backends + Jinja2 templates | Different approach to file updates |
-| `serialize` / `parse` format | `template` in conf.yml | Version display format |
+| `.bumpversion.cfg` / `setup.cfg [bumpversion]` | `.vmn/<app>/conf.yml` | Per-app configuration |
+| `current_version = 1.2.3` | Git tag | No version stored in config |
+| `part = major/minor/patch` | `-r major/minor/patch/hotfix` | Or omit: Conventional Commits pick it (on by default) |
+| `[bumpversion:file:X]` + `search`/`replace` | `generic_selectors` backend | Regex search-and-replace in any file |
+| package.json / pyproject.toml / Cargo.toml | `npm` / `pep621` or `poetry` / `cargo` backends | Structured, no patterns needed |
+| `--dry-run` | `--dry-run` | |
+| `--allow-dirty` | Not available | vmn refuses to stamp uncommitted changes; commit first |
+| `--no-tag` / `--no-commit` | Not available | Tags are the source of truth; use `--dry-run` to preview |
+| `tag_name = v{new_version}` | Not configurable | Tags are `<app>_<version>` |
+| `commit_message` | `-e/--extra-commit-message` | Appends to vmn's message |
+| `serialize` / `parse` | `template` in conf.yml | Display format only |
+| Custom parts (`release_num`, ...) | Not supported | major, minor, patch, optional hotfix, prerelease, build metadata |
+| `bump2version --list` | `vmn show my_app` | `--verbose` for full metadata |
 
-## Step-by-Step Migration
+## Step by step
 
-### 1. Install vmn
+1. **Install:** `pipx install vmn`.
+2. **Start at your current version:** seed the app once with your
+   `current_version`; vmn ignores existing `v1.2.3` tags, and both sets coexist.
 
-```bash
-pip install vmn
-# or: pipx install vmn
-# or: uvx vmn
-```
+   ```bash
+   vmn init-app -v 1.2.3 my_app
+   ```
 
-### 2. Initialize vmn
+3. **Map each `[bumpversion:file:...]` section.** Structured files use a
+   dedicated backend; everything else uses `generic_selectors`:
 
-The first `vmn stamp` auto-initializes both the repository and the app, so you
-can skip straight to stamping. Run the explicit commands only if you want the
-`.vmn/` scaffolding in place before your first version -- for example to seed a
-starting version:
+   ```ini
+   # .bumpversion.cfg, before
+   [bumpversion]
+   current_version = 1.2.3
 
-```bash
-vmn init                       # once per repository
-vmn init-app -v 1.4.2 my_app   # once per app; -v sets the starting version
-```
+   [bumpversion:file:pyproject.toml]
 
-This registers `my_app` for versioning and creates
-`.vmn/my_app/conf.yml` and `.vmn/my_app/last_known_app_version.yml`.
+   [bumpversion:file:mypackage/__init__.py]
+   search = __version__ = "{current_version}"
+   replace = __version__ = "{new_version}"
+   ```
 
-### 3. Map Your bump2version File Patterns
+   ```yaml
+   # .vmn/my_app/conf.yml, after
+   conf:
+     version_backends:
+       pep621:
+         path: pyproject.toml
+       generic_selectors:
+         - paths_section:
+             - input_file_path: mypackage/__init__.py
+               output_file_path: mypackage/__init__.py
+           selectors_section:
+             - regex_selector: '(__version__ = "){{VMN_VERSION_REGEX}}"'
+               regex_sub: '\1{{version}}"'
+   ```
 
-bump2version uses `[bumpversion:file:...]` sections with `search` and `replace`
-patterns to update version strings in source files. vmn replaces this with
-version backends and Jinja2 templates.
+   `{{VMN_VERSION_REGEX}}` matches any vmn version; `{{version}}` is the new
+   one. A file you would rather generate from scratch can use the
+   `generic_jinja` backend (see the README's
+   [version backends](https://github.com/progovoy/vmn#configuration)).
 
-#### Python Projects (pyproject.toml)
-
-**Before (bump2version):**
-
-```ini
-[bumpversion]
-current_version = 1.2.3
-
-[bumpversion:file:setup.py]
-search = version="{current_version}"
-replace = version="{new_version}"
-
-[bumpversion:file:mypackage/__init__.py]
-search = __version__ = "{current_version}"
-replace = __version__ = "{new_version}"
-```
-
-**After (vmn):**
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    pep621:
-      path: pyproject.toml
-```
-
-For files like `__init__.py` that are not covered by a built-in backend, use
-a Jinja2 template with `vmn gen`:
-
-```bash
-vmn gen -t version.j2 -o mypackage/__init__.py my_app
-```
-
-Where `version.j2` contains:
-
-```jinja2
-__version__ = "{{ version }}"
-```
-
-#### Node.js Projects (package.json)
-
-**Before (bump2version):**
-
-```ini
-[bumpversion:file:package.json]
-search = "version": "{current_version}"
-replace = "version": "{new_version}"
-```
-
-**After (vmn):**
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    npm:
-      path: package.json
-```
-
-#### Rust Projects (Cargo.toml)
-
-**Before (bump2version):**
-
-```ini
-[bumpversion:file:Cargo.toml]
-search = version = "{current_version}"
-replace = version = "{new_version}"
-```
-
-**After (vmn):**
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  version_backends:
-    cargo:
-      path: Cargo.toml
-```
-
-### 4. Enable Conventional Commits (Optional)
-
-If you want vmn to automatically determine the release mode from commit
-messages:
-
-```yaml
-# .vmn/my_app/conf.yml
-conf:
-  conventional_commits: true
-```
-
-### 5. Stamp Your First vmn Version
-
-```bash
-# Explicit release mode
-vmn stamp -r patch my_app
-
-# Or, with conventional commits enabled
-vmn stamp my_app
-```
-
-vmn creates an annotated git tag, updates configured version backends, commits
-the changes, and pushes.
-
-### 6. Remove bump2version Configuration
-
-```bash
-# Remove config file
-rm -f .bumpversion.cfg
-
-# If using setup.cfg, remove the [bumpversion] and [bumpversion:file:...] sections
-
-# Uninstall
-pip uninstall bump2version
-```
-
-### 7. Update CI Pipelines
-
-Replace bump2version commands in your CI configuration:
-
-**Before (bump2version):**
-
-```yaml
-# GitHub Actions example
-- run: pip install bump2version
-- run: bump2version patch
-- run: git push --follow-tags
-```
-
-**After (vmn):**
-
-```yaml
-# GitHub Actions example
-- run: pip install vmn
-- run: vmn stamp -r patch my_app
-```
-
-vmn handles the git commit, tag, and push internally.
-
-## Command Mapping Quick Reference
-
-| bump2version command | vmn equivalent |
-| --- | --- |
-| `bump2version patch` | `vmn stamp -r patch my_app` |
-| `bump2version minor` | `vmn stamp -r minor my_app` |
-| `bump2version major` | `vmn stamp -r major my_app` |
-| `bump2version --dry-run patch` | `vmn stamp -r patch --dry-run my_app` |
-| `bump2version --allow-dirty patch` | `vmn stamp -r patch my_app` (vmn manages state) |
-| `bump2version --list patch` | `vmn show my_app` |
-| `bump2version --tag --commit patch` | `vmn stamp -r patch my_app` (always tags and commits) |
-
-## Key Differences to Be Aware Of
-
-### No `current_version` in Config
-
-bump2version stores `current_version` in `.bumpversion.cfg` and updates it on
-every bump. vmn does not store the version in any config file. The version
-lives exclusively in git tags, eliminating a common source of merge conflicts
-and desynchronization.
-
-### No `search` / `replace` Patterns
-
-bump2version uses regex-like `search` and `replace` directives to find and
-update version strings in arbitrary files. vmn uses structured version backends
-for well-known file formats (package.json, Cargo.toml, pyproject.toml) and
-Jinja2 templates for everything else. This is less flexible for unusual
-patterns but more reliable for standard formats.
-
-### Tags Are Required
-
-bump2version can be configured to skip tagging (`--no-tag`). vmn always creates
-annotated git tags because tags are the source of truth. If you need to test
-without creating tags, use `--dry-run`.
-
-### Commit Messages Are Not Configurable
-
-bump2version allows custom `commit_message` templates. vmn generates its own
-structured commit messages. If you need specific commit message formats, wrap
-vmn in a script that amends the commit.
+4. **Stamp:** `vmn stamp -r patch my_app` (or `vmn stamp my_app` with
+   Conventional Commit messages). vmn rewrites the files, commits, tags and
+   pushes — drop the separate `git push --follow-tags`.
+5. **Remove** `.bumpversion.cfg` (or the `[bumpversion*]` sections of
+   `setup.cfg`) and `pip uninstall bump2version`.
 
 ## FAQ
 
-### Can I keep my existing git tags?
+**Monorepo?** One app per component (`vmn stamp -r patch service_a`), each
+auto-initialized on first stamp, or a root app for services
+(`vmn stamp -r patch my_platform/service_a`).
 
-Yes. vmn uses its own tag format (`{app_name}_{version}`), so it will not
-conflict with tags created by bump2version. Both sets of tags can coexist.
-
-### Can I use vmn for non-Python projects?
-
-Absolutely. Unlike bump2version, vmn is language-agnostic. It works with any
-project that lives in a git repository.
-
-### What about bumpversion (the original)?
-
-The migration process is identical. bumpversion and bump2version use the same
-configuration format, so the steps above apply to both.
-
-### Can I use vmn in a monorepo?
-
-Yes. Initialize a separate app for each component:
-
-```bash
-vmn init-app service_a
-vmn init-app service_b
-vmn stamp -r patch service_a
-vmn stamp -r minor service_b
-```
-
-For microservice topologies, use the root-app feature:
-
-```bash
-vmn init-app my_platform/service_a
-vmn init-app my_platform/service_b
-```
-
-### Does vmn support custom version parts?
-
-bump2version allows defining custom version parts (e.g., `release_num`). vmn
-uses the standard semver segments (major, minor, patch) plus an optional hotfix
-segment and prerelease labels. Custom parts are not supported, but the
-four-segment format covers most real-world workflows.
-
-## Further Reading
-
-- [vmn GitHub repository](https://github.com/progovoy/vmn)
-- [vmn README](https://github.com/progovoy/vmn#readme)
-- [bump2version repository](https://github.com/c4urself/bump2version)
+**Non-Python projects?** vmn works with any project in a git repository.
