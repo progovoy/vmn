@@ -126,21 +126,15 @@ def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
     ``status`` is a repo status the caller already computed with the same
     expected/optional sets, to spare a second one.
     """
-    from version_stamp.cli.commands import _get_repo_status
-    from version_stamp.cli.output import get_dirty_states
+    from version_stamp.stamping.repo_status import (
+        READ_ONLY_EXPECTED,
+        READ_ONLY_OPTIONAL,
+        _get_repo_status,
+        get_dirty_states,
+    )
 
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally",
-        "detached",
-        "pending",
-        "outgoing",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
     if status is None:
-        status = _get_repo_status(vcs, expected_status, optional_status)
+        status = _get_repo_status(vcs, READ_ONLY_EXPECTED, READ_ONLY_OPTIONAL)
     if status.error:
         name = vcs.name or "<app_name>"
         VMN_LOGGER.error(
@@ -149,7 +143,7 @@ def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
         )
         return None, None, None, None, None, 1
 
-    dirty_states = list(get_dirty_states(optional_status, status))
+    dirty_states = list(get_dirty_states(READ_ONLY_OPTIONAL, status))
 
     ver_infos = vcs.ver_infos_from_repo
     tag_name = vcs.selected_tag

@@ -24,6 +24,12 @@ from version_stamp.core.logging import (
 )
 from version_stamp.core.utils import resolve_root_path
 from version_stamp.stamping.publisher import VersionControlStamper
+from version_stamp.stamping.repo_status import (
+    READ_ONLY_EXPECTED,
+    READ_ONLY_OPTIONAL,
+    _status_or_fail,
+    get_dirty_states,
+)
 from version_stamp.stamping.template_data import (
     create_data_dict_for_jinja2,
     gen_jinja2_template_from_data,
@@ -32,35 +38,17 @@ from version_stamp.stamping.template_data import (
 
 @measure_runtime_decorator
 def show(vcs, params, verstr=None):
-    from version_stamp.cli.commands import _get_repo_status
+    from version_stamp.cli.commands import _extract_ver_info
 
     dirty_states = None
     # TODO:: fix recusrion crash when doing copy.deepcopy(vcs.ver_infos_from_repo)
-    ver_infos = vcs.ver_infos_from_repo
-    tag_name = vcs.selected_tag
-    if verstr:
-        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
+    tag_name, ver_infos, ver_info = _extract_ver_info(vcs, verstr or None)
 
     if not params["from_file"]:
-        expected_status = {"repo_tracked", "app_tracked"}
-        optional_status = {
-            "repos_exist_locally",
-            "detached",
-            "pending",
-            "outgoing",
-            "version_not_matched",
-            "dirty_deps",
-            "deps_synced_with_conf",
-        }
-        status = _get_repo_status(vcs, expected_status, optional_status)
-        if status.error:
-            VMN_LOGGER.error("Error occured when getting the repo status")
-            VMN_LOGGER.debug(status, exc_info=True)
-
-            raise RuntimeError()
+        status = _read_only_status_or_raise(vcs)
 
         if tag_name in ver_infos:
-            dirty_states = list(get_dirty_states(optional_status, status))
+            dirty_states = list(get_dirty_states(READ_ONLY_OPTIONAL, status))
 
             if params["ignore_dirty"]:
                 dirty_states = None
@@ -71,11 +59,6 @@ def show(vcs, params, verstr=None):
 
             ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"] = []
             ver_infos[tag_name]["ver_info"]["stamping"]["app"]["versions"].extend(vers)
-
-    if tag_name not in ver_infos:
-        ver_info = None
-    else:
-        ver_info = ver_infos[tag_name]["ver_info"]
 
     if ver_info is None:
         VMN_LOGGER.error(
@@ -272,24 +255,9 @@ def _handle_root_output_to_user(data, dirty_states, params, vcs, ver_info):
 
 @measure_runtime_decorator
 def gen(vcs, params, verstr_range=None):
-    from version_stamp.cli.commands import _get_repo_status
+    from version_stamp.cli.commands import _extract_ver_info
 
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally",
-        "detached",
-        "pending",
-        "outgoing",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
-    status = _get_repo_status(vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.error("Error occured when getting the repo status")
-        VMN_LOGGER.debug(status, exc_info=True)
-
-        raise RuntimeError()
+    status = _read_only_status_or_raise(vcs)
 
     verstr, end_verstr = None, "HEAD"
     end_tag_name = end_verstr
@@ -302,20 +270,15 @@ def gen(vcs, params, verstr_range=None):
     if end_verstr != "HEAD":
         end_tag_name, _ = vcs.get_version_info_from_verstr(end_verstr)
 
-    if verstr is None:
-        ver_infos = vcs.ver_infos_from_repo
-        tag_name = vcs.selected_tag
-    else:
-        tag_name, ver_infos = vcs.get_version_info_from_verstr(verstr)
-
-    if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
+    tag_name, ver_infos, ver_info = _extract_ver_info(vcs, verstr)
+    if ver_info is None:
         VMN_LOGGER.error(
             "Version information was not found " f"for {vcs.name}."
         )
 
         raise RuntimeError()
 
-    dirty_states = get_dirty_states(optional_status, status)
+    dirty_states = get_dirty_states(READ_ONLY_OPTIONAL, status)
     if params["verify_version"]:
         # TODO: check here what will happen when using "hotfix" octa
         if dirty_states:
@@ -340,7 +303,7 @@ def gen(vcs, params, verstr_range=None):
             )
             raise RuntimeError()
 
-    data = ver_infos[tag_name]["ver_info"]["stamping"]["app"]
+    data = ver_info["stamping"]["app"]
 
     # With verstr given, we know the supposed to be deps states.
     # If no verstr given, learn the actual deps state
@@ -373,7 +336,7 @@ def gen(vcs, params, verstr_range=None):
         tag_name,
         end_tag_name,
         vcs.backend.repo_path,
-        ver_infos[tag_name]["ver_info"],
+        ver_info,
         params["custom_values"],
     )
 
@@ -386,25 +349,12 @@ def gen(vcs, params, verstr_range=None):
     return 0
 
 
-def get_dirty_states(optional_status, status):
-    dirty_states = (optional_status & status.state) | {
-        "repos_exist_locally",
-        "detached",
-    }
-    dirty_states -= {"detached", "repos_exist_locally", "deps_synced_with_conf"}
-
-    try:
-        debug_msg = ""
-        for k in status.err_msgs.keys():
-            if k in dirty_states:
-                debug_msg = f"{debug_msg}\n{status.err_msgs[k]}"
-
-        if debug_msg:
-            VMN_LOGGER.debug(f"Debug for dirty states call:{debug_msg}")
-    except Exception:
-        VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-
-    return dirty_states
+def _read_only_status_or_raise(vcs):
+    status = _status_or_fail(vcs, READ_ONLY_EXPECTED, READ_ONLY_OPTIONAL)
+    if status is None:
+        VMN_LOGGER.error("Error occured when getting the repo status")
+        raise RuntimeError()
+    return status
 
 
 def _goto_dev_version(vcs, params, version):

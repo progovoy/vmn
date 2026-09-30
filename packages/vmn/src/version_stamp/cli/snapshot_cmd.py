@@ -12,11 +12,6 @@ the ``version_stamp.snapshot`` modules (imported lazily). ``show``/``export``/
 from version_stamp.cli.constants import SNAPSHOT_ACTIONS
 from version_stamp.core.logging import VMN_LOGGER
 
-_EXPECTED_STATUS = {"repo_tracked", "app_tracked"}
-_OPTIONAL_STATUS = {
-    "repos_exist_locally", "detached", "pending", "outgoing",
-    "version_not_matched", "dirty_deps", "deps_synced_with_conf",
-}
 _FLAGS = (
     (("-v", "--version"), dict(default=None, help="Snapshot ref: verstr, unique prefix, @N or latest")),
     (("--latest",), dict(action="store_true", help="Use the most recent snapshot")),
@@ -51,9 +46,13 @@ def add_arg_snapshot(subparsers):
 
 
 def _repo_status(vcs):
-    from version_stamp.cli.commands import _get_repo_status
+    from version_stamp.stamping.repo_status import (
+        READ_ONLY_EXPECTED,
+        READ_ONLY_OPTIONAL,
+        _get_repo_status,
+    )
 
-    status = _get_repo_status(vcs, _EXPECTED_STATUS, _OPTIONAL_STATUS)
+    status = _get_repo_status(vcs, READ_ONLY_EXPECTED, READ_ONLY_OPTIONAL)
     if not status.error:
         return status
     if "repo_tracked" not in status.state:

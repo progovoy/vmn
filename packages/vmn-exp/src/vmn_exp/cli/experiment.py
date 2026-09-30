@@ -36,6 +36,7 @@ from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.checkout import record_run
+from vmn_exp.gitmode.coldstart import DIRTY_OK
 from vmn_exp.snapshot import (
     _diff_real_tree,
     _diff_with_external_tool,
@@ -256,78 +257,24 @@ def experiment_storage_params(vcs, args):
 def auto_init(vmn_ctx):
     """Initialize the repo and the app when either is untracked (a zero-setup
     cold start). Returns 1 on failure, None otherwise."""
-    from version_stamp.api import _get_repo_status, _init_app, handle_init
+    from version_stamp.api import auto_init_if_needed, init_needed
 
     vcs = vmn_ctx.vcs
-    args = vmn_ctx.args
-    expected_status = {"repo_tracked", "app_tracked"}
-    optional_status = {
-        "repos_exist_locally",
-        "detached",
-        "pending",
-        "outgoing",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
-    # An untracked repo or app is the normal cold-start case here, not a
-    # failure: the branch below initializes both. Reporting them as errors
-    # first made a successful first run read like a crash.
-    status = _get_repo_status(
-        vcs,
-        expected_status,
-        optional_status,
-        suppress_errors={"repo_tracked", "app_tracked"},
-    )
+    repo_missing, app_missing = init_needed(vcs)
 
-    if status.error:
-        auto_initialized = False
-        be = vcs.backend
-        vmn_path = os.path.join(vcs.vmn_root_path, ".vmn")
-        vmn_init_file = os.path.join(vmn_path, "conf.yml")
+    # A brand-new app name in a repo that already has other apps is far more
+    # likely a typo than a deliberate new app, and unlike `vmn show`/`vmn goto`
+    # this path commits, tags and pushes as a side effect. Refuse unless the
+    # repo is genuinely uninitialized (no other app could exist yet) or the
+    # user opted in with --new-app.
+    if app_missing and not repo_missing and not getattr(vmn_ctx.args, "new_app", False):
+        other_apps = _other_configured_apps(vcs)
+        if other_apps:
+            VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
+            return 1
 
-        _dirty_ok = {"pending", "outgoing"}
-
-        repo_missing = "repo_tracked" not in status.state and not be.is_path_tracked(
-            vmn_init_file
-        )
-        app_missing = "app_tracked" not in status.state and not be.is_path_tracked(
-            vcs.app_dir_path
-        )
-
-        # A brand-new app name in a repo that already has other apps is
-        # far more likely a typo than a deliberate new app, and unlike
-        # `vmn show`/`vmn goto` this path commits, tags and pushes as a
-        # side effect. Refuse unless the repo is genuinely uninitialized
-        # (no other app could exist yet) or the user opted in with
-        # --new-app.
-        if app_missing and not repo_missing and not getattr(args, "new_app", False):
-            other_apps = _other_configured_apps(vcs)
-            if other_apps:
-                VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
-                return 1
-
-        if repo_missing:
-            VMN_LOGGER.info("Auto-initializing repository...")
-            ret = handle_init(vmn_ctx, extra_optional=_dirty_ok)
-            if ret != 0:
-                return 1
-            auto_initialized = True
-
-        if app_missing:
-            # Name the app and the baseline: a typo'd app name becomes a
-            # permanent git tag, so creating one must never be silent.
-            VMN_LOGGER.info(
-                f"Auto-initializing new vmn app '{vcs.name}' at 0.0.0..."
-            )
-            err = _init_app(vcs, "0.0.0", extra_optional=_dirty_ok)
-            if err:
-                return 1
-            auto_initialized = True
-
-        if auto_initialized:
-            vcs.update_attrs_from_app_conf_file()
-            vcs.initialize_backend_attrs()
+    err, _ = auto_init_if_needed(vmn_ctx, extra_optional=DIRTY_OK)
+    return err or None
 
 
 @measure_runtime_decorator

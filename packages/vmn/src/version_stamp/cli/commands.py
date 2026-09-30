@@ -1,128 +1,45 @@
 #!/usr/bin/env python3
 """Command handlers: handle_init, handle_stamp, handle_release, etc."""
-import copy
 import os
 import random
 import time
-from pathlib import Path
 
 from packaging import version as pversion
 
 from version_stamp import version as version_mod
 from version_stamp.backends.base import VMNBackend
-from version_stamp.backends.factory import get_client
 from version_stamp.cli.config_tui import handle_config  # noqa: F401
-from version_stamp.cli.constants import (
-    IGNORED_FILES,
-    INIT_FILENAME,
-    RepoStatus,
-)
 from version_stamp.compat.release_mode import normalize_release_mode
 from version_stamp.core.changelog import release_mode_for_commit
-from version_stamp.core.constants import (
-    INIT_COMMIT_MESSAGE,
-    RELATIVE_TO_GLOBAL_TYPE,
-    VER_FILE_NAME,
-    VMN_USER_NAME,
-    VMN_VERSION_FORMAT,
-)
+from version_stamp.core.constants import VMN_VERSION_FORMAT
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.utils import WrongTagFormatException
 from version_stamp.core.version_math import (
     compare_release_modes,
     parse_conventional_commit_message,
 )
+from version_stamp.stamping.init import (
+    _init_app,
+    _revert_failed_publish,
+    auto_init_if_needed,
+    init_repo,
+)
+from version_stamp.stamping.repo_status import (
+    _get_repo_status,
+    _log_status_error,
+    _status_or_fail,
+)
 
-_STATUS_DESCRIPTIONS = {
-    "repos_exist_locally": "all dependency repos are cloned locally",
-    "deps_synced_with_conf": "dependency repos match conf.yml settings",
-    "repo_tracked": "vmn tracking is initialized (.vmn/ committed)",
-    "app_tracked": "app has been initialized with vmn",
-    "version_not_matched": "current repo state does not match any stamped version",
-    "pending": "uncommitted changes exist in the working tree",
-    "detached": "HEAD is detached (not on a branch)",
-    "outgoing": "local commits not yet pushed to remote",
-    "dirty_deps": "dependency repos have uncommitted or unpushed changes",
-}
+# The repo status `vmn release` and `vmn add` demand, and what they tolerate.
+_VERSION_OP_EXPECTED = frozenset({"repos_exist_locally", "repo_tracked", "app_tracked"})
+_VERSION_OP_OPTIONAL = frozenset(
+    {"detached", "version_not_matched", "dirty_deps", "deps_synced_with_conf"}
+)
 
 
 @measure_runtime_decorator
 def handle_init(vmn_ctx, extra_optional=None):
-    expected_status = {"repos_exist_locally"}
-    optional_status = {"deps_synced_with_conf", "version_not_matched"}
-    if extra_optional:
-        optional_status |= extra_optional
-
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
-
-        return 1
-
-    be = vmn_ctx.vcs.backend
-
-    vmn_path = os.path.join(vmn_ctx.vcs.vmn_root_path, ".vmn")
-    Path(vmn_path).mkdir(parents=True, exist_ok=True)
-    vmn_init_path = os.path.join(vmn_path, INIT_FILENAME)
-    Path(vmn_init_path).touch()
-    git_ignore_path = os.path.join(vmn_path, ".gitignore")
-    _add_ignored_files(git_ignore_path)
-
-    # TODO:: revert in case of failure. Use the publish_commit function
-    be.commit(
-        message=INIT_COMMIT_MESSAGE,
-        user=VMN_USER_NAME,
-        include=[vmn_init_path, git_ignore_path],
-    )
-    be.push()
-
-    VMN_LOGGER.info(f"Initialized vmn tracking on {vmn_ctx.vcs.vmn_root_path}")
-
-    return 0
-
-
-def _add_ignored_files(git_ignore_path):
-    """Append vmn's ignore entries missing from *git_ignore_path*, keeping
-    whatever the user put there."""
-    existing = ""
-    if os.path.exists(git_ignore_path):
-        with open(git_ignore_path) as f:
-            existing = f.read()
-    present = set(existing.splitlines())
-    missing = [entry for entry in IGNORED_FILES if entry not in present]
-    if existing and not existing.endswith("\n"):
-        existing += "\n"
-    with open(git_ignore_path, "w") as f:
-        f.write(existing + "".join(f"{entry}\n" for entry in missing))
-
-
-def _repo_initialized(be, vmn_root_path):
-    """`vmn init` ran here: its conf.yml or .gitignore is committed (repos
-    initialized before the conf.yml existed have only the .gitignore)."""
-    vmn_path = os.path.join(vmn_root_path, ".vmn")
-    return any(
-        be.is_path_tracked(os.path.join(vmn_path, name))
-        for name in (INIT_FILENAME, ".gitignore")
-    )
-
-
-def _app_initialized(be, app_dir_path):
-    """`vmn init-app` ran for the app: its version file is committed (a
-    committed conf.yml alone does not make an initialized app)."""
-    return be.is_path_tracked(os.path.join(app_dir_path, VER_FILE_NAME))
-
-
-def _revert_failed_publish(versions_be_ifc):
-    """Restore the tracked version files and drop an untracked version file
-    (a failed first init-app writes it; left behind, it would sit in the tree)."""
-    be = versions_be_ifc.backend
-    files = versions_be_ifc.version_files
-    be.revert_local_changes([f for f in files if be.is_path_tracked(f)])
-    version_file = versions_be_ifc.version_file_path
-    if os.path.exists(version_file) and not be.is_path_tracked(version_file):
-        os.remove(version_file)
+    return init_repo(vmn_ctx.vcs, extra_optional)
 
 
 @measure_runtime_decorator
@@ -207,6 +124,18 @@ def _log_no_release_mode(vcs):
     )
 
 
+def _apply_push_credentials(vmn_ctx):
+    push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
+    push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
+    if push_user and push_token:
+        vmn_ctx.vcs.backend.set_push_credentials(push_user, push_token)
+    elif bool(push_user) != bool(push_token):
+        VMN_LOGGER.warning(
+            "Both --git-push-user and --git-push-token must be provided together. "
+            "Ignoring partial credentials."
+        )
+
+
 @measure_runtime_decorator
 def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.prerelease = vmn_ctx.args.pr
@@ -217,15 +146,7 @@ def handle_stamp(vmn_ctx):
     vmn_ctx.vcs.override_version = vmn_ctx.args.ov
     vmn_ctx.vcs.dry_run = vmn_ctx.args.dry
 
-    push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
-    push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
-    if push_user and push_token:
-        vmn_ctx.vcs.backend.set_push_credentials(push_user, push_token)
-    elif bool(push_user) != bool(push_token):
-        VMN_LOGGER.warning(
-            "Both --git-push-user and --git-push-token must be provided together. "
-            "Ignoring partial credentials."
-        )
+    _apply_push_credentials(vmn_ctx)
 
     vmn_ctx.vcs.release_mode = normalize_release_mode(vmn_ctx.vcs.release_mode)
 
@@ -309,54 +230,14 @@ def handle_stamp(vmn_ctx):
     if status.error:
         # Auto-initialize only for truly new repos/apps — check git history
         # to distinguish "never initialized" from "initialized but tags removed"
-        auto_initialized = False
-        be = vmn_ctx.vcs.backend
-
-        if "repo_tracked" not in status.state and not _repo_initialized(
-            be, vmn_ctx.vcs.vmn_root_path
-        ):
-            VMN_LOGGER.info(
-                "vmn tracking not initialized. Auto-initializing repository..."
-            )
-            ret = handle_init(vmn_ctx)
-            if ret != 0:
-                VMN_LOGGER.error("Auto-initialization of repository failed")
-                return 1
-            auto_initialized = True
-
-        if "app_tracked" not in status.state and not _app_initialized(
-            be, vmn_ctx.vcs.app_dir_path
-        ):
-            VMN_LOGGER.info(
-                f"App '{vmn_ctx.vcs.name}' not tracked. Auto-initializing app..."
-            )
-            err = _init_app(vmn_ctx.vcs, "0.0.0")
-            if err:
-                VMN_LOGGER.error(
-                    f"Auto-initialization of app '{vmn_ctx.vcs.name}' failed"
-                )
-                return 1
-            auto_initialized = True
-
-        if auto_initialized:
-            # Refresh vcs state — auto-init created new commits/tags
-            vmn_ctx.vcs.update_attrs_from_app_conf_file()
-            vmn_ctx.vcs.initialize_backend_attrs()
-            # Re-check status after auto-init
-            status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-            if status.error:
-                VMN_LOGGER.debug(
-                    f"Error occurred when getting the repo status after auto-init: "
-                    f"{status}",
-                    exc_info=True,
-                )
-                return 1
-        else:
-            # Error was not due to missing init — original behavior
-            VMN_LOGGER.debug(
-                f"Error occured when getting the repo status: {status}",
-                exc_info=True,
-            )
+        err, initialized = auto_init_if_needed(vmn_ctx)
+        if err:
+            return 1
+        if not initialized:
+            _log_status_error(status)
+            return 1
+        status = _status_or_fail(vmn_ctx.vcs, expected_status, optional_status)
+        if status is None:
             return 1
 
     if status.matched_version_info is not None:
@@ -409,14 +290,12 @@ def handle_stamp(vmn_ctx):
 
             return 1
 
-        release_tag_name = VMNBackend.serialize_vmn_tag_name(
-            vmn_ctx.vcs.name, base_verstr
-        )
+        release_tag_name = vmn_ctx.vcs.get_tag_name(base_verstr)
 
         tag_name_prefix = f"{release_tag_name}*"
         tag = vmn_ctx.vcs.backend.get_latest_available_tag(tag_name_prefix)
 
-        _, ver_infos = vmn_ctx.vcs.backend.get_tag_version_info(release_tag_name)
+        _, ver_infos = vmn_ctx.vcs.release_tag_info(verstr)
         if ver_infos:
             tag = None
 
@@ -487,10 +366,11 @@ def _determine_initial_version(vmn_ctx):
     return initial_version
 
 
-def _validate_and_resolve_version(ver, status, command_name):
+def _validate_and_resolve_version(ver, status, command_name, hint=""):
     """Validate buildmetadata and resolve version from status if needed.
 
-    Returns (ver, error_code). error_code is non-zero on failure.
+    Returns (ver, error_code). error_code is non-zero on failure. *hint* is
+    appended to the "specify a version" error.
     """
     if ver:
         props = VMNBackend.deserialize_vmn_version(ver)
@@ -506,7 +386,7 @@ def _validate_and_resolve_version(ver, status, command_name):
     elif ver is None:
         VMN_LOGGER.error(
             f"When running vmn {command_name} and not on a version commit, "
-            "you must specify a specific version using -v flag"
+            f"you must specify a specific version using -v flag{hint}"
         )
         return ver, 1
 
@@ -514,8 +394,14 @@ def _validate_and_resolve_version(ver, status, command_name):
 
 
 def _extract_ver_info(vcs, ver):
-    """Look up ver_info for a version string. Returns (tag_name, ver_infos, ver_info)."""
-    tag_name, ver_infos = vcs.get_version_info_from_verstr(ver)
+    """Look up ver_info for a version string (None: the selected version).
+
+    Returns (tag_name, ver_infos, ver_info).
+    """
+    if ver is None:
+        tag_name, ver_infos = vcs.selected_tag, vcs.ver_infos_from_repo
+    else:
+        tag_name, ver_infos = vcs.get_version_info_from_verstr(ver)
     if tag_name not in ver_infos or ver_infos[tag_name]["ver_info"] is None:
         ver_info = None
     else:
@@ -525,30 +411,12 @@ def _extract_ver_info(vcs, ver):
 
 @measure_runtime_decorator
 def handle_release(vmn_ctx):
-    push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
-    push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
-    if push_user and push_token:
-        vmn_ctx.vcs.backend.set_push_credentials(push_user, push_token)
-    elif bool(push_user) != bool(push_token):
-        VMN_LOGGER.warning(
-            "Both --git-push-user and --git-push-token must be provided together. "
-            "Ignoring partial credentials."
-        )
+    _apply_push_credentials(vmn_ctx)
 
-    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {
-        "detached",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
-
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
-
+    status = _status_or_fail(
+        vmn_ctx.vcs, _VERSION_OP_EXPECTED, _VERSION_OP_OPTIONAL
+    )
+    if status is None:
         return 1
 
     # Handle --stamp flag: must be on branch tip with a version commit (prerelease)
@@ -578,30 +446,11 @@ def handle_release(vmn_ctx):
             )
             return 1
 
-    ver = vmn_ctx.args.version
-
-    if ver:
-        props = VMNBackend.deserialize_vmn_version(ver)
-        if props.buildmetadata is not None:
-            VMN_LOGGER.error(
-                f"Failed to release {ver}. "
-                f"Releasing metadata versions is not supported"
-            )
-
-            return 1
-
-    if ver is None and status.matched_version_info is not None:
-        # Good we have found an existing version matching
-        # the actual_deps_state
-        ver = status.matched_version_info["stamping"]["app"]["_version"]
-    elif ver is None:
-        # For --stamp, we already validated matched_version_info exists above
-        VMN_LOGGER.error(
-            "When running vmn release and not on a version commit, "
-            "you must specify a specific version using -v flag or use --stamp"
-        )
-
-        return 1
+    ver, err = _validate_and_resolve_version(
+        vmn_ctx.args.version, status, "release", hint=" or use --stamp"
+    )
+    if err:
+        return err
 
     # Validate that we're releasing from a prerelease
     props = VMNBackend.deserialize_vmn_version(ver)
@@ -670,20 +519,10 @@ def handle_add(vmn_ctx):
     vmn_ctx.params["version_metadata_path"] = vmn_ctx.args.vmp
     vmn_ctx.params["version_metadata_url"] = vmn_ctx.args.vmu
 
-    expected_status = {"repos_exist_locally", "repo_tracked", "app_tracked"}
-    optional_status = {
-        "detached",
-        "version_not_matched",
-        "dirty_deps",
-        "deps_synced_with_conf",
-    }
-
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
-
+    status = _status_or_fail(
+        vmn_ctx.vcs, _VERSION_OP_EXPECTED, _VERSION_OP_OPTIONAL
+    )
+    if status is None:
         return 1
 
     ver = vmn_ctx.args.version
@@ -781,12 +620,7 @@ def handle_goto(vmn_ctx):
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
     vmn_ctx.params["force"] = vmn_ctx.args.force
 
-    status = _get_repo_status(vmn_ctx.vcs, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
-
+    if _status_or_fail(vmn_ctx.vcs, expected_status, optional_status) is None:
         return 1
 
     from version_stamp.cli.output import goto_version
@@ -794,308 +628,6 @@ def handle_goto(vmn_ctx):
     return goto_version(
         vmn_ctx.vcs, vmn_ctx.params, vmn_ctx.args.version, vmn_ctx.args.pull
     )
-
-
-def _on_configured_branch(path, branch_name, configured_branch):
-    """A dep is on its configured branch, or on a local branch that tracks it
-    and has no commits of its own (so the recorded hash is reachable).
-
-    The second case is a `vmn wt` island's private branch.
-    """
-    if branch_name == configured_branch:
-        return True
-    from version_stamp.cli.worktree_git import (
-        branch_upstream,
-        head_contained_in_upstream,
-    )
-
-    upstream = branch_upstream(path, branch_name) or ""
-    tracked = upstream.split("/", 1)[-1]
-    return tracked == configured_branch and head_contained_in_upstream(path)
-
-
-def _branch_pin_error(repo, full_path, dep_be, branch):
-    branch_name = dep_be.get_active_branch()
-    if _on_configured_branch(full_path, branch_name, branch):
-        return None
-    return (
-        f"{repo} repository is on a different branch: "
-        f"{branch_name} than what is required by the configuration: {branch}"
-    )
-
-
-def _tag_pin_error(repo, full_path, dep_be, tag):
-    if dep_be.changeset(tag=tag) == dep_be.changeset():
-        return None
-    return f"Repository in not on the requested tag by the configuration for {repo}."
-
-
-def _hash_pin_error(repo, full_path, dep_be, changeset):
-    if changeset == dep_be.changeset():
-        return None
-    return f"Repository in not on the requested hash by the configuration for {repo}."
-
-
-_DEP_PIN_CHECKS = {
-    "branch": _branch_pin_error,
-    "tag": _tag_pin_error,
-    "hash": _hash_pin_error,
-}
-
-
-def _dep_pin_error(pin, repo, full_path, dep_be, value):
-    """Why dep ``repo`` is off its configured ``pin`` (branch/tag/hash), or None."""
-    try:
-        return _DEP_PIN_CHECKS[pin](repo, full_path, dep_be, value)
-    except Exception:
-        VMN_LOGGER.debug(f"Failed to check the {pin} of {repo}", exc_info=True)
-        return (
-            f"Failed to verify that {repo} repository is on the {pin}: {value} "
-            f"required by the configuration"
-        )
-
-
-def _mark_unsynced(status, repo, pin, err_msg):
-    status.deps_synced_with_conf = False
-    status.err_msgs[
-        "deps_synced_with_conf"
-    ] = f"{status.err_msgs['deps_synced_with_conf']}\n{err_msg}"
-    status.state.discard("deps_synced_with_conf")
-    status.repos[repo][f"{pin}_synced_error"] = True
-    status.repos[repo]["state"].add("not_synced_with_conf")
-
-
-@measure_runtime_decorator
-def _get_repo_status(
-    vcs, expected_status, optional_status=set(), suppress_errors=frozenset()
-):
-    be = vcs.backend
-    default_dep_status = {
-        "pending": False,
-        "detached": False,
-        "outgoing": False,
-        "state": set(),
-        "error": False,
-    }
-    status = RepoStatus(
-        state={
-            "repos_exist_locally",
-            "deps_synced_with_conf",
-            "repo_tracked",
-            "app_tracked",
-        },
-    )
-
-    if not vcs.tracked:
-        status.app_tracked = False
-        status.err_msgs["app_tracked"] = "Untracked app. Run vmn init-app first"
-        status.state.remove("app_tracked")
-
-        if not _repo_initialized(vcs.backend, vcs.vmn_root_path):
-            status.repo_tracked = False
-            status.err_msgs[
-                "repo_tracked"
-            ] = "vmn tracking is not yet initialized. Run vmn init on the repository"
-            status.state.remove("repo_tracked")
-
-    err = be.check_for_pending_changes()
-    if err:
-        status.pending = True
-        status.err_msgs["pending"] = err
-        status.state.add("pending")
-
-    err = be.check_for_outgoing_changes()
-    if err:
-        # TODO:: Check for errcode instead of startswith
-        if err.startswith("Detached head"):
-            status.detached = True
-            status.err_msgs["detached"] = err
-            status.state.add("detached")
-        else:
-            # Outgoing changes cannot be in detached head
-            # TODO: is it really?
-            status.outgoing = True
-            status.err_msgs["outgoing"] = err
-            status.state.add("outgoing")
-
-    if "name" in vcs.current_version_info["stamping"]["app"]:
-        verstr = vcs.verstr_from_file
-        matched_version_info = vcs.find_matching_version(verstr)
-        if matched_version_info is None:
-            status.version_not_matched = True
-            status.state.add("version_not_matched")
-        else:
-            status.matched_version_info = matched_version_info
-
-        configured_repos = set(vcs.configured_deps.keys())
-        local_repos = set(vcs.actual_deps_state.keys())
-
-        missing_deps = configured_repos - local_repos
-        if missing_deps:
-            paths = []
-            for path in missing_deps:
-                paths.append(os.path.join(vcs.vmn_root_path, path))
-
-            status.repos_exist_locally = False
-            status.err_msgs["repos_exist_locally"] = (
-                f"Dependency repository were specified in conf.yml file. "
-                f"However repos: {paths} do not exist. Please clone and rerun"
-            )
-            status.local_repos_diff = missing_deps
-            status.state.remove("repos_exist_locally")
-
-        err = 0
-        common_deps = configured_repos & local_repos
-        for repo in common_deps:
-            # Skip local repo
-            if repo == ".":
-                continue
-
-            status.repos[repo] = copy.deepcopy(default_dep_status)
-            full_path = os.path.join(vcs.vmn_root_path, repo)
-
-            dep_be, err = get_client(full_path, vcs.be_type)
-            if err:
-                err_str = f"Failed to create backend {err}. Exiting"
-                VMN_LOGGER.error(err_str)
-                raise RuntimeError(err_str)
-
-            err = dep_be.check_for_pending_changes()
-            if err:
-                status.dirty_deps = True
-                status.err_msgs[
-                    "dirty_deps"
-                ] = f"{status.err_msgs['dirty_deps']}\n{err}"
-                status.state.add("dirty_deps")
-                status.repos[repo]["pending"] = True
-                status.repos[repo]["state"].add("pending")
-
-            for pin in _DEP_PIN_CHECKS:
-                if pin not in vcs.configured_deps[repo]:
-                    continue
-                err_msg = _dep_pin_error(
-                    pin, repo, full_path, dep_be, vcs.configured_deps[repo][pin]
-                )
-                if err_msg:
-                    _mark_unsynced(status, repo, pin, err_msg)
-
-            if not dep_be.in_detached_head():
-                err = dep_be.check_for_outgoing_changes()
-                if err:
-                    status.repos[repo]["outgoing"] = True
-                    status.repos[repo]["state"].add("outgoing")
-                    if "outgoing" not in optional_status:
-                        status.dirty_deps = True
-                        status.err_msgs[
-                            "dirty_deps"
-                        ] = f"{status.err_msgs['dirty_deps']}\n{err}"
-                        status.state.add("dirty_deps")
-            else:
-                status.repos[repo]["detached"] = True
-                status.repos[repo]["state"].add("detached")
-
-    if (expected_status & status.state) != expected_status:
-        for msg in expected_status - status.state:
-            if msg in suppress_errors:
-                continue
-            if status.err_msgs.get(msg):
-                VMN_LOGGER.error(status.err_msgs[msg])
-
-        status.error = True
-
-        return status
-
-    unexpected = (status.state - expected_status) - optional_status
-    if unexpected:
-        for msg in unexpected:
-            if status.err_msgs.get(msg):
-                VMN_LOGGER.error(status.err_msgs[msg])
-
-        desc = ", ".join(
-            f"{s} ({_STATUS_DESCRIPTIONS[s]})" if s in _STATUS_DESCRIPTIONS else s
-            for s in sorted(unexpected)
-        )
-        VMN_LOGGER.error(f"Unexpected repository status: {desc}")
-
-        if "pending" in unexpected:
-            VMN_LOGGER.info(
-                "Hint: commit or stash your changes first, or use "
-                f"'vmn snapshot create {vcs.name}' to save your work."
-            )
-
-        status.error = True
-
-        return status
-
-    return status
-
-
-@measure_runtime_decorator
-def _init_app(versions_be_ifc, starting_version, extra_optional=None):
-    optional_status = {"version_not_matched", "detached"}
-    if extra_optional:
-        optional_status |= extra_optional
-    expected_status = {"repos_exist_locally", "repo_tracked", "deps_synced_with_conf"}
-
-    status = _get_repo_status(versions_be_ifc, expected_status, optional_status)
-    if status.error:
-        VMN_LOGGER.debug(
-            f"Error occured when getting the repo status: {status}", exc_info=True
-        )
-
-        return 1
-
-    versions_be_ifc.create_config_files()
-
-    info = {}
-    versions_be_ifc.update_stamping_info(
-        info, starting_version, starting_version, "init", {}
-    )
-
-    versions_be_ifc.backend.perform_cached_fetch()
-
-    root_app_version = 0
-    services = {}
-    if versions_be_ifc.root_app_name is not None:
-        tag_name, ver_infos = versions_be_ifc.get_first_reachable_version_info(
-            versions_be_ifc.root_app_name,
-            root_context=True,
-            type=RELATIVE_TO_GLOBAL_TYPE,
-        )
-
-        versions_be_ifc.enhance_ver_info(ver_infos)
-
-        if tag_name in ver_infos and ver_infos[tag_name]["ver_info"]:
-            root_app_version = (
-                int(ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]["version"])
-                + 1
-            )
-            root_app = ver_infos[tag_name]["ver_info"]["stamping"]["root_app"]
-            services = copy.deepcopy(root_app["services"])
-
-        versions_be_ifc.current_version_info["stamping"]["root_app"].update(
-            {
-                "version": root_app_version,
-                "services": services,
-            }
-        )
-
-        msg_root_app = versions_be_ifc.current_version_info["stamping"]["root_app"]
-        msg_app = versions_be_ifc.current_version_info["stamping"]["app"]
-        msg_root_app["services"][versions_be_ifc.name] = msg_app["_version"]
-
-    try:
-        err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
-    except Exception:
-        VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-        _revert_failed_publish(versions_be_ifc)
-        err = -1
-
-    if err:
-        VMN_LOGGER.error("Failed to init app")
-        return 1
-
-    return 0
 
 
 @measure_runtime_decorator
@@ -1146,9 +678,12 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
 
             override_main_current_version = main_ver
 
+            next_verstr, _ = versions_be_ifc.advance_version(
+                override_verstr, versions_be_ifc.release_mode
+            )
             VMN_LOGGER.warning(
                 "Failed to publish. Will try to auto-increase "
-                f"from {current_version} to {versions_be_ifc.gen_advanced_version(override_verstr)[0]}"
+                f"from {current_version} to {next_verstr}"
             )
         elif err == 2:
             if not pull:
