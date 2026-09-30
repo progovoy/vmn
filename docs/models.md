@@ -129,7 +129,7 @@ from vmn_exp.sdk import (
 ```
 
 Every function takes an optional `storage=`; without it storage is resolved
-like `start_run` (see [sdk.md](sdk.md#starting-a-run)).
+like `start_run` (see [Storage and scope](#storage-and-scope)).
 
 ```python
 with start_run("my_app") as run:
