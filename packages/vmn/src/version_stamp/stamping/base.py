@@ -30,7 +30,12 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
 from version_stamp.core.models import VMN_DEFAULT_CONF, AppConf
-from version_stamp.core.utils import comment_out_jinja, resolve_branch_conf_path
+from version_stamp.core.utils import (
+    WrongTagFormatException,
+    comment_out_jinja,
+    resolve_branch_conf_path,
+    yaml_safe_load,
+)
 from version_stamp.core.version_math import (
     app_name_to_tag_name,
     deserialize_tag_name,
@@ -143,7 +148,7 @@ class IVersionsStamper:
             self.conf_file_exists = True
 
             with open(self.app_conf_path) as f:
-                data = yaml.safe_load(f)
+                data = yaml_safe_load(f)
                 if "conf" in data:
                     if "template" in data["conf"]:
                         self.raw_template = migrate_old_template(
@@ -165,7 +170,7 @@ class IVersionsStamper:
         ):
             self.root_conf_file_exists = True
             with open(self.root_app_conf_path) as f:
-                data = yaml.safe_load(f)
+                data = yaml_safe_load(f)
                 if "external_services" in data["conf"]:
                     self.external_services = data["conf"]["external_services"]
 
@@ -228,7 +233,7 @@ class IVersionsStamper:
             return None, None
 
         with open(self.version_file_path) as fid:
-            ver_dict = yaml.safe_load(fid)
+            ver_dict = yaml_safe_load(fid)
             legacy_verstr = read_version_from_old_file(
                 ver_dict, serialize_vmn_version, self.hide_zero_hotfix
             )
@@ -533,15 +538,31 @@ class IVersionsStamper:
         release_mode: str,
         globally: bool,
     ) -> int:
-        tag = self.backend.get_latest_available_tag(tag_name_prefix)
-        if tag and globally:
-            props = deserialize_vmn_tag_name(tag)
+        if globally:
             version_number_oct = max(
-                version_number_oct, int(getattr(props, release_mode))
+                [version_number_oct]
+                + [
+                    int(getattr(props, release_mode))
+                    for props in self._own_tag_props(tag_name_prefix)
+                ]
             )
         version_number_oct += 1
 
         return version_number_oct
+
+    def _own_tag_props(self, tag_name_prefix):
+        """Parsed tags matching *tag_name_prefix* that belong to this app, not
+        to another app whose name merely starts with this one."""
+        list_tags = getattr(self.backend, "get_latest_available_tags", None)
+        tags = (list_tags(tag_name_prefix) if list_tags else None) or []
+        own_name = app_name_to_tag_name(self.name)
+        for tag in tags:
+            try:
+                props = deserialize_tag_name(tag)
+            except WrongTagFormatException:
+                continue
+            if app_name_to_tag_name(props.app_name) == own_name:
+                yield props
 
     def advance_version(self, version, release_mode, globally=True):
         # Globally should only be used for the base version components.

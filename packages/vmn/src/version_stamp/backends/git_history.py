@@ -51,6 +51,14 @@ class GitHistoryMixin:
     def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {}
         for path in paths:
+            if path == ".":
+                actual_deps_state[path] = {
+                    "hash": self.changeset(),
+                    "remote": self.remote(),
+                    "vcs_type": "git",
+                }
+                continue
+
             full_path = os.path.join(vmn_root_path, path)
             details = self.__class__.get_repo_details(full_path)
             if details is None:
