@@ -12,6 +12,7 @@ from version_stamp.cli.worktree_git import (
     head_contained_in_upstream,
     run_git,
 )
+from version_stamp.core.git_cmd import primary_remote
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.core.utils import (
     branch_conf_canonical_path,
@@ -87,10 +88,11 @@ def _repin(dep_conf, dep_branch):
 
 
 def _warn_if_unpublished(path, branch):
-    ref = f"refs/remotes/origin/{branch}"
+    remote = primary_remote(path) or "origin"
+    ref = f"refs/remotes/{remote}/{branch}"
     result = run_git(path, ["rev-parse", "--verify", "--quiet", ref])
     if result is None or result.returncode != 0:
         VMN_LOGGER.warning(
-            f"{branch} in {path} is not on origin. Push it before sharing this "
-            f"conf: git push -u origin {branch}"
+            f"{branch} in {path} is not on {remote}. Push it before sharing this "
+            f"conf: git push -u {remote} {branch}"
         )
