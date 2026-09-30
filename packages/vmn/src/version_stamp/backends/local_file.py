@@ -67,14 +67,6 @@ class LocalFileBackend(VMNBackend):
             os.path.join(app_dir, f"{prefix}verinfo"),
         )
 
-    def _resolve_latest_file(self, app_name, root=False):
-        """Find the latest version file, checking snapshots/ first, then verinfo/."""
-        snap_dir, verinfo_dir = self._version_dirs(app_name, root)
-        files = self._list_all_version_files(app_name, root=root)
-        snap_files = [f for f in files if f.startswith(snap_dir + os.sep)]
-
-        return max(snap_files or files, key=os.path.getmtime, default=None)
-
     def _resolve_version_file(self, app_name, verstr, root=False, root_version=None):
         """Find a specific version file, checking snapshots/ first, then verinfo/."""
         if root:
@@ -117,25 +109,6 @@ class LocalFileBackend(VMNBackend):
         snap_dir, verinfo_dir = self._version_dirs(app_name, root)
 
         return _stamp_records(list_all_with_verinfo_fallback(snap_dir, verinfo_dir))
-
-    def get_first_reachable_version_info(
-        self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE
-    ):
-        ver_infos = {
-            "none": {
-                "tag_object": None,
-                "commit_obj": None,
-                "ver_info": None,
-            }
-        }
-
-        latest_file = self._resolve_latest_file(app_name, root=root)
-        if not latest_file:
-            return None, {}
-
-        with open(latest_file) as f:
-            ver_infos["none"]["ver_info"] = yaml.safe_load(f)
-            return "none", ver_infos
 
     def get_latest_available_tag(self, tag_prefix_filter):
         return None

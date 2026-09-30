@@ -231,15 +231,6 @@ class GitOpsMixin:
         return self._be.working_dir
 
     @measure_runtime_decorator
-    def status(self, tag):
-        found_tag = self._be.tag(f"refs/tags/{tag}")
-        try:
-            return tuple(found_tag.commit.stats.files)
-        except Exception:
-            VMN_LOGGER.debug("Logged exception: ", exc_info=True)
-            return None
-
-    @measure_runtime_decorator
     def is_path_tracked(self, path):
         try:
             self._be.git.execute(["git", "ls-files", "--error-unmatch", path])

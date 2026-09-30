@@ -2,8 +2,6 @@
 from dataclasses import asdict, dataclass, field, fields
 from typing import Optional, Set
 
-from version_stamp.core.constants import VMN_OLD_TEMPLATE
-
 # ── Version data classes ─────────────────────────────────────────────
 
 
@@ -232,9 +230,7 @@ class AppConf:
     @classmethod
     def default_conf_dict(cls):
         """Build the VMN_DEFAULT_CONF dict from dataclass defaults."""
-        d = asdict(cls())
-        d["old_template"] = VMN_OLD_TEMPLATE
-        return d
+        return asdict(cls())
 
 
 VMN_DEFAULT_CONF = AppConf.default_conf_dict()

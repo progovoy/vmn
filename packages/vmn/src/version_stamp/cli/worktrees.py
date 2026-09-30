@@ -21,8 +21,6 @@ from version_stamp.cli.worktree_pull import worktree_pull
 from version_stamp.compat.worktree_manifest import legacy_dep_source
 from version_stamp.core.logging import VMN_LOGGER
 
-ISLANDS_DIR_DEFAULT = "../vmn-islands"
-
 
 def handle_worktrees(vmn_ctx):
     handlers = {
