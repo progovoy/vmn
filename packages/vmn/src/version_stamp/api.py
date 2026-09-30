@@ -74,6 +74,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "register_dev_version_loader": "version_stamp.cli.plugin_api:register_dev_version_loader",
     "VMN_ARGS":                    "version_stamp.cli.constants:VMN_ARGS",
     "vmn_run":                     "version_stamp.cli.entry:vmn_run",
+    "run_skill":                   "version_stamp.cli.skill:run_skill",
     # --- worktree helpers (layout + detached worktrees), for vmn-exp rerun --
     "island_layout":               "version_stamp.cli.worktree_create:_island_layout",
     "create_dep_worktree":         "version_stamp.cli.worktree_git:create_dep_worktree",
