@@ -1,27 +1,25 @@
 # Experiments
 
-`vmn-exp` is local-first experiment tracking for any
-versioned app. An "experiment" is a **snapshot of your working tree plus a log of
-metrics and notes** — nothing more. There is no required training script, no
-server, and no database. Experiments are plain files under
-`.vmn/{app}/experiments/` (git-ignored, never committed or pushed), each anchored
-to an exact version and commit so reproducing a result is one `vmn-exp restore`
-away.
+`vmn-exp` is local-first experiment tracking for any versioned app. An
+experiment is a **snapshot of your working tree plus an append-only log of
+metrics and notes** — no required training script, no server, no database.
+Runs are plain files under `.vmn/{app}/experiments/` (git-ignored, never
+committed or pushed), each anchored to an exact version and commit, so
+reproducing a result is one `vmn-exp restore` away.
 
-New here? [client-guide.md](client-guide.md) walks through a project end to end
-(install, store, submit, log, watch, compare, reproduce, resume/rewind/fork,
-models, prune). This page is the reference.
+ML training is the headline use case, but anything you can measure fits:
+config sweeps, benchmarks, load tests, pipeline outputs. If you can print a
+`key=value`, vmn can track it.
 
-Machine-learning training is the headline use case, but the mechanism is
-general. Anything you can measure and want to reproduce fits: **config sweeps,
-performance/benchmark runs, load tests, data-pipeline outputs, compiler flag
-comparisons.** If you can print a `key=value`, vmn can track it.
+New here? [client-guide.md](client-guide.md) walks through a project end to
+end. This page is the CLI reference. Elsewhere: the Python SDK
+([sdk.md](sdk.md)), the web UI and HTTP API ([ui.md](ui.md)), the model and
+dataset registry ([models.md](models.md)), sweeps ([sweeps.md](sweeps.md)),
+`vmn snapshot` ([snapshots.md](snapshots.md)).
 
 - [Mental model](#mental-model)
-- [Four ways to record an experiment](#four-ways-to-record-an-experiment)
-- [Without a script: config sweeps & performance tests](#without-a-script-config-sweeps--performance-tests)
+- [Recording an experiment](#recording-an-experiment)
 - [With a command: `exp run` and the metrics file](#with-a-command-exp-run-and-the-metrics-file)
-- [From Python: the SDK](#from-python-the-sdk)
 - [Run status: did my job die?](#run-status-did-my-job-die)
 - [Outer & inner jobs (sweeps)](#outer--inner-jobs-sweeps)
 - [Addressing experiments](#addressing-experiments)
@@ -30,6 +28,7 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 - [Metrics schema (sorting & goals)](#metrics-schema-sorting--goals)
 - [Storage (local, S3, GCS, Azure, plugins)](#storage-local-s3-gcs-azure-plugins)
 - [Offline recording and push](#offline-recording-and-push)
+- [Environment variables](#environment-variables)
 - [Web UI](#web-ui)
 
 ---
@@ -38,385 +37,237 @@ comparisons.** If you can print a `key=value`, vmn can track it.
 
 Each experiment captures:
 
-1. **Code state** — the base version, the base commit, and a diff of any
-   uncommitted working-tree changes (and local-only commits). This is what
-   `restore`, `diff`, and `export` replay. Config edits count as code state, so
-   an experiment records exactly which knobs you changed, committed or not.
-2. **A log** — an append-only list of entries: the initial `create`, plus any
-   `metrics`, `note`, `artifact`, `run`, or `structured` entries you add later.
-   The log is never rewritten; `add` only appends.
+1. **Code state** — base version, base commit, the diff of uncommitted
+   changes, local-only commits, untracked files and deps. This is what
+   `restore`, `diff`, `export` and `rerun` replay. Config edits are code
+   state, so a run records exactly which knobs you changed, committed or not.
+2. **A log** — append-only entries: the initial `create`, then `metrics`,
+   `note`, `artifact`, `run`, `structured`, `tags`, `define_metric`, `rewind`,
+   ... The log is never rewritten.
 
-Experiments are **content-addressed**. The verstr looks like:
+Experiments are **content-addressed**:
 
 ```
 1.6.0-dev.a1b2c3d.e4f5g6h
-        │        │
-        │        └─ hash of your working-tree diff (0000000 on a clean tree)
-        └─────────── short base commit
+          │       └─ hash of the working-tree diff (0000000 on a clean tree)
+          └───────── short base commit
 ```
 
-Because identical code produces an identical verstr, re-running the same state
-does **not** overwrite the previous run — each new run over an existing state
-gets a `.r2`, `.r3`, … suffix. That is how "same config, different seed" or
-"same benchmark, second measurement" stay as distinct rows.
+Identical code yields an identical verstr, so a new run over an existing
+state gets a `.r2`, `.r3`, … suffix instead of overwriting — "same config,
+different seed" stays as distinct rows. (Offline runs use a writer-id suffix
+instead; see [Offline recording](#offline-recording-and-push).)
 
-The first `exp create` / `exp run` in a fresh repo **cold-starts** everything:
-it auto-initializes vmn tracking and stamps a `0.0.0` baseline for you. No
-separate `vmn init` or `vmn stamp` is required.
+The first `create`/`run` in a fresh repo **cold-starts**: it initializes vmn
+and stamps a `0.0.0` baseline (the repo needs a git remote). A new app name in
+a repo that already has other apps is refused as a likely typo unless you pass
+`--new-app`.
+
+Untracked (non-ignored) files are captured within size caps: files over
+50 MB are skipped and at most 200 MB is collected per snapshot
+(`VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`). Skipped paths are
+logged and recorded as `untracked_skipped`.
 
 ---
 
-## Four ways to record an experiment
+## Recording an experiment
 
 | You want to… | Use |
 |---|---|
-| Capture the tree and type in the numbers yourself | `exp create … --metrics k=v` |
-| Add more numbers/notes/files to an existing run later | `exp add …` |
-| Let vmn run a command and slurp metrics it emits | `exp run … -- <cmd>` |
-| Log from inside your own Python process | [`start_run(...)`](#from-python-the-sdk) |
+| Capture the tree and type in the numbers yourself | `vmn-exp create <app> --metrics k=v …` |
+| Add numbers/notes/files to an existing run later | `vmn-exp add <app> …` |
+| Let vmn run a command and ingest the metrics it emits | `vmn-exp run <app> -- <cmd>` |
+| Log from inside your own Python process | `start_run(...)` — see [sdk.md](sdk.md) |
 
-All four snapshot the working tree (dirty or clean). They differ only in *how*
-the metrics get in, and they produce the same run on disk. You can mix them —
-e.g. `exp run` a benchmark, then `exp add` a hand-measured number afterward, or
-`exp show` a run your Python script opened.
-
-Untracked (non-ignored) files are captured too, within size caps so a stray
-checkpoint or dataset never balloons every run: files over 50 MB are skipped,
-and at most 200 MB is collected per snapshot. Override with
-`VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`. Skipped paths are
-logged and recorded in the run's metadata as `untracked_skipped`, so a restore
-can tell you what it could not bring back.
-
----
-
-## Without a script: config sweeps & performance tests
-
-You do **not** need a `train.py` (or any command) to use experiments. This is
-the workflow for playing with a config and recording how each variant performs.
+All four snapshot the tree (dirty or clean) and produce the same kind of run,
+so they mix freely: `exp run` a benchmark, then `exp add` a hand-measured
+number to it.
 
 ### Record measurements by hand
 
-Edit your config, then capture the state together with whatever your test
-measured:
+A config sweep without any script:
 
 ```sh
-# edit config.yml (uncommitted is fine — it's captured either way)
-vmn-exp create my_app --note "batch=64, cache on" --metrics latency_ms=12.3 throughput=8100
-```
-
-`exp create` snapshots the tree and prints the new verstr. Add more numbers to it
-in as many passes as you like:
-
-```sh
-vmn-exp add my_app --latest --metrics p99_ms=41 --note "warm run"
-```
-
-Change the config and capture again. Repeated identical states get `.rN`
-suffixes, so nothing is clobbered:
-
-```sh
+# edit config.yml (uncommitted is fine)
+vmn-exp create my_app --note "batch=64" --metrics latency_ms=12.3 throughput=8100
+vmn-exp add my_app --latest --metrics p99_ms=41
 # tweak config.yml ...
-vmn-exp create my_app --note "batch=128" --metrics latency_ms=15.1 throughput=9400
-```
+vmn-exp create my_app --note "batch=128" -f variant.yml --metrics latency_ms=15.1
 
-### Compare the sweep
-
-Because each snapshot captures the config diff, you can line the variants up:
-
-```sh
-vmn-exp list my_app                  # table of runs + their latest metrics
-vmn-exp compare my_app --last 3      # metrics side-by-side across the last 3
-vmn-exp diff my_app -v @1 -v @2      # real config/code diff + metric delta
-```
-
-### Record which knobs you set
-
-Use a YAML file to log the inputs alongside the measurements, so the run is
-self-describing:
-
-```yaml
-# variant.yml
-hypothesis: "larger batch trades latency for throughput"
-params:
-  batch_size: 128
-  cache: true
-  workers: 8
-tags: [perf, batch-sweep]
-```
-
-```sh
-vmn-exp create my_app -f variant.yml --metrics latency_ms=15.1 throughput=9400
+vmn-exp list my_app                  # runs + metrics
+vmn-exp compare my_app --last 3      # metrics side by side
+vmn-exp diff my_app -v @1 -v @2      # config/code diff + params/metrics delta
 ```
 
 `--metrics` records outputs; `-f variant.yml` records inputs (`params`,
-`hypothesis`, `tags`). They are stored separately and never overwrite each other,
-and `exp diff` shows a `params:` delta line so you can see exactly which knob
-moved between two runs.
+`hypothesis`, `tags` — see [Structured notes & params](#structured-notes--params)).
+
+**Python.** `start_run()` writes the same run the CLI would (same verstr,
+files and heartbeat), so every command here works on it. The SDK also has
+[autologging](sdk.md#autologging), step counters, rich media, resume/fork and
+the read API — all documented in [sdk.md](sdk.md).
 
 ---
 
 ## With a command: `exp run` and the metrics file
 
-`exp run` snapshots the tree, runs **any** command (a shell script, `hyperfine`,
-`wrk`, `pytest-benchmark`, `python train.py` — anything), and records the exit
-code and duration. The command's output streams live to your terminal
-(stdout to stdout, stderr to stderr) and is also kept as the run's
-[`output.log`](#console-output-outputlog) artifact.
+`exp run` snapshots the tree, runs **any** command, and records its exit code,
+duration and a `run` log entry:
 
 ```sh
 vmn-exp run my_app --note "batch=64" -- ./perf_test.sh
 ```
 
-Everything after the first `--` is the command. `vmn-exp run` returns the
-command's own exit code, so CI can tell a failed run from a passing one — or
-`128 + N` when signal N ended it, the way a shell reports it.
-
-The command runs in the directory you invoked `vmn-exp` from (or
-`$VMN_WORKING_DIR` when set), not the repo root, so
-`cd src && vmn-exp run my_app -- python train.py` finds `src/train.py`.
+- Everything after the first `--` is the command. `vmn-exp run` exits with the
+  command's exit code (`128 + N` when signal N ended it) and prints the new
+  verstr when it finishes.
+- The command runs in the directory you invoked `vmn-exp` from (or
+  `$VMN_WORKING_DIR`), not the repo root, so `cd src && vmn-exp run my_app --
+  python train.py` finds `src/train.py`.
+- Only creating the experiment takes the repo lock; it is released before the
+  command starts, so long runs don't block other `vmn` commands and nesting
+  `vmn-exp run` inside `vmn-exp run` works.
+- `sys_*` system metrics (CPU/RAM, GPU with pynvml) of the command's process
+  tree are sampled on every heartbeat ([list](sdk.md#starting-a-run)).
+  `--no-system-metrics` > `VMN_SYSTEM_METRICS=0` > conf
+  `experiment.system_metrics: false` turn it off. An SDK run inside the child
+  then skips its own sampling.
+- With `VMN_MODE=disabled`, `run` records nothing: it execs the command (no
+  lock, snapshot or `run_state.yml`; works outside a checkout) with
+  `VMN_METRICS_FILE=/dev/null`. See [Disabled mode](sdk.md#disabled-mode).
 
 ### Console output: `output.log`
 
-`vmn-exp run` tees the command's stdout and stderr: every byte still reaches
-your terminal as it is written, and a combined copy is stored as the run's
-`output.log` artifact (next to any other artifact, locally or on S3), with an
-`artifact` log entry. `vmn-exp show` prints an `Output:` line for it and the
-web UI's run page shows it in an **output** card.
+`vmn-exp run` tees the command's stdout/stderr: every byte still reaches your
+terminal, and a combined copy is stored as the run's `output.log` artifact
+(`show` prints an `Output:` line; the UI shows an output card).
 
-- **Size cap**: `--output-cap-mb` (default 10, or `$VMN_EXP_OUTPUT_CAP_MB`).
-  Past the cap the first and last halves are kept around a
-  `[vmn: N bytes of output omitted]` marker — the start has the config the job
-  printed, the end has the traceback it died with. The terminal is never capped.
-- **Uploaded while it runs**: every `--sync-interval` seconds (only when it
-  changed; an upload of N bytes also holds the next one off for N / 64 KB
-  seconds, so a chatty command spends at most ~64 KB/s re-uploading it) and
-  once more, unthrottled, at the end — whatever ended it, a forwarded SIGTERM
-  included — so a preempted or hung job still has its latest output stored.
-  Only a SIGKILL of `vmn-exp run` itself loses what came after the last upload.
-- **Bytes, not text**: output is stored verbatim; non-UTF-8 bytes and control
-  codes never break capture. A failing capture never stops supervision.
-- **Pipes, not a TTY**: the command writes to pipes, so `isatty()` is false —
-  tools may drop colours and progress bars switch to their non-interactive
-  mode. `PYTHONUNBUFFERED=1` is set (unless you set it) so a Python command
-  still streams line by line. A pty was not used: it merges the two streams,
-  rewrites line endings, is POSIX-only and paints redraws into the log.
-  `--no-capture-output` gives the command your terminal back and stores
-  nothing.
+- **Cap**: `--output-cap-mb` > `$VMN_EXP_OUTPUT_CAP_MB` > 10. Past it the first
+  and last halves are kept around a `[vmn: N bytes of output omitted]` marker.
+  The terminal is never capped.
+- **Uploaded while it runs**, on each `--sync-interval` when changed (throttled
+  to ~64 KB/s of upload), and once more unthrottled at the end — whatever
+  ended the run. Only a SIGKILL of `vmn-exp run` itself loses the tail.
+- **Pipes, not a TTY**: `isatty()` is false in the child, so tools may drop
+  colours and progress bars. `PYTHONUNBUFFERED=1` is set unless you set it.
+  Output is stored as raw bytes; capture failures never stop supervision.
+- `--no-capture-output` gives the command your terminal and stores nothing.
 
 ### The metrics-file protocol
 
-vmn sets three environment variables for the child process:
+vmn sets these for the child:
 
 | Variable | Value |
 |---|---|
-| `VMN_EXPERIMENT_ID` | the verstr of this run — also how [nesting](#outer--inner-jobs-sweeps) is detected |
+| `VMN_EXPERIMENT_ID` | this run's verstr — also drives [nesting](#outer--inner-jobs-sweeps) |
 | `VMN_APP_NAME` | the app name |
-| `VMN_METRICS_FILE` | a path your command appends metrics to |
+| `VMN_METRICS_FILE` | a file your command appends metric lines to |
+| `VMN_EXP_SUPERVISOR_SAMPLES` | `1` when the supervisor samples system metrics |
 
-Any line your command writes to `$VMN_METRICS_FILE` is ingested as a metrics
-entry. The grammar is:
+Each line appended to `$VMN_METRICS_FILE` is one metrics entry:
 
 ```
 [step=N] key=value [key=value ...]
 ```
 
-- Numeric values are parsed as floats; anything else is dropped (with a
-  warning) — metrics are numeric-only. Log non-numeric data (e.g.
-  `model=resnet`) as a [param](#structured-notes--params) instead, which keeps
-  strings and bools verbatim.
-- An optional leading `step=N` builds a **per-step series** (a curve). Without
-  it, the values are recorded as scalars — the metrics file is never
-  auto-stepped (unlike the SDK's `log_metrics`, see
-  [sdk.md](sdk.md#steps)).
-- vmn **tails the file live** during the run, so metrics appear in `exp show`
-  and the web UI *while the command is still running*, not just at the end.
-
-A performance test in plain shell:
+- Values are numeric only: non-numeric values are dropped with a warning (log
+  strings as [params](#structured-notes--params) instead). NaN/inf are kept.
+- A leading `step=N` builds a per-step series (a curve); without it the
+  values are step-less scalars — the file is never auto-stepped (unlike the
+  SDK's `log_metrics`, see [sdk.md](sdk.md#steps)).
+- The file is **tailed live**, so metrics show in `exp show` and the UI while
+  the command runs.
 
 ```sh
-#!/usr/bin/env bash
-# perf_test.sh
-start=$(date +%s.%N)
-./run_benchmark --requests 100000
-end=$(date +%s.%N)
-
-echo "latency_ms=$(compute_p50)"           >> "$VMN_METRICS_FILE"
-echo "p99_ms=$(compute_p99)"               >> "$VMN_METRICS_FILE"
-echo "wall_sec=$(echo "$end - $start" | bc)" >> "$VMN_METRICS_FILE"
+echo "latency_ms=$(compute_p50)" >> "$VMN_METRICS_FILE"
+echo "step=$i throughput=$tput"  >> "$VMN_METRICS_FILE"
 ```
-
-The same protocol from Python (with a per-step series):
 
 ```python
 import os
-
-metrics_file = os.environ["VMN_METRICS_FILE"]
-
-def log_metric(key, value, step=None):
-    with open(metrics_file, "a") as f:
-        prefix = f"step={step} " if step is not None else ""
-        f.write(f"{prefix}{key}={value}\n")
-
-for i in range(10):
-    log_metric("throughput", measure(), step=i)   # -> a live curve
-log_metric("p99_ms", final_p99())                  # -> a final scalar
+with open(os.environ["VMN_METRICS_FILE"], "a") as f:
+    f.write(f"step={step} loss={loss}\n")
 ```
-
----
-
-## From Python: the SDK
-
-When the workload is already Python, you don't need `exp run` or a metrics file
-at all — open the run in-process:
-
-```python
-from vmn_exp.sdk import start_run
-
-with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
-    for step, loss in enumerate(train()):
-        run.log_metric("loss", loss, step=step)
-    run.log_metrics({"acc": 0.91})
-    print(run.id)     # 1.6.0-dev.a1b2c3d.e4f5g6h
-```
-
-The result is **the same run** the CLI would have written: same verstr, same
-files, same heartbeat — so `exp list`, `exp show`, `exp compare`, the web UI and
-S3 sync all work on it unchanged, and nesting still produces outer/inner jobs.
-Full guide, including the read-side API: [docs/sdk.md](sdk.md).
-
-Two things only the SDK gives you: [autologging](sdk.md#autologging) — one
-`autolog()` call records scikit-learn, xgboost, Keras and Lightning
-hyperparameters and scores (and, with `log_models=True`, the fitted models) with
-no logging in your training code — and the [query
-language](sdk.md#the-query-language) for filtering runs on metrics and params.
-`exp run` records the `sys_*` metrics [listed in the SDK
-guide](sdk.md#starting-a-run) for the child's process tree on every heartbeat,
-by default. `--no-system-metrics`, `VMN_SYSTEM_METRICS=0` or conf
-`experiment.system_metrics: false` turn it off (in that precedence).
 
 ---
 
 ## Run status: did my job die?
 
-A long run can end in three ways: it finishes cleanly, it finishes with an
-error, or the machine underneath it disappears without anybody writing that
-down. `exp run` handles the third case by keeping a **heartbeat**.
-
-While the child process is alive, `exp run` maintains a `run_state.yml` next to
-the experiment's `metadata.yml` (same directory locally, same key prefix on S3):
+While the command lives, `exp run` keeps a `run_state.yml` next to the run's
+`metadata.yml` (same key prefix on S3) with a **heartbeat**:
 
 ```yaml
-state: running          # "running" while alive, "finished" after the child exits
+state: running          # "finished" after the child exits
 command: [python, train.py]
-runner: exp run         # "exp run", or "sdk" for a start_run() run
-cwd: src                # the child's cwd relative to the repo root ("." at the root)
+runner: exp run         # "sdk" for a start_run() run
+cwd: src                # child cwd relative to the repo root ("." at the root)
 pid: 12345
 host: somebox
 started_at: 2026-09-21T12:00:00Z
-heartbeat: 2026-09-21T12:03:00Z   # refreshed while the child is alive
-heartbeat_seq: 6        # +1 on every beat
+heartbeat: 2026-09-21T12:03:00Z
+heartbeat_seq: 6        # +1 per beat: a clock-free "it moved" signal
 heartbeat_interval_sec: 30
-exit_code: null         # an int once finished
+exit_code: null
 finished_at: null
 duration_sec: null
 ```
 
-The beat interval defaults to 30 seconds and is tunable:
-
-```sh
-vmn-exp run my_app --heartbeat-interval 10 -- python train.py
-```
-
-An [SDK](sdk.md) run has no supervising process, so it beats from its own daemon
-thread — `start_run(..., heartbeat_interval_sec=10)` — and everything below
-applies to it identically.
+`--heartbeat-interval <sec>` (default 30) sets the beat. SDK runs beat from a
+daemon thread (`start_run(heartbeat_interval_sec=)`) and behave identically.
 
 ### Derived statuses
 
-Status is **never stored** — it is derived from `run_state.yml` plus the current
-time, so a run whose machine vanished does not need anybody to update a record:
+Status is **never stored** — it is derived from `run_state.yml` and the
+current time:
 
 | Status | Means |
 |---|---|
-| `created` | the experiment exists but no command was ever started (e.g. `exp create`) |
-| `running` | the heartbeat is fresh (by the writer's timestamp or the store's write time) |
-| `stuck` | claims to be running, but the heartbeat went stale on both clocks and there is no exit code |
-| `succeeded` | finished, exit code 0 |
-| `failed` | finished, non-zero exit code |
+| `created` | no command was ever started (e.g. `exp create`) |
+| `running` | the heartbeat is fresh |
+| `stuck` | claims running, no exit code, and the heartbeat is stale |
+| `succeeded` | finished with exit code 0 (or `end_reason: stopped`, a sweep's early stop) |
+| `failed` | finished with a non-zero exit code |
 
-`stuck` is the interesting one: the runner died, was OOM-killed, or lost its
-node, and left nothing behind to say so. Several missed beats are tolerated
-before vmn calls a run stuck — the staleness window is
-`max(3 × heartbeat_interval_sec, 60s)`. The 60s floor is read by the *reader*
-(`vmn-exp list`, `vmn-exp ui`) from `$VMN_EXP_MIN_STALE_SEC`; lower it for
-demos and load tests that want hung runs to show up as `stuck` within seconds.
+`stuck` means the runner died, was OOM-killed or lost its node. The staleness
+window is `max(3 × heartbeat_interval_sec, 60s)`; readers take the 60s floor
+from `$VMN_EXP_MIN_STALE_SEC`. To tolerate writer clock skew, a run is `stuck`
+only when **both** the heartbeat timestamp and the store's write time of
+`run_state.yml` (file mtime, S3 `LastModified`) are stale; a future-dated
+heartbeat is ignored. When the store time is unknown the heartbeat alone
+decides. (`vmn_exp.core.status.derive_status(state, observed_at=...)`.)
 
-The writer's `heartbeat` timestamp comes from the writer's clock, which may be
-off from the reader's. So every reader — `vmn-exp list`/`show`, `prune`'s live
-guard, the ui and the SDK reader — also weighs the *store's* write time of
-`run_state.yml` (the file mtime locally, `LastModified` on S3): a run is `stuck`
-only when **both** the heartbeat timestamp **and** that write time are older than
-the staleness window. A fresh store write proves the run alive even when its
-writer's clock is behind; a heartbeat dated in the future (a writer clock ahead)
-is ignored, so such a run still turns `stuck` once the store sees no writes.
-When the store time is unknown (a backend listing that carries no mtime), the
-timestamp rule above applies alone. In code: `derive_status(state,
-observed_at=...)` in `vmn_exp.core.status`, with `observed_at`
-from `run_state_observed_at(storage, app, verstr)` or an index snapshot's
-`run_state_observed_at`; `stale_sec` is the age of the fresher of the two. `heartbeat_seq` increases by one on
-every beat, for readers that poll and want a clock-free "it moved" signal.
+A process that is hung but alive keeps heartbeating and reads `running`;
+watch `last_metric_at` (UI/API) for "alive but not making progress".
 
 ### Preemption and signals
 
-A scheduler stopping the job (Slurm `scancel`, Kubernetes eviction, a spot
-reclaim) sends `SIGTERM` to `vmn-exp run`. vmn forwards it to the command, gives
-the command `--kill-grace-sec` (default 30, or `$VMN_EXP_KILL_GRACE_SEC`) to exit
-cleanly, kills it if it is still alive after that, and then **always** records
-the final state — so a preempted run reads `failed`, never `stuck`, and the
-command never outlives its supervisor. `SIGINT` and `SIGHUP` are handled the
-same way, except that they are not re-sent when your terminal already delivered
-them to the command (a Ctrl-C in the foreground reaches both). A second signal
-kills the command at once.
-
-The final `run_state.yml` says what happened:
+`SIGTERM` (Slurm `scancel`, Kubernetes eviction, spot reclaim), `SIGINT` and
+`SIGHUP` to `vmn-exp run` are forwarded to the command, which gets
+`--kill-grace-sec` (> `$VMN_EXP_KILL_GRACE_SEC` > 30) to exit before SIGKILL.
+A second signal kills it at once; a Ctrl-C the terminal already delivered to
+the command is not re-sent. The final state is **always** written, so a
+preempted run reads `failed`, never `stuck`:
 
 ```yaml
 state: finished
-exit_code: 143          # 128 + 15: the command died of SIGTERM
-signal: SIGTERM         # present when a signal ended the command
+exit_code: 143            # 128 + 15
+signal: SIGTERM           # present when a signal ended the command
 received_signal: SIGTERM  # present when vmn itself was signalled
 ```
 
-A command that traps `SIGTERM` and exits 0 (say, after checkpointing) keeps its
-own exit code; `received_signal` still records that it was asked to stop.
+A command that traps SIGTERM and exits 0 keeps its exit code. Only a SIGKILL
+of `vmn-exp run` itself leaves a run claiming `running` (it then derives
+`stuck`). Failing heartbeat writes, bad metric lines or hung syncs never end
+supervision: vmn warns and keeps watching.
 
-Only a `SIGKILL` of `vmn-exp run` itself leaves a run claiming `running` — the stale
-heartbeat then reports it `stuck`. A failing heartbeat write, a metrics line
-that cannot be stored or a remote sync that errors or hangs never ends
-supervision: vmn warns once and keeps watching the command.
-
-> **Honest limitation:** a process that is *hung but alive* keeps heartbeating,
-> so it still reads as `running`. To catch that, watch `last_metric_at` (exposed
-> by the UI and API) — a run that is alive but has logged nothing for a long
-> time is alive but not making progress.
-
-### Seeing it
-
-`exp list` shows a status per row; `exp show` prints a `Status:` line with the
-exit code, duration, and pid/host — plus the heartbeat age when the run is
-`stuck`:
-
-```sh
-vmn-exp list my_app
-vmn-exp show my_app --latest
-```
+`exp list` shows a status per row; `exp show` prints `Status:`, exit code,
+duration, `Runner: pid … on <host>`, and the heartbeat age when `stuck`.
 
 ### Alerts
 
-A run can notify you — a webhook, Slack, or any shell command — when it
-fails, goes stuck, or calls `run.alert()` from the SDK (see
-[docs/sdk.md](sdk.md#alerts)). Configure sinks and opt into triggers in the
-app's `conf.yml`:
+A run can notify a webhook, Slack or a shell command when it fails, goes
+stuck, or calls `run.alert()` ([sdk.md](sdk.md#alerts)). Configure in
+`conf.yml`:
 
 ```yaml
 conf:
@@ -431,59 +282,39 @@ conf:
         - {type: command, command: "./notify.sh"}                        # shell hook
 ```
 
-A pod without a checkout uses env vars instead: `VMN_EXP_ALERT_WEBHOOK_URL`,
-`VMN_EXP_ALERT_SLACK_URL` and `VMN_EXP_ALERT_COMMAND` each add a sink (next to
-any from conf.yml), and `VMN_EXP_ALERT_ON=failed,stuck` replaces the trigger list.
+Without a checkout: `VMN_EXP_ALERT_WEBHOOK_URL`, `VMN_EXP_ALERT_SLACK_URL` and
+`VMN_EXP_ALERT_COMMAND` each add a sink (next to conf's), and
+`VMN_EXP_ALERT_ON=failed,stuck` replaces the trigger list.
 
 | Trigger | Fired by |
-|---------|----------|
+|---|---|
 | `alert` | `run.alert(title, text, level)` in the SDK |
-| `failed` | the process that saw the run end non-zero: `vmn-exp run`'s supervisor (child exit, signal) or the SDK's finish (exception, `finish(exit_code=N)`, SIGTERM) |
-| `stuck` | `vmn-exp watch <app>` — a dead process cannot report itself |
+| `failed` | the process that saw the run end non-zero: `vmn-exp run`'s supervisor, or the SDK's finish (exception, `finish(exit_code=N)`, SIGTERM) |
+| `stuck` | [`vmn-exp watch`](#watch) — a dead process cannot report itself |
 
-`stuck` needs an outside observer. Run the watcher from cron, or leave it
-looping:
-
-```sh
-vmn-exp watch my_app                 # one pass: alert new failed/stuck runs, exit
-vmn-exp watch my_app --interval 60   # keep checking every minute
-vmn-exp watch my_app --within 6h     # ignore transitions older than 6h (default 1d)
-```
-
-It prints `<verstr> <status>` per alert it delivered, never takes the repo
-lock, and exits 1 when no sink is configured for `failed` or `stuck`. Each run alerts once per transition: a delivered alert is recorded in the
-run's `alerts_sent.yml` (through the storage, so local and S3 alike), keyed by
-the run's `finished_at` (failed) or last heartbeat (stuck) — a run that
-recovers and stalls again alerts again, and a `failed` alert the supervisor
-already sent is not repeated by the watcher. An alert no sink accepted is not
-recorded, so the next pass retries it.
-
-Payloads: the webhook POSTs the alert as JSON — `trigger`, `title`, `text`,
-`level` (`info`/`warn`/`error`), `app_name`, `run_id`, `run_name`, `status`,
-`timestamp`, `host`, `pid`, `exit_code`, `signal`, `heartbeat`, `finished_at`.
-Slack gets a message with a colored attachment. The command runs through the
+Payloads: the webhook POSTs JSON with `trigger`, `title`, `text`, `level`
+(`info`/`warn`/`error`), `app_name`, `run_id`, `run_name`, `status`,
+`timestamp`, `host`, `pid`, `exit_code`, `signal`, `heartbeat`,
+`finished_at`. Slack gets a coloured attachment. The command runs through the
 shell with `VMN_ALERT_TRIGGER`, `VMN_ALERT_TITLE`, `VMN_ALERT_TEXT`,
 `VMN_ALERT_LEVEL`, `VMN_ALERT_APP`, `VMN_ALERT_RUN_ID`, `VMN_ALERT_STATUS` and
-`VMN_ALERT_JSON` (the whole payload) in its environment; a non-zero exit counts
-as a failed delivery. Delivery is best-effort: an unreachable endpoint is
-logged, never raised into the run, and never changes its exit code.
+`VMN_ALERT_JSON` (the whole payload); a non-zero exit is a failed delivery.
+Delivery is best-effort and never affects the run or its exit code.
 
 ---
 
 ## Outer & inner jobs (sweeps)
 
-For a managed search — grid/random/bayes over a spec, many agents, early
-stopping — use [`vmn-exp sweep`](sweeps.md). This section is the underlying
-nesting mechanism.
+For a managed search (grid/random/bayes, many agents, early stopping) use
+[`vmn-exp sweep`](sweeps.md). This is the underlying nesting mechanism.
 
-`exp run` exports `VMN_EXPERIMENT_ID` to its child. Any experiment created
-**while that variable is set** records it as its `parent`. So a sweep script
-that itself calls `vmn-exp run` per trial automatically produces one **outer**
-job containing **inner** jobs — no wiring required.
+An experiment created **while `VMN_EXPERIMENT_ID` is set** records it as its
+`parent`. `exp run` exports it to its child, so a script that calls
+`vmn-exp run` (or `start_run()`) per trial yields one **outer** job with
+**inner** jobs:
 
 ```sh
-#!/usr/bin/env bash
-# sweep.sh — each trial becomes an inner job of the run that launched this script
+# sweep.sh
 for lr in 0.001 0.01 0.1; do
     vmn-exp run my_app --note "lr=$lr" -- python train.py --lr "$lr"
 done
@@ -491,510 +322,354 @@ done
 
 ```sh
 vmn-exp run my_app --note "lr sweep" -- ./sweep.sh
+vmn-exp run my_app --parent @3 -- python train.py   # explicit parent (any ref form)
 ```
 
-You can also parent explicitly, which is handy when the trials are launched from
-somewhere that does not inherit the environment:
-
-```sh
-vmn-exp run my_app --parent @3 -- python train.py --lr 0.01
-vmn-exp create my_app --parent latest --metrics acc=0.91
-```
-
-`--parent` takes any of the [addressing forms](#addressing-experiments): a full
-verstr, a unique prefix, `@N`, or `latest`.
-
-### kind and tree_status
-
-Each run has a `kind`: `outer` (has children), `inner` (has a parent), or
-`single` (neither). An outer job also gets a **`tree_status`** — the rollup over
-itself and its whole subtree, with precedence:
-
-```
-failed > stuck > running > created > succeeded
-```
-
-One failed trial therefore makes the whole sweep read as failed, which is the
-answer you usually want from a glance.
-
-### Forks are not children
-
-`vmn-exp create/run --fork-from <ref> [--fork-step N]` (or the SDK's
-`start_run(fork_from=..., fork_step=N)`) starts a new run seeded with another
-run's metrics and params up to step N — all of them without `--fork-step`;
-`<ref>?_step=N` also works. The fork records `forked_from: {verstr, step}` but
-no `parent`: it is `single` unless nested some other way, and it never counts
-in its source's `tree_status`. Rows carry `forked_from`/`forked_from_step`, so
-`vmn-exp list my_app --query 'forked_from = "<verstr>"'` lists a run's forks.
-Rewinding a run hides its own history past a step instead — see
-[`rewind`](#rewind).
-
-### What `exp list` looks like
-
-Inner runs are indented under their outer run:
+Each run has a `kind`: `outer` (has children), `inner` (has a parent) or
+`single`. An outer job's **`tree_status`** rolls up its subtree with
+precedence `failed > stuck > running > created > succeeded`, so one failed
+trial makes the sweep read failed. `exp list` indents inner runs and shows an
+outer row as `<own status>/<subtree status>` when they differ:
 
 ```
 [1] 1.6.0-dev.a1b2c3d.9f8e7d6  succeeded/failed  (3s ago)  - lr sweep
   [2] 1.6.0-dev.a1b2c3d.9f8e7d6.r2  succeeded  (2s ago)  loss=0.31  - lr=0.001
-  [3] 1.6.0-dev.a1b2c3d.1122334  succeeded  (2s ago)  loss=0.28  - lr=0.01
-  [4] 1.6.0-dev.a1b2c3d.5566778  failed  (1s ago)  - lr=0.1
+  [3] 1.6.0-dev.a1b2c3d.1122334  failed  (1s ago)  - lr=0.1
 ```
 
-The sweep script itself exited 0, but one trial failed — so the outer row reads
-`succeeded/failed`: **its own status, then its subtree's**. A single status token
-means the two agree. `exp show` on the outer run prints `Children:` and a
-`Subtree:` line when the rollup differs from its own status; on a trial it
-prints `Parent:`.
+`exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
+it differs) on the outer run.
+
+**Forks are not children.** `create`/`run --fork-from <ref> [--fork-step N]`
+(or `<ref>?_step=N`) starts a new run seeded with the source's params and
+metrics up to step N (all of them without `--fork-step`). It records
+`forked_from: {verstr, step}` but no `parent`, and never counts in the
+source's `tree_status`. `list --query 'forked_from = "<verstr>"'` lists a
+run's forks. To hide a run's own history past a step, see [`rewind`](#rewind).
 
 ---
 
 ## Addressing experiments
 
-Every subcommand that takes a version accepts, in place of a full verstr:
+Every `-v`/ref argument accepts:
 
 | Form | Means |
 |---|---|
-| *(omitted)* | the latest experiment (for `add`/`show`/`restore`/`export`; `compare`/`diff` default to the latest two) |
-| `--latest` | the most recent experiment, explicitly |
-| `@N` | the N-th row shown by `vmn-exp list` (1-indexed, oldest-first) |
-| a unique prefix | e.g. `-v 1.6.0-dev.a1b` if it uniquely identifies one run |
-| full verstr | exact, e.g. `-v 1.6.0-dev.a1b2c3d.e4f5g6h` |
+| *(omitted)* | the latest run for `add`/`show`/`restore`/`export`/`lineage`; the latest two for `compare`/`diff`; every local run for `push` |
+| `--latest` or `latest` | the most recent run |
+| `@N` | the `[N]` row of `vmn-exp list` (1-indexed storage order, oldest first; stable under `--sort`/`--last`) |
+| a unique prefix | e.g. `-v 1.6.0-dev.a1b` |
+| full verstr | exact |
 
-```sh
-vmn-exp show my_app                 # latest
-vmn-exp show my_app -v @2           # the [2] row from list
-vmn-exp diff my_app -v @1 -v @3     # two specific runs
-```
+`tag`, `rewind`, `rerun` and `prune -v` require an explicit ref.
+`vmn goto -v` takes a full verstr only (see [Restore vs goto](#restore-vs-goto)).
 
 ---
 
 ## Subcommand reference
 
+`vmn-exp [action] <app> [flags]`; `create` is the default action, and a
+leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
+`vmn exp list my_app` with vmn-exp installed). Actions: `create`, `run`,
+`add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`,
+`tag`, `archive`, `unarchive`, `rewind`, `rerun`, `push`, `watch`,
+`importance`, `lineage`, `import-mlflow`. Separate commands: `vmn-exp sweep`
+([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
+`vmn-exp ui` ([ui.md](ui.md)).
+
+Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
+`importance`, `lineage` (and `import-mlflow`) — take no repo lock. `list`,
+`show`, `compare` and ref resolution read through the experiment index
+(`.index.sqlite` beside local records; for S3 a per-host cache under
+`$VMN_INDEX_CACHE_DIR`, else `$XDG_CACHE_HOME/vmn` / `~/.cache/vmn`), so
+thousands of runs cost one listing plus whatever changed.
+
+Flags shared by most actions:
+
+| Flag | Description |
+|---|---|
+| `-v, --version <ref>` | the run (repeatable for `compare`/`diff`/`prune`/`push`) |
+| `--latest` | the most recent run |
+| `--store <uri>` | experiment store URI; see [Storage](#storage-local-s3-gcs-azure-plugins) |
+| `--bucket` / `--prefix` / `--endpoint-url` | shorthand for an `s3://` store |
+| `--experiment-dir <dir>` | local root instead of the checkout's `.vmn/` (or `$VMN_EXPERIMENT_DIR`) |
+| `--writer-id <id>` | this process's writer id; `$VMN_WRITER_ID` > `--writer-id` > conf `experiment.storage.writer_id` > `$HOSTNAME` > the host name |
+| `--from-snapshot <path>` | git-free mode against a tree from `vmn-exp export`; see [Git-free mode](#git-free-mode) |
+| `--json` | machine-readable output (`list`, `show`, `importance`, `lineage`, `push`, `rerun --print`) |
+
 ### `create`
 
-Capture the current state as an experiment without running anything. Works on a
-clean or dirty tree (a clean tree zeroes the diff hash). Re-running over an
-identical state starts a new `.rN` run instead of overwriting.
+Capture the current state as a run without running anything (status
+`created`). Prints the verstr.
 
 ```sh
 vmn-exp create my_app --note "dropout 0.3" --metrics loss=0.45 acc=0.85
-vmn-exp create my_app -f params.yml --attach initial_weights.pt
-vmn-exp create my_app --parent @2 --metrics acc=0.91
-vmn-exp create my_app --name baseline-v1
-vmn-exp create my_app --input s3://bucket/train.csv --input s3://bucket/eval.csv
-vmn-exp create my_app --input "train=s3://bucket/train.csv#sha256:abc123"
+vmn-exp create my_app -f params.yml --name baseline-v1
+vmn-exp create my_app --parent @2 --input "train=s3://bucket/train.csv#sha256:abc"
 ```
 
-An experiment created with no run has status `created`. `--parent <ref>` attaches
-it as an [inner job](#outer--inner-jobs-sweeps) of another experiment.
-`--name <text>` (also on `run`) gives the run a human-readable name, stored as
-`name` in `metadata.yml`: `vmn-exp list` shows it quoted after the verstr, rows
-carry it as `name`, and queries match it (`name ~ "baseline"`).
+| Flag | Description |
+|---|---|
+| `--note <text>` | a note |
+| `--metrics k=v …` | metrics to record |
+| `-f <yaml>` | [params/hypothesis/tags](#structured-notes--params) |
+| `--name <text>` | a human-readable name (shown quoted in `list`; row/query field `name`) |
+| `--parent <ref>` | make it an inner job (default: `$VMN_EXPERIMENT_ID`) |
+| `--fork-from <ref>` / `--fork-step N` | [fork](#outer--inner-jobs-sweeps) another run |
+| `--input [name=]uri[#digest]` | record an input (repeatable); see [Inputs and lineage](#inputs-and-lineage) |
+| `--no-env` | skip [environment capture](#environment-capture) |
+| `--new-app` | confirm a brand-new app name in a repo that has other apps |
 
 ### `run`
 
-Create an experiment, run a command, and record its outcome (exit code,
-duration) plus any metrics it emits to `$VMN_METRICS_FILE`. Publishes a
-[`run_state.yml`](#run-status-did-my-job-die) with a heartbeat while the command
-is alive.
-
-Only creating the experiment takes the per-repo vmn lock; it is released before
-the command starts. So a run that trains for hours leaves the repo usable — other
-`vmn` commands, including ones the command itself runs, are unaffected, and
-nesting `vmn-exp run` inside `vmn-exp run` works.
-
-```sh
-vmn-exp run my_app --note "lr 0.01" -- python train.py --lr 0.01
-vmn-exp run my_app -- ./perf_test.sh
-vmn-exp run my_app --heartbeat-interval 10 -- python train.py
-vmn-exp run my_app --parent latest -- python train.py --lr 0.1
-```
+`create` plus a supervised command: `vmn-exp run <app> [flags] -- <cmd>`.
+Takes every `create` flag except `--metrics`, plus:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--heartbeat-interval <sec>` | `30` | How often the run refreshes its heartbeat |
-| `--kill-grace-sec <sec>` | `30` (`$VMN_EXP_KILL_GRACE_SEC`) | How long a [signalled](#preemption-and-signals) command may take to exit before it is killed |
-| `--sync-interval <sec>` | `30` | How often the log (and `output.log`) syncs to remote storage, off the supervise loop (`0` disables periodic sync) |
-| `--output-cap-mb <mb>` | `10` (`$VMN_EXP_OUTPUT_CAP_MB`) | Size cap of the [`output.log`](#console-output-outputlog) artifact; past it the first and last halves are kept |
-| `--no-capture-output` | *(capture enabled)* | Don't keep the command's output as `output.log`; the command inherits the terminal |
-| `--parent <ref>` | *(inherited from `VMN_EXPERIMENT_ID`)* | Attach this run as an inner job of another experiment |
-| `--fork-from <ref>` / `--fork-step <N>` | *(none)* | Start this run with `<ref>`'s metrics and params up to step N (all of them without `--fork-step`). Also accepted by `create`. See [Forks are not children](#forks-are-not-children) |
-| `--no-env` | *(capture enabled)* | Skip environment capture for this run |
-| `--input [name=]uri[#digest]` | *(repeatable)* | Record a dataset or artifact input. Optional `name=` prefix (identifier before the first `=` and before `://`); optional `#digest` suffix (last `#` splits it). Also accepted by `create` and `add`. |
+| `--heartbeat-interval <sec>` | `30` | heartbeat period ([status](#run-status-did-my-job-die)) |
+| `--kill-grace-sec <sec>` | `$VMN_EXP_KILL_GRACE_SEC` or `30` | time a [signalled](#preemption-and-signals) command gets before SIGKILL |
+| `--sync-interval <sec>` | `30` | remote sync period for the log and `output.log` (`0` disables periodic sync) |
+| `--output-cap-mb <mb>` | `$VMN_EXP_OUTPUT_CAP_MB` or `10` | [`output.log`](#console-output-outputlog) cap |
+| `--no-capture-output` | capture on | don't keep `output.log`; the command inherits the terminal |
+| `--no-system-metrics` | sampling on | don't record `sys_*` metrics |
 
-With `VMN_MODE=disabled` in the environment, `run` records nothing: it replaces
-itself with the command (no lock, auto-init, snapshot or `run_state.yml`; works
-outside a git checkout), sets `VMN_METRICS_FILE` to `/dev/null`, and exits with
-the command's own exit code. See [Disabled mode](sdk.md#disabled-mode).
+`run` never reopens an existing run. To continue one, use the SDK's
+`start_run(run_id=<ref>)` ([sdk.md](sdk.md#resuming-a-preempted-run)) or
+`--fork-from`.
 
-### Input tracking
+### Inputs and lineage
 
-`--input [name=]uri[#digest]` records a dataset, model checkpoint, or any other artifact the run consumed. It is repeatable; each call appends an independent log entry:
+`--input [name=]uri[#digest]` (on `create`, `run`, `add`; repeatable) records
+something the run consumed. `name` is an identifier before the first `=`
+(a token containing `:` or `/` is never a name, so `s3://b/p?k=v` stays a
+URI) and defaults to the URI's basename without extension; the last `#`
+splits off an optional digest. `show` lists inputs, and queries read
+`inputs.<name>.uri|digest|kind`.
 
-```sh
-vmn-exp create my_app --input s3://bucket/train.csv
-vmn-exp run my_app --input "train=s3://bucket/train.csv#sha256:abc" -- python train.py
-vmn-exp add my_app -v @3 --input s3://bucket/labels.json
-```
-
-* **`name`**: a label for the input, so queries can use `inputs.train.uri`. Defaults to the URI basename without extension (`train.csv` → `train`).
-* **`digest`**: optional checksum for reproducibility, e.g. `sha256:abc123`.
-* **URIs with `=` inside** (like `s3://bucket/path?key=value`) are not mistaken for `name=uri` — only a token before the first `=` AND before `://` counts as a name.
-
-In the Python SDK, use `run.log_input(uri, name=None, digest=None, kind=None)`:
-
-```python
-from vmn_exp.sdk import start_run
-
-with start_run("my_app") as run:
-    run.log_input("s3://bucket/train.csv", name="train", digest="sha256:abc")
-```
-
-Inputs are visible in `vmn-exp show` and queryable as three-part paths:
-`inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind`.
-
-### Lineage
-
-A run's artifacts — and the images and tables the SDK's `run.log_image` /
-`run.log_table` store (`media/<name>/<step>.png`, `tables/<name>/<step>.json`)
-— are its **outputs**: `list --json`/`show --json` rows and the SDK's
-`get_run`/`list_runs` carry `outputs.<path>.path|digest|size` (`digest` is
-`sha256:<hex>` of the stored bytes), queryable like inputs — quote a path with
-a dot or slash: `outputs."model.pkl".digest = "sha256:..."`,
-`list --query 'outputs."media/samples/0.png".size > 0'`. The experiment index
-keeps outputs beside its rows, not on them, so the `vmn-exp ui` list and
-leaderboard pages never ship them (per-step images would bloat every row);
-`?q=` queries, the run detail (`outputs`) and lineage still read them. A
-logged image/table is recorded only once its file is stored (it uploads in
-the background); one that fails to store is never recorded — see
-[sdk.md](sdk.md#tables-images-and-histograms).
-Runs link when one's input is another's output:
-
-* an input URI `vmn://<app>/<verstr>/<artifact path>` (`<app>` in tag form,
-  `/` → `-`) names the producing run directly — `run.use_artifact(ref, path)`
-  in the SDK records one, or pass it to `--input`;
-* any other input links to the runs of the same app that produced an artifact
-  with the same digest.
+A run's artifacts, images and tables are its **outputs**
+(`outputs."<path>".digest|size|path`). Runs link when one's input is another's
+output: an input URI `vmn://<app>/<verstr>/<path>` (`<app>` in tag form)
+names its producer in any app; any other input links to same-app runs that
+produced an output with the same digest. Used registry versions are inputs
+named `<name>@<N>` ([models.md](models.md#using-versions)).
 
 ```sh
 vmn-exp add my_app -v @1 --attach model.pkl
 vmn-exp create my_app --input "model=vmn://my_app/<verstr of @1>/model.pkl"
 vmn-exp lineage my_app -v @2 --depth 2
-vmn-exp lineage my_app -v @1 --json
-```
-
-`vmn-exp lineage <app> -v <ref> [--depth N] [--json]` prints the upstream runs
-(what this run consumed), the downstream runs of the same app (what consumed
-its outputs), each with the input/artifact pairs that link them — a pair whose
-artifact is a registered version's gets that version too
-(`clf@2 <- model.pkl (uri)  model clf v2`) — the reference datasets it used
-(`Datasets:`, its `vmn-registry://` inputs), and the model versions registered
-from the run. `--depth` (default 1) follows links further;
-`--json` prints the same object as `get_lineage` in the SDK
-([Lineage](sdk.md#lineage)). It is read-only, never takes the repo lock, and is
-answered from the experiment index.
-
-A used registry version is an ordinary input named `<name>@<N>` (see
-[models.md](models.md#using-versions)), so the query language finds the runs
-that used one:
-
-```sh
 vmn-exp list my_app --query 'inputs."resnet50@3".kind = "model"'
-vmn-exp list my_app --query 'inputs."imagenet@1".uri ~ "vmn-registry://"'
 ```
 
-For every app at once — including consumers in other apps, which downstream
-links never reach — ask the version itself: the model page's lineage card in
-`vmn-exp ui`, or `version_lineage` ([sdk.md](sdk.md#lineage)).
+`vmn-exp lineage <app> [-v <ref>] [--depth N] [--json]` (default: latest run,
+depth 1) prints `Upstream:` and `Downstream:` runs with the
+`input <- artifact (uri|digest)` links between them (plus the registry
+version an artifact was registered as), `Datasets:` (reference datasets used)
+and `Models:` (versions registered from the run). `--json` prints the
+`get_lineage` object. Semantics and the payload are in
+[sdk.md](sdk.md#lineage); consumers in other apps are found from the version
+side (`version_lineage`, the UI's model page).
 
 ### Environment capture
 
-Both `create` and `run` automatically record a snapshot of the runtime environment into the experiment: Python version, platform, and installed packages (the full `pip freeze` output). The summary (≤ 2 KB) is embedded in `metadata.yml` under `"env"`, and the full package list is written to `env.yml` next to it. These writes are best-effort — a failure never prevents the run from being created.
-
-When the command passed to `vmn-exp run` is a Python interpreter (`python`, `python3`, `python3.x`) or a `.py` script, vmn probes that interpreter's own package list instead of the current one (5-second timeout; falls back to the current env on failure).
-
-**Opt-out:**
-
-| Method | Example |
-|---|---|
-| CLI flag | `vmn-exp create my_app --no-env` |
-| Environment variable | `VMN_CAPTURE_ENV=0 vmn-exp run my_app -- train.py` |
-| Per-app config | `experiment.capture_env: false` in `.vmn/my_app/conf.yml` |
-
-The precedence is CLI flag > `VMN_CAPTURE_ENV` > conf.yml (default: capture enabled).
+`create`, `run` and `start_run()` record the Python version, platform,
+installed packages, GPU and container info (image digest from
+`VMN_IMAGE_DIGEST`/`IMAGE_DIGEST`/…): a ≤ 2 KB summary under `env` in
+`metadata.yml` (shown as `Env:` by `show`) and the full list in `env.yml`.
+When the `run` command is a Python interpreter (`python`, `python3.x`) or a
+`.py` script, that interpreter's packages are probed (5 s timeout, falling
+back to the current env). Best-effort; never blocks a run. Opt out:
+`--no-env` > `VMN_CAPTURE_ENV=0` > conf `experiment.capture_env: false`.
+Queries read `env.<key>` (summary fields).
 
 ### `add`
 
-Append metrics, a note, an artifact, or a structured entry to an experiment
-(defaults to the latest). The log is append-only — nothing is overwritten.
+Append to a run (default: latest). Nothing is overwritten.
 
 ```sh
 vmn-exp add my_app --metrics val_loss=0.29 val_acc=0.93
 vmn-exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
-vmn-exp add my_app -f extra_notes.yml
-vmn-exp add my_app --input train=s3://bucket/train.csv#sha256:abc123
+vmn-exp add my_app -f extra_notes.yml            # the whole file as a structured entry
+vmn-exp add my_app -v @2 --define-metric val_loss --goal min
 ```
 
-### `watch`
-
-`vmn-exp watch <app> [--interval SEC] [--within 1d]` delivers `failed`/`stuck`
-alerts for runs that have not alerted them yet — see [Alerts](#alerts).
+Flags: `--metrics`, `--note`, `--attach <file>` (an artifact), `-f <yaml>`,
+`--input`, and `--define-metric NAME [--goal min|max] [--summary
+min|max|last|first|mean] [--step-metric M] [--hidden]` (the CLI's
+`run.define_metric`; see [summaries](#best-value-summaries-summary)).
 
 ### `list`
 
-List experiments with a [status](#run-status-did-my-job-die) per row, optionally
-sorted by a metric. Inner runs are indented under their outer run.
-
 ```sh
-vmn-exp list my_app                        # all
+vmn-exp list my_app                        # all (archived hidden)
 vmn-exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
-vmn-exp list my_app --last 10              # most recent 10
+vmn-exp list my_app --last 10              # the 10 most recent
 vmn-exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
-vmn-exp list my_app --json                 # machine-readable
-vmn-exp list my_app --archived             # include archived runs
+vmn-exp list my_app --json
+vmn-exp list my_app --archived             # include archived runs, marked [archived]
 ```
 
-[Archived](#archive--unarchive) runs are left out unless `--archived` is given;
-then they are marked `[archived]`.
+Each row: `[N] <verstr> ['name'] [archived]  <status>  (<age>)  <metrics>
+- <note>`, inner runs indented. `[N]` is the storage index `-v @N` resolves
+and never changes with `--sort`/`--top`/`--last`/`--query`. Metric columns are
+the [schema](#metrics-schema-sorting--goals)'s first, then the rest
+alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
 
-The `[N]` in front of each row is the run's storage index — the same number
-`-v @N` resolves — so it never changes with `--sort`, `--top`, `--last` or `--query`:
-`vmn-exp list my_app --sort loss` showing `[7]` first means `vmn-exp show my_app
--v @7` opens that run.
+`--query` takes [the query language](sdk.md#the-query-language) and applies
+before `--last`, `--sort` and `--top`; a bad query exits 1 with the offset.
+Besides `metrics.*`, `params.*` and `tags.*` it sees every row field
+(`status`, `kind`, `depth`, `tree_status`, `name`, `archived`, `rerun_of`,
+`forked_from`, `imported_from`, `end_reason`, …), `inputs.*`, `outputs.*` and
+`env.*`.
 
-`list`, `show`, `compare`, `diff` and `export` are read-only and take no repo lock, so they never wait
-for — or hold up — a `create`/`run` in the same checkout.
-
-`--query '<expr>'` keeps the runs matching [the query
-language](sdk.md#the-query-language) — the same one the SDK reader and the
-REST API use. It sees every row field, including `status`, `kind`, `depth` and
-`tree_status`, and applies before `--last`, `--sort` and `--top`. A bad query
-exits 1 with the offending offset. Provenance fields are also queryable:
-`inputs.<name>.uri`, `inputs.<name>.digest`, `inputs.<name>.kind` (3-part paths
-for each logged input), `outputs.<path>.digest|size|path` (each artifact, image or table the run
-logged; quote a dotted path: `outputs."model.pkl".digest`), `env.<key>` and `env.packages.<pkg>` (environment
-summary), `imported_from` (set on runs imported from external tools) and
-`forked_from`/`forked_from_step` (a fork's source verstr and step) and
-`rerun_of` (the run a [`rerun`](#rerun) reran).
-
-`--json` prints the rows shown (after `--query`/`--last`/`--sort`/`--top`) as a
-JSON array instead of the table — one object per run with the keys of an SDK
-[`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`, `code_verstr`,
-`timestamp`, `note`, `create_note`, `branch`, `base_version`,
-`params`, `metrics`, `parent`, `last_metric_at`, `name`, `tags`, `archived`,
-the status fields (`status`,
-`exit_code`, `started_at`, `finished_at`, `heartbeat`, `duration_sec`, `pid`,
-`host`, ...) and the tree fields (`children`, `kind`, `depth`, `tree_status`).
-Keys are sorted and non-finite metrics are `null`, so the output is strict JSON.
-An app with no runs prints `[]`.
-
-`list`, `show` and `compare` read through the experiment index
-(`.index.sqlite` beside the records), so a workspace with thousands of runs
-costs one listing plus whatever changed — never a re-read of every record. So
-does resolving `@N`, `latest` and prefixes.
-
-### `importance`
-
-Which params drive a metric — the CLI face of the dashboard's Importance panel.
-
-```sh
-vmn-exp importance my_app --metric loss
-vmn-exp importance my_app --metric loss --query 'status = "succeeded"' --json
-```
-
-```
-param    importance                        correlation  kind         n
-lr            0.912  ##################         +0.954  numeric      240
-opt           0.061  #                               -  categorical  240
-dropout       0.027  #                          -0.081  numeric      236
-```
-
-For the runs `list --query` would show (archived ones only with `--archived`)
-that carry the metric, every param with at least two distinct values gets:
-
-- `importance` — its share of the impurity decrease of a small random forest
-  fitted to predict the metric from the params (50 trees, depth 6, fixed seed,
-  so the same runs always give the same answer). The column sums to 1.
-- `correlation` — Pearson correlation with the metric (`spearman`, the rank
-  correlation, is in `--json`). Categorical params have no order, so theirs is
-  `-`/`null`; bools count as 0/1.
-- `kind` (`numeric`, `bool`, `categorical`) and `n`, the runs carrying both the
-  param and the metric. A run missing a numeric param counts as its median;
-  a missing categorical value is a category of its own.
-
-Past 5000 runs a deterministic sample of 5000 is scored. An unknown metric or a
-bad `--query` exits 1. Read-only: no repo lock. From Python:
-[`reader.param_importance`](sdk.md#reading-runs-back).
+`--json` prints the shown rows as a JSON array (keys sorted, non-finite
+metrics as `null`, `[]` for no runs), one object per run with the keys of an
+SDK [`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`,
+`code_verstr`, `timestamp`, `note`, `create_note`, `name`, `tags`,
+`archived`, `params`, `metrics`, `metric_summary`, `inputs`, `outputs`,
+`parent`, the status fields (`status`, `exit_code`, `started_at`,
+`finished_at`, `heartbeat`, `duration_sec`, `pid`, `host`, …) and the tree
+fields (`children`, `kind`, `depth`, `tree_status`).
 
 ### `show`
 
-Full details for one experiment: metadata, a `Status:` line (exit code,
-duration, pid/host, and the heartbeat age when `stuck`), `Parent:`/`Children:`
-lines, `Rerun of: <verstr>` for a [rerun](#rerun), `Forked from: <verstr> @ step N` for a fork and a `Rewound to step N`
-line per rewind, metrics (each at its [summary value](#best-value-summaries-summary),
-with last/min/max where they differ), and the log timeline — the newest 50 entries, with a
-line saying how many earlier ones were hidden. `--full-log` prints all of them.
+Full details of one run (default: latest): branch, base, created, note,
+`Deps:`, `Env:`, `Output:`, the status block, `Parent:`/`Children:`/
+`Subtree:`, `Rerun of:`, `Forked from: <verstr> @ step N`, one
+`Rewound to step N` line per rewind, patch sizes, `Inputs:`, `Metrics:` (each
+at its [summary value](#best-value-summaries-summary), with last/min/max where
+they differ), `Media:`, and the newest 50 log entries (`--full-log` for all).
 
 ```sh
-vmn-exp show my_app          # latest
-vmn-exp show my_app -v @1
 vmn-exp show my_app -v @1 --full-log
 vmn-exp show my_app -v @1 --json
 ```
 
 `--json` prints one object: the `list --json` row keys plus `base_commit`,
-`has_dep_patches`, `patches` (`{working_tree|local_commits: line count}`),
-`log` (the newest 50 entries, all of them with `--full-log`) and `log_total`.
+`format_version`, `has_dep_patches`, `patches` (`{working_tree|local_commits:
+line count}`), `log` (newest 50, or all with `--full-log`), `log_total` and
+`media_counts`.
 
 ### `compare`
 
-Side-by-side metric table across N experiments (no code diff — use `diff` for
-that). Needs at least two. It reads only each run's metadata and log, never its
-patches or untracked-file tarball, so comparing many runs stays cheap.
+Metric table across runs (default: the latest two; `--last N` for the N most
+recent; `-v` repeatable). Reads only metadata and logs, never code, so
+comparing many runs stays cheap. With two runs it prints the matching `diff`
+command.
 
 ```sh
 vmn-exp compare my_app --last 3
-vmn-exp compare my_app -v @1 -v @4
+vmn-exp compare my_app -v @1 -v @4 -v @7
 ```
 
 ### `diff`
 
-Metric/param delta **plus a real source diff** between two experiments (defaults
-to the latest two). Uses your git `diff.tool` if configured, or `--tool`.
+`params:`/`metrics:` delta lines, an inputs/provenance section, and a **real
+source diff** between two runs (default: the latest two). Uses `--tool`, else
+git's `diff.tool`, else a plain diff. For runs without code (e.g. MLflow
+imports) the deltas print and the code diff is refused (exit 1).
 
 ```sh
-vmn-exp diff my_app                 # latest two
-vmn-exp diff my_app -v @1 -v @3
-vmn-exp diff my_app --tool delta
+vmn-exp diff my_app -v @1 -v @3 --tool delta
 ```
 
 ### `restore`
 
-Check out the exact code state of an experiment. If the working tree is
-dirty, that work is **auto-saved first** as a [snapshot](snapshots.md) noted
-`auto-saved before restore` (and the `vmn goto -v <saved> my_app` that brings
-it back is printed) — you never lose uncommitted changes. This is the same
-restore `vmn snapshot restore` runs: the reset deletes untracked files, so when
-some are over the snapshot size caps (`VMN_SNAPSHOT_MAX_FILE_MB` /
-`VMN_SNAPSHOT_MAX_TOTAL_MB`) and could not be saved, the restore refuses and
-names them; `--force` restores anyway and loses them.
-`vmn goto -v <dev-version> my_app` restores a run's code the same way,
-`--force` included (it takes a full verstr, not a prefix or `@N`; see
-[Restore vs goto](#restore-vs-goto)).
+Put this checkout at a run's exact code (default: latest). A dirty tree is
+**auto-saved first** as a [snapshot](snapshots.md) noted `auto-saved before
+restore`, and the `vmn goto -v <saved> <app>` that brings it back is printed.
+The restore deletes untracked files, so when some exceed the snapshot size
+caps (and so could not be saved) it refuses and names them; `--force`
+restores anyway. It is the same restore `vmn snapshot restore` runs.
 
-Both look the run up the same way: the local experiments dir, then the app's
-remote experiment store (`--store`, else `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`,
-else conf `experiment.storage`) only on a local miss, then the snapshots store —
-so a run another host recorded straight to S3 restores from any checkout. A run
-with no code snapshot (e.g. an MLflow import) is refused with an error, and a
-run that is nowhere is reported with the list of places searched.
+The run is looked up in the local experiments dir, then (only on a local
+miss) the app's remote experiment store, then the snapshots store — so a run
+another host recorded straight to S3 restores from any checkout. Runs without
+code are refused.
 
 ```sh
-vmn-exp restore my_app --latest
 vmn-exp restore my_app -v @2
-vmn-exp restore my_app -v @2 --force   # even if big untracked files would be lost
+vmn-exp restore my_app -v @2 --force
 ```
 
 #### Restore vs goto
 
-Both put this checkout at a run's exact code (base commit, working-tree diff,
-local commits, untracked files), auto-save a dirty tree first, and use the same
-lookup. They differ in what they accept:
+Both restore base commit, diff, local commits and untracked files, auto-save
+a dirty tree, and share the lookup above.
 
 | | `vmn-exp restore <app>` | `vmn goto -v <verstr> <app>` |
 |---|---|---|
-| Ref | any [addressing form](#addressing-experiments): a full verstr, a unique prefix, `@N`, `latest`/`--latest`; defaults to the latest run | a full dev verstr only (e.g. `1.6.0-dev.a1b2c3d.e4f5g6h`) |
-| Remote store | `--store`/`--bucket`/`--prefix`/`--endpoint-url`, else `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`, else conf | `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_BUCKET`, else conf (no store flags) |
-| Needs | `vmn-exp` | `vmn` with `vmn-exp` installed (vmn-exp registers the dev-version loader `goto` uses) |
-| Also restores | experiment runs only | a stamped (non-dev) version with all its deps, as usual |
+| Ref | any [addressing form](#addressing-experiments); default latest | a full dev verstr only |
+| Remote store | `--store`/`--bucket`…, else env, else conf | env, else conf (no store flags) |
+| Needs | `vmn-exp` | `vmn` with `vmn-exp` installed (it registers the dev-version loader) |
+| Also restores | experiment runs and snapshots | also stamped versions, with deps |
 
-Use `restore` while working with runs, where `@N` and prefixes are convenient.
-Use `goto` for the full verstr that a restore prints for your auto-saved work,
-or when a script already speaks `vmn goto`.
+Use `restore` while working with runs (`@N`, prefixes); use `goto` for the
+full verstr a restore prints for your auto-saved work, or in scripts that
+already speak `vmn goto`. `goto --force` matches `restore --force`.
 
 ### `export`
 
-Package an experiment (materialized code, metadata, metrics, artifacts) into a
-directory or a `.tar.gz`.
+Package a run (default: latest) — materialized code without `.git`,
+`vmn_metadata.yml`, `vmn_experiment.yml` (metadata + log) and `artifacts/` —
+into a directory or a `.tar.gz`/`.tgz` (default `<verstr>.tar.gz`). Prints the
+output path. Runs without code are refused.
 
 ```sh
-vmn-exp export my_app                        # latest -> <verstr>.tar.gz
 vmn-exp export my_app --latest -o best.tar.gz
 vmn-exp export my_app --latest -o /mnt/code  # a plain directory
 ```
 
-The exported tree carries a `vmn_metadata.yml`, so a container built from it
-records runs without git: `vmn-exp create my_app --from-snapshot /mnt/code
---experiment-dir /mnt/runs` (or `VMN_SNAPSHOT_METADATA` for [`start_run()`](sdk.md)). See the
-[tracking guide](experiment-tracking-guide.md) for the cluster flow.
+The exported tree records runs without git — see [Git-free
+mode](#git-free-mode) and the [client guide](client-guide.md#jobs-without-git-export-the-code-once-kubernetes)
+for the cluster flow.
 
 ### `prune`
 
-Delete old experiments by count, age, query, or exact ref. Each deleted verstr
-is printed.
+Delete runs by count, age, query or exact ref. Prints `Deleted <verstr>` per
+run and a summary.
 
 ```sh
 vmn-exp prune my_app --keep 10              # keep the 10 most recent
-vmn-exp prune my_app --older-than 30d       # remove anything older than 30 days (Nd/Nw/Nh)
-vmn-exp prune my_app --keep 10 --dry-run    # print what would go, delete nothing
-vmn-exp prune my_app --keep 0 --local-only  # drop local copies, keep the S3 ones
-vmn-exp prune my_app -v @4                  # delete exactly that one run
-vmn-exp prune my_app --keep 5 --protect-tag stage  # never prune a run tagged stage=...
-
-# Query-based selection (uses the same query language as vmn-exp list --query):
-vmn-exp prune my_app --query 'status = "failed"'          # preview (dry-run by default)
-vmn-exp prune my_app --query 'status = "failed"' --yes    # actually delete
-vmn-exp prune my_app --query 'tags.env = "test"' --keep 1 --yes  # keep newest match
+vmn-exp prune my_app --older-than 30d       # Nd / Nw / Nh
+vmn-exp prune my_app --keep 10 --dry-run
+vmn-exp prune my_app --keep 0 --local-only  # drop local copies, keep remote ones
+vmn-exp prune my_app -v @4 -v @5            # exactly these runs
+vmn-exp prune my_app --keep 5 --protect-tag stage
+vmn-exp prune my_app --query 'status = "failed"'          # preview only
+vmn-exp prune my_app --query 'status = "failed"' --yes    # delete
 ```
-
-`--query <expr>` selects candidates via the same query language as
-`vmn-exp list --query` — it sees full rows including `status`, `metrics`, and
-`tags`.  Because a typo in a `<`/`>` comparison could delete far more than
-intended, **`--query` is a dry-run preview by default**; pass `--yes`/`-y` to
-confirm deletion.  `--dry-run` always wins over `--yes`.  An empty or invalid
-query is an error.  `--keep N`/`--older-than` apply *within* the query scope
-(further refining the matched set).  `-v` cannot be combined with `--query`.
-
-`-v <ref>` (repeatable — a verstr, a unique prefix, or `@N`) deletes exactly the
-named run(s) instead of applying `--keep`/`--older-than`; it cannot be combined
-with either.
-
-Guards take runs back out of the selection, whether it came from `--keep`/
-`--older-than`, `--query`, or `-v`:
-
-- a run whose status is `running` or `stuck` is never deleted (it is reported
-  as skipped — a stuck run may just have a late heartbeat); `--force` deletes
-  it anyway.
-- a run carrying a tag key named by `--protect-tag` (repeatable) is never
-  deleted, so a run tagged e.g. `stage=prod` survives `--keep`/`-v` alike;
-  `--force` deletes it anyway.
-- a run with a kept descendant is kept, so no surviving inner run is left
-  pointing at a parent that no longer exists.
-
-With a remote bucket configured, prune deletes both the local and the remote
-(S3) copy — which may hold your teammates' runs too. `--local-only` removes only
-the local copies.
 
 | Flag | Description |
 |---|---|
-| `--query <expr>` | Select candidates by query; dry-run unless `--yes`/`-y` |
-| `--yes`/`-y` | Confirm deletion when `--query` is given |
-| `-v <ref>` | Delete exactly this run (repeatable); not combined with `--keep`/`--older-than` |
-| `--keep N` | Keep the N most recent experiments (applies within `--query` scope too) |
-| `--older-than <dur>` | Delete experiments older than `Nd`/`Nw`/`Nh` (applies within `--query` scope too) |
-| `--protect-tag <key>` | Never delete a run carrying this tag key (repeatable) |
-| `--dry-run` | Print what would be deleted, delete nothing (beats `--yes`) |
-| `--force` | Also delete runs that are still `running`, or tag-protected |
-| `--local-only` | Keep the remote (S3) copies |
+| `--keep N` | keep the N most recent |
+| `--older-than <dur>` | delete runs older than `Nd`/`Nw`/`Nh` |
+| `-v <ref>` | delete exactly these runs (repeatable); not with `--keep`/`--older-than`/`--query` |
+| `--query <expr>` | select by [query](sdk.md#the-query-language) (same rows as `list --query`); **a dry-run preview unless `--yes`/`-y`**; `--keep`/`--older-than` then refine within the matches |
+| `--yes`, `-y` | confirm a `--query` deletion |
+| `--dry-run` | print what would go, delete nothing (beats `--yes`) |
+| `--protect-tag <key>` | never delete a run carrying this tag key (repeatable) |
+| `--force` | also delete `running`/`stuck` and tag-protected runs |
+| `--local-only` | keep the remote copies |
 
-Archived runs are pruned like any other finished run.
+Guards take runs back out of any selection:
+
+- `running` or `stuck` runs are skipped (a stuck run may just be late);
+  `--force` overrides.
+- runs carrying a `--protect-tag` key are skipped; `--force` overrides.
+- runs registered as a live model/dataset version are skipped **even with
+  `--force`** — `vmn-exp model delete` the version first
+  ([models.md](models.md#prune-protection)); if the registry can't be read,
+  prune refuses.
+- a run with a kept descendant is kept, so no inner run loses its parent.
+
+With a remote store, prune deletes local **and** remote copies (which may be
+teammates' runs); `--local-only` touches only local ones. A code object is
+deleted with the last run of its code. Archived runs are pruned like others.
 
 ### `tag`
 
-Set or remove tags on a run — mutable `key=value` labels, also on a finished
-run. The first positional without `=` (or `-v`/`--latest`) is the run; every
-`key=value` sets a tag (the value may contain `=`), and `--remove <key>`
-(repeatable) drops one.
+Set or remove mutable `key=value` labels on a run (finished ones too):
 
 ```sh
 vmn-exp tag my_app @3 stage=prod owner=ann
@@ -1002,10 +677,10 @@ vmn-exp tag my_app @3 --remove owner
 vmn-exp tag my_app stage=candidate --latest
 ```
 
-Each call appends a `tags` entry to the log; readers fold them per key, last
-write wins. Rows carry the result as `tags` and the query language reads
-`tags.<key>` (`vmn-exp list my_app --query 'tags.stage = "prod"'`). Positionals
-go before the flags: argparse binds them before the first option.
+Exactly one run: the positional without `=`, or `-v`/`--latest`. Values may
+contain `=`. Put positionals before flags. Each call appends a `tags` log
+entry; readers fold per key, last write wins. Rows carry `tags`; queries read
+`tags.<key>`. SDK: [sdk.md](sdk.md#changing-stored-runs-archive-unarchive-tags).
 
 ### `archive` / `unarchive`
 
@@ -1016,150 +691,169 @@ vmn-exp archive my_app @1 @2 0.0.3-dev.abc1234.def5678
 vmn-exp unarchive my_app @2
 ```
 
-Archiving writes `archived: true` into the run's `metadata.yml` (atomically on
-disk, under the ETag on S3); unarchiving removes it. `vmn-exp list` and the SDK's
-`list_runs` hide archived runs by default (`--archived` / `include_archived=True`
-shows them), as does the web UI unless asked with `archived=1`; the query language
-matches `archived = true`. From Python: `vmn_exp.sdk.manage.archive_run` /
-`unarchive_run` (see [sdk.md](sdk.md#changing-stored-runs-archive-unarchive-tags)).
+Sets (or clears) `archived: true` in the run's `metadata.yml` (atomically on
+disk, under the ETag on S3). `list`, `list_runs` and the UI hide archived
+runs unless asked (`--archived`, `include_archived=True`, `archived=1`); the
+query language matches `archived = true`.
 
 ### `rewind`
 
-Hide a run's history past a step, in place, without reopening the run:
+Hide a run's history past a step, in place:
 
 ```sh
 vmn-exp rewind my_app -v @3 --step 250
 # rewound 0.0.3-dev.abc1234.def5678 to step 250 (hid 42 entries)
 ```
 
-`-v` takes any ref (verstr, unique prefix, `@N`, `latest`), or use `--latest`;
-`--step` is an integer >= 0. Nothing is deleted: the run's log gets a
-`{"type": "rewind", "step": 250}` entry, and every reader (`show`, `list`, the
-index, the UI's series, `list_runs`) ignores each entry with a step past 250
-written before it. Entries without a step (params, notes, tags) are never
-hidden, and `show` prints a `Rewound to step N` line per rewind. A run that
-derives as `running` is refused — its writer would keep logging the steps being
-hidden. It writes like `tag`/`add`: it takes the repo lock, honours
-`--store`/`--bucket`/`--dir`, and works without a checkout too (with
-`VMN_SNAPSHOT_METADATA`). The web UI's `exp_rewind` job action (body
-`{"verstr", "step"}`) runs this command.
-
-`vmn-exp run` does not reopen runs. To redo a run from a checkpoint, rewind it
-here and continue it from the SDK with `start_run(run_id=<ref>)` — or do both in
-one call, `start_run(run_id=<ref>, rewind_to_step=N)` (see
-[sdk.md](sdk.md#rewinding-a-run)) — or fork it into a new run with
-`vmn-exp run my_app --fork-from <ref> --fork-step N -- <cmd>`.
+Needs `-v`/`--latest` and `--step N` (≥ 0). Nothing is deleted: a
+`{"type": "rewind", "step": N}` entry is appended, and every reader (`show`,
+`list`, the index, the UI, `list_runs`) ignores earlier entries with a step
+past N. Step-less entries (params, notes, tags) are never hidden. A run that
+derives `running` is refused. Takes the repo lock, honours the store flags,
+and works git-free. The UI's `exp_rewind` job action runs it. To rewind and
+continue in one go, use `start_run(run_id=<ref>, rewind_to_step=N)`
+([sdk.md](sdk.md#rewinding-a-run)); to branch instead, `--fork-from`.
 
 ### `rerun`
 
-Run a run's recorded command again, against that run's own code — dirty
-edits, local commits, untracked files and deps included — as a new run:
+Run a run's recorded command again, against that run's own code (dirty edits,
+local commits, untracked files and deps), as a new linked run:
 
 ```sh
-vmn-exp rerun my_app -v @3                        # the recorded command, recorded cwd
-vmn-exp rerun my_app -v @3 -- python train.py --lr 0.01   # another command, same code
-vmn-exp rerun my_app -v @3 --dry-run              # print the plan, create nothing
-vmn-exp rerun my_app -v @3 --print [--json]       # print what a job would run
+vmn-exp rerun my_app -v @3                                 # recorded command and cwd
+vmn-exp rerun my_app -v @3 -- python train.py --lr 0.01    # another command, same code
+vmn-exp rerun my_app -v @3 --dry-run                       # print the plan
+vmn-exp rerun my_app -v @3 --print [--json]                # what a cluster job should run
 ```
 
-The run is required (`-v <ref>` or `--latest`). Its code is restored into a
-throwaway workspace — a fresh `vmn-rerun-<app>-*` directory in `$TMPDIR`, or
-`--worktree-dir DIR` (missing or empty, outside the repo) — as detached
-worktrees at the recorded commits (a clone from the recorded remote when a
-commit is not local), with the recorded deps at their relative paths and the
-captured patches applied. Anything that doesn't restore exactly — a patch that
-doesn't apply, a dep that can't be checked out, a missing code object — is an
-error, and nothing is created. The live checkout is never touched. The
-workspace is removed when the command ends (also on SIGTERM);
-`--keep-worktree` keeps it, prints its path and records it as `workdir` in
-`run_state.yml`.
-
-The command runs in the recorded `cwd` inside the workspace (`--cwd PATH`,
-relative to the restored app root, overrides it; a run recorded before `cwd`
-existed runs from the app root). `-- <cmd>` replaces the recorded command.
-Absolute paths into the live repo in the command are pointed into the
-workspace. Supervision is exactly [`run`](#run)'s: heartbeat, `output.log`,
-signal forwarding, the child's exit code as the exit code, the new verstr
-printed, and the repo lock released once the record is claimed. The run flags
-`--note`, `--name`, `--parent`, `--no-env`, `--input`, `-f`,
-`--heartbeat-interval`, `--kill-grace-sec`, `--no-system-metrics`,
-`--sync-interval`, `--no-capture-output` and `--output-cap-mb` apply;
-`--fork-from` is refused.
-
-The new run records `rerun_of: <verstr>` and copies the original's code
-identity instead of snapshotting the workspace, so it shares the original's
-code object and is named `<code_verstr>.rN` under the same code — which keeps
-that code alive when [`prune`](#prune) deletes the original.
-`vmn-exp list my_app --query 'rerun_of = "<verstr>"'` lists a run's reruns.
-The original's create params are copied (tags and inputs are not); a sweep
-trial's params are re-exported as `VMN_SWEEP_PARAMS`, but the rerun is not a
-trial. The child's `VMN_EXPERIMENT_DIR` points at the original store, so runs
-the command creates (an SDK `start_run()`, a nested `vmn-exp run`) land there as
-inner runs of the rerun.
-
-It warns when the rerun can't match the original: an environment that differs
-from the one captured with the run (python, platform, packages), untracked files
-that were too large to capture, a source run still `running`, a sweep trial.
-
-Refused, with nothing created: runs without code (imports, a missing code
-object), runs that never ran a command (`create`-only — pass one after `--`),
-and SDK runs without `--`: an SDK run records its script's arguments, not the
-interpreter, so rerun it as `vmn-exp rerun my_app -v X -- python train.py`. Its
-metrics then land on the inner run the script opens. `rerun` needs a checkout;
-it is refused in `--from-snapshot` / `VMN_SNAPSHOT_METADATA` mode.
-
-Gitignored files (datasets, `.env`, checkpoints) are not part of a run's code
-and are not in the workspace — point the command at them with absolute paths.
+- **Workspace**: the code is restored into detached worktrees in a fresh
+  `$TMPDIR/vmn-rerun-<app>-*` (or `--worktree-dir DIR`, missing or empty and
+  outside the repo), cloning from the recorded remote when a commit is not
+  local. Anything that doesn't restore exactly is an error and nothing is
+  created; the live checkout is never touched. The workspace is removed
+  afterwards (also on SIGTERM) unless `--keep-worktree`, which prints its path
+  and records it as `workdir` in `run_state.yml`.
+- **Command**: runs in the recorded `cwd` (`--cwd PATH`, relative to the
+  restored app root, overrides); `-- <cmd>` replaces the recorded command;
+  absolute paths into the live repo are pointed into the workspace. Supervision
+  is exactly [`run`](#run)'s, and `run`'s flags apply (`--note`, `--name`,
+  `--parent`, `--input`, `-f`, `--no-env`, the supervision flags); `--fork-from`
+  is refused.
+- **Record**: `rerun_of: <verstr>`, sharing the original's code object under
+  the same code verstr (so it keeps that code alive through `prune`). Create
+  params are copied (tags and inputs are not); a sweep trial's params are
+  re-exported as `VMN_SWEEP_PARAMS`. The child's `VMN_EXPERIMENT_DIR` is the
+  original store, so runs it creates land there as inner runs.
+  `list --query 'rerun_of = "<verstr>"'` lists reruns.
+- **Warnings**: a differing environment, untracked files too large to have
+  been captured, a source still `running`, a sweep trial.
+- **Refused**: runs without code, runs that never ran a command (pass one
+  after `--`), SDK runs without `--` (they record the script's arguments, not
+  the interpreter: `vmn-exp rerun my_app -v X -- python train.py`), and
+  git-free mode. Gitignored files (datasets, `.env`) are not part of the code
+  — point the command at them by absolute path.
 
 #### Reruns on a cluster
 
-vmn does not schedule jobs — your Kubernetes job, Condor submit file or Slurm
-script does. `--print` tells it what to run, without executing or creating
-anything:
+vmn doesn't schedule jobs. `--print` tells your job script what to run:
 
-```sh
-vmn-exp rerun my_app -v @3 --print
-# command:       python train.py --lr 0.1
-# cwd:           src
-# code_verstr:   0.0.3-dev.abc1234.def5678
-# code:          0.0.3-dev.abc1234.def5678.<diff hash>
-# recipe:        vmn-exp rerun my_app -v 0.0.3-dev.abc1234.def5678
-# export_recipe: vmn-exp export my_app -v ... -o ... && cd ... && VMN_SNAPSHOT_METADATA=... vmn-exp run my_app -- python train.py --lr 0.1
+```
+command:       python train.py --lr 0.1
+cwd:           src
+code_verstr:   0.0.3-dev.abc1234.def5678
+code:          0.0.3-dev.abc1234.def5678.<diff hash>
+recipe:        vmn-exp rerun my_app -v 0.0.3-dev.abc1234.def5678
+export_recipe: vmn-exp export my_app -v ... -o ... && cd ... && VMN_SNAPSHOT_METADATA=... vmn-exp run my_app -- python train.py --lr 0.1
 ```
 
-`--print --json` prints the same as one JSON object (`rerun_of`, `app`,
-`command` as a list, `cwd`, `code_verstr`, `code`, `base_commit`, `recipe`,
-`export_recipe`) for a submit script to read.
-
-- **Nodes with the repo**: the job runs the recipe,
-  `vmn-exp rerun my_app -v <verstr>`, in a checkout that reaches the same
-  store (a shared `--store`/`VMN_EXPERIMENT_STORE`, or the same directory).
-- **Nodes without git**: export the run's tree once —
-  `vmn-exp export my_app -v <verstr> -o dir` — ship `dir` (an image, a shared
-  volume), and have the job run the printed command in `dir/<cwd>` with
-  `VMN_SNAPSHOT_METADATA=dir/vmn_metadata.yml` (or `vmn-exp run my_app
-  --from-snapshot dir -- <command>`), as `export_recipe` spells out. That run
-  is a normal git-free run of the exported code, not a linked rerun.
+`--print --json` prints `rerun_of`, `app`, `command` (a list), `cwd`,
+`code_verstr`, `code`, `base_commit`, `recipe`, `export_recipe`. Nodes with a
+checkout reaching the same store run `recipe`; nodes without git run
+`export_recipe` (a plain git-free run of the exported code, not a linked
+rerun).
 
 ### `push`
 
-Upload local runs (typically recorded under `VMN_EXP_OFFLINE`) to the remote
-store under the same names, renaming on a collision. Resumable; `-v`
-(repeatable) picks runs, `--dry-run` previews, `--json` prints the outcomes.
-See [Offline recording and push](#offline-recording-and-push).
+Upload local runs (typically recorded offline) to the remote store under the
+same names. See [Offline recording and push](#offline-recording-and-push).
+
+### `watch`
+
+Deliver `failed`/`stuck` [alerts](#alerts) for runs that have not alerted yet:
 
 ```sh
-vmn-exp push my_app
-vmn-exp push my_app -v @3 --dry-run
+vmn-exp watch my_app                 # one pass (cron-friendly)
+vmn-exp watch my_app --interval 60   # loop every 60 s
+vmn-exp watch my_app --within 6h     # ignore transitions older than 6h (default 1d; Nd/Nw/Nh)
 ```
+
+Prints `<verstr> <status>` per alert delivered; exits 1 when no sink is
+configured for `failed` or `stuck`. Each run alerts once per transition: a
+delivered alert is recorded in the run's `alerts_sent.yml` (keyed by
+`finished_at` or the last heartbeat), so a run that recovers and stalls again
+alerts again, and a `failed` alert the supervisor already sent is not
+repeated. An alert no sink accepted is retried on the next pass.
+
+### `importance`
+
+Which params drive a metric:
+
+```sh
+vmn-exp importance my_app --metric loss
+vmn-exp importance my_app --metric loss --query 'status = "succeeded"' --json
+```
+
+```
+param    importance                        correlation  kind         n
+lr            0.912  ##################         +0.954  numeric      240
+opt           0.061  #                               -  categorical  240
+```
+
+Over the runs `list --query` would show (`--archived` to include archived)
+that carry the metric, each param with at least two distinct values gets:
+`importance` — its share of the impurity decrease of a small, fixed-seed
+random forest (50 trees, depth 6; the column sums to 1); `correlation` —
+Pearson (`spearman` too in `--json`; `-`/`null` for categorical params, bools
+count as 0/1); `kind` (`numeric`/`bool`/`categorical`) and `n`. A missing
+numeric param counts as its median, a missing categorical value as its own
+category. Past 5000 runs a deterministic sample of 5000 is scored. An unknown
+metric or bad query exits 1. SDK: `reader.param_importance`.
+
+### `import-mlflow`
+
+Import runs from an MLflow FileStore or tracking server:
+
+```sh
+vmn-exp import-mlflow --mlruns ./mlruns my_app                        # no mlflow package needed
+vmn-exp import-mlflow --tracking-uri http://mlflow:5000 my_app        # needs mlflow-skinny
+vmn-exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 --dry-run my_app
+```
+
+| Flag | Description |
+|---|---|
+| `--mlruns <dir>` / `--tracking-uri <uri>` | the source (exactly one) |
+| `--experiment <name\|id>` | only this MLflow experiment (repeatable) |
+| `--skip-artifacts` | don't copy local artifact files |
+| `--include-deleted` | include deleted/trashed runs |
+| `--dry-run` | preview, write nothing |
+| `--workers N` | parallel workers (default 8) |
+
+Re-import is idempotent: runs are keyed by MLflow `run_id` with a
+deterministic verstr `0.0.0-mlflow.<run_id[:12]>`, so present runs are
+skipped and parents resolve in any order. Prints `imported N, skipped M
+(already present), resumed K, failed F`; exits 1 if any failed. Takes no
+repo lock and never auto-inits; write outside a repo with `--experiment-dir`/
+`VMN_EXPERIMENT_DIR` or straight to a store with `--store`. Imported runs have
+no code (`restore`/`export`/`rerun` refuse them) and match
+`imported_from != null`. Guide: [migrating-from-mlflow.md](migrating-from-mlflow.md).
 
 ---
 
 ## Structured notes & params
 
-Pass a YAML file with `-f` to attach structured metadata. On `create`/`run`, the
-`params`, `hypothesis`, and `tags` keys are recorded as the experiment's inputs;
-on `add`, the whole file becomes a structured log entry.
+`-f <yaml>` attaches structured metadata. On `create`/`run` the `params`,
+`hypothesis` and `tags` keys become the run's inputs; on `add` the whole file
+becomes a `structured` log entry.
 
 ```yaml
 # params.yml
@@ -1167,146 +861,116 @@ hypothesis: "larger batch size improves convergence"
 params:
   lr: 0.001
   batch_size: 64
-  epochs: 50
 tags: [baseline, transformer-v2]
 ```
 
-```sh
-vmn-exp create my_app -f params.yml --metrics loss=0.38
-```
-
-`exp diff` prints a `params:` line showing which inputs changed between two runs,
-next to the `metrics:` delta.
+`params` are kept verbatim (strings and bools included; query them as
+`params.<name>`); finite numeric params also fold into `metrics`. `exp diff`
+prints a `params:` delta next to the `metrics:` delta.
 
 ---
 
 ## Metrics schema (sorting & goals)
 
-Declare each metric's goal and a primary metric in `.vmn/{app}/conf.yml` so
-`list --sort` (and the web-UI leaderboard) know which direction is "better" and
-what to sort by when you don't pass `--sort`:
+Declare goals and a primary metric in `.vmn/{app}/conf.yml`:
 
 ```yaml
 conf:
   experiment:
     metrics:
-      loss:        {goal: min, primary: true}   # lower is better; default sort key
-      val_loss:    {goal: min}
-      acc:         {goal: max}                   # higher is better
-      latency_ms:  {goal: min}
+      loss:       {goal: min, primary: true}   # lower is better; default sort key
+      acc:        {goal: max}
+      "val_*":    {goal: min}                  # glob; an exact name beats it
+      "grad_*":   {hidden: true}
+      val_acc:    {step_metric: epoch}
 ```
 
-- `goal: min` → best-first ascending. `goal: max` → best-first descending.
-  A metric with no declared goal in the schema sorts as a plain ascending
-  value sort — declare a `goal` to get goal-aware (best-first) ordering.
-- A glob key (`"val_*": {goal: min}`) sets the goal of every metric it
-  matches; an exact name beats it.
-- Runs can declare goals too (`run.define_metric(name, goal=)` or
-  `vmn-exp add --define-metric`): for names conf.yml does not declare, the
-  latest run's `goal` sets the sort direction of `list --sort`, `list_runs()`
-  and the UI leaderboard. conf.yml always wins.
-- `hidden: true` keeps a metric (or glob, `"grad_*": {hidden: true}`) out of
-  the UI's default leaderboard columns and chart grid; it still sorts,
-  queries and summarizes. Runs may declare it with `define_metric(hidden=True)`.
-- `primary: true` marks the metric used to sort `list` when `--sort` is omitted.
-- `step_metric: epoch` charts the metric (a name or a glob such as `val_*`)
-  against `epoch` logged at the same step instead of the step itself — see
-  [sdk.md](sdk.md#custom-x-axis-step_metric).
-- Schema columns also fix the column order in `list`/`compare`; any extra
-  metrics you logged appear after them, alphabetically.
+| Key | Effect |
+|---|---|
+| `goal: min\|max` | best-first sort direction (a metric without a goal sorts ascending); also sets the default summary |
+| `primary: true` | the sort key of `list`/`list_runs` when `--sort` is omitted |
+| `summary` | which value a repeated metric folds to (below) |
+| `hidden: true` | out of the UI's default leaderboard columns and chart grid (still sorts, queries, summarizes) |
+| `step_metric: <name>` | chart against that metric instead of the step ([sdk.md](sdk.md#custom-x-axis-step_metric)) |
+
+Schema columns come first in `list`/`compare`, the rest alphabetically. Runs
+can declare `goal`/`hidden` themselves (`run.define_metric`, `add
+--define-metric`): for names conf.yml lacks, the latest run's declaration
+sets the sort direction of `list --sort`, `list_runs()` and the UI
+leaderboard (conf.yml always wins) — so a store-only UI workspace without a
+conf.yml still sorts best-first.
 
 ### Best-value summaries (`summary`)
 
-A run that logs a metric many times (a loss per epoch) folds it into one
-number per run. Which one is the metric's **summary policy**:
+A metric logged many times folds to one number per run:
 
-| `summary` | The run's `metrics.<name>` is |
+| `summary` | `metrics.<name>` is |
 |---|---|
-| `last` | the latest value logged |
-| `min` | the smallest finite value logged |
-| `max` | the largest finite value logged |
-| `first` | the earliest value logged (by timestamp, across writers) |
-| `mean` | the mean of the finite values logged (`last` when there is none) |
+| `last` | the latest value |
+| `min` / `max` | the smallest / largest finite value |
+| `first` | the earliest value (by timestamp, across writers) |
+| `mean` | the mean of the finite values |
 
-Without an explicit `summary` the policy follows `goal` (`goal: min` → `min`,
-`goal: max` → `max`); a metric with neither is `last`. So with
-`loss: {goal: min}` an overfitting run — loss 1.0, 0.2, then back up to 0.9 —
-ranks on 0.2, its best epoch, not on 0.9:
+Without `summary` it follows `goal` (`min` → `min`, `max` → `max`), else
+`last`. So with `loss: {goal: min}` an overfitting run (1.0, 0.2, 0.9) ranks
+on 0.2. Use `{goal: min, summary: last}` to sort best-first on the final
+value.
 
-```yaml
-conf:
-  experiment:
-    metrics:
-      loss:     {goal: min}                  # ranks on the minimum
-      val_loss: {goal: min, summary: last}   # sorts ascending, ranks on the final value
-      lr:       {summary: last}
-```
-
-The summary value is what everything ranks and filters on: `list --sort`,
-`--query metrics.loss < 0.3`, `prune --query`, `compare`, `diff`, the UI
-leaderboard, and `list_runs()` rows. Every metric logged more than once also
-carries its full `metric_summary` (`{"last", "min", "max", "first", "mean"}`) in `list --json`,
-`show --json`, `list_runs()`/`get_run()` rows and the UI run detail; `show`
-prints them where they differ:
-
-```
-  Metrics:
-    loss: 0.2 (last 0.9, min 0.2, max 1)
-```
-
-- **Precedence**: a run's own definition — [`run.define_metric()`](sdk.md#metric-goals-and-summaries),
-  recorded in its log — beats conf.yml, which beats the `last` default. In
-  each, an exact metric name beats a glob key (`"val_*": {goal: min}`).
-  Another run's declaration never changes a run's summary — it only counts
-  for sort direction and hidden columns.
+- The summary is what everything ranks and filters on: `list --sort`,
+  `--query metrics.x`, `prune`, `compare`, `diff`, the UI, `list_runs()`.
+  Every metric logged more than once also carries `metric_summary`
+  (`{last, min, max, first, mean}`) in `list --json`/`show --json`, SDK rows
+  and the UI; `show` prints `loss: 0.2 (last 0.9, min 0.2, max 1)`.
+- **Precedence**: the run's own `define_metric` > conf.yml > `last`; in each,
+  an exact name beats a glob. Another run's declaration never changes this
+  run's summary.
 - **After the fact**: `vmn-exp add my_app -v <ref> --define-metric val_loss
-  --goal min [--summary min|max|last|first|mean] [--step-metric epoch]
-  [--hidden]` appends the same `define_metric` entry `run.define_metric()`
-  does — handy for a `vmn-exp run` whose child only wrote `key=value` lines.
-  It needs at least one of the four options.
-- **Live**: conf.yml's policies apply when a run is read, so editing them
-  re-ranks existing runs too (the index re-derives rows from its folded state,
-  no log is re-read). An S3 workspace in `vmn-exp ui` has no conf.yml, so only
-  the runs' own definitions apply there (their goals still set the sort
-  direction).
-- **NaN/inf** stay in the log and may be a metric's `last` or `first`, but
-  never its `min`/`max` or part of its `mean`. A `min`/`max` metric with no finite value at all keeps its last
-  (non-finite) value and sorts last.
-- Numeric params folded into `metrics` are single values: `min`/`max` of a
-  param is the param itself.
+  --goal min` (needs at least one of `--goal`/`--summary`/`--step-metric`/
+  `--hidden`) — handy for a `vmn-exp run` whose child only wrote `key=value`
+  lines.
+- **Live**: conf.yml policies apply at read time, so editing them re-ranks
+  existing runs. An S3 workspace in `vmn-exp ui` has no conf.yml; only the
+  runs' own definitions apply there.
+- NaN/inf may be a `last`/`first` but never a `min`/`max` or part of a `mean`;
+  a metric with no finite value sorts last.
+
+SDK side: [Metric goals and summaries](sdk.md#metric-goals-and-summaries).
 
 ---
 
 ## Storage (local, S3, GCS, Azure, plugins)
 
-Experiments live under `.vmn/{app}/experiments/` by default — local, git-ignored,
-never pushed. To share across a team, point any subcommand at a **store URI**:
+Runs live under `.vmn/{app}/experiments/` by default. To share across a team,
+point any action at a **store URI**:
 
 ```sh
-vmn-exp run my_app --store s3://my-experiments/team/ml -- ./perf_test.sh
+vmn-exp run my_app --store s3://my-experiments/team/ml -- ./t.sh
 vmn-exp run my_app --store "s3://my-experiments/team/ml?endpoint_url=http://minio:9000" -- ./t.sh
-vmn-exp run my_app --store gs://my-experiments/team/ml -- ./t.sh     # pip install 'vmn-exp-sdk[gcs]'
-vmn-exp run my_app --store az://experiments/team/ml -- ./t.sh        # pip install 'vmn-exp-sdk[azure]'
+vmn-exp run my_app --store gs://my-experiments/team/ml -- ./t.sh
+vmn-exp run my_app --store az://experiments/team/ml -- ./t.sh
 vmn-exp run my_app --store file:///mnt/nfs/experiments -- ./t.sh
 ```
 
 | URI | Backend | Notes |
 |---|---|---|
-| `s3://bucket[/prefix][?endpoint_url=...]` | S3 / MinIO / LocalStack | extra `[s3]` (boto3); AWS credentials as usual |
-| `gs://bucket[/prefix]` | Google Cloud Storage | extra `[gcs]` (google-cloud-storage); Application Default Credentials |
+| `s3://bucket[/prefix][?endpoint_url=...]` | S3 / MinIO / LocalStack | extra `vmn-exp-sdk[s3]` (boto3); AWS credentials as usual |
+| `gs://bucket[/prefix]` | Google Cloud Storage | extra `[gcs]`; Application Default Credentials |
 | `az://container[/prefix][?account_url=...]` | Azure Blob Storage | extra `[azure]`; `AZURE_STORAGE_CONNECTION_STRING`, else `AZURE_STORAGE_ACCOUNT_URL` + `DefaultAzureCredential` |
 | `file:///abs/dir` (or a bare path) | a local/NFS directory | used *as* the local root, no cache in front |
 | `<scheme>://...` | a plugin | see [Storage backends](#storage-backends-plugins) |
 
-The prefix defaults to `vmn-experiments`.
-The store resolves as `--store` > `VMN_EXPERIMENT_STORE` > `experiment.storage.uri`
-in `.vmn/{app}/conf.yml`. `--bucket`/`--prefix`/`--endpoint-url` (and
+A URI without a prefix uses `vmn-experiments`. A missing SDK fails with the
+`pip install` line to run.
+
+**Resolution.** `--store` > `VMN_EXPERIMENT_STORE` > conf
+`experiment.storage.uri`. `--bucket`/`--prefix`/`--endpoint-url` (env
 `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL`, conf `bucket`/`prefix`/
-`endpoint_url`) remain as shorthand for an `s3://` URI; any store URI wins over
-the shorthand. With a remote store, runs record locally and sync to it when
-there is a local root (a checkout or `--experiment-dir`/`VMN_EXPERIMENT_DIR`),
-or go straight to the store when there is none. A missing SDK fails with the
-`pip install 'vmn-exp-sdk[<extra>]'` line to run.
+`endpoint_url`) are shorthand for an `s3://` URI; any store URI wins over
+them. The local root is `--experiment-dir` > conf
+`experiment.storage.experiment_dir` > `VMN_EXPERIMENT_DIR` > the checkout. With a remote store and a
+local root, runs record locally and sync to the store; without a local root
+they go straight to the store. [`VMN_EXP_OFFLINE`](#offline-recording-and-push)
+drops the remote.
 
 ```yaml
 # .vmn/my_app/conf.yml
@@ -1314,12 +978,29 @@ conf:
   experiment:
     storage:
       uri: gs://ml-experiments/team
+      writer_id: ci-runner        # optional; VMN_WRITER_ID and --writer-id win
 ```
+
+### Git-free mode
+
+A tree from [`vmn-exp export`](#export) carries `vmn_metadata.yml`, so a
+container can record runs without git:
+
+```sh
+vmn-exp run my_app --from-snapshot /mnt/code --experiment-dir /mnt/runs -- python train.py
+# or: VMN_SNAPSHOT_METADATA=/mnt/code/vmn_metadata.yml VMN_EXPERIMENT_DIR=/mnt/runs
+```
+
+`--from-snapshot` (or `$VMN_SNAPSHOT_METADATA`) accepts the file or its
+directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
+`prune`, `rewind` and `push` work; other actions need a checkout.
+`start_run()` honours the same variables
+([sdk.md](sdk.md#runs-without-a-git-checkout-containers)).
 
 ### Storage backends (plugins)
 
-A backend is chosen by the URI scheme. Built-ins are `file`, `s3`, `gs` and
-`az`; a package adds (or overrides) a scheme under the `vmn_exp.storage`
+The URI scheme picks the backend. Built-ins are `file`, `s3`, `gs` and `az`;
+a package adds (or overrides) a scheme under the `vmn_exp.storage`
 entry-point group:
 
 ```toml
@@ -1327,117 +1008,107 @@ entry-point group:
 mem = "my_pkg.store:open_store"
 ```
 
-`open_store(uri, subdir)` receives a `vmn_exp.storage.uri.StoreURI`
-(`scheme`, `location` = bucket/container, `path` = prefix, `options` = the query
-string) and `subdir` (`"experiments"` or `"snapshots"`), and returns a
+`open_store(uri, subdir)` receives a `vmn_exp.storage.uri.StoreURI` (`scheme`,
+`location` = bucket/container, `path` = prefix, `options` = the query string)
+and `subdir` (`"experiments"` or `"snapshots"`), and returns a
 `vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
 factory)` does the same at runtime. The contract:
 
-- **Records**: a record is `<base>/<app>/<verstr>/` holding `metadata.yml`, the
-  patch files, per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and
-  `artifacts/`. `metadata.yml` makes it exist: write it last, delete it first.
+- **Records**: `<base>/<app>/<verstr>/` holding `metadata.yml`, patch files,
+  per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and `artifacts/`.
+  `metadata.yml` makes a record exist: write it last, delete it first.
   Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
   `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
-  `list_artifact_files`) and override the defaulted ones your store can do
+  `list_artifact_files`) and override the defaulted ones your store does
   better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
   `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
-- **`create_exclusive` must be atomic**: of any number of hosts racing for one
-  verstr exactly one gets `True`; everyone else gets `False` and allocates the
-  next name. A store `vmn-exp push` can target also takes
-  `create_exclusive(..., claim_token=)`: the token is stored with the claim,
-  and a claim holding the same token but no `metadata.yml` is the caller's own
-  crashed attempt and is resumed (`True`); empty or foreign claims and
-  existing records stay taken. The base-class default (check, then save) is *not* safe on a shared
-  store — use the store's conditional create (`O_EXCL` mkdir, S3
-  `If-None-Match: *`, GCS `if_generation_match=0`, Azure `overwrite=False`).
-  `update_metadata` should likewise be a compare-and-swap on the object version.
-- **Listing semantics**: `list_verstrs` returns names only (claimed-but-unfinished
-  names included — they are taken); `list_snapshots` returns only records whose
-  `metadata.yml` exists; `list_files` maps `{verstr: {file: (size, mtime[, etag])}}`
-  and is what incremental index refreshes compare, so a rewritten file must
-  change its signature.
-- **`is_remote()`** returns `True` for a network store: it is then fronted by
-  the local root when there is one, and its reads are parallelized. A store
-  returning `False` is used as the local root itself (as `file://` is).
+  Every backend implements `list_apps()`.
+- **`create_exclusive` must be atomic**: of any number of hosts racing for a
+  verstr exactly one gets `True`. A store `vmn-exp push` can target also takes
+  `create_exclusive(..., claim_token=)`: a claim holding the same token but no
+  `metadata.yml` is the caller's own crashed attempt and is resumed (`True`);
+  other claims and records stay taken. The base-class default (check, then
+  save) is *not* safe on a shared store — use a conditional create (`O_EXCL`
+  mkdir, S3 `If-None-Match: *`, GCS `if_generation_match=0`, Azure
+  `overwrite=False`). `update_metadata` should be a compare-and-swap.
+- **Listing**: `list_verstrs` returns names only (claimed-but-unfinished
+  included); `list_snapshots` returns only records whose `metadata.yml`
+  exists; `list_files` maps `{verstr: {file: (size, mtime[, etag])}}` and
+  drives incremental index refreshes, so a rewritten file must change its
+  signature.
+- **`is_remote()`** `True` for a network store (fronted by the local root when
+  there is one; reads parallelized); `False` makes it the local root itself.
 - **`cache_identity()`** returns a hashable name for the data (e.g.
   `(scheme, endpoint, bucket, prefix)`) so process-wide caches never mix stores.
 
-An object store with a conditional create and a conditional overwrite gets all
-of this for free by subclassing `vmn_exp.storage.s3.S3SnapshotStorage` with an
-`vmn_exp.storage.object_client.ObjectClient` adapter for its SDK — that is how
-the GCS and Azure backends are built.
+An object store with conditional create and overwrite gets all of this by
+subclassing `vmn_exp.storage.s3.S3SnapshotStorage` with a
+`vmn_exp.storage.object_client.ObjectClient` adapter — how the GCS and Azure
+backends are built.
 
 ### How records are stored
 
-- **One directory (or key prefix) per run**: `metadata.yml`,
-  `run_state.yml`, `artifacts/` and one append-only `log.<writer>.jsonl` per
-  writer. `metadata.yml` is written last, so a half-created run is never listed.
-  Every storage directory carries its own `.gitignore` (`*`), so experiments of
-  nested apps (`root_app/service`) never show up in `git status` either.
-- **Atomic allocation**: a new run claims its verstr atomically (a plain
-  `mkdir` locally, a conditional `PUT` with `If-None-Match: *` on S3, and the
-  GCS/Azure equivalents). Two
-  hosts running the same commit against a shared bucket or directory get
-  `…` and `….r2`, never one run with both hosts' data merged in.
-- **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, where `<app>` is the tag form
-  (`root_app/service` → `root_app-service`). Records written by older versions
-  under the `root_app_service` form are still read.
-- **Incremental log sync**: a host keeps its log locally and ships only what it
-  appended since the last sync, as segments `log.<writer>@<n>.jsonl` next to
-  the first upload `log.<writer>.jsonl`. Readers merge them per writer.
-- **Local-first caching**: immutable files fetched from S3 (metadata, patches)
-  are cached locally; `run_state.yml` and logs never are, so another host's run
+- **One directory (or key prefix) per run**: `metadata.yml`, `run_state.yml`,
+  `env.yml`, `alerts_sent.yml`, `artifacts/` and one append-only
+  `log.<writer>.jsonl` per writer. `metadata.yml` is written last, so a
+  half-created run is never listed. Local writes are atomic (temp + rename).
+  Every storage dir carries a `.gitignore` of `*`.
+- **Atomic allocation**: a new run claims its verstr atomically, so two hosts
+  running the same commit against a shared bucket or directory get `…` and
+  `….r2`, never one merged run.
+- **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, `<app>` in tag form
+  (`root_app/service` → `root_app-service`; the legacy `root_app_service`
+  form is still read).
+- **Incremental log sync**: a host ships only what it appended since the last
+  sync, as segments `log.<writer>@<n>.jsonl`; readers merge per writer. Log
+  batches are written as whole lines in one write (one PUT), so readers never
+  see a partial line.
+- **Caching**: immutable files fetched from a remote (metadata, patches) are
+  cached locally; `run_state.yml` and logs never are, so another host's run
   shows its live status.
-- **Code stored once per code identity**: a run's patches and untracked tarball
-  live in one *code object* per code identity, not in the run's own directory.
-  Code objects are records of the reserved `vmn-code/<app>` pseudo-app in the
-  same store (`.vmn/vmn-code/<app>/experiments/<code_verstr>.<diff hash>/`
-  locally, `<prefix>/vmn-code-<app>/…` on S3; a root app's `/` becomes `~`),
-  and the run's `metadata.yml` names its object as `code:`. Their
-  `metadata.yml` is written after the payload and marks them complete. A new
-  run of code whose object is already complete builds no tarball and uploads
-  nothing but its own record; an incomplete object is rewritten. `load` (and so
-  `restore`, `vmn goto`, `export`, `diff`) reads the patches from the object;
-  when it is missing or incomplete, `restore`/`goto`/`export` refuse with
-  "code snapshot … is missing from the store" and leave the tree untouched.
-  `prune` deletes a code object together with the last run of its code. A
-  clean-tree run has no code object.
-- **Artifacts** are uploaded to S3 streamed (multipart for large files) and are
-  listed and downloadable from S3-backed workspaces. Names may be nested
-  relative paths (`artifacts/model/sub/c.txt` is listed as `model/sub/c.txt`);
-  absolute paths, `..`, `.`, empty components, backslashes and NUL are refused.
-- **Batched appends**: `append_log_entries` writes a batch of entries as one
-  write of whole lines (one PUT on S3); the SDK flushes its buffered log that
-  way, so readers never see a partial line.
-- **Format version**: every new run (and model registry record) stores
-  `format_version` in its `metadata.yml`. It versions the whole record —
-  metadata, log lines and `run_state.yml` — so log lines carry none of their
-  own. A record without it reads as version 1. `list`, `show`, the ui and the
-  SDK reader skip a record whose version is newer than the installed vmn-exp
-  supports, with a warning to upgrade, rather than mis-read it. `show --json`
-  prints the field.
+- **Code stored once per code identity**: a run's patches and untracked
+  tarball live in one *code object* per identity — a record
+  `<code_verstr>.<diff hash>` of the reserved `vmn-code/<app>` pseudo-app in
+  the same store (`.vmn/vmn-code/<app>/experiments/…` locally) — and the run's
+  `metadata.yml` names it as `code:`. The object's `metadata.yml`, written
+  last, marks it complete. A run of already-stored code uploads nothing but
+  its own record. When the object is missing or incomplete,
+  `restore`/`goto`/`export` refuse ("code snapshot … is missing from the
+  store"). `prune` deletes an object with the last run of its code; a
+  clean-tree run has none.
+- **Artifacts** stream to remote stores (multipart for large files) and are
+  listable and downloadable. Names may be nested relative paths; absolute
+  paths, `..`, `.`, empty components, backslashes and NUL are refused.
+- **Format version**: new runs (and registry records) store `format_version`
+  (currently 1; missing = 1) covering metadata, log lines and
+  `run_state.yml`. `list`, `show`, the UI and the SDK skip records from a
+  newer format with a warning to upgrade.
+
+---
 
 ## Offline recording and push
 
-Compute nodes often have no route to the bucket, while the committed conf.yml
-names one. `VMN_EXP_OFFLINE=1` (also `true`/`yes`/`on`) makes every storage
-factory — `vmn-exp create`/`run`/..., `start_run()`, and `vmn snapshot` — drop
-the remote store and record to the local root only (the checkout's
-`.vmn/<app>/experiments/`, or `--experiment-dir`/`VMN_EXPERIMENT_DIR`). It
-beats `--store`, `VMN_EXPERIMENT_STORE` and conf; without a local root it fails
-rather than silently falling back. Code objects stay local too.
+Compute nodes often can't reach the bucket that the committed conf.yml names.
+`VMN_EXP_OFFLINE=1` (`true`/`yes`/`on`) makes every storage factory —
+`vmn-exp` actions, `start_run()`, `vmn snapshot` — drop the remote store and
+record to the local root only (the checkout, or
+`--experiment-dir`/`VMN_EXPERIMENT_DIR`). It beats flags, env and conf;
+without a local root it fails rather than falling back. Code objects stay
+local too.
 
 An offline run can't see which names other hosts took, so it is named
-`<code_verstr>.<writer_id>[.N]` rather than `.rN` — the writer id is
-`VMN_WRITER_ID`, else `HOSTNAME`, else the host name (e.g. `1.6.0-dev.a1b2c3d.e4f5g6h.gpu07`, then `….gpu07.2`).
+`<code_verstr>.<writer_id>[.N]` instead of `.rN` (e.g.
+`1.6.0-dev.a1b2c3d.e4f5g6h.gpu07`, then `….gpu07.2`); the writer id is
+`$VMN_WRITER_ID`, else `--writer-id`, conf `writer_id`, `$HOSTNAME`, the host
+name.
 
-Later, from a host that can reach the store, upload them with `vmn-exp push`:
+Upload later, from a host that reaches the store:
 
 ```sh
 VMN_EXP_OFFLINE=1 vmn-exp run my_app -- python train.py      # on the node
-vmn-exp push my_app                                          # later: every local run
-vmn-exp push my_app -v @3 -v 1.6.0-dev.a1b2c3d.e4f5g6h.gpu07 # just these (repeatable)
-vmn-exp push my_app --store s3://ml-exps/team --dry-run      # preview, write nothing remote
+vmn-exp push my_app                                          # every local run
+vmn-exp push my_app -v @3 -v 1.6.0-dev.a1b2c3d.e4f5g6h.gpu07 # just these
+vmn-exp push my_app --store s3://ml-exps/team --dry-run      # preview
 ```
 
 ```text
@@ -1447,99 +1118,68 @@ vmn-exp push my_app --store s3://ml-exps/team --dry-run      # preview, write no
 pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
 ```
 
-- **Target**: `--store` (or `--bucket`/`--prefix`/`--endpoint-url`) >
-  `VMN_EXPERIMENT_STORE` > conf `experiment.storage.uri`. `VMN_EXP_OFFLINE`
-  never hides it here, so push works from the same shell. It must be a remote
-  store (`s3://`, `gs://`, `az://`); a `file://` target is refused (rsync the
-  experiments dir instead), and so is having no remote configured.
-- **Same name**: each run is pushed under its local verstr, parents before
-  children: the code object (only when the remote lacks it), the record, the
-  other top-level files, each writer's log from where the remote copy ends,
-  and missing or resized artifacts. `archived`/`note` merge three-way against
-  what was last pushed; on a conflict the remote wins, with a warning.
-- **Resumable**: a failed or interrupted push is simply run again. A ledger per
-  remote under `.vmn/<app>/experiments/.push/<remote id>/` records what was
-  sent, so an unchanged run costs no remote call (`up-to-date`) and a changed
-  one ships only what is new (`update`).
-- **Collisions**: when the remote holds a different run under the same name,
-  the run is renamed on *both* sides to the next free `<code_verstr>.rN` (its
-  local directory, `verstr`, a `renamed_from` field, and its children's
-  `parent`) and then pushed. A running or stuck run, a run a local model
-  version references, and a sweep's outer run are never renamed: they are
-  `skipped`, with the reason.
-- **Output**: one line per run — `<verstr>  <status>` with status `new`,
-  `update`, `up-to-date`, `skipped` or `failed` (`collision` in a `--dry-run`),
-  `-> <new name>` after a rename, and the reason in parentheses — then
-  `pushed N, up-to-date M, renamed R, skipped S, failed F`. `--json` prints the
-  outcomes as a list of `{verstr, status, detail, warnings, renamed_from}`. The
-  exit code is 1 when any run failed.
-- Push takes the repo lock (it may rename local runs) and works git-free
-  (`VMN_SNAPSHOT_METADATA` + `VMN_EXPERIMENT_DIR`) as well as in a checkout.
-  The web UI runs it as the `exp_push` job action ([ui.md](ui.md#actions)).
+- **Target**: `--store` (or the bucket shorthand) > `VMN_EXPERIMENT_STORE` >
+  conf. `VMN_EXP_OFFLINE` never hides it here. It must be a remote store;
+  `file://` (rsync instead) and no remote are refused.
+- **Same name, parents first**: the code object (if the remote lacks it), the
+  claim, other top-level files, each writer's log from where the remote copy
+  ends, and missing or resized artifacts. `archived`/`note` merge three-way
+  against what was last pushed; on conflict the remote wins, with a warning.
+- **Resumable**: a ledger per remote under
+  `.vmn/<app>/experiments/.push/<remote id>/` records what was sent, so an
+  interrupted push is simply rerun; an unchanged run costs no remote call
+  (`up-to-date`) and a changed one ships only what is new (`update`).
+- **Collisions**: when the remote holds a different run under the name, the
+  run is renamed on *both* sides to the next free `<code_verstr>.rN` (local
+  directory, `verstr`, `renamed_from`, and its children's `parent`). Running
+  or stuck runs, runs a local model version references and sweep outer runs
+  are `skipped` instead.
+- **Output**: `<verstr>  <status>[ -> <new name>][ (<reason>)]` per run
+  (`new`, `update`, `up-to-date`, `skipped`, `failed`; `collision` in a
+  dry-run), then the summary. `--json` prints a list of `{verstr, status,
+  detail, warnings, renamed_from}`. Exit 1 when any run failed.
+- Takes the repo lock (it may rename local runs); works git-free. The UI runs
+  it as the `exp_push` job action ([ui.md](ui.md#actions)).
+
+---
+
+## Environment variables
+
+Read by `vmn-exp` (most also by the SDK):
+
+| Variable | Effect |
+|---|---|
+| `VMN_EXPERIMENT_STORE` | store URI fallback for `--store` |
+| `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | fallbacks for the `s3://` shorthand flags |
+| `VMN_EXPERIMENT_DIR` | local experiment root (`--experiment-dir`) |
+| `VMN_SNAPSHOT_METADATA` | [git-free mode](#git-free-mode) (`--from-snapshot`) |
+| `VMN_EXP_OFFLINE` | `1`/`true`/`yes`/`on`: [record locally only](#offline-recording-and-push) |
+| `VMN_WRITER_ID` | writer id (`--writer-id`) |
+| `VMN_WORKING_DIR` | the directory `run` starts the command in |
+| `VMN_MODE` | `disabled`: `run` execs the command without recording |
+| `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables [environment capture](#environment-capture) |
+| `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
+| `VMN_EXP_OUTPUT_CAP_MB` | `output.log` cap (`--output-cap-mb`) |
+| `VMN_EXP_KILL_GRACE_SEC` | signal grace (`--kill-grace-sec`) |
+| `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window (default 60) |
+| `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
+| `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
+| `VMN_INDEX_CACHE_DIR` | where S3 index caches live (`none` disables; default `$XDG_CACHE_HOME/vmn` or `~/.cache/vmn`) |
+| `VMN_IMAGE_DIGEST` | container image digest recorded by environment capture |
+| `VMN_LOCK_FILE_PATH` | repo lock path (default `.vmn/vmn.lock`) |
+
+SDK-only variables (`VMN_RESUME_RUN_ID`, `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`)
+are in [sdk.md](sdk.md). Set **by** vmn for a `run` child:
+`VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`,
+`VMN_EXP_SUPERVISOR_SAMPLES`; sweep trials also get `VMN_SWEEP_PARAMS`,
+`VMN_SWEEP_ID`, `VMN_SWEEP_TRIAL` ([sweeps.md](sweeps.md)).
 
 ---
 
 ## Web UI
 
-`vmn-exp ui` (from `pip install "vmn-exp[ui]"`) serves a dashboard over the same files:
-a sortable experiment leaderboard, per-run detail with **live training/perf
-curves** (from `step=` series), side-by-side compare with a real code diff, and
-an artifact browser. The leaderboard's **Importance** chart ranks the params
-driving a metric (see [`importance`](#importance)). Each run gets a color-coded
-[status](#run-status-did-my-job-die) pill, inner runs nest under their outer run,
-and the page auto-refreshes while anything is unfinished. See
-[docs/ui.md](ui.md) for the full tour and the API fields.
-
-To get live curves, have your command log `step=`-tagged lines to
-`$VMN_METRICS_FILE` — `exp run` tails the file during the run, so the curve
-updates in the browser *while the command is still executing*.
-
----
-
-## Importing from MLflow
-
-`vmn-exp import-mlflow` reads runs from an existing MLflow store and writes
-them into vmn-exp storage.  The imported runs appear in `vmn-exp list`,
-the web UI, and are queryable with `--query 'imported_from != null'`.
-
-```sh
-# From a local mlruns/ directory (no mlflow package needed)
-vmn-exp import-mlflow --mlruns ./mlruns my_app
-
-# From a tracking server (requires pip install mlflow-skinny)
-vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
-
-# Limit to specific experiments (repeatable, by name or numeric ID)
-vmn-exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 my_app
-
-# Preview without writing (dry-run)
-vmn-exp import-mlflow --mlruns ./mlruns --dry-run my_app
-
-# Skip copying local artifact files
-vmn-exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
-
-# Include deleted/trashed runs
-vmn-exp import-mlflow --mlruns ./mlruns --include-deleted my_app
-
-# Tune parallelism (default: 8 workers)
-vmn-exp import-mlflow --mlruns ./mlruns --workers 16 my_app
-```
-
-**Re-import is safe**: running the command a second time skips already-imported
-runs (`skipped N (already present)`).  Runs are identified by their MLflow
-`run_id`, and their vmn verstr is deterministic (`0.0.0-mlflow.<run_id[:12]>`),
-so parents are resolved correctly regardless of import order.
-
-**Summary line** printed on completion:
-```
-imported 42, skipped 0 (already present), resumed 0, failed 0
-```
-Exit code is 1 if any run failed.
-
-**No git repo needed**: the command does not take the repo lock and does not
-auto-init the vmn app.  Use `--experiment-dir` or `VMN_EXPERIMENT_DIR` to
-point at an experiment directory outside a repo, or `--store <uri>` /
-`VMN_EXPERIMENT_STORE` (or the `--bucket` shorthand) to write directly to a store.
-
-See [docs/migrating-from-mlflow.md](migrating-from-mlflow.md) for a migration
-guide including artifact layout, query equivalences, and known differences.
+`vmn-exp ui` (`pip install "vmn-exp[ui]"`) serves a dashboard over the same
+files: a sortable leaderboard with status pills and nested inner runs, live
+curves from `step=` series, compare with a real code diff, an Importance view,
+artifacts, media and lineage. Deployment, workspaces, job actions and the
+HTTP API are in [ui.md](ui.md).
