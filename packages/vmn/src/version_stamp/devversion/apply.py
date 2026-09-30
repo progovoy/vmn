@@ -8,6 +8,7 @@ from version_stamp.devversion.untracked import (
     _ensure_trailing_newline,
     _extract_untracked_tarball,
 )
+from version_stamp.snapshot.identity import safe_dep_name
 
 
 def _apply_patches_to_workdir(dest, patches, three_way=False):
@@ -71,8 +72,7 @@ def _extract_untracked(dest, tarball):
 
 def _dep_patches_of(patches, dep_path):
     dep_patches = patches.get("deps", {})
-    safe = dep_path.replace(os.sep, "_").replace("/", "_")
-    return dep_patches.get(safe) or dep_patches.get(dep_path) or {}
+    return dep_patches.get(safe_dep_name(dep_path)) or dep_patches.get(dep_path) or {}
 
 
 def dep_base_commit(metadata, dep_path, dep_info):

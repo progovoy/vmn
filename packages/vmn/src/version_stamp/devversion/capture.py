@@ -1,6 +1,5 @@
 """Patch generation, diff-hash computation, and verstr formatting for dev versions."""
 import os
-import sys
 
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.untracked import (
@@ -12,7 +11,6 @@ from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
     _DIFF_HASH_LENGTHS,
     _compute_diff_hash,
     _format_dev_verstr,
-    _stored_metadata,
     _unique_snapshot_verstr,
 )
 
@@ -61,46 +59,52 @@ def _generate_patches(backend, lightweight=False):
     return patches
 
 
-def _generate_dep_patches(vcs, lightweight=False):
+def _dep_backends(vcs):
+    """``{dep_path: backend}`` of the configured deps checked out on disk."""
     from version_stamp.backends.factory import get_client
 
-    configured_deps = getattr(vcs, "configured_deps", None)
-    if not configured_deps:
-        return {}
-
-    dep_patches = {}
-    for dep_path in configured_deps:
-        if dep_path == ".":
-            continue
+    backends = {}
+    for dep_path in getattr(vcs, "configured_deps", None) or ():
         full_path = os.path.join(vcs.vmn_root_path, dep_path)
-        if not os.path.isdir(full_path):
+        if dep_path == "." or not os.path.isdir(full_path):
             continue
         try:
             dep_be, err = get_client(full_path, vcs.be_type)
-            if err or not dep_be:
-                continue
+        except Exception:
+            VMN_LOGGER.debug(f"Failed to open dep {dep_path}", exc_info=True)
+            continue
+        if not err and dep_be:
+            backends[dep_path] = dep_be
+    return backends
+
+
+def _generate_dep_patches(vcs, lightweight=False):
+    """``{dep_path: patches}`` of the dirty deps."""
+    return _capture_deps(vcs, lightweight)[0]
+
+
+def _capture_deps(vcs, lightweight=False):
+    """``(dep patches, dep base commits)``: the patches of the dirty deps and
+    the commit every dep on disk sits at (see :func:`_base_commit`)."""
+    dep_patches, dep_bases = {}, {}
+    for dep_path, dep_be in _dep_backends(vcs).items():
+        try:
             dp = _generate_patches(dep_be, lightweight=lightweight)
-            if dp:
-                dp["base_commit"] = _base_commit(dep_be, dp)
-                dep_patches[dep_path] = dp
+            dep_bases[dep_path] = _base_commit(dep_be, dp)
         except Exception:
             VMN_LOGGER.debug(
                 f"Failed to generate patches for dep {dep_path}", exc_info=True
             )
-
-    return dep_patches
+            continue
+        if dp:
+            dep_patches[dep_path] = dp
+    return dep_patches, dep_bases
 
 
 def _compute_verstr(base_version, commit_hash, patches, hash_len=7):
     return _format_dev_verstr(
         base_version, commit_hash, _compute_diff_hash(patches), hash_len
     )
-
-
-def _stored_diff_hash(storage, app_name, verstr):
-    """``(exists, diff_hash)`` of the snapshot stored at *verstr*."""
-    exists, meta = _stored_metadata(storage, app_name, verstr)
-    return exists, meta.get("diff_hash")
 
 
 def _base_commit(backend, patches):
@@ -111,15 +115,13 @@ def _base_commit(backend, patches):
     return backend.changeset()
 
 
-def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
+def gather_create_data(vcs, lightweight=False, status=None):
     """Gather common data needed by snapshot/experiment create.
 
     Returns (base_version, commit_hash, patches, dirty_states, ver_info, error_code).
-    error_code is non-None when the caller should return early.
-
-    When ``allow_clean`` is True a clean working tree is not an error: it yields
-    empty patches (verstr gets a zeroed diff hash) so experiments can be recorded
-    against committed code. Snapshots keep the clean-tree no-op.
+    error_code is non-None when the caller should return early. A clean tree
+    yields empty patches (the verstr gets a zeroed diff hash). ``patches``
+    carries ``dep_base_commits``, the commit each dep on disk sits at.
 
     ``lightweight`` skips the untracked tarball (see :func:`untracked_payload`):
     the patches still carry everything the diff hash is computed from.
@@ -164,17 +166,10 @@ def gather_create_data(vcs, allow_clean=False, lightweight=False, status=None):
     be = vcs.backend
     patches = _generate_patches(be, lightweight=lightweight)
     commit_hash = _base_commit(be, patches)
-    dep_patches = _generate_dep_patches(vcs, lightweight=lightweight)
+    dep_patches, dep_bases = _capture_deps(vcs, lightweight=lightweight)
     if dep_patches:
         patches["deps"] = dep_patches
-
-    has_content = any(k != "deps" for k in patches) or bool(dep_patches)
-    if not patches or not has_content:
-        if not allow_clean:
-            print(
-                "No local changes to snapshot (working tree is clean)",
-                file=sys.stderr,
-            )
-            return None, None, None, None, None, 0
+    if dep_bases:
+        patches["dep_base_commits"] = dep_bases
 
     return base_version, commit_hash, patches, dirty_states, ver_info, None

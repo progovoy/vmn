@@ -83,6 +83,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_apply_patches_to_workdir":   "version_stamp.devversion.apply:_apply_patches_to_workdir",
     "_apply_snapshot_patches":     "version_stamp.devversion.apply:_apply_snapshot_patches",
     "_reset_worktree":             "version_stamp.devversion.apply:_reset_worktree",
+    "dep_base_commit":             "version_stamp.devversion.apply:dep_base_commit",
     # --- version_stamp.devversion.capture ----------------------------------
     "_compute_diff_hash":          "version_stamp.devversion.capture:_compute_diff_hash",
     "_compute_verstr":             "version_stamp.devversion.capture:_compute_verstr",
@@ -90,7 +91,6 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_format_dev_verstr":          "version_stamp.devversion.capture:_format_dev_verstr",
     "_generate_dep_patches":       "version_stamp.devversion.capture:_generate_dep_patches",
     "_generate_patches":           "version_stamp.devversion.capture:_generate_patches",
-    "_stored_diff_hash":           "version_stamp.devversion.capture:_stored_diff_hash",
     "_unique_snapshot_verstr":     "version_stamp.devversion.capture:_unique_snapshot_verstr",
     "gather_create_data":          "version_stamp.devversion.capture:gather_create_data",
     # --- version_stamp.devversion.materialize ------------------------------
@@ -109,7 +109,6 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_resolve_remote":             "version_stamp.devversion.materialize:_resolve_remote",
     "_shallow_clone_at":           "version_stamp.devversion.materialize:_shallow_clone_at",
     "_strip_git_dirs":             "version_stamp.devversion.materialize:_strip_git_dirs",
-    "_write_snapshot_to_dir":      "version_stamp.devversion.materialize:_write_snapshot_to_dir",
     "get_git_difftool":            "version_stamp.devversion.materialize:get_git_difftool",
     "render_tree_diff":            "version_stamp.devversion.materialize:render_tree_diff",
     # --- version_stamp.devversion.untracked --------------------------------

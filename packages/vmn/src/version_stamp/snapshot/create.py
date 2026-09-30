@@ -93,6 +93,7 @@ def snapshot_verstr(records, app_name, captured):
     return _unique_snapshot_verstr(
         records, app_name, captured.base_version, captured.commit_hash,
         captured.diff_hash, _changesets(captured),
+        captured.identity.get("dep_base_commits"),
     )
 
 
