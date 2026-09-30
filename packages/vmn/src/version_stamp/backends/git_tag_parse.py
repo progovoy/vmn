@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Git backend mixin: listing tags and parsing vmn tag messages."""
-import yaml
-
 from version_stamp.compat.tag_format_039 import (
     parse_automatic_tag_message,
     try_tag_with_dot_zero_suffix,
 )
 from version_stamp.core.constants import VMN_USER_NAME
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import _clean_split_result
+from version_stamp.core.utils import _clean_split_result, yaml_safe_load
 
 
 class GitTagParseMixin:
@@ -65,6 +63,9 @@ class GitTagParseMixin:
         if not tag_obj:
             return tag_name, ret
 
+        # Each TagReference.object/.commit access re-resolves the ref
+        tag_data = tag_obj.object
+        ret["tagged_date"] = tag_data.tagged_date
         commit_tag_obj = tag_obj.commit
         if commit_tag_obj is None or commit_tag_obj.author.name != VMN_USER_NAME:
             VMN_LOGGER.debug(f"Corrupted tag {tag_name}: author name is not vmn")
@@ -74,7 +75,7 @@ class GitTagParseMixin:
 
         # TODO:: Check API commit version
         # safe_load discards any text before the YAML document (if present)
-        ver_info = yaml.safe_load(tag_obj.object.message)
+        ver_info = yaml_safe_load(tag_data.message)
         if ver_info is None:
             return tag_name, ret
 
