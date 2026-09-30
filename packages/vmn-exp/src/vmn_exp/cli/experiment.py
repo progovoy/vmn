@@ -50,6 +50,8 @@ from vmn_exp.core.from_snapshot import (
 )
 from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
 from vmn_exp.core.log import (
+    DATE_SORTS,
+    IDX_SORT,
     effective_params,
     filter_archived,
     summary_metrics,
@@ -540,12 +542,18 @@ def _status_token(node):
     return status
 
 
-def _list_rows(index_rows, last):
+def _list_rows(index_rows, last, sort, schema):
     """Rows for ``list``: ``idx`` is the storage index ``@N`` resolves, fixed
-    before ``--last``/sort/``--top`` touch the order."""
+    before ``--last``/sort/``--top`` touch the order. Sorting runs on the flat
+    rows, where the date fields (``timestamp``, ``started_at``, ...) live."""
     shown = index_rows[-last:] if last else index_rows
+    if sort and sort not in (*DATE_SORTS, IDX_SORT) and not any(
+        sort in row["metrics"] for row in shown
+    ):
+        VMN_LOGGER.warning(f"Sort key '{sort}' not found in any experiment")
     return [
-        {"idx": row["idx"], "meta": row, "metrics": row["metrics"]} for row in shown
+        {"idx": row["idx"], "meta": row, "metrics": row["metrics"]}
+        for row in sort_by_metric(shown, schema, sort=sort)
     ]
 
 
@@ -600,10 +608,9 @@ def experiment_list(vcs, params, storage, args):
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
 
-    rows = _list_rows(matching, getattr(args, "last", None))
-    if args.sort and not any(args.sort in row["metrics"] for row in rows):
-        VMN_LOGGER.warning(f"Sort key '{args.sort}' not found in any experiment")
-    rows = sort_by_metric(rows, effective_schema(schema, declared), sort=args.sort)
+    rows = _list_rows(
+        matching, getattr(args, "last", None), args.sort, effective_schema(schema, declared)
+    )
     if args.top:
         rows = rows[: args.top]
 

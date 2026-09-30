@@ -173,3 +173,31 @@ def test_show_json_is_machine_readable(app_layout, capfd):
     assert run["metrics"]["loss"] == 0.4
     assert run["log_total"] == len(run["log"]) == 2
     assert [e["type"] for e in run["log"]] == ["create", "metrics"]
+
+
+# ---------------------------------------------------------------------------
+# --sort by date / run number
+# ---------------------------------------------------------------------------
+
+
+def _sorted_json(capfd, app_layout, sort):
+    capfd.readouterr()
+    rc = _exp(app_layout.app_name, action="list", sort=sort, extra_args=["--json"])
+    captured = capfd.readouterr()
+    assert rc == 0
+    assert "not found" not in captured.out + captured.err
+    return [r["idx"] for r in json.loads(captured.out)]
+
+
+@pytest.mark.parametrize("sort", ["timestamp", "idx"])
+def test_list_sort_timestamp_and_idx_newest_first(app_layout, capfd, sort):
+    _three_runs(app_layout)
+    assert _sorted_json(capfd, app_layout, sort) == [3, 2, 1]
+
+
+@pytest.mark.parametrize("sort", ["started_at", "finished_at"])
+def test_list_sort_run_dates_newest_first(app_layout, capfd, sort):
+    _bootstrap(app_layout)
+    for _ in range(3):
+        assert _exp(app_layout.app_name, action="run", run_cmd=["true"]) == 0
+    assert _sorted_json(capfd, app_layout, sort) == [3, 2, 1]

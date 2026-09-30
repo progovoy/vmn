@@ -503,6 +503,7 @@ min|max|last|first|mean] [--step-metric M] [--hidden]` (the CLI's
 ```sh
 vmn-exp list my_app                        # all (archived hidden)
 vmn-exp list my_app --sort loss --top 5    # best 5 by loss (goal-aware)
+vmn-exp list my_app --sort finished_at     # most recently finished first
 vmn-exp list my_app --last 10              # the 10 most recent
 vmn-exp list my_app --query 'metrics.loss < 0.5 and status = "succeeded"'
 vmn-exp list my_app --json
@@ -514,6 +515,8 @@ Each row: `[N] <verstr> ['name'] [archived]  <status>  (<age>)  <metrics>
 and never changes with `--sort`/`--top`/`--last`/`--query`. Metric columns are
 the [schema](#metrics-schema-sorting--goals)'s first, then the rest
 alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
+`--sort` takes a metric name, or `timestamp` (creation), `started_at`,
+`finished_at` (undated runs last) or `idx` (run number), all newest first.
 
 `--query` takes [the query language](sdk.md#the-query-language) and applies
 before `--last`, `--sort` and `--top`; a bad query exits 1 with the offset.

@@ -75,7 +75,9 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--metrics", nargs="*", default=None,
                       help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)")
     pexp.add_argument("--attach", default=None, help="File to attach as artifact")
-    pexp.add_argument("--sort", default=None, help="Sort list by metric name")
+    pexp.add_argument("--sort", default=None,
+                      help="Sort list by a metric name, or newest first by "
+                           "timestamp/started_at/finished_at/idx")
     pexp.add_argument("--metric", default=None,
                       help="importance: the metric whose driving params to rank")
     pexp.add_argument("--top", type=int, default=None,
