@@ -3,7 +3,7 @@
 Shows:  autolog() patches the framework's fit(), so hyperparameters, the training
         score and the pickled model land on the open run by themselves. It
         records only while a run is open and never opens one for you.
-Run:    python examples/05_autolog_sklearn.py   (inside a git repo with a remote)
+Run:    python packages/vmn-exp/examples/05_autolog_sklearn.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   vmn-exp show vmn_examples --latest   (the sklearn_* params and artifact)
 """

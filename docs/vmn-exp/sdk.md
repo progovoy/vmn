@@ -22,7 +22,7 @@ Recording from a git checkout also needs `vmn-exp`, which provides snapshot
 capture; git-free jobs need only the SDK (see [Slim install](#slim-install)).
 For a task-by-task walkthrough see [client-guide.md](client-guide.md).
 Runnable scripts (minimal run, training loop, nested sweep, queries,
-autologging) live in [`examples/`](../../examples/README.md); they record to the
+autologging) live in [`packages/vmn-exp/examples/`](../../packages/vmn-exp/examples/README.md); they record to the
 app `vmn_examples`.
 
 - [CLI or SDK?](#cli-or-sdk)

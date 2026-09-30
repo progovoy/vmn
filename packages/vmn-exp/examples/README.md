@@ -23,7 +23,7 @@ is needed: the SDK never pushes. A throwaway repo works:
 git init /tmp/vmn-demo && cd /tmp/vmn-demo
 git commit --allow-empty -m "initial commit"
 pip install vmn-exp            # brings vmn and vmn-exp-sdk
-python /path/to/vmn/examples/01_minimal.py
+python /path/to/vmn/packages/vmn-exp/examples/01_minimal.py
 ```
 
 The first script you run cold-starts vmn tracking: it initializes `.vmn/` and
@@ -41,5 +41,5 @@ vmn-exp ui                           # the dashboard (vmn-exp[ui]), at http://12
 
 Re-running any script is safe: it appends new runs and never rewrites old ones.
 
-Full reference: [`docs/vmn-exp/sdk.md`](../docs/vmn-exp/sdk.md) for the SDK,
-[`docs/vmn-exp/experiments.md`](../docs/vmn-exp/experiments.md) for the CLI.
+Full reference: [`docs/vmn-exp/sdk.md`](../../../docs/vmn-exp/sdk.md) for the SDK,
+[`docs/vmn-exp/experiments.md`](../../../docs/vmn-exp/experiments.md) for the CLI.

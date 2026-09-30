@@ -1,4 +1,4 @@
-"""Every script in examples/ is executed here, not merely imported.
+"""Every script in packages/vmn-exp/examples/ is executed here, not merely imported.
 
 Examples rot silently: they keep importing fine long after the behaviour they
 demonstrate changed. So each one runs as a real subprocess against a real repo
@@ -13,7 +13,7 @@ from helpers import _PROJECT_ROOT, _PY, _SRC_PATH, _storage
 
 from vmn_exp.sdk.reader import get_run, list_runs
 
-EXAMPLES_DIR = os.path.join(_PROJECT_ROOT, "examples")
+EXAMPLES_DIR = os.path.join(_PROJECT_ROOT, "packages", "vmn-exp", "examples")
 
 # The app every example writes to; deliberately not a name a real project uses.
 APP_NAME = "vmn_examples"

@@ -3,7 +3,7 @@
 Shows:  nested=True — every run opened inside an open run becomes its child, so
         `vmn-exp list` shows a tree and the outer run's tree_status rolls up the
         whole sweep (failed > stuck > running > created > succeeded).
-Run:    python examples/03_sweep.py   (inside a git repo with a remote)
+Run:    python packages/vmn-exp/examples/03_sweep.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   vmn-exp list vmn_examples   (one outer job, three inner ones)
 """

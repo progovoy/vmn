@@ -4,7 +4,7 @@
 Shows:  params up front, a per-step metric curve, a note, an artifact, and
         system_metrics=True so CPU and memory are sampled on every heartbeat.
         Plain Python — no ML library needed.
-Run:    python examples/02_training_loop.py   (inside a git repo with a remote)
+Run:    python packages/vmn-exp/examples/02_training_loop.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   vmn-exp show vmn_examples --latest   (the loss curve and sys_* metrics)
 """

@@ -2,7 +2,7 @@
 
 Shows:  list_runs(query=...) with a metric threshold, a string param, and a
         status set — plus how a crashed run is recorded as failed.
-Run:    python examples/04_query.py   (inside a git repo with a remote)
+Run:    python packages/vmn-exp/examples/04_query.py   (inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   re-run it — every query is scoped to params.example, so the counts grow
         by the same four runs each time.

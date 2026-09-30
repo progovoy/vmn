@@ -20,7 +20,7 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 - [Client guide](client-guide.md) — start here: a project end to end (store,
   submit, SDK in the job, watch, compare, reproduce, resume/rewind/fork, models,
   cleanup).
-- [Runnable examples](../../examples/README.md) — five small SDK scripts.
+- [Runnable examples](../../packages/vmn-exp/examples/README.md) — five small SDK scripts.
 - [Migrating from MLflow](migrating-from-mlflow.md) and
   [vmn-exp vs MLflow](vmn-vs-mlflow.md).
 - [Driving the UI fleet columns](ai-fleet-tracking.md) — for AI agents

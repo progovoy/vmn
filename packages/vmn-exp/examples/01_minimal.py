@@ -2,7 +2,7 @@
 """The smallest useful vmn run: open one, log metrics, print its id.
 
 Shows:  start_run() as a context manager, log_metric() with and without a step.
-Run:    python examples/01_minimal.py   (from inside a git repo with a remote)
+Run:    python packages/vmn-exp/examples/01_minimal.py   (from inside a git repo with a remote)
 App:    writes runs to the vmn app "vmn_examples"
 Next:   vmn-exp list vmn_examples
 """
