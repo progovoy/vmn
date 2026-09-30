@@ -138,6 +138,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "register_snapshot_store_opener": "version_stamp.cli.plugin_api:register_snapshot_store_opener",
     "LocalRecordStore":            "version_stamp.snapshot.local_store:LocalRecordStore",
     "relative_timestamp":          "version_stamp.snapshot.listing:relative_timestamp",
+    "export_tree":                 "version_stamp.snapshot.export:export_tree",
 }
 
 # __all__ is the sorted key set of the registry — the single source of truth.

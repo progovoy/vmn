@@ -39,9 +39,7 @@ from vmn_exp.gitmode.checkout import record_run
 from vmn_exp.snapshot import (
     _diff_real_tree,
     _diff_with_external_tool,
-    _relative_timestamp,
     _restore_with_safety_net,
-    _strip_git_dirs,
     get_git_difftool,
 )
 import vmn_exp.core.index as experiment_index
@@ -83,7 +81,14 @@ from vmn_exp.core.writer import (
     merge_conf_into_params,
     save_artifact,
 )
-from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
+from version_stamp.api import (
+    VMN_LOGGER,
+    export_tree,
+    measure_runtime_decorator,
+    now_iso,
+    relative_timestamp,
+)
+from vmn_exp.storage.files import safe_verstr
 from vmn_exp.cli.inputs_arg import parse_input_arg
 from vmn_exp.cli.provenance import (
     format_env_oneliner,
@@ -619,7 +624,7 @@ def _format_list_row(row, node, columns):
     archived_str = " [archived]" if meta.get("archived") else ""
     return (
         f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}{name_str}{archived_str}  "
-        f"{_status_token(node)}  ({_relative_timestamp(meta['timestamp'])})  "
+        f"{_status_token(node)}  ({relative_timestamp(meta['timestamp'])})  "
         f"{metric_str}{note_str}"
     )
 
@@ -700,7 +705,7 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
     if fields["pid"]:
         print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
     if fields["status"] == STUCK:
-        print(f"  Heartbeat: last seen {_relative_timestamp(fields['heartbeat'])}")
+        print(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
 
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")
@@ -813,7 +818,7 @@ def _print_log(log, full):
     if hidden:
         print(f"    ({hidden} earlier entries hidden, use --full-log)")
     for entry in shown:
-        ts = _relative_timestamp(entry.get("timestamp", ""))
+        ts = relative_timestamp(entry.get("timestamp", ""))
         print(f"    [{ts}] {_describe_log_entry(entry)}")
 
 
@@ -1050,9 +1055,6 @@ def experiment_restore(vcs, params, storage, args):
 
 @measure_runtime_decorator
 def experiment_export(vcs, params, storage, args):
-    import tarfile
-    import tempfile
-
     verstr, err = _resolve_experiment_version(storage, vcs, args, default_latest=True)
     if err:
         VMN_LOGGER.error(err)
@@ -1070,43 +1072,21 @@ def experiment_export(vcs, params, storage, args):
 
     log = load_log(storage, app_name, verstr)
 
-    safe_verstr = verstr.replace("+", "_plus_")
-    output_path = args.output or f"{safe_verstr}.tar.gz"
-    is_tarball = output_path.endswith(".tar.gz") or output_path.endswith(".tgz")
-
-    if is_tarball:
-        tmpdir = tempfile.mkdtemp(prefix="vmn-exp-export-")
-        dest = os.path.join(tmpdir, safe_verstr)
-    else:
-        tmpdir = None
-        dest = output_path
-
-    try:
-        from vmn_exp.snapshot import _materialize_workdir
-
-        err = _materialize_workdir(vcs, metadata, patches, dest)
-        if err:
-            return err
-
-        _strip_git_dirs(dest)
-
+    def write_experiment_files(dest):
         with open(os.path.join(dest, "vmn_experiment.yml"), "w") as f:
             yaml.dump({"metadata": metadata, "log": log}, f, sort_keys=False)
-
         art_dir = storage.list_artifact_files(app_name, verstr)
         if art_dir and os.path.isdir(art_dir):
-            dest_art = os.path.join(dest, "artifacts")
-            shutil.copytree(art_dir, dest_art, dirs_exist_ok=True)
+            shutil.copytree(art_dir, os.path.join(dest, "artifacts"), dirs_exist_ok=True)
 
-        if is_tarball:
-            with tarfile.open(output_path, "w:gz") as tar:
-                tar.add(dest, arcname=safe_verstr)
-
-        print(output_path)
-        return 0
-    finally:
-        if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+    output_path, err = export_tree(
+        vcs, (metadata, patches), safe_verstr(verstr), args.output,
+        write_experiment_files,
+    )
+    if err:
+        return err
+    print(output_path)
+    return 0
 
 
 # ---------------------------------------------------------------------------
