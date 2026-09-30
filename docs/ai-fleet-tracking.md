@@ -18,16 +18,16 @@ its lifecycle.
 | done | finished with exit code 0 | `succeeded` |
 | failed | finished non-zero, or silent too long | `failed` + `stuck` |
 
-The status is derived from `run_state.yml` (see
-[experiments.md](experiments.md#run-status-did-my-job-die)). A run is `stuck` once its
-heartbeat is older than `max(3 × heartbeat interval, 60s)` with no exit code.
+Status is derived from `run_state.yml`; a run is `stuck` once its heartbeat is
+older than `max(3 × heartbeat interval, 60s)` with no exit code (see
+[experiments.md](experiments.md#run-status-did-my-job-die)).
 
-On the leaderboard, **total** is the number of inner runs that exist. The run
-detail's `fleet` block also reads the outer run's `expected_pods` param. Its
-`expected` is the larger of `expected_pods` and the inner-run count, and its
-`counts.waiting` is the declared pods not registered yet. Registered-but-not-started
-pods are under `counts.created` there. To get the same numbers in both places
-from the start, set `expected_pods` **and** register every pod up front.
+**total** on the leaderboard is the number of inner runs. The run detail's
+`fleet` block also reads the outer run's `expected_pods` param: `expected` is
+the larger of `expected_pods` and the inner-run count, `counts.waiting` is the
+declared pods not registered yet, and registered-but-not-started pods are under
+`counts.created`. To get the same numbers in both places from the start, set
+`expected_pods` **and** register every pod up front.
 
 ## The lifecycle, call by call
 
@@ -104,8 +104,9 @@ row["tree_status"]    # rollup: failed > stuck > running > created > succeeded
 
 Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same
 `children`/`child_counts`. The detail endpoint `.../experiments/{verstr}` adds
-`fleet` (`expected`, `counts` per status plus `waiting`, and per-pod `progress` from a pod's
-`progress`/`progress_total` metrics or params). See [ui.md](ui.md#api).
+`fleet`: `expected`, `counts` (per status, plus `waiting`) and `children` (per
+pod: `status` and `progress`/`progress_total`, read from the pod's metrics or
+params). See [ui.md](ui.md#api).
 
 ## Checklist for an agent
 
