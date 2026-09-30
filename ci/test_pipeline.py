@@ -258,6 +258,12 @@ def test_release_stages_run_after_tests_in_order(mod):
     assert order.index("build") < order.index("upload")
 
 
+def test_the_suites_run_one_after_the_other(mod):
+    # Each suite runs 29 xdist workers; running both at once would put 58 on
+    # the host, twice the load of the single suite this pipeline used to run.
+    assert "tests_core" in mod.pipeline.get_stage("tests_exp").after
+
+
 def test_release_stages_are_not_cached(mod):
     # Side-effecting stages must never be content-address cached.
     for name in ("stamp", "build", "upload"):

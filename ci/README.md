@@ -47,8 +47,8 @@ graph LR
     tests_core["tests_core<br/><i>pytest tests -n 29</i>"]
     tests_exp["tests_exp<br/><i>pytest packages/vmn-exp/tests -n 29</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
-    tests_core --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
-    tests_exp --> stamp
+    tests_core --> tests_exp
+    tests_exp --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
     stamp --> build["build<br/><i>make _build</i>"]
     build --> upload["upload<br/><i>make upload</i>"]
 
@@ -125,7 +125,9 @@ workspace against the pipeline file). That means a run tests the checked-out
 repo in place whether it's launched from the CLI, the UI **Trigger** button, or
 the daily schedule — muster doesn't drop it in an empty per-run scratch dir.
 
-The four non-release stages have no dependencies, so they run in parallel.
+`lint`, `typecheck` and `tests_core` have no dependencies, so they run in
+parallel; `tests_exp` waits for `tests_core` so only one 29-worker suite loads
+the host at a time.
 Every stage declares `requires` (`tests/requirements.txt` +
 `tests/test_requirements.txt` + `packages/vmn-exp/tests/test_requirements.txt` +
 the three packages installed editable). muster builds that venv once, content-addressed by the

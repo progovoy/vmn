@@ -10,10 +10,9 @@ only vmn's source root and the core tests dir.
 import os
 import subprocess
 
-from helpers import _PROJECT_ROOT, _PY
+from helpers import _PY, _SRC_PATH
 
-_VMN_SRC = os.path.join(_PROJECT_ROOT, "packages", "vmn", "src")
-_TESTS_DIR = os.path.join(_PROJECT_ROOT, "tests")
+_TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 _SCRIPT = """
 import sys
@@ -45,10 +44,10 @@ def test_core_infra_and_vmn_work_without_vmn_exp(app_layout):
     env = {
         **os.environ,
         "VMN_WORKING_DIR": app_layout.repo_path,
-        "PYTHONPATH": os.pathsep.join([_VMN_SRC, _TESTS_DIR]),
+        "PYTHONPATH": os.pathsep.join([_SRC_PATH, _TESTS_DIR]),
     }
     proc = subprocess.run(
-        [_PY, "-c", _SCRIPT, app_layout.app_name, _VMN_SRC],
+        [_PY, "-c", _SCRIPT, app_layout.app_name, _SRC_PATH],
         cwd=app_layout.repo_path, env=env, capture_output=True, text=True,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr

@@ -18,7 +18,8 @@ muster content-addresses the venv by the interpreter identity plus the reqs
 files' contents (``.mtd/envs/cpython-<X.Y>-<digest>``), so all stages share one
 venv, it persists across runs, and it rebuilds only when a requirements file or
 the interpreter changes; concurrent builders are serialized by muster's build
-lock, so the three stages run in parallel.
+lock, so lint, typecheck and the tests run in parallel (tests_exp waits for
+tests_core so the two 29-worker suites never share the host).
 
 Each stage runs its tool with ``ctx.run`` (bare names resolve via the venv's
 bin on PATH, cwd is the workspace = repo root) which captures the output into a
@@ -120,6 +121,7 @@ def tests_core(ctx):
     deterministic=True,
     inputs=["packages", "tests", "pyproject.toml"],
     outputs=["reports/tests_exp.xml", "reports/tests_exp.html"],
+    after=["tests_core"],  # one 29-worker suite at a time
 )
 def tests_exp(ctx):
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp")

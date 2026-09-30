@@ -2,30 +2,16 @@
 private names) plus the vmn-exp command/storage helpers."""
 import os
 
-from helpers import *  # noqa: F401,F403
-from helpers import (  # noqa: F401  (``import *`` skips underscore names)
-    _PROJECT_ROOT,
-    _PY,
-    _add_buildmetadata_to_version,
-    _bootstrap,
-    _configure_2_deps,
-    _configure_empty_conf,
-    _exec_script,
-    _gen,
-    _goto,
-    _init_app,
-    _release_app,
-    _run_vmn_init,
-    _show,
-    _snapshot,
-    _stamp_app,
-)
+import helpers
 from version_stamp.core.logging import reset_logger
 from vmn_exp.cli.main import vmn_exp_run
 
+# Every helpers name, private ones too (``import *`` would skip those).
+globals().update({k: v for k, v in vars(helpers).items() if not k.startswith("__")})
+
 # The three distributions' source roots (see docs/packaging.md), as a PYTHONPATH.
 SRC_DIRS = [
-    os.path.join(_PROJECT_ROOT, "packages", dist, "src")
+    os.path.join(helpers._PROJECT_ROOT, "packages", dist, "src")
     for dist in ("vmn", "vmn-exp-sdk", "vmn-exp")
 ]
 _SRC_PATH = os.pathsep.join(SRC_DIRS)
