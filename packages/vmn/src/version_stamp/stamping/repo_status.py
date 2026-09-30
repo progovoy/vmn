@@ -216,7 +216,7 @@ def _get_repo_status(
                 status.repos[repo]["pending"] = True
                 status.repos[repo]["state"].add("pending")
 
-            outgoing = functools.cache(dep_be.check_for_outgoing_changes)
+            outgoing = functools.lru_cache(maxsize=None)(dep_be.check_for_outgoing_changes)
             for pin in _DEP_PIN_CHECKS:
                 if pin not in vcs.configured_deps[repo]:
                     continue
