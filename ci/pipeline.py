@@ -9,7 +9,8 @@ The venv is built by muster from each stage's ``requires`` (see
 substrate/envs.py): the muster runtime, then the declared reqs files and vmn
 installed editable. ``requires`` does NOT augment whatever the process running
 muster happens to have installed — the venv starts empty, so every tool a stage
-invokes has to be declared (ruff/pytest/mypy all are, in test_requirements.txt).
+invokes has to be declared (ruff/pytest/mypy all are, in tests/test_requirements.txt;
+the vmn-exp suite's extra deps are in packages/vmn-exp/tests/test_requirements.txt).
 Because ``requires`` installs after the runtime, a pin here wins over a muster
 runtime dep of the same name.
 
@@ -55,6 +56,10 @@ REQUIRES = [
     "tests/constraints.txt",
     "-r",
     "tests/test_requirements.txt",
+    # The vmn-exp suite's extra deps. It includes tests/test_requirements.txt
+    # too; that file stays listed so its contents keep feeding the venv digest.
+    "-r",
+    "packages/vmn-exp/tests/test_requirements.txt",
     "-e",
     "packages/vmn",
     "-e",
@@ -71,20 +76,7 @@ def lint(ctx):
     ctx.run(["ruff", "check", "packages", "--output-format", "concise"])
 
 
-# deterministic=True + declared inputs make this content-addressable: the key is
-# the stage's source closure, the hash of the trees below, the venv
-# fingerprint (interpreter + the requirements files' contents) and the platform
-# (so a macOS laptop's result is never served to Linux CI). An unchanged repo
-# restores reports/ from the cache instead of re-running the suite; the root
-# pyproject.toml is an input because it declares the workspace, and
-# muster's tree hashing ignores __pycache__ so bytecode never churns the key.
-@stage(
-    requires=REQUIRES,
-    deterministic=True,
-    inputs=["packages", "tests", "pyproject.toml"],
-    outputs=["reports/tests.xml", "reports/tests.html"],
-)
-def run_tests(ctx):
+def _pytest(ctx, suite_dir, report):
     # ctx.run defaults to check=True: it writes the output card, then fails the
     # stage on any nonzero exit — test failures (exit 1) and pytest crashes
     # (exit >1) both go red. pytest writes the JUnit/HTML report as it runs, so a
@@ -92,15 +84,45 @@ def run_tests(ctx):
     ctx.run(
         [
             "pytest",
-            "tests",
+            suite_dir,
             "-n",
             "29",
-            "--junitxml=reports/tests.xml",
-            "--html=reports/tests.html",
+            f"--junitxml=reports/{report}.xml",
+            f"--html=reports/{report}.html",
             "--self-contained-html",
             "-vv",
         ]
     )
+
+
+# Two suites (vmn-exp will become a separate product): tests/ is core vmn and
+# runs with vmn_exp unimportable (tests/conftest.py); packages/vmn-exp/tests is
+# vmn-exp and reuses tests/'s fixtures and helpers.
+# deterministic=True + declared inputs make each content-addressable: the key is
+# the stage's source closure, the hash of the trees below, the venv
+# fingerprint (interpreter + the requirements files' contents) and the platform
+# (so a macOS laptop's result is never served to Linux CI). An unchanged tree
+# restores reports/ from the cache instead of re-running the suite; the root
+# pyproject.toml is an input because it declares the workspace, and
+# muster's tree hashing ignores __pycache__ so bytecode never churns the key.
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["packages/vmn", "tests", "pyproject.toml"],
+    outputs=["reports/tests_core.xml", "reports/tests_core.html"],
+)
+def tests_core(ctx):
+    _pytest(ctx, "tests", "tests_core")
+
+
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["packages", "tests", "pyproject.toml"],
+    outputs=["reports/tests_exp.xml", "reports/tests_exp.html"],
+)
+def tests_exp(ctx):
+    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp")
 
 
 @stage(requires=REQUIRES)
@@ -112,7 +134,7 @@ def typecheck(ctx):
 
 # --- optional release lane -------------------------------------------------
 # stamp -> build -> upload run only when their declared run param is set, after
-# run_tests so a release never ships on a crashed test run. The gate is a
+# both test stages so a release never ships on a crashed test run. The gate is a
 # `when=` condition, which muster evaluates once per run *before* the stage takes
 # a slot — so an unrequested stage costs nothing (no venv, no subprocess) and
 # `muster inspect` reports it as "would skip" without running anything. Each
@@ -138,7 +160,7 @@ def _make(ctx, target):
 
 @stage(
     requires=REQUIRES,
-    after=["run_tests"],
+    after=["tests_core", "tests_exp"],
     when=lambda c: bool(c.params.get("stamp")),
     params=[
         Param(
@@ -180,6 +202,6 @@ def upload(ctx):
 
 pipeline = Pipeline(
     "vmn-ci",
-    stages=[lint, run_tests, typecheck, stamp, build, upload],
+    stages=[lint, tests_core, tests_exp, typecheck, stamp, build, upload],
     workspace="..",
 )

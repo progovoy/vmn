@@ -44,14 +44,17 @@ Instead of waiting for the 2am daily run:
 ```mermaid
 graph LR
     lint["lint<br/><i>ruff check</i>"]
-    run_tests["run_tests<br/><i>pytest -n 29</i>"]
+    tests_core["tests_core<br/><i>pytest tests -n 29</i>"]
+    tests_exp["tests_exp<br/><i>pytest packages/vmn-exp/tests -n 29</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
-    run_tests --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
+    tests_core --> stamp["stamp<br/><i>make _&lt;mode&gt;</i>"]
+    tests_exp --> stamp
     stamp --> build["build<br/><i>make _build</i>"]
     build --> upload["upload<br/><i>make upload</i>"]
 
     style lint fill:#264653,stroke:#1d3557,color:#fff
-    style run_tests fill:#264653,stroke:#1d3557,color:#fff
+    style tests_core fill:#264653,stroke:#1d3557,color:#fff
+    style tests_exp fill:#264653,stroke:#1d3557,color:#fff
     style typecheck fill:#264653,stroke:#1d3557,color:#fff
     style stamp fill:#2a9d8f,stroke:#1d3557,color:#fff
     style build fill:#2a9d8f,stroke:#1d3557,color:#fff
@@ -61,7 +64,8 @@ graph LR
 | Stage | What it does | Cached? |
 |-------|-------------|---------|
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
-| `run_tests` | Runs `pytest tests/ -n 29` (parallel, 29 workers), produces JUnit XML + HTML report | No |
+| `tests_core` | Runs the core vmn suite, `pytest tests -n 29` (parallel, 29 workers; `vmn_exp` is unimportable in it), produces JUnit XML + HTML report | Yes, on `packages/vmn`, `tests`, `pyproject.toml` |
+| `tests_exp` | Runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29`, produces JUnit XML + HTML report | Yes, on `packages`, `tests`, `pyproject.toml` |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
 | `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |
@@ -72,9 +76,9 @@ graph LR
 `stamp`, `build`, and `upload` are **opt-in**: each records a `skipped` status
 (via `ctx.skip`, not a fake `succeeded`) unless its run param is set, so the
 daily/manual test run stays test-only and reads honestly in the UI. When set,
-they reuse the repo's `Makefile` targets and run after `run_tests` (the DAG is
-`run_tests → stamp → build → upload`), so a release never ships on a crashed
-test run. A skipped stage still satisfies its dependents, so the chain proceeds.
+they reuse the repo's `Makefile` targets and run after both test stages (the
+DAG is `tests_core + tests_exp → stamp → build → upload`), so a release never
+ships on a crashed test run. A skipped stage still satisfies its dependents, so the chain proceeds.
 Being side-effecting, they are never cached.
 
 The three params are **declared** on their stages (`@stage(params=[Param(...)])`),
@@ -121,10 +125,11 @@ workspace against the pipeline file). That means a run tests the checked-out
 repo in place whether it's launched from the CLI, the UI **Trigger** button, or
 the daily schedule — muster doesn't drop it in an empty per-run scratch dir.
 
-The three stages have no dependencies, so they run in parallel. Every stage
-declares `requires` (`tests/requirements.txt` + `tests/test_requirements.txt` +
-vmn installed editable). muster builds that venv once, content-addressed by the
-requirements files' contents under `.mtd/envs/`, and all three stages run inside
+The four non-release stages have no dependencies, so they run in parallel.
+Every stage declares `requires` (`tests/requirements.txt` +
+`tests/test_requirements.txt` + `packages/vmn-exp/tests/test_requirements.txt` +
+the three packages installed editable). muster builds that venv once, content-addressed by the
+requirements files' contents under `.mtd/envs/`, and every stage runs inside
 it — no hand-rolled venv or `pip install`. Because the workspace is the repo,
 that venv persists across runs and rebuilds only when a requirements file
 changes; muster's build lock serializes the concurrent builders, so the first
@@ -132,11 +137,12 @@ stage to need it builds it and the others reuse it.
 
 Each stage runs its tool through `ctx.run` (bare names resolve via the venv's
 `bin` on `PATH`), which captures the tool output into a per-stage **card** shown
-in the run UI. `run_tests` additionally writes `reports/tests.xml` (JUnit) and
-`reports/tests.html` as downloadable artifacts.
+in the run UI. `tests_core`/`tests_exp` additionally write
+`reports/tests_core.{xml,html}` / `reports/tests_exp.{xml,html}` (JUnit + HTML)
+as downloadable artifacts.
 
 Lint and typecheck are report-only — they don't fail the pipeline on warnings.
-`run_tests` fails the stage (red) on any nonzero pytest exit — test failures
+Each test stage fails (red) on any nonzero pytest exit — test failures
 (exit 1) as well as a pytest crash (exit >1); it never shows green over a broken
 suite. The JUnit/HTML report and the stage card are written before the failure,
 so a red run still carries the full output.
@@ -233,7 +239,7 @@ $MUSTER status <run_id>
 $MUSTER resume ci/pipeline.py <run_id> --cache-dir .mtd/cache
 
 # Re-run just one stage
-$MUSTER rerun ci/pipeline.py <run_id> --stage run_tests --cache-dir .mtd/cache
+$MUSTER rerun ci/pipeline.py <run_id> --stage tests_core --cache-dir .mtd/cache
 ```
 
 ## Schedule

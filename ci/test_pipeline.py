@@ -59,28 +59,44 @@ def mod():
     return _load_pipeline_module()
 
 
-# ---- run_tests ---------------------------------------------------------
+# ---- tests_core / tests_exp ---------------------------------------------
+# Two suites (vmn-exp will become a separate product): tests/ is core vmn,
+# packages/vmn-exp/tests is vmn-exp.
+
+SUITES = {"tests_core": "tests", "tests_exp": "packages/vmn-exp/tests"}
 
 
-def test_run_tests_passes_on_exit_zero(mod):
+@pytest.mark.parametrize("name,suite_dir", SUITES.items())
+def test_test_stage_runs_its_suite_on_exit_zero(mod, name, suite_dir):
     ctx = FakeCtx(run_returncode=0)
-    mod.run_tests(ctx)  # green: no exception
-    assert ctx.calls and ctx.calls[0][0][0] == "pytest"
+    getattr(mod, name)(ctx)  # green: no exception
+    assert ctx.calls and ctx.calls[0][0][:2] == ["pytest", suite_dir]
 
 
-def test_run_tests_fails_on_test_failure(mod):
+@pytest.mark.parametrize("name", SUITES)
+def test_test_stage_fails_on_test_failure(mod, name):
     # exit 1 = at least one test failed. The stage must go RED (raise), not
     # report green while the suite is broken.
     ctx = FakeCtx(run_returncode=1)
     with pytest.raises(RuntimeError):
-        mod.run_tests(ctx)
+        getattr(mod, name)(ctx)
 
 
-def test_run_tests_fails_on_pytest_crash(mod):
+@pytest.mark.parametrize("name", SUITES)
+def test_test_stage_fails_on_pytest_crash(mod, name):
     # exit >1 = pytest itself crashed — also RED.
     ctx = FakeCtx(run_returncode=2)
     with pytest.raises(RuntimeError):
-        mod.run_tests(ctx)
+        getattr(mod, name)(ctx)
+
+
+def test_each_suite_writes_its_own_reports(mod):
+    ctxs = {name: FakeCtx() for name in SUITES}
+    for name, ctx in ctxs.items():
+        getattr(mod, name)(ctx)
+    core, exp = (ctxs[n].calls[0][0] for n in SUITES)
+    assert "--junitxml=reports/tests_core.xml" in core
+    assert "--junitxml=reports/tests_exp.xml" in exp
 
 
 # ---- lint --------------------------------------------------------------
@@ -213,13 +229,19 @@ def test_build_is_independent_of_stamp(mod):
 # ---- caching -----------------------------------------------------------
 
 
-def test_run_tests_is_cached_on_the_sources_it_reads(mod):
+@pytest.mark.parametrize("name,inputs", [
+    # The core suite reads only vmn; the vmn-exp suite reads all three
+    # packages plus the core suite's helpers in tests/.
+    ("tests_core", {"packages/vmn", "tests", "pyproject.toml"}),
+    ("tests_exp", {"packages", "tests", "pyproject.toml"}),
+])
+def test_test_stages_are_cached_on_the_sources_they_read(mod, name, inputs):
     # The daily run re-ran the whole suite even when nothing changed. Declaring
     # the trees the tests actually read makes the stage content-addressable, so
     # an unchanged repo restores the JUnit/HTML reports instead of re-running.
-    spec = mod.pipeline.get_stage("run_tests")
+    spec = mod.pipeline.get_stage(name)
     assert spec.deterministic is True
-    assert set(spec.inputs) == {"packages", "tests", "pyproject.toml"}
+    assert set(spec.inputs) == inputs
     assert spec.outputs  # a cache hit must restore the reports the UI renders
 
 
@@ -228,9 +250,10 @@ def test_run_tests_is_cached_on_the_sources_it_reads(mod):
 
 def test_release_stages_run_after_tests_in_order(mod):
     order = [s.name for s in mod.pipeline.topological_order()]
-    for name in ("run_tests", "stamp", "build", "upload"):
+    for name in ("tests_core", "tests_exp", "stamp", "build", "upload"):
         assert name in order, f"{name} missing from pipeline"
-    assert order.index("run_tests") < order.index("stamp")
+    assert order.index("tests_core") < order.index("stamp")
+    assert order.index("tests_exp") < order.index("stamp")
     assert order.index("stamp") < order.index("build")
     assert order.index("build") < order.index("upload")
 
