@@ -53,10 +53,11 @@ class GitHistoryMixin:
         actual_deps_state = {}
         for path in paths:
             if path == ".":
+                # The stamper fills in its last user changeset as the hash.
                 actual_deps_state[path] = {
-                    "hash": self.changeset(),
+                    "hash": None,
                     "remote": self.remote(),
-                    "vcs_type": "git",
+                    "vcs_type": self.type(),
                 }
                 continue
 

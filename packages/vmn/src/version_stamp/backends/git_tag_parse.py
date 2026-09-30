@@ -12,9 +12,11 @@ from version_stamp.core.utils import _clean_split_result, yaml_safe_load
 class GitTagParseMixin:
     """Tag listing and tag-message parsing. Mixed into GitBackend."""
 
-    def _list_tags(self, pattern):
-        """Tag names matching *pattern*, oldest tagger date first."""
-        tags = self._be.git.tag("--sort", "taggerdate", "--list", pattern)
+    def _list_tags(self, pattern, by_date=True):
+        """Tag names matching *pattern*, oldest tagger date first (by_date), else
+        in refname order, which skips reading every tag object."""
+        sort = ("--sort", "taggerdate") if by_date else ()
+        tags = self._be.git.tag(*sort, "--list", pattern)
         return _clean_split_result(tags.split("\n"))
 
     def _parse_vmn_tags(self, tag_names):

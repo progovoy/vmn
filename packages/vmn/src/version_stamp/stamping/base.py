@@ -555,10 +555,8 @@ class IVersionsStamper:
     def _own_tag_props(self, tag_name_prefix):
         """Parsed tags matching *tag_name_prefix* that belong to this app, not
         to another app whose name merely starts with this one."""
-        list_tags = getattr(self.backend, "get_latest_available_tags", None)
-        tags = (list_tags(tag_name_prefix) if list_tags else None) or []
         own_name = app_name_to_tag_name(self.name)
-        for tag in tags:
+        for tag in self.backend.list_tag_names(tag_name_prefix):
             try:
                 props = deserialize_tag_name(tag)
             except WrongTagFormatException:

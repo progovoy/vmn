@@ -119,6 +119,9 @@ class LocalFileBackend(VMNBackend):
     def get_latest_available_tag(self, tag_prefix_filter):
         return None
 
+    def list_tag_names(self, tag_prefix_filter):
+        return []
+
     def get_actual_deps_state(self, vmn_root_path, paths):
         actual_deps_state = {
             ".": {

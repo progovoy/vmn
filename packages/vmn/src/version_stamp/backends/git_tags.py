@@ -194,6 +194,11 @@ class GitTagsMixin:
         return self._list_tags(tag_prefix_filter) or None
 
     @measure_runtime_decorator
+    def list_tag_names(self, tag_prefix_filter):
+        """Tag names matching the filter, in no particular order."""
+        return self._list_tags(tag_prefix_filter, by_date=False)
+
+    @measure_runtime_decorator
     def get_latest_available_tag(self, tag_prefix_filter):
         tnames = self.get_latest_available_tags(tag_prefix_filter)
         if tnames is None:

@@ -372,16 +372,9 @@ class VersionControlStamper(IVersionsStamper):
         """The paths git status lists (modified or untracked), in paths order."""
         rel_paths = [os.path.relpath(p, self.vmn_root_path) for p in paths]
         out = self.backend._be.git.status(
-            "--porcelain", "-z", "--untracked-files=all", "--", *rel_paths
+            "--porcelain", "-z", "--no-renames", "--untracked-files=all", "--", *rel_paths
         )
-        entries = iter(out.split("\0"))
-        listed = set()
-        for entry in entries:
-            if not entry:
-                continue
-            listed.add(os.path.normpath(entry[3:]))
-            if entry[0] in "RC":
-                next(entries, None)  # a rename/copy is followed by its source
+        listed = {os.path.normpath(e[3:]) for e in out.split("\0") if e}
 
         return [
             p for p, rel in zip(paths, rel_paths) if os.path.normpath(rel) in listed
