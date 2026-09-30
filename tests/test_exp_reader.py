@@ -555,6 +555,78 @@ def test_a_sole_app_with_experiments_needs_no_app_name(app_layout, monkeypatch):
     assert [r["verstr"] for r in list_runs()] == ["0.0.1"]
 
 
+def _snapshot_meta(tmp_path, app_name):
+    meta_path = tmp_path / f"{app_name}_vmn_metadata.yml"
+    meta_path.write_text(
+        f"verstr: 0.0.1-dev.abc.def\napp_name: {app_name}\n"
+        "base_version: 0.0.1\nbase_commit: abc\nbranch: master\n"
+    )
+    return str(meta_path)
+
+
+def _git_free_run(tmp_path, app_name, exp_root):
+    """A run recorded git-free into *exp_root*, as an exported job would."""
+    from vmn_exp.core.from_snapshot import create_from_snapshot
+    from vmn_exp.snapshot import open_storage
+
+    storage = open_storage(vmn_root_path=str(exp_root), subdir="experiments")
+    verstr, err = create_from_snapshot(
+        storage, app_name, _snapshot_meta(tmp_path, app_name)
+    )
+    assert err is None, err
+    return verstr, storage
+
+
+def _outside_any_checkout(monkeypatch, path):
+    monkeypatch.delenv("VMN_WORKING_DIR", raising=False)
+    monkeypatch.delenv("VMN_APP_NAME", raising=False)
+    monkeypatch.chdir(path)
+
+
+def test_readers_honour_vmn_experiment_dir_outside_a_checkout(tmp_path, monkeypatch):
+    exp_root = tmp_path / "exp"
+    verstr, _ = _git_free_run(tmp_path, "gfapp", exp_root)
+    _outside_any_checkout(monkeypatch, tmp_path)
+    monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(exp_root))
+
+    assert [r["verstr"] for r in list_runs("gfapp")] == [verstr]
+    assert get_run("gfapp")["verstr"] == verstr
+    assert [r["verstr"] for r in list_runs()] == [verstr]
+
+    monkeypatch.setenv("VMN_APP_NAME", "gfapp")
+    assert [r["verstr"] for r in list_runs()] == [verstr]
+
+
+def test_readers_pick_the_snapshot_app_in_a_shared_dir(tmp_path, monkeypatch):
+    exp_root = tmp_path / "exp"
+    wanted, _ = _git_free_run(tmp_path, "gfapp", exp_root)
+    _git_free_run(tmp_path, "otherapp", exp_root)
+    _outside_any_checkout(monkeypatch, tmp_path)
+    monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(exp_root))
+    monkeypatch.setenv("VMN_SNAPSHOT_METADATA", _snapshot_meta(tmp_path, "gfapp"))
+
+    assert [r["verstr"] for r in list_runs()] == [wanted]
+
+
+def test_vmn_experiment_dir_wins_over_the_checkout(app_layout, tmp_path, monkeypatch):
+    _write_experiment(app_layout, "0.0.1-dev.repo0000")
+    env_verstr, _ = _git_free_run(tmp_path, app_layout.app_name, tmp_path / "exp")
+    monkeypatch.setenv("VMN_WORKING_DIR", app_layout.repo_path)
+    monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path / "exp"))
+
+    assert [r["verstr"] for r in list_runs(app_layout.app_name)] == [env_verstr]
+    assert get_run(app_layout.app_name)["verstr"] == env_verstr
+
+
+def test_a_passed_storage_supplies_the_app_candidates(app_layout, tmp_path, monkeypatch):
+    _write_experiment(app_layout, "0.0.1-dev.repo0000")
+    verstr, storage = _git_free_run(tmp_path, "otherapp", tmp_path / "exp")
+    monkeypatch.setenv("VMN_WORKING_DIR", app_layout.repo_path)
+    monkeypatch.delenv("VMN_APP_NAME", raising=False)
+
+    assert [r["verstr"] for r in list_runs(storage=storage)] == [verstr]
+
+
 # ---------------------------------------------------------------------------
 # call shape
 # ---------------------------------------------------------------------------
