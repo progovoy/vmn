@@ -7,7 +7,6 @@ import pathlib
 import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 import yaml
@@ -16,8 +15,6 @@ from version_stamp.backends.base import VMNBackend
 from version_stamp.compat.branch_conf import migrate_branch_confs
 from version_stamp.core.constants import (
     BRANCH_CONF_DIR,
-    PUBLISH_MAX_RETRIES,
-    PUBLISH_RETRY_SLEEP_SECONDS,
     RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     VMN_ROOT_TAG_REGEX,
     VMN_TAG_REGEX,
@@ -30,19 +27,18 @@ from version_stamp.stamping.base import IVersionsStamper
 
 def _push_published_refs(backend, tags):
     backend.push(tags)
-    count = 0
     error = backend.check_for_outgoing_changes()
-    while count < PUBLISH_MAX_RETRIES and error:
-        count += 1
-        VMN_LOGGER.error(
-            f"BUG: Somehow we have outgoing changes right after publishing:\n{error}"
-        )
-        time.sleep(PUBLISH_RETRY_SLEEP_SECONDS)
-        error = backend.check_for_outgoing_changes()
-    if count == PUBLISH_MAX_RETRIES and error:
+    if error:
         raise RuntimeError(
             f"BUG: Somehow we have outgoing changes right after publishing:\n{error}"
         )
+
+
+def _tag_complies(tag, regex):
+    if re.search(regex, tag) is None:
+        VMN_LOGGER.error(f"Tag {tag} doesn't comply with: {regex} format")
+        return False
+    return True
 
 
 class VersionControlStamper(IVersionsStamper):
@@ -62,16 +58,11 @@ class VersionControlStamper(IVersionsStamper):
         if verstr is None:
             return None
 
-        tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(self.name, verstr)
+        tag_formatted_app_name = self.get_tag_name(verstr)
         base_verstr = VMNBackend.get_base_vmn_version(verstr, self.hide_zero_hotfix)
-        release_tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
-            self.name, base_verstr
-        )
+        release_tag_formatted_app_name = self.get_tag_name(base_verstr)
 
-        if (
-            self.selected_tag != tag_formatted_app_name
-            and self.selected_tag != tag_formatted_app_name.rstrip(".")
-        ):
+        if self.selected_tag != tag_formatted_app_name:
             # Get version info for tag
             tag_formatted_app_name, ver_infos = self.backend.get_tag_version_info(
                 tag_formatted_app_name
@@ -151,10 +142,7 @@ class VersionControlStamper(IVersionsStamper):
             tmp["_version"],
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
-        release_tag_name = VMNBackend.serialize_vmn_tag_name(
-            self.name,
-            base_verstr,
-        )
+        release_tag_name = self.get_tag_name(base_verstr)
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
 
         ver_info["stamping"]["app"]["_version"] = base_verstr
@@ -186,10 +174,9 @@ class VersionControlStamper(IVersionsStamper):
             hide_zero_hotfix=self.hide_zero_hotfix,
         )
 
-        buildmetadata_tag_name = VMNBackend.serialize_vmn_tag_name(
-            self.name,
-            res_ver,
-        )
+        buildmetadata_tag_name = self.get_tag_name(res_ver)
+        if not _tag_complies(buildmetadata_tag_name, VMN_TAG_REGEX):
+            raise RuntimeError()
 
         ver_info["vmn_info"] = self.current_version_info["vmn_info"]
         ver_info["stamping"]["app"]["_version"] = res_ver
@@ -215,6 +202,7 @@ class VersionControlStamper(IVersionsStamper):
             buildmetadata_tag_name,
             tag_ver_infos,
         ) = self.backend.get_tag_version_info(buildmetadata_tag_name)
+        tag_ver_infos = tag_ver_infos or {}
 
         self.enhance_ver_info(tag_ver_infos)
 
@@ -256,13 +244,11 @@ class VersionControlStamper(IVersionsStamper):
                 from_verstr,
                 hide_zero_hotfix=self.hide_zero_hotfix,
             )
-            release_tag_formatted_app_name = VMNBackend.serialize_vmn_tag_name(
-                self.name, base_version
-            )
             (
                 release_tag_formatted_app_name,
                 ver_infos,
-            ) = self.backend.get_tag_version_info(release_tag_formatted_app_name)
+            ) = self.backend.get_tag_version_info(self.get_tag_name(base_version))
+            ver_infos = ver_infos or {}
 
             self.enhance_ver_info(ver_infos)
 
@@ -421,109 +407,42 @@ class VersionControlStamper(IVersionsStamper):
         if not self.should_publish:
             return 0
 
-        self._migrate_branch_confs()
+        tags = self._publish_tag_names(app_version, root_app_version)
+        if tags is None:
+            return 3
 
-        self.write_version_to_file(version_number=app_version)
-
-        version_files_to_add = self.get_files_to_add_to_index(self.version_files)
-
-        for backend in self.version_backends:
-            try:
-                backend_conf = self.version_backends[backend]
-                if backend in self._STRUCTURED_BACKEND_SPEC:
-                    self._add_files_simple_backend(version_files_to_add, backend_conf)
-                else:
-                    handler = getattr(self, f"_add_files_{backend}")
-                    handler(version_files_to_add, backend_conf)
-            except AttributeError:
-                VMN_LOGGER.warning(f"Unsupported version backend {backend}")
-                continue
-
-        if self.create_snapshots:
-            self.create_snapshot_file(app_msg, version_files_to_add, app_version)
-
+        msgs = [app_msg]
         if self.root_app_name is not None:
-            root_app_msg = {
-                "stamping": {
-                    "root_app": self.current_version_info["stamping"]["root_app"]
-                },
-                "vmn_info": self.current_version_info["vmn_info"],
-            }
-
-            tmp = self.get_files_to_add_to_index([self.root_app_conf_path])
-            if tmp:
-                version_files_to_add.extend(tmp)
-
-            if self.create_snapshots:
-                self.create_snapshot_root_file(
-                    root_app_msg, root_app_version, version_files_to_add
-                )
-
-        self._generate_changelog(app_version, version_files_to_add)
-
-        commit_msg = None
-        if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
-            commit_msg = f"{self.name}: Stamped initial version {app_version}\n\n"
-        else:
-            extra_commit_message = self.params["extra_commit_message"]
-            commit_msg = (
-                f"{self.name}: Stamped version {app_version}\n{extra_commit_message}\n"
+            msgs.append(
+                {
+                    "stamping": {
+                        "root_app": self.current_version_info["stamping"]["root_app"]
+                    },
+                    "vmn_info": self.current_version_info["vmn_info"],
+                }
             )
 
-        self.current_version_info["stamping"]["msg"] = commit_msg
-
         prev_changeset = self.backend.changeset()
+        try:
+            version_files_to_add = self._write_stamp_files(
+                app_version, root_app_version, msgs
+            )
+        except Exception:
+            self._revert(prev_changeset)
+            raise
+
+        self.current_version_info["stamping"]["msg"] = self._stamp_commit_msg(
+            app_version
+        )
 
         try:
             self.publish_commit(version_files_to_add)
         except Exception:
             VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-            VMN_LOGGER.info("Reverting vmn changes... ")
-            if self.dry_run:
-                VMN_LOGGER.info("Would have tried to revert a vmn commit")
-            else:
-                self.backend.revert_vmn_commit(prev_changeset, self.version_files)
+            self._revert(prev_changeset)
 
             # TODO:: turn to error codes (enums). This one means - exit without retries
             return 3
-
-        tag = self.get_tag_name(app_version)
-        match = re.search(VMN_TAG_REGEX, tag)
-        if match is None:
-            VMN_LOGGER.error(
-                f"Tag {tag} doesn't comply to vmn version format"
-                f"Reverting vmn changes ..."
-            )
-            if self.dry_run:
-                VMN_LOGGER.info("Would have reverted vmn commit.")
-            else:
-                self.backend.revert_vmn_commit(prev_changeset, self.version_files)
-
-            return 3
-
-        tags = [tag]
-        msgs = [app_msg]
-
-        if self.root_app_name is not None:
-            msgs.append(root_app_msg)
-            tag = f"{self.root_app_name}_{root_app_version}"
-            match = re.search(VMN_ROOT_TAG_REGEX, tag)
-            if match is None:
-                VMN_LOGGER.error(
-                    f"Tag {tag} doesn't comply to vmn version format"
-                    f"Reverting vmn changes ..."
-                )
-                if self.dry_run:
-                    VMN_LOGGER.info("Would have reverted vmn commit.")
-                else:
-                    self.backend.revert_vmn_commit(prev_changeset, self.version_files)
-
-                return 3
-
-            tags.append(tag)
-
-        all_tags = []
-        all_tags.extend(tags)
 
         try:
             for t, m in zip(tags, msgs):
@@ -537,34 +456,18 @@ class VersionControlStamper(IVersionsStamper):
                     self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
         except Exception:
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
-            VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ... ")
-            if self.dry_run:
-                VMN_LOGGER.info(
-                    f"Would have reverted vmn commit and delete tags:\n{all_tags}"
-                )
-            else:
-                self.backend.revert_vmn_commit(
-                    prev_changeset, self.version_files, all_tags
-                )
+            self._revert(prev_changeset, tags)
 
             return 1
 
         try:
             if self.dry_run:
-                VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {all_tags} ")
+                VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {tags} ")
             else:
-                _push_published_refs(self.backend, all_tags)
+                _push_published_refs(self.backend, tags)
         except Exception:
             VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
-            VMN_LOGGER.info(f"Reverting vmn changes for tags: {tags} ...")
-            if self.dry_run:
-                VMN_LOGGER.info(
-                    f"Would have reverted vmn commit and delete tags:\n{all_tags}"
-                )
-            else:
-                self.backend.revert_vmn_commit(
-                    prev_changeset, self.version_files, all_tags
-                )
+            self._revert(prev_changeset, tags)
 
             return 2
 
@@ -572,6 +475,111 @@ class VersionControlStamper(IVersionsStamper):
         self._create_github_release(tags[0], app_version)
 
         return 0
+
+    def _publish_tag_names(self, app_version, root_app_version):
+        """The tags a stamp creates, or None when one breaks the tag format."""
+        tags = [(self.get_tag_name(app_version), VMN_TAG_REGEX)]
+        if self.root_app_name is not None:
+            root_tag_app_name = VMNBackend.app_name_to_tag_name(self.root_app_name)
+            tags.append((f"{root_tag_app_name}_{root_app_version}", VMN_ROOT_TAG_REGEX))
+
+        if not all(_tag_complies(tag, regex) for tag, regex in tags):
+            return None
+
+        return [tag for tag, _ in tags]
+
+    def _stamp_commit_msg(self, app_version):
+        if self.current_version_info["stamping"]["app"]["release_mode"] == "init":
+            return f"{self.name}: Stamped initial version {app_version}\n\n"
+
+        extra_commit_message = self.params["extra_commit_message"]
+        return f"{self.name}: Stamped version {app_version}\n{extra_commit_message}\n"
+
+    def _write_stamp_files(self, app_version, root_app_version, msgs):
+        """Write everything the stamp commit holds; return the paths to commit.
+
+        Every path it may touch is kept in ``self._stamp_paths`` (those that
+        already existed also in ``self._preexisting_paths``) for _revert."""
+        self._stamp_paths = []
+        self._preexisting_paths = set()
+        for move in self._migrate_branch_confs():
+            self._stamp_paths.extend(move)
+        self._stamp_paths.extend(self.version_files)
+        self._add_version_backend_files(self._stamp_paths)
+        if self._changelog_path() is not None:
+            self._stamp_paths.append(self._changelog_path())
+        self._preexisting_paths = {p for p in self._stamp_paths if os.path.exists(p)}
+        self._stamp_paths.extend(
+            self._collect_stale_branch_confs(self.backend.active_branch)
+        )
+
+        version_files_to_add = []
+        try:
+            self.write_version_to_file(version_number=app_version)
+
+            version_files_to_add.extend(
+                self.get_files_to_add_to_index(self.version_files)
+            )
+            self._add_version_backend_files(version_files_to_add)
+
+            if self.create_snapshots:
+                self.create_snapshot_file(msgs[0], version_files_to_add, app_version)
+
+            if self.root_app_name is not None:
+                version_files_to_add.extend(
+                    self.get_files_to_add_to_index([self.root_app_conf_path])
+                )
+
+                if self.create_snapshots:
+                    self.create_snapshot_root_file(
+                        msgs[1], root_app_version, version_files_to_add
+                    )
+
+            self._generate_changelog(app_version, version_files_to_add)
+        finally:
+            self._stamp_paths.extend(version_files_to_add)
+
+        return version_files_to_add
+
+    def _revert(self, prev_changeset, tags=()):
+        """Undo a failed publish: the vmn commit, ``tags`` and every file
+        _write_stamp_files wrote (files new to the repo are removed)."""
+        VMN_LOGGER.info(f"Reverting vmn changes... {list(tags) or ''}")
+        if self.dry_run:
+            VMN_LOGGER.info(
+                f"Would have reverted vmn commit and deleted tags: {list(tags)}"
+            )
+            return
+
+        paths = list(dict.fromkeys(self.version_files + self._stamp_paths))
+        committed = [p for p in paths if self._in_commit(prev_changeset, p)]
+        self.backend.revert_vmn_commit(prev_changeset, committed, list(tags))
+        for path in paths:
+            if path not in committed:
+                self._drop_new_file(path)
+
+    def _in_commit(self, changeset, path):
+        rel = os.path.relpath(path, self.backend._be.working_tree_dir)
+        try:
+            self.backend._be.git.cat_file("-e", f"{changeset}:{Path(rel).as_posix()}")
+            return True
+        except Exception:
+            return False
+
+    def _drop_new_file(self, path):
+        try:
+            self.backend._be.git.rm("--cached", "-q", "--ignore-unmatch", "--", path)
+        except Exception:
+            VMN_LOGGER.debug(f"Failed to unstage {path}", exc_info=True)
+        if path not in self._preexisting_paths and os.path.isfile(path):
+            os.remove(path)
+
+    def _changelog_path(self):
+        if not self.changelog:
+            return None
+        return os.path.join(
+            self.vmn_root_path, self.changelog.get("path", "CHANGELOG.md")
+        )
 
     def _generate_changelog(self, app_version, version_files_to_add):
         """Generate a changelog entry from conventional commits and prepend to CHANGELOG.md."""
@@ -584,8 +592,7 @@ class VersionControlStamper(IVersionsStamper):
             )
             return
 
-        changelog_path_rel = self.changelog.get("path", "CHANGELOG.md")
-        changelog_path = os.path.join(self.vmn_root_path, changelog_path_rel)
+        changelog_path = self._changelog_path()
 
         # Collect commits grouped by type
         type_labels = {
@@ -743,7 +750,7 @@ class VersionControlStamper(IVersionsStamper):
             if self.github_release.get("draft", False):
                 cmd.append("--draft")
 
-            if self.prerelease:
+            if self.current_version_info["stamping"]["app"]["prerelease"] != "release":
                 cmd.append("--prerelease")
 
             result = subprocess.run(
@@ -841,7 +848,7 @@ class VersionControlStamper(IVersionsStamper):
         moves = migrate_branch_confs(self.backend, app_dirs, self.dry_run)
         if self.dry_run or not moves:
             # Dry-run moves are only planned; nothing on disk to remap to.
-            return
+            return []
 
         remap = dict(moves)
         self.app_conf_path = remap.get(self.app_conf_path, self.app_conf_path)
@@ -850,6 +857,7 @@ class VersionControlStamper(IVersionsStamper):
                 self.root_app_conf_path, self.root_app_conf_path
             )
         self.version_files = [remap.get(p, p) for p in self.version_files]
+        return moves
 
     def _collect_stale_branch_confs(self, cur_branch):
         """Canonical confs belonging to branches other than ``cur_branch``."""
