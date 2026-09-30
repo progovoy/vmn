@@ -34,6 +34,7 @@ from version_stamp.core.constants import (
 )
 from version_stamp.core.logging import (
     VMN_LOGGER,
+    debug_enabled,
     get_call_stack,
     measure_runtime_decorator,
 )
@@ -44,6 +45,18 @@ _CREDENTIALS_RE = re.compile(r"(https?://)([^@]+)@")
 def _sanitize_log_str(s):
     """Mask credentials in URLs (e.g. https://user:token@host → https://***@host)."""
     return _CREDENTIALS_RE.sub(r"\1***@", s)
+
+
+_GIT_OUTPUT_LOG_LIMIT = 2048
+
+
+def _loggable_output(output):
+    """*output* for the log: head only (unless --debug), credentials masked."""
+    s = str(output)
+    if not debug_enabled() and len(s) > _GIT_OUTPUT_LOG_LIMIT:
+        dropped = len(s) - _GIT_OUTPUT_LOG_LIMIT
+        s = f"{s[:_GIT_OUTPUT_LOG_LIMIT]}... {dropped} bytes truncated"
+    return _sanitize_log_str(s)
 
 
 # Global monkey-patch of git.cmd.Git.execute for logging and timing.
@@ -83,8 +96,8 @@ def _custom_git_execute(self, *args, **kwargs):
     if VMN_LOGGER:
         VMN_LOGGER.debug(
             f"{'  ' * (len(call_stack) - 1)}return code: {ret_code}, git cmd took: {time_took:.6f} seconds.\n"
-            f"{'  ' * (len(call_stack) - 1)}stdout: {_sanitize_log_str(str(sout))}\n"
-            f"{'  ' * (len(call_stack) - 1)}stderr: {_sanitize_log_str(str(serr))}"
+            f"{'  ' * (len(call_stack) - 1)}stdout: {_loggable_output(sout)}\n"
+            f"{'  ' * (len(call_stack) - 1)}stderr: {_loggable_output(serr)}"
         )
 
     return ret

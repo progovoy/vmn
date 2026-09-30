@@ -7,8 +7,8 @@ from urllib.parse import quote as urlquote
 
 import git
 
-from version_stamp.core.constants import TAG_CHRONOLOGICAL_SPACING_SECONDS
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.version_math import app_name_to_tag_name, deserialize_tag_name
 
 
 def _strip_prefix(s, prefix):
@@ -131,16 +131,31 @@ class GitOpsMixin:
                 raise
             self._push_with_ci_skip_fallback(refspecs)
 
+    def _newest_tagger_second(self, tag):
+        """Newest taggerdate (unix seconds) among tags of *tag*'s app, or None."""
+        prefix = app_name_to_tag_name(deserialize_tag_name(tag).app_name)
+        newest = self._be.git.for_each_ref(
+            "--sort=-taggerdate",
+            "--count=1",
+            "--format=%(taggerdate:unix)",
+            f"refs/tags/{prefix}_*",
+        ).strip()
+        return int(newest) if newest else None
+
+    def _wait_for_new_tagger_second(self, tag):
+        """Keep same-app tags in distinct seconds: taggerdate has second
+        resolution and tags are listed sorted by it."""
+        now = time.time()
+        if self._newest_tagger_second(tag) == int(now):
+            time.sleep(int(now) + 1 - now)
+
     @measure_runtime_decorator
     def tag(self, tags, messages, ref="HEAD", push=False):
         if push and self.selected_remote is None:
             raise RuntimeError("Will not push tag without a configured remote")
 
         for tag, message in zip(tags, messages):
-            # This is required in order to preserver chronological order when
-            # listing tags since the taggerdate field is in seconds resolution
-            time.sleep(TAG_CHRONOLOGICAL_SPACING_SECONDS)
-
+            self._wait_for_new_tagger_second(tag)
             self._be.create_tag(tag, ref=ref, message=message)
 
             if not push:
