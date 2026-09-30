@@ -15,7 +15,6 @@ from version_stamp.cli.worktree_git import (
     fetch_readonly_branch,
     git_current_branch as _git_current_branch,
     git_head,
-    git_remote_url as _git_remote_url,
     is_dirty,
     remove_readonly_remote_if_unused,
     shallow_clone_dep as _shallow_clone_dep,
@@ -31,6 +30,7 @@ from version_stamp.cli.worktree_state import (
     write_manifest as _write_manifest,
 )
 from version_stamp.core.constants import VMN_READONLY_REMOTE
+from version_stamp.core.git_cmd import remote_url
 from version_stamp.core.logging import VMN_LOGGER
 
 def worktree_create(vmn_ctx):
@@ -256,7 +256,7 @@ def _new_manifest(
             "branch": island_branch,
             "original_branch": current_branch,
             "source_branch": source_branch,
-            "remote": _git_remote_url(main_repo_path),
+            "remote": remote_url(main_repo_path),
         },
         "deps": {},
         "shallow_deps": vmn_ctx.args.shallow_deps,

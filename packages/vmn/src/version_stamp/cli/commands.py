@@ -25,6 +25,8 @@ from version_stamp.stamping.init import (
     init_repo,
 )
 from version_stamp.stamping.repo_status import (
+    READ_ONLY_EXPECTED,
+    READ_ONLY_OPTIONAL,
     _get_repo_status,
     _log_status_error,
     _status_or_fail,
@@ -230,7 +232,7 @@ def handle_stamp(vmn_ctx):
     if status.error:
         # Auto-initialize only for truly new repos/apps — check git history
         # to distinguish "never initialized" from "initialized but tags removed"
-        err, initialized = auto_init_if_needed(vmn_ctx)
+        err, initialized = auto_init_if_needed(vmn_ctx.vcs)
         if err:
             return 1
         if not initialized:
@@ -602,7 +604,7 @@ def handle_gen(vmn_ctx):
 
 @measure_runtime_decorator
 def handle_goto(vmn_ctx):
-    expected_status = {"repo_tracked", "app_tracked"}
+    expected_status = READ_ONLY_EXPECTED
     optional_status = {
         "detached",
         "repos_exist_locally",
@@ -615,7 +617,7 @@ def handle_goto(vmn_ctx):
     from version_stamp.core.version_math import is_dev_version
 
     if vmn_ctx.args.version and is_dev_version(vmn_ctx.args.version):
-        optional_status |= {"pending", "outgoing", "dirty_deps"}
+        optional_status = READ_ONLY_OPTIONAL
 
     vmn_ctx.params["deps_only"] = vmn_ctx.args.deps_only
     vmn_ctx.params["force"] = vmn_ctx.args.force

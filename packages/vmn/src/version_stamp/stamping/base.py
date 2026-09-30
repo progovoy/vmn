@@ -78,6 +78,8 @@ class IVersionsStamper:
         _defaults = AppConf()
         for _f in fields(AppConf):
             setattr(self, self._CONF_KEY_TO_ATTR[_f.name], getattr(_defaults, _f.name))
+        # The conf's template string; self.template holds its parsed form.
+        self.raw_template = self.template
 
         self.configured_deps = {}
         self.conf_file_exists = False
@@ -144,9 +146,8 @@ class IVersionsStamper:
                 data = yaml.safe_load(f)
                 if "conf" in data:
                     if "template" in data["conf"]:
-                        self.template = data["conf"]["template"]
-                        self.template = migrate_old_template(
-                            self.template, VMN_DEFAULT_CONF["template"]
+                        self.raw_template = migrate_old_template(
+                            data["conf"]["template"], VMN_DEFAULT_CONF["template"]
                         )
 
                     migrate_config_keys(data["conf"], self.app_conf_path)
@@ -157,8 +158,7 @@ class IVersionsStamper:
                         if conf_key in data["conf"]:
                             setattr(self, attr_name, data["conf"][conf_key])
 
-        if isinstance(self.template, str):
-            self.set_template(self.template)
+        self.set_template(self.raw_template)
 
         if self.root_app_conf_path is not None and os.path.isfile(
             self.root_app_conf_path
@@ -898,8 +898,7 @@ class IVersionsStamper:
             conf_dict = {
                 key: getattr(self, attr) for key, attr in self._CONF_KEY_TO_ATTR.items()
             }
-            # Without a conf file the (already parsed) template is the default
-            conf_dict["template"] = VMN_DEFAULT_CONF["template"]
+            conf_dict["template"] = self.raw_template
             # Remove the internal "." entry from deps before writing
             conf_dict["deps"] = copy.deepcopy(self.configured_deps)
             conf_dict["deps"].pop(".", None)

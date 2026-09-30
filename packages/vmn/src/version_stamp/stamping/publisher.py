@@ -494,8 +494,9 @@ class VersionControlStamper(IVersionsStamper):
             self._stamp_paths.extend(move)
         self._stamp_paths.extend(self.version_files)
         self._add_version_backend_files(self._stamp_paths)
-        if self._changelog_path() is not None:
-            self._stamp_paths.append(self._changelog_path())
+        changelog_path = self._changelog_path()
+        if changelog_path is not None:
+            self._stamp_paths.append(changelog_path)
         self._preexisting_paths = {p for p in self._stamp_paths if os.path.exists(p)}
         self._stamp_paths.extend(
             self._collect_stale_branch_confs(self.backend.active_branch)

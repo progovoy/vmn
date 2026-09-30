@@ -7,8 +7,30 @@ import re
 import git
 
 from version_stamp.compat.tag_format_039 import try_commit_with_dot_zero_suffix
-from version_stamp.core.constants import INIT_COMMIT_MESSAGE, VMN_USER_NAME
+from version_stamp.core.constants import (
+    INIT_COMMIT_MESSAGE,
+    VMN_READONLY_REMOTE,
+    VMN_USER_NAME,
+)
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+
+
+def select_remote(repo):
+    """The first remote of git.Repo *repo* that is not the island read-only
+    mirror, or None."""
+    return next((r for r in repo.remotes if r.name != VMN_READONLY_REMOTE), None)
+
+
+def remote_location(remote, root):
+    """*remote*'s URL (a local path relative to *root*), or None."""
+    if remote is None:
+        return None
+
+    url = tuple(remote.urls)[0]
+    if os.path.isdir(url):
+        url = os.path.relpath(url, root)
+
+    return url
 
 
 class GitHistoryMixin:
@@ -87,15 +109,7 @@ class GitHistoryMixin:
 
     @measure_runtime_decorator
     def remote(self):
-        if self.selected_remote is None:
-            return None
-
-        remote = tuple(self.selected_remote.urls)[0]
-
-        if os.path.isdir(remote):
-            remote = os.path.relpath(remote, self.root())
-
-        return remote
+        return remote_location(self.selected_remote, self.root())
 
     @measure_runtime_decorator
     def changeset(self, tag=None, short=False):

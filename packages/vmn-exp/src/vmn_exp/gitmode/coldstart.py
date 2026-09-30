@@ -9,7 +9,6 @@ baseline commit and tag stay local until the user pushes them
 (``git push --follow-tags``) or the next ``vmn stamp`` does.
 """
 import contextlib
-from types import SimpleNamespace
 
 from version_stamp.api import VMN_BE_TYPE_GIT, get_repo_lock, resolve_root_path
 
@@ -76,9 +75,7 @@ def cold_start(vcs, status):
         return
 
     with local_only(vcs.backend):
-        # auto-init only ever reads vmn_ctx.vcs, so there is no argparse
-        # namespace to fabricate.
-        err, _ = auto_init_if_needed(SimpleNamespace(vcs=vcs), extra_optional=DIRTY_OK)
+        err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
     if err:
         raise RuntimeError(_failure(vcs.name))
 

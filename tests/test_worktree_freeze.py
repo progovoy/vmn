@@ -164,3 +164,13 @@ def test_unpublished_warning_names_the_primary_remote(layout, caplog):
     assert worktree_freeze(layout.ctx) == 0
 
     assert "git push -u upstream feature/b" in caplog.text
+
+
+def test_no_push_advice_when_dep_has_no_remote(layout, caplog):
+    _git(layout.dep, "remote", "remove", "origin")
+    _git(layout.dep, "checkout", "-q", "-b", "feature/b")
+
+    assert worktree_freeze(layout.ctx) == 0
+
+    assert "git push" not in caplog.text
+    assert _read_conf(layout.conf)["deps"]["../"]["dep"]["branch"] == "feature/b"

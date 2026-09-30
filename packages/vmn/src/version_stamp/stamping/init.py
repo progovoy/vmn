@@ -120,14 +120,13 @@ def _init_app(versions_be_ifc, starting_version, extra_optional=None):
     return 0
 
 
-def auto_init_if_needed(vmn_ctx, extra_optional=None):
+def auto_init_if_needed(vcs, extra_optional=None):
     """Initialize the repo and/or the app when vmn has never tracked them.
 
     Returns ``(err, initialized)``: *err* is 1 when an init failed; the vcs is
     refreshed when *initialized*. Only a truly new repo/app is initialized —
     one whose tags were removed still has its committed files.
     """
-    vcs = vmn_ctx.vcs
     repo_missing, app_missing = init_needed(vcs)
 
     if repo_missing:

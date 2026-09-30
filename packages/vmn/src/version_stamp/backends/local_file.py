@@ -13,13 +13,15 @@ from version_stamp.core.constants import (
     VMN_BE_TYPE_LOCAL_FILE,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+from version_stamp.core.utils import yaml_safe_load
 
 
 def _is_stamp_record(path):
-    """A stamp's version file, not a `vmn snapshot` dev record sharing the tree."""
+    """A stamp's version file, not a `vmn snapshot` dev record sharing the tree
+    (a dict carrying ``verstr``, as core.utils.parse_record_metadata defines)."""
     try:
         with open(path) as f:
-            data = yaml.safe_load(f)
+            data = yaml_safe_load(f)
     except (OSError, yaml.YAMLError):
         return False
     return isinstance(data, dict) and "stamping" in data and "verstr" not in data
