@@ -6,7 +6,7 @@ import pytest
 from helpers import _init_app, _run_vmn_init, _stamp_app
 from version_stamp.stamping import repo_status
 from version_stamp.cli.entry import vmn_run
-from version_stamp.core.logging import reset_logger
+from version_stamp.core.logging import init_stamp_logger, reset_logger
 from version_stamp.stamping.publisher import VersionControlStamper
 
 
@@ -58,6 +58,7 @@ def _fake_vcs(tmp_path):
         backend=SimpleNamespace(
             check_for_pending_changes=lambda: 0,
             check_for_outgoing_changes=lambda: 0,
+            outgoing_change_state=lambda: (None, None),
         ),
         tracked=True,
         current_version_info={"stamping": {"app": {"name": "app"}}},
@@ -74,6 +75,7 @@ def _fake_vcs(tmp_path):
 def test_branch_pinned_dep_on_no_branch_names_the_repo(tmp_path, monkeypatch):
     """A dep whose active branch can't be resolved is reported by its own name,
     whatever order the deps are checked in."""
+    init_stamp_logger()
     backends = {"repo1": _FakeDepBackend("main"), "repo2": _FakeDepBackend(None)}
     monkeypatch.setattr(
         repo_status,

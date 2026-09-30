@@ -98,3 +98,20 @@ def test_pull_outside_an_island_needs_a_name(app_layout, capfd):
     assert _pull() == 1
 
     assert "Not inside an island" in capfd.readouterr().err
+
+
+def test_pull_with_a_corrupt_manifest_fails_cleanly(tmp_path, capfd):
+    from types import SimpleNamespace
+
+    from version_stamp.cli.worktree_pull import worktree_pull
+    from version_stamp.core.logging import init_stamp_logger
+
+    init_stamp_logger()
+    (tmp_path / "island.json").write_text("{not json")
+    ctx = SimpleNamespace(
+        args=SimpleNamespace(name=None),
+        vcs=SimpleNamespace(vmn_root_path=str(tmp_path)),
+    )
+
+    assert worktree_pull(ctx) == 1
+    assert "Cannot read island manifest" in capfd.readouterr().err

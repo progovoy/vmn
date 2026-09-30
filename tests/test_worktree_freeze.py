@@ -142,3 +142,25 @@ def test_warns_when_dep_branch_was_never_pushed(layout, caplog):
 
     assert "git push -u origin feature/b" in caplog.text
     assert _read_conf(layout.conf)["deps"]["../"]["dep"]["branch"] == "feature/b"
+
+
+def _rename_dep_remote_to_upstream(layout):
+    _git(layout.dep, "remote", "rename", "origin", "upstream")
+    _git(layout.dep, "checkout", "-q", "-b", "feature/b")
+
+
+def test_published_check_uses_the_primary_remote(layout, caplog):
+    _rename_dep_remote_to_upstream(layout)
+    _git(layout.dep, "push", "-q", "-u", "upstream", "feature/b")
+
+    assert worktree_freeze(layout.ctx) == 0
+
+    assert "not on" not in caplog.text
+
+
+def test_unpublished_warning_names_the_primary_remote(layout, caplog):
+    _rename_dep_remote_to_upstream(layout)
+
+    assert worktree_freeze(layout.ctx) == 0
+
+    assert "git push -u upstream feature/b" in caplog.text

@@ -526,11 +526,6 @@ class IVersionsStamper:
             del self.backend
             self.backend = None
 
-    def gen_advanced_version(self, verstr):
-        verstr, prerelease_count = self.advance_version(verstr, self.release_mode)
-
-        return verstr, prerelease_count
-
     def increase_octet(
         self,
         tag_name_prefix: str,
