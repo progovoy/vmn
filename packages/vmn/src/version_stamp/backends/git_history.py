@@ -3,6 +3,7 @@
 import configparser
 import os
 import re
+from pathlib import Path
 
 import git
 
@@ -149,9 +150,36 @@ class GitHistoryMixin:
                 )
 
     @measure_runtime_decorator
-    def revert_vmn_commit(self, prev_changeset, version_files, tags=[]):
-        self.revert_local_changes(version_files)
+    def revert_vmn_commit(self, prev_changeset, paths, tags=(), preexisting=()):
+        """Undo a failed publish: restore ``paths`` committed in
+        ``prev_changeset``, drop the vmn commit and ``tags``, and unstage the
+        other paths, removing those not in ``preexisting``."""
+        committed = self._paths_in_commit(prev_changeset, paths)
+        self.revert_local_changes(committed)
+        self._drop_vmn_commit(prev_changeset, tags)
+        for path in paths:
+            if path not in committed:
+                self._drop_new_file(path, keep=path in preexisting)
 
+    def _paths_in_commit(self, changeset, paths):
+        if not paths:
+            return []
+        root = self._be.working_tree_dir
+        by_rel = {Path(os.path.relpath(p, root)).as_posix(): p for p in paths}
+        listed = self._be.git.ls_tree(
+            "--full-tree", "--name-only", changeset, "--", *by_rel
+        ).splitlines()
+        return [by_rel[rel] for rel in listed if rel in by_rel]
+
+    def _drop_new_file(self, path, keep):
+        try:
+            self._be.git.rm("--cached", "-q", "--ignore-unmatch", "--", path)
+        except Exception:
+            VMN_LOGGER.debug(f"Failed to unstage {path}", exc_info=True)
+        if not keep and os.path.isfile(path):
+            os.remove(path)
+
+    def _drop_vmn_commit(self, prev_changeset, tags):
         # TODO: also validate that the commit is
         #  currently worked on app name
         if self.changeset() == prev_changeset:
