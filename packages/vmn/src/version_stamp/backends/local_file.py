@@ -7,13 +7,26 @@ from version_stamp.backends.base import VMNBackend
 from version_stamp.compat.local_file_paths import (
     list_all_with_verinfo_fallback,
     resolve_specific_with_verinfo_fallback,
-    resolve_with_verinfo_fallback,
 )
 from version_stamp.core.constants import (
     RELATIVE_TO_GLOBAL_TYPE,
     VMN_BE_TYPE_LOCAL_FILE,
 )
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
+
+
+def _is_stamp_record(path):
+    """A stamp's version file, not a `vmn snapshot` dev record sharing the tree."""
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return False
+    return isinstance(data, dict) and "stamping" in data and "verstr" not in data
+
+
+def _stamp_records(files):
+    return [f for f in files if _is_stamp_record(f)]
 
 
 class LocalFileBackend(VMNBackend):
@@ -46,16 +59,21 @@ class LocalFileBackend(VMNBackend):
     def get_last_user_changeset(self, version_files_to_track_diff, name):
         return "none"
 
+    def _version_dirs(self, app_name, root):
+        prefix = "root_" if root else ""
+        app_dir = os.path.join(self.repo_path, ".vmn", app_name)
+        return (
+            os.path.join(app_dir, f"{prefix}snapshots"),
+            os.path.join(app_dir, f"{prefix}verinfo"),
+        )
+
     def _resolve_latest_file(self, app_name, root=False):
         """Find the latest version file, checking snapshots/ first, then verinfo/."""
-        if root:
-            snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "root_snapshots")
-            verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
-        else:
-            snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "snapshots")
-            verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
+        snap_dir, verinfo_dir = self._version_dirs(app_name, root)
+        files = self._list_all_version_files(app_name, root=root)
+        snap_files = [f for f in files if f.startswith(snap_dir + os.sep)]
 
-        return resolve_with_verinfo_fallback(snap_dir, verinfo_dir)
+        return max(snap_files or files, key=os.path.getmtime, default=None)
 
     def _resolve_version_file(self, app_name, verstr, root=False, root_version=None):
         """Find a specific version file, checking snapshots/ first, then verinfo/."""
@@ -95,15 +113,10 @@ class LocalFileBackend(VMNBackend):
         return resolve_specific_with_verinfo_fallback(snap_path, verinfo_path)
 
     def _list_all_version_files(self, app_name, root=False):
-        """List all version files from both snapshots/ and verinfo/."""
-        if root:
-            snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "root_snapshots")
-            verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "root_verinfo")
-        else:
-            snap_dir = os.path.join(self.repo_path, ".vmn", app_name, "snapshots")
-            verinfo_dir = os.path.join(self.repo_path, ".vmn", app_name, "verinfo")
+        """List all stamp version files from both snapshots/ and verinfo/."""
+        snap_dir, verinfo_dir = self._version_dirs(app_name, root)
 
-        return list_all_with_verinfo_fallback(snap_dir, verinfo_dir)
+        return _stamp_records(list_all_with_verinfo_fallback(snap_dir, verinfo_dir))
 
     def get_first_reachable_version_info(
         self, app_name, root=False, type=RELATIVE_TO_GLOBAL_TYPE

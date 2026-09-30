@@ -159,7 +159,7 @@ class GitHistoryMixin:
                 continue
 
         try:
-            self._be.git.fetch("--tags")
+            self._fetch("--tags")
         except Exception:
             VMN_LOGGER.info("Failed to fetch tags")
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
@@ -226,7 +226,7 @@ class GitHistoryMixin:
 
         shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
         if shallow:
-            self._be.git.execute(["git", "fetch", "--unshallow"])
+            self._fetch("--unshallow")
 
         return self._be.iter_commits(f"{from_hex}..{to_hex}")
 
