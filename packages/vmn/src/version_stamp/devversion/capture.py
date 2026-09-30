@@ -80,6 +80,7 @@ def _generate_dep_patches(vcs, lightweight=False):
                 continue
             dp = _generate_patches(dep_be, lightweight=lightweight)
             if dp:
+                dp["base_commit"] = _base_commit(dep_be, dp)
                 dep_patches[dep_path] = dp
         except Exception:
             VMN_LOGGER.debug(

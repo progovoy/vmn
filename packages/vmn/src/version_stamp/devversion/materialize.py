@@ -7,7 +7,7 @@ import tempfile
 import yaml
 
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.apply import _apply_patches_to_workdir
+from version_stamp.devversion.apply import _apply_patches_to_workdir, dep_base_commit
 from version_stamp.devversion.clone import (  # noqa: F401 (re-exported)
     _LOCAL_GIT_TIMEOUT_SEC,
     _NETWORK_GIT_TIMEOUT_SEC,
@@ -110,7 +110,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
         if dep_path == ".":
             continue
 
-        dep_hash = dep_info.get("hash")
+        dep_hash = dep_base_commit(metadata, dep_path, dep_info)
         dep_remote = dep_info.get("remote")
         if not dep_hash or not dep_remote:
             VMN_LOGGER.warning(
