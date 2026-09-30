@@ -37,7 +37,7 @@ stronger on everything downstream of a finished run.
 | System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
 | Run status | **Derived** — `created`/`running`/`stuck`/`succeeded`/`failed` | Stored; a dead run can stay `RUNNING` forever |
-| Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch >= "2.0"` | `search_runs` filter strings |
+| Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch = "2.0.0"` | `search_runs` filter strings |
 | Environment capture | **Auto** — Python version, platform, packages captured at run create (`env.yml` + summary) | With logged models (requirements/conda files) |
 | Dataset / input tracking | `run.log_input(uri, digest, kind)` / `--input uri` on CLI | `mlflow.log_input(mlflow.data.from_*(...))` |
 | Exact source reproduction | **Snapshot of the working tree, dirty included** | Git commit + dirty *flag* |
