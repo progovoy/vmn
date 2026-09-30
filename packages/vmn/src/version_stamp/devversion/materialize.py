@@ -6,21 +6,18 @@ import tempfile
 
 import yaml
 
+from version_stamp.core.git_cmd import clone_at_commit as _shallow_clone_at  # noqa: F401 (tests)
 from version_stamp.core.git_cmd import git_stdout, run_git
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.devversion.apply import _apply_patches_to_workdir, dep_base_commit
-from version_stamp.devversion.clone import (  # noqa: F401 (re-exported)
-    _LOCAL_GIT_TIMEOUT_SEC,
-    _NETWORK_GIT_TIMEOUT_SEC,
-    _clone_at,
-    _clone_local_at,
-    _commit_exists,
-    _git,
-    _git_ok,
-    _shallow_clone_at,
+from version_stamp.devversion.apply import (
+    _apply_patches_to_workdir,
+    _dep_patches_of,
+    dep_base_commit,
 )
+from version_stamp.devversion.clone import _LOCAL_GIT_TIMEOUT_SEC  # noqa: F401 (tests)
+from version_stamp.devversion.clone import _clone_at
 from version_stamp.devversion.untracked import copy_untracked_files
-from version_stamp.snapshot.identity import safe_dep_name, safe_verstr
+from version_stamp.snapshot.identity import safe_verstr
 
 
 def _resolve_remote(remote, vcs):
@@ -101,7 +98,6 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
             VMN_LOGGER.debug("Failed to copy untracked files", exc_info=True)
 
     changesets = metadata.get("changesets", {})
-    dep_patches = patches.get("deps", {})
     for dep_path, dep_info in changesets.items():
         if dep_path == ".":
             continue
@@ -123,7 +119,7 @@ def _materialize_workdir(vcs, metadata, patches, output_path):
             VMN_LOGGER.warning(f"Failed to export dependency {dep_path}")
             continue
 
-        dp = dep_patches.get(safe_dep_name(dep_path)) or dep_patches.get(dep_path)
+        dp = _dep_patches_of(patches, dep_path)
         if dp and _patches_failed(dep_dest, dp, f"dependency {dep_path}"):
             return 1
 

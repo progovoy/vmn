@@ -10,7 +10,7 @@ import tempfile
 
 from version_stamp.core.git_cmd import run_git
 from version_stamp.core.logging import VMN_LOGGER
-from version_stamp.core.utils import sha256_file
+from version_stamp.core.utils import atomic_write, sha256_file
 
 
 def _ensure_trailing_newline(s):
@@ -37,33 +37,22 @@ def _store_untracked_cache(repo_path, cache):
     vmn_dir = os.path.join(repo_path, ".vmn")
     if not os.path.isdir(vmn_dir):
         return
-    path = os.path.join(vmn_dir, _UNTRACKED_CACHE_FILE)
-    data = json.dumps(cache)
     try:
-        fd, tmp = tempfile.mkstemp(dir=vmn_dir, prefix=".cache.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                f.write(data)
-            os.replace(tmp, path)
-        except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-            raise
+        atomic_write(os.path.join(vmn_dir, _UNTRACKED_CACHE_FILE), json.dumps(cache))
     except OSError:
         VMN_LOGGER.debug("Failed to persist untracked hash cache", exc_info=True)
 
 
-def _hash_untracked_content(repo_path):
+def _hash_untracked_content(repo_path, stats=None):
     """Hash untracked non-ignored files by their content, deterministically.
 
     Returns a bytes digest over sorted ``(rel_path, content-sha256)`` pairs, or
     None if there are no untracked files. Per-file content hashes are cached by
     ``(size, mtime_ns)`` at ``.vmn/untracked_hash.cache`` so repeat calls (e.g.
-    ``show --dev``) stay fast without re-reading unchanged files.
+    ``show --dev``) stay fast without re-reading unchanged files. *stats* is
+    an already listed :func:`_untracked_stats` of *repo_path*.
     """
-    candidates = _untracked_stats(repo_path)
+    candidates = _untracked_stats(repo_path) if stats is None else stats
     if not candidates:
         return None
 
@@ -129,9 +118,12 @@ def _untracked_stats(repo_path):
     return candidates
 
 
-def _untracked_candidates(repo_path):
-    """``[(rel_path, abs_path, size)]`` of untracked, non-ignored regular files."""
-    return [(rel, path, st.st_size) for rel, path, st in _untracked_stats(repo_path)]
+def _untracked_candidates(repo_path, stats=None):
+    """``[(rel_path, abs_path, size)]`` of untracked, non-ignored regular files
+    (from *stats*, an already listed :func:`_untracked_stats`, when given)."""
+    if stats is None:
+        stats = _untracked_stats(repo_path)
+    return [(rel, path, st.st_size) for rel, path, st in stats]
 
 
 def _within_caps(candidates):
@@ -162,13 +154,13 @@ def untracked_over_caps(repo_path):
     return _within_caps(_untracked_candidates(repo_path))[1]
 
 
-def _collect_untracked_tarball(repo_path):
+def _collect_untracked_tarball(repo_path, stats=None):
     """Collect untracked non-ignored files into a tar.gz, within the size caps.
 
     Returns ``(tarball_bytes_or_None, skipped_rel_paths)``. The archive is built
     in a temporary file so only the finished tarball is ever held in memory.
     """
-    kept, skipped = _within_caps(_untracked_candidates(repo_path))
+    kept, skipped = _within_caps(_untracked_candidates(repo_path, stats))
     if not kept:
         return None, skipped
 

@@ -7,7 +7,7 @@ which re-export these names.
 import hashlib
 import os
 
-from version_stamp.core.utils import valid_path_component, yaml_safe_load
+from version_stamp.core.utils import parse_record_metadata, valid_path_component
 
 # Diff-hash prefix lengths tried, shortest first, when a verstr is taken by a
 # snapshot with different content (a 7-hex prefix is only 28 bits).
@@ -31,26 +31,15 @@ def safe_dep_name(dep_path):
 
 def _compute_diff_hash(patches):
     """Full sha256 hex over a snapshot's content, or None for a clean tree."""
+    deps = patches.get("deps", {})
     h = hashlib.sha256()
     has_content = False
-    for key in ("working_tree", "local_commits"):
-        if patches.get(key):
-            h.update(patches[key].encode())
-            has_content = True
-    if patches.get("untracked_hash"):
-        h.update(patches["untracked_hash"])
-        has_content = True
-
-    for dep_path in sorted(patches.get("deps", {})):
-        dp = patches["deps"][dep_path]
-        for key in ("working_tree", "local_commits"):
-            if dp.get(key):
-                h.update(dp[key].encode())
+    for part in (patches, *(deps[path] for path in sorted(deps))):
+        for key in ("working_tree", "local_commits", "untracked_hash"):
+            if part.get(key):
+                value = part[key]
+                h.update(value if key == "untracked_hash" else value.encode())
                 has_content = True
-        if dp.get("untracked_hash"):
-            h.update(dp["untracked_hash"])
-            has_content = True
-
     return h.hexdigest() if has_content else None
 
 
@@ -94,11 +83,7 @@ def _stored_metadata(storage, app_name, verstr):
     raw = storage.load_file(app_name, verstr, "metadata.yml")
     if raw is None:
         return False, {}
-    try:
-        meta = yaml_safe_load(raw)
-    except Exception:
-        meta = None
-    return True, meta if isinstance(meta, dict) else {}
+    return True, parse_record_metadata(raw) or {}
 
 
 def _unique_snapshot_verstr(
@@ -113,9 +98,8 @@ def _unique_snapshot_verstr(
     repo commits (or with deps at other *dep_bases*) is a collision too;
     without them only the diff counts.
     """
-    verstr = _format_dev_verstr(base_version, commit_hash, diff_hash)
     if not diff_hash:
-        return verstr
+        return _format_dev_verstr(base_version, commit_hash, diff_hash)
     for hash_len in _DIFF_HASH_LENGTHS:
         verstr = _format_dev_verstr(base_version, commit_hash, diff_hash, hash_len)
         exists, stored = _stored_metadata(storage, app_name, verstr)

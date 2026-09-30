@@ -29,13 +29,8 @@ from version_stamp.core.utils import (
     yaml_safe_load,
 )
 from version_stamp.snapshot.code_store import resolve_code
-from version_stamp.snapshot.record import (
-    METADATA_FILE,
-    PATCH_FILES,
-    safe_dep_name,
-    safe_verstr,
-    unsafe_verstr,
-)
+from version_stamp.snapshot.identity import safe_dep_name, safe_verstr, unsafe_verstr
+from version_stamp.snapshot.record import METADATA_FILE, PATCH_FILES
 
 
 def _write_patches(directory, patches):

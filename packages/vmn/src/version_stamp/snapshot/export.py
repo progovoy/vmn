@@ -18,7 +18,7 @@ import tempfile
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.materialize import _materialize_workdir, _strip_git_dirs
 from version_stamp.snapshot.load import load_snapshot
-from version_stamp.snapshot.record import safe_verstr
+from version_stamp.snapshot.identity import safe_verstr
 
 _TARBALL_SUFFIXES = (".tar.gz", ".tgz")
 

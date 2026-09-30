@@ -1,4 +1,5 @@
 """Apply snapshot patches to a working tree."""
+import functools
 import os
 
 from version_stamp.core.constants import VMN_USER_NAME
@@ -17,7 +18,7 @@ def _apply_patches_to_workdir(dest, patches, three_way=False):
     *three_way* lets the working-tree patch fall back to a 3-way merge."""
     steps = (
         ("local_commits", _git_am),
-        ("working_tree", _git_apply_3way if three_way else _git_apply),
+        ("working_tree", functools.partial(_git_apply, three_way=three_way)),
         ("untracked_files", _extract_untracked),
     )
     return [
@@ -42,12 +43,9 @@ def _fallback_identity(dest):
     return ["-c", f"user.name={VMN_USER_NAME}", "-c", f"user.email={VMN_USER_NAME}"]
 
 
-def _git_apply(dest, patch):
-    return _run_with_patch(["apply"], patch, dest, "working tree patch")
-
-
-def _git_apply_3way(dest, patch):
-    return _run_with_patch(["apply", "--3way"], patch, dest, "working tree patch")
+def _git_apply(dest, patch, three_way=False):
+    args = ["apply", "--3way"] if three_way else ["apply"]
+    return _run_with_patch(args, patch, dest, "working tree patch")
 
 
 def _run_with_patch(args, patch, cwd, what):
@@ -82,34 +80,47 @@ def dep_base_commit(metadata, dep_path, dep_info):
     return captured or (dep_info or {}).get("hash")
 
 
-def _checkout_dep(vcs, dep_path, dep_hash):
+def _checkout_state(repo_path):
+    """``(dirty, detached_head_sha)`` of a checkout — ``(True, None)`` when
+    git cannot tell, so nothing is skipped."""
+    result = run_git(repo_path, ["status", "--porcelain=v2", "--branch"], text=True)
+    if result is None or result.returncode != 0:
+        return True, None
+    lines = result.stdout.splitlines()
+    headers = dict(line[2:].split(" ", 1) for line in lines if line.startswith("# branch."))
+    dirty = any(not line.startswith("#") for line in lines)
+    detached = headers.get("branch.head") == "(detached)"
+    return dirty, headers.get("branch.oid") if detached else None
+
+
+def _checkout_dep(full_path, dep_path, dep_hash, reset):
     """Put the dep checkout at *dep_hash* (detached); whether it worked.
 
-    A configured dep's work was saved by the restore's safety snapshot, so
-    it is discarded first."""
-    full_path = os.path.join(vcs.vmn_root_path, dep_path)
+    With *reset* (the dep's work was saved by the restore's safety snapshot)
+    its changes are discarded first. A clean dep is not reset and one already
+    detached at *dep_hash* is not checked out again."""
+    dirty, detached_at = _checkout_state(full_path)
     try:
-        if dep_path in (getattr(vcs, "configured_deps", None) or {}):
+        if reset and dirty:
             _reset_repo(full_path)
     except RuntimeError as exc:
         VMN_LOGGER.error(f"Dep {dep_path}: {exc}")
         return False
-    result = run_git(full_path, ["checkout", "--quiet", "--detach", dep_hash], text=True)
-    if result is None or result.returncode != 0:
-        stderr = result.stderr if result else "git could not be run"
-        VMN_LOGGER.error(f"Failed to checkout dep {dep_path} at {dep_hash[:7]}: {stderr}")
-        return False
-    return True
+    return detached_at == dep_hash or git_ok(
+        full_path,
+        ["checkout", "--quiet", "--detach", dep_hash],
+        what=f"Checkout of dep {dep_path} at {dep_hash[:7]}",
+    )
 
 
-def _restore_dep(vcs, dep_path, dep_hash, patches):
+def _restore_dep(vcs, dep_path, dep_hash, patches, reset):
     """Whether *dep_path* was restored (a missing checkout is skipped)."""
-    if not os.path.isdir(os.path.join(vcs.vmn_root_path, dep_path)):
+    full_path = os.path.join(vcs.vmn_root_path, dep_path)
+    if not os.path.isdir(full_path):
         VMN_LOGGER.warning(f"Dep directory {dep_path} not found, skipping")
         return True
-    if dep_hash and not _checkout_dep(vcs, dep_path, dep_hash):
+    if dep_hash and not _checkout_dep(full_path, dep_path, dep_hash, reset):
         return False
-    full_path = os.path.join(vcs.vmn_root_path, dep_path)
     failed = _apply_patches_to_workdir(
         full_path, _dep_patches_of(patches, dep_path), three_way=True
     )
@@ -118,16 +129,21 @@ def _restore_dep(vcs, dep_path, dep_hash, patches):
     return not failed
 
 
-def _apply_dep_patches(vcs, metadata, patches):
+def _apply_dep_patches(vcs, metadata, patches, reset_deps):
     """Check every recorded dep out at its base commit and apply its patches;
-    the paths of the deps that could not be restored."""
+    the paths of the deps that could not be restored. The deps in
+    *reset_deps* are reset first (their work is saved)."""
     changesets = metadata.get("changesets") or {}
     return [
         dep_path
         for dep_path, dep_info in changesets.items()
         if dep_path != "."
         and not _restore_dep(
-            vcs, dep_path, dep_base_commit(metadata, dep_path, dep_info), patches
+            vcs,
+            dep_path,
+            dep_base_commit(metadata, dep_path, dep_info),
+            patches,
+            dep_path in reset_deps,
         )
     ]
 
@@ -146,11 +162,11 @@ def _restore_app(vcs, metadata, patches):
     return not failed
 
 
-def _apply_snapshot_patches(vcs, params, metadata, patches):
+def _apply_snapshot_patches(vcs, params, metadata, patches, reset_deps):
     """Apply snapshot patches to restore a dev version state."""
     if not params.get("deps_only") and not _restore_app(vcs, metadata, patches):
         return 1
-    if _apply_dep_patches(vcs, metadata, patches):
+    if _apply_dep_patches(vcs, metadata, patches, reset_deps):
         return 1
 
     VMN_LOGGER.info(f"Restored dev version {metadata['verstr']} of {vcs.name}")

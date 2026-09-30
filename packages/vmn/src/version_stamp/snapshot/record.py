@@ -12,7 +12,7 @@ Public:
   - ``same_state(stored_meta, diff_hash, changesets, dep_bases=None) -> bool``.
 """
 from version_stamp.core.utils import now_iso
-from version_stamp.snapshot.identity import (  # noqa: F401  (re-exported)
+from version_stamp.snapshot.identity import (  # noqa: F401  (public names re-exported)
     _compute_diff_hash,
     _format_dev_verstr,
     safe_dep_name,
