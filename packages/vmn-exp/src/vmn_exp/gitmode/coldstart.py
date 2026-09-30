@@ -9,24 +9,12 @@ baseline commit and tag stay local until the user pushes them
 (``git push --follow-tags``) or the next ``vmn stamp`` does.
 """
 import contextlib
-import os
 from types import SimpleNamespace
 
-from version_stamp.api import INIT_FILENAME, VMN_BE_TYPE_GIT, get_repo_lock, resolve_root_path
+from version_stamp.api import VMN_BE_TYPE_GIT, get_repo_lock, resolve_root_path
 
-# The repo state `vmn-exp create` demands, and what it tolerates — the SDK
-# cold-starts on exactly the same terms.
-_EXPECTED_STATUS = {"repo_tracked", "app_tracked"}
-_OPTIONAL_STATUS = {
-    "repos_exist_locally",
-    "detached",
-    "pending",
-    "outgoing",
-    "version_not_matched",
-    "dirty_deps",
-    "deps_synced_with_conf",
-}
-_DIRTY_OK = {"pending", "outgoing"}
+# The states `vmn-exp create` (and so the SDK's cold start) lets an init run in.
+DIRTY_OK = frozenset({"pending", "outgoing"})
 _PUSHING_METHODS = ("push",)
 
 
@@ -67,45 +55,32 @@ def tracked_vcs(app_name, root_path):
 
 def repo_status(vcs):
     """The repo status `vmn-exp create` checks, untracked repo/app included."""
-    from version_stamp.api import _get_repo_status
+    from version_stamp.api import READ_ONLY_EXPECTED, READ_ONLY_OPTIONAL, _get_repo_status
 
     # An untracked repo or app is the cold-start case this module exists to
     # handle, so it must not be announced as an error first — that made a
     # successful first run look like a crash.
     return _get_repo_status(
         vcs,
-        _EXPECTED_STATUS,
-        _OPTIONAL_STATUS,
+        READ_ONLY_EXPECTED,
+        READ_ONLY_OPTIONAL,
         suppress_errors={"repo_tracked", "app_tracked"},
     )
 
 
 def cold_start(vcs, status):
     """Init vmn tracking and a 0.0.0 baseline for *vcs*, as ``vmn-exp`` does."""
-    from version_stamp.api import _init_app, handle_init
+    from version_stamp.api import auto_init_if_needed
 
     if not status.error:
         return
 
-    be = vcs.backend
-    vmn_init_file = os.path.join(vcs.vmn_root_path, ".vmn", INIT_FILENAME)
-
-    def missing(state, path):
-        return state not in status.state and not be.is_path_tracked(path)
-
-    init_repo = missing("repo_tracked", vmn_init_file)
-    init_app = missing("app_tracked", vcs.app_dir_path)
-    with local_only(be):
-        # handle_init only ever reads vmn_ctx.vcs, so there is no argparse
+    with local_only(vcs.backend):
+        # auto-init only ever reads vmn_ctx.vcs, so there is no argparse
         # namespace to fabricate.
-        if init_repo and handle_init(SimpleNamespace(vcs=vcs), extra_optional=_DIRTY_OK):
-            raise RuntimeError(_failure(vcs.name, "initialize the repo"))
-        if init_app and _init_app(vcs, "0.0.0", extra_optional=_DIRTY_OK):
-            raise RuntimeError(_failure(vcs.name, "stamp a baseline"))
-
-    if init_repo or init_app:
-        vcs.update_attrs_from_app_conf_file()
-        vcs.initialize_backend_attrs()
+        err, _ = auto_init_if_needed(SimpleNamespace(vcs=vcs), extra_optional=DIRTY_OK)
+    if err:
+        raise RuntimeError(_failure(vcs.name))
 
 
 @contextlib.contextmanager
@@ -131,8 +106,8 @@ def _skip_push(*args, **kwargs):
     return None
 
 
-def _failure(app_name, what):
+def _failure(app_name):
     return (
-        f"Could not {what} for '{app_name}' automatically. "
+        f"Could not initialize vmn tracking for '{app_name}' automatically. "
         f"Run 'vmn stamp -r patch {app_name}' once, then start the run again."
     )

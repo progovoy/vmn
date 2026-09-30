@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from helpers import _init_app, _run_vmn_init, _stamp_app
-from version_stamp.cli import commands
+from version_stamp.stamping import repo_status
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
 from version_stamp.stamping.publisher import VersionControlStamper
@@ -76,12 +76,12 @@ def test_branch_pinned_dep_on_no_branch_names_the_repo(tmp_path, monkeypatch):
     whatever order the deps are checked in."""
     backends = {"repo1": _FakeDepBackend("main"), "repo2": _FakeDepBackend(None)}
     monkeypatch.setattr(
-        commands,
+        repo_status,
         "get_client",
         lambda path, be_type: (backends[os.path.basename(path)], None),
     )
 
-    status = commands._get_repo_status(
+    status = repo_status._get_repo_status(
         _fake_vcs(tmp_path), {"deps_synced_with_conf"}, {"detached"}
     )
 

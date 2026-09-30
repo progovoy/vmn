@@ -57,10 +57,14 @@ _LAZY_REGISTRY: dict[str, str] = {
     "version":                     "version_stamp:version",
     # --- heavy: loaded only when experiment code calls into stamping --------
     "VersionControlStamper":       "version_stamp.stamping.publisher:VersionControlStamper",
-    "_get_repo_status":            "version_stamp.cli.commands:_get_repo_status",
-    "_init_app":                   "version_stamp.cli.commands:_init_app",
+    "_get_repo_status":            "version_stamp.stamping.repo_status:_get_repo_status",
+    "READ_ONLY_EXPECTED":          "version_stamp.stamping.repo_status:READ_ONLY_EXPECTED",
+    "READ_ONLY_OPTIONAL":          "version_stamp.stamping.repo_status:READ_ONLY_OPTIONAL",
+    "get_dirty_states":            "version_stamp.stamping.repo_status:get_dirty_states",
+    "_init_app":                   "version_stamp.stamping.init:_init_app",
+    "auto_init_if_needed":         "version_stamp.stamping.init:auto_init_if_needed",
     "handle_init":                 "version_stamp.cli.commands:handle_init",
-    "get_dirty_states":            "version_stamp.cli.output:get_dirty_states",
+    "init_needed":                 "version_stamp.stamping.init:init_needed",
     "get_client":                  "version_stamp.backends.factory:get_client",
     "_complete_apps":              "version_stamp.cli.completion:_complete_apps",
     # --- plugin hooks and the CLI runner, for vmn-exp's commands ------------
