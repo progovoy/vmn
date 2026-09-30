@@ -1,8 +1,8 @@
 # Python SDK
 
 `vmn_exp.sdk` is the in-process Python API for [experiment
-tracking](experiments.md). It records the same runs the CLI does — same
-snapshot, same verstr, same files — without a wrapper command or a metrics file.
+tracking](experiments.md). It records the same runs the CLI does (same
+snapshot, same verstr, same files) without a wrapper command or a metrics file.
 
 ```python
 from vmn_exp.sdk import start_run
@@ -17,30 +17,13 @@ with start_run("my_app", note="baseline", params={"lr": 3e-4}) as run:
     print(run.id)     # the verstr, e.g. 1.6.0-dev.a1b2c3d.e4f5g6h
 ```
 
-The SDK ships in `vmn-exp-sdk` (`pip install vmn-exp-sdk`, which depends only
-on PyYAML, filelock and psutil); `pip install vmn-exp` brings it along with the
-CLI. It never imports `vmn` (`version_stamp`), the CLI or the dashboard, so a
-job image needs nothing else — see [Slim install](#slim-install). Creating a
-run from a repository checkout additionally needs `vmn-exp`, which provides the
-snapshot capture.
-
-For a task-by-task walkthrough (submit, log, watch, compare, resume/rewind/fork,
-models), see [client-guide.md](client-guide.md).
-
-A run needs a git checkout; a remote is optional (its URL is recorded when
-there is one). Creating a run commits nothing — except the first `start_run` in
-a repo vmn does not track yet: that cold start commits vmn's init files and
-tags a `0.0.0` baseline, locally, and the annotated tag needs a usable git
-identity (`user.name` and `user.email`). In a container that means setting them
-in the image or via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` — otherwise that first
-`start_run` fails on git's "please tell me who you are".
-
-**Runnable versions of what follows live in
-[`examples/`](../examples/README.md)** — five standalone scripts (a minimal run,
-a training loop, a nested sweep, the query language, autologging) that need no
-arguments and no network: `python examples/01_minimal.py` from inside a git repo
-with a remote. They record to the app `vmn_examples`, so they never touch a real
-one.
+The SDK ships in `vmn-exp-sdk` (depends only on PyYAML, filelock and psutil).
+Recording from a git checkout also needs `vmn-exp`, which provides snapshot
+capture; git-free jobs need only the SDK (see [Slim install](#slim-install)).
+For a task-by-task walkthrough see [client-guide.md](client-guide.md).
+Runnable scripts (minimal run, training loop, nested sweep, queries,
+autologging) live in [`examples/`](../examples/README.md); they record to the
+app `vmn_examples`.
 
 - [CLI or SDK?](#cli-or-sdk)
 - [Starting a run](#starting-a-run)
@@ -52,7 +35,17 @@ one.
 - [The query language](#the-query-language)
 - [Model registry](#model-registry)
 - [Integrations](#integrations)
+- [Environment variables](#environment-variables)
 - [Library logging](#library-logging)
+- [Slim install](#slim-install)
+
+Public names in `vmn_exp.sdk`: `start_run`, `Run`, `NoOpRun`, `current_run`,
+`install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`, and the
+registry functions `register_model`, `set_alias`, `remove_alias`,
+`get_model_version`, `list_models`, `download_model`, `register_dataset`,
+`get_dataset_version`, `use_model`, `use_dataset`. Readers live in
+`vmn_exp.sdk.reader`, run management in `vmn_exp.sdk.manage`, integrations in
+`vmn_exp.integrations.*`.
 
 ---
 
@@ -61,23 +54,19 @@ one.
 | Situation | Use |
 |---|---|
 | Wrapping a script you don't want to modify | `vmn-exp run my_app -- python train.py` |
-| A non-Python workload (a shell benchmark, `wrk`, a compiler flag sweep) | `vmn-exp run` + `$VMN_METRICS_FILE` |
-| You're already inside Python and want per-step metrics without a metrics file | `start_run(...)` |
+| A non-Python workload | `vmn-exp run` + `$VMN_METRICS_FILE` |
+| Per-step metrics from inside Python | `start_run(...)` |
 | Metrics you measured by hand | `vmn-exp create … --metrics k=v` |
 
-**An SDK run is indistinguishable from a CLI run on disk.** Same verstr scheme,
-same `metadata.yml`, same per-writer JSONL log, same `run_state.yml`. So
-`vmn-exp list`, `vmn-exp show`, `vmn-exp compare`, the web dashboard, and S3 sync
-all work on SDK runs with no extra steps, and mixing the CLI and the SDK in one
-project is fine — `vmn-exp add` a hand-measured number to a run your training
-script opened.
+**An SDK run is indistinguishable from a CLI run on disk**: same verstr scheme,
+`metadata.yml`, per-writer JSONL log and `run_state.yml`. `vmn-exp
+list/show/compare`, the dashboard and remote sync work on SDK runs unchanged,
+and mixing the two is fine (`vmn-exp add` a number to a run your script opened).
 
-One difference: an SDK run records its script's arguments (`sys.argv`), not the
-interpreter, with `runner: sdk` in `run_state.yml`. So
-[`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out —
-`vmn-exp rerun my_app -v <ref> -- python train.py` — and the script's
-`start_run()` then opens an inner run of the rerun record, which is where its
-metrics land.
+One difference: an SDK run records `sys.argv` as its command, with `runner:
+sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
+(`vmn-exp rerun my_app -v <ref> -- python train.py`), and the script's
+`start_run()` then opens an inner run of the rerun record.
 
 ---
 
@@ -85,200 +74,167 @@ metrics land.
 
 ```python
 start_run(
-    app_name=None,
-    note=None,
-    params=None,
-    parent=None,
-    nested=False,
-    heartbeat_interval_sec=None,
-    storage=None,
-    system_metrics=None,
-    sync_interval_sec=30,
-    run_id=None,
-    all_ranks=False,
-    name=None,
-    tags=None,
-    capture_env=None,
-    fork_from=None,
-    fork_step=None,
-    rewind_to_step=None,
-    capture_output=False,
-    mode=None,
+    app_name=None, note=None, params=None, parent=None, nested=False,
+    heartbeat_interval_sec=None, storage=None, system_metrics=None,
+    sync_interval_sec=30, run_id=None, all_ranks=False, name=None, tags=None,
+    capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
+    capture_output=False, mode=None,
 )
 ```
 
 | Argument | Means |
 |---|---|
-| `app_name` | the app to track under. `None` resolves it from the current repo, exactly as the CLI does |
-| `note` | free-text note recorded on the run |
-| `params` | the run's inputs, like `-f params.yml`'s `params:` key |
-| `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) — a full verstr, a unique prefix, `@N`, or `latest` |
+| `app_name` | app to track under. `None`: `$VMN_APP_NAME` (which `vmn-exp run` exports to its child), else the checkout's only stamped app (else `ValueError`) |
+| `note` | free-text note |
+| `params` | the run's inputs (like `-f params.yml`'s `params:`) |
+| `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) (verstr, unique prefix, `@N`, `latest`); an unknown one raises `ValueError` |
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
-| `heartbeat_interval_sec` | beat cadence; defaults to the same 30s the CLI uses. Also the sampling interval for `system_metrics` — the two are the same clock |
-| `storage` | a storage backend, for S3-backed stores; defaults to the app's configured one |
-| `system_metrics` | `None` (default) records this process's CPU/memory (and GPU, with `pynvml` installed) as `sys_*` metrics on every beat; `False` turns sampling off; `True` samples even when `experiment.system_metrics: false` is set in conf.yml but still respects `VMN_SYSTEM_METRICS=0`. `psutil` ships with the SDK; GPU metrics need `pip install pynvml`. A missing sampler dependency is silent (debug log only). Non-zero ranks record nothing, system metrics included |
-| `sync_interval_sec` | push the log to the remote store (when `storage` has one, e.g. S3) at most this often, off the heartbeat thread (a hung upload never delays a beat) — so a run that is OOM-killed or preempted still leaves its metrics remotely. `None`/`0` syncs only on `finish()`. A failed sync is logged and retried on a later beat; it never stops the heartbeat |
-| `run_id` | reopen an existing run of the app instead of creating one, in any [addressing form](experiments.md#addressing-experiments). Falls back to `$VMN_RESUME_RUN_ID`. See [Resuming a preempted run](#resuming-a-preempted-run) |
-| `rewind_to_step` | with `run_id`: hide the reopened run's history past this step. See [Rewinding a run](#rewinding-a-run) |
-| `fork_from` / `fork_step` | start a NEW run seeded with another run's metrics and params up to `fork_step` (`fork_from="<ref>?_step=N"` works too). See [Forking a run](#forking-a-run) |
-| `all_ranks` | record on every rank of a distributed job; by default only rank 0 does (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
-| `name` | a human-readable run name, stored as `name` in `metadata.yml`, shown by `vmn-exp list`, available as `run.name` and queryable (`name ~ "sweep"`) |
-| `tags` | `{key: value}` tags set as the run opens (see [Tags](#tags)) |
-| `capture_env` | `None` (default) captures the runtime environment (Python version, platform, installed packages); `False` skips capture entirely; `True` captures even when `experiment.capture_env: false` is set in conf.yml but still respects `VMN_CAPTURE_ENV=0`. Resuming (`run_id=...`) always keeps the original captured env. |
-| `capture_output` | `True` tees this process's stdout/stderr into the run's `output.log` artifact — the same artifact [`vmn-exp run`](experiments.md#console-output-outputlog) keeps. Captured at the file-descriptor level (fds 1 and 2), so `print`, logging handlers, C extensions and subprocesses are all kept, and everything still reaches the original streams. Capped like the CLI (`$VMN_EXP_OUTPUT_CAP_MB`, default 10; first and last halves kept), uploaded off-thread every `sync_interval_sec` and at `finish()` (SIGTERM and interpreter exit included); the fds are restored at finish. Off by default: redirecting a host process's descriptors means it writes to pipes rather than its TTY, which an interactive debugger or a notebook kernel may not expect. Under `vmn-exp run` the CLI already keeps the output, so leave it off there |
-| `mode` | `None` (default) follows `$VMN_MODE`; `"disabled"` records nothing (see [Disabled mode](#disabled-mode)); `"enabled"` records even under `VMN_MODE=disabled`. Anything else raises `ValueError` |
+| `heartbeat_interval_sec` | beat cadence, default 30 s; also the `sys_*` sampling interval |
+| `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.core.storage_resolve.resolve_experiment_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
+| `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
+| `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Failed syncs are retried on a later beat |
+| `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
+| `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
+| `fork_from` / `fork_step` | a NEW run seeded with another run's history up to `fork_step` (`"<ref>?_step=N"` works too). See [Forking](#forking-a-run) |
+| `all_ranks` | record on every rank; default only rank 0 (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
+| `name` | human-readable name: `run.name`, shown by `vmn-exp list`, queryable (`name ~ "sweep"`) |
+| `tags` | `{key: value}` [tags](#tags) set as the run opens |
+| `capture_env` | `None`: capture Python version, platform and installed packages unless opted out (`VMN_CAPTURE_ENV=0` > conf `experiment.capture_env: false`); `False`: skip; `True`: capture despite conf.yml, not despite the env var. A resumed run keeps its original env |
+| `capture_output` | tee fds 1/2 (so `print`, logging, C extensions and subprocesses) into the run's [`output.log`](experiments.md#console-output-outputlog) artifact, capped by `$VMN_EXP_OUTPUT_CAP_MB` (default 10; head and tail kept), uploaded every `sync_interval_sec` and at finish. Off by default: the process then writes to pipes, not its TTY, which debuggers and notebooks may not expect. Leave it off under `vmn-exp run`, which captures already |
+| `mode` | `None`: follow `$VMN_MODE`; `"disabled"`: record nothing ([Disabled mode](#disabled-mode)); `"enabled"`: record even under `VMN_MODE=disabled`. Anything else raises `ValueError` |
 
-The system metrics are on by default — here and on `vmn-exp run`, which
-measures the child's process tree instead. Opt out, strongest first:
-`system_metrics=False` / `vmn-exp run --no-system-metrics`, then
-`VMN_SYSTEM_METRICS=0` (or `false`/`no`/`off`), then conf.yml:
+Calling `start_run()` again on a thread whose run is still open (a re-run
+notebook cell that never called `finish()`) raises `RuntimeError`; pass
+`nested=True` to nest on purpose, or finish the old run first.
 
-```yaml
-conf:
-  experiment:
-    system_metrics: false
-```
+Creating the run snapshots the working tree (dirty or clean) and assigns
+`run.id`. The first run in a repo vmn does not track yet cold-starts it: it
+commits vmn's init files and tags `<app>_0.0.0` **locally, never pushing**
+(`git push --follow-tags` when you want to share them). That annotated tag
+needs a git identity (`user.name`/`user.email`, or `GIT_AUTHOR_*`/
+`GIT_COMMITTER_*` in a container). A remote is optional; its URL is recorded
+when there is one.
 
-Samples are taken on the heartbeat thread, once per beat (30 s by default), so
-a run shorter than one beat records none.
+The repo lock (`.vmn/vmn.lock`) is held only for the cold start and the verstr
+claim. The snapshot (diff, format-patch, untracked tarball) is captured before
+the lock, so sweep trials started together capture in parallel, and the code is
+stored once per code identity, so trials of an unchanged tree upload only their
+own records ([How records are stored](experiments.md#how-records-are-stored)).
+The lock is released before your training code runs.
+
+With `VMN_EXP_OFFLINE=1` the run records to the local root only, for a later
+[`vmn-exp push`](experiments.md#offline-recording-and-push).
+
+### System metrics
+
+On by default here and on `vmn-exp run` (which measures the child's process
+tree instead). Opt out, strongest first: `system_metrics=False` /
+`--no-system-metrics`, `VMN_SYSTEM_METRICS=0` (or `false`/`no`/`off`), conf
+`experiment.system_metrics: false`. Inside a `vmn-exp run` that already samples
+its child (`VMN_EXP_SUPERVISOR_SAMPLES` is set), `start_run()` defaults to off;
+`system_metrics=True` samples anyway.
+
+Samples are taken once per heartbeat (a run shorter than one beat records
+none), carry no step, and are skipped on non-zero ranks. GPU metrics need
+`pip install pynvml`; a missing sampler dependency only logs at debug.
 
 | Metric | Meaning |
 |---|---|
-| `sys_cpu_percent` | CPU of the process tree, summed (so >100 on several cores). Samples are at least 0.1 s apart — psutil reads a near-zero interval as 0% — and a worker born since the last sample is counted from its own CPU time |
-| `sys_rss_mb` | memory of the tree: the root's RSS plus each child's *unique* memory (USS), so forked workers sharing the parent's pages are not counted N times |
-| `sys_gpu_mem_mb` | GPU memory held by the tree's own processes (NVML per-process accounting); omitted when NVML lists none of them — e.g. inside a container, where NVML reports host pids |
-| `sys_gpu_node_mem_mb` | used memory on the visible GPUs, all processes included |
-| `sys_gpu_node_util_percent` | mean utilization over the visible GPUs, all processes included |
+| `sys_cpu_percent` | CPU of the process tree, summed (>100 on several cores) |
+| `sys_rss_mb` | the root's RSS plus each child's unique memory (USS), so forked workers sharing pages are not counted N times |
+| `sys_gpu_mem_mb` | GPU memory held by the tree's own processes; omitted when NVML lists none of them (e.g. in a container, where NVML reports host pids) |
+| `sys_gpu_node_mem_mb` | used memory on the visible GPUs, all processes |
+| `sys_gpu_node_util_percent` | mean utilization over the visible GPUs, all processes |
 
-"Visible" follows `CUDA_VISIBLE_DEVICES` (indices or UUIDs), not every device
-on the node. Each NVML query is guarded on its own, so one a device does not
-support (utilization under MIG, say) drops that value only. Several runs open
-in one process all sample that same process.
-
-Creating the run snapshots the working tree (dirty or clean) and assigns the
-verstr, available as `run.id`. As with the CLI, the first run in a fresh repo
-cold-starts vmn tracking and stamps a `0.0.0` baseline. Several workers may
-cold-start one fresh checkout at the same moment: they serialize on the repo
-lock, and each builds its view of the repo only once it holds the lock, so the
-ones that wait see the initialization the first one did.
-
-**An SDK cold start is local-only.** Unlike `vmn-exp`/`vmn stamp`, it never
-pushes: the init commit and the `<app>_0.0.0` tag stay in your checkout, so a
-training script neither publishes refs as a side effect nor fails in a checkout
-that has no remote. Push them when you want to share them
-(`git push --follow-tags`).
-
-The repo lock (`.vmn/vmn.lock`) is held only where it is needed: by the cold
-start, when there is something to initialize, and for the verstr claim. The
-snapshot itself — `git diff`, format-patch, hashing and tarring untracked files —
-is captured *before* the lock is taken, so the trials of a sweep started at once
-capture in parallel instead of queueing behind each other. The code (patches
-and untracked tarball) is stored once per code identity (`HEAD` plus the diff
-hash, which covers the untracked files' contents), so trials 2..N of an
-unchanged tree build no tarball and upload nothing but their own records —
-every one of them still restores to the exact tree (see
-[How records are stored](experiments.md#how-records-are-stored)). The lock is released before your training code
-runs — a run that trains for hours does not block other `vmn` commands, and a
-subprocess you launch can use vmn freely.
+"Visible" follows `CUDA_VISIBLE_DEVICES` (indices or UUIDs). An NVML query a
+device does not support (utilization under MIG) drops that value only.
 
 ### Runs without a git checkout (containers)
 
-A training image built from [`vmn-exp export`](experiments.md#export) has no `.git`.
-Set `VMN_SNAPSHOT_METADATA` to the exported `vmn_metadata.yml` (or its directory)
-and `VMN_EXPERIMENT_DIR` to where runs should be recorded, and `start_run()`
-records against that exported code — the same git-free mode the CLI's `--from-snapshot`
-uses:
+An image built from [`vmn-exp export`](experiments.md#export) has no `.git`.
+Set `VMN_SNAPSHOT_METADATA` to the exported `vmn_metadata.yml` (or its
+directory) and `start_run()` records against that code, like the CLI's
+`--from-snapshot`. The app defaults to the one the metadata names.
 
 ```python
 # VMN_SNAPSHOT_METADATA=/app/vmn_metadata.yml  VMN_EXPERIMENT_DIR=/mnt/runs
-with start_run() as run:            # app name comes from the metadata
+with start_run() as run:
     run.log_metric("loss", 0.25)
 ```
 
-`app_name` may still be passed (or set via `VMN_APP_NAME`); otherwise the app the
-snapshot names is used.
+Where it records:
 
-To record to a shared store from a pod, set `VMN_EXPERIMENT_STORE` to a store URI —
-`s3://bucket/prefix`, `gs://bucket/prefix` (`[gcs]` extra), `az://container/prefix`
-(`[azure]` extra), `file:///mnt/nfs/exps` or a plugin scheme (see
-[Storage](experiments.md#storage-local-s3-gcs-azure-plugins)).
-`VMN_EXPERIMENT_BUCKET` (plus `VMN_EXPERIMENT_PREFIX`, default `vmn-experiments`, and
-`VMN_EXPERIMENT_ENDPOINT_URL` for MinIO and the like) is shorthand for an `s3://`
-URI; `VMN_EXPERIMENT_STORE` wins over it. With `VMN_EXPERIMENT_DIR` too, entries are
-appended to that local scratch dir and the new lines are synced to the store every
-`sync_interval_sec`; with the store alone the run writes straight to it. The job
-creates its own record — no prefix needs to exist beforehand — and
-`vmn-exp ui --store <uri>` reads it. `storage=` still overrides all of this. With
-neither a dir nor a store, `start_run()` raises a `ValueError` naming
-`VMN_EXPERIMENT_DIR` and `VMN_EXPERIMENT_STORE`.
+- `VMN_EXPERIMENT_DIR` — a local (or NFS) root. Concurrent workers sharing it
+  serialize the verstr claim on a lock inside it.
+- `VMN_EXPERIMENT_STORE` — a [store URI](experiments.md#storage-local-s3-gcs-azure-plugins)
+  (`s3://`, `gs://`, `az://`, `file://`, plugins).
+  `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` are shorthand for `s3://`;
+  the store wins over them.
+- Both: entries go to the local dir and new lines sync to the store every
+  `sync_interval_sec`. Store alone: the run writes straight to it.
+- Neither (and no `storage=`): `ValueError`.
+
+Readers do not read these variables; pass them a storage, e.g.
+`list_runs("my_model", storage=resolve_experiment_storage())` (see
+[Reading runs back](#reading-runs-back)).
 
 ---
 
 ## Logging
 
-Every call appends to the run's log; nothing is ever rewritten.
+Every call appends to the run's log; nothing is rewritten.
 
 | Call | Records |
 |---|---|
-| `run.log_metric(key, value, step=None, commit=True)` | one metric, at `step` (default: `run.step`) — a point of the **per-step series** `exp show` and the UI plot. See [Steps](#steps) |
-| `run.log_metrics({...}, step=None, commit=True)` | several metrics at once, sharing one step |
-| `run.log_params({...})` | more inputs, merged into the run's params |
-| `run.log_input(uri, name=None, digest=None, kind=None)` | record a dataset or artifact the run consumed. `name` defaults to the URI basename. `digest` (e.g. `"sha256:..."`) and `kind` (e.g. `"dataset"`) are optional. Multiple calls are independent entries; folded last-write-wins by name in `vmn-exp list`. |
-| `run.use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run (`ref`: verstr, prefix, `@N`; `app_name` defaults to this run's app) and return a local path to it (downloaded from S3 when needed). Records an input with URI `vmn://<app>/<verstr>/<path>`, the artifact's sha256 digest and `kind="artifact"` — see [Lineage](#lineage). `ValueError` when that run logged no such artifact. On a non-zero rank it still returns the path, recording nothing |
-| `run.log_note(text)` | a note entry |
-| `run.log_artifact(path, name=None)` | a file produced by the run, stored as `name` (a relative `a/b/c.txt` path) or under its basename |
-| `run.log_dict(obj, name)` | `obj` as JSON (`.json`) or YAML (`.yaml`/`.yml`), by `name`'s extension |
-| `run.log_text(text, name)` | a text file |
-| `run.log_figure(fig, name, **savefig_kwargs)` | a matplotlib-style figure through its `savefig` (the format follows `name`); nothing imports matplotlib |
-| `run.log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its path below it (`prefix/sub/file`) |
-| `run.log_table(name, data, columns=None, step=None)` | a table — see [Tables, images and histograms](#tables-images-and-histograms) |
-| `run.log_image(name, image, step=None, caption=None)` | an image, stored as PNG |
-| `run.log_histogram(name, values, step=None, bins=64)` | a histogram of `values`, binned in the job (or a precomputed `{"bins", "counts"}`) |
-| `run.set_tag(key, value)` / `run.set_tags({...})` / `run.remove_tag(key)` | mutable [tags](#tags) |
-| `run.define_metric(name, step_metric=None, summary=None, goal=None, hidden=None, **fields)` | declare how metric `name` (exact, or an `fnmatch` glob like `val_*`) is charted — see [Custom x axis](#custom-x-axis-step_metric) — which of its values the run ranks on, which way it sorts and whether the UI hides it by default — see [Metric goals and summaries](#metric-goals-and-summaries) |
+| `log_metric(key, value, step=None, commit=True)` | one metric at `step` (default `run.step`; see [Steps](#steps)) |
+| `log_metrics({...}, step=None, commit=True)` | several metrics sharing one step |
+| `log_params({...})` | more inputs, merged into the run's params |
+| `log_input(uri, name=None, digest=None, kind=None)` | a dataset/artifact the run consumed; `name` defaults to the URI basename without extension; folded last-write-wins by name |
+| `use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run and return a local path to it (downloaded when remote). Records an input `vmn://<app>/<verstr>/<path>` with the artifact's digest and `kind="artifact"` ([Lineage](#lineage)). `ValueError` if that run logged no such artifact |
+| `log_note(text)` | a note |
+| `log_artifact(path, name=None)` | a file, stored as `name` (a relative `a/b/c.txt` path) or its basename |
+| `log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its relative path (under `prefix`) |
+| `log_dict(obj, name)` | JSON or YAML by `name`'s extension (`.json`/`.yaml`/`.yml`, else `ValueError`) |
+| `log_text(text, name)` | a text file |
+| `log_figure(fig, name, **savefig_kwargs)` | anything with `savefig` (format from `name`); matplotlib is not imported |
+| `log_table` / `log_image` / `log_histogram` | see [Tables, images and histograms](#tables-images-and-histograms) |
+| `set_tag(key, value)` / `set_tags({...})` / `remove_tag(key)` | mutable [tags](#tags) |
+| `define_metric(name, step_metric=None, summary=None, goal=None, hidden=None)` | how a metric (or `fnmatch` glob) is charted, ranked and shown: [x axis](#custom-x-axis-step_metric), [goals and summaries](#metric-goals-and-summaries) |
+| `alert(title, text="", level="info", wait_sec=None)` | an [alert](#alerts) |
+| `register_model(...)`, `use_model(ref)`, `use_dataset(ref)` | [registry](#model-registry) shortcuts bound to this run |
+
+`Run` attributes: `id` (verstr), `app_name`, `name`, `step`, `start_step` (the
+step a fork/rewind continues from, else `None`), `pid` (the owning process),
+`disabled`.
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
-components, backslashes and NUL are refused with a `ValueError` (`log_artifacts`
-checks every name before uploading any). Each helper stores a real file, so the
-log entry (`path` = the name, `size`, `sha256`) and the backends are exactly those
-of `log_artifact`, and `vmn-exp ui` downloads nested ones at
-`.../artifacts/<a/b/c.txt>`.
+components, backslashes and NUL raise `ValueError` (`log_artifacts` checks every
+name before uploading any). Each entry records `path`, `size` and `sha256`.
 
-**Writes are batched.** Log calls queue in memory and reach the store as one
-write of whole lines per flush: at most every ~1 s (a daemon thread), whenever
-1000 entries are pending, on every heartbeat (before the remote sync), and on
-`finish()`, SIGTERM and interpreter exit — before the final run state is
-published, so a reader that sees a run finished sees everything it logged.
-A reader never sees half a line. This is what lets a loop log ~50k points a
-second (vs ~2-5k when every call opened and appended to the file); the price is
-that another process sees a metric up to ~1 s after it was logged. A forked
+**Writes are batched.** Log calls queue in memory and are written as whole
+lines at most ~1 s apart, at 1000 pending entries, on every heartbeat and at
+`finish()`/SIGTERM/exit (before the final state, so a reader that sees a run
+finished sees everything it logged). A reader never sees half a line, and live
+readers (`vmn-exp show`, the UI) see a metric within about a second. A forked
 child writing through an inherited `Run`, or a write after `finish()`, goes
-straight to the store. Storage backends take the batch through
-`append_log_entries(app, verstr, writer, entries)` (one `O_APPEND` write and
-one record-signature bump locally, one PUT on S3; the base class loops over
-`append_log_entry`).
+straight to the store.
 
-Metrics land in the store within about a second of being logged, so `vmn-exp
-show` and the web UI see the curve **while training is still running**.
+Metric values are stored as floats:
 
-Metric values are stored as floats, whatever you pass:
+- numpy scalars, 0-d arrays and 0-d torch tensors are unwrapped (no `.item()`
+  needed); numeric strings like `"0.5"` are parsed;
+- `nan`/`inf` are kept (a diverged loss is a result) and sort last;
+- booleans, vectors and other non-numeric values are dropped with a warning;
+  an entry left empty is not written.
 
-- numpy scalars, 0-d arrays and 0-d torch tensors are unwrapped (no need for
-  `.item()`), and numeric strings such as `"0.5"` are parsed;
-- `nan` and `inf` are kept — a diverged loss is a real result — and sort last
-  on a leaderboard;
-- booleans, vectors and other non-numeric values are dropped with a warning,
-  and an entry left with nothing numeric is not written.
-
-Params keep their values verbatim, with numpy/torch scalars unwrapped to plain
-Python numbers so `params.max_depth = 3` matches.
+Params are kept verbatim, with numpy/torch scalars unwrapped so
+`params.max_depth = 3` matches.
 
 ### Tables, images and histograms
 
-Rich values are keyed by `name` and `step` (default: one past the name's last
-logged step in this process, so pass `step=` explicitly when resuming). Each writes one small log
-entry; the table and image bodies are artifacts. The run page's **Media**
-section shows them, and `vmn-exp show` counts them.
+Keyed by `name` and `step` (default: one past the name's last step logged by
+this process, so pass `step=` when resuming; explicit steps must be
+non-negative ints). The run page's **Media** section shows them.
 
 ```python
 run.log_table("preds", [{"y": 1, "p": 0.9}, {"y": 0, "p": 0.2}], step=epoch)
@@ -288,130 +244,87 @@ run.log_image("samples", batch[0], step=epoch, caption="first batch")
 run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
 ```
 
-| Call | Accepts | Stored as | Log entry |
-|---|---|---|---|
-| `log_table` | a list of dicts (columns in first-seen order), a list of lists / 2-D numpy array plus `columns=`, or a pandas DataFrame | artifact `tables/<name>/<step>.json`: columnar JSON `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}`, types `number`/`string`/`bool`/`null`/`mixed` | `{"type": "table", "name", "step", "path", "rows", "columns", "sha256", "size"}` (+ `total_rows` when truncated) |
-| `log_image` | a file path, a PIL image, a numpy `HxW` / `HxWxC` array (C = 1-4; `uint8`, or floats in 0..1, clipped), a matplotlib figure | artifact `media/<name>/<step>.png` | `{"type": "image", "name", "step", "path", "caption", "width", "height", "sha256", "size"}` |
-| `log_histogram` | anything numpy can flatten (lists, arrays, torch tensors), or a precomputed `{"bins": edges, "counts": counts}` mapping (`len(bins) == len(counts) + 1`, else `ValueError`; `bins=` unused) | — | `{"type": "histogram", "name", "step", "bins": [edges], "counts": [...]}` |
+| Call | Accepts | Stored as |
+|---|---|---|
+| `log_table(name, data, columns=None, step=None)` | list of dicts (columns in first-seen order), list of lists / 2-D array plus `columns=`, or a DataFrame | `tables/<name>/<step>.json`: `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}` |
+| `log_image(name, image, step=None, caption=None)` | file path, PIL image, numpy `HxW`/`HxWxC` (C = 1-4; `uint8`, or floats in 0..1), matplotlib figure | `media/<name>/<step>.png` |
+| `log_histogram(name, values, step=None, bins=64)` | anything numpy can flatten, or a precomputed `{"bins": edges, "counts": counts}` (`len(bins) == len(counts) + 1`) | a `histogram` log entry only |
 
-- Tables keep at most **10,000 rows** (`vmn_exp.core.tables.MAX_TABLE_ROWS`);
-  longer ones are truncated with a warning. Cells are made JSON-safe: numpy
-  scalars are unwrapped, NaN/inf become `null`, other objects their `str`.
-- Images need no Pillow: numpy arrays are encoded by a small stdlib (zlib) PNG
-  encoder when Pillow is absent. With Pillow, it encodes arrays and converts
-  non-PNG files; without it a non-PNG file is stored as is, under its own
-  extension.
-- Histograms bin only the finite values (NaN/inf dropped) into `bins` equal
-  bins with numpy when installed, else in pure Python (same edges). With no
-  finite value nothing is logged and a warning says so.
-- A rank > 0 [`NoOpRun`](#distributed-training-ddp-torchrun-slurm) ignores
-  all three.
-- Logged images and tables are **outputs** of the run, like `log_artifact`
-  files: the entry's `sha256`/`size` are those of the encoded bytes, hashed in
-  memory before the upload, so they appear in `get_run()["outputs"]`, match
-  `outputs."media/samples/3.png".size > 0` queries, link consumers in
-  [lineage](#lineage), and another run can fetch one with
-  `run.use_artifact(ref, "media/samples/3.png")` (or `"tables/preds/3.json"`).
-  The file is stored on a background worker, and its entry is logged only
-  once the file is stored (keeping the step and timestamp of the
-  `log_image`/`log_table` call), so a reader never sees an output — or an
-  image/table — whose file is not there, even from a process killed
-  mid-upload. A file that fails to store — the save raises, or it is still
-  queued when the run's final upload wait (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`)
-  runs out — is never recorded; a warning says so. `finish()` waits for the
-  queue before its final log flush.
+- Tables keep at most 10,000 rows (truncated with a warning, `total_rows`
+  recorded); cells are made JSON-safe (NaN/inf → `null`, objects → `str`).
+- Images need no Pillow: arrays go through a stdlib PNG encoder. Without
+  Pillow, a non-PNG file is stored as is under its own extension.
+- Histograms bin only finite values (numpy if installed, else pure Python, same
+  edges); with none, nothing is logged.
+- Images and tables are **outputs** of the run: their entry carries the stored
+  bytes' `sha256`/`size`, so they appear in `outputs`, link in
+  [lineage](#lineage), and `use_artifact(ref, "media/samples/3.png")` fetches
+  one. Files upload on a background worker, and the entry is logged only once
+  the file is stored (keeping the call's step and timestamp). A file that fails
+  to store, or is still queued when the final upload wait
+  (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`) runs out, is never recorded.
 
-`get_run()` returns the indexes next to `artifacts`: `media`, `tables` and
-`histograms` map each name to its steps in order (the latest entry for a step
-wins), and `histograms_total` counts each histogram's steps — `histograms`
-keeps at most 100 evenly spaced steps per name, first and last included.
+`get_run()` adds `media`, `tables` and `histograms` (name → steps, latest entry
+per step wins) and `histograms_total`; `histograms` keeps at most 100 evenly
+spaced steps per name, first and last included.
 
 ### Custom x axis (`step_metric`)
 
-Chart a metric against another metric instead of the step, like W&B's
-`define_metric`:
+Chart a metric against another metric instead of the step (W&B's
+`define_metric`):
 
 ```python
 run.define_metric("val_*", step_metric="epoch")
-for step, batch in enumerate(loader):
-    ...
-    if end_of_epoch:
-        run.log_metrics({"val_loss": vl, "val_acc": va, "epoch": epoch}, step=step)
+run.log_metrics({"val_loss": vl, "val_acc": va, "epoch": epoch}, step=step)
 ```
 
-- The declaration is a log entry,
-  `{"type": "define_metric", "name": "val_*", "step_metric": "epoch"}`; extra
-  keyword fields ride along in the same entry. Entries fold per name, last
-  write wins per field, so a resumed run can redeclare.
-- The same can be declared without the SDK (for `vmn-exp run` metrics files and
-  `vmn-exp add`) in the app's conf.yml metrics schema, next to `goal:`:
-  `experiment.metrics.<name or glob>.step_metric: epoch`. A run's own
-  declarations win over the schema, and an exact name over a glob. A metric is
-  never its own x.
-- **Join rule**: a point is plotted at the x metric's value logged at the *same
-  step* (in the same `log_metrics` call or another call with that step);
-  step-less points join only within the same call. A point with no (finite) x
-  value is dropped from the joined series — the plain series is unchanged.
-- Read back: `get_run(...)["step_metrics"]` maps each declaring metric to its
-  x metric, and `get_run(..., x="epoch")["series"]` holds every other metric
-  joined on `epoch`, each point a `{"step", "ts", "value", "x"}`.
-  `vmn_exp.core.log.metric_series(log, x="epoch")` does the same on a raw log.
-- The UI picks the declared x metric by default and lets you choose any
-  metric; see [ui.md](ui.md#custom-x-axis).
+- A point is plotted at the x metric's value logged at the **same step**;
+  step-less points join only within one call. Points without a finite x are
+  dropped from the joined series.
+- Declare it without the SDK in conf.yml: `experiment.metrics.<name or
+  glob>.step_metric: epoch`. The run's declaration wins, an exact name beats a
+  glob, and a metric is never its own x.
+- `get_run(...)["step_metrics"]` maps each declaring metric to its x;
+  `get_run(..., x="epoch")["series"]` joins every other metric on `epoch`
+  (points `{"step", "ts", "value", "x"}`). The UI picks the declared x by
+  default ([ui.md](ui.md#custom-x-axis)).
 
 ### Metric goals and summaries
 
-A metric logged every epoch folds to one number per run: by default the last
-one. `run.define_metric()` picks another, like W&B's `define_metric(summary=)`:
+A metric logged every epoch folds to one number per run, by default the last.
+`define_metric()` picks another:
 
 ```python
-with start_run("my_app") as run:
-    run.define_metric("val_loss", goal="min")        # rank on the best (lowest) epoch
-    run.define_metric("lr", summary="last")
-    for epoch in range(epochs):
-        run.log_metrics({"val_loss": evaluate(), "lr": sched.lr}, step=epoch)
+run.define_metric("val_loss", goal="min")        # rank on the best (lowest) epoch
+run.define_metric("lr", summary="last")
+run.define_metric("grad_*", hidden=True)         # out of the UI's default columns
 ```
 
-- `summary` is `"min"`, `"max"`, `"last"`, `"first"` (the earliest value by
-  timestamp) or `"mean"` (of the finite values); without it, `goal="min"`
-  means `min` and `goal="max"` means `max`. Anything else (including
-  `"none"`) raises `ValueError`.
-- `hidden=True` keeps the metric (or glob, e.g. `run.define_metric("grad_*",
-  hidden=True)`) out of the UI's default leaderboard columns and chart grid —
-  it still sorts, queries and summarizes as usual. It must be a bool.
-- It is the same `define_metric` call (and log entry) that declares a
-  [`step_metric`](#custom-x-axis-step_metric):
-  `{"type": "define_metric", "name", "summary"?, "goal"?, "step_metric"?, "hidden"?}`.
+- `summary`: `"min"`, `"max"`, `"last"`, `"first"` (earliest) or `"mean"` (of
+  finite values). Without it, `goal="min"`/`"max"` implies it. Anything else
+  (including `"none"`) raises `ValueError`.
+- `hidden` (a bool) is display-only: the metric still sorts, queries and
+  summarizes.
+- The declaration is a `define_metric` log entry, so it travels with the run
+  and needs no conf.yml; later declarations override per field.
   `vmn-exp add <app> -v <ref> --define-metric NAME [--goal] [--summary]
-  [--step-metric] [--hidden]` appends the same entry from the CLI.
-  So it travels with the run — to S3, to other readers, to `vmn-exp ui` — and
-  needs no conf.yml. Entries fold per field, last write wins: declaring a
-  `step_metric` later keeps an earlier `summary`.
-- `name` may be a glob (`run.define_metric("val_*", goal="min")`); an exact
-  name beats a glob. A run's declaration beats the app's
-  [conf.yml schema](experiments.md#best-value-summaries-summary) (globs work
-  there too), which beats `last`.
-- `row["metrics"][name]` is then that value everywhere (`list_runs(sort=,
-  query=)`, `vmn-exp list --sort`, `prune --query`, the leaderboard), and
-  `row["metric_summary"][name]` holds `{"last", "min", "max", "first", "mean"}`
-  for every metric logged more than once. Non-finite values are never a min,
-  max or part of the mean (`mean` is `None` without a finite value).
-- **Cross-run goals.** A run's `goal` (and `hidden`) also counts across runs
-  for names conf.yml does not declare: the *effective schema* is conf.yml
-  plus those declarations, the latest run's winning. It sets the sort
-  *direction* of `list_runs(sort=)`, `vmn-exp list --sort` and the UI
-  leaderboard, and the UI's hidden columns — so a store workspace without a
-  conf.yml still sorts `val_loss` best-first. It never changes which value
-  another run ranks on: summaries follow only the run's own definitions and
-  conf.yml. Glob goals (`"val_*": {goal: min}`) set the direction too.
+  [--step-metric] [--hidden]` appends the same entry.
+- Precedence: run declaration (exact name, then glob) > the app's [conf.yml
+  schema](experiments.md#best-value-summaries-summary) > `last`.
+- `row["metrics"][name]` is that value everywhere (`list_runs(sort=, query=)`,
+  `vmn-exp list --sort`, `prune --query`, the leaderboard);
+  `row["metric_summary"][name]` holds `{"last", "min", "max", "first",
+  "mean"}` for metrics logged more than once (non-finite values never count;
+  `mean` is `None` without a finite value).
+- A run's `goal` and `hidden` also count across runs for names conf.yml does
+  not declare (the latest run wins): they set sort direction and the UI's
+  hidden columns, never which value another run ranks on.
 
 ### Tags
 
-Tags are mutable `str -> str` labels (values are stored as strings). Each
-`set_tag`/`set_tags`/`remove_tag` appends a `tags` log entry
-(`{"type": "tags", "set": {...}, "remove": [...]}`); readers fold them per key,
-last write wins, and a removal is a write like any other, so a removed tag can
-be set again. They work on a finished run too — tag the winner after the sweep:
+Mutable `str -> str` labels. Each call appends a `tags` entry; readers fold them
+per key, last write wins, and a removed tag can be set again. They work on a
+finished run too:
 
 ```python
 run.set_tags({"stage": "candidate", "owner": "ann"})
@@ -419,37 +332,27 @@ run.finish()
 run.set_tag("verdict", "keep")      # still recorded
 ```
 
-Rows carry them as `tags` (`{key: value}`), and the query language reads
-`tags.<key>` (`tags.stage = "prod"`). A `tags:` mapping (or list of labels) in a
-`-f` notes file seeds them at creation.
+Rows carry `tags` (`{key: value}`); query them as `tags.stage = "prod"`.
 
 ### Alerts
 
-`run.alert()` is `wandb.alert()`: flag something from inside the loop and get
-told about it.
+`run.alert()` is `wandb.alert()`:
 
 ```python
 if math.isnan(loss):
     run.alert("loss is NaN", text=f"step {step}, lr {lr}", level="error")
 ```
 
-- `level` is `"info"` (default), `"warn"` or `"error"`; anything else raises
-  `ValueError`.
-- It appends an `alert` log entry (`{"type": "alert", "title", "text",
-  "level"}`), rendered by `vmn-exp show` and listed in the dashboard's run log.
-- Repeats of one title within `wait_sec` seconds (default: conf
-  `experiment.alerts.wait_sec`, 60) are dropped — neither logged nor sent — so a
-  check inside a loop cannot spam a channel. `wait_sec=0` sends every call. The
-  return value says whether this one went through.
-- It is sent to the configured sinks when the `alert` trigger is on (the
-  default); delivery runs off-thread, never raises, and `finish()` waits up to
-  5s for it.
-- With the `failed` trigger opted in, the run also alerts when it finishes
-  failed (an exception, `finish(exit_code=N)` with N != 0, SIGTERM).
+- `level`: `"info"` (default), `"warn"` or `"error"`, else `ValueError`.
+- Appends an `alert` log entry (shown by `vmn-exp show` and the run log) and
+  sends it to the configured sinks when the `alert` trigger is on (the
+  default). Delivery is off-thread and never raises; `finish()` waits up to 5 s.
+- Repeats of one title within `wait_sec` (default conf
+  `experiment.alerts.wait_sec`, 60) are dropped, neither logged nor sent;
+  `wait_sec=0` sends every call. Returns whether this one went through.
+- With the `failed` trigger on, the run also alerts when it finishes failed.
 
-Sinks (webhook, Slack, shell command), triggers and the env-var fallbacks are
-configured as described in [docs/experiments.md](experiments.md#alerts). A
-`NoOpRun` (non-zero rank) ignores `alert()`.
+Sinks, triggers and env-var fallbacks: [experiments.md](experiments.md#alerts).
 
 ### Changing stored runs: archive, unarchive, tags
 
@@ -461,241 +364,128 @@ manage.unarchive_run("my_app", "@3")
 manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
 ```
 
-`archive_run(app_name=None, ref="latest", *, storage=None)`,
-`unarchive_run(...)` and `set_tags(app_name=None, ref="latest", tags=None, *,
-remove=None, storage=None)` take any [addressing form](experiments.md#addressing-experiments),
-return the verstr they changed and raise `ValueError` for a ref that names no
-run. Archiving writes `archived: true` into `metadata.yml` (atomically on disk,
-under the ETag on S3); unarchiving
-removes it. Nothing is deleted, and nothing but listings treats an archived run
-differently — `vmn-exp prune` counts and deletes it like any finished run.
+`archive_run(app_name=None, ref="latest", *, storage=None)`, `unarchive_run(...)`
+and `set_tags(app_name=None, ref="latest", tags=None, *, remove=None,
+storage=None)` take any addressing form, return the verstr they changed and
+raise `ValueError` for an unknown ref. Archiving sets `archived: true` in
+`metadata.yml`; nothing is deleted, and only listings treat archived runs
+differently (`vmn-exp prune` counts them like any finished run).
 
 ---
 
 ## Autologging
 
-`autolog()` patches a framework's training entry point so that every `fit()`
-records the estimator's hyperparameters, its training score and (optionally) the
-fitted model — with no logging calls in your training code:
+`autolog()` patches a framework's training entry point so every `fit()` records
+hyperparameters, a score and (optionally) the fitted model, with no logging
+calls in your training code.
 
 ```python
 from vmn_exp.sdk import autolog, autolog_disable, start_run
 
 autolog()                                          # every supported framework
-autolog(frameworks=["sklearn"], log_models=True)   # or name them, and opt in to saving models
+autolog(frameworks=["sklearn"], log_models=True)   # name them; opt in to saving models
 autolog(training_score=False)                      # calling again reconfigures
 autolog_disable()                                  # restore the originals
-```
-
-| Option | Default | Meaning |
-|---|---|---|
-| `frameworks` | all supported | which frameworks to patch |
-| `log_models` | `False` | also save each trained model as an artifact — opt-in, because it writes, hashes and copies a file per fit on the training thread |
-| `training_score` | `"auto"` | record `<framework>_score`, the estimator's `score()` on its *training* data: `True`, `False`, or `"auto"` = only for inputs of at most 10,000 rows (the re-predict can cost as much as the fit) |
-
-`autolog()` never imports a framework itself. One the script has already
-imported is patched on the spot; any other is patched the moment the script
-first imports it — so a scikit-learn-only script does not pay for loading
-TensorFlow or torch just because they are installed.
-
-Supported framework names, each covered by integration tests that train a real
-model from the real library:
-
-| Name | Wraps | Notes |
-|---|---|---|
-| `sklearn` | every estimator's `fit` | includes the meta-estimator and inherited-`fit` cases |
-| `xgboost` | `XGBClassifier.fit`, `XGBRegressor.fit` | the scikit-learn wrappers only |
-| `keras` | `keras.Model.fit` | Keras 3, any backend |
-| `tensorflow` | the same method | `tensorflow.keras.Model` *is* `keras.Model` |
-| `lightning` | `lightning.pytorch.Trainer.fit` | |
-| `pytorch_lightning` | `pytorch_lightning.Trainer.fit` | a separate mirror package, so a separate patch |
-| `transformers` | `Trainer.train` (via injected `VmnCallback`) | patches `transformers.trainer` lazily — `import transformers` alone never triggers it; records `params.*` on `on_train_begin` and `metrics.train/<name>` / `metrics.eval/<name>` per step on `on_log` |
-
-Naming an unsupported — or simply uninstalled — framework is a silent no-op, so
-`autolog()` is safe to call at import time in code that may run without any ML
-library present.
-
-For xgboost it is the scikit-learn wrappers that are autologged; the native
-`xgboost.train` / `Booster` API is a different shape, with no estimator to ask
-for hyperparameters, and is left alone. `tensorflow` and `keras` name the same
-underlying function, so requesting both patches it once, not twice. Lightning's
-two import names are genuinely two classes and each gets its own patch, but both
-record under the `lightning_` prefix — a query must not have to care which
-import the training script reached for.
-
-**Plain `torch` is deliberately not a framework**, and no `torch` entry exists.
-Raw PyTorch has no training entry point to wrap: you write the loop, so there is
-no `fit()`. The candidate hooks are worse than nothing — `Module.__call__` fires
-on every forward pass, `Optimizer.step` on every batch, and neither can tell an
-epoch from a step or knows which loss you care about. Raw-torch users log
-metrics explicitly in their own loop, which costs two lines (for gradient and
-parameter histograms, see [PyTorch — `watch`](#pytorch--watch)):
-
-```python
-with start_run("my_app", params={"lr": lr, "batch_size": 32}) as run:
-    for epoch in range(epochs):
-        loss = train_one_epoch(model, loader, optimizer)
-        run.log_metric("train_loss", loss, step=epoch)
-```
-
-Lightning is the supported way to get the same thing autologged, because
-`Trainer.fit` is the entry point raw torch lacks.
-
-**Autologging only records inside a run you opened.** With no run open, the
-patched `fit()` is a pass-through plus one debug line. It will never open a run
-for you: creating a run snapshots the repository and stamps a dev version, which
-is not something `fit()` gets to do behind your back. So the usage is always
-`autolog()` first, then a run:
-
-```python
-autolog(log_models=True)
 
 with start_run("my_app", note="rbf baseline") as run:
     SVC(kernel="rbf", C=2.0).fit(X, y)
     # params.sklearn_estimator = "SVC", params.sklearn_kernel = "rbf",
-    # params.sklearn_C = 2.0, metrics.sklearn_score = 0.97, plus an SVC.pkl artifact
+    # params.sklearn_C = 2.0, metrics.sklearn_score = 0.97
 ```
 
-| Recorded | As |
-|---|---|
-| the estimator class name | `params.sklearn_estimator` (a meta-estimator's own `estimator` param is kept as `params.sklearn_param_estimator`) |
-| every key of `estimator.get_params()` | `params.sklearn_<name>` — scalars verbatim (numpy scalars as the Python number they hold), anything else as its `repr()` with memory addresses stripped |
-| `estimator.score(X, y)` on the **training** data, per `training_score` | `metrics.sklearn_score` — a training-set score flatters overfit models; prefer the CV score below |
-| a search estimator's `best_score_` (`GridSearchCV`, `RandomizedSearchCV`, ...) | `metrics.sklearn_best_cv_score` |
-| a search estimator's `best_params_` | `params.sklearn_best_<name>` |
-| the pickled fitted estimator, when `log_models=True` | an artifact named `sklearn_<Class>.pkl`; the n-th model of the same class in one run is `sklearn_<Class>_<n>.pkl` |
-
-What each framework can actually give up differs, so what lands differs too:
-
-| | Keras | Lightning |
+| Option | Default | Meaning |
 |---|---|---|
-| params | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` — read back off the compiled model | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (so call `save_hyperparameters()`) |
-| metrics | one point per epoch, `metrics.keras_loss` and one per compiled metric | the final `trainer.callback_metrics`, e.g. `metrics.lightning_train_loss` |
-| step series | yes — a callback vmn appends to your `callbacks` records each epoch as it ends, with the epoch's real time and its true number (`fit(initial_epoch=3)` continues at step 3), so a run that crashes at epoch 4 keeps epochs 0–3 | no; log inside `training_step` and Lightning's own loggers keep the curve |
-| `log_models=True` | `keras_<Class>.keras`, the native archive | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`, restorable with `load_from_checkpoint`. **Skipped under multi-process training** (`trainer.world_size > 1`) with a warning: `save_checkpoint` ends in a barrier every rank must reach, and only the rank with an open run would call it |
+| `frameworks` | all supported | which to patch; unknown or uninstalled names are a silent no-op |
+| `log_models` | `False` | also save each trained model as an artifact (a file per fit, written on the training thread) |
+| `training_score` | `"auto"` | record `<framework>_score`, `score()` on the **training** data: `True`, `False`, or `"auto"` = only for inputs of at most 10,000 rows |
 
-Neither is pickled: a Keras model and a Lightning module full of tensors both
-have a first-class save format, and pickle is not it.
+- `autolog()` never imports a framework: one already imported is patched now,
+  any other when first imported. Under `VMN_MODE=disabled` it patches nothing.
+- **It records only inside a run you opened**, into `current_run()`. It never
+  opens a run itself (that would snapshot and stamp from inside `fit()`).
+- Names are `<framework>_<name>` with an underscore, so the query language's
+  two-part paths resolve them (`params.sklearn_kernel`).
 
-Because the store folds a metric to its latest value, the last point of the Keras
-epoch series *is* `metrics.keras_loss` — the curve and the headline number are
-the same log, not two.
+| Name | Wraps | Notes |
+|---|---|---|
+| `sklearn` | every estimator's `fit` | incl. meta-estimators and inherited `fit` |
+| `xgboost` | `XGBClassifier.fit`, `XGBRegressor.fit` | the scikit-learn wrappers; native `xgboost.train` is left alone |
+| `keras`, `tensorflow` | `keras.Model.fit` | Keras 3, any backend; the two names patch the same method once |
+| `lightning`, `pytorch_lightning` | `Trainer.fit` of each package | both record under the `lightning_` prefix |
+| `transformers` | `Trainer.train` | injects a [`VmnCallback`](#hugging-face-transformers--vmncallback); patched when `transformers.trainer` is imported |
 
-Autologged names are prefixed with the framework name and an **underscore**, not
-a dot: `sklearn_kernel`, never `sklearn.kernel`. The prefix keeps autologged
-values out of the way of your own, and the underscore keeps each name a single
-segment, because [the query language](#the-query-language) resolves only
-two-part dotted paths — `params.sklearn.kernel` would be a parse error, while
-`params.sklearn_kernel` filters normally.
+What each records:
 
-Three guarantees worth relying on:
+| | scikit-learn / xgboost | Keras | Lightning |
+|---|---|---|---|
+| params | `sklearn_estimator` (class name), `sklearn_<k>` for every `get_params()` key (non-scalars as `repr`, addresses stripped; a meta-estimator's own `estimator` param as `sklearn_param_estimator`), search estimators' `sklearn_best_<param>` | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (call `save_hyperparameters()`) |
+| metrics | `sklearn_score` (training set; prefer the CV score), `sklearn_best_cv_score` for search estimators | per epoch: `keras_loss` and each compiled metric, stepped by the real epoch (`initial_epoch` respected) | the final `trainer.callback_metrics`, e.g. `lightning_train_loss`; no per-epoch series |
+| `log_models=True` | pickle `sklearn_<Class>.pkl` (`_<n>` for the n-th of a class) | `keras_<Class>.keras` | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`; skipped with a warning when `trainer.world_size > 1` |
 
-- **One record per training call.** A `Pipeline` fits each step and a forest fits
-  each tree, and those inner `fit()` calls are patched too — but only the
-  outermost one records. So fitting a pipeline gives you
-  `params.sklearn_estimator = "Pipeline"` and one model artifact, not the last
-  sub-estimator's name and one pickle per step.
-- **Each fit records into its own run.** A `fit()` records into the run opened
-  by the same thread; a thread with no run of its own uses the process's only
-  open run. So a thread-pool sweep (Optuna `n_jobs>1`) records each trial into
-  its own run. A framework's worker threads (joblib's threading backend,
-  `IsolationForest(n_jobs=4)`) run while the outer fit is recording and never
-  record themselves, and forked worker processes never write into the parent's
-  run. One consequence: while a fit is recording, a fit in *another* thread that
-  opened no run of its own is not recorded — open a run in that thread.
-- **Autologging never breaks training.** Every recording step is guarded; a
-  failure inside it becomes a debug log line. Your `fit()` call, its return value
-  and any exception it raises pass through untouched.
-- **Patching is idempotent and reversible.** Each wrapper remembers the function
-  it replaced, so a second `autolog()` recognizes its own work instead of
-  wrapping twice (it only applies the new options), and `autolog_disable()` puts
-  the exact originals back and drops any pending import hooks.
+Guarantees:
 
-Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`, in
-`vmn_exp/sdk/autolog.py`. An adapter answers the five questions the shared
-recording path asks, and everything but the first defaults to the scikit-learn
-answer:
+- **One record per training call**: inner `fit()`s (pipeline steps, forest
+  trees) don't record, so a `Pipeline` gives `sklearn_estimator = "Pipeline"`
+  and one model.
+- **Each fit records into its own run**: the run opened by the calling thread,
+  else the process's only open run, so a thread-pool sweep records each trial
+  separately. A framework's worker threads never record while the outer fit
+  is recording; a fit in another thread with no run of its own is not recorded
+  meanwhile. Forked workers never write into the parent's run.
+- **Autologging never breaks training**: recording failures become debug log
+  lines; `fit()`'s return value and exceptions pass through.
+- **Idempotent and reversible**: a second `autolog()` only applies new options;
+  `autolog_disable()` restores the originals and drops pending import hooks.
 
-| Field | Answers |
-|---|---|
-| `discover(module)` | which `(owner, attr)` pairs to wrap |
-| `subject(call)` | which object is being trained — `call.instance` by default, the first argument for Lightning |
-| `params(call)` | its hyperparameters, unprefixed — `subject.get_params()` by default |
-| `metrics(call)` | its final metrics — `subject.score(X, y)` by default |
-| `series(call)` | `{name: [per-step values]}`, logged one `log_metrics` per step — empty by default |
-| `save(call, subject, base)` | write the model to `base + ext` and return the path (or `None` to skip) — a pickle by default |
-| `instrument(call, run)` | the call to make instead, e.g. with a callback added — the call unchanged by default |
-| `fitted_params(call)` | params that only exist after training — a search's `best_params_` as `best_<name>` by default |
+**Plain `torch` has no `fit()` to wrap**: log in your own loop
+(`run.log_metric("train_loss", loss, step=epoch)`), and use
+[`watch`](#pytorch--watch) for gradient/parameter histograms. Lightning is the
+autologged route.
 
-`call` is the intercepted training call: `(instance, args, kwargs, result)`, with
-`result` still `None` while params are captured before training starts. The
-recording path is shared; nothing else needs a branch per framework.
+Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`
+(`vmn_exp/sdk/autolog.py`). Only `discover(module)` (the `(owner, attr)` pairs
+to wrap) is required, or `method_owners` when the entry point is not `fit`;
+`watch` names the module(s) whose import triggers patching. The rest default to
+the scikit-learn behaviour: `subject(call)` (the trained object), `params(call)`,
+`metrics(call)`, `series(call)` (`{name: [per-step values]}`), `save(call,
+subject, base)`, `instrument(call, run)` (e.g. add a callback) and
+`fitted_params(call)`. `call` is `(instance, args, kwargs, result)`.
 
 ---
 
 ## Finishing, failures, and the heartbeat
 
-The context manager calls `run.finish(exit_code=0)` on the way out. You can call
-it yourself when the run doesn't fit a `with` block, and it is idempotent:
+The context manager calls `run.finish(exit_code=0)` on the way out; call it
+yourself when a `with` block doesn't fit. It is idempotent.
 
-```python
-run = start_run("my_app")
-try:
-    ...
-finally:
-    run.finish()
-```
-
-An exception raised inside the `with` block finalizes the run as **failed** and
-then **re-raises** — the SDK never swallows your error, and a crashed training
-job reads as `failed` rather than as a run that just stopped logging.
-
-**The run heartbeats itself.** `vmn-exp run` refreshes the heartbeat from the
-process supervising the child; an SDK run has no supervisor — it *is* the
-workload — so it carries its own daemon thread. That is what makes
-[`stuck`](experiments.md#run-status-did-my-job-die) work for SDK runs: a job
-that is OOM-killed or loses its node goes stale and is reported `stuck`, instead
-of sitting at `running` forever with nobody left to write down that it died.
-
-Each beat also bumps `heartbeat_seq` in `run_state.yml`. The remote copy of the
-run state and the log sync are uploaded off the heartbeat thread, and only the
-newest pending state is uploaded (in order, so the final state is never
-overwritten by an older beat): a hung S3 PUT cannot delay the local heartbeat.
-
-**SIGTERM finalizes the run.** A preempted job (spot reclaim, `scancel`, a
-Kubernetes eviction) is sent `SIGTERM`, and `atexit` never runs for a process a
-signal kills. The SDK therefore handles `SIGTERM`: it finishes every open run
-with exit code `143` (`128 + 15`, so it reads `failed`, never `stuck`) and
-`received_signal: SIGTERM`, syncs the log (giving up after a minute —
-`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` changes that — so a hung store cannot keep
-the process alive), and then hands the signal on — the handler
-that was in place before is called, otherwise the default action is
-re-delivered, so the process still dies of `SIGTERM`. With no run open it
-finalizes nothing. Python lets only the main thread install a handler, so the
-SDK installs it when `vmn_exp.sdk` is imported on the main thread; runs opened
-later from worker threads (a thread-pool sweep) are covered. If you install
-your own `SIGTERM` handler after that import, or first import the SDK from a
-worker thread, call `install_signal_handlers()` from the main thread afterwards
-to chain it. It is never installed over `SIG_IGN`. With several runs open,
-every run's final state is written locally first and their uploads then share
-that one wait, so a hung store cannot leave the later runs `stuck`; the same
-holds at interpreter exit.
-
-**A flaky store never becomes your error.** `finish()` does not raise for a
-storage failure (a remote that returns 503 at the end of a ten-hour run is logged
-as a warning, not thrown at the workload), and it always closes the run — the
-run leaves the open-run registry and the environment is handed back regardless.
-An exception from your own code inside the `with` block is re-raised unchanged;
-a storage error while recording it is logged, never substituted for it.
+- An exception inside the `with` block appends an `error` entry, finalizes the
+  run as **failed** (exit code 1) and is re-raised. `sys.exit(N)` inside it
+  records `N` (0 for no argument).
+- A run still open at interpreter exit is finalized too: succeeded after a
+  clean exit, failed after an uncaught exception.
+- `finish()` never raises for a storage failure (a 503 at the end of a
+  ten-hour run is logged as a warning) and always closes the run.
+- The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`
+  in `run_state.yml`), so an OOM-killed or lost job goes
+  [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`
+  forever. Remote state and log uploads run off that thread; a hung PUT never
+  delays a beat.
+- **SIGTERM finalizes every open run** with exit code 143 and
+  `received_signal: SIGTERM` (so it reads `failed`, never `stuck`), waits for
+  the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
+  shared wait for all runs), then calls the previous handler or re-delivers the
+  signal. The handler is installed when `vmn_exp.sdk` is imported on the main
+  thread (never over `SIG_IGN`). If you install your own SIGTERM handler later,
+  or first import the SDK from a worker thread, call
+  `install_signal_handlers()` from the main thread to chain it.
 
 ### Steps
 
-Every metrics entry has a step. `run.step` is the step the next
-`log_metrics()` without `step=` records; each such call records it and then
-advances it by one (one counter per run, like W&B's `_step`):
+Every metrics entry has a step. `run.step` is the step the next call without
+`step=` records; each such call advances it by one (W&B's `_step`):
 
 ```python
-run.log_metrics({"loss": 0.9, "acc": 0.1})   # step 0 — one call, one shared step
+run.log_metrics({"loss": 0.9, "acc": 0.1})   # step 0, shared by both values
 run.log_metric("loss", 0.8)                  # step 1
 run.log_metric("loss", 0.5, step=10)         # step 10; run.step is now 11
 run.log_metric("loss", 0.6, step=3)          # kept at step 3; run.step stays 11
@@ -703,47 +493,33 @@ run.log_metric("lr", 1e-3, commit=False)     # step 11, not advanced ...
 run.log_metric("loss", 0.4)                  # ... so this one is step 11 too
 ```
 
-- An explicit `step=s` is recorded as given and raises `run.step` to `s + 1`
-  when that is higher; a lower step is kept, never dropped (forks and rewinds
-  re-log old steps). `commit=False` records at the current step (or `s`)
-  without advancing, so the next call shares it.
-- A call whose every value is dropped as non-numeric consumes no step. The
-  counter is thread-safe: concurrent calls get distinct steps.
-- A fork or a rewound run starts at `run.start_step`; a resumed run at one past
-  the highest step its (non-rewound) metrics reached; a new run at 0.
-- System metrics (`sys_*`) carry no step and consume none; images, tables and
-  histograms keep their own per-name steps; the metrics file of `vmn-exp run`
-  still needs an explicit `step=N` prefix for a stepped point.
-- Runs logged before auto-stepping have step-less points, which the UI charts
-  against seconds; overlaying one with a newer run mixes seconds and steps.
-  Since every SDK metric now has a step, a rewind hides metrics logged without
-  an explicit `step=` too.
+- An explicit step only ever raises `run.step`; lower steps are kept.
+  `commit=False` records without advancing. A call whose values are all dropped
+  consumes no step. The counter is thread-safe.
+- A new run starts at 0, a fork or rewind at `run.start_step`, a resumed run one
+  past its highest visible metrics step.
+- `sys_*` metrics are step-less; media keep per-name steps; the `vmn-exp run`
+  metrics file still needs an explicit `step=N` prefix.
 - `NoOpRun` counts `run.step` the same way, so `range(run.step, ...)` works on
   every rank.
 
 ### Resuming a preempted run
-
-A requeued job should continue the run it was rather than start a new one:
 
 ```python
 run = start_run("my_app", run_id=saved_run_id)
 # or set VMN_RESUME_RUN_ID=<verstr> in the requeued job's environment
 ```
 
-The run is reopened — same verstr, `state: running` again with this process's
-pid/host, heartbeating — and new entries are appended to its log (this process
-writes its own log segment; readers merge them). `started_at` is kept, so
-`duration_sec` spans every attempt; `resume_count` and `resumed_at` record the
-restarts. A `note`/`params` passed on resume is appended as a note/params entry.
-A reference that matches no experiment of the app raises `ValueError`.
-`$VMN_RESUME_RUN_ID` is consumed (removed from the environment) when used, so
-neither the next run this process opens nor a vmn subprocess resumes it again;
-an explicit `run_id` wins over it.
+The run is reopened (same verstr, `running` again with this pid/host) and this
+process appends its own log segment. `started_at` is kept, so `duration_sec`
+spans every attempt; `resume_count` and `resumed_at` record the restarts. A
+`note`/`params` passed on resume is appended. An unknown ref raises
+`ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
+neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
 
 ### Forking a run
 
-Branch a new run off another one at a step — try a different learning-rate
-schedule from epoch 200 without retraining the first 200 (W&B's `fork_from`):
+Branch a new run off another at a step (W&B's `fork_from`):
 
 ```python
 with start_run("my_app", fork_from=source_id, fork_step=200) as run:
@@ -752,28 +528,21 @@ with start_run("my_app", fork_from=source_id, fork_step=200) as run:
 # fork_from=f"{source_id}?_step=200" is the same thing
 ```
 
-The fork is an ordinary new run: its own verstr, its own snapshot of the
-*current* working tree (the code identity is what you run now, not the
-source's), and `metadata.yml` records `forked_from: {verstr, step}`. Its log
-opens with the source's `metrics` entries up to and including the step and the
-params logged before it, copied with `"inherited": true` and their original
-timestamps, so the fork's own entries always fold over them — `params=` passed
-here win over inherited ones. Without `fork_step` the whole history is copied
-and `forked_from.step` is the source's last step. The source must be a run of
-the same app; an unknown reference raises `ValueError` before anything is
-created. `run_id` and `fork_from` cannot be combined.
+The fork gets its own verstr and a snapshot of the **current** tree, and
+records `forked_from: {verstr, step}`. Its log opens with the source's metrics
+up to and including the step and the params logged before it, marked
+`"inherited": true`, so the fork's own entries (and `params=`) fold over them.
+Without `fork_step` the whole history is copied. The source must be a run of
+the same app (else `ValueError`, before anything is created); `run_id` and
+`fork_from` cannot be combined.
 
-A fork is **not a child**: `parent`, `kind` and `tree_status` are unchanged
-(nest it with `parent=` if you also want that). Rows carry a flat
-`forked_from` (the source verstr) and `forked_from_step`, so
-`list_runs(query='forked_from = "<verstr>"')` finds every fork of a run;
-`vmn-exp show` prints `Forked from: <verstr> @ step N` and the dashboard links
-the source and marks the fork step on the charts.
+A fork is **not a child** (nest it with `parent=` if you want that). Rows carry
+`forked_from` and `forked_from_step`, so `query='forked_from = "<verstr>"'`
+finds every fork; `vmn-exp show` prints `Forked from: <verstr> @ step N`.
 
 ### Rewinding a run
 
-Resume a run but throw away what it logged after a step — a divergence at step
-300 you want to redo from a step-250 checkpoint:
+Resume a run but discard what it logged after a step:
 
 ```python
 with start_run("my_app", run_id=run_id, rewind_to_step=250) as run:
@@ -781,52 +550,38 @@ with start_run("my_app", run_id=run_id, rewind_to_step=250) as run:
         ...
 ```
 
-Logs are append-only across writers and S3 segments, so nothing is deleted:
-the run appends `{"type": "rewind", "step": 250}`, and every reader — the
-merged log, the leaderboard fold, `list_runs`, the incremental experiment index,
-the run page's series — ignores each entry with a step past 250 that was
-written before that marker. Entries written after it count as usual; entries
-without a step (params, notes, tags) are never rewound. Rewinding again later
-cuts again from the new marker. A run that is live elsewhere (`running`, with a
-fresh heartbeat) is refused with `RuntimeError` — its writer would keep logging
-the steps being rewound. `vmn-exp show` prints each `Rewound to step N` line.
-To rewind a finished run without reopening it, use the CLI:
-`vmn-exp rewind my_app -v <ref> --step 250` (see
-[experiments.md](experiments.md#rewind)).
+Nothing is deleted: the run appends `{"type": "rewind", "step": 250}` and every
+reader ignores entries with a step past 250 written before the marker. Entries
+without a step (params, notes, tags) are never rewound; a later rewind cuts
+again. A run live elsewhere is refused with `RuntimeError`. To rewind without
+reopening, use [`vmn-exp rewind`](experiments.md#rewind).
 
 ### Distributed training (DDP, torchrun, Slurm)
 
-Every rank of a distributed job runs the same script. On a non-zero rank —
-`RANK > 0`, or (without `RANK`) `LOCAL_RANK > 0` with `WORLD_SIZE > 1`, or
-`SLURM_PROCID > 0` — `start_run()` returns a `NoOpRun`: the same interface
-(`log_metric`, `log_params`, `finish`, `with` ...), recording nothing, with no
-heartbeat thread and no git or storage access. It is never registered as open,
-so `current_run()` is `None` there and autologging records nothing. Rank 0
-records as usual and exports `VMN_EXPERIMENT_ID`. Pass `all_ranks=True` to
-record on every rank.
+On a non-zero rank (`RANK > 0`; without `RANK`, `LOCAL_RANK > 0` with
+`WORLD_SIZE > 1`; else `SLURM_PROCID > 0`) `start_run()` returns a `NoOpRun`:
+the same interface, recording nothing, with no heartbeat, git or storage
+access. It is never registered as open, so `current_run()` is `None` and
+autologging records nothing there. `use_artifact`/`use_model`/`use_dataset`
+still return what rank 0 gets. Rank 0 records and exports
+`VMN_EXPERIMENT_ID`. `all_ranks=True` records on every rank.
 
 ### Disabled mode
 
-`VMN_MODE=disabled` (or `start_run(mode="disabled")`) turns the SDK into a
-no-op — for CI, unit tests of training code, or a debugging session you don't
-want recorded. `start_run()` returns a `NoOpRun` with `run.disabled` set to
-`True` (and `run.id` `None`) before anything else happens: no git checkout is
-needed, nothing is snapshotted or written to the store, `$VMN_RESUME_RUN_ID` is
-left untouched, `current_run()` stays `None` and `VMN_EXPERIMENT_ID` is not
-exported. Every `run.*` method is accepted and ignored, and `autolog()` patches
-nothing. An explicit `mode="enabled"` beats the variable (like `capture_env`).
-
-`vmn-exp run my_app -- cmd` under `VMN_MODE=disabled` just runs `cmd` in place
-of vmn-exp (no lock, auto-init, snapshot or `run_state.yml`), with
-`VMN_METRICS_FILE` pointing at `/dev/null`; its exit code and signals are its
-own. Other `vmn-exp` actions ignore `VMN_MODE`.
+`VMN_MODE=disabled` (or `start_run(mode="disabled")`) makes the SDK a no-op for
+CI, unit tests or debugging: `start_run()` returns a `NoOpRun` with
+`run.disabled = True` and `run.id = None` before touching git or the store;
+`$VMN_RESUME_RUN_ID` is left alone, `current_run()` stays `None`,
+`VMN_EXPERIMENT_ID` is not exported, and `autolog()` patches nothing. An
+explicit `mode="enabled"` beats the variable. `vmn-exp run my_app -- cmd` under
+`VMN_MODE=disabled` just runs `cmd` (with `VMN_METRICS_FILE=/dev/null`).
 
 ---
 
 ## Nesting
 
-`nested=True` parents the new run to the calling context's run — the innermost
-run opened by this thread that is still open (else the process's only open run):
+`nested=True` parents the new run to the calling context's open run (else the
+process's only open run):
 
 ```python
 with start_run("my_app", note="lr sweep") as sweep:
@@ -835,14 +590,9 @@ with start_run("my_app", note="lr sweep") as sweep:
             trial.log_metric("loss", train(lr))
 ```
 
-In one process it is belt-and-braces: an open run exports `VMN_EXPERIMENT_ID`
-into its own environment, so the inner `start_run` would have found the parent
-anyway. Pass it when you want the parenting to be explicit in the code, or when
-the enclosing run may have been started elsewhere.
-
-Otherwise `VMN_EXPERIMENT_ID` is honored exactly as the CLI honors it, and the
-SDK **exports** it while a run is open — so any subprocess you launch auto-links
-as an inner run:
+Parent precedence: explicit `parent=` > `nested=True` > `$VMN_EXPERIMENT_ID` (a
+stale one is warned about and ignored). An open run exports
+`VMN_EXPERIMENT_ID`, so a subprocess you launch auto-links as an inner run:
 
 ```python
 with start_run("my_app", note="lr sweep"):
@@ -850,43 +600,31 @@ with start_run("my_app", note="lr sweep"):
         subprocess.run(["vmn-exp", "run", "my_app", "--", "python", "train.py", "--lr", str(lr)])
 ```
 
-Either way you get the same outer/inner structure — including `kind` and the
-`tree_status` rollup — that a [CLI sweep](experiments.md#outer--inner-jobs-sweeps)
-produces.
+Either way you get the [outer/inner structure](experiments.md#outer--inner-jobs-sweeps)
+(`kind`, `tree_status`) a CLI sweep produces.
 
 ### Sweep trials: `sweep_params()`
 
-Inside a trial that [`vmn-exp sweep agent`](sweeps.md) launched,
-`from vmn_exp.sdk import sweep_params` returns the trial's params (a fresh dict
-from `$VMN_SWEEP_PARAMS`; `{}` outside a sweep). A `start_run()` in the trial
-nests under the trial run, and the sweep reads the target metric from it (see
-[a trial's metric](sweeps.md#inside-a-trial)).
+Inside a trial launched by [`vmn-exp sweep agent`](sweeps.md), `sweep_params()`
+returns the trial's params (a fresh dict from `$VMN_SWEEP_PARAMS`; `{}` outside
+a sweep). A `start_run()` in the trial nests under it, and the sweep reads the
+target metric from it ([sweeps.md](sweeps.md#inside-a-trial)).
 
 ### Threads, forks and `current_run()`
 
-`from vmn_exp.sdk.run import current_run` returns the run the calling code
-should record into, or `None`:
+`from vmn_exp.sdk import current_run` returns the run the calling code should
+record into: the run this thread/context opened, else the process's only open
+run, else `None`.
 
-1. the run the calling context (thread) opened, if it is still open;
-2. else the process's only open run;
-3. else `None` — several runs are open and none belongs to this context.
-
-That is what keeps concurrent runs in one process apart:
-
-- **Thread-pool sweeps** (Optuna `n_jobs>1`, a `ThreadPoolExecutor`): trials that
-  each call `start_run()` in their own thread are independent siblings. The
-  exported `VMN_EXPERIMENT_ID` names whichever run opened last, but a run another
-  thread of this process has open is never taken as a parent — only the value the
-  process was *launched* with (an enclosing `vmn-exp run`) is. Once every run has
-  finished, in whatever order, the environment is exactly what it was before the
-  first one opened. To nest a trial under an outer run opened by another thread,
-  pass `parent=outer.id`.
-- **Forks** (`multiprocessing` with `fork`, DataLoader workers): a child inherits
-  the parent's `Run` objects but not the runs. `current_run()` is `None` there, and
-  the child's interpreter exit never finalizes the parent's still-running run.
-  Every `Run` records its owning process as `run.pid`. A child that calls
-  `start_run()` itself becomes an inner run of the parent via the inherited
-  `VMN_EXPERIMENT_ID`, exactly like a subprocess.
+- **Thread-pool sweeps**: trials that each call `start_run()` in their own
+  thread are independent siblings. A run another thread has open is never taken
+  as a parent via `VMN_EXPERIMENT_ID` (only the value the process was launched
+  with is); pass `parent=outer.id` to nest across threads. Once every run has
+  finished, the environment is restored.
+- **Forks** (`multiprocessing` fork, DataLoader workers): the child inherits the
+  `Run` objects but not the runs: `current_run()` is `None` there and the
+  child's exit never finalizes the parent's run. A child calling `start_run()`
+  becomes an inner run via the inherited `VMN_EXPERIMENT_ID`.
 
 ---
 
@@ -904,44 +642,42 @@ for run in list_runs("my_app", query='metrics.loss < 0.5 and params.optimizer = 
 best = get_run("my_app", ref="latest")
 ```
 
-- `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None,
-  query=None, use_index=True, include_archived=False)` — archived runs are
-  left out unless `include_archived=True`; `sort` picks the metric to order by (the configured [primary
-  metric](experiments.md#metrics-schema-sorting--goals) when omitted), `last`
-  caps the result count, `status` filters to one derived status, and `query` is
-  [the query language](#the-query-language). A bad query raises `QueryError`.
-  Everything after `app_name` is keyword-only, so a query passed positionally
-  cannot be mistaken for `storage`.
-- `get_run(app_name=None, ref="latest", *, storage=None, x=None)` — `ref` takes any
-  [addressing form](experiments.md#addressing-experiments): a full verstr, a
-  unique prefix, `@N`, or `latest`. `x="epoch"` joins `series` on that metric
-  (see [Custom x axis](#custom-x-axis-step_metric)); the row's `step_metrics`
-  lists the declared x metrics.
-- `param_importance(app_name=None, metric=None, *, storage=None, query=None,
-  status=None, include_archived=False)` — which params drive `metric` over the
-  runs `list_runs` would return for the same filters: a list of
-  `{"param", "importance", "correlation", "spearman", "kind", "n"}`, most
-  important first. `importance` is a random-forest share (sums to 1),
-  `correlation`/`spearman` are `None` for categorical params; see
-  [`vmn-exp importance`](experiments.md#importance) for the details. Raises
-  `ValueError` when no run carries `metric`, `QueryError` on a bad query.
+All readers resolve `app_name=None` like `start_run()` (among apps with
+experiments). Without `storage=` they read the local experiments of the
+checkout found from the cwd (or `$VMN_WORKING_DIR`). For a git-free dir or a
+remote store, pass one:
+`storage=vmn_exp.core.storage_resolve.resolve_experiment_storage()` honours
+`VMN_EXPERIMENT_DIR`/`VMN_EXPERIMENT_STORE`/the bucket shorthand, or takes
+`dir=`/`store=` explicitly. Outside a checkout pass `app_name` too: only with
+both given is no checkout looked up (and then no conf.yml metrics schema is
+applied).
 
-  ```python
-  from vmn_exp.sdk.reader import param_importance
+| Function | Returns |
+|---|---|
+| `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None, query=None, use_index=True, include_archived=False)` | rows, oldest first. `status`: a status or list/comma-separated statuses; `query`: [the query language](#the-query-language) (`QueryError` on a bad one); `last` keeps the last N (before sorting); `sort` orders by a metric (default the configured [primary metric](experiments.md#metrics-schema-sorting--goals)); archived runs only with `include_archived=True` |
+| `get_run(app_name=None, ref="latest", *, storage=None, x=None)` | one row plus `log`, `series` (metric → `[{"step", "ts", "value"}]` in log order), `step_metrics`, `artifacts`, `format_version` and the media indexes. `x=` joins series on a metric ([x axis](#custom-x-axis-step_metric)). `ValueError` for an unknown ref |
+| `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)` | see [Lineage](#lineage) |
+| `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
+| `runs_dataframe(app_name=None, **list_runs_kwargs)` | pandas, below |
+| `get_metric_history(metric, app_name=None, ref="latest", *, storage=None)` | pandas, below |
 
-  for entry in param_importance("my_app", "loss", query='status = "succeeded"')[:3]:
-      print(entry["param"], round(entry["importance"], 2), entry["correlation"])
-  ```
+A row carries each metric's [summary](#metric-goals-and-summaries) (the last
+value unless declared otherwise), `params`, `tags`, `inputs`, `outputs`, `name`,
+`archived`, the status fields and the tree fields (`parent`, `children`,
+`kind`, `depth`, `tree_status`). Records written in a newer format than the
+installed SDK reads are skipped with a warning.
 
-A `list_runs` row carries the latest value of each metric, the run's `name`
-(or `None`), its current `tags` and `archived` (a bool). `get_run` adds the record's
-`format_version` (1 for runs written before it existed); runs written in a
-newer format than the installed SDK reads are left out of both, with a
-warning (see [How records are stored](experiments.md#how-records-are-stored)). To read a metric's
-whole history, ask for the run itself — `get_run(...)["series"]` maps each metric
-name to its points in log order, each a `{"step": ..., "ts": ..., "value": ...}`.
+`list_runs` reads through the incremental index `vmn-exp list` and the UI use:
+for a local store `.index.sqlite` in the experiments directory, for S3 a
+per-host cache under `$VMN_INDEX_CACHE_DIR` (default `$XDG_CACHE_HOME/vmn` or
+`~/.cache/vmn`; `none` disables). Each call re-reads only what changed. It is a
+disposable cache; `use_index=False` reads storage directly and writes no index.
+`get_run` uses the index to resolve refs, then reads just that run.
 
 ### As pandas DataFrames
+
+Needs `pip install "vmn-exp-sdk[pandas]"` (otherwise `ImportError` naming the
+extra).
 
 ```python
 from vmn_exp.sdk.reader import get_metric_history, runs_dataframe
@@ -952,47 +688,19 @@ df.sort_values("metrics.loss").head()
 loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timestamp, value
 ```
 
-Needs pandas: `pip install "vmn-exp-sdk[pandas]"` (without it both raise an
-`ImportError` naming that extra).
-
-- `runs_dataframe(app_name=None, **list_runs_kwargs)` — the `list_runs` rows as
-  one flat DataFrame, like `mlflow.search_runs()`. It takes every `list_runs`
-  keyword (`storage`, `query`, `status`, `sort`, `last`, `include_archived`, ...),
-  so filtering stays in the query language rather than a second API. Columns:
-  `run_id` (the verstr), `idx`, `name`, `status`, `kind`, `parent`,
-  `tree_status`, `timestamp`/`started_at`/`finished_at` (UTC datetimes),
-  `duration_sec`, `exit_code`, `host`, `branch`, `code_verstr`, `note`,
-  `archived`, then `metrics.<k>`, `params.<k>`, `tags.<k>` and `inputs.<name>`
-  (the input's URI), each group sorted. A run missing a value reads `NaN`/`None`.
-  `metrics.<k>` is the same fold the query language's `metrics.<k>` sees, so
-  numeric params appear there too.
-- `get_metric_history(metric, app_name=None, ref="latest", *, storage=None)` —
-  every logged value of one metric in one run, in log order (`step` is `None`
-  where none was logged); empty when the run never logged it. The metric comes
-  first because it is the only argument without a default.
-
-A separate function rather than `list_runs(output="pandas")`: one return type
-per function keeps `list_runs` free of a pandas code path and type-checkable.
-
-`vmn-exp list`, the ui and `list_runs()` read through an incremental index
-(`list_runs(..., use_index=False)` reads storage directly and writes no index
-file): the folded
-rows persist in `.vmn/<app>/experiments/.index.sqlite`, next to the records
-(the directory's own `.gitignore` keeps it out of `git status`). A call lists
-the record files once and re-reads only what changed since the last one — the
-new lines of a grown log, a rewritten `run_state.yml` — so listing thousands of
-runs stays cheap while they train. It is a disposable cache: delete it any time,
-and if it cannot be opened (read-only disk, corrupt file) the rows are read
-directly. Status is still derived on every call.
-
-`get_run` always goes through the index to resolve `@N`/`latest`/prefixes and
-to find the run's place in the tree; it then reads just that run — its
-metadata, log and artifacts, and the run states of its own subtree.
+- `runs_dataframe` is `list_runs` as one flat DataFrame (like
+  `mlflow.search_runs()`), taking every `list_runs` keyword. Columns: `run_id`
+  (the verstr), `idx`, `name`, `status`, `kind`, `parent`, `tree_status`,
+  `timestamp`/`started_at`/`finished_at` (UTC datetimes), `duration_sec`,
+  `exit_code`, `host`, `branch`, `code_verstr`, `note`, `archived`, then sorted
+  `metrics.<k>`, `params.<k>`, `tags.<k>` and `inputs.<name>` (the URI).
+  `metrics.<k>` is the fold the query language sees, numeric params included.
+- `get_metric_history` is every logged value of one metric in one run, in log
+  order (`step` is `None` where none was logged); empty if never logged.
 
 ### Lineage
 
 ```python
-from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import get_lineage
 
 with start_run("my_app", name="train") as train:
@@ -1003,66 +711,44 @@ with start_run("my_app", name="eval") as evaluate:
     path = evaluate.use_artifact(train.id, "model.pkl")   # vmn://my_app/<train>/model.pkl
 
 get_lineage("my_app", evaluate.id, depth=2)
-# {"app": "my_app", "verstr": "...", "upstream": [...], "downstream": [...],
+# {"app", "verstr", "upstream": [...], "downstream": [...],
 #  "datasets": [...], "models": [...], "truncated": False}
 ```
 
-`get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)`
-links runs through what they consumed and produced:
+Runs link through what they consumed and produced:
 
-- every `get_run`/`list_runs` row carries `outputs` — `{path: {"path", "digest":
-  "sha256:<hex>", "size"}}`, folded from the run's artifact, image and table
-  entries (the latest write of a path wins) — next to `inputs`. The experiment index keeps them beside its lean
-  rows rather than on them, so `vmn-exp ui` list, leaderboard, facets and
-  columns payloads never carry them (a run logging an image per step has one
-  output per step), while lineage, run detail and `outputs.*` queries read
-  them;
-- **upstream** are the runs whose artifacts this run consumed: an input whose
-  URI is `vmn://<app>/<verstr>/<path>` (what `use_artifact` records; `<app>` is
-  the tag form, `/` → `-`) names its producer, in any app; any other input
-  matches every run of the same app with an output of the same digest
-  (compared without the `sha256:` prefix, case-insensitively). Each node's
-  `links` are `{"input", "artifact", "digest", "via"}`; a `vmn://` link to an
-  artifact a live registry version was registered from (what `use_model` /
-  `use_dataset` of a run-backed version record) also carries `"model"`,
-  `"version"` and `"kind"` — the version its input is named after
-  (`<name>@<N>`), else the first registered from that artifact;
-- **downstream** are the runs of the same app that consumed this run's outputs,
-  by the same two rules;
-- **datasets** are the reference datasets the run used — its
-  `vmn-registry://<name>@<N>` inputs, which no run produced, so they are no
-  run node and never match by digest: `{"model", "version", "kind", "input",
-  "digest", "found"}` (`found` is False once the version is deleted);
-- **models** are the live model versions registered from the run:
-  `{"model", "kind", "version", "aliases", "status", "artifact_path"}` (`kind`
-  is `model` or `dataset`).
+- Every row carries `outputs`: `{path: {"path", "digest": "sha256:<hex>",
+  "size"}}` from its artifact, image and table entries (latest write wins).
+- **upstream**: runs whose artifacts this run consumed. A `vmn://<app>/<verstr>/<path>`
+  input (what `use_artifact` records; `<app>` in tag form, `/` → `-`) names its
+  producer in any app; any other input matches runs of the same app with an
+  output of the same digest (compared without `sha256:`, case-insensitively).
+- **downstream**: runs of the same app that consumed this run's outputs, by the
+  same rules.
+- **datasets**: the reference datasets used (`vmn-registry://<name>@<N>`
+  inputs): `{"model", "version", "kind", "input", "digest", "found"}`.
+- **models**: live registry versions registered from the run: `{"model",
+  "kind", "version", "aliases", "status", "artifact_path"}`.
 
-The other direction — which run made a version and which runs used it — is
-`vmn_exp.registry.lineage.version_lineage(storage, name, n)`:
-`{"model", "version", "kind", "status", "producer", "consumers"}`, where
-`producer` is the run node of the version's run (None for a reference dataset)
-and `consumers` the runs recorded in its `<name>-uses` record, first use first.
-It answers for deleted versions too (`status: "deleted"`); a pruned consumer
-is a node with `found: False`. Raises KeyError for a version that never
-existed. Downstream links stay within one app, so this is how consumers in
-other apps are found.
+Each node is `{"app", "verstr", "name", "timestamp", "status", "depth",
+"found", "links"}`; `depth` counts hops, `found` is False for a `vmn://` URI
+naming a missing run, and `links` are `{"input", "artifact", "digest", "via":
+"uri"|"digest"}` (plus `model`/`version`/`kind` when the artifact backs a live
+registry version). Each direction keeps at most `limit` nodes (`truncated`
+says one was cut). It is answered from the index rows; no run log is read.
+`ValueError` for an unknown ref.
 
-Each node is `{"app", "verstr", "name", "timestamp", "status", "depth", "found",
-"links"}`; `depth` counts hops (1 = direct), `found` is False for a `vmn://`
-URI naming a run that is not there, and `links` lists `{"input", "artifact",
-"digest", "via": "uri"|"digest"}`. `depth` follows links further; each
-direction keeps at most `limit` nodes (`truncated` says one was cut). It is a
-join over the index rows, so no run log is read. A run is never its own
-neighbour. `ValueError` when `ref` resolves to nothing.
-
-As on the write side, `app_name=None` resolves from the current repo.
+The other direction, which run made a registry version and which runs used it
+(across apps), is `vmn_exp.registry.lineage.version_lineage(storage, name, n)`;
+see [models.md](models.md#lineage).
 
 ---
 
 ## The query language
 
-One small expression language filters experiment rows, shared by the SDK reader
-and the [REST API](ui.md#filtering-with-a-query) so they select identically:
+One expression language filters rows for `list_runs(query=)`, `vmn-exp list
+--query` ([experiments.md](experiments.md#list)), `prune --query` and the
+[REST API / UI](ui.md#filtering-with-a-query):
 
 ```
 metrics.loss < 0.5 and status = "succeeded"
@@ -1070,296 +756,171 @@ status in ("running", "stuck")
 note ~ "baseline"
 params.optimizer = "adam" and not params.frozen = true
 metrics.acc >= 0.9 and (kind = "inner" or depth = 0)
+metrics."train/loss" < 0.3
 ```
 
 **Operators**
 
 | Form | Means |
 |---|---|
-| `=` `==` `!=` | equality. Types must match: a number never equals a string, `true` never equals `1` |
-| `<` `<=` `>` `>=` | ordering, for two numbers or two strings. Mixed types simply don't match |
-| `~` / `contains` / `!~` | case-insensitive substring; the right-hand side must be a string. Against a list field (`command`, `children`) it matches any element — `command ~ "train.py"` — and against a dict field (`tags`) any value |
+| `=` `==` `!=` | equality; types must match (a number never equals a string, `true` never equals `1`) |
+| `<` `<=` `>` `>=` | ordering of two numbers or two strings; mixed types don't match |
+| `~` / `contains` / `!~` | case-insensitive substring (string right-hand side); on a list field (`command`, `children`) any element matches, on a dict field (`tags`) any value |
 | `in (…)` / `not in (…)` | membership in a literal list |
 | `and` `or` `not`, `(…)` | the usual, `not` binding tightest |
 
-Literals are numbers, quoted strings (either quote), `true`, `false`, `null`.
-Numbers are integers, decimals or scientific notation (`1e-4`, `2.5E+3`), so
-`params.lr = 1e-4` works as written. Keywords and operators are case-insensitive (`AND`, `Contains`); **field names
-are case-sensitive**, so `STATUS = "failed"` is an error, not an empty result.
-`not` and parentheses nest at most 100 levels deep (deeper is a `QueryError`);
-`and`/`or` chains can be any length.
+Literals: numbers (including `1e-4`, `2.5E+3`), quoted strings (either quote),
+`true`, `false`, `null`. Keywords are case-insensitive; **field names are
+case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
+`not`/parentheses nest at most 100 deep.
 
 **Fields**
 
-- Bare row keys — `status`, `verstr`, `note`, `branch`, `exit_code`,
-  `duration_sec`, `idx`, `timestamp`, `parent`, `kind`, `depth`, `tree_status`,
-  `pid`, `host`, `command`, and the rest of what a row
-  [carries](ui.md#experiment-status-fields). An unknown name is a query error,
-  so a typo tells you instead of returning nothing.
-- `metrics.<name>` — a numeric metric.
-- `params.<name>` — a param, as it was recorded.
-- `tags.<key>` — a tag, always a string (`tags.stage = "prod"`); a removed or
-  never-set tag is missing. Keys the query can name are letters, digits and `_`.
-- `name` (`name ~ "sweep"`, `name = null` for unnamed runs) and `archived`
-  (`archived = true` — only meaningful with `include_archived=True`, since the
-  default listing drops archived rows first).
-- `inputs.<name>.uri|digest|kind` — a logged input; `outputs.<path>.path|digest|size`
-  — an artifact, image or table the run logged ([lineage](#lineage)). Quote a key with a dot or
-  slash in it: `outputs."model.pkl".digest = "sha256:..."`.
+- Row keys: `idx`, `verstr`, `code_verstr`, `timestamp`, `note`, `branch`,
+  `base_version`, `parent`, `name`, `archived`, `tags`, `last_metric_at`,
+  `status`, `exit_code`, `started_at`, `finished_at`, `heartbeat`,
+  `duration_sec`, `pid`, `host`, `command`, `stale_sec`,
+  `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
+  `imported_from`, `forked_from`, `forked_from_step`, `rerun_of` (see
+  [ui.md](ui.md#experiment-status-fields)). `archived = true` only matters with
+  `include_archived=True`.
+- `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
+  is missing), `env.<key>` (the captured environment summary: `python`,
+  `platform`, `packages_count`, …).
+- `inputs.<name>.uri|digest|kind` and `outputs.<path>.path|digest|size`
+  ([lineage](#lineage)).
+- Quote a key containing `/`, `.` or `-`: `metrics."train/loss"`,
+  `params.'val-acc'`, `outputs."model.pkl".digest`, `inputs."resnet50@3".kind`.
 
-`metrics` and `params` read different dicts, and the difference matters:
-**`metrics` holds numeric values only** (params that parse as finite, non-boolean
-numbers are folded in, since sorting, leaderboards and charts need numbers — so
-`missing=nan` or `verbose=True` never become metrics), while **`params` holds
-every param verbatim**. So `params.model = "xgb"` and `params.cache = true` work
-and `metrics.model` does not, while a numeric param resolves under both
-`params.lr` and `metrics.lr`.
+`metrics` and `params` read different dicts. **`metrics` is numeric only**:
+params that parse as finite numbers are folded in (bools as 1.0/0.0; `nan`
+values never). **`params` holds every param verbatim**, so `params.model =
+"xgb"` and `params.cache = true` work and `metrics.model` does not.
 
 **Missing fields** are two-valued, not SQL's `UNKNOWN`: a comparison against an
-absent or `None` field is simply false, so a query and its `not` always partition
-the rows exactly. `= null` is how you ask for absence — and `!= x` is therefore
-true for a run that has no `x` at all.
+absent or `None` field is false, so a query and its `not` partition the rows.
+`= null` tests absence, and `!= x` is true for a run without `x`.
 
-An invalid query raises `QueryError` with the offending character offset
-(`unknown field 'statuz' at offset 0`). Over HTTP the same message comes back as
-a 400. Nothing is ever `eval`'d: the implementation is a hand-written lexer plus
-recursive-descent parser in `vmn_exp/core/query.py`.
-
-On the command line the same expressions go to `vmn-exp list <app> --query
-'<expr>'` (see [experiments.md](experiments.md#list)).
+An invalid query raises `QueryError` (a `ValueError`) with the character offset
+(`unknown field 'statuz' at offset 0`); over HTTP it is a 400. Nothing is
+`eval`'d.
 
 ---
 
 ## Model registry
 
-The model registry links named, versioned model identifiers to the experiment
-runs and artifact paths that produced them. The registry lives in the same
-storage root as experiment runs (under the reserved pseudo-app `vmn-registry`),
-so no extra infrastructure is needed.
+Named, versioned models and datasets linked to the runs that produced them,
+stored under the reserved pseudo-app `vmn-registry` in the same store as runs.
+The full reference (refs, aliases, datasets, use recording, storage, prune
+protection) is [models.md](models.md#sdk).
 
 ```python
-from vmn_exp.sdk import start_run, register_model, get_model_version, download_model
+from vmn_exp.sdk import download_model, get_model_version, set_alias, start_run
 
-# Register during (or after) a run
 with start_run("my_app") as run:
     run.log_artifact("weights.pt")
     run.register_model("resnet50", artifact_path="weights.pt", alias="staging")
 
-# Or register after the run is closed
-meta = register_model("resnet50", run=run, artifact_path="weights.pt")
-print(meta["n"])          # version number, e.g. 1
-print(meta["run_ref"])    # {"app": "my_app", "verstr": "1.6.0-dev.a1b2c3d..."}
-```
-
-### Resolving a model version
-
-Refs have four forms:
-
-| Ref | Resolves to |
-|-----|-------------|
-| `model` | Latest non-deleted version |
-| `model@latest` | Same |
-| `model@3` | Version number 3 |
-| `model@alias` | Version the alias currently points to |
-
-```python
-from vmn_exp.sdk import get_model_version, set_alias, remove_alias
-
-meta = get_model_version("resnet50@staging")
-meta = get_model_version("resnet50@2")
-meta = get_model_version("resnet50")     # latest
-
-set_alias("resnet50", "production", 2)           # move alias
-set_alias("resnet50", "production", 3, expect=2) # only if currently at v2
-remove_alias("resnet50", "staging")
-```
-
-### Downloading artifacts
-
-```python
-from vmn_exp.sdk import download_model
-
-path = download_model("resnet50@production")         # returns local path
-path = download_model("resnet50@production", dst="/tmp/models")  # copy to dir
-```
-
-Local storage returns the on-disk path directly. S3 storage downloads the
-artifact to a temporary cache directory.
-
-`download_model` inside an open run also records the use (below);
-`record=False` opts out. A reference dataset raises `ValueError`.
-
-### Datasets
-
-Datasets are registry entries of kind `dataset` (same namespace, refs and
-aliases as models). Reference mode records a location and digest, copied mode
-points at a run artifact:
-
-```python
-from vmn_exp.sdk import register_dataset, get_dataset_version
-
-register_dataset("imagenet", "/data/imagenet")                 # local path: hashed
-register_dataset("raw", "s3://lake/raw/", digest="sha256:ab..")
-register_dataset("train_split", run=run, artifact_path="data/train.parquet")
-meta = get_dataset_version("imagenet")
-```
-
-Exactly one of `uri` / `artifact_path`; `dedupe=True` (default) returns the
-existing version for a digest already registered. See
-[models.md](models.md#datasets) for the digest rules.
-
-### Recording use
-
-```python
-from vmn_exp.sdk import use_model, use_dataset
-
+meta = get_model_version("resnet50@staging")      # model, model@latest, model@N, model@alias
+set_alias("resnet50", "production", 2, expect=1)  # CAS guard
 with start_run("serving") as run:
-    run.use_model("resnet50@production")     # returns the version metadata
+    path = download_model("resnet50@production")  # also records the use inside a run
     run.use_dataset("imagenet")
 ```
 
-Each use logs an `input` named `<name>@<N>` (the resolved number, never an
-alias) — URI `vmn://<app>/<verstr>/<path>` of the producer artifact with its
-digest, or `vmn-registry://<name>@<N>` for a reference dataset — and appends a
-best-effort `use` entry to the registry record `<name>-uses`. Once per version
-per run; `get_model_version` never records; `NoOpRun.use_*` only resolve. See
-[models.md](models.md#using-versions).
-
-### Listing models
-
-```python
-from vmn_exp.sdk import list_models
-
-print(list_models())   # e.g. ["bert_base", "imagenet", "resnet50"]
-```
-
-### Storage resolution
-
-All model registry functions accept an optional keyword argument `storage=` for
-passing an explicit storage object. When omitted, storage is resolved the same
-way as experiment runs:
-
-1. `VMN_SNAPSHOT_METADATA` set → container/snapshot mode
-2. `VMN_EXPERIMENT_DIR` set → that directory
-3. Otherwise → the current git checkout's `.vmn` root
-
-The local root found this way fronts the remote store, if any:
-`VMN_EXPERIMENT_STORE` (a URI; `resolve_experiment_storage(store=...)` in code),
-else the `VMN_EXPERIMENT_BUCKET`/`_PREFIX`/`_ENDPOINT_URL` shorthand for `s3://`.
-With no local root the store is used directly; a `file://` store *is* the root.
-The URI scheme picks the backend from the registry in `vmn_exp.storage.registry`
-(built-ins `file`, `s3`, `gs`, `az`; plugins via the `vmn_exp.storage`
-entry-point group). A backend whose SDK is missing raises `ImportError` naming
-the extra to install, e.g. `pip install 'vmn-exp-sdk[gcs]'`.
+| Function | Signature |
+|---|---|
+| `register_model` | `(name, run=None, app_name=None, artifact_path=None, alias=None, description=None, *, storage=None)` |
+| `set_alias` / `remove_alias` | `(model, alias, version, expect=None, *, storage=None)` / `(model, alias, *, storage=None)` |
+| `get_model_version` / `get_dataset_version` | `(ref, *, storage=None)`; never records a use |
+| `list_models` | `(*, storage=None)`; models and datasets |
+| `download_model` | `(ref, dst=None, *, storage=None, record=True)` |
+| `register_dataset` | `(name, uri=None, *, run=None, app_name=None, artifact_path=None, digest=None, description=None, alias=None, dedupe=True, storage=None)`; exactly one of `uri` / `artifact_path` |
+| `use_model` / `use_dataset` | `(ref, *, run=None, storage=None)`; also `run.use_model(ref)` / `run.use_dataset(ref)` |
 
 ---
 
 ## Integrations
 
-Higher-level wrappers for specific ML frameworks and experiment-management
-libraries.  Each integration lives in `vmn_exp.integrations.*` and is separate
-from autologging: autolog patches the framework's training entrypoint
-automatically; integrations are explicit helpers you call when you need more
-control.  They need the library they wrap (`transformers`, `optuna`,
-`ray[tune]`), which you install yourself; vmn never pulls in a framework.
+Explicit helpers in `vmn_exp.integrations.*`, separate from autologging. Each
+needs the library it wraps (installed by you) and imports it lazily.
 
 ### Hugging Face Transformers — `VmnCallback`
 
-`VmnCallback` records Trainer params and per-step train/eval metrics.  It is
-injected automatically when `autolog()` is active; you can also attach it
-manually without calling `autolog()`:
+`autolog()` injects it into every `Trainer.train`; attach it by hand without
+autologging:
 
 ```python
-from vmn_exp.integrations.hf import VmnCallback
-# VmnCallback is assembled lazily — transformers is NOT imported by this line
-
-from transformers import Trainer, TrainingArguments
-from vmn_exp.sdk import start_run
+from vmn_exp.integrations.hf import VmnCallback   # transformers is imported on first use
 
 with start_run("my_app") as run:
-    trainer = Trainer(
-        model=model,
-        args=TrainingArguments(...),
-        callbacks=[VmnCallback()],
-    )
-    trainer.train()
-    # params.learning_rate, metrics.train/loss, metrics.eval/f1, … are recorded
+    Trainer(model=model, args=TrainingArguments(...), callbacks=[VmnCallback()]).train()
 ```
 
-`VmnCallback` only records on rank 0 (world_process_zero).  Checkpoint artifacts
-are saved when `log_models=True` is passed to `autolog()`; the manual callback
-does not save checkpoints by default.
-
-For `autolog("transformers")` behaviour see the [Autologging](#autologging)
-section above.
+- `on_train_begin` logs the `TrainingArguments` as params (keys containing
+  `token`, `logging_dir` and `_`-prefixed ones dropped) plus model config keys
+  that differ from the config's defaults, as `model.<key>`.
+- `on_log` logs numeric values at `state.global_step` as `train/<name>`,
+  `eval/<name>` and `test/<name>` (`epoch` → `train/epoch`; `total_flos` and
+  runtime/throughput keys dropped). Query them quoted: `metrics."eval/f1"`.
+- Records only on the world-process-zero rank, and only inside an open run.
+- Checkpoints are not stored; log them yourself with
+  `run.log_artifacts(checkpoint_dir, prefix="checkpoint")`.
 
 ### Optuna — `start_study_run` + `StudyTracker`
-
-`start_study_run` opens an outer run for an Optuna study and returns a
-`StudyTracker`.  Each trial maps to an inner run with the study's run as its
-parent, so the tree view in `vmn-exp ui` shows one row per sweep with all trials
-nested under it.
 
 ```python
 import optuna
 from vmn_exp.integrations.optuna_study import start_study_run
-from vmn_exp.sdk import autolog
-
-autolog()   # autolog records into whatever run is active on each thread
-
-def objective(trial):
-    lr = trial.suggest_float("lr", 1e-4, 1e-1, log=True)
-    # ... train ...
-    return val_loss
 
 study = optuna.create_study(direction="minimize")
 tracker = start_study_run(study, app_name="my_app", name="lr_sweep")
-
 study.optimize(tracker.wrap(objective), n_trials=20, n_jobs=4)
-tracker.finish()   # records best trial metrics on the outer run
+tracker.finish()
 ```
 
-`tracker.wrap(objective)` returns a new callable that opens an inner run before
-calling `objective` and closes it afterwards.  With `n_jobs > 1` (thread-pool
-parallelism), each trial thread gets its own inner run; `autolog()` records into
-the thread's current run automatically.
-
-Pruned trials (`optuna.TrialPruned`) are recorded as `succeeded` with
-`tag state=pruned` and the exception is re-raised so Optuna marks the trial
-`PRUNED`.
+- `start_study_run(study, app_name=None, **start_run_kwargs)` opens the outer
+  run (`name` defaults to the study name) with params `sampler`, `pruner` and
+  `direction`/`directions`.
+- `tracker.wrap(objective)` opens one inner run per trial (thread-safe under
+  `n_jobs > 1`; `autolog()` inside the objective records into it), tagged
+  `trial_number`. It logs `trial.params`, the return value as `objective`
+  (`objective_<i>` for multi-objective) and each `trial.report(value, step)` as
+  the `intermediate` series.
+- A pruned trial finishes succeeded with tag `state=pruned` and `TrialPruned`
+  is re-raised; any other exception finishes it failed and is re-raised.
+- `tracker.finish()` logs `best_value` and `best_<param>` on the outer run
+  (multi-objective: `best_n_pareto_trials`) and closes it.
 
 ### Ray Tune — `TuneRecorder` + `VmnTuneCallback`
 
-The Ray integration is driver-side only (D20 decision): it records trial outcomes
-from the driver process that calls `tune.run`.  Worker-side autolog is deferred.
+Driver-side only: it records trial outcomes from the process running Tune; no
+worker-side logging.
 
 ```python
 from vmn_exp.integrations.ray_tune import TuneRecorder, make_callback
-import ray.tune as tune
-from vmn_exp.sdk import start_run
 
 recorder = TuneRecorder(app_name="my_app", experiment_name="lr_sweep")
-
-analysis = tune.run(
-    trainable,
-    config={"lr": tune.grid_search([1e-3, 3e-4, 1e-4])},
-    callbacks=[make_callback(recorder)],
-)
+tune.run(trainable, config={"lr": tune.grid_search([1e-3, 3e-4])},
+         callbacks=[make_callback(recorder)])
 recorder.finish()
 ```
 
-`TuneRecorder` creates one outer run on the first `on_trial_start` event and one
-inner run per trial.  Ray's bookkeeping keys (`config`, `timestamp`, `pid`, …)
-are stripped; the rest of each result dict is logged as metrics.  The outer run's
-`tree_status` rolls up to `failed` if any trial failed.
-
-See also: [docs/models.md](models.md) for registering the model after a sweep.
+- `TuneRecorder(app_name=None, experiment_name=None, **start_run_kwargs)`
+  (kwargs go to every `start_run()`) opens the outer run on the first trial
+  and one inner run per trial, named by trial id, with the flattened config
+  (`a.b` keys) as params.
+- Each result is logged at `training_iteration` as the step, minus Ray's
+  bookkeeping keys (`config`, `timestamp`, `pid`, `time_*`, …).
+- Completed trials finish succeeded, errored ones failed (so the outer
+  `tree_status` rolls up to `failed`). `finish()` is idempotent and also runs
+  on Tune's experiment end; used as a context manager, an exception closes
+  everything as failed.
 
 ### PyTorch — `watch`
 
-The equivalent of `wandb.watch(model)` for a plain torch loop: gradient and/or
-parameter histograms of every parameter tensor (unrelated to the `vmn-exp
-watch` alerts command). Importing the module does not import torch.
+`wandb.watch(model)` for a plain torch loop: gradient and/or parameter
+histograms of every parameter (unrelated to the `vmn-exp watch` command).
 
 ```python
 from vmn_exp.integrations.torch_watch import watch, unwatch
@@ -1371,86 +932,75 @@ with start_run("my_app") as run:
     unwatch(model)  # or watcher.remove(): logs what is pending, drops the hooks
 ```
 
-- `log="gradients"` (default), `"parameters"` or `"all"`; `run=` (default
-  `current_run()` at each forward call) and `prefix=` (prepended to keys).
-- Keys: `gradients/<param>` and `parameters/<param>` (`named_parameters()`
-  names), ordinary `histogram` entries, so they show in the run page's Media
-  section and `get_run(...)["histograms"]`.
-- The step is the model's **training-mode forward count**: every `freq`-th
-  forward call with `model.training` set logs the parameters (before that
-  step's update) and captures that pass's gradients, which are logged at the
-  next forward call or `watcher.flush()`. Eval-mode forwards do not count. It
+- `watch(model, log="gradients", freq=1000, bins=64, run=None, prefix="")`:
+  `log` is `"gradients"`, `"parameters"` or `"all"`; `run` defaults to
+  `current_run()` at each forward call. Watching a model again replaces its
+  watcher.
+- Keys `gradients/<param>` and `parameters/<param>` are ordinary `histogram`
+  entries (Media section, `get_run(...)["histograms"]`).
+- The step is the **training-mode forward count**: every `freq`-th forward with
+  `model.training` set logs the parameters (before that step's update) and
+  captures the gradients, logged at the next forward or `watcher.flush()`. It
   is not your metrics' step.
-- Histograms are computed on the tensor's device (`torch.histc`, CPU fallback);
-  only a logged step pays the device-to-host copy of `bins` counts. Gradients
-  are never modified. A hook that fails is logged at debug and never breaks
-  `backward()`.
-- Without an open run nothing is recorded; under DDP only rank 0 records (other
-  ranks get a no-op run). `watch()` on a watched model replaces its watcher.
-- Caveats: with AMP `GradScaler` the hooks see *scaled* gradients; FSDP-sharded
-  or `torch.compile`d models may give partial or missing histograms.
-- Size: a 64-bin entry is ~1.9 KB of log. ResNet-50 (~161 tensors) is ~310 KB
-  per logged step per mode: ~31 MB over 100k steps for gradients at the default
-  `freq=1000`, ~62 MB for `"all"`, ~310 MB at `freq=100`. Lower `bins` or raise
-  `freq` for big models.
+- Histograms are computed on the device (`torch.histc`); only logged steps pay
+  a host copy. Gradients are never modified, and a failing hook never breaks
+  `backward()`. Nothing is recorded without an open run or on non-zero ranks.
+- Caveats: with AMP `GradScaler` the hooks see scaled gradients; FSDP-sharded
+  or `torch.compile`d models may give partial histograms.
+- Size: a 64-bin entry is ~1.9 KB. ResNet-50 (~161 tensors) is ~310 KB per
+  logged step per mode: ~31 MB over 100k steps at `freq=1000` for gradients.
+  Lower `bins` or raise `freq` for big models.
+
+---
+
+## Environment variables
+
+Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments.md).
+
+| Variable | Effect |
+|---|---|
+| `VMN_APP_NAME` | default app name for writers and readers |
+| `VMN_WORKING_DIR` | where writers and readers look for the checkout (default the cwd) |
+| `VMN_MODE` | `disabled`: no-op runs, `autolog()` patches nothing |
+| `VMN_RESUME_RUN_ID` | run to reopen (consumed when used) |
+| `VMN_EXPERIMENT_ID` | parent of new runs; exported while a run is open |
+| `VMN_SNAPSHOT_METADATA` | git-free mode against an exported snapshot |
+| `VMN_EXPERIMENT_DIR` | local experiment root |
+| `VMN_EXPERIMENT_STORE` | remote store URI |
+| `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | `s3://` shorthand (prefix default `vmn-experiments`) |
+| `VMN_EXP_OFFLINE` | record locally only; upload later with `vmn-exp push` |
+| `VMN_WRITER_ID` | this writer's id (log segment names, offline verstrs); default `HOSTNAME`, then the host name |
+| `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
+| `VMN_EXP_SUPERVISOR_SAMPLES` | set by `vmn-exp run` when it samples the child; `system_metrics` then defaults off |
+| `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables environment capture |
+| `VMN_EXP_OUTPUT_CAP_MB` | `capture_output` size cap (default 10) |
+| `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60) |
+| `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |
+| `VMN_SWEEP_PARAMS` | sweep trial params, read by `sweep_params()` |
+| `VMN_INDEX_CACHE_DIR` | where S3 index caches live; `none` disables |
+| `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window when readers derive status (default 60) |
 
 ---
 
 ## Library logging
 
-The SDK emits stdlib `logging` records under the `vmn_exp.sdk` logger and
-never configures handlers — it is a library, so what happens to the records is
-your application's call. To see its debug output:
-
-```python
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
-```
+The SDK logs through stdlib `logging` under `vmn_exp.sdk` and never configures
+handlers. To see its debug output: `logging.basicConfig(level=logging.DEBUG)`.
 
 ---
 
 ## Slim install
 
-For recording-only environments (container images, CI workers, air-gapped
-training jobs), install just the metrics writer:
+For recording-only environments (containers, CI workers, air-gapped jobs):
 
 ```sh
-pip install vmn-exp-sdk           # + [s3]/[gcs]/[azure] to record to a bucket; pynvml for GPU sys_* metrics
+pip install vmn-exp-sdk    # + [s3]/[gcs]/[azure] for a bucket, [pandas] for DataFrames; pynvml for GPU metrics
 ```
 
 `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
-needs. It depends only on `PyYAML`, `filelock` and `psutil`: no vmn, no GitPython, no git
-binary. Creating a run from a git checkout (cold start, snapshot capture), the
-`vmn-exp` CLI and the dashboard live in `vmn-exp`, which depends on this
-package; in a slim install, `start_run()` in a checkout fails with a pointer to
-`pip install vmn-exp`. See [packaging.md](packaging.md) for how the three
-packages split.
-
-### Git-free recording
-
-With `VMN_SNAPSHOT_METADATA` pointing to the `vmn_metadata.yml` that
-`vmn-exp export` writes (baked into your image) and `VMN_EXPERIMENT_DIR`
-pointing to a writable directory, `start_run()` works with no git checkout and
-no GitPython installed:
-
-```python
-import os
-
-os.environ["VMN_SNAPSHOT_METADATA"] = "/opt/model/vmn_metadata.yml"
-os.environ["VMN_EXPERIMENT_DIR"]    = "/mnt/experiments"
-
-from vmn_exp.sdk import start_run
-
-with start_run(app_name="my_model") as run:
-    run.log_metric("accuracy", 0.91)
-```
-
-Reads work the same way:
-
-```python
-from vmn_exp.sdk.reader import list_runs
-
-runs = list_runs("my_model")
-print(runs[0]["verstr"], runs[0]["metrics"])
-```
+needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
+needs `vmn-exp`; in a slim install `start_run()` in a checkout raises a
+`RuntimeError` pointing at `pip install vmn-exp` or the git-free variables
+([Runs without a git checkout](#runs-without-a-git-checkout-containers)). A
+missing store extra raises `ImportError` naming it. See
+[packaging.md](packaging.md) for the package split.
