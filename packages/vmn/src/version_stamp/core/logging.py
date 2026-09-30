@@ -143,9 +143,18 @@ class LevelFilter(logging.Filter):
 # ── Logger setup ─────────────────────────────────────────────────────
 
 
+_debug_holder = [False]
+
+
+def debug_enabled():
+    """Whether --debug was given (full git output is logged only then)."""
+    return _debug_holder[0]
+
+
 def init_stamp_logger(rotating_log_path=None, debug=False, supress_stdout=False):
     import os
 
+    _debug_holder[0] = debug
     _logger_holder[0] = logging.getLogger(VMN_USER_NAME)
     clear_logger_handlers(VMN_LOGGER)
     glob_logger = logging.getLogger()
