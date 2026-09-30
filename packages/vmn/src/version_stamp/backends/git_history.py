@@ -224,8 +224,7 @@ class GitHistoryMixin:
         """Return a raw GitPython commit iterator for the range tag..to_hex."""
         from_hex = self._be.tags[tag_name].commit
 
-        shallow = os.path.exists(os.path.join(self._be.common_dir, "shallow"))
-        if shallow:
+        if self._is_shallow():
             self._fetch("--unshallow")
 
         return self._be.iter_commits(f"{from_hex}..{to_hex}")

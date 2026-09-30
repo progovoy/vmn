@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Git backend mixin: core operations (tag, push, pull, commit, clone)."""
+import os
 import re
 import time
 from urllib.parse import quote as urlquote
@@ -206,6 +207,9 @@ class GitOpsMixin:
             return
 
         self.selected_remote.pull(ff_only=True)
+
+    def _is_shallow(self):
+        return os.path.exists(os.path.join(self._be.common_dir, "shallow"))
 
     def _fetch(self, *args):
         """git fetch from the selected remote; a no-op without one."""

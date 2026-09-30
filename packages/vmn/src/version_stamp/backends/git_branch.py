@@ -223,6 +223,14 @@ class GitBranchMixin:
 
         return None
 
+    def outgoing_change_state(self):
+        """``(kind, message)``: kind is ``"detached"``, ``"outgoing"`` (any
+        other check_for_outgoing_changes error) or None when all is pushed."""
+        err = self.check_for_outgoing_changes()
+        if err is None:
+            return None, None
+        return ("detached" if self.in_detached_head() else "outgoing"), err
+
     @measure_runtime_decorator
     def check_for_outgoing_changes(self):
         if self.in_detached_head():

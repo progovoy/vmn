@@ -19,6 +19,7 @@ from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.git_branch import GitBranchMixin
 from version_stamp.backends.git_history import GitHistoryMixin
 from version_stamp.backends.git_ops import GitOpsMixin
+from version_stamp.backends.git_tag_parse import GitTagParseMixin
 from version_stamp.backends.git_tags import GitTagsMixin
 from version_stamp.core.constants import (
     BOLD_CHAR,
@@ -28,6 +29,7 @@ from version_stamp.core.constants import (
     VMN_READONLY_REMOTE,
     VMN_USER_NAME,
 )
+from version_stamp.core.git_cmd import remote_url
 from version_stamp.core.logging import (
     VMN_LOGGER,
     get_call_stack,
@@ -103,6 +105,7 @@ class GitBackend(
     GitOpsMixin,
     GitBranchMixin,
     GitTagsMixin,
+    GitTagParseMixin,
     GitHistoryMixin,
     VMNBackend,
 ):
@@ -175,13 +178,10 @@ class GitBackend(
 
         try:
             hash = client.head.commit.hexsha
-            if client.remotes:
-                remote = tuple(client.remotes[0].urls)[0]
-                if os.path.isdir(remote):
-                    remote = os.path.relpath(remote, client.working_dir)
-            else:
-                # No remote configured — keep the repo entry, just no remote URL.
-                remote = None
+            # None when no remote is configured — the repo entry is kept.
+            remote = remote_url(client.working_dir)
+            if remote and os.path.isdir(remote):
+                remote = os.path.relpath(remote, client.working_dir)
         except Exception:
             VMN_LOGGER.debug(f'Skipping "{path}" directory reason:\n', exc_info=True)
             return None
