@@ -127,11 +127,11 @@ class VersionControlStamper(IVersionsStamper):
 
         if "whitelist_release_branches" in self.policies:
             policy_conf = self.policies["whitelist_release_branches"]
-            tag_branch = self.backend.get_branch_from_changeset(
+            tag_branches = self.backend.branches_containing(
                 self.backend.changeset(tag=tag_name)
             )
 
-            if tag_branch not in policy_conf:
+            if not set(tag_branches) & set(policy_conf):
                 err_msg = "Policy: whitelist_release_branches was violated. Refusing to release"
                 VMN_LOGGER.error(err_msg)
 

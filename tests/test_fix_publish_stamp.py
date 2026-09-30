@@ -229,3 +229,17 @@ def test_missing_tag_version_info_is_treated_as_absent(app_layout):
     ver_info = vcs.ver_infos_from_repo[vcs.selected_tag]["ver_info"]
     assert vcs.add_metadata_to_version(vcs.selected_tag, ver_info) == "0.0.1-rc.1+b1"
     assert tagged == [f"{app}_0.0.1-rc.1+b1"]
+
+
+def test_release_allowed_when_any_containing_branch_is_whitelisted(app_layout):
+    app = app_layout.app_name
+    _run_vmn_init()
+    _, _, params = _init_app(app)
+    default = _git(app_layout, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    app_layout.write_conf(
+        params["app_conf_path"], policies={"whitelist_release_branches": [default]}
+    )
+    assert _stamp_app(app, "patch", prerelease="rc")[0] == 0
+    _git(app_layout, "branch", "aaa")
+
+    assert _release_app(app, version="0.0.1-rc.1")[0] == 0
