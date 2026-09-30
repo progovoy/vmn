@@ -1,0 +1,19 @@
+-r ../../../tests/test_requirements.txt
+boto3
+moto[s3]
+fastapi
+httpx
+uvicorn
+orjson
+psutil
+scikit-learn
+xgboost
+torch
+lightning
+pytorch-lightning
+tensorflow
+keras
+optuna
+pip
+numpy
+playwright

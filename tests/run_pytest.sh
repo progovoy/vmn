@@ -6,12 +6,15 @@ set -o pipefail
 usage()
 {
 cat << EOF
-    Usage: run_pytest.sh [--color] [--base_log_dir (the default is /tmp)]
+    Usage: run_pytest.sh [--suite core|exp (the default is core)]
+           [--color] [--base_log_dir (the default is /tmp)]
            [--specific_test <test_name>]
            [--skip_test <test_name>]
-           [--module_name <module_name> (the default is just the current directory)]
+           [--module_name <module_name> (the default is the suite's tests directory)]
            [--ci_coverage] (turns on pytest coverage for codecov, pytest-coverage should be installed)
            [-h or --help for this usage message]
+    Suites: core = vmn alone (tests/, vmn's source root only);
+            exp  = vmn-exp (packages/vmn-exp/tests/, all three source roots).
     Default values: --base_log_dir='/tmp'
 EOF
 }
@@ -21,11 +24,15 @@ ci_coverage='no'
 base_log_dir='/tmp/'
 specific_test='none'
 skip_test='none'
-module_name=${CUR_DIR}
+suite='core'
+module_name=''
 html_report_suffix='all'
 
 while [ "$1" != "" ]; do
     case $1 in
+        --suite )          shift
+                           suite=$1
+                           ;;
         --base_log_dir )   shift
                            base_log_dir=$1
                            ;;
@@ -52,6 +59,21 @@ while [ "$1" != "" ]; do
     shift
 done
 
+REPO_ROOT="$(cd "${CUR_DIR}/.." && pwd)"
+
+case ${suite} in
+    core ) SUITE_DIR=${CUR_DIR}
+           SRC_PATH=${REPO_ROOT}/packages/vmn/src
+           COV_PACKAGES='--cov=version_stamp'
+           ;;
+    exp )  SUITE_DIR=${REPO_ROOT}/packages/vmn-exp/tests
+           SRC_PATH=${REPO_ROOT}/packages/vmn/src:${REPO_ROOT}/packages/vmn-exp-sdk/src:${REPO_ROOT}/packages/vmn-exp/src
+           COV_PACKAGES='--cov=vmn_exp'
+           ;;
+    * )    usage
+           exit 1
+esac
+module_name=${module_name:-${SUITE_DIR}}
 
 COLOR=''
 if [ ${color} = 'yes' ]; then
@@ -60,7 +82,7 @@ fi
 
 COVERAGE=''
 if [ ${ci_coverage} = 'yes' ]; then
-        COVERAGE='--cov-report term --cov-report html --cov=version_stamp --cov=vmn_exp'
+        COVERAGE="--cov-report term --cov-report html ${COV_PACKAGES}"
 fi
 
 K_EXPR=''
@@ -74,12 +96,10 @@ K_ARGS=()
 if [ -n "${K_EXPR}" ]; then
 	K_ARGS=(-k "${K_EXPR}")
 fi
-html_report_suffix=${html_report_suffix//[^A-Za-z0-9_.-]/_}
+html_report_suffix=${suite}_${html_report_suffix//[^A-Za-z0-9_.-]/_}
 
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 OUT_PATH=${base_log_dir}
-
-REPO_ROOT="$(cd "${CUR_DIR}/.." && pwd)"
 
 rm -rf ${REPO_ROOT}/version_stamp/__pycache__
 # macOS caches .pyc files outside __pycache__, under a tree mirroring the
@@ -92,12 +112,12 @@ rm -rf "${HOME}/Library/Caches/com.apple.python${REPO_ROOT}"
 PYTHON=${PYTHON:-python3}
 if ! ${PYTHON} -c 'import coverage, pytest' 2>/dev/null; then
 	echo "${PYTHON} cannot import coverage/pytest. Activate the test venv" \
-	     "(or set PYTHON=<interpreter>) and install tests/test_requirements.txt." >&2
+	     "(or set PYTHON=<interpreter>) and install the suite's test_requirements.txt." >&2
 	exit 1
 fi
 
-echo "Will run:"
-export PYTHONPATH=${CUR_DIR}/../packages/vmn/src:${CUR_DIR}/../packages/vmn-exp-sdk/src:${CUR_DIR}/../packages/vmn-exp/src
+echo "Will run the ${suite} suite:"
+export PYTHONPATH=${SRC_PATH}
 cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
 
 echo "${cmd}"
@@ -106,4 +126,3 @@ eval "${cmd}"
 RET_CODE=$?
 
 exit ${RET_CODE}
-
