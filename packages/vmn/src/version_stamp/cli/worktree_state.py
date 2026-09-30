@@ -13,6 +13,15 @@ def write_manifest(manifest):
         json.dump(manifest, stream, indent=2)
 
 
+def read_manifest(path):
+    """The island manifest at *path*, or None when it is missing or corrupt."""
+    try:
+        with open(path) as stream:
+            return json.load(stream)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def island_dir(vmn_ctx, name):
     """Directory of island *name* under the --base-path of the current repo."""
     base = os.path.join(vmn_ctx.vcs.vmn_root_path, vmn_ctx.args.base_path)
