@@ -195,7 +195,7 @@ _COMMIT = "c" * 40
 
 
 def _claim(storage, diff_hash):
-    return _unique_snapshot_verstr(storage, _TEST_APP, "0.0.1", _COMMIT, diff_hash)
+    return _unique_snapshot_verstr(storage, _TEST_APP, "0.0.1", _COMMIT, diff_hash, {})
 
 
 def _save(storage, verstr, **meta):

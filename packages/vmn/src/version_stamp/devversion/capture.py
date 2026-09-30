@@ -9,12 +9,7 @@ from version_stamp.devversion.untracked import (
     _untracked_stats,
     payload_from_tarball,
 )
-from version_stamp.snapshot.identity import (  # noqa: F401  (tests import two from here)
-    _DIFF_HASH_LENGTHS,
-    _compute_diff_hash,
-    _format_dev_verstr,
-    _unique_snapshot_verstr,
-)
+from version_stamp.snapshot.identity import _compute_diff_hash, _format_dev_verstr
 
 
 def _generate_patches(backend, lightweight=False):
@@ -69,7 +64,7 @@ def _dep_backends(vcs):
     from version_stamp.backends.factory import get_client
 
     backends = {}
-    for dep_path in getattr(vcs, "configured_deps", None) or ():
+    for dep_path in vcs.configured_deps:
         full_path = os.path.join(vcs.vmn_root_path, dep_path)
         if dep_path == "." or not os.path.isdir(full_path):
             continue

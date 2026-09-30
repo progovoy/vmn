@@ -49,16 +49,6 @@ def test_api_names_resolve_to_identity_objects():
         assert getattr(api, name) is getattr(identity, name)
 
 
-def test_record_and_capture_keep_their_public_names():
-    from version_stamp.devversion import capture
-    from version_stamp.snapshot import record
-
-    for name in ("safe_dep_name", "safe_verstr", "unsafe_verstr", "same_state"):
-        assert getattr(record, name) is getattr(identity, name)
-    for name in ("_compute_diff_hash", "_format_dev_verstr", "_unique_snapshot_verstr"):
-        assert getattr(capture, name) is getattr(identity, name)
-
-
 def test_identity_helpers_behave():
     assert identity.safe_verstr("1.0.0+b") == "1.0.0_plus_b"
     assert identity.unsafe_verstr("1.0.0_plus_b") == "1.0.0+b"
@@ -69,4 +59,3 @@ def test_identity_helpers_behave():
         "1.0.0-dev.abcdef0.0000000"
     )
     assert identity._compute_diff_hash({}) is None
-    assert not identity.same_state({"diff_hash": "a"}, "b", None)

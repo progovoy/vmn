@@ -11,6 +11,7 @@ from vmn_exp.core import code_store as sdk_code
 from vmn_exp.storage import files as sdk_files
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.snapshot import code_store as vmn_code
+from version_stamp.snapshot import identity
 from version_stamp.snapshot import record as vmn_record
 from version_stamp.snapshot.local_store import LocalRecordStore
 
@@ -126,7 +127,7 @@ def test_code_store_constants_match_the_sdk():
     assert vmn_code.code_key("v", "h") == sdk_code.code_key("v", "h")
     assert vmn_record.METADATA_FILE == sdk_files.METADATA_FILE
     assert vmn_record.PATCH_FILES == sdk_files.PATCH_FILES
-    assert vmn_record.safe_dep_name("a/b") == sdk_files.safe_dep_name("a/b")
+    assert identity.safe_dep_name("a/b") == sdk_files.safe_dep_name("a/b")
 
 
 def test_verinfo_dir_is_not_a_record(tmp_path):
@@ -146,9 +147,9 @@ def test_plus_in_verstr_round_trips(tmp_path):
     verstr = "0.0.1+build-dev.abcdef1.1234567"
     LocalRecordStore(root, "snapshots").save("app", verstr, _metadata(verstr), {})
     assert os.path.isdir(
-        os.path.join(root, ".vmn", "app", "snapshots", vmn_record.safe_verstr(verstr))
+        os.path.join(root, ".vmn", "app", "snapshots", identity.safe_verstr(verstr))
     )
-    assert vmn_record.safe_verstr(verstr) == sdk_files.safe_verstr(verstr)
+    assert identity.safe_verstr(verstr) == sdk_files.safe_verstr(verstr)
     assert LocalSnapshotStorage(root, "snapshots").list_verstrs("app") == [verstr]
     LocalSnapshotStorage(root, "snapshots").save("app", "1+x", _metadata("1+x"), {})
     assert sorted(LocalRecordStore(root, "snapshots").list_verstrs("app")) == sorted(

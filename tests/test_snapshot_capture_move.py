@@ -6,7 +6,7 @@ verstr is only reused for the same diff *and* the same repo commits.
 import importlib
 
 from version_stamp import api
-from version_stamp.devversion.capture import _unique_snapshot_verstr
+from version_stamp.snapshot.identity import _unique_snapshot_verstr
 from version_stamp.snapshot.local_store import LocalRecordStore
 
 APP = "my_app"
@@ -64,11 +64,11 @@ def test_same_diff_new_dep_commit_gets_a_new_verstr(tmp_path):
     assert new == f"{BASE}-dev.abcdef1.{DIFF_HASH[:12]}"
 
 
-def test_legacy_callers_without_changesets_keep_old_behaviour(tmp_path):
+def test_same_changesets_reuse_by_diff_hash(tmp_path):
     store = _stored(tmp_path)
 
-    assert _unique_snapshot_verstr(store, APP, BASE, COMMIT, DIFF_HASH) == SHORT
+    assert _unique_snapshot_verstr(store, APP, BASE, COMMIT, DIFF_HASH, CHANGESETS) == SHORT
     other = "7654321" + "b" * 57
-    assert _unique_snapshot_verstr(store, APP, BASE, COMMIT, other) == (
+    assert _unique_snapshot_verstr(store, APP, BASE, COMMIT, other, CHANGESETS) == (
         f"{BASE}-dev.abcdef1.7654321"
     )

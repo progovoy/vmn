@@ -1,8 +1,7 @@
 """Snapshot identity: record names, diff hashes and dev verstrs.
 
 A leaf module (it imports only ``version_stamp.core``), shared by
-:mod:`version_stamp.devversion.capture` and :mod:`version_stamp.snapshot.record`,
-which re-export these names.
+:mod:`version_stamp.devversion.capture` and :mod:`version_stamp.snapshot.record`.
 """
 import hashlib
 import os
@@ -62,14 +61,11 @@ def _repo_positions(changesets, dep_bases):
 
 def same_state(stored_meta, diff_hash, changesets, dep_bases=None):
     """Whether *stored_meta* records this exact state: the same full diff hash
-    and, unless *changesets* is None (a legacy caller), the same repo commits
-    — each dep at its *dep_bases* commit when the record carries
+    and the same repo commits — each dep at its *dep_bases* commit when the record carries
     ``dep_base_commits`` (older records compare changesets only).
     A record without a ``diff_hash`` never matches."""
     if not diff_hash or stored_meta.get("diff_hash") != diff_hash:
         return False
-    if changesets is None:
-        return True
     stored_changesets = stored_meta.get("changesets")
     if "dep_base_commits" not in stored_meta:
         return _changeset_hashes(stored_changesets) == _changeset_hashes(changesets)
@@ -87,16 +83,15 @@ def _stored_metadata(storage, app_name, verstr):
 
 
 def _unique_snapshot_verstr(
-    storage, app_name, base_version, commit_hash, diff_hash, changesets=None,
+    storage, app_name, base_version, commit_hash, diff_hash, changesets,
     dep_bases=None,
 ):
     """The shortest dev verstr that is free or already holds this exact state.
 
     A snapshot never overwrites a different one: on a prefix collision (or a
     legacy record that carries no ``diff_hash`` to compare) the diff hash is
-    extended instead. With *changesets*, a record of the same diff at other
-    repo commits (or with deps at other *dep_bases*) is a collision too;
-    without them only the diff counts.
+    extended instead. A record of the same diff at other repo commits (or
+    with deps at other *dep_bases*) is a collision too.
     """
     if not diff_hash:
         return _format_dev_verstr(base_version, commit_hash, diff_hash)

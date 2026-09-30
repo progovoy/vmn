@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from version_stamp.cli import plugin_api
-from version_stamp.snapshot import record
+from version_stamp.snapshot import identity
 from version_stamp.snapshot.stores import (
     SnapshotStoreError,
     SnapshotStores,
@@ -60,8 +60,7 @@ def test_local_flag_skips_the_opener(tmp_path):
 def test_same_state_compares_diff_hash_and_dep_commits():
     changesets = {".": {"hash": "a"}, "../dep": {"hash": "b", "state": ["clean"]}}
     stored = {"diff_hash": "h", "changesets": changesets}
-    assert record.same_state(stored, "h", {".": {"hash": "a"}, "../dep": {"hash": "b"}})
-    assert not record.same_state(stored, "h", {".": {"hash": "a"}, "../dep": {"hash": "c"}})
-    assert not record.same_state(stored, "other", changesets)
-    assert not record.same_state({"changesets": changesets}, "h", changesets)
-    assert record.same_state(stored, "h", None)
+    assert identity.same_state(stored, "h", {".": {"hash": "a"}, "../dep": {"hash": "b"}})
+    assert not identity.same_state(stored, "h", {".": {"hash": "a"}, "../dep": {"hash": "c"}})
+    assert not identity.same_state(stored, "other", changesets)
+    assert not identity.same_state({"changesets": changesets}, "h", changesets)

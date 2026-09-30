@@ -6,7 +6,6 @@ import tempfile
 
 import yaml
 
-from version_stamp.core.git_cmd import clone_at_commit as _shallow_clone_at  # noqa: F401 (tests)
 from version_stamp.core.git_cmd import git_stdout, run_git
 from version_stamp.core.logging import VMN_LOGGER
 from version_stamp.devversion.apply import (

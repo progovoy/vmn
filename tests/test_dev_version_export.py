@@ -6,9 +6,9 @@ import subprocess
 import pytest
 import yaml
 
-import version_stamp.devversion.materialize as dv_materialize
 from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core import logging as vmn_logging
+from version_stamp.core.git_cmd import clone_at_commit
 from helpers import _PY, _SRC_PATH, _bootstrap, _experiment, extract_dev_verstr
 
 UNREACHABLE_REMOTE = "https://127.0.0.1:9/no/such/repo.git"
@@ -120,7 +120,7 @@ def test_clone_timeout_is_an_error_not_a_hang(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", timeout)
 
-    assert dv_materialize._shallow_clone_at(str(tmp_path / "d"), UNREACHABLE_REMOTE, "a" * 40) == 1
+    assert clone_at_commit(str(tmp_path / "d"), UNREACHABLE_REMOTE, "a" * 40) == 1
 
 
 def _vmn_exp_without_git(cwd, *argv):
