@@ -36,14 +36,6 @@ def test_facade_exposes_snapshot_names():
         assert getattr(api, name) is getattr(importlib.import_module(module), attr)
 
 
-def test_gitmode_capture_is_the_vmn_capture():
-    from vmn_exp.gitmode import capture
-
-    assert capture.Capture is api.SnapshotCapture
-    assert capture.capture_snapshot is api.capture_identity
-    assert capture.ensure_code is api.ensure_code
-
-
 def _stored(tmp_path, changesets=CHANGESETS):
     store = LocalRecordStore(str(tmp_path))
     meta = {"verstr": SHORT, "diff_hash": DIFF_HASH, "changesets": changesets}

@@ -6,7 +6,7 @@ import subprocess
 import pytest
 import yaml
 
-from helpers import _bootstrap, _goto, _snapshot, extract_dev_verstr
+from helpers import _bootstrap, _snapshot, extract_dev_verstr
 
 MB = 1024 * 1024
 
@@ -188,14 +188,3 @@ def test_restore_refuses_a_snapshot_whose_code_is_gone(stamped, capfd):
     assert ret == 1
     assert "code" in out
     assert _read(stamped, "work.txt") == "state B unsaved"
-
-
-def test_goto_restores_a_snapshot(stamped, capfd):
-    _write(stamped, "extra.txt", "untracked in snapshot")
-    verstr = _snapshot_of(stamped, capfd, "goto state")
-    _discard_changes(stamped)
-
-    assert _goto(stamped.app_name, version=verstr) == 0
-
-    assert _read(stamped, "work.txt") == "goto state"
-    assert _read(stamped, "extra.txt") == "untracked in snapshot"

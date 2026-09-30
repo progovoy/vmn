@@ -1,0 +1,161 @@
+"""vmn ui serving: artifacts bypass gzip, safe Content-Disposition, static
+cache headers, API 404s, constant-time token check, gzip level."""
+import os
+from urllib.parse import quote
+
+import pytest
+
+pytest.importorskip("fastapi")
+from starlette.testclient import TestClient
+
+from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.open import open_storage
+from vmn_exp.ui import server as server_mod
+from vmn_exp.ui.server import create_app
+from vmn_exp.ui.workspaces import WorkspaceManager
+
+APP = "app"
+V = "1.0.0-dev.a"
+ART = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}/artifacts"
+STATIC = os.path.join(os.path.dirname(server_mod.__file__), "static")
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+VITE_CONFIG = os.path.join(REPO_ROOT, "packages", "vmn-exp", "webui", "vite.config.ts")
+
+
+@pytest.fixture
+def ws(tmp_path):
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
+    storage.save(APP, V, {"verstr": V, "timestamp": "t"}, {})
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.attach_path("ws", str(root))
+    return manager, storage, tmp_path
+
+
+def test_local_artifacts_are_not_gzipped(ws):
+    manager, storage, tmp_path = ws
+    src = tmp_path / "model.json"
+    src.write_text('{"w": 1}' * 1000)
+    storage.save_artifact_file(APP, V, str(src))
+    r = TestClient(create_app(manager)).get(
+        f"{ART}/model.json", headers={"Accept-Encoding": "gzip"}
+    )
+    assert r.status_code == 200
+    assert "content-encoding" not in r.headers
+    assert r.content == src.read_bytes()
+
+
+@pytest.mark.parametrize("name", ['a"b.bin', "モデル.bin", "naïve;x.bin"])
+def test_streamed_artifacts_use_rfc5987_filenames(ws, monkeypatch, name):
+    manager, _, _ = ws
+    data = b"x" * 5000
+
+    def open_artifact(self, app_name, verstr, filename):
+        return iter([data]), len(data)
+
+    monkeypatch.setattr(CachedSnapshotStorage, "open_artifact", open_artifact, raising=False)
+    r = TestClient(create_app(manager)).get(
+        f"{ART}/{quote(name)}", headers={"Accept-Encoding": "gzip"}
+    )
+    assert r.status_code == 200
+    disposition = r.headers["content-disposition"]
+    assert f"filename*=UTF-8''{quote(name, safe='')}" in disposition
+    assert disposition.count('"') == 2  # one quoted ASCII fallback, nothing broken
+    assert "content-encoding" not in r.headers
+    assert r.content == data
+
+
+def test_json_api_responses_are_still_gzipped(ws):
+    manager, storage, _ = ws
+    for i in range(40):
+        storage.save(APP, f"1.0.0-dev.r{i}", {"verstr": f"1.0.0-dev.r{i}", "timestamp": "t"}, {})
+    r = TestClient(create_app(manager)).get(
+        f"/api/v1/workspaces/ws/apps/{APP}/experiments", headers={"Accept-Encoding": "gzip"}
+    )
+    assert r.headers.get("content-encoding") == "gzip"
+
+
+def test_gzip_uses_a_moderate_level(ws):
+    manager, _, _ = ws
+    app = create_app(manager)
+    levels = [m.kwargs.get("compresslevel") for m in app.user_middleware if "GZip" in m.cls.__name__]
+    assert levels and all(3 <= level <= 6 for level in levels)
+
+
+def test_unknown_api_paths_are_json_404s(ws):
+    manager, _, _ = ws
+    client = TestClient(create_app(manager))
+    for path in ("/api/v1/nope", "/api/nope/deeper", "/api"):
+        r = client.get(path)
+        assert r.status_code == 404, path
+        assert r.headers["content-type"].startswith("application/json")
+        assert "<html" not in r.text.lower()
+
+
+def _bundle_asset():
+    assets = os.path.join(STATIC, "assets")
+    if not os.path.isdir(assets) or not os.listdir(assets):
+        pytest.skip("web bundle not built")
+    return min(os.listdir(assets))
+
+
+def test_the_bundle_is_named_by_chunk_not_by_content_hash():
+    if not os.path.isfile(VITE_CONFIG):
+        pytest.skip("webui sources not present")
+    with open(VITE_CONFIG) as fid:
+        config = fid.read()
+    for key, pattern in (
+        ("entryFileNames", "assets/[name].js"),
+        ("chunkFileNames", "assets/[name].js"),
+        ("assetFileNames", "assets/[name].[ext]"),
+    ):
+        assert f'{key}: "{pattern}"' in config, key
+    # ...and the committed bundle was actually built with it.
+    with open(os.path.join(STATIC, "index.html")) as fid:
+        assert 'src="/assets/index.js"' in fid.read()
+
+
+def test_stable_assets_revalidate(ws):
+    # Stable names mean a browser must not keep a chunk across an upgrade.
+    manager, _, _ = ws
+    client = TestClient(create_app(manager))
+    asset = _bundle_asset()
+    r = client.get(f"/assets/{asset}")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-cache"
+    # Revalidating still costs no transfer while the asset is unchanged.
+    fresh = client.get(f"/assets/{asset}", headers={"If-None-Match": r.headers["etag"]})
+    assert fresh.status_code == 304
+    assert fresh.headers["cache-control"] == "no-cache"
+
+
+def test_the_spa_shell_is_revalidated(ws):
+    manager, _, _ = ws
+    _bundle_asset()
+    client = TestClient(create_app(manager))
+    for path in ("/", "/workspaces/ws/apps/app", "/index.html"):
+        r = client.get(path)
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "no-cache", path
+
+
+def test_token_check_is_constant_time(ws, monkeypatch):
+    manager, _, _ = ws
+    import hmac
+
+    calls = []
+    real = hmac.compare_digest
+
+    def spy(a, b):
+        calls.append(1)
+        return real(a, b)
+
+    monkeypatch.setattr(hmac, "compare_digest", spy)
+    client = TestClient(create_app(manager, token="s3cret"))
+    assert client.get("/api/v1/workspaces").status_code == 401
+    assert client.get("/api/v1/workspaces", headers={"Authorization": "Bearer nope"}).status_code == 401
+    ok = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer s3cret"})
+    assert ok.status_code == 200
+    assert len(calls) >= 2
+    assert client.get("/api/v1/workspaces", headers={"Authorization": "Bearer sécret".encode()}).status_code == 401

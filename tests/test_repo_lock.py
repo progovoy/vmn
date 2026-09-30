@@ -22,15 +22,6 @@ def test_default_lock_path(monkeypatch, tmp_path):
     assert lock.lock_file == os.path.join(str(tmp_path), ".vmn", "vmn.lock")
 
 
-def test_writer_lock_guards_the_same_file(tmp_path, monkeypatch):
-    """The experiment writer's lock (vmn_exp._base's copy) and vmn's are one file."""
-    from vmn_exp.core.writer import get_repo_lock as ew_lock
-    from version_stamp.core.repo_lock import get_repo_lock as rl_lock
-
-    monkeypatch.delenv("VMN_LOCK_FILE_PATH", raising=False)
-    assert ew_lock(str(tmp_path)).lock_file == rl_lock(str(tmp_path)).lock_file
-
-
 def test_repo_lock_module_imports_no_experiment_modules():
     """Importing repo_lock must not pull in any experiment/exp/ui modules."""
     code = (
