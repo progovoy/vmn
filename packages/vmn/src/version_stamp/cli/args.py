@@ -3,13 +3,13 @@
 import argparse
 import sys
 
-from version_stamp import version as version_mod
 from version_stamp.cli.completion import SUPPORTED_SHELLS
 from version_stamp.cli.constants import (
     VMN_ARGS,
     WORKTREES_ACTIONS,
     WORKTREES_NAME_REQUIRED,
 )
+from version_stamp.core import dev_build
 from version_stamp.core.constants import (
     SEMVER_BUILDMETADATA_REGEX,
     VMN_VERSION_FORMAT,
@@ -54,7 +54,7 @@ def parse_user_commands(command_line):
 
     parser = argparse.ArgumentParser("vmn")
     parser.add_argument(
-        "--version", "-v", action="version", version=version_mod.version
+        "--version", "-v", action="version", version=dev_build.display_version()
     )
     parser.add_argument("--debug", required=False, action="store_true")
     parser.set_defaults(debug=False)

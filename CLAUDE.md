@@ -76,7 +76,7 @@ pip install -U pip "setuptools>=64"
 pip install -r ./tests/requirements.txt
 pip install -r ./packages/vmn-exp/tests/test_requirements.txt  # core + vmn-exp test deps
 pip install -e packages/vmn -e packages/vmn-exp-sdk -e "packages/vmn-exp[ui]"
-vmn --version  # Should see 0.0.0 if installed successfully
+vmn --version  # e.g. 0.10.2-rc.11+dev: a source checkout adds +dev
 ```
 
 `uv sync` also works from the repo root. Build the wheels with

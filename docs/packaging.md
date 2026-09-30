@@ -164,6 +164,9 @@ the PyPI release.
   `vmn-exp-sdk==` pin, as part of `vmn stamp`. That replaces `gen_ver.py` and
   the checkout revert. packages/vmn-exp/tests/test_workspace.py checks the selectors against the
   real files and through a real `vmn stamp`.
+- `vmn --version` from a source checkout prints the stamped version with a
+  `+dev` local label (`version_stamp/core/dev_build.py`); an installed wheel
+  prints it plain.
 - `./release_exp.sh` releases vmn-exp and vmn-exp-sdk with a patch bump (a minor
   bump the very first time, past the 0.0.1 placeholders). It refuses a dirty
   tree. vmn is released on its own (`vmn stamp vmn`, `make _build`,
