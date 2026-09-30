@@ -22,6 +22,7 @@ Usage (via autolog)::
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -41,7 +42,6 @@ def _build_vmn_callback():
     import transformers  # noqa: PLC0415 — intentionally lazy
 
     from vmn_exp.integrations.hf_core import (
-        checkpoint_artifacts,
         is_world_process_zero,
         params_from,
         rewrite_logs,
@@ -72,8 +72,9 @@ def _build_vmn_callback():
         the code runs outside of a ``start_run()`` context.
 
         Args:
-            log_checkpoints: If ``True``, call ``run.log_artifact`` for each
-                ``checkpoint-<N>`` directory on every ``on_save`` event.
+            log_checkpoints: If ``True``, upload the ``checkpoint-<N>``
+                directory just saved on each ``on_save`` event, under
+                ``checkpoint-<N>/``.
                 Off by default because checkpoints are large.
         """
 
@@ -131,8 +132,11 @@ def _build_vmn_callback():
             try:
                 output_dir = getattr(args, "output_dir", None)
                 if output_dir:
-                    for path in checkpoint_artifacts(output_dir):
-                        run.log_artifact(path)
+                    path = os.path.join(
+                        output_dir, f"checkpoint-{state.global_step}"
+                    )
+                    if os.path.isdir(path):
+                        run.log_artifacts(path, prefix=os.path.basename(path))
             except Exception:
                 _LOGGER.debug("vmn autolog hf: on_save failed", exc_info=True)
 
