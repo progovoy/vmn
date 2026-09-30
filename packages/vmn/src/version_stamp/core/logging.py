@@ -110,19 +110,17 @@ def measure_runtime_decorator(func):
             )
 
         start_time = time.perf_counter()
-        result = func(*args, **kwargs)
-        end_time = time.perf_counter()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            elapsed_time = time.perf_counter() - start_time
 
-        elapsed_time = end_time - start_time
+            if VMN_LOGGER:
+                VMN_LOGGER.debug(
+                    f"{'  ' * (len(ctx.call_stack) - 1)}<-- Exiting {func.__name__} {BOLD_CHAR} took {elapsed_time:.6f} seconds {END_CHAR} at {fcode.co_filename}:{fcode.co_firstlineno}"
+                )
 
-        if VMN_LOGGER:
-            VMN_LOGGER.debug(
-                f"{'  ' * (len(ctx.call_stack) - 1)}<-- Exiting {func.__name__} {BOLD_CHAR} took {elapsed_time:.6f} seconds {END_CHAR} at {fcode.co_filename}:{fcode.co_firstlineno}"
-            )
-
-        ctx.call_stack.pop()
-
-        return result
+            ctx.call_stack.pop()
 
     return wrapper
 

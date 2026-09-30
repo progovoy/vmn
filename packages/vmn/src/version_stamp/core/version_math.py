@@ -140,7 +140,7 @@ def serialize_vmn_version(
             rcn = props.rcn
 
     if props.buildmetadata is not None:
-        if prerelease is not None:
+        if buildmetadata is not None:
             VMN_LOGGER.warning(
                 "Tried to serialize verstr containing "
                 "buildmetadata component but also tried to append"

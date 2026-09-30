@@ -83,12 +83,14 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
     r"""
     ^(?P<type>[a-zA-Z0-9 ]+)              # Commit type (e.g., feat, fix)
     (?:\((?P<scope>[a-zA-Z0-9\-]+)\))?(?P<bc>!)?  # Optional scope
-    :\s*(?P<description>.+)            # Description
-    (?:\n\n(?P<body>.*))?              # Optional body
-    (?:\n\n(?P<footer>.*))?            # Optional footer
-    $
+    :\s*(?P<description>[^\n]+)       # Description (subject line only)
+    (?:\n+(?P<body>.*?))??             # Optional body
+    (?:\n+(?P<footer>                  # Optional footer: "Token: value" /
+        (?:BREAKING[ ]CHANGE|[\w-]+)    # "Token \#value" lines to the end
+        (?::[ ]|[ ]\#).*?))?
+    \s*$
 """,
-    re.VERBOSE | re.DOTALL | re.MULTILINE,
+    re.VERBOSE | re.DOTALL,
 )
 
 # Patterns for live Jinja code we need to protect
