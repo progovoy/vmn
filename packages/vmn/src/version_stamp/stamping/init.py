@@ -35,17 +35,6 @@ def app_initialized(be, app_dir_path):
     return be.is_path_tracked(os.path.join(app_dir_path, VER_FILE_NAME))
 
 
-def _revert_failed_publish(versions_be_ifc):
-    """Restore the tracked version files and drop an untracked version file
-    (a failed first init-app writes it; left behind, it would sit in the tree)."""
-    be = versions_be_ifc.backend
-    files = versions_be_ifc.version_files
-    be.revert_local_changes([f for f in files if be.is_path_tracked(f)])
-    version_file = versions_be_ifc.version_file_path
-    if os.path.exists(version_file) and not be.is_path_tracked(version_file):
-        os.remove(version_file)
-
-
 @measure_runtime_decorator
 def init_repo(vcs, extra_optional=None):
     """Commit vmn's .vmn/conf.yml and .vmn/.gitignore and push them."""
@@ -110,7 +99,6 @@ def _init_app(versions_be_ifc, starting_version, extra_optional=None):
         err = versions_be_ifc.publish_stamp(starting_version, root_app_version)
     except Exception:
         VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-        _revert_failed_publish(versions_be_ifc)
         err = -1
 
     if err:

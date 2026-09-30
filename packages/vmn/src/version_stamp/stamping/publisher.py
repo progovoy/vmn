@@ -411,58 +411,51 @@ class VersionControlStamper(IVersionsStamper):
             )
 
         prev_changeset = self.backend.changeset()
+        self._stamp_paths = {}
+        # TODO:: turn to error codes (enums). 3 means - exit without retries
+        err = -1
         try:
             version_files_to_add = self._write_stamp_files(
                 app_version, root_app_version, msgs
             )
-        except Exception:
-            self._revert(prev_changeset)
-            raise
-
-        self.current_version_info["stamping"]["msg"] = self._stamp_commit_msg(
-            app_version
-        )
-
-        try:
+            self.current_version_info["stamping"]["msg"] = self._stamp_commit_msg(
+                app_version
+            )
+            err = 3
             self.publish_commit(version_files_to_add)
-        except Exception:
-            VMN_LOGGER.debug("Logged Exception message: ", exc_info=True)
-            self._revert(prev_changeset)
-
-            # TODO:: turn to error codes (enums). This one means - exit without retries
-            return 3
-
-        try:
-            for t, m in zip(tags, msgs):
-                if self.dry_run:
-                    VMN_LOGGER.info(
-                        "Would have created tag:\n"
-                        f"{t}\n"
-                        f"Tag content:\n{yaml.dump(m, sort_keys=True)}"
-                    )
-                else:
-                    self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
-        except Exception:
-            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
-            self._revert(prev_changeset, tags)
-
-            return 1
-
-        try:
-            if self.dry_run:
-                VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {tags} ")
-            else:
-                _push_published_refs(self.backend, tags)
-        except Exception:
-            VMN_LOGGER.debug("Logged Exception message:", exc_info=True)
-            self._revert(prev_changeset, tags)
-
-            return 2
+            err = 1
+            self._create_tags(tags, msgs)
+            err = 2
+            self._push_tags(tags)
+        except Exception as exc:
+            VMN_LOGGER.error(
+                f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
+            )
+            VMN_LOGGER.debug("Exception info: ", exc_info=True)
+            self._revert(prev_changeset, tags if err in (1, 2) else ())
+            return err
 
         # Best-effort GitHub Release creation after successful push
         self._create_github_release(tags[0], app_version)
 
         return 0
+
+    def _create_tags(self, tags, msgs):
+        for t, m in zip(tags, msgs):
+            if self.dry_run:
+                VMN_LOGGER.info(
+                    "Would have created tag:\n"
+                    f"{t}\n"
+                    f"Tag content:\n{yaml.dump(m, sort_keys=True)}"
+                )
+            else:
+                self.backend.tag([t], [yaml.dump(m, sort_keys=True)])
+
+    def _push_tags(self, tags):
+        if self.dry_run:
+            VMN_LOGGER.info("Would have pushed with tags.\n" f"tags: {tags} ")
+        else:
+            _push_published_refs(self.backend, tags)
 
     def _publish_tag_names(self, app_version, root_app_version):
         """The tags a stamp creates, or None when one breaks the tag format."""
@@ -486,20 +479,23 @@ class VersionControlStamper(IVersionsStamper):
     def _write_stamp_files(self, app_version, root_app_version, msgs):
         """Write everything the stamp commit holds; return the paths to commit.
 
-        Every path it may touch is kept in ``self._stamp_paths`` (those that
-        already existed also in ``self._preexisting_paths``) for _revert."""
-        self._stamp_paths = []
-        self._preexisting_paths = set()
-        for move in self._migrate_branch_confs():
-            self._stamp_paths.extend(move)
-        self._stamp_paths.extend(self.version_files)
-        self._add_version_backend_files(self._stamp_paths)
-        changelog_path = self._changelog_path()
-        if changelog_path is not None:
-            self._stamp_paths.append(changelog_path)
-        self._preexisting_paths = {p for p in self._stamp_paths if os.path.exists(p)}
-        self._stamp_paths.extend(
-            self._collect_stale_branch_confs(self.backend.active_branch)
+        Every path it may touch is recorded for _revert by _record_paths."""
+        for src, dst in self._migrate_branch_confs():
+            self._record_paths([src], existed=True)
+            self._record_paths([dst], existed=False)
+        # conf files this command created (a first init-app) are new
+        self._record_paths([self.app_conf_path], existed=self.conf_file_exists)
+        if self.root_app_conf_path is not None:
+            self._record_paths(
+                [self.root_app_conf_path], existed=self.root_conf_file_exists
+            )
+        existing = list(self.version_files)
+        self._add_version_backend_files(existing)
+        existing.append(self._changelog_path())
+        self._record_paths([p for p in existing if p is not None])
+        self._record_paths(
+            self._collect_stale_branch_confs(self.backend.active_branch),
+            existed=False,
         )
 
         version_files_to_add = []
@@ -526,9 +522,18 @@ class VersionControlStamper(IVersionsStamper):
 
             self._generate_changelog(app_version, version_files_to_add)
         finally:
-            self._stamp_paths.extend(version_files_to_add)
+            self._record_paths(version_files_to_add, existed=False)
 
         return version_files_to_add
+
+    def _record_paths(self, paths, existed=None):
+        """Remember each path the publish may touch and whether it existed
+        before (``existed`` None: whether it exists now); first record wins."""
+        for path in paths:
+            if path not in self._stamp_paths:
+                self._stamp_paths[path] = (
+                    os.path.exists(path) if existed is None else existed
+                )
 
     def _revert(self, prev_changeset, tags=()):
         """Undo a failed publish: the vmn commit, ``tags`` and every file
@@ -540,28 +545,10 @@ class VersionControlStamper(IVersionsStamper):
             )
             return
 
-        paths = list(dict.fromkeys(self.version_files + self._stamp_paths))
-        committed = [p for p in paths if self._in_commit(prev_changeset, p)]
-        self.backend.revert_vmn_commit(prev_changeset, committed, list(tags))
-        for path in paths:
-            if path not in committed:
-                self._drop_new_file(path)
-
-    def _in_commit(self, changeset, path):
-        rel = os.path.relpath(path, self.backend._be.working_tree_dir)
-        try:
-            self.backend._be.git.cat_file("-e", f"{changeset}:{Path(rel).as_posix()}")
-            return True
-        except Exception:
-            return False
-
-    def _drop_new_file(self, path):
-        try:
-            self.backend._be.git.rm("--cached", "-q", "--ignore-unmatch", "--", path)
-        except Exception:
-            VMN_LOGGER.debug(f"Failed to unstage {path}", exc_info=True)
-        if path not in self._preexisting_paths and os.path.isfile(path):
-            os.remove(path)
+        preexisting = {p for p, existed in self._stamp_paths.items() if existed}
+        self.backend.revert_vmn_commit(
+            prev_changeset, list(self._stamp_paths), list(tags), preexisting
+        )
 
     def _changelog_path(self):
         if not self.changelog:

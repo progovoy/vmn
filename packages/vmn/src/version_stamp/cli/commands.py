@@ -22,7 +22,6 @@ from version_stamp.core.version_math import (
 )
 from version_stamp.stamping.init import (
     _init_app,
-    _revert_failed_publish,
     auto_init_if_needed,
     init_repo,
 )
@@ -670,7 +669,6 @@ def _stamp_version(versions_be_ifc, pull, check_vmn_version, verstr):
                 f"Failed to publish. Will revert local changes {exc}\nFor more details use --debug"
             )
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
-            _revert_failed_publish(versions_be_ifc)
             err = -1
 
         if not err:
