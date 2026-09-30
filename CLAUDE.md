@@ -74,7 +74,7 @@ python3 -m venv ./venv
 source ./venv/bin/activate
 pip install -U pip "setuptools>=64"
 pip install -r ./tests/requirements.txt
-pip install -r ./tests/test_requirements.txt
+pip install -r ./packages/vmn-exp/tests/test_requirements.txt  # core + vmn-exp test deps
 pip install -e packages/vmn -e packages/vmn-exp-sdk -e "packages/vmn-exp[ui]"
 vmn --version  # Should see 0.0.0 if installed successfully
 ```
@@ -82,7 +82,7 @@ vmn --version  # Should see 0.0.0 if installed successfully
 `uv sync` also works from the repo root. Build the wheels with
 `uv build --all-packages` (or `make _build NAME=vmn|vmn_exp`).
 
-Import rules (tests/test_packaging_split.py): `version_stamp` never imports
+Import rules (packages/vmn-exp/tests/test_packaging_split.py): `version_stamp` never imports
 `vmn_exp`; the vmn-exp-sdk subpackages import neither `version_stamp` nor the
 vmn-exp subpackages (except a lazy `vmn_exp.gitmode`); vmn-exp reaches
 `version_stamp` only through `version_stamp.api`. vmn loads `vmn goto` of dev
@@ -91,23 +91,36 @@ vmn-exp declares.
 
 ## Running Tests
 
-Tests require Docker. Activate the test venv first — the suite runs through the
+Two suites (vmn-exp will become a separate product):
+- **core** — `tests/`: vmn alone. `tests/conftest.py` puts only `packages/vmn/src`
+  on `sys.path` and makes `vmn_exp` unimportable (`tests/no_vmn_exp.py`), so it
+  passes without vmn-exp installed; deps in `tests/test_requirements.txt`.
+- **exp** — `packages/vmn-exp/tests/`: vmn-exp. Its conftest adds all three
+  `src/` roots plus `tests/`, reusing the core fixtures (`tests/vmn_fixtures.py`)
+  and helpers (`exp_helpers.py` = `tests/helpers.py` + `_experiment`/`_exp`/
+  `_storage`/`cli_module`); deps in `packages/vmn-exp/tests/test_requirements.txt`
+  (includes the core file). A test that needs `vmn_exp` or a vmn-exp command
+  belongs here; one asserting vmn works *without* vmn-exp belongs in core.
+
+Tests require Docker. Activate the test venv first — the suites run through the
 active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 `git-cliff` binary that `tests/test_requirements.txt` installs into it.
 ```sh
 source ./venv/bin/activate
-./tests/run_pytest.sh
+./tests/run_pytest.sh                        # core suite (= --suite core)
+./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
 ```
 
 Run a specific test:
 ```sh
 ./tests/run_pytest.sh --specific_test <test_name>
+./packages/vmn-exp/tests/run_pytest.sh --specific_test <test_name>
 ```
 
-UI load harness (real `vmn-exp ui` + live job processes; see tests/uiload/README.md):
+UI load harness (real `vmn-exp ui` + live job processes; see packages/vmn-exp/tests/uiload/README.md):
 ```sh
-python tests/uiload/run.py live --profile smoke --duration 0   # watch in a browser
-VMN_UILOAD_PROFILE=smoke python -m pytest -s tests/test_uiload_profile.py
+python packages/vmn-exp/tests/uiload/run.py live --profile smoke --duration 0   # watch in a browser
+VMN_UILOAD_PROFILE=smoke python -m pytest -s packages/vmn-exp/tests/test_uiload_profile.py
 ```
 
 CI is the local Muster pipeline in `ci/pipeline.py` (`./ci/start.sh`, see
@@ -149,7 +162,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 
 ### Test Infrastructure
 
-- `tests/conftest.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repos
+- `tests/vmn_fixtures.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repos, registered by both suites' `conftest.py`
 - Tests create temporary git repos with remotes to simulate real workflows
 
 ## CLI Commands

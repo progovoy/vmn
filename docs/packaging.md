@@ -105,20 +105,20 @@ subpackage belongs to exactly one distribution.
   with "install vmn-exp for git mode".
 - `vmn_exp._base` holds the few helpers the SDK used to take from
   `version_stamp` (logger, `now_iso`, path validation, `yaml_safe_load`,
-  `sha256_file`, `resolve_root_path`, the repo lock); tests/test_exp_base.py
+  `sha256_file`, `resolve_root_path`, the repo lock); packages/vmn-exp/tests/test_exp_base.py
   keeps each copy behaving like the original. They are copied, not shared, so the SDK has no dependency on
   `vmn`. `parse_record_metadata` moves here, since the record format belongs to
   experiments.
 
 ## Import rules (enforced by tests)
 
-1. `version_stamp.*` never imports `vmn_exp` (tests/test_packaging_split.py).
+1. `version_stamp.*` never imports `vmn_exp` (packages/vmn-exp/tests/test_packaging_split.py).
 2. `vmn-exp-sdk` subpackages import neither `version_stamp` nor the `vmn-exp`
    subpackages, except a lazy `vmn_exp.gitmode` import (same file).
 3. `vmn-exp` subpackages import `version_stamp` only through `version_stamp.api`
    (same file).
 4. No path appears in two built wheels, and the SDK wheel alone records a run
-   with no `git` or `version_stamp` installed (tests/test_installation.py).
+   with no `git` or `version_stamp` installed (packages/vmn-exp/tests/test_installation.py).
 
 ## Repository layout
 
@@ -130,19 +130,24 @@ packages/
   vmn/          pyproject.toml  src/version_stamp/
   vmn-exp-sdk/  pyproject.toml  src/vmn_exp/{sdk,storage,core,registry,integrations,_base}
   vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode}  webui/
-tests/           one suite for all three
+  vmn-exp/tests/  the vmn-exp suite (all three packages)
+tests/           the core vmn suite (vmn alone)
 ```
 
 - For development, `uv sync` (or `pip install -e` of each package) installs all
-  three editable. tests/conftest.py puts the three `src/` folders first on
-  `sys.path`, and `helpers._SRC_PATH` is the matching `PYTHONPATH` for
-  subprocesses, so a worktree tests its own tree.
+  three editable. Each suite's conftest.py puts its `src/` folders first on
+  `sys.path` (tests/: vmn's only, with `vmn_exp` made unimportable;
+  packages/vmn-exp/tests/: all three), and `helpers._SRC_PATH` /
+  `exp_helpers._SRC_PATH` are the matching `PYTHONPATH` for subprocesses, so a
+  worktree tests its own tree.
 - `uv build --all-packages` builds the three wheels.
 - `setup.py`, `VMN_DIST`, `gen_ver.py` and `MANIFEST.in` are deleted.
 - Runtime dependencies live in each `pyproject.toml`; `tests/requirements.txt`
   and `tests/constraints.txt` are dev-only pins.
-- *Differs from the design:* the tests were not split per package; they stay
-  in one `tests/` folder. Split them when `vmn-exp` moves out.
+- The tests are split in two suites: `tests/` (core vmn, run with
+  `tests/run_pytest.sh`) and `packages/vmn-exp/tests/` (vmn-exp and vmn-exp-sdk,
+  run with `packages/vmn-exp/tests/run_pytest.sh`); the exp suite reuses the
+  core fixtures (`tests/vmn_fixtures.py`) and helpers.
 
 Moving `vmn-exp` to its own repository later: run `git filter-repo` on
 `packages/vmn-exp*`, then change its `vmn` dependency from the workspace copy to
@@ -157,7 +162,7 @@ the PyPI release.
   `.vmn/vmn/conf.yml` and `.vmn/vmn_exp/conf.yml`) writes the new version into
   `project.version`, into `version_stamp/version.py` (vmn), and into vmn-exp's
   `vmn-exp-sdk==` pin, as part of `vmn stamp`. That replaces `gen_ver.py` and
-  the checkout revert. tests/test_workspace.py checks the selectors against the
+  the checkout revert. packages/vmn-exp/tests/test_workspace.py checks the selectors against the
   real files and through a real `vmn stamp`.
 - `./release_exp.sh` releases vmn-exp and vmn-exp-sdk with a patch bump (a minor
   bump the very first time, past the 0.0.1 placeholders). It refuses a dirty

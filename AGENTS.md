@@ -71,14 +71,17 @@ vmn --version  # Should see 0.0.0 if installed successfully
 
 ## Running Tests
 
-Tests require Docker. Run the full test suite:
+Tests require Docker. There are two suites: core vmn in `tests/` (runs with
+`vmn_exp` unimportable) and vmn-exp in `packages/vmn-exp/tests/`:
 ```sh
-./tests/run_pytest.sh
+./tests/run_pytest.sh                        # core suite (= --suite core)
+./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
 ```
 
 Run a specific test:
 ```sh
 ./tests/run_pytest.sh --specific_test <test_name>
+./packages/vmn-exp/tests/run_pytest.sh --specific_test <test_name>
 ```
 
 Skip a test:
@@ -116,7 +119,7 @@ Per-app config in `.vmn/{app_name}/conf.yml`. Key fields:
 
 ### Test Infrastructure
 
-- `tests/conftest.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repos
+- `tests/vmn_fixtures.py`: Pytest fixtures including `FSAppLayoutFixture` for creating isolated git repos, registered by both suites' `conftest.py`
 - Tests create temporary git repos with remotes to simulate real workflows
 
 ## CLI Commands

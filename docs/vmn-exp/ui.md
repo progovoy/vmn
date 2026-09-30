@@ -182,7 +182,7 @@ uvx --python 3.14t --from "vmn-exp[ui]" vmn-exp ui --repo .
 uv tool install --python 3.14t "vmn-exp[ui]"     # or install it once
 ```
 
-The load harness (`tests/uiload`, `--profile load`: 100k runs, 500 live jobs,
+The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 500 live jobs,
 16 clients) measured:
 
 | | 3.9 | 3.14 | 3.14t |

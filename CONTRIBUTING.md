@@ -15,7 +15,7 @@ source ./venv/bin/activate
 
 # Install dependencies
 pip install -r ./tests/requirements.txt
-pip install -r ./tests/test_requirements.txt
+pip install -r ./packages/vmn-exp/tests/test_requirements.txt  # core + vmn-exp test deps
 pip install -e packages/vmn -e packages/vmn-exp-sdk -e "packages/vmn-exp[ui]"
 
 # Verify installation
@@ -25,10 +25,18 @@ vmn --version  # Should print 0.0.0
 ## Running Tests
 
 Tests require Docker and run in parallel (29 workers by default) using pytest-xdist.
+There are two suites: core vmn in `tests/` (it runs with `vmn_exp` unimportable,
+so it passes without vmn-exp installed; deps in `tests/test_requirements.txt`)
+and vmn-exp in `packages/vmn-exp/tests/` (deps in
+`packages/vmn-exp/tests/test_requirements.txt`). Put a test that needs `vmn_exp`
+or a `vmn-exp` command in the exp suite.
 
 ```sh
-# Full test suite
+# Core suite (the default; same as --suite core)
 ./tests/run_pytest.sh
+
+# vmn-exp suite (same as ./tests/run_pytest.sh --suite exp)
+./packages/vmn-exp/tests/run_pytest.sh
 
 # Run a specific test
 ./tests/run_pytest.sh --specific_test <test_name>
