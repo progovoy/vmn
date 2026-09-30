@@ -38,7 +38,6 @@ _EXPECTED_ALL = [
     "_apply_patches_to_workdir",
     "_apply_snapshot_patches",
     "_clone_at",
-    "_clone_local_at",
     "_collect_untracked_tarball",
     "_commit_exists",
     "_complete_apps",
@@ -234,13 +233,13 @@ def test_names_are_same_objects():
         # devversion.capture
         ("version_stamp.devversion.capture", "gather_create_data", "gather_create_data"),
         ("version_stamp.devversion.capture", "_compute_diff_hash", "_compute_diff_hash"),
-        ("version_stamp.devversion.capture", "_DIFF_HASH_LENGTHS", "_DIFF_HASH_LENGTHS"),
+        ("version_stamp.snapshot.identity", "_DIFF_HASH_LENGTHS", "_DIFF_HASH_LENGTHS"),
         # devversion.apply
         ("version_stamp.devversion.apply", "_reset_worktree", "_reset_worktree"),
         ("version_stamp.devversion.apply", "_apply_dep_patches", "_apply_dep_patches"),
         # devversion.materialize
         ("version_stamp.devversion.materialize", "get_git_difftool", "get_git_difftool"),
-        ("version_stamp.devversion.materialize", "_LOCAL_GIT_TIMEOUT_SEC", "_LOCAL_GIT_TIMEOUT_SEC"),
+        ("version_stamp.devversion.clone", "_LOCAL_GIT_TIMEOUT_SEC", "_LOCAL_GIT_TIMEOUT_SEC"),
         # devversion.untracked
         ("version_stamp.devversion.untracked", "copy_untracked_files", "copy_untracked_files"),
         ("version_stamp.devversion.untracked", "_DEFAULT_MAX_FILE_MB", "_DEFAULT_MAX_FILE_MB"),

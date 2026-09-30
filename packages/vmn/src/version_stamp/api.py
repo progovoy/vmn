@@ -97,7 +97,6 @@ _LAZY_REGISTRY: dict[str, str] = {
     "_unique_snapshot_verstr":     "version_stamp.snapshot.identity:_unique_snapshot_verstr",
     # --- version_stamp.devversion.clone ------------------------------------
     "_clone_at":                   "version_stamp.devversion.clone:_clone_at",
-    "_clone_local_at":             "version_stamp.devversion.clone:_clone_local_at",
     "_commit_exists":              "version_stamp.devversion.clone:_commit_exists",
     "_git_ok":                     "version_stamp.devversion.clone:_git_ok",
     "_LOCAL_GIT_TIMEOUT_SEC":      "version_stamp.devversion.clone:_LOCAL_GIT_TIMEOUT_SEC",

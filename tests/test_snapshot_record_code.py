@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from version_stamp.snapshot import record
+from version_stamp.snapshot import identity, record
 
 VER_INFO = {"stamping": {"app": {"changesets": {}}}}
 COMMIT = "abcdef1" + "0" * 33
@@ -25,7 +25,7 @@ def test_a_given_diff_hash_is_not_recomputed(monkeypatch):
     def boom(_patches):
         raise AssertionError("re-hashed")
 
-    monkeypatch.setattr(record, "_compute_diff_hash", boom)
+    monkeypatch.setattr(identity, "_compute_diff_hash", boom)
     meta = _build(diff_hash="1234567" + "f" * 57)
     assert meta["diff_hash"] == "1234567" + "f" * 57
     assert meta["code_verstr"] == "0.0.1-dev.abcdef1.1234567"

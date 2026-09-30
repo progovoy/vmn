@@ -2,24 +2,14 @@
 
 Public:
   - ``METADATA_FILE``, ``PATCH_FILES`` — same as ``vmn_exp.storage.files``.
-  - ``safe_verstr(verstr) -> str`` (ValueError if it would leave its dir),
-    ``unsafe_verstr(name) -> str``, ``safe_dep_name(dep_path) -> str``.
   - ``skipped_untracked(patches) -> list``, ``patch_summary(patches) -> dict``.
   - ``build_record_metadata(vcs, verstr, base_version, commit_hash,
     dirty_states, patches, ver_info, note=None, code=None, diff_hash=None)
     -> dict`` — adds ``code_verstr`` (the 7-char dev verstr the code object is
     named by) and, with *code* ``(key, summary)``, the ``code:`` reference.
-  - ``same_state(stored_meta, diff_hash, changesets, dep_bases=None) -> bool``.
 """
 from version_stamp.core.utils import now_iso
-from version_stamp.snapshot.identity import (  # noqa: F401  (public names re-exported)
-    _compute_diff_hash,
-    _format_dev_verstr,
-    safe_dep_name,
-    safe_verstr,
-    same_state,
-    unsafe_verstr,
-)
+from version_stamp.snapshot import identity
 
 METADATA_FILE = "metadata.yml"
 # (patches key, file name, binary?)
@@ -80,10 +70,10 @@ def build_record_metadata(
     if code:
         metadata.update(code[1])
     if diff_hash is None:
-        diff_hash = _compute_diff_hash(patches)
+        diff_hash = identity._compute_diff_hash(patches)
     if diff_hash:
         metadata["diff_hash"] = diff_hash
-        metadata["code_verstr"] = _format_dev_verstr(base_version, commit_hash, diff_hash)
+        metadata["code_verstr"] = identity._format_dev_verstr(base_version, commit_hash, diff_hash)
 
     changesets = ver_info["stamping"]["app"].get("changesets", {})
     if changesets:

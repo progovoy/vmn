@@ -7,7 +7,6 @@ import tempfile
 
 import yaml
 
-from version_stamp.core.git_cmd import clone_at_commit as _shallow_clone_at  # noqa: F401 (tests)
 from version_stamp.core.constants import POOL_SIZE_CLONES
 from version_stamp.core.git_cmd import git_stdout, run_git
 from version_stamp.core.logging import VMN_LOGGER
@@ -16,7 +15,6 @@ from version_stamp.devversion.apply import (
     _dep_patches_of,
     dep_base_commit,
 )
-from version_stamp.devversion.clone import _LOCAL_GIT_TIMEOUT_SEC  # noqa: F401 (tests)
 from version_stamp.devversion.clone import _clone_at
 from version_stamp.devversion.ordered_pool import replay, run_ordered
 from version_stamp.devversion.untracked import copy_untracked_files
