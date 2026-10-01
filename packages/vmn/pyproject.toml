@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vmn"
-version = "0.10.2-rc.11"  # written by `vmn stamp` (version_backends in .vmn/vmn/conf.yml)
+version = "0.10.2-rc.12"  # written by `vmn stamp` (version_backends in .vmn/vmn/conf.yml)
 description = "Stamping utility"
 readme = "README.md"
 license = { text = "MIT" }
