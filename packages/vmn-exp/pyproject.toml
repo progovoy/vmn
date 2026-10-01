@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vmn-exp"
-version = "0.1.1"  # written by `vmn stamp vmn_exp`, shared with vmn-exp-sdk
+version = "0.1.2"  # written by `vmn stamp vmn_exp`, shared with vmn-exp-sdk
 description = "vmn experiment platform: the vmn-exp CLI, dashboard and git-mode capture"
 readme = "README.md"
 license = { text = "MIT" }
@@ -15,7 +15,7 @@ dependencies = [
     "vmn>0.10.2rc9,<1",
     # Released together with this package; tests/test_workspace.py keeps the
     # pin equal to this package's own version.
-    "vmn-exp-sdk==0.1.1",
+    "vmn-exp-sdk==0.1.2",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +29,7 @@ mlflow = ["mlflow-skinny"]
 vmn-exp = "vmn_exp.cli.main:main"
 
 [project.entry-points."vmn.plugins"]
-dev_version = "vmn_exp.cli.plugin:register_dev_version"
+dev_version = "0.1.2"
 
 [project.urls]
 Homepage = "https://github.com/progovoy/vmn"
