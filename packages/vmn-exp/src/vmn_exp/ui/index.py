@@ -10,13 +10,12 @@ so it can't dirty a workspace's git status; with ``--no-index`` it is kept in
 memory only.
 """
 import hashlib
-import json
 import logging
 import os
-import sqlite3
 import threading
 
 import vmn_exp.core.index as experiment_index
+from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.readers import versions as ver_reader
 from vmn_exp.ui.refresher import InlineRefresher
@@ -82,36 +81,13 @@ class WorkspaceIndex:
             self._db_path = _db_path(db_dir, os.path.abspath(root_path))
         self._lock = threading.Lock()
         self._in_memory = {}  # app name -> unpersisted ExperimentIndex
-        self._conn = sqlite3.connect(self._db_path or ":memory:", check_same_thread=False)
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS cache ("
-            " scope TEXT PRIMARY KEY, fingerprint TEXT, payload TEXT)"
-        )
-        self._conn.commit()
+        self._cache = SqliteStore(self._db_path or ":memory:")
         self._storage = exp_reader.experiment_storage(root_path)
 
     @property
     def storage(self):
         """The workspace's experiment storage, shared by every request."""
         return self._storage
-
-    def _get(self, scope, fingerprint):
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT fingerprint, payload FROM cache WHERE scope = ?", (scope,)
-            ).fetchone()
-        if row and row[0] == fingerprint:
-            return json.loads(row[1])
-        return None
-
-    def _put(self, scope, fingerprint, payload):
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO cache (scope, fingerprint, payload)"
-                " VALUES (?, ?, ?)",
-                (scope, fingerprint, json.dumps(payload)),
-            )
-            self._conn.commit()
 
     def snapshot(self, app_name, refresher=_INLINE, schema=None):
         """The app's current :class:`IndexSnapshot` (see :func:`app_snapshot`)."""
@@ -132,8 +108,10 @@ class WorkspaceIndex:
 
     def list_versions(self, app_name):
         fp = versions_fingerprint(self.root_path, app_name)
-        rows = self._get(f"ver:{app_name}", fp)
+        with self._lock:
+            rows = self._cache.kv_get(f"ver:{app_name}", fp)
         if rows is None:
             rows = ver_reader.list_versions(self.root_path, app_name)
-            self._put(f"ver:{app_name}", fp, rows)
+            with self._lock:
+                self._cache.kv_put(f"ver:{app_name}", fp, rows)
         return rows
