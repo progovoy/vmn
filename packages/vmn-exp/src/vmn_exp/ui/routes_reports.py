@@ -19,6 +19,14 @@ from vmn_exp.ui.request_author import author_of
 RID_RE = re.compile(r"^r[a-z2-7]{1,64}$")
 
 
+def _check_patch(body):
+    title = body.get("title", "x")
+    if not isinstance(title, str) or not title.strip():
+        raise HTTPException(400, "title must be a non-empty string")
+    if any(not isinstance(body.get(f, False), bool) for f in ("archived", "pinned")):
+        raise HTTPException(400, "archived and pinned must be booleans")
+
+
 def register(app, api_prefix, any_exp_storage):
     """*any_exp_storage(ws_name)* returns the workspace's experiment storage."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/reports"
@@ -104,11 +112,13 @@ def register(app, api_prefix, any_exp_storage):
     @app.patch(f"{base}/{{rid}}", dependencies=[require(EDITOR)])
     def patch_report_route(ws_name: str, rid: str, request: Request, body: dict = None):
         _require_rw()
+        body = body or {}
+        _check_patch(body)
         storage, _ = _report(ws_name, rid)
         actor = author_of(request)
         setters = {"title": set_title, "archived": set_archived, "pinned": set_pinned}
         for field, setter in setters.items():
-            if field in (body or {}):
+            if field in body:
                 setter(storage, rid, body[field], actor=actor)
         return {}
 

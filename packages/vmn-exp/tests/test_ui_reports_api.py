@@ -52,6 +52,14 @@ def test_patch_title_pinned(tmp_path):
     assert got["title"] == "New" and got["pinned"] is True
 
 
+@pytest.mark.parametrize("body", [{"title": ""}, {"title": 3}, {"pinned": "yes"}, {"archived": 1}])
+def test_patch_bad_types_400(tmp_path, body):
+    client = make_client(tmp_path)
+    rid = create_report(client)
+    assert client.patch(f"{WS}/reports/{rid}", json=body).status_code == 400
+    assert client.get(f"{WS}/reports/{rid}").json()["title"] == "T"
+
+
 def test_publish_and_read_panel_data(tmp_path):
     client = make_client(tmp_path)
     rid = create_report(client)
