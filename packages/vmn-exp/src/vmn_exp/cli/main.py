@@ -10,7 +10,7 @@ import sys
 from version_stamp.api import VMN_ARGS, vmn_run
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 
-OWN_COMMANDS = ("exp", "experiment", "model", "sweep", "ui")
+OWN_COMMANDS = ("exp", "experiment", "model", "report", "comment", "comments", "sweep", "ui")
 
 
 def _to_vmn_argv(argv):

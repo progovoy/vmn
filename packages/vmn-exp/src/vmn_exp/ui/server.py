@@ -20,7 +20,9 @@ from vmn_exp.ui import (
     routes_leaderboard,
     routes_lineage,
     routes_media,
+    routes_comments,
     routes_models,
+    routes_reports,
     routes_series,
     routes_sweep,
     routes_tree,
@@ -463,10 +465,12 @@ def create_app(
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
-    routes_models.register(
-        app, API_PREFIX,
-        lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),
-    )
+    def _ws_storage(ws_name):
+        return _any_exp_storage(_experiment_workspace(ws_name))
+
+    routes_models.register(app, API_PREFIX, _ws_storage)
+    routes_reports.register(app, API_PREFIX, _ws_storage)
+    routes_comments.register(app, API_PREFIX, _ws_storage)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 

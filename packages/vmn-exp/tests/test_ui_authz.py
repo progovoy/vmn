@@ -14,6 +14,7 @@ from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal
 ADMIN_ROUTES = {
     ("POST", "/api/v1/workspaces"),
     ("DELETE", "/api/v1/workspaces/{ws_name}"),
+    ("DELETE", "/api/v1/workspaces/{ws_name}/reports/{rid}"),
 }
 READ_POSTS = {"/api/v1/workspaces/{ws_name}/apps/{app_tag}/series"}
 RANK = {VIEWER: 0, EDITOR: 1, ADMIN: 2}
