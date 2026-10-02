@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.cli.prune_query import print_preview, query_candidates
 from vmn_exp.cli.views import metrics_schema
 from vmn_exp.core.code_store import drop_unused_code
+from vmn_exp.reports import comments
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
@@ -73,6 +74,12 @@ def _ancestors(verstr, parent_of):
         seen.add(parent)
         parent = parent_of.get(parent)
     return seen
+
+
+def _delete_run(storage, app_name, verstr):
+    storage.delete(app_name, verstr)
+    if hasattr(storage, "in_area"):
+        comments.delete_thread(storage, ("run", app_name, verstr))
 
 
 def _map(storage, fn, items):
@@ -341,7 +348,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
         return 0
 
     verstrs = [m["verstr"] for m in to_delete]
-    _map(storage, lambda v: storage.delete(app_name, v), verstrs)
+    _map(storage, lambda v: _delete_run(storage, app_name, v), verstrs)
     drop_unused_code(storage, app_name, {m.get("code_verstr") for m in to_delete})
     for verstr in verstrs:
         print(f"Deleted {verstr}")
