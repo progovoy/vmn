@@ -19,6 +19,7 @@ ADMIN_ROUTES = {
     ("DELETE", "/api/v1/tokens/{token_id}"),
     ("GET", "/api/v1/audit"),
     ("GET", "/api/v1/audit/export"),
+    ("DELETE", "/api/v1/workspaces/{ws_name}/reports/{rid}"),
 }
 READ_POSTS = {"/api/v1/workspaces/{ws_name}/apps/{app_tag}/series"}
 RANK = {VIEWER: 0, EDITOR: 1, ADMIN: 2}
