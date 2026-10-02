@@ -41,6 +41,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_record import refresh_record, update_record
@@ -89,6 +90,16 @@ class ExperimentIndex:
         self._lock = threading.Lock()
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
+        self._cache_gen = None  # a follower's CacheStore generation; None for a leader
+
+    @classmethod
+    def follower(cls, cache_store, scope):
+        """An index that never reads storage: each refresh applies
+        *cache_store*'s ``load_since`` deltas, which a leader saves."""
+        index = cls(None, scope)
+        index._store = cache_store
+        index._cache_gen = 0
+        return index
 
     @property
     def full_sweep_sec(self):
@@ -155,6 +166,10 @@ class ExperimentIndex:
 
     def _refresh_locked(self):
         started = _monotonic()
+        if self._cache_gen is not None:
+            self._refresh_from_cache()
+            self.last_refresh_at = started
+            return
         try:
             self._refresh_from_storage(started)
         except Exception:
@@ -202,6 +217,23 @@ class ExperimentIndex:
         if touched or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else touched)
+
+    def _refresh_from_cache(self):
+        if self._records is None:
+            self._records = {}
+        old = set(self._records)
+        changed, removed, self._cache_gen = apply_delta(
+            self._records, self._store, self.app_name, self._cache_gen
+        )
+        for key in changed | removed:
+            self._rows.pop(key, None)
+        new = [key for key in changed if key not in old]
+        # A changed record may have been re-described (its timestamp moved).
+        self._reorder = (new, bool(removed) or len(new) < len(changed))
+        self._order = self._sorted_keys()
+        if changed or removed or self._snapshot is None:
+            self.generation += 1
+            self._snapshot = self._build_snapshot(None if removed else changed)
 
     def _load_records(self):
         return self._io.load() if self._io else self._store.load(self.app_name)
