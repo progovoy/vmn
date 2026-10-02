@@ -11,7 +11,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 SRC = {dist: REPO / "packages" / dist / "src" for dist in ("vmn", "vmn-exp-sdk", "vmn-exp")}
-SDK_SUBPACKAGES = ("sdk", "storage", "core", "registry", "integrations", "_base")
+SDK_SUBPACKAGES = ("sdk", "storage", "core", "registry", "reports", "integrations", "_base")
 FULL_SUBPACKAGES = ("cli", "ui", "snapshot", "importers", "gitmode")
 FACADE = "version_stamp.api"
 # The SDK may load git mode lazily, from inside a function, and nothing else.
