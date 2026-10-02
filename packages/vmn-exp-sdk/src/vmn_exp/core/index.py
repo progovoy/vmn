@@ -73,12 +73,13 @@ class ExperimentIndex:
     """Incrementally maintained rows for one app of one storage backend."""
 
     def __init__(
-        self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC
+        self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC,
+        cache_store=None,
     ):
         self._storage = storage
         self.app_name = app_name
         self._cache_path = cache_path
-        self._store = IndexStore(cache_path)
+        self._store = cache_store or IndexStore(cache_path)
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None

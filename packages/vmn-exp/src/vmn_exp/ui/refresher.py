@@ -55,6 +55,7 @@ class _Watch:
         self.touched_at = time.monotonic()
         self.thread = None
         self.failing = False
+        self.wake = threading.Event()
 
 
 class Refresher:
@@ -84,10 +85,21 @@ class Refresher:
         watch = self._watches.get(index)
         return bool(watch and watch.thread and watch.thread.is_alive())
 
+    def wake_scope(self, payload):
+        """Refresh at once the watched indexes of ``vmn_gen``'s
+        ``<workspace>:<app>`` *payload*, instead of at their next tick."""
+        app = payload.split(":", 1)[-1]
+        with self._lock:
+            watches = [w for i, w in self._watches.items() if i.app_name == app]
+        for watch in watches:
+            watch.wake.set()
+
     def stop(self):
         """End every refresh thread and I/O helper (for tests and shutdown)."""
         self._stopped.set()
         with self._lock:
+            for watch in self._watches.values():
+                watch.wake.set()
             threads = [w.thread for w in self._watches.values() if w.thread]
             threads += list(self._journals.values())
             indexes = list(self._watches)
@@ -144,7 +156,9 @@ class Refresher:
         # Refresh at once: a restart after idling catches up before it waits.
         while not self._idle(index, watch):
             self._refresh(index, watch)
-            if self._stopped.wait(self.interval_sec):
+            watch.wake.wait(self.interval_sec)
+            watch.wake.clear()
+            if self._stopped.is_set():
                 return
 
     def _idle(self, index, watch):
