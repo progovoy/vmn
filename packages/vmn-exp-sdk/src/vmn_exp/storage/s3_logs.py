@@ -59,16 +59,20 @@ class S3Logs:
         so two processes sharing a writer id never overwrite each other.
         Returns the seq used."""
         prefix = self._record_prefix(app_name, verstr)
+        return self._put_next_free(
+            lambda n: f"{prefix}/{log_object_name(writer_id, n)}", seq, data)
+
+    def _put_next_free(self, key_of, seq, data):
+        """Create ``key_of(seq)``, or the first free key after it; the seq used."""
         for _ in range(_APPEND_ATTEMPTS):
             try:
-                key = f"{prefix}/{log_object_name(writer_id, seq)}"
-                self._put(key, data, IfNoneMatch="*")
+                self._put(key_of(seq), data, IfNoneMatch="*")
                 return seq
             except Exception as e:
                 if not is_taken(e):
                     raise
                 seq += 1
-        raise RuntimeError(f"Could not store a log segment of {writer_id}")
+        raise RuntimeError(f"Could not store {key_of(seq)}: too many writers")
 
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         return self.append_log_entries(app_name, verstr, writer_id, [entry])

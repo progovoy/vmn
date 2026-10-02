@@ -32,6 +32,7 @@ from vmn_exp.storage.files import (
     unsafe_verstr,
     write_patches_to_dir,
 )
+from vmn_exp.storage.local_metrics import LocalMetrics
 from vmn_exp.storage.listing import RecordListings, files_in, map_dirs
 
 
@@ -66,7 +67,7 @@ def _dir_sig(entry):
     return (entry.stat().st_mtime_ns, entry.inode())
 
 
-class LocalSnapshotStorage(SnapshotStorage):
+class LocalSnapshotStorage(LocalMetrics, SnapshotStorage):
     def __init__(self, root, area=SNAPSHOTS):
         self.root = root
         self.area = area

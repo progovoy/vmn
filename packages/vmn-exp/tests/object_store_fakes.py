@@ -73,12 +73,12 @@ class FakeBlob:
         with open(filename, "rb") as f:
             self.upload_from_string(f.read())
 
-    def download_as_bytes(self, start=None):
+    def download_as_bytes(self, start=None, end=None):
         obj = self._current()
         if start and start >= len(obj.data):
             raise RequestRangeNotSatisfiable(self.name)
         self.generation = obj.generation  # as the SDK does, from x-goog-generation
-        return obj.data[start or 0:]
+        return obj.data[start or 0:None if end is None else end + 1]
 
     def download_to_filename(self, filename):
         with open(filename, "wb") as f:
@@ -251,7 +251,9 @@ class FakeBlobClient:
         obj = self._current()
         if offset and offset >= len(obj.data):
             raise HttpResponseError(416)
-        return _Downloader(BlobProperties(self.blob_name, obj), obj.data[offset or 0:])
+        start = offset or 0
+        stop = None if length is None else start + length
+        return _Downloader(BlobProperties(self.blob_name, obj), obj.data[start:stop])
 
 
 class FakeContainerClient:

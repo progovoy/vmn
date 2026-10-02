@@ -196,5 +196,28 @@ class SnapshotStorage(ABC):
         """``[(object name, size)]`` of a writer's remote log objects, in order."""
         return []
 
+    # -- metric streams (plan 12 §4.2) ----------------------------------------
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        """Append one encoded block to the writer's ``metrics/`` stream."""
+        raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
+
+    def put_indexed(self, app_name, verstr, writer_id, path):
+        """Store *path* as the writer's ``.vmx`` (never over one; False then)
+        and drop the stream objects it supersedes."""
+        raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
+
+    def metric_objects(self, app_name, verstr):
+        """``{writer: [(name, size)]}`` of the visible metric objects."""
+        return {}
+
+    def read_range(self, app_name, verstr, name, offset, length):
+        """*length* bytes of *name* from *offset*, or None when it is missing."""
+        data = self.load_file(app_name, verstr, name)
+        return None if data is None else data[offset:offset + length]
+
+    def sync_metrics_to_remote(self, app_name, verstr, writer_id):
+        """Ship the writer's new metric blocks. No-op by default."""
+
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         """Sync the writer's log file to remote storage. No-op by default."""

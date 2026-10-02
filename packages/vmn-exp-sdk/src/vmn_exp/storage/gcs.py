@@ -27,11 +27,14 @@ class GCSObjectClient(ObjectClient):
         blob = self._bucket.get_blob(key)
         return _obj(blob) if blob is not None else None
 
-    def _get(self, key, offset):
+    def _get(self, key, offset, length=None):
         # One request: a missing key raises 404, a start past the end 416, and
         # the download carries the generation it read (x-goog-generation).
         blob = self._bucket.blob(key)
-        data = blob.download_as_bytes(start=offset or None)
+        if length is None:
+            data = blob.download_as_bytes(start=offset or None)
+        else:
+            data = blob.download_as_bytes(start=offset, end=offset + length - 1)
         return {"Body": Body(lambda: data), "ETag": str(blob.generation),
                 "ContentLength": len(data)}
 

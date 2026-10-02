@@ -41,9 +41,11 @@ class AzureObjectClient(ObjectClient):
                 return None
             raise
 
-    def _get(self, key, offset):
+    def _get(self, key, offset, length=None):
         try:
-            stream = self._blob(key).download_blob(offset=offset or None)
+            # The SDK refuses a length without an offset.
+            start = offset if length is not None else offset or None
+            stream = self._blob(key).download_blob(offset=start, length=length)
         except Exception as e:
             if getattr(e, "status_code", None) == 416:
                 raise ObjectStoreError(BAD_RANGE, key) from e
