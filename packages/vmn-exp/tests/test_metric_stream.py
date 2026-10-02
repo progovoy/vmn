@@ -118,3 +118,17 @@ def test_a_failed_append_keeps_the_points_for_the_next_flush():
     w.add("x", 2.0, step=1)
     w.flush()
     assert list(_keys(s)["x"].values) == [1.0, 2.0]
+
+
+def test_a_refused_append_reports_false_and_keeps_the_points():
+    class Refusing(FakeStorage):
+        def append_metric_block(self, *a):
+            return False
+
+    s = Refusing()
+    w = _writer(s)
+    w.add("loss", 0.5, step=1)
+    assert w.flush() is False
+    s.append_metric_block = FakeStorage.append_metric_block.__get__(s)
+    assert w.flush()
+    assert list(_keys(s)["loss"].values) == [0.5]

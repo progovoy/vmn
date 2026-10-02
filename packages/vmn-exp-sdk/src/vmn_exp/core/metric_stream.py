@@ -54,12 +54,13 @@ class MetricWriter:
 
     def flush(self):
         """Append the buffered points as one block; True when nothing was
-        pending or the append succeeded. A failed append keeps them."""
+        pending or the append succeeded. A failed or refused append keeps them."""
         with self._lock:
             keys = self._block_keys()
             if not keys:
                 return True
-            self._storage.append_metric_block(*self._target, encode_block(keys))
+            if not self._storage.append_metric_block(*self._target, encode_block(keys)):
+                return False
             self._has_steps.update(self._stepped)
             self._stepped, self._stepless = {}, {}
             return True
