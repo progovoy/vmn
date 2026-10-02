@@ -14,8 +14,11 @@
     "@tanstack/react-virtual": "^3.14.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.28.0",
-    "uplot": "^1.6.32"
+    "remark-gfm": "^4.0.1",
+    "uplot": "^1.6.32",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
