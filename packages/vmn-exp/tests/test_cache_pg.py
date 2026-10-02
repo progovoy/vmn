@@ -55,3 +55,10 @@ def test_scope_may_be_workspace_and_app(pg_dsn):
     assert set(store.load((1, "app"))) == {"a"}
     assert store.load("app") == {}
     assert cache_pg.scope_key((1, "app")) == (0, 1, "app")
+
+
+def test_cache_survives_reconnect_with_same_schema(pg_dsn):
+    PostgresStore(pg_dsn).save("app", {"a": {"verstr": "1"}}, set())
+    again = PostgresStore(pg_dsn)
+    assert set(again.load("app")) == {"a"}
+    assert again.generation("app") == 1
