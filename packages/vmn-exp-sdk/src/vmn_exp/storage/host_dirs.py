@@ -55,7 +55,10 @@ def store_id(identity):
 
 
 def _app_part(app_name):
-    return _slug(app_name.replace("/", "-"))
+    """Readable slug plus a short hash, so apps whose slugs collide (``a.b`` /
+    ``a_b``, long names) never share a file."""
+    digest = hashlib.sha256(app_name.encode()).hexdigest()[:8]
+    return f"{_slug(app_name.replace('/', '-'))}.{digest}"
 
 
 def index_cache_root():

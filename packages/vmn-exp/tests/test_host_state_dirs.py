@@ -88,3 +88,17 @@ def test_xdg_vars_win_over_platform_defaults(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "s"))
     assert host_dirs.cache_base() == str(tmp_path / "c" / "vmn-exp")
     assert host_dirs.state_base() == str(tmp_path / "s" / "vmn-exp")
+
+
+def test_app_names_that_slug_alike_get_distinct_paths(tmp_path, monkeypatch):
+    from vmn_exp.storage import host_dirs
+
+    monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("VMN_INDEX_CACHE_DIR", raising=False)
+    ident = ("file", str(tmp_path / "store"))
+    assert host_dirs.index_cache_path(ident, "a.b") != host_dirs.index_cache_path(
+        ident, "a_b"
+    )
+    assert host_dirs.push_ledger_dir(ident, "r", "a.b") != host_dirs.push_ledger_dir(
+        ident, "r", "a_b"
+    )
