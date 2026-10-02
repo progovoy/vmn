@@ -43,7 +43,7 @@ def stamped(app_layout):
 
 
 def _corrupt_working_tree_patch(app_layout):
-    code_root = os.path.join(app_layout.repo_path, ".vmn", "vmn-code")
+    code_root = os.path.join(app_layout.repo_path, ".vmn", "store", "code")
     corrupted = 0
     for dirpath, _, filenames in os.walk(code_root):
         for name in filenames:

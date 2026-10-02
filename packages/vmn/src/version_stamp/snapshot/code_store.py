@@ -1,8 +1,8 @@
 """Code objects: a dirty tree's patches + untracked tarball, stored once per identity.
 
 A mirror of ``vmn_exp.core.code_store`` (see its docstring for the design):
-records of the reserved pseudo-app ``vmn-code/<app~>`` of the experiment-subdir
-store, keyed ``<code_verstr>.<full diff hash>``; ``metadata.yml`` (written
+records of the reserved pseudo-app ``vmn-code/<app~>`` (locally ``.vmn/store/code/<app-key>/``)
+keyed ``<code_verstr>.<full diff hash>``; ``metadata.yml`` (written
 last, ``verstr`` = key) is the completion marker carrying the payload summary.
 *storage* is any store with ``save``/``load_metadata``/``load_record``
 (``LocalRecordStore`` or a vmn-exp backend).

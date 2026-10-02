@@ -80,7 +80,7 @@ def test_untracked_names_with_unicode_and_quotes_roundtrip(stamped, capfd):
 
 
 def _copy_snapshot_stores(src_repo, dst_repo, app_name):
-    for rel in (os.path.join(app_name, "snapshots"), "vmn-code"):
+    for rel in (os.path.join("store", "snapshots", app_name), os.path.join("store", "code")):
         src = os.path.join(src_repo, ".vmn", rel)
         if os.path.isdir(src):
             shutil.copytree(src, os.path.join(dst_repo, ".vmn", rel), dirs_exist_ok=True)
@@ -95,7 +95,7 @@ def test_unpushed_commit_is_based_on_upstream_and_restores_in_fresh_clone(
     )
     verstr = _create(stamped, capfd)
     meta_path = os.path.join(
-        stamped.repo_path, ".vmn", stamped.app_name, "snapshots", verstr, "metadata.yml"
+        stamped.repo_path, ".vmn", "store", "snapshots", stamped.app_name, verstr, "metadata.yml"
     )
     with open(meta_path) as f:
         assert yaml.safe_load(f)["base_commit"] == upstream

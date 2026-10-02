@@ -19,6 +19,7 @@ IGNORED_FILES = [
     _UNTRACKED_CACHE_FILE,
     "*/snapshots/",
     "*/experiments/",
+    "store/",
 ]
 
 VMN_ARGS = {

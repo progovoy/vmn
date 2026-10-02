@@ -39,6 +39,7 @@ def test_vmn_init_gitignores_snapshot_dirs(app_layout):
     assert (
         "experiments" in content.lower()
     ), f".vmn/.gitignore missing experiments pattern: {content}"
+    assert "store/" in content, f".vmn/.gitignore missing store pattern: {content}"
 
 
 def test_double_stamp_no_commit(app_layout):

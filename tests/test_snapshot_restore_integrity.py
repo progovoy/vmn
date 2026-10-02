@@ -51,7 +51,7 @@ def _restore(app_layout, capfd, verstr):
 
 def _record_meta_path(app_layout, verstr):
     return os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots", verstr,
+        app_layout.repo_path, ".vmn", "store", "snapshots", app_layout.app_name, verstr,
         "metadata.yml",
     )
 
@@ -164,7 +164,7 @@ def test_restore_resets_a_dirty_dep_and_applies_its_patch(app_layout, capfd, wit
 
 
 def _corrupt_dep_patches(app_layout):
-    code_root = os.path.join(app_layout.repo_path, ".vmn", "vmn-code")
+    code_root = os.path.join(app_layout.repo_path, ".vmn", "store", "code")
     corrupted = 0
     for dirpath, _, filenames in os.walk(code_root):
         if os.sep + "deps" + os.sep not in dirpath + os.sep:

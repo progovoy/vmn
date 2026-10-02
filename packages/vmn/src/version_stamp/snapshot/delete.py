@@ -1,9 +1,8 @@
 """``vmn snapshot delete -v REF``: remove a snapshot record, then its code
 object unless another snapshot or an experiment run still references it.
 
-Runs are the *code* store's records of the app itself (experiment runs keep
-their records next to the code objects' store), so both stores are scanned
-for ``code:`` references.
+Runs (``stores.runs``, else the *code* store's records of the app itself)
+are scanned for ``code:`` references too.
 
 Public: ``snapshot_delete(stores, app_name, verstr) -> int``.
 """
@@ -13,7 +12,7 @@ from version_stamp.snapshot.code_store import code_app
 
 def _referenced_code_keys(stores, app_name):
     keys = set()
-    for store in (stores.records, stores.code):
+    for store in (stores.records, stores.runs or stores.code):
         keys.update(m.get("code") for m in store.list_snapshots(app_name))
     keys.discard(None)
     return keys
