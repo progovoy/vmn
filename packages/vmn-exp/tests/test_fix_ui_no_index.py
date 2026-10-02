@@ -6,6 +6,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.files import INDEX_CACHE_FILE
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.workspaces import Workspace
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 
@@ -13,7 +14,7 @@ APP = "app"
 def _setup(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(root=local_store_root(str(root)), area="runs")
     source = ExperimentSource(str(tmp_path / "data"), use_index=False)
     return Workspace(name="ws", path=str(root)), storage, source
 

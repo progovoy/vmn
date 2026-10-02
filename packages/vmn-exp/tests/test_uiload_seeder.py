@@ -10,6 +10,7 @@ from uiload import seeder
 from vmn_exp.core.tree import rollup_status
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "loadapp"
 STATUSES = ("succeeded", "failed", "stuck", "created")
@@ -28,7 +29,7 @@ def seeded(tmp_path_factory):
         root, runs=60, sweeps=2, inner_per_sweep=5, max_metric_keys=30,
         max_steps=500, max_params=20, rng_seed=7, workers=2,
     )
-    storage = open_storage(vmn_root_path=root, subdir="experiments")
+    storage = open_storage(root=local_store_root(root), area="runs")
     rows = list_runs(APP, storage=storage, include_archived=True)
     return root, counts, storage, rows
 
@@ -104,7 +105,7 @@ def test_long_series_exist_for_downsampling(tmp_path):
     seeder.seed(root, runs=300, sweeps=0, inner_per_sweep=0, max_metric_keys=10,
                 max_steps=5000, max_params=10, workers=1)
     logs = []
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, ".vmn", "store", "runs", APP)
     for verstr in os.listdir(base):
         folder = os.path.join(base, verstr)
         if os.path.isdir(folder):
@@ -137,7 +138,7 @@ def test_nan_and_inf_metrics_are_kept_somewhere(tmp_path):
     root = _root(tmp_path)
     seeder.seed(root, runs=400, sweeps=0, inner_per_sweep=0, max_metric_keys=10,
                 max_steps=50, max_params=5, workers=1)
-    storage = open_storage(vmn_root_path=root, subdir="experiments")
+    storage = open_storage(root=local_store_root(root), area="runs")
     values = [v for r in list_runs(APP, storage=storage, include_archived=True)
               for v in r["metrics"].values()]
     assert any(isinstance(v, float) and not math.isfinite(v) for v in values)

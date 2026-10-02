@@ -173,10 +173,10 @@ def test_gcs_factory_builds_from_the_uri(monkeypatch):
 
     client = FakeGCSClient()
     install_fake_gcs(monkeypatch, client)
-    store = open_store("gs://bkt/team", subdir="experiments")
-    assert (store.bucket, store.prefix, store.scheme) == ("bkt", "team", "gs")
+    store = open_store("gs://bkt/team", area="runs")
+    assert (store.bucket, store.prefix, store.scheme) == ("bkt", "team/runs", "gs")
     assert store.create_exclusive(APP, V1, _meta(V1), {})
-    assert any(k.startswith("team/trainer/") for k in client.bucket("bkt").objects)
+    assert any(k.startswith("team/runs/trainer/") for k in client.bucket("bkt").objects)
 
 
 def test_azure_factory_uses_the_connection_string(monkeypatch):
@@ -184,8 +184,8 @@ def test_azure_factory_uses_the_connection_string(monkeypatch):
 
     install_fake_azure(monkeypatch)
     monkeypatch.setenv("AZURE_STORAGE_CONNECTION_STRING", "UseDevelopmentStorage=true")
-    store = open_store("az://ctr", subdir="experiments")
-    assert (store.bucket, store.prefix, store.scheme) == ("ctr", "vmn-experiments", "az")
+    store = open_store("az://ctr", area="runs")
+    assert (store.bucket, store.prefix, store.scheme) == ("ctr", "vmn/runs", "az")
     assert store.create_exclusive(APP, V1, _meta(V1), {})
     assert not store.create_exclusive(APP, V1, _meta(V1), {})
 

@@ -9,12 +9,13 @@ import pytest
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 
 
 def _seed(root, n=3):
-    st = LocalSnapshotStorage(str(root), subdir="experiments")
+    st = LocalSnapshotStorage(local_store_root(str(root)), area="runs")
     for i in range(n):
         v = f"0.0.1-dev.abc.r{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

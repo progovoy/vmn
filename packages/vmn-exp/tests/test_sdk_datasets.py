@@ -21,7 +21,7 @@ BUCKET = "vmn-test-bucket"
 
 
 def _storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "store"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
 
 
 def _file(tmp_path, name="train.csv", data=b"a,b\n1,2\n"):

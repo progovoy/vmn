@@ -21,7 +21,7 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
 
 
 def _seed(root):
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, ".vmn", "store", "runs", APP)
     for i in range(RUNS):
         verstr = f"0.0.1-dev.abc1234.def5678.r{i}"
         folder = os.path.join(base, verstr)

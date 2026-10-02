@@ -1,5 +1,5 @@
 """``SnapshotStorage.list_apps()``: every backend names the apps it holds,
-reserved pseudo-apps (model registry, sweep claims) filtered out once, in
+the reserved model-registry pseudo-app filtered out once, in
 the storage layer — and a ``file://`` store workspace lists its apps."""
 import os
 
@@ -12,7 +12,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 
 REAL_APPS = ["my_app", "root/svc"]
-RESERVED = ["vmn-registry", "vmn-sweeps/sw1"]
+RESERVED = ["vmn-registry"]
 
 
 def _record(storage, app, verstr="0.0.1-dev.abc"):
@@ -25,14 +25,14 @@ def _fill(storage):
 
 
 def test_local_storage_lists_its_apps_without_reserved(tmp_path):
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     _fill(storage)
     assert storage.list_apps() == REAL_APPS
 
 
-def test_local_storage_ignores_the_other_subdir(tmp_path):
-    _record(LocalSnapshotStorage(str(tmp_path), subdir="snapshots"), "snap_only")
-    assert LocalSnapshotStorage(str(tmp_path), subdir="experiments").list_apps() == []
+def test_local_storage_ignores_the_other_area(tmp_path):
+    _record(LocalSnapshotStorage(str(tmp_path), area="snapshots"), "snap_only")
+    assert LocalSnapshotStorage(str(tmp_path), area="runs").list_apps() == []
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_s3_storage_lists_its_apps_without_reserved(bucket):
 
 
 def test_cached_storage_merges_local_and_remote_apps(bucket, tmp_path):
-    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), subdir="experiments")
+    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs")
     _record(storage._remote, "remote_app")
     _record(storage._local, "local_app")
     assert storage.list_apps() == ["local_app", "remote_app"]
@@ -66,7 +66,7 @@ def test_file_store_workspace_lists_its_apps(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     store_dir = tmp_path / "store"
-    _fill(LocalSnapshotStorage(str(store_dir), subdir="experiments"))
+    _fill(LocalSnapshotStorage(str(store_dir), area="runs"))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", f"file://{os.path.abspath(store_dir)}")
 

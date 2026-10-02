@@ -132,7 +132,7 @@ def test_storage_the_helper_cannot_read_stays_in_process(tmp_path):
     class Subclassed(Store(str(tmp_path)).st.__class__):
         pass
 
-    index = ExperimentIndex(Subclassed(str(tmp_path), subdir="experiments"), APP)
+    index = ExperimentIndex(Subclassed(str(tmp_path), area="runs"), APP)
     assert not index.use_io_process()
     index.refresh()
 

@@ -13,8 +13,7 @@ API = "/api/v1/workspaces/main/apps"
 
 
 def _record(app_layout, verstr, entries, meta=None):
-    path = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name,
-                        "experiments", verstr)
+    path = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr)
     os.makedirs(path, exist_ok=True)
     metadata = {"verstr": verstr, "code_verstr": verstr, "branch": "master",
                 "timestamp": "2026-09-27T10:00:00Z", "base_version": "0.0.1"}

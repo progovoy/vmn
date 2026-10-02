@@ -151,7 +151,7 @@ def test_tree_depth_uses_all_runs_not_just_the_shown_ones(app_layout, capfd):
 
 def _metadata_path(app_layout, verstr):
     return os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr,
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr,
         "metadata.yml",
     )
 
@@ -263,7 +263,7 @@ def test_conf_writer_id_names_the_log_file(app_layout):
     assert rc == 0, out
     logs = glob.glob(
         os.path.join(
-            app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", "*",
+            app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, "*",
             "log.*.jsonl",
         )
     )

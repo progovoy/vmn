@@ -121,7 +121,7 @@ def test_query_still_rejects_unknown_prefixes():
 
 @pytest.fixture
 def st(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "repo"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "repo"), area="runs")
 
 
 def _index(st, tmp_path):

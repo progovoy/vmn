@@ -69,7 +69,7 @@ def test_s3_uri_builds_the_bucket_shorthand():
 def test_file_store_opens_a_local_storage(tmp_path):
     from vmn_exp.storage.local import LocalSnapshotStorage
 
-    store = registry.open_store(f"file://{tmp_path}", subdir="experiments")
+    store = registry.open_store(f"file://{tmp_path}", area="runs")
     assert isinstance(store, LocalSnapshotStorage)
     assert store.create_exclusive("app", "1.0.0-dev.a.b", {"verstr": "x"}, {})
     assert not store.create_exclusive("app", "1.0.0-dev.a.b", {"verstr": "x"}, {})
@@ -85,18 +85,18 @@ def test_unknown_scheme_names_the_known_ones():
 def test_register_store_adds_a_scheme():
     seen = []
 
-    def factory(uri, subdir):
-        seen.append((uri.location, uri.path, subdir))
+    def factory(uri, area):
+        seen.append((uri.location, uri.path, area))
         return "store"
 
     registry.register_store("mem", factory)
-    assert registry.open_store("mem://x/y", subdir="snapshots") == "store"
+    assert registry.open_store("mem://x/y", area="snapshots") == "store"
     assert seen == [("x", "y", "snapshots")]
 
 
 def test_entry_point_declares_a_scheme(monkeypatch):
     module = type(sys)("fake_vmn_store_plugin")
-    module.make = lambda uri, subdir: ("plugin", uri.location)
+    module.make = lambda uri, area: ("plugin", uri.location)
     monkeypatch.setitem(sys.modules, "fake_vmn_store_plugin", module)
     ep = EntryPoint("mem", "fake_vmn_store_plugin:make", registry.ENTRY_POINT_GROUP)
     monkeypatch.setattr(registry, "_storage_entry_points", lambda: [ep])

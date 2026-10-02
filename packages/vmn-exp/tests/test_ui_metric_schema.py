@@ -90,7 +90,7 @@ def s3_client(tmp_path):
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/exps")
-        yield TestClient(create_app(manager)), S3SnapshotStorage("vmn-bucket", prefix="exps")
+        yield TestClient(create_app(manager)), S3SnapshotStorage("vmn-bucket", prefix="exps/runs")
 
 
 def _store_run(storage, verstr, sec, entries):

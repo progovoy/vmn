@@ -17,7 +17,7 @@ QUERY = 'outputs."media/x/0.png".size > 0'
 
 
 def _write(app_layout, verstr, second, entries):
-    path = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr)
+    path = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr)
     os.makedirs(path, exist_ok=True)
     meta = {"verstr": verstr, "code_verstr": verstr, "branch": "master",
             "base_version": "0.0.1", "timestamp": f"2026-09-21T12:00:0{second}Z"}

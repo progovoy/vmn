@@ -30,6 +30,21 @@ from vmn_exp.storage.files import (
 
 
 class SnapshotStorage(ABC):
+    # The store area (:mod:`vmn_exp.storage.areas`) this storage reads/writes.
+    area = None
+
+    def in_area(self, name):
+        """The storage of the same root's *name* area (opened once)."""
+        if name == self.area:
+            return self
+        opened = self.__dict__.setdefault("_areas", {})
+        if name not in opened:
+            opened[name] = self._open_area(name)
+        return opened[name]
+
+    def _open_area(self, name):
+        raise NotImplementedError(f"{type(self).__name__} has no store areas")
+
     @abstractmethod
     def save(self, app_name, verstr, metadata, patches):
         ...

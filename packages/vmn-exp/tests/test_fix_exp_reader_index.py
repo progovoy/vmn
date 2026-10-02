@@ -13,7 +13,7 @@ from vmn_exp.sdk.reader import get_run
 
 def _write(app_layout, verstr, second, parent=None):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path)
     meta = {"verstr": verstr, "code_verstr": verstr, "note": f"n-{verstr}",

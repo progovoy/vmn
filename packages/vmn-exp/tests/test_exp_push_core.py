@@ -7,7 +7,7 @@ from push_helpers import (
 )
 from s3_helpers import mocked_bucket, put_raw, record_calls, s3_storage
 
-from vmn_exp.core.code_store import code_app, stored_code
+from vmn_exp.core.code_store import code_storage, stored_code
 from vmn_exp.core.push_code import CodePusher
 from vmn_exp.core.push_identity import run_identity
 from vmn_exp.core.push_ledger import PushLedger, remote_id
@@ -177,19 +177,19 @@ def test_code_object_pushed_before_claim(local, target, tmp_path):
     calls = record_calls(target._s3)
     push_run(local, target, APP, X)
     keys = _puts(calls)
-    marker = next(i for i, k in enumerate(keys) if "vmn-code" in k and "metadata" in k)
-    payload = next(i for i, k in enumerate(keys) if "vmn-code" in k and "untracked" in k)
-    claim = next(i for i, k in enumerate(keys) if k.endswith(CLAIM_FILE) and "vmn-code" not in k)
+    marker = next(i for i, k in enumerate(keys) if "/code/" in k and "metadata" in k)
+    payload = next(i for i, k in enumerate(keys) if "/code/" in k and "untracked" in k)
+    claim = next(i for i, k in enumerate(keys) if k.endswith(CLAIM_FILE) and "/code/" not in k)
     assert payload < marker < claim
 
 
 def test_code_object_already_on_remote_not_reuploaded(local, target, tmp_path):
     make_run(local, tmp_path)
-    target.save(code_app(APP), KEY, {"verstr": KEY}, PAYLOAD)
+    code_storage(target).save(APP, KEY, {"verstr": KEY}, PAYLOAD)
     calls = record_calls(target._s3)
     code = CodePusher(local, target, APP)
     push_run(local, target, APP, X, code=code)
-    assert _puts(calls, "vmn-code") == []
+    assert _puts(calls, "/code/") == []
     assert (code.uploaded, code.present) == (0, 1)
 
 
@@ -200,7 +200,7 @@ def test_code_object_recreated_if_pruned_between_upload_and_claim(
     claim = target.create_exclusive
 
     def pruned_first(*args, **kwargs):
-        target.delete(code_app(APP), KEY)
+        code_storage(target).delete(APP, KEY)
         return claim(*args, **kwargs)
 
     monkeypatch.setattr(target, "create_exclusive", pruned_first)
@@ -215,7 +215,7 @@ def test_runs_sharing_code_upload_it_once(local, target, tmp_path):
     calls = record_calls(target._s3)
     for verstr in (X, X + ".2"):
         assert push_run(local, target, APP, verstr, code=code).status == NEW
-    assert len(_puts(calls, "vmn-code-app/" + KEY + "/metadata")) == 1
+    assert len(_puts(calls, "/code/app/" + KEY + "/metadata")) == 1
     assert code.uploaded == 1
 
 

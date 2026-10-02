@@ -9,7 +9,7 @@ from rerun_helpers import (
     run_names, worktrees, write,
 )
 
-from vmn_exp.core.code_store import code_app
+from vmn_exp.core.code_store import code_storage
 from vmn_exp.core.status import FAILED, derive_status, load_run_state
 
 
@@ -71,7 +71,7 @@ def test_rerun_of_legacy_in_record_patches_promotes_code_object(app_layout):
     source, patches = storage.load(app, orig)
     legacy = {k: v for k, v in source.items() if k != "code"}
     storage.save(app, orig, legacy, patches)
-    storage.delete(code_app(app), source["code"])
+    code_storage(storage).delete(app, source["code"])
 
     rc, new = rerun(app_layout, orig)
     assert rc == 0 and metric_values(app_layout, new) == [1.0]
@@ -93,7 +93,7 @@ def test_rerun_of_clean_run(app_layout):
 
 def test_rerun_refuses_code_missing(app_layout):
     orig = original_run(app_layout)
-    _storage(app_layout).delete(code_app(app_layout.app_name), meta(app_layout, orig)["code"])
+    code_storage(_storage(app_layout)).delete(app_layout.app_name, meta(app_layout, orig)["code"])
     rc, new = rerun(app_layout, orig)
     assert rc == 1 and new is None
 
@@ -189,7 +189,7 @@ def test_setup_failure_creates_no_record(app_layout, tmp_path):
     storage = _storage(app_layout)
     source, patches = storage.load(app_layout.app_name, orig)
     patches = dict(patches, working_tree="garbage that is not a patch\n")
-    storage.save(code_app(app_layout.app_name), source["code"],
+    code_storage(storage).save(app_layout.app_name, source["code"],
                  {"verstr": source["code"], "has_working_tree_patch": True}, patches)
     rc, new = rerun(app_layout, orig, extra_args=["--worktree-dir", str(tmp_path / "ws")])
     assert rc == 1 and new is None

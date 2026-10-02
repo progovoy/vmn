@@ -78,11 +78,10 @@ def _load_snapshot(storage, app_name, verstr, exp_storage):
 def _searched(params):
     storage_params = {key: params.get(key) for key in STORAGE_ENV}
     places = ["local experiments"]
-    exp_uri = store_uri(storage_params)
-    if exp_uri:
-        places.append(f"remote experiment store {exp_uri}")
+    uri = store_uri(storage_params)
+    if uri:
+        places.append(f"remote experiment store {uri}")
     places.append("local snapshots")
-    snap_uri = store_uri(storage_params, default_prefix="vmn-snapshots")
-    if snap_uri:
-        places.append(f"remote snapshot store {snap_uri}")
+    if uri:
+        places.append(f"remote snapshot store {uri}")
     return ", ".join(places)

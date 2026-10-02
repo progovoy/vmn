@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import responses
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 
@@ -22,7 +23,7 @@ def test_identical_list_requests_encode_their_body_once(tmp_path, monkeypatch):
 
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = LocalSnapshotStorage(str(root), subdir="experiments")
+    st = LocalSnapshotStorage(local_store_root(str(root)), area="runs")
     for i in range(300):
         v = f"0.0.1-dev.abc.r{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z"}, {})

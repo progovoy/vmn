@@ -8,4 +8,10 @@ monkeypatch them here.
 """
 from version_stamp.api import SnapshotCapture as Capture  # noqa: F401
 from version_stamp.api import capture_identity as capture_snapshot  # noqa: F401
-from version_stamp.api import ensure_code  # noqa: F401
+from version_stamp.api import ensure_code as _core_ensure_code
+from vmn_exp.snapshot.core_code import CoreCodeStore
+
+
+def ensure_code(storage, vcs, captured):
+    """vmn's ``ensure_code`` over *storage*'s ``code`` area."""
+    return _core_ensure_code(CoreCodeStore(storage), vcs, captured)

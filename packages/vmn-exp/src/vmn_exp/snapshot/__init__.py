@@ -6,6 +6,7 @@ and ``vmn goto -v <dev-version>``."""
 from vmn_exp.core.resolve_ref import _resolve_verstr  # noqa: F401
 from vmn_exp.core.storage_resolve import store_uri
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
+from vmn_exp.storage.areas import SNAPSHOTS, local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: F401
 from vmn_exp.storage.open import open_storage  # noqa: F401
 from version_stamp.api import (  # noqa: F401
@@ -39,8 +40,8 @@ def _get_storage(vcs, params):
     then ``VMN_EXPERIMENT_*``, then conf ``experiment.storage``)."""
     storage_params = {key: params.get(key) for key in STORAGE_ENV}
     merge_conf_into_params(vcs, storage_params)
-    store = store_uri(storage_params, default_prefix="vmn-snapshots")
-    return open_storage(store, vcs.vmn_root_path, subdir="snapshots")
+    return open_storage(store_uri(storage_params), local_store_root(vcs.vmn_root_path),
+                        area=SNAPSHOTS)
 
 
 def _restore_with_safety_net(vcs, params, metadata, patches):

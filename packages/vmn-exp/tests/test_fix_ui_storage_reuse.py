@@ -9,6 +9,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 
@@ -19,7 +20,7 @@ def test_detail_log_and_series_requests_reuse_one_storage(tmp_path, monkeypatch)
 
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = LocalSnapshotStorage(str(root), subdir="experiments")
+    st = LocalSnapshotStorage(local_store_root(str(root)), area="runs")
     verstr = "0.0.1-dev.abc.r1"
     st.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
     st.append_log_entry(APP, verstr, "w", {"timestamp": "t", "type": "metrics", "values": {"loss": 1}})

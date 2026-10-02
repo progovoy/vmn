@@ -1,7 +1,9 @@
 """Two-way contract: vmn's snapshot store writes what vmn-exp-sdk reads, and back.
 
 ``version_stamp`` may not import ``vmn_exp``, so the record and code-object
-format lives on both sides; these tests keep the copies byte-compatible.
+format lives on both sides; these tests keep the copies byte-compatible. vmn's
+stores take the repo root, vmn-exp's the repo-local store root
+(``<repo>/.vmn/store``, laid out ``<area>/<app key>/<verstr>/``).
 """
 import os
 
@@ -9,6 +11,7 @@ import yaml
 
 from vmn_exp.core import code_store as sdk_code
 from vmn_exp.storage import files as sdk_files
+from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage
 from version_stamp.snapshot import code_store as vmn_code
 from version_stamp.snapshot import identity
@@ -34,8 +37,12 @@ def _metadata(verstr=VERSTR, **extra):
     )
 
 
-def _record_files(root, subdir, app, verstr):
-    rec = os.path.join(root, ".vmn", *app.split("/"), subdir, verstr)
+def _sdk(root, area):
+    return LocalSnapshotStorage(local_store_root(root), area)
+
+
+def _record_files(root, area, app, verstr):
+    rec = os.path.join(local_store_root(root), area, app.replace("/", "-"), verstr)
     found = {}
     for dirpath, _, filenames in os.walk(rec):
         for name in filenames:
@@ -49,22 +56,21 @@ def test_vmn_record_reads_back_in_vmn_exp_storage(tmp_path):
     root = str(tmp_path)
     LocalRecordStore(root, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
 
-    sdk = LocalSnapshotStorage(root, "snapshots")
+    sdk = _sdk(root, "snapshots")
     metadata, patches = sdk.load_record(APP, VERSTR)
     assert metadata == _metadata()
     assert patches["working_tree"] == PATCHES["working_tree"]
     assert patches["untracked_files"] == PATCHES["untracked_files"]
     assert patches["deps"] == {".._dep": {"local_commits": "From abc\n"}}
     assert [m["verstr"] for m in sdk.list_snapshots(APP)] == [VERSTR]
-    base = os.path.join(root, ".vmn", "root_app", "svc", "snapshots")
-    with open(os.path.join(base, ".gitignore")) as f:
+    with open(os.path.join(local_store_root(root), ".gitignore")) as f:
         assert f.read() == "*\n"
 
 
 def test_vmn_and_vmn_exp_write_identical_bytes(tmp_path):
     ours, theirs = str(tmp_path / "a"), str(tmp_path / "b")
     LocalRecordStore(ours, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
-    LocalSnapshotStorage(theirs, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
+    _sdk(theirs, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
     assert _record_files(ours, "snapshots", APP, VERSTR) == _record_files(
         theirs, "snapshots", APP, VERSTR
     )
@@ -72,7 +78,7 @@ def test_vmn_and_vmn_exp_write_identical_bytes(tmp_path):
 
 def test_vmn_exp_record_reads_back_in_vmn_store(tmp_path):
     root = str(tmp_path)
-    LocalSnapshotStorage(root, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
+    _sdk(root, "snapshots").save(APP, VERSTR, _metadata(), PATCHES)
 
     store = LocalRecordStore(root, "snapshots")
     metadata, patches = store.load_record(APP, VERSTR)
@@ -91,17 +97,17 @@ def test_code_object_written_by_vmn_is_stored_code_for_exp(tmp_path):
     summary = {"has_working_tree_patch": True, "has_untracked_files": True}
     vmn_code.store_code(LocalRecordStore(root, "experiments"), APP, key, PATCHES, summary)
 
-    sdk = LocalSnapshotStorage(root, "experiments")
+    sdk = _sdk(root, "runs")
     assert sdk_code.stored_code(sdk, APP, key) == summary
     assert sdk_code.find_code_key(sdk, APP, VERSTR) == key
-    assert os.path.isdir(os.path.join(root, ".vmn", "vmn-code", "root_app~svc", "experiments"))
+    assert os.path.isdir(os.path.join(local_store_root(root), "code", "root_app-svc", key))
 
 
 def test_code_object_written_by_exp_resolves_in_vmn(tmp_path):
     root = str(tmp_path)
     key = sdk_code.code_key(VERSTR, "f" * 64)
-    sdk_code.store_code(LocalSnapshotStorage(root, "experiments"), APP, key, PATCHES, {})
-    LocalSnapshotStorage(root, "snapshots").save(APP, VERSTR, _metadata(code=key), {})
+    sdk_code.store_code(_sdk(root, "runs"), APP, key, PATCHES, {})
+    _sdk(root, "snapshots").save(APP, VERSTR, _metadata(code=key), {})
 
     code = LocalRecordStore(root, "experiments")
     records = LocalRecordStore(root, "snapshots", code_store=code)
@@ -121,9 +127,7 @@ def test_missing_code_object_is_flagged(tmp_path):
 
 
 def test_code_store_constants_match_the_sdk():
-    assert vmn_code.CODE_APP == sdk_code.CODE_APP
     assert vmn_code.CODE_MISSING == sdk_code.CODE_MISSING
-    assert vmn_code.code_app(APP) == sdk_code.code_app(APP)
     assert vmn_code.code_key("v", "h") == sdk_code.code_key("v", "h")
     assert vmn_record.METADATA_FILE == sdk_files.METADATA_FILE
     assert vmn_record.PATCH_FILES == sdk_files.PATCH_FILES
@@ -132,12 +136,12 @@ def test_code_store_constants_match_the_sdk():
 
 def test_verinfo_dir_is_not_a_record(tmp_path):
     root = str(tmp_path)
-    verinfo = os.path.join(root, ".vmn", "app", "snapshots", "0.0.1")
+    verinfo = os.path.join(local_store_root(root), "snapshots", "app", "0.0.1")
     os.makedirs(verinfo)
     with open(os.path.join(verinfo, "metadata.yml"), "w") as f:
         yaml.dump({"vmn_info": {}, "stamping": {}}, f)
 
-    for store in (LocalRecordStore(root, "snapshots"), LocalSnapshotStorage(root, "snapshots")):
+    for store in (LocalRecordStore(root, "snapshots"), _sdk(root, "snapshots")):
         assert store.list_snapshots("app") == []
         assert store.load_metadata("app", "0.0.1") is None
 
@@ -147,11 +151,11 @@ def test_plus_in_verstr_round_trips(tmp_path):
     verstr = "0.0.1+build-dev.abcdef1.1234567"
     LocalRecordStore(root, "snapshots").save("app", verstr, _metadata(verstr), {})
     assert os.path.isdir(
-        os.path.join(root, ".vmn", "app", "snapshots", identity.safe_verstr(verstr))
+        os.path.join(local_store_root(root), "snapshots", "app", identity.safe_verstr(verstr))
     )
     assert identity.safe_verstr(verstr) == sdk_files.safe_verstr(verstr)
-    assert LocalSnapshotStorage(root, "snapshots").list_verstrs("app") == [verstr]
-    LocalSnapshotStorage(root, "snapshots").save("app", "1+x", _metadata("1+x"), {})
+    assert _sdk(root, "snapshots").list_verstrs("app") == [verstr]
+    _sdk(root, "snapshots").save("app", "1+x", _metadata("1+x"), {})
     assert sorted(LocalRecordStore(root, "snapshots").list_verstrs("app")) == sorted(
         [verstr, "1+x"]
     )
@@ -163,7 +167,7 @@ def test_update_note_and_delete(tmp_path):
     store.save(APP, VERSTR, _metadata(), PATCHES)
     assert store.update_note(APP, VERSTR, "new") is True
     assert store.update_metadata(APP, VERSTR, {"user_meta": {"k": "v"}, "note": None})
-    meta = LocalSnapshotStorage(root, "snapshots").load_metadata(APP, VERSTR)
+    meta = _sdk(root, "snapshots").load_metadata(APP, VERSTR)
     assert meta["user_meta"] == {"k": "v"} and "note" not in meta
     assert store.update_note(APP, "missing", "x") is False
     store.delete(APP, VERSTR)

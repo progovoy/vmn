@@ -19,7 +19,7 @@ GOAL_MIN = {"loss": {"goal": "min"}}
 
 def _exp_dir(app_layout, verstr):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     return path
@@ -44,6 +44,7 @@ def _append(app_layout, verstr, losses, start=0):
 
 def _write_conf(app_layout, metrics):
     path = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "conf.yml")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         yaml.dump({"conf": {"experiment": {"metrics": metrics}}}, f)
 

@@ -11,7 +11,7 @@ APP = "app"
 
 
 def _storage(root):
-    return open_storage(vmn_root_path=str(root), subdir="experiments")
+    return open_storage(root=str(root), area="runs")
 
 
 def _make(storage, i, entries_by_writer=None, run_state=None, note=None):
@@ -269,8 +269,8 @@ def test_cached_storage_with_a_remote_folds_like_the_reader(tmp_path, monkeypatc
         boto3.client("s3").create_bucket(Bucket="vmn-bucket")
         storage = open_storage(
             s3_uri("vmn-bucket", "exps"),
-            vmn_root_path=str(tmp_path / "repo"),
-            subdir="experiments",
+            root=str(tmp_path / "repo"),
+            area="runs",
         )
         verstrs = _seed(storage, n=2)
         storage.sync_log_to_remote(APP, verstrs[0], "w0")

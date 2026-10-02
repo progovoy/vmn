@@ -12,7 +12,7 @@ import pytest
 from exp_helpers import _bootstrap, _experiment, _goto, _storage, extract_dev_verstr
 
 import version_stamp.devversion.untracked as dv_untracked
-from vmn_exp.core.code_store import code_app
+from vmn_exp.core.code_store import code_storage
 from vmn_exp.sdk import start_run
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES
 
@@ -70,18 +70,18 @@ def _clean_tree(app_layout):
 
 
 def _code_keys(app_layout):
-    return _storage(app_layout).list_verstrs(code_app(app_layout.app_name))
+    return code_storage(_storage(app_layout)).list_verstrs(app_layout.app_name)
 
 
 def _run_dir(app_layout, verstr):
     return os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
 
 
 def _code_dir(app_layout, key):
     store = _storage(app_layout)._local
-    return store._snapshot_dir(code_app(app_layout.app_name), key)
+    return code_storage(store)._snapshot_dir(app_layout.app_name, key)
 
 
 def test_identical_code_runs_share_one_code_object(app_layout, capfd, tarballs):
@@ -109,7 +109,7 @@ def test_sdk_trials_of_one_tree_upload_the_payload_once(app_layout, tarballs, mo
     real_save = LocalSnapshotStorage.save
 
     def spy(self, app_name, verstr, metadata, patches):
-        saves.append(app_name)
+        saves.append((self.area, app_name))
         return real_save(self, app_name, verstr, metadata, patches)
 
     monkeypatch.setattr(LocalSnapshotStorage, "save", spy)
@@ -123,7 +123,7 @@ def test_sdk_trials_of_one_tree_upload_the_payload_once(app_layout, tarballs, mo
 
     assert len(set(ids)) == 3
     assert len(tarballs) == 1
-    assert saves.count(code_app(app_layout.app_name)) == 1
+    assert saves.count(("code", app_layout.app_name)) == 1
     for verstr in ids:
         _, patches = _storage(app_layout).load(app_layout.app_name, verstr)
         assert patches["untracked_files"] and patches["working_tree"]
@@ -214,7 +214,7 @@ def test_restore_refuses_when_the_code_object_is_unusable(
     assert f"code snapshot {key} is missing" in out.out + out.err
     assert _read(tracked) == "unsaved work"
     assert _read(os.path.join(app_layout.repo_path, "untracked.txt")) == "recorded new"
-    safety = _storage(app_layout, subdir="snapshots").list_snapshots(app_layout.app_name)
+    safety = _storage(app_layout, area="snapshots").list_snapshots(app_layout.app_name)
     assert safety == []
 
 

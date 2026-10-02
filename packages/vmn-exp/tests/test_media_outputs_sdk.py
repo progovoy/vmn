@@ -40,7 +40,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(image / "vmn_metadata.yml"))
     monkeypatch.setenv("VMN_CAPTURE_ENV", "0")
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path / "store"))
-    return LocalSnapshotStorage(str(tmp_path / "store"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
 
 
 def _png(tmp_path):
@@ -125,7 +125,7 @@ class _FailingStore(LocalSnapshotStorage):
 
 
 def test_a_media_file_that_failed_to_store_is_never_recorded(store, tmp_path):
-    with start_run(storage=_FailingStore(store.vmn_root_path, subdir="experiments")) as run:
+    with start_run(storage=_FailingStore(store.root, area="runs")) as run:
         run.log_image("pic", _png(tmp_path))
         run.log_table("t", [{"a": 1}])
     row = get_run(APP, run.id, storage=store)

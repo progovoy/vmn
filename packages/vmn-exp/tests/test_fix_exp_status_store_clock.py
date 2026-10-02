@@ -81,7 +81,7 @@ def _write_run(app_layout, verstr, run_state, store_age_sec=None):
     """An experiment dir with a stale-heartbeat run state; *store_age_sec*
     ages the file's mtime (None: just written)."""
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     meta = {"verstr": verstr, "code_verstr": verstr, "branch": "master",

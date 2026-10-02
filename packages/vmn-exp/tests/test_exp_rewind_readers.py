@@ -35,7 +35,7 @@ def clock(monkeypatch):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    s = open_storage(root=str(tmp_path), area="runs")
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.save_file(APP, V, "run_state.yml", "state: running\n")
     for i, loss in ((1, 1.0), (2, 0.5), (3, 0.25)):

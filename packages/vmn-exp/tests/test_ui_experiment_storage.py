@@ -55,7 +55,7 @@ def _save_exp_with_log(storage, app, verstr, metrics=None, ts="2025-01-01T00:00:
 
 def test_storage_workspace_snapshot_rows(tmp_path):
     """A storage-backed workspace's index snapshot has rows with correct metrics."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(
         storage,
@@ -83,7 +83,7 @@ def test_storage_workspace_snapshot_rows(tmp_path):
 
 def test_get_experiment_from_storage(tmp_path):
     """get_experiment_from_storage returns full detail dict."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(
         storage,
@@ -113,7 +113,7 @@ def test_get_experiment_from_storage(tmp_path):
 
 def test_get_experiment_from_storage_not_found(tmp_path):
     """get_experiment_from_storage returns error for missing experiment."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     result, err = exp_reader.get_experiment_from_storage(
         storage, "myapp", "1.0.0-dev.nonexistent.xxx"
@@ -148,7 +148,7 @@ def test_list_apps_from_storage():
 
 def test_direct_rows_with_storage(tmp_path):
     """The unindexed read folds a storage backend's records into rows."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(
         storage,
@@ -172,7 +172,7 @@ def test_direct_rows_with_storage(tmp_path):
 
 def test_direct_rows_with_jsonl_logs(tmp_path):
     """Rows include merged metrics from per-writer JSONL log files."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb", ts="2025-01-01T00:00:00Z")
 
@@ -211,7 +211,7 @@ def test_direct_rows_with_jsonl_logs(tmp_path):
 
 def test_experiment_diff_from_storage(tmp_path):
     """experiment_diff_from_storage returns metrics_delta and diff: None."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(
         storage,
@@ -249,7 +249,7 @@ def test_experiment_diff_from_storage(tmp_path):
 
 def test_experiment_diff_from_storage_not_found(tmp_path):
     """experiment_diff_from_storage returns error when one ref is missing."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
 
     _save_exp_with_log(storage, "myapp", "1.0.0-dev.aaa.bbb", ts="2025-01-01T00:00:00Z")
 

@@ -11,6 +11,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.log import sort_by_metric
 from vmn_exp.core.tree import subtree_status
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -87,7 +88,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
 def _storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    return str(root), open_storage(vmn_root_path=str(root), subdir="experiments")
+    return str(root), open_storage(root=local_store_root(str(root)), area="runs")
 
 
 def _runs(storage, n, loss=0.1):
@@ -259,7 +260,7 @@ def test_s3_artifacts_stream_without_a_disk_cache(s3_ws, tmp_path):
     from vmn_exp.storage.s3 import S3SnapshotStorage
     from vmn_exp.ui.server import create_app
 
-    storage = S3SnapshotStorage("vmn-bucket", prefix="exps")
+    storage = S3SnapshotStorage("vmn-bucket", prefix="exps/runs")
     verstr = "1.0.0-dev.s3run"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": _ts(0)}, {})
     model = tmp_path / "model.bin"

@@ -34,7 +34,7 @@ def _logger():
 
 @pytest.fixture
 def local(tmp_path):
-    st = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save("app", V, meta(V), {})
     return st
 
@@ -89,7 +89,7 @@ def test_an_empty_batch_writes_nothing(local):
 
 
 def test_cached_storage_batches_into_its_local_copy(tmp_path):
-    cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path), "experiments"))
+    cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path), "runs"))
     cached.save("app", V, meta(V), {})
 
     assert cached.append_log_entries("app", V, "w", _entries(20)) is True

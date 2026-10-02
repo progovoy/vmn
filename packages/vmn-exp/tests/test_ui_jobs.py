@@ -110,7 +110,7 @@ def test_ui_restore_action_with_safety_net(app_layout, capfd):
     with open(p) as f:
         assert f.read() == "state A"
     # Safety net preserved the unsaved state B as a snapshot (recoverable).
-    snaps = _storage(app_layout, subdir="snapshots").list_snapshots(app_layout.app_name)
+    snaps = _storage(app_layout, area="snapshots").list_snapshots(app_layout.app_name)
     assert len(snaps) == 1
     assert "auto-saved before restore" in (snaps[0]["note"] or "")
 

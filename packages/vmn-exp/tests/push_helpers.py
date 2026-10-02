@@ -3,7 +3,7 @@ import os
 
 import yaml
 
-from vmn_exp.core.code_store import code_app, store_code
+from vmn_exp.core.code_store import code_storage, store_code
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.files import log_object_name
 from vmn_exp.storage.local import LocalSnapshotStorage
@@ -17,7 +17,7 @@ PAYLOAD = {"working_tree": "diff --git a/f b/f\n", "untracked_files": b"tarball"
 
 
 def local_root(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "root"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "root"), area="runs")
 
 
 def run_meta(verstr=X, **kw):
@@ -63,7 +63,7 @@ def make_run(local, tmp_path, verstr=X, code=True, **meta):
 
 
 def local_code_exists(local):
-    return local.exists(code_app(APP), KEY)
+    return code_storage(local).exists(APP, KEY)
 
 
 def remote_log(target, verstr=X, writer=WRITER):

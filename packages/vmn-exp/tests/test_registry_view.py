@@ -18,7 +18,7 @@ from vmn_exp.registry.view import model_state, resolve_ref, registered_runs
 # ---------------------------------------------------------------------------
 
 def _storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _run_ref(app="myapp", verstr="1.0.0"):

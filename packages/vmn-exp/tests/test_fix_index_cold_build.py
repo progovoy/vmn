@@ -13,6 +13,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core import index_store as experiment_index_store, index_workers as experiment_index_workers
 from version_stamp.core import logging as vmn_logging
 from vmn_exp.core.index import ExperimentIndex, direct_rows
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 TS = "2026-01-01T00:00:{:02d}Z"
@@ -28,11 +29,11 @@ def _logger():
 
 
 def _storage(root):
-    return open_storage(vmn_root_path=str(root), subdir="experiments")
+    return open_storage(root=local_store_root(str(root)), area="runs")
 
 
 def _dir(root, verstr):
-    return os.path.join(str(root), ".vmn", APP, "experiments", verstr)
+    return os.path.join(str(root), ".vmn", "store", "runs", APP, verstr)
 
 
 def _write(root, verstr, name, text):
@@ -193,7 +194,7 @@ class _ReadingStorage(LocalSnapshotStorage):
 
 def test_a_storage_subclass_is_loaded_in_process(tmp_path, spawned, workers_for_any_size):
     _seed(tmp_path / "repo")
-    storage = _ReadingStorage(str(tmp_path / "repo"), subdir="experiments")
+    storage = _ReadingStorage(local_store_root(str(tmp_path / "repo")), area="runs")
 
     assert _cold(storage, tmp_path) == _expected(storage)
     assert spawned == []
@@ -249,7 +250,7 @@ def test_a_cold_build_reads_every_file_once(tmp_path, monkeypatch):
 
 def test_a_full_listing_does_not_stat_each_metadata_file_again(tmp_path, monkeypatch):
     storage = _seed(tmp_path / "repo")
-    local = LocalSnapshotStorage(str(tmp_path / "repo"), subdir="experiments")
+    local = LocalSnapshotStorage(local_store_root(str(tmp_path / "repo")), area="runs")
     expected_keys = {m["verstr"] for m in storage.list_snapshots(APP)} | {"legacy_verinfo"}
     checks = []
     real_isfile = os.path.isfile

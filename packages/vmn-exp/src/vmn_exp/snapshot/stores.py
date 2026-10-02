@@ -4,8 +4,8 @@ store opener, see ``version_stamp.snapshot.stores``).
 The store comes from ``--store`` > ``VMN_EXPERIMENT_STORE`` > the bucket
 env/shorthand > conf ``experiment.storage.uri``; ``VMN_EXP_OFFLINE`` or no
 store at all leaves vmn on its local stores. Snapshot records live in the
-store's ``snapshots`` subdir (where restore safety snapshots are), code objects
-in its experiment subdir, so snapshots and runs share them.
+store's ``snapshots`` area (where restore safety snapshots are), code objects
+in its ``code`` area, so snapshots and runs share them.
 
 Public: ``open_configured_snapshot_stores(vcs, params) -> ConfiguredStores | None``.
 """
@@ -18,6 +18,8 @@ from vmn_exp.core.storage_resolve import (
     store_uri,
 )
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
+from vmn_exp.snapshot.core_code import CoreCodeStore
+from vmn_exp.storage.areas import SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 
 
@@ -57,8 +59,5 @@ def open_configured_snapshot_stores(vcs, params):
     if where is None:
         return None
     code = _get_experiment_storage(vcs, storage_params)
-    records = open_storage(
-        store_uri(storage_params, default_prefix="vmn-snapshots"),
-        vcs.vmn_root_path, subdir="snapshots",
-    )
-    return ConfiguredStores(RecordsWithCode(records, code), code, where)
+    records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS)
+    return ConfiguredStores(RecordsWithCode(records, code), CoreCodeStore(code), where)

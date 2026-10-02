@@ -10,6 +10,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core import logging as vmn_logging
 from version_stamp.core.git_cmd import clone_at_commit
 from exp_helpers import _PY, _SRC_PATH, _bootstrap, _experiment, extract_dev_verstr
+from vmn_exp.storage.areas import local_store_root
 
 UNREACHABLE_REMOTE = "https://127.0.0.1:9/no/such/repo.git"
 
@@ -36,7 +37,7 @@ def _export(app_layout, verstr, out):
 
 
 def _rewrite_meta(app_layout, verstr, **updates):
-    storage = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
     path = os.path.join(storage._snapshot_dir(app_layout.app_name, verstr), "metadata.yml")
     with open(path) as f:
         meta = yaml.safe_load(f)

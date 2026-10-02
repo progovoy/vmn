@@ -28,7 +28,7 @@ class _SlowArtifactStorage(CachedSnapshotStorage):
 
 @pytest.fixture
 def storage(tmp_path):
-    st = _SlowArtifactStorage(LocalSnapshotStorage(str(tmp_path / "s"), "experiments"))
+    st = _SlowArtifactStorage(LocalSnapshotStorage(str(tmp_path / "s"), "runs"))
     st.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
 

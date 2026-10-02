@@ -371,9 +371,8 @@ def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
 
     log_path = os.path.join(
         app_layout.repo_path,
-        ".vmn",
+        ".vmn", "store", "runs",
         app_layout.app_name,
-        "experiments",
         run.id.replace("+", "_plus_"),
         f"log.{get_writer_id()}.jsonl",
     )

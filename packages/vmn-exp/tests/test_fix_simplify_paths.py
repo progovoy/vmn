@@ -36,7 +36,7 @@ def test_safe_segment_still_accepts_an_absent_value():
 
 @pytest.fixture
 def local(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 @pytest.mark.parametrize("verstr", ["../escape", "a/b", ".."])

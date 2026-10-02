@@ -26,7 +26,7 @@ def _init_logger():
 
 @pytest.fixture
 def exp_storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _save_exp(storage, app, verstr, ts="2025-01-01T00:00:00Z"):
@@ -256,7 +256,7 @@ def test_s3_load_merged_log_with_legacy_log_yml():
 
 
 def test_cached_append_log_writes_local_only(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     remote = MagicMock()
     cached = CachedSnapshotStorage(local, remote)
     _save_exp(local, "app", "1.0.0-dev.aaa.bbb")
@@ -272,7 +272,7 @@ def test_cached_append_log_writes_local_only(tmp_path):
 
 
 def test_cached_load_merged_log_local_first(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     remote = MagicMock()
     cached = CachedSnapshotStorage(local, remote)
     _save_exp(local, "app", "1.0.0-dev.aaa.bbb")
@@ -286,7 +286,7 @@ def test_cached_load_merged_log_local_first(tmp_path):
 
 
 def test_cached_load_merged_log_falls_back_to_remote(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     remote = MagicMock()
     remote.load_merged_log.return_value = [
         {"timestamp": "t1", "type": "create", "note": "from remote"},
@@ -301,7 +301,7 @@ def test_cached_load_merged_log_falls_back_to_remote(tmp_path):
 
 
 def test_cached_sync_log_to_remote(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     remote = MagicMock()
     cached = CachedSnapshotStorage(local, remote)
     _save_exp(local, "app", "1.0.0-dev.aaa.bbb")
@@ -318,7 +318,7 @@ def test_cached_sync_log_to_remote(tmp_path):
 
 
 def test_cached_sync_log_to_remote_noop_without_remote(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     cached = CachedSnapshotStorage(local, None)
     _save_exp(local, "app", "1.0.0-dev.aaa.bbb")
 
@@ -481,7 +481,7 @@ def test_create_from_snapshot_reads_metadata(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(
         yaml.dump(
@@ -514,7 +514,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     snap_dir = tmp_path / "snapshot_dir"
     snap_dir.mkdir()
     (snap_dir / "vmn_metadata.yml").write_text(
@@ -539,7 +539,7 @@ def test_create_from_snapshot_directory_path(tmp_path, monkeypatch):
 
 
 def test_create_from_snapshot_missing_file(tmp_path):
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     from vmn_exp.cli.experiment import _experiment_create_from_snapshot
 
     verstr, err = _experiment_create_from_snapshot(
@@ -555,7 +555,7 @@ def test_create_from_snapshot_missing_verstr(tmp_path, monkeypatch):
     experiment_writer._WRITER_ID = None
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
 
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(yaml.dump({"app_name": "myapp", "base_version": "1.0.0"}))
 
@@ -574,7 +574,7 @@ def test_create_from_snapshot_with_note_and_extra(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(
         yaml.dump(
@@ -614,7 +614,7 @@ def test_create_from_snapshot_app_name_from_metadata(tmp_path, monkeypatch):
     monkeypatch.delenv("VMN_WRITER_ID", raising=False)
     monkeypatch.delenv("HOSTNAME", raising=False)
 
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     meta_path = tmp_path / "vmn_metadata.yml"
     meta_path.write_text(
         yaml.dump(

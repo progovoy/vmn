@@ -39,13 +39,13 @@ def _env(monkeypatch):
 def _host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, "exps"),
-        vmn_root_path=str(tmp_path / name),
-        subdir="experiments",
+        root=str(tmp_path / name),
+        area="runs",
     )
 
 
 def _s3():
-    return S3SnapshotStorage(BUCKET, prefix="exps")
+    return S3SnapshotStorage(BUCKET, prefix="exps/runs")
 
 
 def _meta(verstr, **kw):
@@ -116,7 +116,7 @@ def test_appending_to_another_hosts_record_pulls_it_in(tmp_path):
 
 def _remote_log_keys(verstr="v"):
     resp = boto3.client("s3").list_objects_v2(
-        Bucket=BUCKET, Prefix=f"exps/app/{verstr}/log."
+        Bucket=BUCKET, Prefix=f"exps/runs/app/{verstr}/log."
     )
     return {o["Key"].rsplit("/", 1)[1]: o["Size"] for o in resp.get("Contents", [])}
 
@@ -178,7 +178,7 @@ def test_s3_app_keys_are_injective():
 def test_s3_reads_fall_back_to_the_legacy_underscore_prefix():
     body = b"verstr: old\ntimestamp: '2025-01-01T00:00:00Z'\n"
     boto3.client("s3").put_object(
-        Bucket=BUCKET, Key="exps/root_svc/old/metadata.yml", Body=body
+        Bucket=BUCKET, Key="exps/runs/root_svc/old/metadata.yml", Body=body
     )
     s3 = _s3()
     assert [m["verstr"] for m in s3.list_snapshots("root/svc")] == ["old"]

@@ -19,6 +19,7 @@ from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import signals, start_run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 
 TIMEOUT = 0.5
 RUNS = 3
@@ -46,8 +47,8 @@ def hung_runs(app_layout, tmp_path, monkeypatch):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", TIMEOUT)
     _bootstrap(app_layout)
-    local = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
-    remote = _HungRemote(LocalSnapshotStorage(str(tmp_path), subdir="remote"))
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
+    remote = _HungRemote(LocalSnapshotStorage(str(tmp_path), area="remote"))
     storage = CachedSnapshotStorage(local, remote)
     runs = [
         start_run(

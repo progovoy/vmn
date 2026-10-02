@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.png import encode_png
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import open_storage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 V = "1.0.0-dev.media"
@@ -19,7 +20,7 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}"
 def storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = open_storage(vmn_root_path=str(root), subdir="experiments")
+    st = open_storage(root=local_store_root(str(root)), area="runs")
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
 

@@ -39,7 +39,7 @@ RUN_C = "cccccccccccccccccccccccccccccccccccc"
 # ---------------------------------------------------------------------------
 
 def _storage(experiment_dir: str):
-    return LocalSnapshotStorage(str(experiment_dir), subdir="experiments")
+    return LocalSnapshotStorage(str(experiment_dir), area="runs")
 
 
 def _make_args(
@@ -241,7 +241,7 @@ def test_dry_run_writes_nothing(tmp_path, capsys):
     assert rc == 0
 
     # The experiment dir should either not exist or have no run dirs
-    storage_root = Path(exp_dir) / ".vmn" / "myapp" / "experiments"
+    storage_root = Path(exp_dir) / "runs" / "myapp"
     if storage_root.exists():
         run_dirs = [d for d in storage_root.iterdir() if d.is_dir()]
         assert run_dirs == [], f"Dry-run should not write runs: {run_dirs}"

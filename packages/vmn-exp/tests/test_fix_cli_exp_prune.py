@@ -279,7 +279,7 @@ def test_prune_local_only_keeps_remote_copies(app_layout, capfd, s3):
     err, out = _prune(app_layout, capfd, "--bucket", BUCKET, "--local-only", keep=0)
     assert err == 0, out
     local_dir = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     assert not os.path.exists(local_dir)
     assert any(verstr.replace("+", "_plus_") in k for k in _remote_keys(s3))

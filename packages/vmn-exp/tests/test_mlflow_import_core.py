@@ -31,7 +31,7 @@ RUN_ID_PARENT = "pppppppppppppppppppppppppppppppppppp"
 
 
 def _storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _simple_run(mlruns_path, run_id, *, start_time=1700000000000, **kwargs):

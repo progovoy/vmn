@@ -29,10 +29,10 @@ PREFIX = "vmn-experiments"
 
 
 def _storage_root(storage):
-    """Return the vmn_root_path regardless of whether storage is Local or Cached."""
-    # CachedSnapshotStorage wraps local in ._local; LocalSnapshotStorage has .vmn_root_path
+    """Return the store root regardless of whether storage is Local or Cached."""
+    # CachedSnapshotStorage wraps local in ._local; LocalSnapshotStorage has .root
     local = getattr(storage, "_local", storage)
-    return getattr(local, "vmn_root_path", None)
+    return getattr(local, "root", None)
 
 
 def _is_s3(storage):
@@ -55,7 +55,8 @@ def _make_repo(tmp_path):
 
 def _local_storage(path):
     from vmn_exp.storage.local import LocalSnapshotStorage
-    return LocalSnapshotStorage(path, subdir="experiments")
+    from vmn_exp.storage.areas import local_store_root
+    return LocalSnapshotStorage(local_store_root(path), area="runs")
 
 
 def _register_fake_run(storage, app_name, verstr):

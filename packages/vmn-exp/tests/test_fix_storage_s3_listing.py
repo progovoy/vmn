@@ -48,7 +48,7 @@ def test_list_files_for_keys_lists_only_those_records(tmp_path):
     assert {"metadata.yml", "log.w.jsonl"} <= set(files["v1"])
     assert not any("/" in name for names in files.values() for name in names)
     prefixes = sorted(p["Prefix"] for op, p in calls if op == "ListObjectsV2")
-    assert prefixes == [f"{PREFIX}/app/v1/", f"{PREFIX}/app/v3/"]
+    assert prefixes == [f"{PREFIX}/runs/app/v1/", f"{PREFIX}/runs/app/v3/"]
     assert all(p.get("Delimiter") == "/" for op, p in calls if op == "ListObjectsV2")
 
 
@@ -85,7 +85,7 @@ def test_list_run_verstrs_lists_only_that_codes_own_runs():
 
     assert names == {"0.0.1", "0.0.1.r2"}
     prefixes = [p.get("Prefix") for op, p in calls if op == "ListObjectsV2"]
-    assert prefixes and all(p == f"{PREFIX}/app/0.0.1." for p in prefixes)
+    assert prefixes and all(p == f"{PREFIX}/runs/app/0.0.1." for p in prefixes)
 
 
 def test_list_run_verstrs_is_empty_for_an_unstamped_code_verstr():
@@ -99,7 +99,7 @@ LEGACY_META = b"verstr: old\napp_name: root/svc\ntimestamp: '2025-01-01T00:00:00
 
 
 def _with_legacy_and_new():
-    put_raw(f"{PREFIX}/root_svc/old/metadata.yml", LEGACY_META)
+    put_raw(f"{PREFIX}/runs/root_svc/old/metadata.yml", LEGACY_META)
     s3 = s3_storage()
     s3.save("root/svc", "new", meta("new"), {})
     return s3
@@ -116,14 +116,14 @@ def test_legacy_records_stay_visible_next_to_new_ones():
 
 def test_another_apps_records_under_the_shared_legacy_key_stay_hidden():
     s3 = _with_legacy_and_new()
-    put_raw(f"{PREFIX}/root_svc/theirs/metadata.yml", b"verstr: theirs\napp_name: root_svc\n")
+    put_raw(f"{PREFIX}/runs/root_svc/theirs/metadata.yml", b"verstr: theirs\napp_name: root_svc\n")
     assert s3.list_record_names("root/svc") == {"new": None, "old": None}
     assert set(s3.list_files("root/svc")) == {"new", "old"}
     assert set(s3.list_files("root/svc", keys=["theirs", "old"])) == {"old"}
 
 
 def test_a_record_under_both_keys_is_listed_once_from_the_new_key():
-    put_raw(f"{PREFIX}/root_svc/v/metadata.yml", b"verstr: v\ntimestamp: old\n")
+    put_raw(f"{PREFIX}/runs/root_svc/v/metadata.yml", b"verstr: v\ntimestamp: old\n")
     s3 = s3_storage()
     s3.save("root/svc", "v", meta("v", timestamp="new"), {})
     snaps = s3.list_snapshots("root/svc")

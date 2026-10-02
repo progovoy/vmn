@@ -23,7 +23,7 @@ _T1 = "2026-09-21T12:00:02.500000Z"
 
 def _write_run(app_layout, verstr, log, parent=None, name=None, run_state=None):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     meta = {"verstr": verstr, "code_verstr": verstr, "timestamp": _T0,

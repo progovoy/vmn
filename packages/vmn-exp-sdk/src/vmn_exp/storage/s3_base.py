@@ -2,6 +2,7 @@
 """The S3 backend's client and key helpers, shared by its listing, record and
 log halves (:mod:`snapshot_storage_s3`)."""
 
+import copy
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import VMN_LOGGER
@@ -62,7 +63,7 @@ class S3Base:
 
     scheme = "s3"
 
-    def __init__(self, bucket, prefix="vmn-snapshots", endpoint_url=None, client=None):
+    def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None):
         self.bucket = bucket
         self.prefix = prefix
         self.endpoint_url = endpoint_url
@@ -70,6 +71,18 @@ class S3Base:
         self._record_prefixes = {}
         self._probes = {}
         self._legacy_owners = {}
+
+    @property
+    def area(self):
+        return self.prefix.rpartition("/")[2]
+
+    def _open_area(self, name):
+        """This store's sibling area: ``<root>/<name>``, sharing the client."""
+        clone = copy.copy(self)
+        clone.__dict__.pop("_areas", None)
+        clone.prefix = f"{self.prefix.rpartition('/')[0]}/{name}".lstrip("/")
+        clone._record_prefixes, clone._probes, clone._legacy_owners = {}, {}, {}
+        return clone
 
     # -- keys -----------------------------------------------------------------
 

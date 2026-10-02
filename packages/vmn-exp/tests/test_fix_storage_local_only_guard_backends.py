@@ -10,6 +10,7 @@ from vmn_exp.core.writer import save_artifact, save_run_state
 from vmn_exp.sdk import start_run
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -48,7 +49,7 @@ def test_guard_applies_to_gcs_and_azure_backends(tmp_path, make_remote, remote_h
     remote = make_remote()
     if remote_has:
         remote.save(APP, X, _meta("2026-09-09T00:00:00Z"), {})
-    local = LocalSnapshotStorage(str(tmp_path / "root"), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path / "root"), area="runs")
     local.save(APP, X, _meta(), {})
     host = CachedSnapshotStorage(local, remote)
 
@@ -65,7 +66,7 @@ def test_gcs_and_azure_records_on_the_remote_are_written_through(tmp_path, make_
     remote = make_remote()
     remote.save(APP, X, _meta(), {})
     host = CachedSnapshotStorage(
-        LocalSnapshotStorage(str(tmp_path / "root"), subdir="experiments"), remote
+        LocalSnapshotStorage(str(tmp_path / "root"), area="runs"), remote
     )
 
     _write_everything(host, tmp_path)
@@ -91,7 +92,7 @@ def test_sdk_resume_of_local_only_run_writes_nothing_to_remote(
 
     remote = _gcs()
     online = CachedSnapshotStorage(
-        LocalSnapshotStorage(app_layout.repo_path, subdir="experiments"), remote
+        LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs"), remote
     )
     resumed = start_run(
         app_layout.app_name, run_id=first.id, storage=online, heartbeat_interval_sec=0.05

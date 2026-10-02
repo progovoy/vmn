@@ -43,7 +43,7 @@ def _running_state(started):
 
 
 def _seed(root):
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, ".vmn", "store", "runs", APP)
     folders, i = {}, 0
     for status, n in EXPECTED.items():
         for _ in range(n):

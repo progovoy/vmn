@@ -50,7 +50,7 @@ def _write_log(path, i, steps, now):
 
 
 def _seed(root):
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, ".vmn", "store", "runs", APP)
     now = datetime.datetime.now(datetime.timezone.utc)
     stale = time.time() - 3600
     for i in range(RUNS):

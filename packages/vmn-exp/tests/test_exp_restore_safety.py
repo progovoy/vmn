@@ -38,11 +38,11 @@ def _recorded(app_layout, capfd, content):
 
 
 def _snapshot_dir(app_layout):
-    return os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots")
+    return os.path.join(app_layout.repo_path, ".vmn", "store", "snapshots", app_layout.app_name)
 
 
 def _safety_verstrs(app_layout):
-    return [m["verstr"] for m in _storage(app_layout, subdir="snapshots")
+    return [m["verstr"] for m in _storage(app_layout, area="snapshots")
             .list_snapshots(app_layout.app_name)]
 
 

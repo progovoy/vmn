@@ -24,7 +24,7 @@ API = "/api/v1/workspaces/main/apps"
 
 def _exp_dir(app_layout, verstr):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     return path

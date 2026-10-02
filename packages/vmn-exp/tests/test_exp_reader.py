@@ -22,7 +22,7 @@ def _ago(seconds):
 
 def _exp_dir(app_layout, verstr):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     return path
@@ -569,7 +569,7 @@ def _git_free_run(tmp_path, app_name, exp_root):
     from vmn_exp.core.from_snapshot import create_from_snapshot
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(vmn_root_path=str(exp_root), subdir="experiments")
+    storage = open_storage(root=str(exp_root), area="runs")
     verstr, err = create_from_snapshot(
         storage, app_name, _snapshot_meta(tmp_path, app_name)
     )

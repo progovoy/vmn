@@ -7,14 +7,15 @@ Built-ins: ``file`` (local disk), ``s3``, ``gs`` (``vmn-exp-sdk[gcs]``) and
     [project.entry-points."vmn_exp.storage"]
     mem = "my_pkg.store:open_store"
 
-A factory is called as ``factory(uri, subdir=...)`` with the parsed
-:class:`~vmn_exp.storage.uri.StoreURI` and ``"experiments"``/``"snapshots"``,
-and returns a :class:`~vmn_exp.storage.base.SnapshotStorage`. See
+A factory is called as ``factory(uri, area=...)`` with the parsed
+:class:`~vmn_exp.storage.uri.StoreURI` and an area name
+(:mod:`vmn_exp.storage.areas`), and returns a :class:`~vmn_exp.storage.base.SnapshotStorage`. See
 docs/vmn-exp/experiments.md ("Storage backends") for the contract it must meet.
 """
 from importlib import import_module
 from importlib.metadata import entry_points
 
+from vmn_exp.storage.areas import RUNS, area_prefix
 from vmn_exp.storage.uri import parse_store_uri
 
 ENTRY_POINT_GROUP = "vmn_exp.storage"
@@ -37,9 +38,10 @@ def missing_extra(package, extra):
     )
 
 
-def default_prefix(uri, subdir):
-    """The URI's key prefix, else ``vmn-<subdir>``."""
-    return uri.path or f"vmn-{subdir}"
+def default_prefix(uri, area):
+    """*area*'s key prefix: ``<root>/<area>``, the root being the URI's path,
+    else ``vmn``."""
+    return area_prefix(uri.path, area)
 
 
 def register_store(scheme, factory):
@@ -52,10 +54,10 @@ def known_schemes():
     return sorted(set(_BUILTINS) | set(_registered))
 
 
-def open_store(uri, subdir="experiments"):
+def open_store(uri, area=RUNS):
     """The backend storage *uri* names (a string or a parsed ``StoreURI``)."""
     parsed = parse_store_uri(uri) if isinstance(uri, str) else uri
-    return _factory(parsed.scheme)(parsed, subdir=subdir)
+    return _factory(parsed.scheme)(parsed, area=area)
 
 
 def _factory(scheme):
@@ -97,30 +99,30 @@ class _LazyEntryPoint:
     def __init__(self, ep):
         self._ep = ep
 
-    def __call__(self, uri, subdir):
+    def __call__(self, uri, area):
         try:
             factory = self._ep.load()
         except ImportError as e:
             raise ImportError(
                 f"Storage plugin {self._ep.name!r} ({self._ep.value}) failed to load: {e}"
             ) from e
-        return factory(uri, subdir=subdir)
+        return factory(uri, area=area)
 
 
 # -- built-in factories -------------------------------------------------------
 
 
-def open_file_store(uri, subdir):
+def open_file_store(uri, area):
     from vmn_exp.storage.local import LocalSnapshotStorage
 
-    return LocalSnapshotStorage(uri.path, subdir=subdir)
+    return LocalSnapshotStorage(uri.path, area)
 
 
-def open_s3_store(uri, subdir):
+def open_s3_store(uri, area):
     from vmn_exp.storage.s3 import S3SnapshotStorage
 
     return S3SnapshotStorage(
         uri.location,
-        prefix=default_prefix(uri, subdir),
+        prefix=default_prefix(uri, area),
         endpoint_url=uri.options.get("endpoint_url"),
     )

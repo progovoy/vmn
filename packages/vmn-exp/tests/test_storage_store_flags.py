@@ -48,15 +48,15 @@ def test_snapshot_storage_honours_store(s3, tmp_path):
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
     storage = _get_storage(vcs, {"store": f"s3://{BUCKET}/snaps"})
-    assert (_remote(storage).bucket, _remote(storage).prefix) == (BUCKET, "snaps")
+    assert (_remote(storage).bucket, _remote(storage).prefix) == (BUCKET, "snaps/snapshots")
 
 
-def test_snapshot_storage_bucket_shorthand_keeps_its_prefix(s3, tmp_path):
+def test_snapshot_storage_bucket_shorthand_uses_the_vmn_root(s3, tmp_path):
     from vmn_exp.snapshot import _get_storage
 
     vcs = SimpleNamespace(vmn_root_path=str(tmp_path))
     storage = _get_storage(vcs, {"bucket": BUCKET})
-    assert _remote(storage).prefix == "vmn-snapshots"
+    assert _remote(storage).prefix == "vmn/snapshots"
 
 
 def test_model_storage_honours_store(s3):
@@ -64,7 +64,7 @@ def test_model_storage_honours_store(s3):
 
     args = SimpleNamespace(dir=None, store=f"s3://{BUCKET}/models",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "models"
+    assert _remote(_get_storage(args)).prefix == "models/runs"
 
 
 def test_import_mlflow_storage_honours_store(s3):
@@ -72,7 +72,7 @@ def test_import_mlflow_storage_honours_store(s3):
 
     args = SimpleNamespace(experiment_dir=None, store=f"s3://{BUCKET}/imp",
                            bucket=None, prefix=None, endpoint_url=None)
-    assert _remote(_get_storage(args)).prefix == "imp"
+    assert _remote(_get_storage(args)).prefix == "imp/runs"
 
 
 def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
@@ -86,7 +86,7 @@ def test_ui_store_flag_adds_a_store_workspace(tmp_path, s3):
     manager = build_manager(args)
     stores = [w for w in manager.list() if w.kind == "store"]
     assert [w.store for w in stores] == [f"s3://{BUCKET}/team"]
-    assert _remote(workspace_storage(stores[0])).prefix == "team"
+    assert _remote(workspace_storage(stores[0])).prefix == "team/runs"
 
     again = build_manager(args)  # re-attaching is a no-op
     assert len([w for w in again.list() if w.kind == "store"]) == 1

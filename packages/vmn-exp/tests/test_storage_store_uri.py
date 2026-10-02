@@ -64,29 +64,29 @@ def _remote(storage):
 
 
 def test_s3_uri_without_a_root_writes_to_its_prefix(s3):
-    storage = open_storage(f"s3://{BUCKET}/team/exps", subdir="experiments")
+    storage = open_storage(f"s3://{BUCKET}/team/exps", area="runs")
     assert _record(storage)
-    assert _keys(s3, "team/exps/trainer/")
+    assert _keys(s3, "team/exps/runs/trainer/")
 
 
-def test_s3_uri_without_a_prefix_uses_the_subdir_default(s3):
-    storage = open_storage(f"s3://{BUCKET}", subdir="experiments")
-    assert _remote(storage).prefix == "vmn-experiments"
+def test_s3_uri_without_a_prefix_uses_the_vmn_root(s3):
+    storage = open_storage(f"s3://{BUCKET}", area="runs")
+    assert _remote(storage).prefix == "vmn/runs"
 
 
 def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
     storage = open_storage(
-        f"s3://{BUCKET}/p", vmn_root_path=str(tmp_path), subdir="experiments"
+        f"s3://{BUCKET}/p", root=str(tmp_path), area="runs"
     )
     assert _record(storage)
     assert isinstance(storage._remote, S3SnapshotStorage)
-    assert (tmp_path / ".vmn" / APP / "experiments").is_dir()
-    assert _keys(s3, "p/trainer/")
+    assert (tmp_path / "runs" / APP).is_dir()
+    assert _keys(s3, "p/runs/trainer/")
 
 
 def test_endpoint_url_option_reaches_the_s3_client(s3):
     storage = open_storage(
-        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", subdir="experiments"
+        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs"
     )
     assert _remote(storage).endpoint_url == "http://localhost:1"
 
@@ -94,16 +94,16 @@ def test_endpoint_url_option_reaches_the_s3_client(s3):
 def test_file_uri_is_the_local_root(tmp_path):
     other = tmp_path / "repo"
     storage = open_storage(
-        f"file://{tmp_path / 'nfs'}", vmn_root_path=str(other), subdir="experiments"
+        f"file://{tmp_path / 'nfs'}", root=str(other), area="runs"
     )
     assert _record(storage)
-    assert (tmp_path / "nfs" / ".vmn" / APP / "experiments").is_dir()
+    assert (tmp_path / "nfs" / "runs" / APP).is_dir()
     assert not other.exists()
 
 
 def test_no_root_and_no_store_is_an_error():
     with pytest.raises(ValueError):
-        open_storage(None, subdir="experiments")
+        open_storage(None, area="runs")
 
 
 # -- resolution order -------------------------------------------------------------
@@ -175,7 +175,7 @@ def test_cli_store_flag_records_to_the_uri(tmp_path, monkeypatch, s3):
     err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"s3://{BUCKET}/cli"])
 
     assert err == 0
-    assert _keys(s3, "cli/trainer/")
+    assert _keys(s3, "cli/runs/trainer/")
 
 
 def test_cli_file_store_records_to_the_path(tmp_path, monkeypatch):
@@ -185,7 +185,7 @@ def test_cli_file_store_records_to_the_path(tmp_path, monkeypatch):
     err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"file://{tmp_path / 'd'}"])
 
     assert err == 0
-    assert (tmp_path / "d" / ".vmn" / APP / "experiments").is_dir()
+    assert (tmp_path / "d" / "runs" / APP).is_dir()
 
 
 def test_start_run_in_a_pod_records_to_the_env_store(tmp_path, monkeypatch, s3):
@@ -197,5 +197,5 @@ def test_start_run_in_a_pod_records_to_the_env_store(tmp_path, monkeypatch, s3):
     with start_run() as run:
         run.log_metric("loss", 0.5)
 
-    assert any(k.startswith(f"pod/trainer/") for k in _keys(s3))
+    assert any(k.startswith("pod/runs/trainer/") for k in _keys(s3))
     assert run.id

@@ -13,6 +13,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.ui import server as server_mod
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -26,7 +27,7 @@ VITE_CONFIG = os.path.join(REPO_ROOT, "packages", "vmn-exp", "webui", "vite.conf
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(root=local_store_root(str(root)), area="runs")
     storage.save(APP, V, {"verstr": V, "timestamp": "t"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))

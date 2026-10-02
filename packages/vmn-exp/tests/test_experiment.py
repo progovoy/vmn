@@ -17,6 +17,7 @@ from exp_helpers import (
     _show,
     _stamp_app,
 )
+from vmn_exp.storage.areas import local_store_root
 
 
 def _make_dirty(app_layout, filename="dirty.txt", content="dirty"):
@@ -534,7 +535,7 @@ def _exp_log(app_layout, verstr):
     """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(vmn_root_path=app_layout.repo_path, subdir="experiments")
+    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs")
     return storage.load_merged_log(app_layout.app_name, verstr)
 
 
@@ -1300,7 +1301,7 @@ def test_exp_run_tails_metrics_during_run(app_layout, capfd):
         "root = os.getcwd()\n"
         "app = os.environ['VMN_APP_NAME']\n"
         "verstr = os.environ['VMN_EXPERIMENT_ID'].replace('+', '_plus_')\n"
-        "exp_dir = os.path.join(root, '.vmn', app, 'experiments', verstr)\n"
+        "exp_dir = os.path.join(root, '.vmn', 'store', 'runs', app, verstr)\n"
         "with open(os.environ['VMN_METRICS_FILE'], 'a') as f:\n"
         "    f.write('step=1 live=1.0\\n')\n"
         "deadline = time.time() + 30\n"

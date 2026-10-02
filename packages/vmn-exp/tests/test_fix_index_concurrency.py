@@ -17,7 +17,7 @@ def short_busy_timeout(monkeypatch):
 
 
 def _seeded(tmp_path, n=3):
-    storage = open_storage(vmn_root_path=str(tmp_path / "repo"), subdir="experiments")
+    storage = open_storage(root=str(tmp_path / "repo"), area="runs")
     for i in range(n):
         v = f"0.0.1-dev.abc.r{i}"
         storage.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

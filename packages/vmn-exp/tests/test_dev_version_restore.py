@@ -46,7 +46,7 @@ def _captured_state(app_layout, capfd, name, content):
 
 
 def _safety_snapshots(app_layout):
-    return _storage(app_layout, subdir="snapshots").list_snapshots(app_layout.app_name)
+    return _storage(app_layout, area="snapshots").list_snapshots(app_layout.app_name)
 
 
 def test_goto_restores_a_recorded_dev_version(app_layout, capfd):

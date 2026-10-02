@@ -45,7 +45,7 @@ class FakeRun:
 
 
 def _storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _producer(storage, app="trainer", verstr="0.0.1-dev.aaa", path="model.pkl", data=b"w"):

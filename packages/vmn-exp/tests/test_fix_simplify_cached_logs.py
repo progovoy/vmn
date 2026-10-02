@@ -25,8 +25,8 @@ def s3():
 def _host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, "exp"),
-        vmn_root_path=str(tmp_path / name),
-        subdir="experiments",
+        root=str(tmp_path / name),
+        area="runs",
     )
 
 

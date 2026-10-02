@@ -14,6 +14,7 @@ import pytest
 from uiload import worker
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.storage.open import open_storage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "loadapp"
 HB = 0.5
@@ -85,7 +86,7 @@ def launched(tmp_path_factory):
 
 
 def _storage(root):
-    return open_storage(vmn_root_path=root, subdir="experiments")
+    return open_storage(root=local_store_root(root), area="runs")
 
 
 def _rows(root):
@@ -127,7 +128,7 @@ def fast_stale(monkeypatch):
 def test_records_land_where_the_ui_reads(launched):
     root = launched["root"]
     _wait_for(_status_is(root, "live-000001", "succeeded"))
-    exp_dir = os.path.join(root, ".vmn", APP, "experiments")
+    exp_dir = os.path.join(root, ".vmn", "store", "runs", APP)
     row = _rows(root)["live-000001"]
     assert os.path.isdir(os.path.join(exp_dir, row["verstr"]))
 
