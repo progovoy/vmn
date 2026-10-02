@@ -1,8 +1,8 @@
 """The push ledger: what ``vmn exp push`` last sent of each run to one remote.
 
-One YAML file per run at ``.vmn/<app>/experiments/.push/<remote_id>/<safe
-verstr>.yml``. The dot-dir is skipped by listings, and the storage dir's
-``.gitignore`` of ``*`` already covers it. Fields:
+One YAML file per run at ``<state>/push/<store-id>/<remote_id>/<app>/<safe
+verstr>.yml`` (:func:`vmn_exp.storage.host_dirs.push_ledger_dir`): per-host
+state, never inside the store. Fields:
 
 - ``remote_verstr``, ``identity`` (:func:`run_identity`), ``fingerprint``
   (:func:`record_fingerprint` after the push), ``complete``, ``pushed_at``;
@@ -21,10 +21,8 @@ import os
 import yaml
 
 from vmn_exp import _base
+from vmn_exp.storage import host_dirs
 from vmn_exp.storage.files import atomic_write, safe_verstr
-
-PUSH_DIR = ".push"
-
 
 def remote_id(target):
     """A short stable name for *target*'s data (its ``cache_identity()``,
@@ -38,10 +36,8 @@ class PushLedger:
     ``lock_path`` (where a push holds its lock)."""
 
     def __init__(self, local, app_name, remote_id):
-        self._local = local
-        self._app_name = app_name
-        self.dir = os.path.join(
-            local._snapshot_base_dir(app_name), PUSH_DIR, remote_id
+        self.dir = host_dirs.push_ledger_dir(
+            local.cache_identity(), remote_id, app_name
         )
 
     @classmethod
@@ -64,7 +60,6 @@ class PushLedger:
         return entry if isinstance(entry, dict) else None
 
     def put(self, verstr, entry):
-        self._local._ensure_base_dir(self._app_name)
         os.makedirs(self.dir, exist_ok=True)
         atomic_write(self._path(verstr), yaml.safe_dump(entry, sort_keys=True))
 

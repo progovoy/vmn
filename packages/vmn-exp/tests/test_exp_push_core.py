@@ -1,5 +1,7 @@
 """``push_run``: a local run uploaded to a remote store, resumably, with its
 code object; the per-run ledger makes an unchanged run cost no remote call."""
+import os
+
 import pytest
 from push_helpers import (
     APP, KEY, PAYLOAD, WRITER, X, add_lines, line, local_log, local_root, make_run,
@@ -61,11 +63,13 @@ def test_push_requires_capable_remote_target(local, target):
         require_push_target(local)
 
 
-def test_ledger_lives_under_push_dir_and_is_not_listed(local, target, tmp_path):
+def test_ledger_lives_in_host_state_dir_and_is_not_listed(local, target, tmp_path):
     make_run(local, tmp_path)
     assert push_run(local, target, APP, X).status == NEW
     ledger = PushLedger(local, APP, remote_id(target))
-    assert f"/.push/{remote_id(target)}" in ledger.dir.replace("\\", "/")
+    state = os.environ["VMN_EXP_CACHE_DIR"]
+    assert ledger.dir.startswith(os.path.join(state, "push") + os.sep)
+    assert remote_id(target) in ledger.dir
     assert ledger.get(X)["complete"] is True
     assert local.list_verstrs(APP) == [X]
 

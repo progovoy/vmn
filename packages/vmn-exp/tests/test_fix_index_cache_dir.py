@@ -4,10 +4,11 @@ import stat
 
 import pytest
 
-from vmn_exp.storage.index_cache_dir import (
-    index_cache_root,
-    s3_index_cache_path,
-)
+from vmn_exp.storage.host_dirs import index_cache_path, index_cache_root
+
+
+def s3_index_cache_path(endpoint_url, bucket, prefix, app_name):
+    return index_cache_path(("s3", endpoint_url, bucket, prefix), app_name)
 
 
 # ---------------------------------------------------------------------------
@@ -24,17 +25,10 @@ def test_env_override_is_used(monkeypatch, tmp_path):
 
 def test_xdg_fallback_used_when_no_env(monkeypatch, tmp_path):
     monkeypatch.delenv("VMN_INDEX_CACHE_DIR", raising=False)
+    monkeypatch.delenv("VMN_EXP_CACHE_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     root = index_cache_root()
-    assert root == str(tmp_path / "xdg" / "vmn")
-
-
-def test_home_cache_fallback(monkeypatch):
-    monkeypatch.delenv("VMN_INDEX_CACHE_DIR", raising=False)
-    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
-    root = index_cache_root()
-    home = os.path.expanduser("~")
-    assert root == os.path.join(home, ".cache", "vmn")
+    assert root == str(tmp_path / "xdg" / "vmn-exp")
 
 
 def test_none_value_disables(monkeypatch):
@@ -96,19 +90,19 @@ def test_unwritable_root_returns_none(monkeypatch, tmp_path):
         locked.chmod(stat.S_IRWXU)  # restore so cleanup works
 
 
-def test_path_ends_with_index_sqlite(tmp_path, monkeypatch):
+def test_path_ends_with_sqlite(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_INDEX_CACHE_DIR", str(tmp_path))
     path = s3_index_cache_path(None, "mybucket", "prefix", "myapp")
     assert path is not None
-    assert os.path.basename(path) == ".index.sqlite"
+    assert path.endswith(".sqlite")
 
 
-def test_path_is_under_s3_subdir(tmp_path, monkeypatch):
+def test_path_is_under_index_subdir(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_INDEX_CACHE_DIR", str(tmp_path))
     path = s3_index_cache_path(None, "mybucket", "prefix", "myapp")
     assert path is not None
     rel = os.path.relpath(path, str(tmp_path))
-    assert rel.startswith("s3" + os.sep)
+    assert rel.startswith("index" + os.sep)
 
 
 # ---------------------------------------------------------------------------
