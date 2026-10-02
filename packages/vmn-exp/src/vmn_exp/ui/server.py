@@ -81,6 +81,7 @@ def create_app(
     app.state.read_only = read_only
     jobs = JobRunner()
     chain = build_chain(token, auth.authenticators if auth else ())
+    app.state.auth_chain = chain
     guard = RequestGuard.build(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )

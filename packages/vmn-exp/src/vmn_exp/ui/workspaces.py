@@ -5,7 +5,8 @@ A workspace is an isolated source of vmn data: a git checkout (its own working
 tree, .vmn/, lock and index) or a read-only experiment ``store`` named by a
 storage URI (``s3://``, ``gs://``, ``az://``, ``file://``, a plugin scheme). Several
 workspaces may be clones of the same remote — mutations in one never touch
-another. The registry persists in ``<data_dir>/workspaces.yml``.
+another. The registry persists through a :class:`WorkspaceRegistry`: by default
+``<data_dir>/workspaces.yml``; a server with a DB keeps it in the control plane.
 
 Clones created by the server live under ``<data_dir>/workspaces/<name>`` and
 are server-owned: removing such a workspace also deletes its directory.
@@ -32,6 +33,8 @@ class Workspace:
     kind: str = "git"  # "git" | "store"
     path: Optional[str] = None
     store: Optional[str] = None  # a storage URI, for kind "store"
+    downloads: Optional[str] = None  # "stream" | "redirect" (server config)
+    reconcile_sec: Optional[int] = None
 
     def to_public_dict(self):
         d = {k: v for k, v in asdict(self).items() if v is not None}
@@ -42,33 +45,75 @@ class WorkspaceError(ValueError):
     pass
 
 
+class WorkspaceRegistry:
+    """Where the workspace list persists: ``load()`` all, ``save(ws)`` one,
+    ``delete(name)`` one."""
+
+    def load(self) -> List[Workspace]:
+        raise NotImplementedError
+
+    def save(self, ws, all_workspaces):
+        raise NotImplementedError
+
+    def delete(self, name, all_workspaces):
+        raise NotImplementedError
+
+
+class YamlWorkspaceRegistry(WorkspaceRegistry):
+    """``<data_dir>/workspaces.yml`` — the standalone server's registry."""
+
+    def __init__(self, path):
+        self.path = path
+
+    def load(self):
+        try:
+            with open(self.path) as f:
+                data = yaml.safe_load(f) or {}
+        except OSError:
+            return []
+        return [Workspace(**entry) for entry in data.get("workspaces", [])]
+
+    def save(self, ws, all_workspaces):
+        self._write(all_workspaces)
+
+    def delete(self, name, all_workspaces):
+        self._write(all_workspaces)
+
+    def _write(self, all_workspaces):
+        data = {"workspaces": [w.to_public_dict() for w in all_workspaces]}
+        with open(self.path, "w") as f:
+            yaml.safe_dump(data, f, sort_keys=False)
+
+
+class DbWorkspaceRegistry(WorkspaceRegistry):
+    """The registry in a :class:`ControlPlaneStore` (kind ``workspace``)."""
+
+    def __init__(self, control_plane):
+        self.control_plane = control_plane
+
+    def load(self):
+        return [Workspace(**doc) for doc in self.control_plane.list("workspace")]
+
+    def save(self, ws, all_workspaces):
+        self.control_plane.put("workspace", ws.name, ws.to_public_dict())
+
+    def delete(self, name, all_workspaces):
+        self.control_plane.delete("workspace", name)
+
+
 class WorkspaceManager:
     """Registry of workspaces, persisted under a server data directory."""
 
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, registry=None):
         self.data_dir = data_dir
         Path(data_dir).mkdir(parents=True, exist_ok=True)
-        self._registry_path = os.path.join(data_dir, REGISTRY_FILENAME)
-        self._workspaces = self._load()
+        self.registry = registry or YamlWorkspaceRegistry(
+            os.path.join(data_dir, REGISTRY_FILENAME)
+        )
+        self._workspaces = {ws.name: ws for ws in self.registry.load()}
 
-    # -- persistence --------------------------------------------------------
-
-    def _load(self):
-        try:
-            with open(self._registry_path) as f:
-                data = yaml.safe_load(f) or {}
-        except OSError:
-            return {}
-        result = {}
-        for entry in data.get("workspaces", []):
-            ws = Workspace(**entry)
-            result[ws.name] = ws
-        return result
-
-    def _save(self):
-        data = {"workspaces": [ws.to_public_dict() for ws in self._workspaces.values()]}
-        with open(self._registry_path, "w") as f:
-            yaml.safe_dump(data, f, sort_keys=False)
+    def _save(self, ws):
+        self.registry.save(ws, self.list())
 
     # -- registry operations ------------------------------------------------
 
@@ -135,15 +180,16 @@ class WorkspaceManager:
             )
         ws = Workspace(name=name, kind="git", path=path)
         self._workspaces[name] = ws
-        self._save()
+        self._save(ws)
         return ws
 
-    def add_store(self, name, uri) -> Workspace:
+    def add_store(self, name, uri, downloads=None, reconcile_sec=None) -> Workspace:
         """Register a read-only experiment store named by a storage URI."""
         self._validate_new_name(name)
-        ws = Workspace(name=name, kind="store", store=uri)
+        ws = Workspace(name=name, kind="store", store=uri, downloads=downloads,
+                       reconcile_sec=reconcile_sec)
         self._workspaces[name] = ws
-        self._save()
+        self._save(ws)
         return ws
 
     def remove(self, name):
@@ -151,7 +197,7 @@ class WorkspaceManager:
         if ws is None:
             raise WorkspaceError(f"Workspace '{name}' not found")
         del self._workspaces[name]
-        self._save()
+        self.registry.delete(name, self.list())
         # Server-owned clones are deleted with their registration; attached
         # checkouts belong to the user and are left alone.
         if ws.path and self._is_managed(ws.path):
