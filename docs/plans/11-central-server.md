@@ -228,10 +228,43 @@ inside the index.
 
 - **Cold start or wiped cache:** one full listing builds the cache (the existing worker-process
   cold load), the cursor is set to the journal's newest key, and from then on step 1 drives
-  everything.
+  everything. A cache lost *while running* is rebuilt the same way without a restart (§4.6).
 - **Server edits (§7.1):** written to the bucket through the same storage layer (so they're
   journaled like any write), then the server hints the record itself, so the editor sees
   the change on their next request.
+
+### 4.6 Self-healing and manual resync
+
+The cache never needs a server restart to recover.
+
+**Automatic detection, checked every tick:**
+- SQLite: the file was deleted, replaced, is corrupt or unreadable, or carries another
+  `SCHEMA_VERSION`. Postgres: the cache tables were truncated (a scope's generation goes
+  backwards, or the `vmn_cache_meta` row is gone), or the schema version differs.
+- Any of these starts a **background rebuild** of the affected workspace (§ rebuild below).
+
+**Rolling consistency check:** each tick, the leader also re-lists a small slice of
+*finished* records (file signatures only, no reads unless they differ), sized so every
+record is covered once per `reconcile_sec`. A record whose signature differs from the cache
+(a missed journal entry, a hand-edited or restored file) is re-read on the spot. Drift found
+is counted in `/metrics` (`vmn_cache_drift_total`), so a healthy journal shows ~0. This
+replaces the hourly "big bang" listing with a steady trickle; the full listing remains only
+at startup and on a rebuild.
+
+**Manual:**
+- UI: a **Resync** button per workspace (role `admin`) with a progress line ("rebuilding:
+  41,000 / 100,000 records").
+- API: `POST /api/v1/workspaces/{ws}/cache/resync` (re-check every record's signatures and
+  re-read the ones that differ) and `?full=1` (drop the workspace's cache rows and rebuild);
+  `GET .../cache/status` reports generation, journal lag, drift count, last reconcile, and
+  rebuild progress.
+- CLI: `vmn-exp ui cache resync|rebuild [--workspace <name>] [--config server.yml]`, which
+  calls the API of a running server, or operates on the DB directly when none is running.
+
+**Rebuild without downtime:** a rebuild writes the new rows under a new generation (a
+shadow set in Postgres, a new SQLite file swapped in by rename) while the replicas keep
+serving their current snapshots. Then the generation switches atomically and followers load
+it. Requests never see a half-built cache.
 
 ---
 
@@ -556,7 +589,7 @@ using the access their environment already has.
 |---|---|---|
 | Server down or unreachable | Dashboard unavailable | Jobs are unaffected; they never contact the server (I3). On restart the startup reconcile listing catches up, then the journal resumes from the saved cursor. |
 | Postgres down | API can't load new generations | Replicas keep serving their last in-memory snapshot (stale banner in the UI via an `X-Vmn-Stale` header). Leaders keep their own in-memory index. Control-plane writes and logins return 503. |
-| Cache corrupt or schema mismatch | — | Truncate and rebuild from storage (I2); the first request per scope waits for the initial load, as today. |
+| Cache corrupt, deleted, truncated or schema mismatch | — | Detected on the next tick; rebuilt in the background from storage (I2, §4.6) while the last snapshot keeps being served. No restart. |
 | Leader replica crashes mid-refresh | Its transaction rolls back | Another replica takes the advisory lock; no partial generation is visible. |
 | Writer crashed between a data write and its journal put | That change has no entry | Found by the next reconcile listing (≤ `reconcile_sec`). |
 | Writer clock more than `skew_window` behind | Its entries sort before what the server already read | Found by the next reconcile listing; the journal lag metric shows it. |
