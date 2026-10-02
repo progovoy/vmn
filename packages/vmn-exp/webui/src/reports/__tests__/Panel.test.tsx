@@ -93,7 +93,7 @@ describe("Panel", () => {
     ["scatter", { x: "params.lr", y: "loss" }, "MetricScatter", { initialX: "lr", initialY: "loss", paramCols: ["lr"] }],
     ["parallel", { columns: ["params.lr", "loss"] }, "ParallelCoordinates", { metricCols: ["loss"], paramCols: ["lr"] }],
     ["importance", { metric: "loss" }, "ParamImportance", { defaultMetric: "loss" }],
-    ["grouped", { group_by: "params.lr", metric: "loss" }, "GroupedMetrics", { metricCols: ["loss"] }],
+    ["grouped", { group_by: "params.lr", metric: "loss" }, "GroupedMetrics", { metricCols: ["loss"], initialGroup: "lr" }],
   ])("%s: renders query rows", async (type, extra, comp, expected) => {
     wrap(<Panel ws="w" spec={{ ...base, type, runs: query, ...extra }} />);
     await waitFor(() => expect(props(comp).rows).toHaveLength(2));

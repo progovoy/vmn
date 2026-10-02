@@ -84,7 +84,7 @@ function plan(spec: RowSpec, ws: string): { view: ChartView; cols: Cols; render:
         render: (c) => (rows, schema) => <ParallelCoordinates rows={rows} {...c} schema={schema} /> };
     case "grouped":
       return { view: "grouped", cols: splitKeys([spec.metric, spec.group_by]),
-        render: (c) => (rows, schema) => <GroupedMetrics rows={rows} {...c} schema={schema} /> };
+        render: (c) => (rows, schema) => <GroupedMetrics rows={rows} {...c} schema={schema} initialGroup={bareKey(spec.group_by)} /> };
     case "importance": {
       const filter = "verstrs" in spec.runs ? {} : queryFilter(spec.runs);
       return { view: "importance", cols: splitKeys([spec.metric]),
