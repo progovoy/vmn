@@ -16,7 +16,7 @@ RUNS = [("0.0.1-dev.aaaa111", "a"), ("0.0.1-dev.bbbb222", "b"), ("0.0.1-dev.cccc
 def _seed(app_layout):
     for second, (verstr, kind) in enumerate(RUNS, 1):
         path = os.path.join(
-            app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots", verstr
+            app_layout.repo_path, ".vmn", "store", "snapshots", app_layout.app_name, verstr
         )
         os.makedirs(path)
         meta = {"verstr": verstr, "timestamp": f"2026-09-21T12:00:{second:02d}Z",

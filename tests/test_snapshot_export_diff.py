@@ -74,7 +74,7 @@ def test_export_defaults_to_a_verstr_tarball(stamped, capfd, tmp_path, monkeypat
 
 def test_export_refuses_a_snapshot_whose_code_is_gone(stamped, capfd, tmp_path):
     verstr = _snapshot_of(stamped, capfd, "snapshot state\n")
-    shutil.rmtree(os.path.join(stamped.repo_path, ".vmn", "vmn-code"))
+    shutil.rmtree(os.path.join(stamped.repo_path, ".vmn", "store", "code"))
     out_dir = str(tmp_path / "exported")
 
     ret, out, err = _run(stamped, capfd, "export", version=verstr, output=out_dir)

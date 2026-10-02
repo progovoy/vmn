@@ -1,11 +1,15 @@
-"""The local record store: ``.vmn/<app>/<subdir>/<safe verstr>/``.
+"""The local record store: ``.vmn/store/<kind>/<app-key>/<safe verstr>/``.
+
+*kind* is ``snapshots``, ``experiments`` or ``code``; the app key is the tag
+form (``/`` -> ``-``). The ``code`` kind is addressed with ``code_app(app)``
+names and keys them by the app they belong to.
 
 Writes the same bytes as ``vmn_exp.storage.local.LocalSnapshotStorage``: patch
 files, ``deps/<safe dep>/`` patch files, then ``metadata.yml``
 (``yaml.dump(sort_keys=True)``) last — it is what makes a record exist. The
-base dir carries a ``.gitignore`` of ``*``. Every write is atomic.
+``.vmn/store/`` carries one ``.gitignore`` of ``*``. Every write is atomic.
 
-``LocalRecordStore(vmn_root_path, subdir="snapshots", code_store=None)``:
+``LocalRecordStore(vmn_root_path, kind="snapshots", code_store=None)``:
   - ``save(app, verstr, metadata, patches)``
   - ``load_record(app, verstr) -> (metadata, patches) | (None, None)``
   - ``load(app, verstr)`` — like ``load_record`` with a ``code:`` reference
@@ -28,7 +32,7 @@ from version_stamp.core.utils import (
     valid_app_path,
     yaml_safe_load,
 )
-from version_stamp.snapshot.code_store import resolve_code
+from version_stamp.snapshot.code_store import CODE_APP, resolve_code
 from version_stamp.snapshot.identity import safe_dep_name, safe_verstr, unsafe_verstr
 from version_stamp.snapshot.record import METADATA_FILE, PATCH_FILES
 
@@ -79,16 +83,28 @@ def _read_dep_patches(record_dir):
     return found
 
 
+def _app_key(kind, app_name):
+    if not valid_app_path(app_name):
+        raise ValueError(f"Invalid app name: {app_name!r}")
+    if kind == "code":
+        prefix = f"{CODE_APP}/"
+        if not app_name.startswith(prefix):
+            raise ValueError(f"Not a code app name: {app_name!r}")
+        return app_name[len(prefix):].replace("~", "-")
+    return app_name.replace("/", "-")
+
+
 class LocalRecordStore:
-    def __init__(self, vmn_root_path, subdir="snapshots", code_store=None):
+    def __init__(self, vmn_root_path, kind="snapshots", code_store=None):
         self.vmn_root_path = vmn_root_path
-        self.subdir = subdir
+        self.kind = kind
         self.code_store = self if code_store is None else code_store
 
+    def _store_root(self):
+        return os.path.join(self.vmn_root_path, ".vmn", "store")
+
     def _base_dir(self, app_name):
-        if not valid_app_path(app_name):
-            raise ValueError(f"Invalid app name: {app_name!r}")
-        return os.path.join(self.vmn_root_path, ".vmn", *app_name.split("/"), self.subdir)
+        return os.path.join(self._store_root(), self.kind, _app_key(self.kind, app_name))
 
     def _record_dir(self, app_name, verstr):
         return os.path.join(self._base_dir(app_name), safe_verstr(verstr))
@@ -96,7 +112,7 @@ class LocalRecordStore:
     def _ensure_base_dir(self, app_name):
         base = self._base_dir(app_name)
         Path(base).mkdir(parents=True, exist_ok=True)
-        ignore = os.path.join(base, ".gitignore")
+        ignore = os.path.join(self._store_root(), ".gitignore")
         if not os.path.exists(ignore):
             atomic_write(ignore, "*\n")
         return base

@@ -27,8 +27,8 @@ def test_without_opener_stores_are_local(tmp_path):
     assert stores.where == "local"
     stores.records.save("app", "v", {"verstr": "v"}, {})
     stores.code.save("vmn-code/app", "k", {"verstr": "k"}, {})
-    assert os.path.isdir(tmp_path / ".vmn" / "app" / "snapshots" / "v")
-    assert os.path.isdir(tmp_path / ".vmn" / "vmn-code" / "app" / "experiments" / "k")
+    assert os.path.isdir(tmp_path / ".vmn" / "store" / "snapshots" / "app" / "v")
+    assert os.path.isdir(tmp_path / ".vmn" / "store" / "code" / "app" / "k")
     assert stores.records.code_store is stores.code
 
 

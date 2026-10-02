@@ -50,7 +50,7 @@ def _restore(app_layout, capfd, **kwargs):
 
 
 def _records(app_layout):
-    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots")
+    base = os.path.join(app_layout.repo_path, ".vmn", "store", "snapshots", app_layout.app_name)
     found = {}
     for name in os.listdir(base):
         meta_path = os.path.join(base, name, "metadata.yml")
@@ -181,7 +181,7 @@ def test_restore_force_proceeds_despite_dropped_untracked_files(
 def test_restore_refuses_a_snapshot_whose_code_is_gone(stamped, capfd):
     verstr = _snapshot_of(stamped, capfd, "state A")
     _write(stamped, "work.txt", "state B unsaved")
-    shutil.rmtree(os.path.join(stamped.repo_path, ".vmn", "vmn-code"))
+    shutil.rmtree(os.path.join(stamped.repo_path, ".vmn", "store", "code"))
 
     ret, out = _restore(stamped, capfd, version=verstr)
 

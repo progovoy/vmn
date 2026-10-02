@@ -1,8 +1,9 @@
 """Which stores a snapshot command reads and writes.
 
-``SnapshotStores(records, code, where)``: *records* holds snapshot records,
-*code* the code objects they reference, *where* names the store for messages
-(``"local"`` or a store URI).
+``SnapshotStores(records, code, where, runs=None)``: *records* holds snapshot
+records, *code* the code objects they reference, *where* names the store for
+messages (``"local"`` or a store URI), *runs* the experiment runs that may
+reference code too (None: they live in *code*'s store).
 
 ``open_snapshot_stores(vcs, params) -> SnapshotStores``: unless
 ``params["local"]``, the opener registered through
@@ -12,8 +13,8 @@ Otherwise the local stores; ``params["store"]`` without an opener raises
 :class:`SnapshotStoreError`.
 
 ``local_snapshot_stores(vmn_root_path) -> SnapshotStores``: records in
-``.vmn/<app>/snapshots/``, code in the experiment subdir
-(``.vmn/vmn-code/<app~>/experiments/``), where experiment runs keep theirs.
+``.vmn/store/snapshots/<app-key>/``, code in ``.vmn/store/code/<app-key>/``
+(shared with the runs of ``.vmn/store/experiments/<app-key>/``).
 """
 from dataclasses import dataclass
 
@@ -32,12 +33,14 @@ class SnapshotStores:
     records: object
     code: object
     where: str
+    runs: object = None
 
 
 def local_snapshot_stores(vmn_root_path):
-    code = LocalRecordStore(vmn_root_path, "experiments")
+    code = LocalRecordStore(vmn_root_path, "code")
     records = LocalRecordStore(vmn_root_path, "snapshots", code_store=code)
-    return SnapshotStores(records=records, code=code, where="local")
+    runs = LocalRecordStore(vmn_root_path, "experiments", code_store=code)
+    return SnapshotStores(records=records, code=code, where="local", runs=runs)
 
 
 def _opened_by_plugin(vcs, params):

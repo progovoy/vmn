@@ -1,8 +1,8 @@
 """``vmn snapshot``: save points of uncommitted work, stored as thin records.
 
-A snapshot record (``.vmn/<app>/snapshots/<verstr>/metadata.yml``) references
+A snapshot record (``.vmn/store/snapshots/<app-key>/<verstr>/metadata.yml``) references
 its code — patches and untracked tarball — by a ``code:`` key into the shared
-code store (``vmn-code/<app~>`` records of the experiment-subdir store), the
+code store (``vmn-code/<app~>`` records, stored under ``.vmn/store/code/<app-key>/``), the
 same objects experiment runs use. The on-disk format is byte-compatible with
 vmn-exp-sdk (``vmn_exp.storage.local`` / ``vmn_exp.core.code_store``), which
 ``version_stamp`` may never import; ``tests/test_snapshot_store_format.py``

@@ -41,7 +41,7 @@ def _restore(app_layout, capfd, verstr):
 
 def _meta(app_layout, verstr):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "snapshots", verstr,
+        app_layout.repo_path, ".vmn", "store", "snapshots", app_layout.app_name, verstr,
         "metadata.yml",
     )
     with open(path) as f:

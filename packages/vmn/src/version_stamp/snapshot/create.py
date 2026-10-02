@@ -1,6 +1,6 @@
 """``vmn snapshot create``: save the dirty tree as a thin record.
 
-The record (``.vmn/<app>/snapshots/<verstr>/metadata.yml``, or the configured
+The record (``.vmn/store/snapshots/<app-key>/<verstr>/metadata.yml``, or the configured
 store's) holds identity and metadata only; the patches and untracked tarball
 live once in the shared code store and are referenced as ``code:``. The code
 object is built only when the store has no complete one for this identity.

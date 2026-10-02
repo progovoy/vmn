@@ -32,11 +32,11 @@ def _vmn_dir(app_layout, *parts):
 
 
 def _record_dir(app_layout, verstr):
-    return _vmn_dir(app_layout, app_layout.app_name, "snapshots", verstr)
+    return _vmn_dir(app_layout, "store", "snapshots", app_layout.app_name, verstr)
 
 
 def _code_dir(app_layout):
-    return _vmn_dir(app_layout, "vmn-code", app_layout.app_name, "experiments")
+    return _vmn_dir(app_layout, "store", "code", app_layout.app_name)
 
 
 def _code_keys(app_layout):
@@ -132,7 +132,7 @@ def test_store_flag_without_vmn_exp_is_an_error(app_layout, capfd, monkeypatch):
     capfd.readouterr()
     assert _snapshot(app_layout.app_name, store="s3://bucket/prefix") == 1
     assert "pip install vmn-exp" in capfd.readouterr().err
-    assert not os.path.isdir(_vmn_dir(app_layout, app_layout.app_name, "snapshots"))
+    assert not os.path.isdir(_vmn_dir(app_layout, "store", "snapshots", app_layout.app_name))
 
 
 def test_list_and_show_json(app_layout, capfd):
@@ -154,7 +154,7 @@ def test_list_and_show_json(app_layout, capfd):
 
 
 def _fake_run_referencing(app_layout, code):
-    run_dir = _vmn_dir(app_layout, app_layout.app_name, "experiments", "0.0.1-dev.run0001.r1")
+    run_dir = _vmn_dir(app_layout, "store", "experiments", app_layout.app_name, "0.0.1-dev.run0001.r1")
     os.makedirs(run_dir)
     with open(os.path.join(run_dir, "metadata.yml"), "w") as f:
         yaml.dump({"verstr": "0.0.1-dev.run0001.r1", "code": code}, f)
