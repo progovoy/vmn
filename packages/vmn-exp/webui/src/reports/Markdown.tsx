@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { parse as parseYaml } from "yaml";
+import Panel from "./Panel";
 import { extractHeadings, makeSlugger, type Heading } from "./headings";
 
 export type PanelSpec = Record<string, unknown>;
@@ -10,6 +11,9 @@ export interface MarkdownProps {
   source: string;
   resolveMedia?: (uri: string) => string;
   renderPanel?: (spec: PanelSpec, rawText: string) => ReactNode;
+  /** Workspace the report's panels fetch from; without it (and no
+   *  renderPanel) panels render as placeholders. */
+  ws?: string;
 }
 
 const TOC_MIN_HEADINGS = 4;
@@ -88,7 +92,14 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
   );
 }
 
+function panelRenderer(props: MarkdownProps): MarkdownProps["renderPanel"] {
+  const { ws } = props;
+  if (props.renderPanel || ws === undefined) return props.renderPanel;
+  return (spec) => <Panel ws={ws} spec={spec} />;
+}
+
 function buildComponents(props: MarkdownProps): Components {
+  const renderPanel = panelRenderer(props);
   return {
     a: ({ node: _n, ...rest }) =>
       rest.href?.startsWith("#") ? <a {...rest} /> : <a {...rest} target="_blank" rel="noopener noreferrer" />,
@@ -107,7 +118,7 @@ function buildComponents(props: MarkdownProps): Components {
       const classes = code && "properties" in code ? code.properties.className : undefined;
       if (Array.isArray(classes) && classes.includes("language-vmn-panel")) {
         const raw = code && "children" in code ? code.children.map((c) => ("value" in c ? c.value : "")).join("") : "";
-        return <PanelBlock raw={raw} renderPanel={props.renderPanel} />;
+        return <PanelBlock raw={raw} renderPanel={renderPanel} />;
       }
       return <pre>{children}</pre>;
     },
@@ -118,7 +129,7 @@ export function Markdown(props: MarkdownProps) {
   const { source } = props;
   const headings = useMemo(() => extractHeadings(source), [source]);
   const plugins = useMemo(() => [remarkGfm, remarkHeadingIds(headings)], [headings]);
-  const components = useMemo(() => buildComponents(props), [props.resolveMedia, props.renderPanel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const components = useMemo(() => buildComponents(props), [props.resolveMedia, props.renderPanel, props.ws]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="md-body">
       {headings.length >= TOC_MIN_HEADINGS && <TableOfContents headings={headings} />}
