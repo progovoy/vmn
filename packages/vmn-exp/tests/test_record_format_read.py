@@ -1,5 +1,6 @@
 """Readers honour a run's record format version: a record written by a newer
-format is skipped with a warning; a record with none reads as version 1."""
+format, or one with none (a v1 record: run vmn-exp migrate), is skipped with a
+warning."""
 import logging
 
 import pytest
@@ -40,9 +41,15 @@ def _run(storage, code="0.0.1", **meta_updates):
     return verstr
 
 
-def test_a_missing_format_version_reads_as_1():
-    assert record_format_version({"verstr": "v"}) == 1
+def test_a_missing_format_version_is_none():
+    assert record_format_version({"verstr": "v"}) is None
     assert record_format_version({"verstr": "v", "format_version": 3}) == 3
+
+
+def test_storage_stamps_records_written_without_a_format_version(tmp_path):
+    storage = _storage(tmp_path)
+    storage.save("app", "0.0.1", {"verstr": "0.0.1", "timestamp": "t"}, {})
+    assert storage.load_metadata("app", "0.0.1")["format_version"] == RECORD_FORMAT_VERSION
 
 
 @pytest.mark.parametrize("use_index", [True, False])
@@ -60,15 +67,18 @@ def test_list_runs_skips_a_future_format_record_with_a_warning(
 
 
 @pytest.mark.parametrize("use_index", [True, False])
-def test_list_runs_reads_a_record_without_a_format_version(tmp_path, use_index):
+def test_list_runs_refuses_a_v1_record_with_the_migrate_hint(
+    tmp_path, warnings, use_index
+):
     storage = _storage(tmp_path)
-    legacy = _run(storage, format_version=None)
-    assert "format_version" not in storage.load_metadata("app", legacy)
+    current = _run(storage, "0.0.1")
+    legacy = _run(storage, "0.0.2", format_version=None)
+    assert storage.load_metadata("app", legacy) is None
 
     rows = list_runs("app", storage=storage, use_index=use_index)
 
-    assert [r["verstr"] for r in rows] == [legacy]
-    assert rows[0]["metrics"]["m"] == 1
+    assert [r["verstr"] for r in rows] == [current]
+    assert any(legacy in w and "vmn-exp migrate" in w for w in warnings), warnings
 
 
 def test_the_index_snapshot_leaves_a_future_record_out(tmp_path, warnings):
@@ -89,10 +99,11 @@ def test_get_run_exposes_the_format_version(tmp_path):
     assert get_run("app", verstr, storage=storage)["format_version"] == RECORD_FORMAT_VERSION
 
 
-def test_get_run_reads_a_missing_format_version_as_1(tmp_path):
+def test_get_run_refuses_a_record_without_a_format_version(tmp_path):
     storage = _storage(tmp_path)
     verstr = _run(storage, format_version=None)
-    assert get_run("app", verstr, storage=storage)["format_version"] == 1
+    with pytest.raises(ValueError):
+        get_run("app", verstr, storage=storage)
 
 
 def test_get_run_refuses_a_future_format_record(tmp_path):

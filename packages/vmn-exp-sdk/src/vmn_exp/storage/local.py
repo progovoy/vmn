@@ -9,6 +9,7 @@ import yaml
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
+from vmn_exp.core.record_format import with_format_version
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
@@ -129,7 +130,8 @@ class LocalSnapshotStorage(SnapshotStorage):
             write_patches_to_dir(dep_dir, dep_patches)
         # Last: metadata.yml is what makes the record visible.
         atomic_write(
-            os.path.join(snap_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True)
+            os.path.join(snap_dir, METADATA_FILE),
+            yaml.dump(with_format_version(metadata), sort_keys=True),
         )
 
     def _load_metadata(self, meta_path):

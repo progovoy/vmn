@@ -146,3 +146,14 @@ def test_rerun_deletes_the_old_copy_of_a_done_record(tmp_path):
     raw.put(f"{old}/metadata.yml", b"verstr: s1\n")
     assert run_migrate(["--dir", str(tmp_path)]) == 0
     assert not any(k.startswith(old) for k in raw.keys())
+
+
+def test_migrated_records_carry_the_format_version(tmp_path):
+    from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
+
+    raw = _v1_dir(tmp_path)
+    assert run_migrate(["--dir", str(tmp_path)]) == 0
+    metas = [k for k in raw.keys() if k.endswith("/metadata.yml")]
+    assert metas
+    for key in metas:
+        assert yaml.safe_load(raw.get(key))["format_version"] == RECORD_FORMAT_VERSION, key

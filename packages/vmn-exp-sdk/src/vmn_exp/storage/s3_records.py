@@ -11,6 +11,7 @@ leftovers — never a listed record with half its files.
 import yaml
 
 from vmn_exp import _base
+from vmn_exp.core.record_format import with_format_version
 from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
@@ -42,7 +43,7 @@ class S3Records:
     def _put_metadata(self, prefix, metadata, **condition):
         self._put(
             f"{prefix}/{METADATA_FILE}",
-            yaml.dump(metadata, sort_keys=True),
+            yaml.dump(with_format_version(metadata), sort_keys=True),
             **condition,
         )
 
