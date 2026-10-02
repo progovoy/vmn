@@ -1,0 +1,933 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "vmn-panel",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "curves"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "x": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "step",
+                "wall",
+                "relative",
+                "metric"
+              ]
+            },
+            "metric": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "metric"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "mode",
+              "metric"
+            ]
+          }
+        },
+        "smoothing": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "log_y": {
+          "type": "boolean"
+        },
+        "max_points": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "leaderboard"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "bar"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "metric": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "metric"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "scatter"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "x": {
+          "type": "string"
+        },
+        "y": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "parallel"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "importance"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "metric": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "metric"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "grouped"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "group_by": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "group_by",
+        "metric"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "media"
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "verstrs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "verstrs"
+          ],
+          "additionalProperties": false
+        },
+        "key": {
+          "type": "string"
+        },
+        "step": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "const": "last"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "table"
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "verstrs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "verstrs"
+          ],
+          "additionalProperties": false
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "histogram"
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "verstrs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "verstrs"
+          ],
+          "additionalProperties": false
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "lineage"
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "verstrs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "verstrs"
+          ],
+          "additionalProperties": false
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
+          "const": "run"
+        },
+        "runs": {
+          "type": "object",
+          "properties": {
+            "verstrs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 1
+            }
+          },
+          "required": [
+            "verstrs"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}
