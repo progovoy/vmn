@@ -35,6 +35,7 @@ class Workspace:
     store: Optional[str] = None  # a storage URI, for kind "store"
     downloads: Optional[str] = None  # "stream" | "redirect" (server config)
     reconcile_sec: Optional[int] = None
+    capabilities: Optional[List[str]] = None  # probed, store workspaces only
 
     def to_public_dict(self):
         d = {k: v for k, v in asdict(self).items() if v is not None}
@@ -189,6 +190,13 @@ class WorkspaceManager:
         ws = Workspace(name=name, kind="store", store=uri, downloads=downloads,
                        reconcile_sec=reconcile_sec)
         self._workspaces[name] = ws
+        self._save(ws)
+        return ws
+
+    def set_capabilities(self, name, capabilities):
+        """Store the probed capabilities (storage_access) with workspace *name*."""
+        ws = self._workspaces[name]
+        ws.capabilities = list(capabilities)
         self._save(ws)
         return ws
 

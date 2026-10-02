@@ -73,7 +73,11 @@ def create_app(
     made before it. *auth* is an ``AuthenticatorChain`` tried after the
     static *token*; with neither the API is open. *role_mappings* map OIDC
     groups to roles (``{group, workspace or "*", role}``)."""
+    from vmn_exp.storage.areas import RUNS
+    from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
+    from vmn_exp.ui.jobs_store import build_store_action
+    from vmn_exp.ui.storage_access import EDIT, probe_store
 
     app = FastAPI(
         title="vmn-exp ui",
@@ -100,6 +104,7 @@ def create_app(
     # One client per store workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
     store_storages = {}
+    edit_storages = {}
 
     for router in chain.routers():
         app.include_router(router)
@@ -221,6 +226,7 @@ def create_app(
         source.forget(ws_name)
         app_lists.pop(ws_name)
         store_storages.pop(ws_name, None)
+        edit_storages.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps", dependencies=[require(VIEWER)])
     def list_apps(ws_name: str):
@@ -376,12 +382,41 @@ def create_app(
     def run_action(ws_name: str, app_tag: str, action: str, body: dict = None):
         if read_only:
             raise HTTPException(403, "Server is read-only")
-        ws = _git_workspace(ws_name)
+        ws = _workspace(ws_name)
         app_name = _app_name(app_tag)
+        if ws.kind == "store":
+            return _submit_store_action(ws, app_name, action, body)
         command, err = build_command(action, app_name, body)
         if err:
             raise HTTPException(400, err)
         job, err = jobs.submit(ws_name, ws.path, command)
+        if err:
+            raise HTTPException(409, err)
+        return job
+
+    def _capabilities(ws):
+        if ws.capabilities is None:
+            manager.set_capabilities(ws.name, probe_store(ws.store).capabilities)
+        return ws.capabilities
+
+    def _edit_storage(ws):
+        if ws.name not in edit_storages:
+            edit_storages[ws.name] = open_storage(ws.store, area=RUNS, buffer_logs=True)
+        return edit_storages[ws.name]
+
+    def _submit_store_action(ws, app_name, action, body):
+        store_action, err = build_store_action(action, app_name, body)
+        if err:
+            raise HTTPException(400, err)
+        if EDIT not in _capabilities(ws):
+            raise HTTPException(403, "The server has no edit access to this store")
+        storage, reads = _edit_storage(ws), _exp_storage_for(ws)
+
+        def hint(app, verstr):
+            source.touched(ws, app, reads)
+
+        job, err = jobs.submit_call(
+            ws.name, store_action.command, lambda: store_action.run(storage, hint))
         if err:
             raise HTTPException(409, err)
         return job
