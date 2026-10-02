@@ -44,6 +44,15 @@ export async function del(path: string): Promise<void> {
   return parse<void>(res);
 }
 
+export async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  return parse<T>(res);
+}
+
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));

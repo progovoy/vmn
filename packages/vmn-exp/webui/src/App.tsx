@@ -130,6 +130,9 @@ export default function App() {
             <NavLink to={`/ws/${ws}/models`}>
               <NavIcon name="models" /> Models
             </NavLink>
+            <NavLink to={`/ws/${ws}/reports`}>
+              <NavIcon name="reports" /> Reports
+            </NavLink>
           </nav>
         )}
 
