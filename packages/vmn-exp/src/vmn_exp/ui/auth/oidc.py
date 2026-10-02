@@ -78,7 +78,10 @@ class OIDCAuthenticator:
 
     def metadata(self):
         if self._metadata is None:
-            meta = self.http.get_json(self.config.issuer.rstrip("/") + DISCOVERY_PATH)
+            try:
+                meta = self.http.get_json(self.config.issuer.rstrip("/") + DISCOVERY_PATH)
+            except Exception as exc:
+                raise OIDCError("discovery failed") from exc
             if meta.get("issuer") != self.config.issuer:
                 raise OIDCError("discovery issuer mismatch")
             self._metadata = meta

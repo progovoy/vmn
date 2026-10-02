@@ -158,3 +158,10 @@ def test_forged_cookie_rejected(tmp_path):
     client = _client(tmp_path, FakeIdP())
     client.cookies.set(SESSION_COOKIE, "made-up")
     assert client.get("/api/v1/_whoami").status_code == 401
+
+
+def test_discovery_issuer_mismatch_fails_login_cleanly(tmp_path):
+    client = _client(tmp_path, FakeIdP(issuer="https://evil.example"))
+    r = client.get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502
+    assert "issuer" in r.json()["detail"]

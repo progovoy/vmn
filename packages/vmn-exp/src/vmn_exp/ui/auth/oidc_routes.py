@@ -11,7 +11,11 @@ def oidc_router(oidc):
 
     @router.get("/auth/login")
     def _login():
-        return RedirectResponse(oidc.login_url(), status_code=302)
+        try:
+            url = oidc.login_url()
+        except OIDCError as exc:
+            return JSONResponse({"detail": f"Identity provider: {exc}"}, status_code=502)
+        return RedirectResponse(url, status_code=302)
 
     @router.get("/auth/callback")
     def _callback(code: str = "", state: str = ""):
