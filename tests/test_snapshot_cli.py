@@ -154,7 +154,7 @@ def test_list_and_show_json(app_layout, capfd):
 
 
 def _fake_run_referencing(app_layout, code):
-    run_dir = _vmn_dir(app_layout, "store", "experiments", app_layout.app_name, "0.0.1-dev.run0001.r1")
+    run_dir = _vmn_dir(app_layout, "store", "runs", app_layout.app_name, "0.0.1-dev.run0001.r1")
     os.makedirs(run_dir)
     with open(os.path.join(run_dir, "metadata.yml"), "w") as f:
         yaml.dump({"verstr": "0.0.1-dev.run0001.r1", "code": code}, f)

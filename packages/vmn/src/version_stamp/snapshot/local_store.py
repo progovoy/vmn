@@ -1,6 +1,6 @@
 """The local record store: ``.vmn/store/<kind>/<app-key>/<safe verstr>/``.
 
-*kind* is ``snapshots``, ``experiments`` or ``code``; the app key is the tag
+*kind* is ``snapshots``, ``runs`` or ``code``; the app key is the tag
 form (``/`` -> ``-``). The ``code`` kind is addressed with ``code_app(app)``
 names and keys them by the app they belong to.
 

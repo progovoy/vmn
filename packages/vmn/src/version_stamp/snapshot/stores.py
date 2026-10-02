@@ -14,7 +14,7 @@ Otherwise the local stores; ``params["store"]`` without an opener raises
 
 ``local_snapshot_stores(vmn_root_path) -> SnapshotStores``: records in
 ``.vmn/store/snapshots/<app-key>/``, code in ``.vmn/store/code/<app-key>/``
-(shared with the runs of ``.vmn/store/experiments/<app-key>/``).
+(shared with the runs of ``.vmn/store/runs/<app-key>/``).
 """
 from dataclasses import dataclass
 
@@ -39,7 +39,7 @@ class SnapshotStores:
 def local_snapshot_stores(vmn_root_path):
     code = LocalRecordStore(vmn_root_path, "code")
     records = LocalRecordStore(vmn_root_path, "snapshots", code_store=code)
-    runs = LocalRecordStore(vmn_root_path, "experiments", code_store=code)
+    runs = LocalRecordStore(vmn_root_path, "runs", code_store=code)
     return SnapshotStores(records=records, code=code, where="local", runs=runs)
 
 

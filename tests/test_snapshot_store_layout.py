@@ -20,7 +20,7 @@ def test_records_and_code_use_store_layout(tmp_path, app, key):
     assert stores.records.load(app, "0.0.1-dev.abc")[0]["verstr"] == "0.0.1-dev.abc"
 
 
-def test_runs_are_scanned_from_experiments_dir(tmp_path):
+def test_runs_are_scanned_from_runs_dir(tmp_path):
     stores = local_snapshot_stores(str(tmp_path))
     stores.runs.save("root/svc", "0.0.1-dev.run", {"verstr": "r", "code": "k"}, {})
-    assert (tmp_path / ".vmn/store/experiments/root-svc/0.0.1-dev.run").is_dir()
+    assert (tmp_path / ".vmn/store/runs/root-svc/0.0.1-dev.run").is_dir()
