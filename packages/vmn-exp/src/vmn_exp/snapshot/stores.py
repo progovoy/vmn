@@ -20,6 +20,7 @@ from vmn_exp.core.storage_resolve import (
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
 from vmn_exp.storage.areas import SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
+from vmn_exp.storage.store_marker import require_store
 
 
 @dataclass
@@ -58,6 +59,10 @@ def open_configured_snapshot_stores(vcs, params):
     where = store_uri(storage_params)
     if where is None:
         return None
-    runs = _get_experiment_storage(vcs, storage_params)
-    records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS)
+    writer = not params.get("read_only")
+    runs = _get_experiment_storage(vcs, storage_params, writer=writer)
+    records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS,
+                           writer=writer)
+    if not writer:
+        require_store(records, where)
     return ConfiguredStores(RecordsWithCode(records, runs), code_storage(runs), where, runs)

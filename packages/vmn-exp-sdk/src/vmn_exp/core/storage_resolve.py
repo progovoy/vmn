@@ -103,11 +103,12 @@ def drop_remote_if_offline(params, root):
     return {k: v for k, v in params.items() if k not in _REMOTE_PARAMS}
 
 
-def _open(root, params):
+def _open(root, params, writer=True):
     from vmn_exp.storage.open import open_storage
 
     params = drop_remote_if_offline(params, root)
-    return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True)
+    return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
+                        writer=writer)
 
 
 def _try_repo_root() -> "str | None":
@@ -132,8 +133,8 @@ def experiment_dir(vcs, params):
             or _repo_store(vcs.vmn_root_path if vcs else None))
 
 
-def _get_experiment_storage(vcs, params):
-    return _open(experiment_dir(vcs, params), params)
+def _get_experiment_storage(vcs, params, writer=True):
+    return _open(experiment_dir(vcs, params), params, writer)
 
 
 def add_storage_flags(parser):

@@ -33,7 +33,8 @@ from vmn_exp.cli.views import (
     show_payload,
 )
 from vmn_exp.core.app_conf import experiment_conf
-from vmn_exp.core.storage_resolve import _get_experiment_storage
+from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
+from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.checkout import record_run
 from vmn_exp.gitmode.coldstart import DIRTY_OK
@@ -279,6 +280,21 @@ def auto_init(vmn_ctx):
     return err or None
 
 
+# Actions that never write the store (they take no repo lock either).
+READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "import-mlflow",
+                               "watch", "lineage", "importance"})
+
+
+def _open_checked_storage(vcs, params, action):
+    """The experiment storage; a read-only action refuses a configured store
+    that doesn't exist (a mistyped URI) instead of listing nothing."""
+    writer = action not in READ_ONLY_ACTIONS
+    storage = _get_experiment_storage(vcs, params, writer=writer)
+    if not writer:
+        require_store(storage, store_uri(params))
+    return storage
+
+
 @measure_runtime_decorator
 def handle_experiment(vmn_ctx):
     vcs = vmn_ctx.vcs
@@ -296,7 +312,11 @@ def handle_experiment(vmn_ctx):
         if err:
             return err
 
-    storage = _get_experiment_storage(vcs, params)
+    try:
+        storage = _open_checked_storage(vcs, params, action)
+    except ValueError as exc:
+        VMN_LOGGER.error(str(exc))
+        return 1
 
     if action in MANAGE_ACTIONS:
         return experiment_manage(_app_name(vcs, args), storage, args)

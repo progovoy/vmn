@@ -43,6 +43,7 @@ from vmn_exp.ui.responses import (
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
 from vmn_exp.ui.static_files import mount_static
+from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 API_PREFIX = "/api/v1"
@@ -162,7 +163,12 @@ def create_app(
         if ws.kind == "git":
             return None  # None means: use the default path-based reader
         if ws.name not in store_storages:
-            store_storages[ws.name] = workspace_storage(ws)
+            try:
+                storage = workspace_storage(ws)
+                require_store(storage, ws.store)
+                store_storages[ws.name] = storage
+            except ValueError as exc:  # no store there / an unusable one
+                raise HTTPException(404, str(exc))
         return store_storages[ws.name]
 
     def _any_exp_storage(ws):
