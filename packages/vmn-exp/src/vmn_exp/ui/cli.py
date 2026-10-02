@@ -4,6 +4,7 @@
 The server never takes the repo lock — reads are lock-free and mutations run
 as `vmn` CLI subprocesses that acquire it themselves.
 """
+import dataclasses
 import os
 import re
 
@@ -31,7 +32,7 @@ def _workspace_name(path):
     return os.path.basename(os.path.abspath(path)) or "workspace"
 
 
-def build_manager(args):
+def build_manager(args, manager=None):
     """Create the WorkspaceManager for a `vmn-exp ui` invocation.
 
     Sources: every ``--repo`` path, a ``--store`` URI, and — when no
@@ -40,8 +41,8 @@ def build_manager(args):
     """
     from vmn_exp.ui.workspaces import WorkspaceError, WorkspaceManager
 
-    data_dir = args.data_dir or DEFAULT_DATA_DIR
-    manager = WorkspaceManager(data_dir)
+    if manager is None:
+        manager = WorkspaceManager(args.data_dir or DEFAULT_DATA_DIR)
 
     registered_paths = {os.path.realpath(w.path) for w in manager.list() if w.path}
 
@@ -82,11 +83,91 @@ def _add_store_workspace(manager, uri):
     manager.add_store(name, uri)
 
 
+def open_control_plane(cfg):
+    """The control plane a configured server keeps its state in."""
+    from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.control_plane import SQLiteControlPlane
+
+    if not cfg.db:
+        return SQLiteControlPlane.in_data_dir(cfg.data_dir)
+    if cfg.db.startswith("sqlite:///"):
+        return SQLiteControlPlane(cfg.db[len("sqlite:///"):])
+    raise ConfigError(f"Unsupported db {cfg.db!r}: only sqlite:///<path> is available")
+
+
+def seed_workspaces(manager, seeds):
+    """Register config workspaces not yet in the registry (restarts keep edits)."""
+    for seed in seeds:
+        if manager.get(seed.name) is None:
+            manager.add_store(seed.name, seed.store, downloads=seed.downloads,
+                              reconcile_sec=seed.reconcile_sec)
+
+
+def build_server(args, env=None):
+    """``(manager, config, control_plane)``; config and control plane are
+    ``None`` without ``--config``/``--db`` (the standalone server)."""
+    from vmn_exp.ui.config import resolve_config
+    from vmn_exp.ui.workspaces import DbWorkspaceRegistry, WorkspaceManager
+
+    cfg = resolve_config(args, env=env)
+    if cfg is None:
+        return build_manager(args), None, None
+    control_plane = open_control_plane(cfg)
+    manager = WorkspaceManager(cfg.data_dir, registry=DbWorkspaceRegistry(control_plane))
+    seed_workspaces(manager, cfg.workspaces)
+    if getattr(args, "repo", None) or getattr(args, "store", None):
+        build_manager(args, manager)
+    return manager, cfg, control_plane
+
+
+def _oidc_chain(cfg, control_plane, env):
+    from vmn_exp.ui.auth import AuthenticatorChain
+    from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
+    from vmn_exp.ui.config import ConfigError
+
+    oidc = cfg.auth.oidc
+    if oidc is None:
+        return None
+    if not cfg.server.public_url:
+        raise ConfigError("auth.oidc needs server.public_url for its redirect URI")
+    config = OIDCConfig(
+        issuer=oidc.issuer,
+        client_id=oidc.client_id,
+        redirect_uri=cfg.server.public_url.rstrip("/") + "/auth/callback",
+        client_secret=env.get(oidc.client_secret_env) if oidc.client_secret_env else None,
+        groups_claim=oidc.groups_claim,
+        role_mappings=[dataclasses.asdict(m) for m in cfg.auth.role_mappings],
+    )
+    return AuthenticatorChain([OIDCAuthenticator(config, control_plane)])
+
+
+def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
+    """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
+    from vmn_exp.ui.server import create_app
+
+    env = os.environ if env is None else env
+    auth = _oidc_chain(cfg, control_plane, env) if cfg else None
+    host = cfg.server.host if cfg else args.host
+    app = create_app(
+        manager,
+        token=token,
+        read_only=args.read_only,
+        use_index=not args.no_index,
+        bind_host=host,
+        allowed_hosts=getattr(args, "allowed_host", None),
+        auth=auth,
+        **kwargs,
+    )
+    app.state.config = cfg
+    app.state.role_mappings = cfg.auth.role_mappings if cfg else ()
+    return app
+
+
 def handle_ui(args):
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401
 
-        from vmn_exp.ui.server import create_app
+        from vmn_exp.ui.server import create_app  # noqa: F401
     except ImportError:
         VMN_LOGGER.error(
             "The web UI requires the 'ui' extra. Install it with:\n\n"
@@ -94,36 +175,41 @@ def handle_ui(args):
         )
         return 1
 
-    token = args.token or os.environ.get("VMN_UI_TOKEN")
-    if args.host not in LOOPBACK_HOSTS and not token and not args.read_only:
+    from vmn_exp.ui.config import ConfigError
+
+    try:
+        manager, cfg, control_plane = build_server(args)
+    except ConfigError as e:
+        VMN_LOGGER.error(str(e))
+        return 1
+    host = cfg.server.host if cfg else args.host
+    port = cfg.server.port if cfg else args.port
+    token = cfg.token() if cfg else args.token or os.environ.get("VMN_UI_TOKEN")
+    if host not in LOOPBACK_HOSTS and not token and not args.read_only:
         VMN_LOGGER.error(
-            f"Refusing to bind {args.host} beyond localhost without --token: "
+            f"Refusing to bind {host} beyond localhost without --token: "
             "the Host-header allowlist is not authentication, so any host that "
             "can reach this port could forge it and get full read-write access. "
             "Pass --token (or set VMN_UI_TOKEN), pass --read-only to serve reads "
             "only, or bind --host to 127.0.0.1/localhost."
         )
         return 1
-    if args.host not in LOOPBACK_HOSTS and not token:
+    if host not in LOOPBACK_HOSTS and not token:
         VMN_LOGGER.warning(
             "Binding beyond localhost without --token — --read-only keeps mutations "
             "blocked, but the Host-header allowlist is not authentication for reads."
         )
 
-    manager = build_manager(args)
-    app = create_app(
-        manager,
-        token=token,
-        read_only=args.read_only,
-        use_index=not args.no_index,
-        bind_host=args.host,
-        allowed_hosts=getattr(args, "allowed_host", None),
-        background_refresh=True,
-    )
+    try:
+        app = server_app(manager, cfg, control_plane, args, token=token,
+                         background_refresh=True)
+    except ConfigError as e:
+        VMN_LOGGER.error(str(e))
+        return 1
 
-    url = f"http://{args.host}:{args.port}"
+    url = f"http://{host}:{port}"
     VMN_LOGGER.info(f"vmn-exp ui serving {len(manager.list())} workspace(s) at {url}")
-    if not args.no_browser and args.host in ("127.0.0.1", "localhost"):
+    if not args.no_browser and host in ("127.0.0.1", "localhost"):
         import threading
         import webbrowser
 
@@ -131,5 +217,5 @@ def handle_ui(args):
 
     import uvicorn
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0

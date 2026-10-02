@@ -25,11 +25,19 @@ CREATE TABLE IF NOT EXISTS vmn_login_states (
     id TEXT PRIMARY KEY, doc TEXT NOT NULL, expires_at REAL NOT NULL
 );
 """
-_TABLES = {"token": "vmn_api_tokens", "session": "vmn_sessions", "login": "vmn_login_states"}
+# Migration 0003_workspaces: the workspace registry when the server has a DB.
+_WORKSPACES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS vmn_workspaces (
+    id TEXT PRIMARY KEY, doc TEXT NOT NULL
+);
+"""
+_TABLES = {"token": "vmn_api_tokens", "session": "vmn_sessions", "login": "vmn_login_states",
+           "workspace": "vmn_workspaces"}
+_NON_EXPIRING = ("token", "workspace")
 
 
 class ControlPlaneStore:
-    """Key/document storage per kind (``token``, ``session``, ``login``)."""
+    """Key/document storage per kind (``token``, ``session``, ``login``, ``workspace``)."""
 
     def put(self, kind, key, doc, expires_at=None):
         raise NotImplementedError
@@ -54,7 +62,7 @@ class SQLiteControlPlane(ControlPlaneStore):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self._db.executescript(_IDENTITY_SCHEMA)
+        self._db.executescript(_IDENTITY_SCHEMA + _WORKSPACES_SCHEMA)
 
     @classmethod
     def in_data_dir(cls, data_dir):
@@ -62,7 +70,7 @@ class SQLiteControlPlane(ControlPlaneStore):
 
     def put(self, kind, key, doc, expires_at=None):
         table, cols, args = _TABLES[kind], "id, doc", [key, json.dumps(doc)]
-        if kind != "token":
+        if kind not in _NON_EXPIRING:
             cols, args = cols + ", expires_at", args + [expires_at or 0]
         marks = ", ".join("?" * len(args))
         with self._lock:
@@ -91,7 +99,7 @@ class SQLiteControlPlane(ControlPlaneStore):
     def _get(self, kind, key, now):
         sql = f"SELECT doc FROM {_TABLES[kind]} WHERE id = ?"
         args = [key]
-        if kind != "token" and now is not None:
+        if kind not in _NON_EXPIRING and now is not None:
             sql += " AND expires_at > ?"
             args.append(now)
         row = self._db.execute(sql, args).fetchone()

@@ -196,6 +196,11 @@ def _add_ui_parser(subprasers):  # noqa: N802
     pui = subprasers.add_parser(
         "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
     )
+    pui.add_argument("--config", default=None,
+                     help="Server config file (server.yml); flags override its values")
+    pui.add_argument("--db", default=None,
+                     help="Control-plane DB DSN (sqlite:///path; or VMN_UI_DB). "
+                          "Keeps the workspace registry in the DB")
     pui.add_argument("--host", default="127.0.0.1", help="Bind address")
     pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
     pui.add_argument("--allowed-host", action="append", default=None,
