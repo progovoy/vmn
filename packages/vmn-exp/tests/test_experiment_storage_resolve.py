@@ -147,6 +147,7 @@ def test_bucket_env_gives_s3_backend(tmp_path, monkeypatch, _aws_creds):
     """VMN_EXPERIMENT_BUCKET (no dir) → S3 backend."""
     monkeypatch.delenv("VMN_EXPERIMENT_DIR", raising=False)
     monkeypatch.delenv("VMN_WORKING_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)  # no enclosing repo: its .vmn/store stays untouched
     monkeypatch.setenv("VMN_EXPERIMENT_BUCKET", BUCKET)
     monkeypatch.setenv("VMN_EXPERIMENT_PREFIX", PREFIX)
 

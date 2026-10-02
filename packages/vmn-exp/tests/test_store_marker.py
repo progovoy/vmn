@@ -73,6 +73,13 @@ def test_writer_creates_local_marker(tmp_path):
     assert marker["created_at"]
 
 
+def test_local_marker_is_readable_by_other_users(tmp_path):
+    root = str(tmp_path / "store")
+    open_storage(None, root, area="runs")
+    mode = os.stat(os.path.join(root, "store.yml")).st_mode & 0o777
+    assert mode & 0o044 == 0o044
+
+
 def test_local_marker_created_once_under_race(tmp_path):
     root = str(tmp_path / "store")
     seen = []

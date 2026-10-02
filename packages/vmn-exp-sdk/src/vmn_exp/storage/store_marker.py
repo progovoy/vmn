@@ -63,6 +63,7 @@ class LocalRoot:
         try:
             with os.fdopen(fd, "w") as f:
                 f.write(text)
+            os.chmod(tmp, 0o644)
             os.link(tmp, self._path())
         except FileExistsError:
             pass
