@@ -145,7 +145,7 @@ def test_rewind_works_git_free_on_s3(container, capfd):
 
     store = ["--store", f"s3://{BUCKET}/cli"]
     assert vmn_exp_run(["exp", "create", APP, *store])[0] == 0
-    remote = S3SnapshotStorage(BUCKET, prefix="cli")
+    remote = S3SnapshotStorage(BUCKET, prefix="cli/runs")
     verstr = remote.list_snapshots(APP)[-1]["verstr"]
     for step in (1, 2, 3):
         remote.append_log_entry(APP, verstr, "w", {

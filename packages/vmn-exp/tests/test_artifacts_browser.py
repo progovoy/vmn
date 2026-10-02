@@ -7,6 +7,7 @@ import pytest
 from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.storage.areas import local_store_root
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +52,7 @@ def _create_artifact(storage, app, verstr, filename, content):
 
 def test_experiment_detail_includes_structured_artifacts(tmp_path):
     """get_experiment_from_storage should return an 'artifacts' list with name and size."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "model.pt", "x" * 100)
     _create_artifact(
@@ -80,7 +81,7 @@ def test_experiment_detail_includes_structured_artifacts(tmp_path):
 
 def test_experiment_detail_no_artifacts(tmp_path):
     """Experiment with no artifacts returns an empty artifacts list."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
 
     result, err = exp_reader.get_experiment_from_storage(
@@ -94,7 +95,7 @@ def test_experiment_detail_no_artifacts(tmp_path):
 
 def test_experiment_from_storage_includes_structured_artifacts(tmp_path):
     """get_experiment_from_storage also returns structured artifacts."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "weights.bin", "w" * 50)
 
@@ -135,7 +136,7 @@ def _make_client(tmp_path):
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_artifact_download_returns_file(tmp_path):
     """GET /artifacts/{filename} returns the file content."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
     _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "output.csv", "a,b\n1,2\n")
 
@@ -151,7 +152,7 @@ def test_artifact_download_returns_file(tmp_path):
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_artifact_download_not_found(tmp_path):
     """GET /artifacts/{filename} returns 404 for nonexistent files."""
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
     _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
 
     client = _make_client(tmp_path)

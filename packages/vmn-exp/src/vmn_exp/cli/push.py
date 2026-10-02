@@ -22,6 +22,7 @@ from vmn_exp.core.push_run import (
 )
 from vmn_exp.core.storage_resolve import experiment_dir, store_uri
 from vmn_exp.registry.view import registered_runs
+from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.registry import open_store
 
@@ -56,9 +57,9 @@ def _stores(vcs, params):
     root = experiment_dir(vcs, params)
     if not uri or not root:
         raise ValueError(_NO_REMOTE if root else "exp push needs a local experiment dir")
-    target = open_store(uri, subdir="experiments")
+    target = open_store(uri, area=RUNS)
     require_push_target(target)
-    return LocalSnapshotStorage(root, subdir="experiments"), target
+    return LocalSnapshotStorage(root, RUNS), target
 
 
 def _select(local, app_name, refs):

@@ -36,7 +36,7 @@ def _age_run_state(app_layout, verstr, state):
         app_layout.app_name, verstr, RUN_STATE_FILE, yaml.dump(state, sort_keys=False)
     )
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr,
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr,
         RUN_STATE_FILE,
     )
     old = (datetime.datetime.now() - datetime.timedelta(hours=1)).timestamp()

@@ -43,7 +43,7 @@ def _logger():
 
 @pytest.fixture
 def local(tmp_path):
-    st = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save("app", V, meta(V, note="keep me"), {})
     return st
 
@@ -132,7 +132,7 @@ def test_local_refuses_to_store_outside_the_run(local, tmp_path, bad):
 
 
 def test_cached_nested_artifacts_list_through(tmp_path):
-    cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path), "experiments"))
+    cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path), "runs"))
     cached.save("app", V, meta(V), {})
     cached.save_artifact_file("app", V, _src(tmp_path), name="x/y.txt")
     assert [a["name"] for a in cached.list_artifacts("app", V)] == ["x/y.txt"]

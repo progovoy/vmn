@@ -93,7 +93,7 @@ class AzureObjectClient(ObjectClient):
 class AzureSnapshotStorage(S3SnapshotStorage):
     scheme = "az"
 
-    def __init__(self, container_name, prefix="vmn-snapshots", container=None,
+    def __init__(self, container_name, prefix="vmn/snapshots", container=None,
                  if_not_modified=None):
         client = AzureObjectClient(container, if_not_modified)
         super().__init__(container_name, prefix=prefix, client=client)
@@ -129,10 +129,10 @@ def _default_credential():
     return DefaultAzureCredential()
 
 
-def open_azure_store(uri, subdir):
+def open_azure_store(uri, area):
     container_cls, match = _sdk()
     container = _container_client(container_cls, uri.location,
                                   uri.options.get("account_url"))
-    return AzureSnapshotStorage(uri.location, prefix=default_prefix(uri, subdir),
+    return AzureSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
                                 container=container,
                                 if_not_modified=match.IfNotModified)

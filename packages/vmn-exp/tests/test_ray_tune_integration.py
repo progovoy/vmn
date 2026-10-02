@@ -86,7 +86,7 @@ def test_outer_and_inner_run_linkage(container):
     finally:
         recorder.finish()
 
-    storage = open_storage(vmn_root_path=str(container), subdir="experiments")
+    storage = open_storage(root=str(container), area="runs")
     meta, _ = storage.load(APP_NAME, inner_id)
     assert meta.get("parent") == outer_id, (
         f"inner run parent should be outer run id {outer_id!r}, got {meta.get('parent')!r}"
@@ -289,7 +289,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
         recorder.finish()
         ray.shutdown()
 
-    storage = open_storage(vmn_root_path=str(store), subdir="experiments")
+    storage = open_storage(root=str(store), area="runs")
     runs = storage.list_snapshots(APP_NAME)
     # 1 outer run + 2 inner runs (one per grid search value) = 3 total
     assert len(runs) == 3, f"expected 3 runs (1 outer + 2 inner), got {len(runs)}"

@@ -15,6 +15,7 @@ from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core import index as experiment_index
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -27,7 +28,7 @@ def _ts(i):
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(root=local_store_root(str(root)), area="runs")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -203,7 +204,7 @@ def s3_workspace(tmp_path, monkeypatch):
         manager = WorkspaceManager(data_dir)
         manager.add_store("ws", "s3://vmn-bucket/persisted")
         yield (lambda: TestClient(create_app(manager))), S3SnapshotStorage(
-            "vmn-bucket", prefix="persisted"
+            "vmn-bucket", prefix="persisted/runs"
         ), data_dir
 
 

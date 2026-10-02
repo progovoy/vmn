@@ -41,7 +41,7 @@ def _image(tmp_path, monkeypatch):
 def store(tmp_path, monkeypatch):
     _image(tmp_path, monkeypatch)
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path / "store"))
-    return LocalSnapshotStorage(str(tmp_path / "store"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
 
 
 def _file(tmp_path, name, content):

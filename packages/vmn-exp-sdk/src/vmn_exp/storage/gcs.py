@@ -82,7 +82,7 @@ def _chunks(blob, size):
 class GCSSnapshotStorage(S3SnapshotStorage):
     scheme = "gs"
 
-    def __init__(self, bucket, prefix="vmn-snapshots", client=None):
+    def __init__(self, bucket, prefix="vmn/snapshots", client=None):
         if client is None:
             client = _default_client()
         super().__init__(bucket, prefix=prefix, client=GCSObjectClient(client, bucket))
@@ -105,7 +105,7 @@ def _default_client(endpoint_url=None):
     return storage.Client()
 
 
-def open_gcs_store(uri, subdir):
+def open_gcs_store(uri, area):
     client = _default_client(uri.options.get("endpoint_url"))
-    return GCSSnapshotStorage(uri.location, prefix=default_prefix(uri, subdir),
+    return GCSSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
                               client=client)

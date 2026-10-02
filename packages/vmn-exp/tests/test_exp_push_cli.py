@@ -10,6 +10,7 @@ from vmn_exp.core import writer
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.storage.uri import s3_uri
+from vmn_exp.storage.areas import local_store_root
 
 URI = s3_uri(BUCKET, PREFIX)
 FOREIGN = "2025-05-05T00:00:00Z"
@@ -48,7 +49,7 @@ def _push(app_layout, *args):
 
 
 def _local(app_layout):
-    return LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
+    return LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
 
 
 def _lines(capfd):

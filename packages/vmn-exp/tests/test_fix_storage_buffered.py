@@ -113,7 +113,7 @@ def test_reads_do_not_create_a_buffer_dir():
 
     storage = _get_experiment_storage(None, dict(PARAMS))
     storage.list_snapshots("app")
-    assert not os.path.exists(storage._local.vmn_root_path)
+    assert not os.path.exists(storage._local.root)
 
 
 def test_a_storage_with_nothing_pending_is_not_kept_alive():

@@ -30,7 +30,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 
 
 def _storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _use(version, app, verstr, ts, writer="w1", pos=0):

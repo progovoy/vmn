@@ -162,6 +162,7 @@ def workspace_storage(ws):
     """A ``store`` workspace's experiment storage, else None."""
     if ws.kind != "store":
         return None
+    from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
 
-    return open_storage(ws.store, subdir="experiments")
+    return open_storage(ws.store, area=RUNS)

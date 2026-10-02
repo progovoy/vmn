@@ -4,7 +4,7 @@
     python packages/vmn-exp/tests/uiload/worker.py --root R --app A --run-dir D --jobs-file F [--heartbeat-sec S]
 
 Git-free: runs record against a stub exported snapshot (``VMN_SNAPSHOT_METADATA``)
-into ``VMN_EXPERIMENT_DIR=<root>``, i.e. ``<root>/.vmn/<app>/experiments/`` — the
+into ``VMN_EXPERIMENT_DIR=<root>/.vmn/store``, i.e. ``.vmn/store/runs/<app>/`` — the
 directory ``vmn-exp ui --repo <root>`` serves. The worker sets that env itself
 from ``--root``; :func:`prepare_snapshot_env` builds the same env for launchers.
 
@@ -55,7 +55,7 @@ def write_snapshot_metadata(app, run_dir):
 def snapshot_env_vars(root, app, run_dir):
     return {
         "VMN_SNAPSHOT_METADATA": write_snapshot_metadata(app, run_dir),
-        "VMN_EXPERIMENT_DIR": os.path.abspath(root),
+        "VMN_EXPERIMENT_DIR": os.path.join(os.path.abspath(root), ".vmn", "store"),
         "VMN_CAPTURE_ENV": "0",
         # Teardown SIGTERMs job processes; don't let a hung store hold one for
         # the SDK's default minute of final-upload waiting.
@@ -94,7 +94,7 @@ def killed_command(job, root, app, run_dir, env, heartbeat_sec=1):
     assert env.get("VMN_SNAPSHOT_METADATA"), "use prepare_snapshot_env()"
     return [
         sys.executable, "-m", "vmn_exp.cli", "run", app, "--name", job["job_id"],
-        "--experiment-dir", root, "--no-env",
+        "--experiment-dir", os.path.join(root, ".vmn", "store"), "--no-env",
         "--heartbeat-interval", str(max(1, round(heartbeat_sec))),
         "--", sys.executable, CHILD, "--job-id", job["job_id"], "--run-dir", run_dir,
         "--steps", str(job.get("steps") or 100000),

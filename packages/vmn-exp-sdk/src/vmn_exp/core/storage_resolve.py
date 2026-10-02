@@ -9,7 +9,8 @@ Single source of truth for the resolution order shared by:
 The local root (highest wins):
 1. Explicit ``dir`` argument (the --dir flag)
 2. ``VMN_EXPERIMENT_DIR`` environment variable
-3. ``repo_root`` argument, or auto-detected git/.vmn root from cwd
+3. ``repo_root`` argument, or auto-detected git/.vmn root from cwd: its
+   repo-local store ``<repo>/.vmn/store``
 
 It fronts the remote store, if any: ``store`` (--store) >
 ``VMN_EXPERIMENT_STORE`` > conf ``experiment.storage.uri``, else the
@@ -19,6 +20,8 @@ a local root the store is used directly; a ``file://`` store is the root.
 from __future__ import annotations
 
 import os
+
+from vmn_exp.storage.areas import DEFAULT_ROOT, RUNS, local_store_root
 
 
 def resolve_experiment_storage(
@@ -49,7 +52,7 @@ def resolve_experiment_storage(
 
     root = dir or os.environ.get("VMN_EXPERIMENT_DIR")
     if not root and repo_root is not False:
-        root = repo_root if repo_root is not None else _try_repo_root()
+        root = _repo_store(repo_root if repo_root is not None else _try_repo_root())
 
     params = {
         "store": store,
@@ -61,8 +64,9 @@ def resolve_experiment_storage(
     return _open(root, params)
 
 
-def store_uri(params, default_prefix="vmn-experiments"):
-    """The store URI *params* name: ``store``, else the bucket shorthand."""
+def store_uri(params, default_prefix=DEFAULT_ROOT):
+    """The store URI *params* name: ``store``, else the bucket shorthand
+    (its prefix is the store root)."""
     from vmn_exp.storage.uri import s3_uri
 
     if params.get("store"):
@@ -103,7 +107,7 @@ def _open(root, params):
     from vmn_exp.storage.open import open_storage
 
     params = drop_remote_if_offline(params, root)
-    return open_storage(store_uri(params), root, subdir="experiments", buffer_logs=True)
+    return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True)
 
 
 def _try_repo_root() -> "str | None":
@@ -117,10 +121,15 @@ def _try_repo_root() -> "str | None":
         return None
 
 
+def _repo_store(repo_root):
+    return local_store_root(repo_root) if repo_root else None
+
+
 def experiment_dir(vcs, params):
-    """The local store root: ``--dir``, ``$VMN_EXPERIMENT_DIR``, else the repo root."""
+    """The local store root: ``--dir``, ``$VMN_EXPERIMENT_DIR``, else the
+    repo-local store."""
     return (params.get("experiment_dir") or os.environ.get("VMN_EXPERIMENT_DIR")
-            or (vcs.vmn_root_path if vcs else None))
+            or _repo_store(vcs.vmn_root_path if vcs else None))
 
 
 def _get_experiment_storage(vcs, params):
@@ -136,6 +145,6 @@ def add_storage_flags(parser):
     parser.add_argument("--bucket", default=None,
                         help="S3 bucket name (shorthand for --store s3://BUCKET/PREFIX)")
     parser.add_argument("--prefix", default=None,
-                        help="S3 key prefix (default: vmn-experiments)")
+                        help="S3 key prefix: the store root (default: vmn)")
     parser.add_argument("--endpoint-url", dest="endpoint_url", default=None,
                         help="Custom S3 endpoint URL")

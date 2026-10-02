@@ -61,12 +61,12 @@ def _container(tmp_path, monkeypatch):
 
 
 def _local_runs(root):
-    local = open_storage(vmn_root_path=str(root), subdir="experiments")
+    local = open_storage(root=str(root), area="runs")
     return local.list_snapshots(APP)
 
 
 def _bucket_runs():
-    storage = open_storage(s3_uri(BUCKET, "vmn-experiments"), subdir="experiments")
+    storage = open_storage(s3_uri(BUCKET, "vmn"), area="runs")
     return storage.list_snapshots(APP)
 
 

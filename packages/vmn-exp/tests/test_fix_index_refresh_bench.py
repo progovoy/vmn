@@ -15,7 +15,7 @@ RUNS = 2000
 
 
 def _seed(root):
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, "runs", APP)
     for i in range(RUNS):
         verstr = f"0.0.1-dev.abc1234.def5678.r{i}"
         folder = os.path.join(base, verstr)
@@ -44,7 +44,7 @@ class CountingStorage(LocalSnapshotStorage):
 
 def test_a_no_change_refresh_lists_no_finished_record(tmp_path):
     _seed(str(tmp_path))
-    storage = CountingStorage(str(tmp_path), subdir="experiments")
+    storage = CountingStorage(str(tmp_path), area="runs")
     index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "idx.sqlite"),
                            full_sweep_sec=300)
     index.refresh()

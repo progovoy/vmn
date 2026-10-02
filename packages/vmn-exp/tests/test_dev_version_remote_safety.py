@@ -62,7 +62,7 @@ def test_goto_restores_a_safety_snapshot_from_the_remote_store(app_layout, capfd
     assert _read(path) == "state A"
 
     # Another checkout: no local copy of the safety snapshot.
-    shutil.rmtree(os.path.join(app_layout.repo_path, ".vmn", app, "snapshots"))
+    shutil.rmtree(os.path.join(app_layout.repo_path, ".vmn", "store", "snapshots", app))
     subprocess.run(["git", "checkout", "."], cwd=app_layout.repo_path, check=True)
 
     assert _goto(app, version=saved) == 0

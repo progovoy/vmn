@@ -98,8 +98,8 @@ def s3():
 
 def _bucket_runs():
     return [m["verstr"] for m in open_storage(
-        s3_uri(BUCKET, "vmn-experiments"),
-        subdir="experiments",
+        s3_uri(BUCKET, "vmn"),
+        area="runs",
     ).list_snapshots("trainer")]
 
 
@@ -111,8 +111,8 @@ def test_start_run_in_a_pod_records_straight_to_the_bucket(tmp_path, monkeypatch
 
     assert _bucket_runs() == [run.id]
     log = open_storage(
-        s3_uri(BUCKET, "vmn-experiments"),
-        subdir="experiments",
+        s3_uri(BUCKET, "vmn"),
+        area="runs",
     ).load_merged_log("trainer", run.id)
     assert any(e.get("values", {}).get("loss") == 0.25 for e in log)
 
@@ -125,7 +125,7 @@ def test_start_run_with_a_scratch_dir_also_syncs_to_the_bucket(tmp_path, monkeyp
         run.log_metric("loss", 0.5)
 
     assert _bucket_runs() == [run.id]
-    assert (tmp_path / "scratch" / ".vmn" / "trainer" / "experiments").is_dir()
+    assert (tmp_path / "scratch" / "runs" / "trainer").is_dir()
 
 
 def test_git_less_cli_create_records_to_the_env_bucket(tmp_path, monkeypatch, s3):

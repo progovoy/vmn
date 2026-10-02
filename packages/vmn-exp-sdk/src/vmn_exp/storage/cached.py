@@ -32,6 +32,14 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
         self._presence = RemotePresence(local_storage, remote_storage)
         self._init_logs()
 
+    @property
+    def area(self):
+        return self._local.area
+
+    def _open_area(self, name):
+        remote = self._remote.in_area(name) if self._remote else None
+        return CachedSnapshotStorage(self._local.in_area(name), remote)
+
     def _local_patches(self, patches):
         """What of a record's body the local copy keeps: all of it, unless
         the local copy is only a log buffer."""

@@ -5,7 +5,7 @@ import subprocess
 
 from exp_helpers import _PY, _bootstrap, _exp, _storage
 
-from vmn_exp.core.code_store import code_app
+from vmn_exp.core.code_store import code_storage
 
 # Reads the tracked value.txt (edited, uncommitted, at the original run) and
 # records it: a rerun reporting the original value ran the original code.
@@ -40,7 +40,7 @@ def run_names(app_layout):
 
 
 def code_objects(app_layout):
-    return set(_storage(app_layout).list_record_names(code_app(app_layout.app_name)))
+    return set(code_storage(_storage(app_layout)).list_record_names(app_layout.app_name))
 
 
 def meta(app_layout, verstr):

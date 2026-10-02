@@ -1,11 +1,10 @@
-"""Server-less trial claims: ``create_exclusive`` slots under ``vmn-sweeps``."""
+"""Server-less trial claims: ``create_exclusive`` slots in the ``sweeps`` area."""
+import os
 import threading
 
 import pytest
 
-from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.sweep.claims import (
-    SWEEP_APP,
     attach_run,
     claim_next_trial,
     claim_retry,
@@ -21,7 +20,7 @@ SWEEP = "0.0.1-dev.aaaaaaa.bbbbbbb"
 
 
 def _local(tmp_path):
-    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(None, str(tmp_path), area="runs")
 
 
 def _grid(run_cap=None, n_values=6):
@@ -43,8 +42,12 @@ def _drain(storage, spec, agent, out, sweep=SWEEP):
         out.append(claim)
 
 
-def test_the_sweep_pseudo_app_is_reserved():
-    assert is_reserved_app(SWEEP_APP)
+def test_slots_live_in_the_sweeps_area_scoped_by_app_key_and_sweep(tmp_path):
+    storage = _local(tmp_path)
+    claim_next_trial(storage, "root/svc", SWEEP, _grid())
+    slot = tmp_path / "sweeps" / f"root-svc~{SWEEP}" / "t0" / "metadata.yml"
+    assert os.path.isfile(slot)
+    assert storage.list_apps() == []
 
 
 def test_sequential_claims_walk_the_grid_then_stop(tmp_path):

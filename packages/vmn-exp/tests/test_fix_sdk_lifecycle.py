@@ -112,7 +112,7 @@ def test_start_run_works_in_a_container_without_git(container):
 
     assert run.app_name == "trainer"
     assert run.id.startswith("0.0.1-dev.abc1234.def5678")
-    storage = open_storage(vmn_root_path=str(container), subdir="experiments")
+    storage = open_storage(root=str(container), area="runs")
     assert [m["verstr"] for m in storage.list_snapshots("trainer")] == [run.id]
     state = load_run_state(storage, "trainer", run.id)
     assert state["exit_code"] == 0

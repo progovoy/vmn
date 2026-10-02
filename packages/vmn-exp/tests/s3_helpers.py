@@ -32,7 +32,7 @@ def mocked_bucket(monkeypatch):
 def s3_storage():
     from vmn_exp.storage.s3 import S3SnapshotStorage
 
-    return S3SnapshotStorage(BUCKET, prefix=PREFIX)
+    return S3SnapshotStorage(BUCKET, prefix=f"{PREFIX}/runs")
 
 
 def cached_host(tmp_path, name):
@@ -40,8 +40,8 @@ def cached_host(tmp_path, name):
 
     return open_storage(
         s3_uri(BUCKET, PREFIX),
-        vmn_root_path=str(tmp_path / name),
-        subdir="experiments",
+        root=str(tmp_path / name),
+        area="runs",
     )
 
 

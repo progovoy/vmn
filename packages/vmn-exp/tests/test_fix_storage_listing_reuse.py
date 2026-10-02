@@ -16,7 +16,7 @@ HOUR_NS = 3600 * 10**9
 
 @pytest.fixture
 def storage(tmp_path):
-    st = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    st = LocalSnapshotStorage(str(tmp_path), area="runs")
     for i in range(3):
         verstr = f"0.0.1-dev.abc.r{i}"
         st.save(APP, verstr, {"verstr": verstr, "timestamp": f"t{i}"}, {})

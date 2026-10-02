@@ -28,7 +28,7 @@ class _CountingStorage(CachedSnapshotStorage):
     """A real local store that counts how log lines reach it."""
 
     def __init__(self, root):
-        super().__init__(LocalSnapshotStorage(root, subdir="experiments"))
+        super().__init__(LocalSnapshotStorage(root, area="runs"))
         self.batches = []
         self.single_appends = 0
 
@@ -55,7 +55,7 @@ def _open_run(storage, heartbeat=60):
 
 
 def _logged_steps(storage):
-    log = LocalSnapshotStorage(storage._local.vmn_root_path, "experiments")
+    log = LocalSnapshotStorage(storage._local.root, "runs")
     entries = log.load_merged_log(APP, VERSTR)
     return [e["step"] for e in entries if e.get("type") == "metrics"]
 
@@ -130,7 +130,7 @@ from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.run import Run
 log_buffer.FLUSH_INTERVAL_SEC = 3600
-st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], subdir="experiments"))
+st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
 run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600)
 run._open()
 for step in range(25):
@@ -146,7 +146,7 @@ def _spawn(storage, tmp_path, mode):
     marker = str(tmp_path / "marker")
     env = dict(os.environ, PYTHONPATH=_SRC_PATH)
     proc = subprocess.Popen(
-        [_PY, "-c", _SCRIPT, storage._local.vmn_root_path, marker, mode],
+        [_PY, "-c", _SCRIPT, storage._local.root, marker, mode],
         env=env,
     )
     deadline = time.monotonic() + 60
@@ -176,7 +176,7 @@ class _AlwaysFailingStorage(CachedSnapshotStorage):
     """A store whose log writes always fail, like a disk that stays full."""
 
     def __init__(self, root):
-        super().__init__(LocalSnapshotStorage(root, subdir="experiments"))
+        super().__init__(LocalSnapshotStorage(root, area="runs"))
         self.attempts = 0
 
     def append_log_entries(self, app_name, verstr, writer_id, entries):

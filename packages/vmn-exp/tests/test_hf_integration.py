@@ -362,7 +362,7 @@ def test_real_hf_trainer_autologs(tmp_path, monkeypatch):
     # -- read back the recorded run -------------------------------------------
     from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 
-    storage = LocalSnapshotStorage(str(exp_dir), subdir="experiments")
+    storage = LocalSnapshotStorage(str(exp_dir), area="runs")
     detail = get_run("hf_autolog_test", verstr, storage=storage)
 
     # series["train/loss"]: 2 logging steps → 2 step entries
@@ -440,7 +440,7 @@ def test_vmn_callback_log_checkpoints_uploads_saved_checkpoint_dir(
     finally:
         hf_mod._vmn_callback_class = None
 
-    storage = LocalSnapshotStorage(str(exp_dir), subdir="experiments")
+    storage = LocalSnapshotStorage(str(exp_dir), area="runs")
     artifacts = get_run("hf_ckpt_test", run.id, storage=storage)["artifacts"]
     paths = [a["name"] for a in artifacts]
     assert "checkpoint-2/model.bin" in paths

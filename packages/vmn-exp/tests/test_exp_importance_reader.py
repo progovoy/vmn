@@ -9,7 +9,7 @@ APP = "app"
 
 
 def _storage(tmp_path):
-    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(root=str(tmp_path), area="runs")
 
 
 def _run(storage, i, loss, **params):

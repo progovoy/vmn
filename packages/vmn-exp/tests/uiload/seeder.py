@@ -2,7 +2,7 @@
 
     seed(root, runs=100_000, sweeps=200, inner_per_sweep=50, ...) -> counts
 
-writes ``<root>/.vmn/<app>/experiments/<verstr>/`` records shaped exactly like
+writes ``<root>/.vmn/store/runs/<app>/<verstr>/`` records shaped exactly like
 the SDK's git-free runs (see :mod:`uiload.seed_records`), sharded over worker
 processes. Every run is a pure function of ``(rng_seed, index)``, so the counts
 do not depend on *workers*. Seed into a fresh root: an existing record is an error.
@@ -26,7 +26,7 @@ SHARDS_PER_WORKER = 4
 
 
 def experiments_dir(root, app):
-    return os.path.join(root, ".vmn", app, "experiments")
+    return os.path.join(root, ".vmn", "store", "runs", app)
 
 
 def metadata_yaml(app, meta):

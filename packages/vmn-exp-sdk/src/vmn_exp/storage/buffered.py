@@ -21,6 +21,7 @@ import time
 import uuid
 
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
+from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
@@ -47,17 +48,20 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def __init__(
         self,
         remote,
-        subdir="experiments",
+        area=RUNS,
         flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
     ):
         # Created on the first write, so a read-only command leaves nothing behind.
         self._buffer_root = os.path.join(
             tempfile.gettempdir(), f"vmn-log-buffer-{uuid.uuid4().hex}"
         )
-        super().__init__(LocalSnapshotStorage(self._buffer_root, subdir=subdir), remote)
+        super().__init__(LocalSnapshotStorage(self._buffer_root, area), remote)
         self._flush_interval_sec = flush_interval_sec
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
+
+    def _open_area(self, name):
+        return BufferedRemoteStorage(self._remote.in_area(name), name, self._flush_interval_sec)
 
     def load_record(self, app_name, verstr):
         return self._remote.load_record(app_name, verstr)

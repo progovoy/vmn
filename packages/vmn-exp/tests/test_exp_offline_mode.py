@@ -14,6 +14,7 @@ from vmn_exp.core.storage_resolve import (
 from vmn_exp.core.writer import allocate_run_verstr
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.uri import s3_uri
+from vmn_exp.storage.areas import local_store_root
 
 URI = s3_uri(BUCKET, PREFIX)
 CODE = "0.0.1-dev.abc1234.0000001"
@@ -86,13 +87,13 @@ def test_offline_sdk_start_run_with_unreachable_store_records_locally(
     )
     with start_run(app_layout.app_name) as run:
         run.log_metric("loss", 1.0)
-    local = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
     assert local.exists(app_layout.app_name, run.id)
     assert run.id.endswith("." + writer.get_writer_id())
 
 
 def test_offline_code_object_stays_local(app_layout, monkeypatch, offline):
-    from vmn_exp.core.code_store import code_app
+    from vmn_exp.core.code_store import code_storage
     from vmn_exp.sdk import start_run
 
     _bootstrap(app_layout)
@@ -100,9 +101,9 @@ def test_offline_code_object_stays_local(app_layout, monkeypatch, offline):
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", URI)
     with start_run(app_layout.app_name) as run:
         pass
-    local = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
     meta = local.load_metadata(app_layout.app_name, run.id)
-    assert local.exists(code_app(app_layout.app_name), meta["code"])
+    assert code_storage(local).exists(app_layout.app_name, meta["code"])
     assert raw_keys() == []
 
 
@@ -116,25 +117,25 @@ def _claim_run(storage, suffix_kw):
 
 def test_offline_run_names_carry_writer_suffix(tmp_path, monkeypatch, offline):
     monkeypatch.setenv("HOSTNAME", "laptop")
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     names = [_claim_run(local, {}) for _ in range(2)]
     assert names == [f"{CODE}.laptop", f"{CODE}.laptop.2"]
 
 
 def test_allocate_suffix_none_ignores_writer_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod1")
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     names = [_claim_run(local, {"suffix": None}) for _ in range(2)]
     assert names == [CODE, f"{CODE}.r2"]
 
 
 def test_allocate_explicit_suffix(tmp_path):
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     names = [_claim_run(local, {"suffix": "w1"}) for _ in range(2)]
     assert names == [f"{CODE}.w1", f"{CODE}.w1.2"]
 
 
 def test_online_default_keeps_writer_env_suffix(tmp_path, monkeypatch):
     monkeypatch.setenv("VMN_WRITER_ID", "pod1")
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     assert _claim_run(local, {}) == f"{CODE}.pod1"

@@ -40,7 +40,7 @@ def _stored_snapshot(app_layout, capfd, store, content):
 
 
 def _store_records(tmp_path, app_layout):
-    base = tmp_path / "store" / ".vmn" / app_layout.app_name / "snapshots"
+    base = tmp_path / "store" / "snapshots" / app_layout.app_name
     return sorted(e.name for e in base.iterdir() if not e.name.startswith("."))
 
 

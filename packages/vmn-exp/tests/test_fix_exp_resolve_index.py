@@ -39,7 +39,7 @@ REFS = [
 
 def _write(app_layout, verstr, timestamp):
     path = os.path.join(
-        app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr
+        app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     os.makedirs(path, exist_ok=True)
     meta = {"verstr": verstr, "code_verstr": verstr, "timestamp": timestamp}

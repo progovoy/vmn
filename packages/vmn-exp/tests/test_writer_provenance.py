@@ -6,12 +6,13 @@ import tempfile
 import yaml
 
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 
 
 def _make_storage(base_dir, app_name, verstr):
-    storage = LocalSnapshotStorage(base_dir)
+    storage = LocalSnapshotStorage(local_store_root(base_dir))
     safe_verstr = verstr.replace("+", "_plus_")
-    snap_dir = os.path.join(base_dir, ".vmn", app_name, "snapshots", safe_verstr)
+    snap_dir = os.path.join(base_dir, ".vmn", "store", "snapshots", app_name, safe_verstr)
     os.makedirs(snap_dir, exist_ok=True)
     return storage, snap_dir
 

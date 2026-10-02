@@ -10,6 +10,7 @@ import pytest
 from moto import mock_aws
 
 from exp_helpers import _experiment, _goto, _init_app, _run_vmn_init, _stamp_app, extract_dev_verstr
+from vmn_exp.storage.areas import local_store_root
 
 BUCKET = "goto-exp-bkt"
 # No key prefix: experiments land under ``vmn-experiments/`` and snapshots
@@ -62,7 +63,7 @@ def _recorded_run(app_layout, capfd):
 
 
 def _local_experiments(app_layout, app):
-    return os.path.join(app_layout.repo_path, ".vmn", app, "experiments")
+    return os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app)
 
 
 def _spy_remote_loads(monkeypatch):
@@ -92,7 +93,7 @@ def test_goto_on_a_no_code_run_refuses_cleanly(app_layout, capfd, s3):
     from vmn_exp.storage.local import LocalSnapshotStorage
 
     app, _, verstr = _recorded_run(app_layout, capfd)
-    local = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
     meta, patches = local.load(app, verstr)
     meta.pop("base_commit")
     meta["imported_from"] = {"tool": "mlflow", "run_id": "abc123"}

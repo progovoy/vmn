@@ -13,6 +13,7 @@ import pytest
 from exp_helpers import _bootstrap, _storage
 
 from vmn_exp.sdk import start_run
+from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 
@@ -45,7 +46,7 @@ def _dirty(app_layout):
 
 
 def _online(app_layout):
-    return open_storage(URI, app_layout.repo_path, subdir="experiments")
+    return open_storage(URI, local_store_root(app_layout.repo_path), area="runs")
 
 
 def _run(app_layout, storage):
@@ -54,13 +55,13 @@ def _run(app_layout, storage):
 
 
 def _remote_code_is_complete(app_layout, verstr):
-    reader = open_storage(URI, None, subdir="experiments")
+    reader = open_storage(URI, None, area="runs")
     meta, patches = reader.load(app_layout.app_name, verstr)
     return "code_missing" not in meta and bool(patches.get("untracked_files"))
 
 
 def _code_puts(calls):
-    return [p["Key"] for op, p in calls if op == "PutObject" and "/vmn-code-" in p["Key"]]
+    return [p["Key"] for op, p in calls if op == "PutObject" and "/code/" in p["Key"]]
 
 
 def test_code_stored_locally_only_is_uploaded_on_next_online_create(app_layout):
@@ -80,7 +81,7 @@ def test_retry_after_remote_code_save_failure_uploads_code(app_layout, monkeypat
     failures = []
 
     def flaky_save(self, app_name, verstr, metadata, patches):
-        if app_name.startswith("vmn-code/") and not failures:
+        if self.area == "code" and not failures:
             failures.append(verstr)
             raise RuntimeError("transient S3 error")
         return real_save(self, app_name, verstr, metadata, patches)

@@ -94,7 +94,7 @@ def clock(monkeypatch):
 
 @pytest.fixture
 def st(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 @pytest.fixture

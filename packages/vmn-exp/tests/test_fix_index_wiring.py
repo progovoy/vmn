@@ -53,7 +53,7 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=True)
     assert [r["metrics"]["loss"] for r in rows] == [0.4, 0.2]
 
-    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
+    base = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name)
     assert os.path.isfile(os.path.join(base, ".index.sqlite"))
     status = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
@@ -73,7 +73,7 @@ def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
 
     _bootstrap(app_layout)
     _create(app_layout, "--metrics", "loss=0.4")
-    base = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments")
+    base = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name)
 
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=False)
     assert [r["metrics"]["loss"] for r in rows] == [0.4]

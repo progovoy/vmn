@@ -12,7 +12,7 @@ from vmn_exp.core.index import ExperimentIndex
 
 @pytest.fixture
 def storage(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _record(storage, i):

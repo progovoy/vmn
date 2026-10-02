@@ -44,7 +44,7 @@ def _bucket(monkeypatch):
 
 def _local_only(tmp_path, name="a", **kw):
     """A run recorded under host *name*'s root with no remote configured."""
-    local = LocalSnapshotStorage(str(tmp_path / name), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path / name), area="runs")
     local.save(APP, X, meta(X, **kw), {})
     return cached_host(tmp_path, name)
 

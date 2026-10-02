@@ -21,6 +21,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core import status as st
 from vmn_exp.sdk import start_run
+from vmn_exp.storage.areas import local_store_root
 
 NOW = datetime.datetime(2026, 9, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
 
@@ -84,7 +85,7 @@ def test_status_fields_measure_staleness_on_the_store_clock():
 
 
 def test_observed_at_is_read_from_a_local_store(tmp_path):
-    storage = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save("app", "v1", {"verstr": "v1"}, {})
     storage.save_file("app", "v1", st.RUN_STATE_FILE, "state: running\n")
 
@@ -157,8 +158,8 @@ class _StallingRemote:
 
 def test_a_stalled_remote_put_does_not_delay_local_heartbeats(app_layout, tmp_path):
     _bootstrap(app_layout)
-    local = LocalSnapshotStorage(app_layout.repo_path, subdir="experiments")
-    remote = _StallingRemote(LocalSnapshotStorage(str(tmp_path), subdir="remote"))
+    local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
+    remote = _StallingRemote(LocalSnapshotStorage(str(tmp_path), area="remote"))
     storage = CachedSnapshotStorage(local, remote)
 
     run = start_run(app_layout.app_name, storage=storage, heartbeat_interval_sec=0.05)

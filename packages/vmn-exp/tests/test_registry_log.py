@@ -23,7 +23,7 @@ from vmn_exp.registry.log import (
 # ---------------------------------------------------------------------------
 
 def _local(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="registry")
+    return LocalSnapshotStorage(str(tmp_path), area="registry")
 
 
 def _make_model(storage, model):

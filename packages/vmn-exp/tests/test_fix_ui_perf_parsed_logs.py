@@ -31,7 +31,7 @@ def _metric(i, **values):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    s = open_storage(root=str(tmp_path), area="runs")
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": _ts(0), "type": "create", "params": {"lr": 0.1}})
     return s

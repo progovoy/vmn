@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The local-disk snapshot/experiment backend: ``.vmn/<app>/<subdir>/<verstr>/``."""
+"""The local-disk backend: ``<root>/<area>/<app key>/<verstr>/``."""
 import json
 import os
 import shutil
@@ -10,6 +10,7 @@ import yaml
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.record_files import read_file, read_file_from
+from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
 from vmn_exp.storage.files import (
     INDEX_CACHE_FILE,
@@ -51,25 +52,29 @@ def _dir_sig(entry):
 
 
 class LocalSnapshotStorage(SnapshotStorage):
-    def __init__(self, vmn_root_path, subdir="snapshots"):
-        self.vmn_root_path = vmn_root_path
-        self._subdir = subdir
+    def __init__(self, root, area=SNAPSHOTS):
+        self.root = root
+        self.area = area
         self._listings = RecordListings()
         self._identity = None
 
+    def _open_area(self, name):
+        return LocalSnapshotStorage(self.root, name)
+
+    def _area_dir(self):
+        return os.path.join(self.root, self.area)
+
     def _snapshot_base_dir(self, app_name):
-        app_dir = checked_app_path(app_name).replace("/", os.sep)
-        return os.path.join(self.vmn_root_path, ".vmn", app_dir, self._subdir)
+        return os.path.join(self._area_dir(), app_key(checked_app_path(app_name)))
 
     def _snapshot_dir(self, app_name, verstr):
         return os.path.join(self._snapshot_base_dir(app_name), safe_verstr(verstr))
 
     def _ensure_base_dir(self, app_name):
-        """The base dir, ignoring itself: the repo-level rule vmn commits at
-        init only matches one level deep, which misses ``root/svc`` apps."""
+        """The base dir, under a root whose one ``.gitignore`` ignores it all."""
         base = self._snapshot_base_dir(app_name)
         Path(base).mkdir(parents=True, exist_ok=True)
-        ignore = os.path.join(base, ".gitignore")
+        ignore = os.path.join(self.root, ".gitignore")
         if not os.path.exists(ignore):
             atomic_write(ignore, "*\n")
         return base
@@ -151,13 +156,14 @@ class LocalSnapshotStorage(SnapshotStorage):
         ]
 
     def _app_keys(self):
-        """Every ``.vmn/<app>/`` holding this storage's subdir (``root/svc`` nested)."""
-        vmn_dir = os.path.join(self.vmn_root_path, ".vmn")
-        for dirpath, dirnames, _ in os.walk(vmn_dir):
-            if dirpath != vmn_dir and self._subdir in dirnames:
-                yield os.path.relpath(dirpath, vmn_dir).replace(os.sep, "/")
-                dirnames.remove(self._subdir)
-            dirnames[:] = [d for d in dirnames if d != "branch_conf" and d[0] != "."]
+        area_dir = self._area_dir()
+        if not os.path.isdir(area_dir):
+            return []
+        return [e.name for e in os.scandir(area_dir)
+                if e.is_dir() and not e.name.startswith(".")]
+
+    def _app_name_of(self, key):
+        return app_name_of(key)
 
     def list_verstrs(self, app_name):
         return [unsafe_verstr(entry.name) for entry in self._record_dirs(app_name)]
@@ -231,17 +237,17 @@ class LocalSnapshotStorage(SnapshotStorage):
         its files some other way."""
         if type(self) is not LocalSnapshotStorage:
             return None
-        return (self.vmn_root_path, self._subdir)
+        return (self.root, self.area)
 
     def cache_identity(self):
         # Resolved once: every index lookup asks, and realpath lstat-s each
         # path component.
         if self._identity is None:
-            self._identity = ("local", os.path.realpath(self.vmn_root_path), self._subdir)
+            self._identity = ("local", os.path.realpath(self.root), self.area)
         return self._identity
 
     def index_cache_path(self, app_name):
-        """Inside the base dir, which ignores itself; None before any record."""
+        """Inside the base dir; None before any record."""
         if not os.path.isdir(self._snapshot_base_dir(app_name)):
             return None
         return os.path.join(self._ensure_base_dir(app_name), INDEX_CACHE_FILE)

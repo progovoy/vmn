@@ -7,6 +7,7 @@ import yaml
 from vmn_exp.snapshot import open_storage
 from vmn_exp.core.refs import resolve_parent
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 RUN = "0.0.1-dev.aaaa111.bbbb222"
@@ -18,11 +19,11 @@ def _init_logger():
 
 
 def _storage_with_run(tmp_path):
-    path = os.path.join(tmp_path, ".vmn", APP, "experiments", RUN)
+    path = os.path.join(tmp_path, ".vmn", "store", "runs", APP, RUN)
     os.makedirs(path)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump({"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}, f)
-    return open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    return open_storage(root=local_store_root(str(tmp_path)), area="runs")
 
 
 def test_no_ref_means_no_parent(tmp_path):

@@ -54,7 +54,7 @@ def test_start_run_disabled_returns_noop_and_writes_nothing(outside_git):
         run.log_metric("loss", 1.0, step=1)
     run.finish()
 
-    # No run record, no vmn-code/<app> code object: the store is never created.
+    # No run record, no code/<app> code object: the store is never created.
     assert list(outside_git.rglob("*")) == []
 
 

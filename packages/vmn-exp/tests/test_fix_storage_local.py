@@ -23,7 +23,7 @@ def _init_logger():
 
 @pytest.fixture
 def st(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 def _meta(verstr, **kw):
@@ -129,7 +129,7 @@ def test_writes_to_a_deleted_experiment_do_not_resurrect_it(st):
 def test_cached_writes_to_a_deleted_experiment_skip_remote(tmp_path):
     from unittest.mock import MagicMock
 
-    local = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
     remote = MagicMock()
     remote.exists.return_value = False  # pruned everywhere
     cached = CachedSnapshotStorage(local, remote)
@@ -143,17 +143,17 @@ def _git(cwd, *args):
     ).stdout
 
 
-def test_storage_dirs_ignore_themselves_at_any_depth(tmp_path):
+def test_the_store_root_ignores_itself_with_one_gitignore(tmp_path):
     _git(tmp_path, "init", "-q")
-    # the repo-level rule vmn writes at init only matches one level deep
-    os.makedirs(tmp_path / ".vmn")
-    (tmp_path / ".vmn" / ".gitignore").write_text("*/experiments/\n*/snapshots/\n")
-    for subdir in ("experiments", "snapshots"):
-        s = LocalSnapshotStorage(str(tmp_path), subdir=subdir)
+    root = tmp_path / ".vmn" / "store"
+    for area in ("runs", "snapshots"):
+        s = LocalSnapshotStorage(str(root), area=area)
         s.save("root/svc", "v1", _meta("v1"), {"working_tree": "p\n"})
         s.save("app", "v1", _meta("v1"), {})
     status = _git(tmp_path, "status", "--porcelain", "-uall")
-    assert "experiments" not in status and "snapshots" not in status, status
+    assert status.strip() == "", status
+    ignores = [os.path.join(d, ".gitignore") for d, _, f in os.walk(root) if ".gitignore" in f]
+    assert ignores == [os.path.join(str(root), ".gitignore")]
 
 
 def test_yaml_safe_load_uses_the_c_loader_when_available(monkeypatch):

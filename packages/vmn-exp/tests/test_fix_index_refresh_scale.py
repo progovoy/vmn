@@ -16,6 +16,7 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.core import index_record, index_snapshot, index_sweep
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 N = 2000
@@ -33,8 +34,8 @@ def _now_iso():
 
 class Store:
     def __init__(self, root):
-        self.st = LocalSnapshotStorage(root, subdir="experiments")
-        self.base = os.path.join(root, ".vmn", APP, "experiments")
+        self.st = LocalSnapshotStorage(local_store_root(root), area="runs")
+        self.base = os.path.join(root, ".vmn", "store", "runs", APP)
 
     def add(self, i, run_state):
         verstr = f"0.0.1-dev.abc1234.def5678.r{i}"

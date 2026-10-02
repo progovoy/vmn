@@ -1,8 +1,7 @@
 """Trial slots, claimed with ``create_exclusive`` — no server, no lock.
 
-Every slot is a record ``t<N>`` of the sweep's own pseudo-app
-``vmn-sweeps/<app>~<sweep verstr>`` (``/`` in the app becomes ``~``; the
-``vmn-sweeps`` tree is reserved), so listing a sweep's slots never reads another
+Every slot is a record ``t<N>`` of the store's ``sweeps`` area, scoped
+``<app key>~<sweep verstr>``, so listing a sweep's slots never reads another
 sweep's. Creating one is atomic on every backend (``O_EXCL`` mkdir locally, a
 conditional PUT on object stores), so exactly one agent owns trial N even when
 many share an NFS dir or a bucket. The loser re-lists and tries the next free
@@ -19,16 +18,20 @@ from vmn_exp._base import now_iso
 from vmn_exp.core.sweep.spec import trial_limit
 from vmn_exp.core.sweep.suggest import suggest
 from vmn_exp.core.writer import claim_record, get_writer_id
+from vmn_exp.storage.areas import SWEEPS, app_key
 from vmn_exp.storage.s3_base import parallel_map
 
-SWEEP_APP = "vmn-sweeps"
 _MAX_ATTEMPTS = 1000
 _SLOT = re.compile(r"^t(\d+)(?:\.a(\d+))?$")
 
 
-def claims_app(app_name, sweep_verstr):
-    """The pseudo-app holding one sweep's slots."""
-    return f"{SWEEP_APP}/{app_name.replace('/', '~')}~{sweep_verstr}"
+def claims_scope(app_name, sweep_verstr):
+    """The ``sweeps`` area scope holding one sweep's slots."""
+    return f"{app_key(app_name)}~{sweep_verstr}"
+
+
+def _area(storage):
+    return storage.in_area(SWEEPS)
 
 
 def claim_next_trial(storage, app_name, sweep_verstr, spec, agent=None, history=None):
@@ -59,7 +62,7 @@ def claim_retry(storage, app_name, sweep_verstr, trial, agent=None, attempt=None
     retry. Without, claim the next free attempt. None when the trial was never
     claimed.
     """
-    original = storage.load_metadata(claims_app(app_name, sweep_verstr), _record(trial, 0))
+    original = _area(storage).load_metadata(claims_scope(app_name, sweep_verstr), _record(trial, 0))
     if original is None:
         return None
     if attempt is not None:
@@ -76,8 +79,8 @@ def claim_retry(storage, app_name, sweep_verstr, trial, agent=None, attempt=None
 
 def attach_run(storage, claim, run_verstr):
     """Record which run carries out *claim*."""
-    app = claims_app(claim["app"], claim["sweep"])
-    storage.update_metadata(app, claim["verstr"], {"run": run_verstr})
+    app = claims_scope(claim["app"], claim["sweep"])
+    _area(storage).update_metadata(app, claim["verstr"], {"run": run_verstr})
 
 
 def claimed_trials(storage, app_name, sweep_verstr):
@@ -88,9 +91,9 @@ def claimed_trials(storage, app_name, sweep_verstr):
 
 def list_claims(storage, app_name, sweep_verstr):
     """Every complete claim of the sweep, ordered by (trial, attempt)."""
-    app = claims_app(app_name, sweep_verstr)
+    app = claims_scope(app_name, sweep_verstr)
     names = [_record(t, a) for t, a in sorted(_slots(storage, app_name, sweep_verstr))]
-    metas = parallel_map(lambda name: storage.load_metadata(app, name), names)
+    metas = parallel_map(lambda name: _area(storage).load_metadata(app, name), names)
     return [meta for meta in metas if meta is not None]
 
 
@@ -106,8 +109,8 @@ def _claim(storage, app_name, sweep_verstr, trial, attempt, params, agent):
         "agent": agent or get_writer_id(),
         "timestamp": now_iso(),
     }
-    app = claims_app(app_name, sweep_verstr)
-    return metadata if claim_record(storage, app, name, metadata) else None
+    app = claims_scope(app_name, sweep_verstr)
+    return metadata if claim_record(_area(storage), app, name, metadata) else None
 
 
 def _record(trial, attempt):
@@ -116,6 +119,6 @@ def _record(trial, attempt):
 
 def _slots(storage, app_name, sweep_verstr):
     """``{(trial, attempt)}`` of every slot, in-flight claims included."""
-    names = storage.list_record_names(claims_app(app_name, sweep_verstr))
+    names = _area(storage).list_record_names(claims_scope(app_name, sweep_verstr))
     matches = (_SLOT.match(name) for name in names)
     return {(int(m.group(1)), int(m.group(2) or 0)) for m in matches if m}

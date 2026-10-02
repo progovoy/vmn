@@ -29,7 +29,7 @@ def clock(monkeypatch):
 
 @pytest.fixture
 def st(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path), area="runs")
 
 
 @pytest.fixture
@@ -226,7 +226,7 @@ def test_names_without_signatures_wait_for_the_full_sweep(st, clock):
         def list_record_names(self, app_name):
             return set(super().list_record_names(app_name))
 
-    names_only = NamesOnly(st.vmn_root_path, subdir="experiments")
+    names_only = NamesOnly(st.root, area="runs")
     verstr = _make(names_only, 1, FINISHED)
     index = ExperimentIndex(names_only, APP, full_sweep_sec=300)
     index.refresh()

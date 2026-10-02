@@ -22,15 +22,15 @@ def _count_realpath(monkeypatch):
 
 
 def test_local_cache_identity_resolves_the_root_once(tmp_path, monkeypatch):
-    st = LocalSnapshotStorage(str(tmp_path), subdir="experiments")
+    st = LocalSnapshotStorage(str(tmp_path), area="runs")
     calls = _count_realpath(monkeypatch)
     identities = {st.cache_identity() for _ in range(100)}
-    assert identities == {("local", os.path.realpath(str(tmp_path)), "experiments")}
+    assert identities == {("local", os.path.realpath(str(tmp_path)), "runs")}
     assert len(calls) <= 2  # one lookup, plus the assertion's own
 
 
 def test_cached_storage_identity_resolves_the_root_once(tmp_path, monkeypatch):
-    st = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    st = open_storage(root=str(tmp_path), area="runs")
     calls = _count_realpath(monkeypatch)
     first = st.cache_identity()
     for _ in range(100):

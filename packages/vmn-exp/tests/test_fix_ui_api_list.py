@@ -10,6 +10,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.ui.readers.experiments import sort_rows
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -22,7 +23,7 @@ def _ts(i):
 def _client(tmp_path, use_index=True):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(vmn_root_path=str(root), subdir="experiments")
+    storage = open_storage(root=local_store_root(str(root)), area="runs")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -122,7 +123,7 @@ def s3_client(tmp_path):
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/exps")
-        storage = S3SnapshotStorage("vmn-bucket", prefix="exps")
+        storage = S3SnapshotStorage("vmn-bucket", prefix="exps/runs")
         yield TestClient(create_app(manager)), storage
 
 

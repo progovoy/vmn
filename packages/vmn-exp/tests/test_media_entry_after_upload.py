@@ -52,7 +52,7 @@ def image_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def store(image_dir, tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "store"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
 
 
 class _GatedStore(LocalSnapshotStorage):
@@ -74,7 +74,7 @@ class _GatedStore(LocalSnapshotStorage):
 
 
 def _gated(store, **kwargs):
-    return _GatedStore(store.vmn_root_path, subdir="experiments", **kwargs)
+    return _GatedStore(store.root, area="runs", **kwargs)
 
 
 def _png(tmp_path):
@@ -172,7 +172,7 @@ _KILLED_CHILD = textwrap.dedent("""
                 time.sleep(600)
             return super().save_artifact_file(app_name, verstr, src_path, name=name)
 
-    run = start_run(storage=Hung(sys.argv[1], subdir="experiments"))
+    run = start_run(storage=Hung(sys.argv[1], area="runs"))
     run.log_image("pic", sys.argv[2], step=3)
     run.log_metric("loss", 0.5)
     run._log_buffer.flush()
@@ -183,7 +183,7 @@ _KILLED_CHILD = textwrap.dedent("""
 
 def test_a_process_killed_mid_upload_leaves_no_dangling_entry(store, tmp_path):
     child = subprocess.Popen(
-        [sys.executable, "-c", _KILLED_CHILD, store.vmn_root_path, _png(tmp_path)],
+        [sys.executable, "-c", _KILLED_CHILD, store.root, _png(tmp_path)],
         stdout=subprocess.PIPE, text=True, env=dict(os.environ),
     )
     try:

@@ -1,6 +1,6 @@
 """`vmn snapshot --store <uri>` (and a configured experiment store): vmn-exp
-registers the opener, records land in the store's snapshots subdir and code
-objects in its experiments subdir, shared with experiment runs."""
+registers the opener, records land in the store's ``snapshots`` area and code
+objects in its ``code`` area, shared with experiment runs."""
 import json
 import os
 import shutil
@@ -8,6 +8,7 @@ import shutil
 import pytest
 import yaml
 
+from vmn_exp.storage.areas import local_store_root
 from exp_helpers import _bootstrap, _experiment, _snapshot, extract_dev_verstr
 
 
@@ -42,11 +43,11 @@ def _create(app_layout, capfd, **kwargs):
 
 
 def _records_dir(root, app_layout):
-    return os.path.join(root, ".vmn", app_layout.app_name, "snapshots")
+    return os.path.join(root, "snapshots", app_layout.app_name)
 
 
 def _code_dir(root, app_layout):
-    return os.path.join(root, ".vmn", "vmn-code", app_layout.app_name, "experiments")
+    return os.path.join(root, "code", app_layout.app_name)
 
 
 def _entries(path):
@@ -74,8 +75,8 @@ def test_create_with_store_writes_records_and_code_to_the_store(app_layout, capf
     assert _entries(_records_dir(store_dir, app_layout)) == [verstr]
     meta = _meta(store_dir, app_layout, verstr)
     assert _entries(_code_dir(store_dir, app_layout)) == [meta["code"]]
-    assert not os.path.isdir(_records_dir(app_layout.repo_path, app_layout))
-    assert _entries(_code_dir(app_layout.repo_path, app_layout)) == []
+    assert not os.path.isdir(_records_dir(local_store_root(app_layout.repo_path), app_layout))
+    assert _entries(_code_dir(local_store_root(app_layout.repo_path), app_layout)) == []
 
 
 def test_list_show_note_delete_through_the_store(app_layout, capfd, store_dir):
@@ -114,7 +115,7 @@ def test_configured_store_is_the_default_and_local_overrides(app_layout, capfd, 
 
     _dirty(app_layout, content="local only")
     local = _create(app_layout, capfd, local=True)
-    assert _entries(_records_dir(app_layout.repo_path, app_layout)) == [local]
+    assert _entries(_records_dir(local_store_root(app_layout.repo_path), app_layout)) == [local]
     assert _entries(_records_dir(store_dir, app_layout)) == [remote]
 
     capfd.readouterr()
@@ -136,7 +137,7 @@ def test_offline_mode_keeps_snapshots_local(app_layout, capfd, store_dir, monkey
     monkeypatch.setenv("VMN_EXP_OFFLINE", "1")
     _dirty(app_layout)
     verstr = _create(app_layout, capfd)
-    assert _entries(_records_dir(app_layout.repo_path, app_layout)) == [verstr]
+    assert _entries(_records_dir(local_store_root(app_layout.repo_path), app_layout)) == [verstr]
     assert _entries(_records_dir(store_dir, app_layout)) == []
 
 
@@ -177,8 +178,8 @@ def test_s3_store_serves_snapshots_a_checkout_does_not_hold(app_layout, capfd, s
     uri = f"s3://{BUCKET}"
     _dirty(app_layout, content="on s3")
     verstr = _create(app_layout, capfd, store=uri)
-    shutil.rmtree(_records_dir(app_layout.repo_path, app_layout))
-    shutil.rmtree(_code_dir(app_layout.repo_path, app_layout))
+    shutil.rmtree(_records_dir(local_store_root(app_layout.repo_path), app_layout))
+    shutil.rmtree(_code_dir(local_store_root(app_layout.repo_path), app_layout))
 
     capfd.readouterr()
     assert _snapshot(app_layout.app_name, action="show", version=verstr,

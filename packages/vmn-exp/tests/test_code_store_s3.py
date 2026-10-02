@@ -8,7 +8,8 @@ import pytest
 from exp_helpers import _bootstrap, _exp, _storage
 
 import version_stamp.devversion.untracked as dv_untracked
-from vmn_exp.core.code_store import code_app
+from vmn_exp.core.code_store import code_storage
+from vmn_exp.storage.areas import local_store_root
 from vmn_exp.sdk import start_run
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES
 from vmn_exp.storage.open import open_storage
@@ -86,7 +87,7 @@ def _create(app_layout, *extra):
 def _code_objects(client, app_name):
     """``{code key: [file names]}`` in the bucket's code store for *app_name*."""
     found = {}
-    marker = f"/{code_app(app_name).replace('/', '-')}/"
+    marker = f"/code/{app_name.replace('/', '-')}/"
     for key in _keys(client):
         if marker in key:
             code_key, _, name = key.split(marker, 1)[1].partition("/")
@@ -95,9 +96,9 @@ def _code_objects(client, app_name):
 
 
 def _drop_local_copies(app_layout):
-    vmn = os.path.join(app_layout.repo_path, ".vmn")
-    shutil.rmtree(os.path.join(vmn, app_layout.app_name, "experiments"))
-    shutil.rmtree(os.path.join(vmn, "vmn-code"))
+    store = local_store_root(app_layout.repo_path)
+    shutil.rmtree(os.path.join(store, "runs", app_layout.app_name))
+    shutil.rmtree(os.path.join(store, "code"))
 
 
 def test_runs_synced_to_s3_share_one_remote_code_object(app_layout, s3, tarballs):
@@ -125,7 +126,7 @@ def test_runs_synced_to_s3_share_one_remote_code_object(app_layout, s3, tarballs
 def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
     _bootstrap(app_layout)
     _dirty(app_layout, untracked="remote only")
-    storage = open_storage(f"s3://{BUCKET}/exp", None, subdir="experiments", buffer_logs=True)
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", buffer_logs=True)
 
     ids = []
     for _ in range(2):
@@ -134,7 +135,7 @@ def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
 
     assert len(tarballs) == 1
     assert len(_code_objects(s3, app_layout.app_name)) == 1
-    reader = open_storage(f"s3://{BUCKET}/exp", None, subdir="experiments")
+    reader = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
     for verstr in ids:
         meta, patches = reader.load(app_layout.app_name, verstr)
         assert meta["code"]
@@ -146,10 +147,10 @@ def test_an_incomplete_s3_code_object_is_rewritten_and_flagged_meanwhile(
 ):
     _bootstrap(app_layout)
     _dirty(app_layout)
-    storage = open_storage(f"s3://{BUCKET}/exp", None, subdir="experiments")
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
     with start_run(app_layout.app_name, storage=storage) as run:
         pass
-    marker = next(k for k in _keys(s3) if "/vmn-code-" in k and k.endswith(METADATA_FILE))
+    marker = next(k for k in _keys(s3) if "/code/" in k and k.endswith(METADATA_FILE))
     s3.delete_object(Bucket=BUCKET, Key=marker)
 
     meta, patches = storage.load(app_layout.app_name, run.id)
@@ -175,15 +176,15 @@ def test_prune_keeps_shared_code_until_its_last_run_goes(app_layout, s3, remote)
     _dirty(app_layout)
     first, second = _create(app_layout, *extra), _create(app_layout, *extra)
     storage = _storage(app_layout)
-    (key,) = storage.list_verstrs(code_app(app_layout.app_name))
+    (key,) = code_storage(storage).list_verstrs(app_layout.app_name)
 
     assert _prune_v(app_layout, first, *extra) == 0
-    assert storage.list_verstrs(code_app(app_layout.app_name)) == [key]
+    assert code_storage(storage).list_verstrs(app_layout.app_name) == [key]
     _, patches = storage.load(app_layout.app_name, second)
     assert patches["untracked_files"]
 
     assert _prune_v(app_layout, second, *extra) == 0
-    assert storage.list_verstrs(code_app(app_layout.app_name)) == []
+    assert code_storage(storage).list_verstrs(app_layout.app_name) == []
     if remote:
         assert _code_objects(s3, app_layout.app_name) == {}
 
@@ -193,8 +194,8 @@ def test_prune_removes_an_incomplete_code_object_with_its_last_run(app_layout):
     _dirty(app_layout)
     verstr = _create(app_layout)
     storage = _storage(app_layout)
-    (key,) = storage.list_verstrs(code_app(app_layout.app_name))
-    code_dir = storage._local._snapshot_dir(code_app(app_layout.app_name), key)
+    (key,) = code_storage(storage).list_verstrs(app_layout.app_name)
+    code_dir = code_storage(storage._local)._snapshot_dir(app_layout.app_name, key)
     os.remove(os.path.join(code_dir, METADATA_FILE))
 
     assert _prune_v(app_layout, verstr) == 0
@@ -211,4 +212,4 @@ def test_prune_keeps_code_of_other_identities(app_layout):
     kept_code = storage.load_metadata(app_layout.app_name, kept)["code"]
 
     assert _prune_v(app_layout, doomed) == 0
-    assert storage.list_verstrs(code_app(app_layout.app_name)) == [kept_code]
+    assert code_storage(storage).list_verstrs(app_layout.app_name) == [kept_code]

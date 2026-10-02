@@ -38,14 +38,14 @@ def test_create_claims_with_a_marker_and_writes_metadata_last():
 
 def test_a_claimed_name_without_metadata_is_invisible_but_taken():
     s3 = s3_storage()
-    put_raw(f"{PREFIX}/app/v/.claim", b"")
+    put_raw(f"{PREFIX}/runs/app/v/.claim", b"")
     assert not s3.exists("app", "v")
     assert s3.list_snapshots("app") == []
     assert not s3.create_exclusive("app", "v", meta("v"), {})
 
 
 def test_a_record_created_before_claims_existed_still_blocks_the_name():
-    put_raw(f"{PREFIX}/app/v/metadata.yml", b"verstr: v\ntimestamp: t\n")
+    put_raw(f"{PREFIX}/runs/app/v/metadata.yml", b"verstr: v\ntimestamp: t\n")
     assert not s3_storage().create_exclusive("app", "v", meta("v"), {})
 
 

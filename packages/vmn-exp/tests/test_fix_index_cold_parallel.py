@@ -14,7 +14,7 @@ APP = "app"
 
 
 def _seed(root, n):
-    st = LocalSnapshotStorage(str(root), subdir="experiments")
+    st = LocalSnapshotStorage(str(root), area="runs")
     for i in range(n):
         v = f"0.0.1-dev.abc.r{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"t{i}"}, {})

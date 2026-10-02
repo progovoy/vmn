@@ -16,7 +16,7 @@ RUNS = 50  # two changed rows (4 moves) stay under the delta limit: orders move 
 
 
 def _dir(app_layout, verstr):
-    path = os.path.join(app_layout.repo_path, ".vmn", app_layout.app_name, "experiments", verstr)
+    path = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr)
     os.makedirs(path, exist_ok=True)
     return path
 

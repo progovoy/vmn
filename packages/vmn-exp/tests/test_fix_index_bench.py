@@ -10,6 +10,7 @@ import yaml
 
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
+from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 RUNS = 3000
@@ -17,7 +18,7 @@ STEPS = 50
 
 
 def _seed(root):
-    base = os.path.join(root, ".vmn", APP, "experiments")
+    base = os.path.join(root, ".vmn", "store", "runs", APP)
     for i in range(RUNS):
         verstr = f"0.0.1-dev.abc1234.def5678.r{i}"
         folder = os.path.join(base, verstr)
@@ -69,7 +70,7 @@ def _refresh(index, touched):
 
 
 def _storage(tmp_path):
-    storage = open_storage(vmn_root_path=str(tmp_path), subdir="experiments")
+    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs")
     return storage, _track_record_reads(storage)
 
 

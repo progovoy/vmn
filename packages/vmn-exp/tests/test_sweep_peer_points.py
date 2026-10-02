@@ -9,7 +9,7 @@ APP = "my_app"
 
 
 def _storage(tmp_path):
-    return open_storage(None, str(tmp_path), subdir="experiments")
+    return open_storage(None, str(tmp_path), area="runs")
 
 
 def _log(storage, verstr, step, **values):

@@ -22,7 +22,7 @@ APP = "app"
 
 @pytest.fixture
 def st(tmp_path):
-    return LocalSnapshotStorage(str(tmp_path / "repo"), subdir="experiments")
+    return LocalSnapshotStorage(str(tmp_path / "repo"), area="runs")
 
 
 def _make(st, name, second, parent=None, run_state=None):

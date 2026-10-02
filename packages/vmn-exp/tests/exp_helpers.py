@@ -17,10 +17,12 @@ SRC_DIRS = [
 _SRC_PATH = os.pathsep.join(SRC_DIRS)
 
 
-def _storage(app_layout, subdir="experiments"):
+def _storage(app_layout, area="runs"):
     from vmn_exp.snapshot import open_storage
 
-    return open_storage(vmn_root_path=app_layout.repo_path, subdir=subdir)
+    from vmn_exp.storage.areas import local_store_root
+
+    return open_storage(root=local_store_root(app_layout.repo_path), area=area)
 
 
 def _experiment(

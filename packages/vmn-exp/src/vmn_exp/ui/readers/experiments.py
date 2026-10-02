@@ -7,6 +7,7 @@ own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
+from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.log import filter_by_status, sort_by_metric
@@ -20,7 +21,7 @@ from vmn_exp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):
-    return open_storage(vmn_root_path=root_path, subdir="experiments")
+    return open_storage(None, local_store_root(root_path), area=RUNS)
 
 
 def metrics_schema(root_path, app_name):
@@ -36,6 +37,9 @@ def list_apps(root_path):
     if os.path.isdir(vmn_dir):
         for dirpath, dirnames, filenames in os.walk(vmn_dir):
             rel = os.path.relpath(dirpath, vmn_dir)
+            if rel == "store":  # the repo-local store: listed below
+                dirnames[:] = []
+                continue
             if rel == "." or rel.split(os.sep)[0].startswith("."):
                 continue
             parts = rel.split(os.sep)
@@ -54,6 +58,8 @@ def list_apps(root_path):
 
     rows = []
     storage = experiment_storage(root_path)
+    apps.update(storage.list_apps())
+    apps.update(storage.in_area(SNAPSHOTS).list_apps())
     ver_counts = version_counts(root_path)
     for name in sorted(apps):
         try:

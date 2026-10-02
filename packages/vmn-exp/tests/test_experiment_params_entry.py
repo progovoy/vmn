@@ -15,9 +15,8 @@ from vmn_exp.core.log import latest_metrics
 def _append_log_entry(app_layout, verstr, entry, writer="sdk"):
     path = os.path.join(
         app_layout.repo_path,
-        ".vmn",
+        ".vmn", "store", "runs",
         app_layout.app_name,
-        "experiments",
         verstr,
         f"log.{writer}.jsonl",
     )
