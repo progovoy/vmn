@@ -54,7 +54,12 @@ describe("archived rows in the list", () => {
 
 describe("artifactUrl", () => {
   it("encodes each component of a nested artifact path", () => {
-    expect(artifactUrl("w", "my-app", "0.0.1-dev.a", "plots/loss curve.png"))
+    expect(artifactUrl("w", "my-app", "0.0.1-dev.a", "artifacts/plots/loss curve.png"))
       .toBe("/api/v1/workspaces/w/apps/my-app/experiments/0.0.1-dev.a/artifacts/plots/loss%20curve.png");
+  });
+
+  it("serves a vmn output at its record path", () => {
+    expect(artifactUrl("w", "my-app", "0.0.1-dev.a", "outputs/media/s/0.png"))
+      .toBe("/api/v1/workspaces/w/apps/my-app/experiments/0.0.1-dev.a/outputs/media/s/0.png");
   });
 });

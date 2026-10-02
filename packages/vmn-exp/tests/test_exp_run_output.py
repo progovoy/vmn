@@ -10,7 +10,7 @@ import time
 
 from exp_helpers import _PY, _bootstrap, _exp, _storage, extract_dev_verstr
 
-from vmn_exp.core.output_log import OUTPUT_CAP_ENV, OUTPUT_LOG_NAME
+from vmn_exp.core.output_log import OUTPUT_CAP_ENV, OUTPUT_LOG_PATH
 
 from test_fix_exp_run_signals import (
     _finish,
@@ -41,7 +41,7 @@ def _run(app_layout, capfd, script, extra_args=None):
 
 def _output_log(app_layout, verstr):
     path = _storage(app_layout).artifact_local_path(
-        app_layout.app_name, verstr, OUTPUT_LOG_NAME
+        app_layout.app_name, verstr, OUTPUT_LOG_PATH
     )
     if path is None:
         return None
@@ -67,7 +67,7 @@ def test_output_log_gets_an_artifact_log_entry(app_layout, capfd):
 
     log = _storage(app_layout).load_merged_log(app_layout.app_name, verstr)
     entries = [e for e in log if e.get("type") == "artifact"]
-    assert [e["path"] for e in entries] == [OUTPUT_LOG_NAME]
+    assert [e["path"] for e in entries] == [OUTPUT_LOG_PATH]
     assert entries[0]["size"] == len(_output_log(app_layout, verstr))
 
 
@@ -180,7 +180,7 @@ def test_show_mentions_output_log(app_layout, capfd):
     capfd.readouterr()
     assert _exp(app_layout.app_name, action="show", version=verstr) == 0
     out = capfd.readouterr().out
-    assert f"Output:    {OUTPUT_LOG_NAME}" in out
+    assert f"Output:    {OUTPUT_LOG_PATH}" in out
 
 
 def _start_supervisor_with_args(app_layout, child_script, extra):

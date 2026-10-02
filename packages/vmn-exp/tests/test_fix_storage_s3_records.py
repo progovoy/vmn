@@ -73,7 +73,7 @@ def test_delete_removes_large_records_in_concurrent_batches(monkeypatch):
     s3 = s3_storage()
     s3.save("app", "v", meta("v"), PATCHES)
     for i in range(1, 4):
-        s3.save_file("app", "v", f"log.w@{i:06d}.jsonl", "{}\n")
+        s3.save_file("app", "v", f"log/w@{i:06d}.jsonl", "{}\n")
     s3._s3.delete_objects = concurrently(2, s3._s3.delete_objects)
     s3.delete("app", "v")
     assert raw_keys() == []

@@ -13,7 +13,7 @@ class _Files:
 
 
 def _read(data, offset=0, **kwargs):
-    return read_complete_lines(_Files(data), "app", "v", "log.w.jsonl", offset, **kwargs)
+    return read_complete_lines(_Files(data), "app", "v", "log/w.jsonl", offset, **kwargs)
 
 
 def test_a_missing_file_reads_as_none():

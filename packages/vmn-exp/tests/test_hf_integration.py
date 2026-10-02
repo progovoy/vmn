@@ -443,6 +443,6 @@ def test_vmn_callback_log_checkpoints_uploads_saved_checkpoint_dir(
     storage = LocalSnapshotStorage(str(exp_dir), area="runs")
     artifacts = get_run("hf_ckpt_test", run.id, storage=storage)["artifacts"]
     paths = [a["name"] for a in artifacts]
-    assert "checkpoint-2/model.bin" in paths
-    assert "checkpoint-2/config.json" in paths
+    assert "artifacts/checkpoint-2/model.bin" in paths
+    assert "artifacts/checkpoint-2/config.json" in paths
     assert not any("checkpoint-1" in p for p in paths)

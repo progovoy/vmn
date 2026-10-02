@@ -249,7 +249,7 @@ def test_metrics_notes_and_artifacts_land_in_the_log(app_layout):
     assert notes[0]["text"] == "looks good"
 
     artifacts = [e for e in log if e.get("type") == "artifact"]
-    assert artifacts[0]["path"] == "weights.bin"
+    assert artifacts[0]["path"] == "artifacts/weights.bin"
     assert artifacts[0]["size"] == 10
 
     from vmn_exp.core.log import latest_metrics
@@ -374,7 +374,7 @@ def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
         ".vmn", "store", "runs",
         app_layout.app_name,
         run.id.replace("+", "_plus_"),
-        f"log.{get_writer_id()}.jsonl",
+        f"log/{get_writer_id()}.jsonl",
     )
     assert os.path.isfile(log_path), os.listdir(os.path.dirname(log_path))
 

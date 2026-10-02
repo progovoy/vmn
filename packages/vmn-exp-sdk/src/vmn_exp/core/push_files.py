@@ -5,7 +5,7 @@
   is never clobbered when the remote copy changed since this host last pushed
   it (its ETag differs from the ledger's); ``alerts_sent.yml`` is merged as a
   set union on both sides.
-- Artifacts (``output.log`` and media included) go when missing remotely or
+- Stored files (``artifacts/`` and ``outputs/``) go when missing remotely or
   of a different size.
 - The mutable metadata fields ``archived``/``note`` merge three-way against
   the ledger's base; on a conflict (or without a base) the remote wins, with

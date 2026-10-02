@@ -78,7 +78,7 @@ def test_the_sealed_log_uploads_at_once_and_matches_its_entry():
 
     final = storage.uploads[-1]
     assert final.endswith(b"last line\n")
-    assert entry["path"] == ol.OUTPUT_LOG_NAME
+    assert entry["path"] == ol.OUTPUT_LOG_PATH
     assert entry["size"] == len(final)
     assert entry["sha256"] == hashlib.sha256(final).hexdigest()
 

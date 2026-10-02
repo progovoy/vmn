@@ -57,8 +57,8 @@ def test_list_files_reports_top_level_files_with_size_and_mtime(st):
     st.append_log_entry("app", "v1", "w", {"timestamp": "t", "type": "note"})
     files = st.list_files("app")
     assert set(files) == {"v1"}
-    assert {"metadata.yml", "log.w.jsonl"} <= set(files["v1"])
-    size, mtime = files["v1"]["log.w.jsonl"]
+    assert {"metadata.yml", "log/w.jsonl"} <= set(files["v1"])
+    size, mtime = files["v1"]["log/w.jsonl"]
     assert size > 0 and mtime > 0
 
 
@@ -67,10 +67,10 @@ def test_list_artifacts_and_local_path(st, tmp_path):
     src = tmp_path / "model.bin"
     src.write_bytes(b"12345")
     st.save_artifact_file("app", "v1", str(src))
-    assert st.list_artifacts("app", "v1") == [{"name": "model.bin", "size": 5}]
-    path = st.artifact_local_path("app", "v1", "model.bin")
+    assert st.list_artifacts("app", "v1") == [{"name": "artifacts/model.bin", "size": 5}]
+    path = st.artifact_local_path("app", "v1", "artifacts/model.bin")
     assert open(path, "rb").read() == b"12345"
-    assert st.artifact_local_path("app", "v1", "missing.bin") is None
+    assert st.artifact_local_path("app", "v1", "artifacts/missing.bin") is None
     for bad in ("../metadata.yml", "a/b", "..", ""):
         assert st.artifact_local_path("app", "v1", bad) is None
     assert st.list_artifacts("app", "nope") == []

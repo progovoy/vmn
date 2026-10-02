@@ -128,12 +128,12 @@ def test_output_artifact_uploads_output_log_only_when_changed(app_layout, capfd)
     art.write(b"line 1\n")
     assert art.upload() is True
     assert art.upload() is False
-    path = storage.artifact_local_path(app_layout.app_name, verstr, ol.OUTPUT_LOG_NAME)
+    path = storage.artifact_local_path(app_layout.app_name, verstr, ol.OUTPUT_LOG_PATH)
     with open(path, "rb") as f:
         assert f.read() == b"line 1\n"
 
     entry = art.artifact_entry()
     assert entry["type"] == "artifact"
-    assert entry["path"] == ol.OUTPUT_LOG_NAME
+    assert entry["path"] == ol.OUTPUT_LOG_PATH
     assert entry["size"] == len(b"line 1\n")
     assert entry["sha256"]

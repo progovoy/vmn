@@ -18,7 +18,7 @@ def _append_log_entry(app_layout, verstr, entry, writer="sdk"):
         ".vmn", "store", "runs",
         app_layout.app_name,
         verstr,
-        f"log.{writer}.jsonl",
+        f"log/{writer}.jsonl",
     )
     with open(path, "a") as f:
         f.write(json.dumps(entry) + "\n")

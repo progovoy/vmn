@@ -40,6 +40,7 @@ def line(i):
 
 def add_lines(local, verstr, lines, writer=WRITER):
     path = os.path.join(local._snapshot_dir(APP, verstr), log_object_name(writer))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a") as f:
         f.write("".join(lines))
 

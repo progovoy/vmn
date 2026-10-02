@@ -7,7 +7,7 @@ from moto import mock_aws
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
-from vmn_exp.storage.files import valid_artifact_path
+from vmn_exp.storage.files import valid_artifact_path, valid_relative_path
 from version_stamp.core.utils import parse_record_metadata, valid_path_component
 from vmn_exp.ui.security import safe_segment
 
@@ -18,7 +18,8 @@ BAD = ["", ".", "..", "../x", "a/b", "a\\b", "a..b", "x\0y"]
 @pytest.mark.parametrize("name", GOOD)
 def test_valid_components_pass_every_validator(name):
     assert valid_path_component(name)
-    assert valid_artifact_path(name)
+    assert valid_relative_path(name)
+    assert valid_artifact_path(f"artifacts/{name}")
     assert safe_segment(name)
 
 
@@ -26,7 +27,8 @@ def test_valid_components_pass_every_validator(name):
 def test_invalid_components_fail_every_validator(name):
     assert not valid_path_component(name)
     # "a/b" is a bad component but a fine nested artifact path.
-    assert not valid_artifact_path(name) or "/" in name
+    assert not valid_relative_path(name) or "/" in name
+    assert not valid_artifact_path(f"artifacts/{name}") or "/" in name
     assert not safe_segment(name)
 
 

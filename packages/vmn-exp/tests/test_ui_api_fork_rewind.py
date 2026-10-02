@@ -20,7 +20,8 @@ def _record(app_layout, verstr, entries, meta=None):
     metadata.update(meta or {})
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump(metadata, f, sort_keys=True)
-    with open(os.path.join(path, "log.w0.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
+    with open(os.path.join(path, "log/w0.jsonl"), "a") as f:
         for entry in entries:
             f.write(json.dumps(entry) + "\n")
 

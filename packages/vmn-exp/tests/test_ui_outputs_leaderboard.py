@@ -22,7 +22,8 @@ def _dir(app_layout, verstr):
 
 
 def _append(app_layout, verstr, entry):
-    with open(os.path.join(_dir(app_layout, verstr), "log.w0.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(_dir(app_layout, verstr), "log/w0.jsonl")), exist_ok=True)
+    with open(os.path.join(_dir(app_layout, verstr), "log/w0.jsonl"), "a") as f:
         f.write(json.dumps(entry) + "\n")
 
 

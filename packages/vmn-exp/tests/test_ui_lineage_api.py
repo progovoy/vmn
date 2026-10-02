@@ -24,7 +24,8 @@ def _write_run(app_layout, verstr, entries, second):
     }
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump(meta, f)
-    with open(os.path.join(path, "log.w0.jsonl"), "w") as f:
+    os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
+    with open(os.path.join(path, "log/w0.jsonl"), "w") as f:
         for entry in entries:
             f.write(json.dumps(entry) + "\n")
 

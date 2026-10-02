@@ -82,7 +82,7 @@ def test_02_training_loop_records_params_note_artifact_and_sys_metrics(app_layou
     assert "sys_rss_mb" in row["metrics"], row["metrics"]
 
     full = get_run(APP_NAME, ref=row["verstr"], storage=_storage(app_layout))
-    assert [a["name"] for a in full["artifacts"]] == ["metrics.json"]
+    assert [a["name"] for a in full["artifacts"]] == ["artifacts/metrics.json"]
     # Per-step metrics are a curve, not one number.
     assert len(full["series"]["loss"]) > 1
     assert row["verstr"] in out
@@ -138,4 +138,4 @@ def test_05_autolog_sklearn_records_the_fit_without_logging_calls(app_layout):
     assert "sklearn_estimator" in out
 
     full = get_run(APP_NAME, ref=row["verstr"], storage=_storage(app_layout))
-    assert [a["name"] for a in full["artifacts"]] == ["sklearn_LogisticRegression.pkl"]
+    assert [a["name"] for a in full["artifacts"]] == ["artifacts/sklearn_LogisticRegression.pkl"]

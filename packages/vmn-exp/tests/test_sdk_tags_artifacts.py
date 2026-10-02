@@ -41,7 +41,7 @@ def _row(storage):
 
 
 def _artifact(storage, name):
-    with open(storage.artifact_local_path(APP, VERSTR, name), "rb") as f:
+    with open(storage.artifact_local_path(APP, VERSTR, f"artifacts/{name}"), "rb") as f:
         return f.read()
 
 
@@ -78,7 +78,7 @@ def test_log_dict_writes_json_or_yaml_by_extension(run, storage):
     assert json.loads(_artifact(storage, "conf/params.json")) == {"lr": 0.1}
     assert yaml.safe_load(_artifact(storage, "conf/params.yaml")) == {"lr": 0.2}
     logged = [e["path"] for e in storage.load_merged_log(APP, VERSTR) if e["type"] == "artifact"]
-    assert logged == ["conf/params.json", "conf/params.yaml"]
+    assert logged == ["artifacts/conf/params.json", "artifacts/conf/params.yaml"]
 
 
 def test_log_dict_rejects_an_unknown_extension(run):
@@ -114,7 +114,7 @@ def test_log_artifacts_uploads_a_tree_with_nested_names(run, storage, tmp_path):
     run.finish()
 
     names = [a["name"] for a in storage.list_artifacts(APP, VERSTR)]
-    assert names == ["model/a.txt", "model/sub/deep/c.txt"]
+    assert names == ["artifacts/model/a.txt", "artifacts/model/sub/deep/c.txt"]
     assert _artifact(storage, "model/sub/deep/c.txt") == b"c"
 
 
@@ -123,7 +123,7 @@ def test_log_artifacts_without_prefix(run, storage, tmp_path):
     (tmp_path / "t" / "x.bin").write_bytes(b"x")
     run.log_artifacts(str(tmp_path / "t"))
     run.finish()
-    assert [a["name"] for a in storage.list_artifacts(APP, VERSTR)] == ["x.bin"]
+    assert [a["name"] for a in storage.list_artifacts(APP, VERSTR)] == ["artifacts/x.bin"]
 
 
 def test_log_artifact_path_names_are_validated(run, tmp_path):

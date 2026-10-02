@@ -60,7 +60,7 @@ from vmn_exp.core.log import (
     sort_by_metric,
 )
 from vmn_exp.core.metric_schema import effective_schema
-from vmn_exp.core.output_log import OUTPUT_LOG_NAME
+from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
     parent_edges,
@@ -92,7 +92,7 @@ from version_stamp.api import (
     now_iso,
     relative_timestamp,
 )
-from vmn_exp.storage.files import safe_verstr
+from vmn_exp.storage.files import FILE_TREES, safe_verstr
 from vmn_exp.cli.inputs_arg import parse_input_arg
 from vmn_exp.cli.provenance import (
     format_env_oneliner,
@@ -694,8 +694,8 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
 @measure_runtime_decorator
 def _print_output_log(storage, app_name, verstr):
     for artifact in storage.list_artifacts(app_name, verstr):
-        if artifact["name"] == OUTPUT_LOG_NAME:
-            print(f"  Output:    {OUTPUT_LOG_NAME} ({artifact['size']} bytes)")
+        if artifact["name"] == OUTPUT_LOG_PATH:
+            print(f"  Output:    {OUTPUT_LOG_PATH} ({artifact['size']} bytes)")
 
 
 def experiment_show(vcs, params, storage, args):
@@ -1049,9 +1049,11 @@ def experiment_export(vcs, params, storage, args):
     def write_experiment_files(dest):
         with open(os.path.join(dest, "vmn_experiment.yml"), "w") as f:
             yaml.dump({"metadata": metadata, "log": log}, f, sort_keys=False)
-        art_dir = storage.list_artifact_files(app_name, verstr)
-        if art_dir and os.path.isdir(art_dir):
-            shutil.copytree(art_dir, os.path.join(dest, "artifacts"), dirs_exist_ok=True)
+        record_dir = storage.local_record_dir(app_name, verstr)
+        for tree in FILE_TREES if record_dir else ():
+            src = os.path.join(record_dir, tree)
+            if os.path.isdir(src):
+                shutil.copytree(src, os.path.join(dest, tree), dirs_exist_ok=True)
 
     output_path, err = export_tree(
         vcs, (metadata, patches), safe_verstr(verstr), args.output,

@@ -264,7 +264,7 @@ def test_conf_writer_id_names_the_log_file(app_layout):
     logs = glob.glob(
         os.path.join(
             app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, "*",
-            "log.*.jsonl",
+            "log/*.jsonl",
         )
     )
-    assert [os.path.basename(p) for p in logs] == ["log.confwriter.jsonl"], logs
+    assert [os.path.basename(p) for p in logs] == ["confwriter.jsonl"], logs

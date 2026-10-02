@@ -45,7 +45,8 @@ def _write_meta(path, verstr, extra=None):
 
 
 def _write_log(path, entries, writer="w0"):
-    log_path = os.path.join(path, f"log.{writer}.jsonl")
+    log_path = os.path.join(path, f"log/{writer}.jsonl")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a") as f:
         for entry in entries:
             f.write(json.dumps(entry) + "\n")

@@ -2,8 +2,8 @@ import ArtifactPreview from "./ArtifactPreview";
 import type { Artifact } from "../util/artifactTree";
 
 /** The console output `vmn-exp run` (or `start_run(capture_output=True)`)
- *  kept as the run's `output.log` artifact. */
-export const OUTPUT_LOG = "output.log";
+ *  kept as the run's `outputs/output.log`. */
+export const OUTPUT_LOG = "outputs/output.log";
 
 export default function RunOutput({ artifacts, downloadUrl }: {
   artifacts: Artifact[]; downloadUrl: (filename: string) => string;

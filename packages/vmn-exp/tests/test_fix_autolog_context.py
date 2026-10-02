@@ -160,15 +160,15 @@ def test_two_fits_in_one_run_keep_two_artifacts_with_matching_digests(app_layout
     row = _row(app_layout, verstr)
     names = [a["name"] for a in row["artifacts"]]
     assert names == [
-        "sklearn_LogisticRegression.pkl",
-        "sklearn_LogisticRegression_2.pkl",
+        "artifacts/sklearn_LogisticRegression.pkl",
+        "artifacts/sklearn_LogisticRegression_2.pkl",
     ]
 
-    art_dir = _storage(app_layout).list_artifact_files(app_layout.app_name, verstr)
+    record_dir = _storage(app_layout).local_record_dir(app_layout.app_name, verstr)
     entries = [e for e in row["log"] if e.get("type") == "artifact"]
     assert len(entries) == 2
     for entry in entries:
-        assert entry["sha256"] == _sha256(os.path.join(art_dir, entry["path"]))
+        assert entry["sha256"] == _sha256(os.path.join(record_dir, entry["path"]))
 
 
 # --- configuration -----------------------------------------------------------

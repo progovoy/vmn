@@ -38,7 +38,7 @@ def _values():
 
 
 def _log_keys():
-    return [k.rsplit("/", 1)[1] for k in raw_keys() if "/log." in k]
+    return ["/".join(k.rsplit("/", 2)[1:]) for k in raw_keys() if "/log/" in k]
 
 
 def test_appends_never_read_the_remote_log():
@@ -46,7 +46,7 @@ def test_appends_never_read_the_remote_log():
     calls = record_calls(pod._remote._s3)
     for i in range(5):
         pod.append_log_entry("app", V, "w", entry(i))
-    reads = [p["Key"] for op, p in calls if op == "GetObject" and "/log." in p["Key"]]
+    reads = [p["Key"] for op, p in calls if op == "GetObject" and "/log/" in p["Key"]]
     assert reads == []
 
 
@@ -62,7 +62,7 @@ def test_buffered_lines_ship_as_segments_on_sync():
         pod.append_log_entry("app", V, "w", entry(i))
     pod.sync_log_to_remote("app", V, "w")
     assert _values() == [0, 1, 2]
-    assert _log_keys() == ["log.w.jsonl", "log.w@000001.jsonl"]
+    assert _log_keys() == ["log/w.jsonl", "log/w@000001.jsonl"]
 
 
 def test_close_flushes_what_is_still_buffered():
@@ -104,8 +104,8 @@ def test_artifacts_go_straight_to_the_bucket(tmp_path):
     src = tmp_path / "model.pt"
     src.write_bytes(b"w" * 64)
     assert pod.save_artifact_file("app", V, str(src))
-    assert pod._local.list_artifact_files("app", V) is None
-    assert s3_storage().list_artifacts("app", V) == [{"name": "model.pt", "size": 64}]
+    assert pod._local.list_artifacts("app", V) == []
+    assert s3_storage().list_artifacts("app", V) == [{"name": "artifacts/model.pt", "size": 64}]
 
 
 def test_reads_do_not_create_a_buffer_dir():

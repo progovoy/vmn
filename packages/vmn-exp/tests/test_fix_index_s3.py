@@ -92,7 +92,7 @@ def test_s3_new_segment_is_read_alone(s3):
     index = ExperimentIndex(storage, APP)
     index.refresh()
 
-    storage.save_file(APP, verstrs[0], "log.w0@000001.jsonl",
+    storage.save_file(APP, verstrs[0], "log/w0@000001.jsonl",
                       '{"timestamp": "2026-01-01T00:03:00Z", "type": "metrics", "values": {"acc": 1}}\n')
     assert _refresh(index, calls) == {"ListObjectsV2": 1, "GetObject": 1}
     assert index.rows()[0]["metrics"]["acc"] == 1

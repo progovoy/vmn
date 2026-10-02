@@ -55,7 +55,7 @@ def _assert_matches_full_parse(snap, storage, verstr=V):
 
 
 def _log_path(storage, writer="w", verstr=V):
-    return os.path.join(storage.direct_files()._snapshot_dir(APP, verstr), f"log.{writer}.jsonl")
+    return os.path.join(storage.direct_files()._snapshot_dir(APP, verstr), f"log/{writer}.jsonl")
 
 
 def test_a_grown_log_is_read_from_the_saved_offset(storage, monkeypatch):
@@ -79,7 +79,7 @@ def test_a_grown_log_is_read_from_the_saved_offset(storage, monkeypatch):
     _append(storage, 50, 60)
     snap = cache.get(storage, APP, V, load_log)
 
-    assert offsets == [("log.w.jsonl", size)]
+    assert offsets == [("log/w.jsonl", size)]
     monkeypatch.undo()
     _assert_matches_full_parse(snap, storage)
 

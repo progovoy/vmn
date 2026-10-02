@@ -114,12 +114,12 @@ describe("RunMediaSection", () => {
   it("renders a Media card when anything was logged", () => {
     render(
       <RunMediaSection ws="ws" app="app" detail={{
-        ...base, media: { s: [{ step: 0, path: "media/s/0.png" }] },
+        ...base, media: { s: [{ step: 0, path: "outputs/media/s/0.png" }] },
       }} />,
     );
     expect(screen.getByText("media")).toBeInTheDocument();
     expect(screen.getByRole("img")).toHaveAttribute(
-      "src", "/api/v1/workspaces/ws/apps/app/experiments/v1/artifacts/media/s/0.png",
+      "src", "/api/v1/workspaces/ws/apps/app/experiments/v1/outputs/media/s/0.png",
     );
   });
 });

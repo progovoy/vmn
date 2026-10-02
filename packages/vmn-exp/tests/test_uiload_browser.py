@@ -42,6 +42,7 @@ def _run_state(status, now):
 
 
 def _write_log(path, i, steps, now):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         for s in range(steps):
             values = {"loss": 1.0 / (s + 1) + i * 1e-4, "acc": s / steps}
@@ -62,9 +63,10 @@ def _seed(root):
                 "params": {"lr": 0.001 * (i % 7), "seed": i}}
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
             yaml.dump(meta, f)
-        _write_log(os.path.join(folder, "log.w.jsonl"), i, STEPS if i < 20 else 5, now)
+        _write_log(os.path.join(folder, "log/w.jsonl"), i, STEPS if i < 20 else 5, now)
         if i == WIDE_RUN:  # enough params to push the charts below the fold
-            with open(os.path.join(folder, "log.w.jsonl"), "a") as f:
+            os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
+            with open(os.path.join(folder, "log/w.jsonl"), "a") as f:
                 wide = {f"hp_{k:03d}": k * 0.01 for k in range(60)}
                 f.write(json.dumps({"timestamp": _iso(now), "type": "create", "params": wide}) + "\n")
         status = STATUS_OF.get(i % 10, "succeeded")

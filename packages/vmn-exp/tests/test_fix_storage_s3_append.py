@@ -10,7 +10,7 @@ from vmn_exp.storage.s3 import S3SnapshotStorage
 
 BUCKET = "vmn-bucket"
 VERSTR = "1.0.0-dev.aaa.bbb"
-LOG_KEY = f"exp/app/{VERSTR}/log.writer.jsonl"
+LOG_KEY = f"exp/app/{VERSTR}/log/writer.jsonl"
 
 
 @pytest.fixture

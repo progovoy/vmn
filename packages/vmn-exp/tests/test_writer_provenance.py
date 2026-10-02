@@ -32,7 +32,8 @@ def test_merged_log_injects_writer_for_jsonl_entries():
                 "values": {"loss": 0.3},
             },
         ]
-        with open(os.path.join(snap_dir, "log.gpu0.jsonl"), "w") as f:
+        os.makedirs(os.path.dirname(os.path.join(snap_dir, "log/gpu0.jsonl")), exist_ok=True)
+        with open(os.path.join(snap_dir, "log/gpu0.jsonl"), "w") as f:
             for e in entries:
                 f.write(json.dumps(e) + "\n")
 
@@ -70,7 +71,8 @@ def test_merged_log_mixed_legacy_and_writer():
                 "values": {"acc": 0.9},
             },
         ]
-        with open(os.path.join(snap_dir, "log.worker1.jsonl"), "w") as f:
+        os.makedirs(os.path.dirname(os.path.join(snap_dir, "log/worker1.jsonl")), exist_ok=True)
+        with open(os.path.join(snap_dir, "log/worker1.jsonl"), "w") as f:
             for e in writer_entries:
                 f.write(json.dumps(e) + "\n")
 

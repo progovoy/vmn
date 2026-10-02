@@ -63,7 +63,7 @@ def test_log_image_and_log_table_are_outputs_with_the_stored_digest(store, tmp_p
         run.log_image("pic", _png(tmp_path), step=0)
         run.log_table("preds", [{"y": 1}], step=2)
     outputs = get_run(APP, run.id, storage=store)["outputs"]
-    assert set(outputs) == {"media/pic/0.png", "tables/preds/2.json"}
+    assert set(outputs) == {"outputs/media/pic/0.png", "outputs/tables/preds/2.json"}
     for path, out in outputs.items():
         assert out == dict(_expected(_stored(store, run.id, path)), path=path)
 
@@ -72,11 +72,11 @@ def test_use_artifact_fetches_a_logged_image_of_another_run(store, tmp_path):
     with start_run(name="gen") as producer:
         producer.log_image("pic", _png(tmp_path))
     with start_run(name="judge") as consumer:
-        local = consumer.use_artifact(producer.id, "media/pic/0.png")
+        local = consumer.use_artifact(producer.id, "outputs/media/pic/0.png")
     with open(local, "rb") as f:
         assert f.read() == PNG
     inp = get_run(APP, consumer.id, storage=store)["inputs"]["0"]
-    assert inp["uri"] == artifact_ref_uri(APP, producer.id, "media/pic/0.png")
+    assert inp["uri"] == artifact_ref_uri(APP, producer.id, "outputs/media/pic/0.png")
     assert inp["digest"] == _expected(PNG)["digest"]
 
 
@@ -84,15 +84,15 @@ def test_use_artifact_fetches_a_logged_table(store):
     with start_run() as producer:
         producer.log_table("t", [{"a": 1}])
     with start_run() as consumer:
-        local = consumer.use_artifact(producer.id, "tables/t/0.json", name="t")
-    assert open(local).read() == _stored(store, producer.id, "tables/t/0.json").decode()
+        local = consumer.use_artifact(producer.id, "outputs/tables/t/0.json", name="t")
+    assert open(local).read() == _stored(store, producer.id, "outputs/tables/t/0.json").decode()
 
 
 def test_lineage_links_a_media_consumer_by_uri_and_by_digest(store, tmp_path):
     with start_run(name="gen") as producer:
         producer.log_image("pic", _png(tmp_path))
     with start_run(name="by_uri") as by_uri:
-        by_uri.use_artifact(producer.id, "media/pic/0.png")
+        by_uri.use_artifact(producer.id, "outputs/media/pic/0.png")
     with start_run(name="by_digest") as by_digest:
         by_digest.log_input("file:///copy.png", digest=_expected(PNG)["digest"])
 
@@ -101,7 +101,7 @@ def test_lineage_links_a_media_consumer_by_uri_and_by_digest(store, tmp_path):
     assert vias == {by_uri.id: "uri", by_digest.id: "digest"}
     up = get_lineage(APP, by_digest.id, storage=store)["upstream"]
     assert [(n["verstr"], n["links"][0]["artifact"]) for n in up] == [
-        (producer.id, "media/pic/0.png")
+        (producer.id, "outputs/media/pic/0.png")
     ]
 
 
@@ -110,16 +110,16 @@ def test_list_runs_query_reaches_media_outputs(store, tmp_path):
         with_image.log_image("x", _png(tmp_path))
     with start_run() as without:
         without.log_metric("m", 1)
-    rows = list_runs(APP, storage=store, query='outputs."media/x/0.png".size > 0')
+    rows = list_runs(APP, storage=store, query='outputs."outputs/media/x/0.png".size > 0')
     assert [r["verstr"] for r in rows] == [with_image.id]
     by_verstr = {r["verstr"]: r for r in list_runs(APP, storage=store)}
-    assert set(by_verstr[with_image.id]["outputs"]) == {"media/x/0.png"}
+    assert set(by_verstr[with_image.id]["outputs"]) == {"outputs/media/x/0.png"}
     assert by_verstr[without.id]["outputs"] == {}
 
 
 class _FailingStore(LocalSnapshotStorage):
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
-        if name and name.startswith("media/"):
+        if name and name.startswith("outputs/media/"):
             raise OSError("disk full")
         return super().save_artifact_file(app_name, verstr, src_path, name=name)
 
@@ -129,7 +129,7 @@ def test_a_media_file_that_failed_to_store_is_never_recorded(store, tmp_path):
         run.log_image("pic", _png(tmp_path))
         run.log_table("t", [{"a": 1}])
     row = get_run(APP, run.id, storage=store)
-    assert set(row["outputs"]) == {"tables/t/0.json"}
+    assert set(row["outputs"]) == {"outputs/tables/t/0.json"}
     assert [e["path"] for e in row["log"] if e["type"] == "image"] == []
 
 

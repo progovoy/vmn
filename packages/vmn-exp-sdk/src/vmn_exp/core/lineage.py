@@ -7,9 +7,12 @@ logged images/tables, with their sha256) are already folded by the index —
 inputs on every row, outputs beside the lean rows (``outputs_of``) — so
 lineage is a join over rows: no log is read. Two kinds of edge:
 
-* **uri** — an input whose URI is ``vmn://<app>/<verstr>/<artifact path>``
-  (what ``run.use_artifact`` records) names its producer outright. ``<app>``
-  is the tag form (``/`` → ``-``; app names never contain ``-``).
+* **uri** — an input whose URI is ``vmn://<app>/<verstr>/<path>`` (what
+  ``run.use_artifact`` records) names its producer outright. ``<path>`` is
+  record-relative and explicit: ``artifacts/…`` for a user artifact,
+  ``outputs/…`` for vmn's own (``output.log``, media, tables) — the same
+  paths ``outputs`` rows are keyed by. ``<app>`` is the tag form (``/`` →
+  ``-``; app names never contain ``-``).
 * **digest** — any other input whose digest equals an output's sha256.
 
 A ``vmn-registry://<name>@<N>`` input (a reference dataset, which no run

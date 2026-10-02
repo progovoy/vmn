@@ -35,7 +35,8 @@ def _write(app_layout, verstr, losses, second):
 
 
 def _append(app_layout, verstr, losses, start=0):
-    with open(os.path.join(_exp_dir(app_layout, verstr), "log.w0.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(_exp_dir(app_layout, verstr), "log/w0.jsonl")), exist_ok=True)
+    with open(os.path.join(_exp_dir(app_layout, verstr), "log/w0.jsonl"), "a") as f:
         for i, loss in enumerate(losses, start):
             f.write(json.dumps({"timestamp": f"2026-09-21T12:05:{i:02d}Z",
                                 "type": "metrics", "step": i,

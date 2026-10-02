@@ -35,6 +35,15 @@ from vmn_exp.storage.files import (
 from vmn_exp.storage.listing import RecordListings, files_in, map_dirs
 
 
+def _ensure_parent(path):
+    """Create *path*'s folder inside its record (``log/``); never the record
+    itself, so a record deleted under a writer stays deleted."""
+    try:
+        os.mkdir(os.path.dirname(path))
+    except FileExistsError:
+        pass
+
+
 def _append_bytes(path, text):
     """Append *text* with a single ``O_APPEND`` write (looping only on a short one)."""
     data = text.encode("utf-8")
@@ -283,29 +292,27 @@ class LocalSnapshotStorage(SnapshotStorage):
     def save_file(self, app_name, verstr, filename, data):
         if self._refuse_orphan_write(app_name, verstr, filename):
             return False
-        atomic_write(os.path.join(self._snapshot_dir(app_name, verstr), filename), data)
+        path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
+        _ensure_parent(path)
+        atomic_write(path, data)
         return True
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         name = artifact_name_for(src_path, name)
         if self._refuse_orphan_write(app_name, verstr, src_path):
             return False
-        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
-        dest = artifact_file_path(art_dir, name)
+        dest = artifact_file_path(self._snapshot_dir(app_name, verstr), name)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(src_path, dest)
         return True
 
-    def list_artifact_files(self, app_name, verstr):
-        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
-        if os.path.isdir(art_dir):
-            return art_dir
-        return None
+    def local_record_dir(self, app_name, verstr):
+        record_dir = self._snapshot_dir(app_name, verstr)
+        return record_dir if os.path.isdir(record_dir) else None
 
     def artifact_uri(self, app_name, verstr, path):
         """Stable ``file://`` URI referencing artifact *path* for this record."""
-        art_dir = os.path.join(self._snapshot_dir(app_name, verstr), "artifacts")
-        abs_path = artifact_file_path(art_dir, path)
+        abs_path = artifact_file_path(self._snapshot_dir(app_name, verstr), path)
         return f"file://{abs_path}"
 
     def record_files(self, app_name, verstr):
@@ -327,7 +334,9 @@ class LocalSnapshotStorage(SnapshotStorage):
             return False
         snap_dir = self._snapshot_dir(app_name, verstr)
         data = "".join(json.dumps(e, default=str) + "\n" for e in entries)
-        _append_bytes(os.path.join(snap_dir, log_object_name(writer_id)), data)
+        path = os.path.join(snap_dir, log_object_name(writer_id))
+        _ensure_parent(path)
+        _append_bytes(path, data)
         # An append leaves the dir mtime alone; bump it so the index's
         # record signature (list_record_names) sees the change.
         os.utime(snap_dir)
@@ -343,7 +352,7 @@ class LocalSnapshotStorage(SnapshotStorage):
             if isinstance(data, list):
                 logs[""] = data
         if os.path.isdir(snap_dir):
-            for writer, names in group_log_names(os.listdir(snap_dir)).items():
+            for writer, names in group_log_names(files_in(snap_dir)).items():
                 entries = logs.setdefault(writer, [])
                 for name in names:
                     with open(os.path.join(snap_dir, name), encoding="utf-8") as f:
@@ -354,11 +363,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         snap_dir = self._snapshot_dir(app_name, verstr)
         if not os.path.isdir(snap_dir):
             return {}
-        return log_sizes_of(
-            (entry.name, entry.stat().st_size)
-            for entry in os.scandir(snap_dir)
-            if entry.is_file()
-        )
+        return log_sizes_of((name, sig[0]) for name, sig in files_in(snap_dir).items())
 
     def load_merged_log(self, app_name, verstr):
         return flatten_logs(self.load_logs_by_writer(app_name, verstr))

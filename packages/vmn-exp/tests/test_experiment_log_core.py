@@ -181,15 +181,15 @@ def test_sort_by_metric_leaves_rows_alone_when_the_metric_is_unknown():
 
 
 class _FakeStorage:
-    def __init__(self, log=None, art_dir=None):
+    def __init__(self, log=None, record_dir=None):
         self._log = log or []
-        self._art_dir = art_dir
+        self._record_dir = record_dir
 
     def load_merged_log(self, app_name, verstr):
         return self._log
 
-    def list_artifact_files(self, app_name, verstr):
-        return self._art_dir
+    def local_record_dir(self, app_name, verstr):
+        return self._record_dir
 
 
 def test_load_log_delegates_to_the_storage_backend():
@@ -198,15 +198,21 @@ def test_load_log_delegates_to_the_storage_backend():
 
 
 def test_list_artifacts_reports_name_and_size_of_each_file(tmp_path):
-    (tmp_path / "model.bin").write_text("weights")
-    (tmp_path / "sub").mkdir()
-    artifacts = list_artifacts(_FakeStorage(art_dir=str(tmp_path)), "app", "0.0.1")
-    assert artifacts == [{"name": "model.bin", "size": len("weights")}]
+    (tmp_path / "artifacts" / "sub").mkdir(parents=True)
+    (tmp_path / "artifacts" / "model.bin").write_text("weights")
+    (tmp_path / "outputs").mkdir()
+    (tmp_path / "outputs" / "output.log").write_text("out")
+    (tmp_path / "metadata.yml").write_text("not a stored file")
+    artifacts = list_artifacts(_FakeStorage(record_dir=str(tmp_path)), "app", "0.0.1")
+    assert artifacts == [
+        {"name": "artifacts/model.bin", "size": len("weights")},
+        {"name": "outputs/output.log", "size": len("out")},
+    ]
 
 
 def test_list_artifacts_is_empty_without_an_artifact_dir():
     assert list_artifacts(_FakeStorage(), "app", "0.0.1") == []
-    assert list_artifacts(_FakeStorage(art_dir="/nope/nope"), "app", "0.0.1") == []
+    assert list_artifacts(_FakeStorage(record_dir="/nope/nope"), "app", "0.0.1") == []
 
 
 def test_core_does_not_import_upward():

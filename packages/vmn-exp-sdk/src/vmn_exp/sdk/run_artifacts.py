@@ -4,8 +4,10 @@
 Each writes what it was given to a temporary file and hands it to
 ``log_artifact(path, name)`` — so the stored artifact, its log entry (path, size,
 sha256) and the storage backends are exactly those of a plain file artifact.
-*name* is the artifact's path inside the run: a relative ``a/b/c.txt``, never
-absolute, never with ``..``.
+*name* is the artifact's path inside the run's ``artifacts/``: a relative
+``a/b/c.txt``, never absolute, never with ``..``. Lineage and ``use_artifact``
+name stored files by record-relative path: ``artifacts/<name>`` for the
+user's, ``outputs/…`` for vmn's own (``output.log``, media, tables).
 """
 import json
 import os
@@ -22,6 +24,7 @@ from vmn_exp.storage.files import (
     artifact_file_path,
     list_artifact_tree,
     valid_artifact_path,
+    valid_relative_path,
 )
 
 _DICT_WRITERS = {
@@ -32,9 +35,17 @@ _DICT_WRITERS = {
 
 
 def checked_artifact_name(name):
-    if not valid_artifact_path(name):
+    """*name*, a user artifact's path below ``artifacts/``; ValueError if unsafe."""
+    if not valid_relative_path(name):
         raise ValueError(f"Invalid artifact name {name!r}: use a relative a/b/c path")
     return name
+
+
+def checked_stored_path(path):
+    """*path*, a record-relative ``artifacts/…``/``outputs/…`` path; ValueError if not."""
+    if not valid_artifact_path(path):
+        raise ValueError(f"Invalid stored file path {path!r}")
+    return path
 
 
 def _tree_names(local_dir, prefix):
@@ -69,8 +80,9 @@ class RunArtifacts:
     """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``log_artifact``."""
 
     def use_artifact(self, ref, path, name=None, app_name=None):
-        """Consume artifact *path* of run *ref* (verstr, prefix, ``@N``) and
-        return a local path to it.
+        """Consume stored file *path* of run *ref* (verstr, prefix, ``@N``) and
+        return a local path to it. *path* is record-relative:
+        ``artifacts/<name>`` or ``outputs/…``.
 
         Records an input named *name* (default: the path's basename) whose URI
         is ``vmn://<app>/<verstr>/<path>`` and whose digest is the artifact's

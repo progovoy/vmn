@@ -116,9 +116,9 @@ def test_appending_to_another_hosts_record_pulls_it_in(tmp_path):
 
 def _remote_log_keys(verstr="v"):
     resp = boto3.client("s3").list_objects_v2(
-        Bucket=BUCKET, Prefix=f"exps/runs/app/{verstr}/log."
+        Bucket=BUCKET, Prefix=f"exps/runs/app/{verstr}/log/"
     )
-    return {o["Key"].rsplit("/", 1)[1]: o["Size"] for o in resp.get("Contents", [])}
+    return {"/".join(o["Key"].rsplit("/", 2)[1:]): o["Size"] for o in resp.get("Contents", [])}
 
 
 def test_sync_uploads_only_new_bytes_as_segments(tmp_path):
@@ -129,9 +129,9 @@ def test_sync_uploads_only_new_bytes_as_segments(tmp_path):
         a.sync_log_to_remote("app", "v", "w")
     a.sync_log_to_remote("app", "v", "w")  # nothing new: no object
     keys = _remote_log_keys()
-    assert sorted(keys) == ["log.w.jsonl", "log.w@000001.jsonl", "log.w@000002.jsonl"]
+    assert sorted(keys) == ["log/w.jsonl", "log/w@000001.jsonl", "log/w@000002.jsonl"]
     local_size = os.path.getsize(
-        os.path.join(a._local._snapshot_dir("app", "v"), "log.w.jsonl")
+        os.path.join(a._local._snapshot_dir("app", "v"), "log/w.jsonl")
     )
     assert sum(keys.values()) == local_size
     assert [e["timestamp"] for e in _s3().load_merged_log("app", "v")] == [
@@ -221,8 +221,8 @@ def test_s3_artifacts_stream_list_and_download(tmp_path):
     src = tmp_path / "model.pt"
     src.write_bytes(b"w" * 2048)
     s3.save_artifact_file("app", "v", str(src))
-    assert s3.list_artifacts("app", "v") == [{"name": "model.pt", "size": 2048}]
-    path = s3.artifact_local_path("app", "v", "model.pt")
+    assert s3.list_artifacts("app", "v") == [{"name": "artifacts/model.pt", "size": 2048}]
+    path = s3.artifact_local_path("app", "v", "artifacts/model.pt")
     assert open(path, "rb").read() == b"w" * 2048
     assert s3.artifact_local_path("app", "v", "../metadata.yml") is None
     assert s3.artifact_local_path("app", "v", "missing") is None

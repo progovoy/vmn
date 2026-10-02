@@ -18,6 +18,7 @@ import os
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.storage.files import list_record_artifacts
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     _foldable_param,
     entry_params,
@@ -200,18 +201,15 @@ def load_log(storage, app_name, verstr):
 
 
 def list_artifacts(storage, app_name, verstr):
-    """``[{"name", "size"}]`` for an experiment's artifact files, name-ordered.
+    """``[{"name", "size"}]`` for an experiment's stored files (``artifacts/…``
+    and ``outputs/…``), name-ordered.
 
     The backend answers, so S3 records list theirs too; a duck-typed storage
-    without ``list_artifacts`` falls back to its local artifacts directory.
+    without ``list_artifacts`` falls back to its local record directory.
     """
     if hasattr(storage, "list_artifacts"):
         return storage.list_artifacts(app_name, verstr)
-    art_dir = storage.list_artifact_files(app_name, verstr)
-    if not art_dir or not os.path.isdir(art_dir):
+    record_dir = storage.local_record_dir(app_name, verstr)
+    if not record_dir or not os.path.isdir(record_dir):
         return []
-    return [
-        {"name": name, "size": os.path.getsize(os.path.join(art_dir, name))}
-        for name in sorted(os.listdir(art_dir))
-        if os.path.isfile(os.path.join(art_dir, name))
-    ]
+    return list_record_artifacts(record_dir)

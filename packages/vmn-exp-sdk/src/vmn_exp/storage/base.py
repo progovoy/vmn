@@ -23,7 +23,7 @@ from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
     artifact_file_path,
-    list_artifact_tree,
+    list_record_artifacts,
     valid_artifact_path,
 )
 
@@ -157,29 +157,31 @@ class SnapshotStorage(ABC):
 
     @abstractmethod
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
-        """Copy an artifact file into the snapshot's artifacts subdirectory,
-        as *name* (a relative ``a/b/c`` path) or under its basename."""
+        """Copy a file into the record as *name* — its record-relative path,
+        ``artifacts/<user path>`` or ``outputs/<path>`` (default:
+        ``artifacts/<basename>``)."""
         ...
 
     @abstractmethod
-    def list_artifact_files(self, app_name, verstr):
-        """Return the filesystem path to the artifacts directory, or None."""
+    def local_record_dir(self, app_name, verstr):
+        """The local directory holding the record's ``artifacts/`` and
+        ``outputs/`` trees, or None."""
         ...
 
     def list_artifacts(self, app_name, verstr):
-        """``[{"name", "size"}]`` for the record's artifacts, name-ordered;
-        nested artifacts are named by their relative ``a/b/c`` path."""
-        art_dir = self.list_artifact_files(app_name, verstr)
-        if not art_dir or not os.path.isdir(art_dir):
+        """``[{"name", "size"}]`` for the record's stored files (user
+        artifacts and vmn outputs), named by record-relative path."""
+        record_dir = self.local_record_dir(app_name, verstr)
+        if not record_dir or not os.path.isdir(record_dir):
             return []
-        return list_artifact_tree(art_dir)
+        return list_record_artifacts(record_dir)
 
     def artifact_local_path(self, app_name, verstr, name):
-        """A local path to artifact *name*, or None (unknown or unsafe name)."""
+        """A local path to stored file *name*, or None (unknown or unsafe name)."""
         if not valid_artifact_path(name):
             return None
-        art_dir = self.list_artifact_files(app_name, verstr)
-        path = artifact_file_path(art_dir, name) if art_dir else None
+        record_dir = self.local_record_dir(app_name, verstr)
+        path = artifact_file_path(record_dir, name) if record_dir else None
         return path if path and os.path.isfile(path) else None
 
     def log_sizes(self, app_name, verstr):

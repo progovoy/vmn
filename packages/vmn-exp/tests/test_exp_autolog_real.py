@@ -164,7 +164,7 @@ def test_an_ensemble_logs_one_model_not_one_per_sub_estimator(app_layout):
     )
 
     assert len(row["artifacts"]) == 1
-    assert row["artifacts"][0]["name"] == "sklearn_RandomForestClassifier.pkl"
+    assert row["artifacts"][0]["name"] == "artifacts/sklearn_RandomForestClassifier.pkl"
 
 
 # --- models ----------------------------------------------------------------
@@ -180,7 +180,7 @@ def test_log_models_attaches_a_pickle_of_the_real_estimator(app_layout):
 
     assert len(row["artifacts"]) == 1
     artifact = row["artifacts"][0]
-    assert artifact["name"] == "sklearn_LogisticRegression.pkl"
+    assert artifact["name"] == "artifacts/sklearn_LogisticRegression.pkl"
     assert artifact["size"] > 0
 
 
@@ -311,7 +311,7 @@ def test_xgboost_log_models_attaches_a_pickle(app_layout):
     )
 
     assert len(row["artifacts"]) == 1
-    assert row["artifacts"][0]["name"] == "xgboost_XGBClassifier.pkl"
+    assert row["artifacts"][0]["name"] == "artifacts/xgboost_XGBClassifier.pkl"
 
 
 def test_autolog_disable_restores_xgboost(app_layout):

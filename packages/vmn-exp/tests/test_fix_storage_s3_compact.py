@@ -29,7 +29,7 @@ def _bucket(monkeypatch):
 
 
 def _log_keys():
-    return [k.rsplit("/", 1)[1] for k in raw_keys() if "/log." in k]
+    return ["/".join(k.rsplit("/", 2)[1:]) for k in raw_keys() if "/log/" in k]
 
 
 def _host_with_segments(tmp_path, n=3):
@@ -48,8 +48,8 @@ def _values(storage):
 def test_compacted_name_covers_the_segments_it_merged():
     name = compacted_log_name("w", 5)
     assert log_writer_and_seq(name) == ("w", 5)
-    names = ["log.w.jsonl", "log.w@000003.jsonl", name, "log.w@000006.jsonl"]
-    assert group_log_names(names) == {"w": [name, "log.w@000006.jsonl"]}
+    names = ["log/w.jsonl", "log/w@000003.jsonl", name, "log/w@000006.jsonl"]
+    assert group_log_names(names) == {"w": [name, "log/w@000006.jsonl"]}
 
 
 def test_compaction_merges_a_writers_segments_into_one_object(tmp_path):
@@ -63,7 +63,7 @@ def test_compaction_merges_a_writers_segments_into_one_object(tmp_path):
 def test_compaction_of_a_single_object_changes_nothing(tmp_path):
     _host_with_segments(tmp_path, n=1)
     s3_storage().compact_log_segments("app", V, "w")
-    assert _log_keys() == ["log.w.jsonl"]
+    assert _log_keys() == ["log/w.jsonl"]
 
 
 def test_readers_do_not_double_count_mid_compaction(tmp_path, monkeypatch):
@@ -116,7 +116,7 @@ def test_segments_are_fetched_concurrently(tmp_path):
     s3 = s3_storage()
     real, together = s3._s3.get_object, concurrently(3, s3._s3.get_object)
     s3._s3.get_object = lambda **kw: (
-        together(**kw) if "/log.w" in kw["Key"] else real(**kw)
+        together(**kw) if "/log/w" in kw["Key"] else real(**kw)
     )
     assert _values(s3) == [0, 1, 2]
 
@@ -126,7 +126,7 @@ def test_compaction_does_not_touch_other_writers(tmp_path):
     host.append_log_entry("app", V, "x", entry(9))
     host.sync_log_to_remote("app", V, "x")
     s3_storage().compact_log_segments("app", V, "w")
-    assert sorted(_log_keys()) == [compacted_log_name("w", 1), "log.x.jsonl"]
+    assert sorted(_log_keys()) == [compacted_log_name("w", 1), "log/x.jsonl"]
 
 
 def test_the_index_does_not_fold_a_merged_object_on_top_of_its_parts(

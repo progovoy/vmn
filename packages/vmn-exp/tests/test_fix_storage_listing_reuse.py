@@ -35,6 +35,10 @@ def _age(storage):
 
 
 def _set_mtime(path, mtime_ns):
+    """*path*'s mtime — and a record directory's ``log/`` folder's with it."""
+    log_dir = os.path.join(path, "log")
+    if os.path.isdir(log_dir):
+        os.utime(log_dir, ns=(mtime_ns, mtime_ns))
     os.utime(path, ns=(mtime_ns, mtime_ns))
 
 
@@ -58,11 +62,12 @@ def test_settled_records_are_listed_again_without_scanning_them(storage, scans):
 def test_an_in_place_append_to_a_settled_record_still_shows(storage):
     _age(storage)
     storage.list_files(APP)
-    log = os.path.join(_dir(storage, 1), "log.w.jsonl")
+    log = os.path.join(_dir(storage, 1), "log/w.jsonl")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
     with open(log, "a") as f:
         f.write('{"type": "metrics", "values": {"i": 9}}\n')
 
-    listed = storage.list_files(APP)["0.0.1-dev.abc.r1"]["log.w.jsonl"]
+    listed = storage.list_files(APP)["0.0.1-dev.abc.r1"]["log/w.jsonl"]
 
     assert listed[0] == os.path.getsize(log)
 
@@ -93,10 +98,10 @@ def test_a_file_gone_behind_an_unchanged_signature_is_scanned_again(storage):
     path = _dir(storage, 1)
     mtime = os.stat(path).st_mtime_ns
     storage.list_files(APP)
-    os.remove(os.path.join(path, "log.w.jsonl"))
+    os.remove(os.path.join(path, "log/w.jsonl"))
     _set_mtime(path, mtime)
 
-    assert "log.w.jsonl" not in storage.list_files(APP)["0.0.1-dev.abc.r1"]
+    assert "log/w.jsonl" not in storage.list_files(APP)["0.0.1-dev.abc.r1"]
 
 
 def test_a_removed_record_leaves_the_listing(storage):
@@ -135,4 +140,7 @@ def test_a_fine_grained_mtime_settles_well_before_a_coarse_one(storage, scans):
 
     storage.list_files(APP)
 
-    assert sorted(os.path.basename(p) for p in scans[1:]) == ["0.0.1-dev.abc.r1"]
+    # A record's log/ folder is scanned with it.
+    records = [os.path.dirname(p) if os.path.basename(p) == "log" else p for p in scans[1:]]
+    scanned = {os.path.basename(p) for p in records}
+    assert scanned == {"0.0.1-dev.abc.r1"}  # its log/ folder with it

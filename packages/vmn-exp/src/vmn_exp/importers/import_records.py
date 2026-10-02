@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.core.writer import (
     claim_record,
     create_tags_entry,
@@ -173,8 +174,8 @@ def _copy_local_artifacts(
     for dirpath, _, filenames in os.walk(artifact_dir):
         for fname in filenames:
             src = os.path.join(dirpath, fname)
-            rel = os.path.relpath(src, artifact_dir)
-            storage.save_artifact_file(app_name, verstr, src, name=rel)
+            rel = os.path.relpath(src, artifact_dir).replace(os.sep, "/")
+            storage.save_artifact_file(app_name, verstr, src, name=user_artifact_path(rel))
 
 
 def _has_import_log(storage, app_name: str, verstr: str) -> bool:

@@ -57,7 +57,8 @@ def _write_experiment(
 
 
 def _append_log(app_layout, verstr, entry, writer="w0"):
-    path = os.path.join(_exp_dir(app_layout, verstr), f"log.{writer}.jsonl")
+    path = os.path.join(_exp_dir(app_layout, verstr), f"log/{writer}.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -416,7 +417,7 @@ def test_get_run_returns_log_series_and_artifacts(app_layout):
         {"step": 1, "ts": "2026-09-21T12:01:00Z", "value": 0.5},
         {"step": 2, "ts": "2026-09-21T12:02:00Z", "value": 0.2},
     ]
-    assert run["artifacts"] == [{"name": "model.bin", "size": len("weights")}]
+    assert run["artifacts"] == [{"name": "artifacts/model.bin", "size": len("weights")}]
     assert run["status"] == "succeeded"
     assert run["verstr"] == "0.0.1"
 

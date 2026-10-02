@@ -57,7 +57,8 @@ from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
-from vmn_exp.sdk.run_artifacts import RunArtifacts
+from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
+from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
 from vmn_exp.sdk.run_metrics import RunMetrics
@@ -469,11 +470,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
 
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``
-        path; default: its basename)."""
+        path; default: its basename), at ``artifacts/<name>`` in the run."""
         info = compute_artifact_info(path)
         if name is not None:
-            info["path"] = name
-        self._save_artifact_file(path, name)
+            info["path"] = user_artifact_path(checked_artifact_name(name))
+        self._save_artifact_file(path, info["path"])
         self._append(create_log_entry("artifact", **info))
 
     def _save_artifact_file(self, path, name):
@@ -490,7 +491,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         name:
             Model name.
         artifact_path:
-            Relative artifact path within this run.
+            Record-relative path of the stored file (``artifacts/<name>``).
         alias:
             If given, immediately point this alias at the new version.
         description:

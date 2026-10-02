@@ -83,7 +83,7 @@ def test_ingest_does_not_rewrite_the_legacy_log_file(app_layout, capfd):
         app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr
     )
     assert not os.path.exists(os.path.join(exp_dir, "log.yml")), os.listdir(exp_dir)
-    jsonl = [n for n in os.listdir(exp_dir) if n.startswith("log.") and n.endswith(".jsonl")]
+    jsonl = [n for n in os.listdir(os.path.join(exp_dir, "log")) if n.endswith(".jsonl")]
     assert jsonl, os.listdir(exp_dir)
 
 

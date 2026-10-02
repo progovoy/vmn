@@ -23,6 +23,7 @@ from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
+from vmn_exp.storage.files import user_artifact_path
 
 # Storage params an app's conf.yml may supply (param -> conf key).
 _STORAGE_CONF_KEYS = {
@@ -185,17 +186,18 @@ def save_run_state(storage, app_name, verstr, run_state, **updates):
 
 
 def compute_artifact_info(path):
-    """Compute sha256 and size for an artifact file."""
+    """Compute sha256 and size for an artifact file, stored under its basename."""
     return {
-        "path": os.path.basename(path),
+        "path": user_artifact_path(os.path.basename(path)),
         "size": os.path.getsize(path),
         "sha256": sha256_file(path),
     }
 
 
 def save_artifact(storage, app_name, verstr, src_path, name=None):
-    """Copy an artifact file into the experiment directory, as *name* (a
-    relative ``a/b/c`` path) when given, else under its basename."""
+    """Copy a file into the experiment record as *name* (its record-relative
+    ``artifacts/…`` or ``outputs/…`` path) when given, else as
+    ``artifacts/<basename>``."""
     if name is None:
         storage.save_artifact_file(app_name, verstr, src_path)
     else:
