@@ -35,6 +35,7 @@ from vmn_exp.core.status import (
     parse_iso,
     run_state_observed_at,
 )
+from vmn_exp.storage.journal import prune_journal
 from version_stamp.api import VMN_LOGGER
 
 # Remote reads/deletes in flight at once; a delete fans out further inside S3.
@@ -283,9 +284,25 @@ def _select_candidates(storage, app_name, metas, snapshot, args, schema=None):
     return candidates, None
 
 
+def _is_dry_run(args):
+    return getattr(args, "dry_run", False) or (
+        getattr(args, "query", None) is not None and not getattr(args, "yes", False)
+    )
+
+
+def _trim_journal(storage):
+    """Drop journal partitions past their use (stores without a lifecycle rule)."""
+    try:
+        prune_journal(storage)
+    except Exception as e:
+        VMN_LOGGER.warning(f"Could not trim the change journal: {e}")
+
+
 def experiment_prune(vcs, params, storage, args, app_name):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
+    if not _is_dry_run(args):
+        _trim_journal(storage)
     metas, snapshot = _metas_and_snapshot(storage, app_name)
     if not metas:
         print("No experiments to prune")
@@ -327,12 +344,8 @@ def experiment_prune(vcs, params, storage, args, app_name):
         print("Nothing to prune")
         return 0
 
-    query = getattr(args, "query", None)
-    dry_run = getattr(args, "dry_run", False) or (
-        query is not None and not getattr(args, "yes", False)
-    )
-    if dry_run:
-        if query is not None:
+    if _is_dry_run(args):
+        if getattr(args, "query", None) is not None:
             print_preview(to_delete)
         else:
             print(f"Would delete {len(to_delete)} experiments:")

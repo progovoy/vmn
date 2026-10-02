@@ -267,8 +267,10 @@ def s3(monkeypatch):
 
 
 def _remote_keys(client):
+    """Record keys (change-journal entries name records but are not records)."""
     resp = client.list_objects_v2(Bucket=BUCKET)
-    return [o["Key"] for o in resp.get("Contents", [])]
+    keys = [o["Key"] for o in resp.get("Contents", [])]
+    return [k for k in keys if "/journal/" not in f"/{k}"]
 
 
 def test_prune_local_only_keeps_remote_copies(app_layout, capfd, s3):

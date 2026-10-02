@@ -46,6 +46,12 @@ def _append_bytes(path, text):
         os.close(fd)
 
 
+def _read_class(storage):
+    """The class whose reads *storage* does (a journaled store journals its
+    writes only, so it reads as the backend it wraps)."""
+    return getattr(type(storage), "read_class", type(storage))
+
+
 def _dir_sig(entry):
     """A record directory's ``(mtime_ns, inode)``: every atomic write bumps it."""
     return (entry.stat().st_mtime_ns, entry.inode())
@@ -227,7 +233,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         """The directory of *verstr*'s files, for a reader that opens them
         itself (the index's worker processes); None from a subclass, which
         may read its files some other way."""
-        if type(self) is not LocalSnapshotStorage:
+        if _read_class(self) is not LocalSnapshotStorage:
             return None
         return self._snapshot_dir(app_name, verstr)
 
@@ -235,7 +241,7 @@ class LocalSnapshotStorage(SnapshotStorage):
         """``LocalSnapshotStorage(*args)`` in another process reads the same
         records (an index's I/O helper); None from a subclass, which may read
         its files some other way."""
-        if type(self) is not LocalSnapshotStorage:
+        if _read_class(self) is not LocalSnapshotStorage:
             return None
         return (self.root, self.area)
 
