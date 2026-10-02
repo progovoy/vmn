@@ -25,7 +25,7 @@ from vmn_exp.storage.files import (
     artifact_name_for,
     valid_artifact_path,
 )
-from vmn_exp.storage.index_cache_dir import s3_index_cache_path
+from vmn_exp.storage import host_dirs
 from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
     S3Base,
     app_keys,
@@ -108,9 +108,7 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         return (self.scheme, self.endpoint_url, self.bucket, self.prefix)
 
     def index_cache_path(self, app_name):
-        # The endpoint slot tells stores apart; S3 keeps its historical key.
-        where = self.endpoint_url if self.scheme == "s3" else f"{self.scheme}:"
-        return s3_index_cache_path(where, self.bucket, self.prefix, app_name)
+        return host_dirs.index_cache_path(self.cache_identity(), app_name)
 
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)

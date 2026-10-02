@@ -43,6 +43,12 @@ def log_reads(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def _cached_indexes():
+    """Index files in the per-host cache dir (storage/host_dirs.py)."""
+    root = os.path.join(os.environ["VMN_EXP_CACHE_DIR"], "index")
+    return [f for _, _, fs in os.walk(root) for f in fs if f.endswith(".sqlite")]
+
+
 def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log_reads):
     from vmn_exp.sdk.reader import list_runs
 
@@ -53,13 +59,12 @@ def test_list_runs_persists_an_ignored_index_and_rereads_nothing(app_layout, log
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=True)
     assert [r["metrics"]["loss"] for r in rows] == [0.4, 0.2]
 
-    base = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name)
-    assert os.path.isfile(os.path.join(base, ".index.sqlite"))
+    assert _cached_indexes()
     status = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=app_layout.repo_path, capture_output=True, text=True,
     ).stdout
-    assert ".index.sqlite" not in status
+    assert ".sqlite" not in status
 
     log_reads.clear()
     _append(app_layout, first, "2099-01-01T00:00:00Z", loss=0.01)
@@ -73,15 +78,14 @@ def test_list_runs_uses_the_index_unless_asked_to_read_directly(app_layout):
 
     _bootstrap(app_layout)
     _create(app_layout, "--metrics", "loss=0.4")
-    base = os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name)
 
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout), use_index=False)
     assert [r["metrics"]["loss"] for r in rows] == [0.4]
-    assert not os.path.exists(os.path.join(base, ".index.sqlite"))
+    assert not _cached_indexes()
 
     rows = list_runs(app_layout.app_name, storage=_storage(app_layout))
     assert [r["metrics"]["loss"] for r in rows] == [0.4]
-    assert os.path.isfile(os.path.join(base, ".index.sqlite"))
+    assert _cached_indexes()
 
 
 def test_list_runs_falls_back_when_the_index_cannot_be_opened(app_layout, monkeypatch):

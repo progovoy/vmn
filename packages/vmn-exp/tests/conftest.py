@@ -41,3 +41,10 @@ def _vmn_exp_commands_registered():
     from vmn_exp.cli.plugin import register_all
 
     register_all()
+
+
+@pytest.fixture(autouse=True)
+def _host_state_in_tmp(monkeypatch, tmp_path_factory):
+    """Index caches and push ledgers are per-host state (storage/host_dirs.py);
+    keep each test's off the real ~/.cache and away from other tests'."""
+    monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path_factory.mktemp("hoststate")))

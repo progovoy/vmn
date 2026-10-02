@@ -17,7 +17,7 @@ Status is *derived* on every call — a run whose heartbeat went stale reports
 ``stuck`` the next time it is read, never the ``running`` it last claimed. What
 is cached is the folded files: :func:`list_runs` reads through the experiment
 index (:mod:`vmn_exp.core.index`, persisted as
-``.index.sqlite`` beside the records), which re-reads only what changed.
+a per-host cache file, :mod:`vmn_exp.storage.host_dirs`), which re-reads only what changed.
 
 Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
 on ``vmn_exp.ui``, so the experiment feature can be lifted out later. The
@@ -157,7 +157,7 @@ def list_runs(
             :class:`~version_stamp.core.experiment_query.QueryError` when it will
             not compile — a caller wants the error, not a silent empty list.
         use_index: read through the incremental experiment index cached at
-            ``<experiments dir>/.index.sqlite`` — what ``vmn-exp list`` and the
+            the per-host cache dir (:mod:`vmn_exp.storage.host_dirs`) — what ``vmn-exp list`` and the
             ui use — so repeated calls re-read only what changed. Status is
             still derived per call. On by default; ``use_index=False`` reads
             every run straight from storage (and writes no index file).

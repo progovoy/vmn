@@ -12,8 +12,8 @@ from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage import host_dirs
 from vmn_exp.storage.files import (
-    INDEX_CACHE_FILE,
     LEGACY_LOG_FILE,
     METADATA_FILE,
     apply_metadata_updates,
@@ -256,10 +256,10 @@ class LocalSnapshotStorage(SnapshotStorage):
         return self._identity
 
     def index_cache_path(self, app_name):
-        """Inside the base dir; None before any record."""
+        """In the per-host cache dir; None before any record."""
         if not os.path.isdir(self._snapshot_base_dir(app_name)):
             return None
-        return os.path.join(self._ensure_base_dir(app_name), INDEX_CACHE_FILE)
+        return host_dirs.index_cache_path(self.cache_identity(), app_name)
 
     def update_note(self, app_name, verstr, note):
         return self.update_metadata(app_name, verstr, {"note": note})
