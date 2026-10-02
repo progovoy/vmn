@@ -57,6 +57,18 @@ def _latest_memoized(snap):
     return resolve
 
 
+def _open_journal(ws, storage, cache_path):
+    from vmn_exp.core.index_store import SqliteStore
+    from vmn_exp.storage.journal_sinks import journal_list_fn
+    from vmn_exp.ui.journal_follow import WorkspaceJournal
+
+    try:
+        list_fn = journal_list_fn(storage)
+    except AttributeError:  # a backend without a journal sink
+        return None
+    return WorkspaceJournal(list_fn, SqliteStore(cache_path), ws.name)
+
+
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None):
         self._db_dir = os.path.join(data_dir, "index")
@@ -64,6 +76,7 @@ class ExperimentSource:
         self._ws_db_dir = self._db_dir if use_index else None
         self.refresher = refresher or InlineRefresher()
         self._indexes = {}  # workspace name -> WorkspaceIndex
+        self._journals = {}  # store workspace name -> WorkspaceJournal
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._lock = threading.Lock()
@@ -81,9 +94,19 @@ class ExperimentSource:
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
             return ui_index.app_snapshot(
-                s3_storage, app_name, cache_path, self.refresher, schema
+                s3_storage, app_name, cache_path, self.refresher, schema,
+                self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
             )
         return self.workspace_index(ws).snapshot(app_name, self.refresher, schema)
+
+    def _journal(self, ws, storage, cache_path):
+        """The store workspace's journal reader (background refresh only)."""
+        if not self.refresher.background:
+            return None
+        with self._lock:
+            if ws.name not in self._journals:
+                self._journals[ws.name] = _open_journal(ws, storage, cache_path)
+            return self._journals[ws.name]
 
     def metrics_schema(self, ws, app_name):
         """The git workspace app's metrics schema, parsed once per conf change."""
@@ -109,3 +132,4 @@ class ExperimentSource:
         """Drop a removed workspace's caches: a later one may point elsewhere."""
         with self._lock:
             self._indexes.pop(ws_name, None)
+            self._journals.pop(ws_name, None)

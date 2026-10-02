@@ -110,6 +110,24 @@ class ExperimentIndex:
     def full_sweep_sec(self, value):
         self._sweep.full_sweep_sec = value
 
+    @property
+    def journaled(self):
+        """True: refreshes list only hinted and live records (plan 11 §5.2)."""
+        return self._sweep.journaled
+
+    @journaled.setter
+    def journaled(self, value):
+        self._sweep.journaled = value
+
+    def hint(self, name):
+        """The store's journal named *name*: the next refresh re-reads it (and
+        loads it, if new) without listing anything else."""
+        self._sweep.hint(name)
+
+    def reconcile(self):
+        """Make the next refresh a full listing."""
+        self._sweep.request_full()
+
     # -- refresh -------------------------------------------------------------
 
     def refresh(self):

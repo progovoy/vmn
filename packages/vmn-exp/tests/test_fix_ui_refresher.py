@@ -128,7 +128,7 @@ def test_inline_refresher_keeps_the_full_sweep_default():
     from vmn_exp.ui.refresher import InlineRefresher
 
     assert InlineRefresher().full_sweep_sec is None
-    assert Refresher().full_sweep_sec == 30
+    assert Refresher().full_sweep_sec == 3600
 
 
 def test_create_app_refreshes_inline_unless_asked_otherwise(tmp_path):

@@ -25,7 +25,8 @@ _LOGGER = logging.getLogger(__name__)
 _INLINE = InlineRefresher()
 
 
-def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None):
+def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
+                 journal=None, reconcile_sec=None):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
     A :class:`~vmn_exp.ui.refresher.Refresher` keeps the index fresh in
@@ -41,15 +42,20 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None):
         app_name,
         refresher,
         schema,
+        journal,
+        reconcile_sec,
     )
 
 
-def _snapshot_of(index_of, storage, app_name, refresher, schema=None):
+def _snapshot_of(index_of, storage, app_name, refresher, schema=None, journal=None,
+                 reconcile_sec=None):
     try:
         index = index_of()
         if refresher.full_sweep_sec is not None:
-            index.full_sweep_sec = refresher.full_sweep_sec
-        return refresher.snapshot(index).summarized(schema)
+            index.full_sweep_sec = reconcile_sec or refresher.full_sweep_sec
+        if journal is None:
+            return refresher.snapshot(index).summarized(schema)
+        return refresher.snapshot(index, journal).summarized(schema)
     except Exception:
         _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
         return experiment_index.direct_snapshot(storage, app_name, schema)

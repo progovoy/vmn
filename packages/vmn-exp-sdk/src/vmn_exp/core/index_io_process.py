@@ -84,9 +84,6 @@ def _read(stream):
 class _Watch:
     """The helper's :class:`~vmn_exp.core.index_listing.ListingWatch`."""
 
-    # One full listing at 100k records keeps a refresh busy for seconds.
-    rolling = True
-
     def __init__(self, io):
         self._io = io
 
@@ -98,9 +95,6 @@ class _Watch:
 
     def full_changes(self):
         return self._io.call("full_changes")
-
-    def slice_changes(self, keys):
-        return self._io.call("slice_changes", list(keys)) if keys else ({}, set())
 
     def reset(self):
         # A replaced helper starts from empty baselines anyway.
