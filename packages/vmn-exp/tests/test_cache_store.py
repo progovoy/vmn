@@ -7,10 +7,13 @@ from vmn_exp.core.index_store import CacheStore, IndexStore, SqliteStore
 APP = "app"
 
 
-@pytest.fixture(params=["sqlite"])
+@pytest.fixture(params=["sqlite", "postgres"])
 def cache_store(request, tmp_path):
-    factories = {"sqlite": lambda: SqliteStore(str(tmp_path / "idx.sqlite"))}
-    return factories[request.param]()
+    if request.param == "sqlite":
+        return SqliteStore(str(tmp_path / "idx.sqlite"))
+    from vmn_exp.ui.cache_pg import PostgresStore
+
+    return PostgresStore(request.getfixturevalue("pg_dsn"))
 
 
 def _rec(verstr, **extra):
@@ -126,7 +129,8 @@ def test_disabled_store_never_raises():
     assert store.kv_get("s", "f") is None
 
 
-def test_kv_get_never_raises_on_undecodable_payload(cache_store):
+def test_kv_get_never_raises_on_undecodable_payload(tmp_path):
+    cache_store = SqliteStore(str(tmp_path / "idx.sqlite"))
     cache_store._conn.execute(
         "INSERT INTO exp_index_kv (scope, fingerprint, payload) VALUES ('s', 'f', '{bad')"
     )
