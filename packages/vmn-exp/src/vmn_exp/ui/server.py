@@ -12,11 +12,14 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.auth.authz import require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.ui import (
+    routes_admin,
     routes_leaderboard,
     routes_lineage,
     routes_media,
@@ -65,6 +68,7 @@ def create_app(
     background_refresh=False,
     auth=None,
     role_mappings=(),
+    control_plane=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -72,7 +76,9 @@ def create_app(
     without it each request refreshes the index first, seeing every write
     made before it. *auth* is an ``AuthenticatorChain`` tried after the
     static *token*; with neither the API is open. *role_mappings* map OIDC
-    groups to roles (``{group, workspace or "*", role}``)."""
+    groups to roles (``{group, workspace or "*", role}``). A *control_plane*
+    enables API tokens (``vmnx_...`` bearer tokens, managed under
+    ``/api/v1/tokens``) and the audit log."""
     from vmn_exp.ui.jobs import JobRunner, build_command
 
     app = FastAPI(
@@ -85,7 +91,12 @@ def create_app(
     app.state.read_only = read_only
     app.state.role_mappings = list(role_mappings)
     jobs = JobRunner()
-    chain = build_chain(token, auth.authenticators if auth else ())
+    app.state.control_plane = control_plane
+    app.state.audit = AuditLog(control_plane) if control_plane else None
+    extra = list(auth.authenticators) if auth else []
+    if control_plane:
+        extra.append(ApiTokenAuthenticator(TokenService(control_plane)))
+    chain = build_chain(token, extra)
     app.state.auth_chain = chain
     app.state.auth_enabled = bool(chain)
     guard = RequestGuard.build(
@@ -103,6 +114,8 @@ def create_app(
 
     for router in chain.routers():
         app.include_router(router)
+
+    install_audit_middleware(app)
 
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
@@ -456,6 +469,7 @@ def create_app(
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
+    routes_admin.register(app, API_PREFIX)
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)

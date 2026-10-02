@@ -132,6 +132,11 @@ export default function App() {
             </NavLink>
           </nav>
         )}
+        <nav className="sb-nav">
+          <NavLink to="/tokens">
+            <NavIcon name="tokens" /> API tokens
+          </NavLink>
+        </nav>
 
         {appBase && (
           <nav className="sb-nav">

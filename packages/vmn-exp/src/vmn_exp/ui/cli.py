@@ -156,6 +156,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         bind_host=host,
         allowed_hosts=getattr(args, "allowed_host", None),
         auth=auth,
+        control_plane=control_plane,
         **kwargs,
     )
     app.state.config = cfg
