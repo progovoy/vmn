@@ -3,6 +3,7 @@ pipeline, cached detail reads, streamed S3 artifacts, validated query params."""
 import os
 
 import pytest
+import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.core.log import sort_by_metric
 from vmn_exp.core.tree import subtree_status
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.storage.store_marker import new_marker
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -227,7 +229,11 @@ def s3_ws(tmp_path):
     os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "x")
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
     with moto.mock_aws():
-        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="vmn-bucket")
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="vmn-bucket")
+        # An empty prefix is "no vmn store" (404) since plan 14 §2.3: mark it.
+        s3.put_object(Bucket="vmn-bucket", Key="exps/store.yml",
+                      Body=yaml.safe_dump(new_marker()).encode())
         from vmn_exp.ui.workspaces import WorkspaceManager
 
         manager = WorkspaceManager(str(tmp_path / "data"))

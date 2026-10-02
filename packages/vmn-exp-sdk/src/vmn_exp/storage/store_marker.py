@@ -76,6 +76,9 @@ class LocalRoot:
         except FileNotFoundError:
             return set()
 
+    def dirs(self):
+        return {n for n in self.entries() if os.path.isdir(os.path.join(self.root, n))}
+
 
 class ObjectRoot:
     def __init__(self, client, bucket, prefix, endpoint_url=None):
@@ -107,12 +110,20 @@ class ObjectRoot:
             if not is_taken(e):
                 raise
 
-    def entries(self):
-        page = self.client.list_objects_v2(
+    def _page(self):
+        return self.client.list_objects_v2(
             Bucket=self.bucket, Prefix=self._dir, Delimiter="/", MaxKeys=100)
-        names = [p["Prefix"] for p in page.get("CommonPrefixes", [])]
-        names += [o["Key"] for o in page.get("Contents", [])]
-        return {n[len(self._dir):].rstrip("/") for n in names}
+
+    def _names(self, keys):
+        return {k[len(self._dir):].rstrip("/") for k in keys}
+
+    def entries(self):
+        page = self._page()
+        return self.dirs(page) | self._names(o["Key"] for o in page.get("Contents", []))
+
+    def dirs(self, page=None):
+        page = page or self._page()
+        return self._names(p["Prefix"] for p in page.get("CommonPrefixes", []))
 
 
 def root_of(storage):
@@ -127,8 +138,9 @@ def root_of(storage):
 
 
 def _has_records(where):
-    return any(n not in _AREAS and n != MARKER and not n.startswith(".")
-               for n in where.entries())
+    """v1 records live in ``<root>/<app>/<verstr>/``: a top-level directory
+    that is no area. Stray files beside the store are not records."""
+    return any(n not in _AREAS and not n.startswith(".") for n in where.dirs())
 
 
 def _parse(text):

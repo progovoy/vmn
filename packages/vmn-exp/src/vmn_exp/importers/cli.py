@@ -137,7 +137,11 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
         _print_dry_run(runs)
         return 0
 
-    storage = _get_storage(args)
+    try:
+        storage = _get_storage(args)
+    except (OSError, ValueError) as e:
+        print(f"error: cannot open the experiment store: {e}")
+        return 1
     n_created = n_skipped = n_resumed = n_failed = 0
 
     with ThreadPoolExecutor(max_workers=workers) as pool:

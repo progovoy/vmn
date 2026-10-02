@@ -20,7 +20,7 @@ def client(tmp_path):
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     src = tmp_path / "c.txt"
     src.write_bytes(b"nested bytes")
-    storage.save_artifact_file(APP, V, str(src), name="a/b/c.txt")
+    storage.save_artifact_file(APP, V, str(src), name="artifacts/a/b/c.txt")
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
