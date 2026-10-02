@@ -1,10 +1,11 @@
 import { memo, useMemo, useState, type ReactNode } from "react";
 import type { SeriesPoint } from "../types";
 import { seriesColor } from "../util";
-import { allTimestamped, runOrigin, splitSysMetrics, type XMode } from "../util/chartData";
+import { allTimestamped, runOrigin, splitSysMetrics } from "../util/chartData";
 import { filterMetrics } from "../util/seriesArrays";
-import { AUTO_X, xMetricMap, xMetricOptions, type XMap } from "../util/xMetric";
+import { xMetricMap, xMetricOptions, type XMap } from "../util/xMetric";
 import { useJoinedSeries } from "../hooks/useJoinedSeries";
+import { useCurveControls, type CurveControlProps } from "../hooks/useCurveControls";
 import { LogToggle, MetricSearch, XMetricSelect, XModeToggle } from "./ChartControls";
 import MetricGrid, { type GridView } from "./MetricGrid";
 import SmoothingSlider from "./SmoothingSlider";
@@ -17,10 +18,11 @@ type Series = Record<string, SeriesPoint[]>;
  *  declared step metric (*stepMetrics*), or every one once an x metric is
  *  picked, is drawn from *fetchJoined*'s series against that metric.
  *  *markStep* (a fork point) is marked on every step chart. *hiddenMetrics*
- *  (`define_metric(hidden=True)` or conf.yml) get a collapsed section too. */
+ *  (`define_metric(hidden=True)` or conf.yml) get a collapsed section too.
+ *  Smoothing, x mode, x metric and log scale follow *controls* when given. */
 function TrainingCurves({
-  series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics,
-}: {
+  series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics, ...control
+}: CurveControlProps & {
   series: Series;
   seriesTotal?: Record<string, number>;
   startedAt?: string | null;
@@ -29,10 +31,9 @@ function TrainingCurves({
   markStep?: number | null;
   hiddenMetrics?: string[];
 }) {
-  const [alpha, setAlpha] = useState(0);
-  const [xMode, setXMode] = useState<XMode>("step");
-  const [xChoice, setXChoice] = useState(AUTO_X);
-  const [logY, setLogY] = useState(false);
+  const {
+    smoothing: alpha, setSmoothing: setAlpha, xMode, setXMode, x: xChoice, setX: setXChoice, logY, setLogY,
+  } = useCurveControls(control);
   const [query, setQuery] = useState("");
 
   const origin = useMemo(() => runOrigin(series, startedAt), [series, startedAt]);
