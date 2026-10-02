@@ -36,7 +36,7 @@ def test_migrations_are_idempotent(pg_dsn):
         apply_migrations(conn)
         apply_migrations(conn)
         (n,) = conn.execute("SELECT count(*) FROM vmn_schema_migrations").fetchone()
-    assert n == 2
+    assert n == 3
 
 
 def test_unreachable_database_never_raises():

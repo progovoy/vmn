@@ -53,5 +53,6 @@ async function parse<T>(res: Response): Promise<T> {
       status: res.status,
     });
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }

@@ -14,6 +14,7 @@ const StampTree = lazy(() => import("./pages/StampTree"));
 const Actions = lazy(() => import("./pages/Actions"));
 const Models = lazy(() => import("./pages/Models"));
 const ModelDetail = lazy(() => import("./pages/ModelDetail"));
+const Tokens = lazy(() => import("./pages/Tokens"));
 
 function PageFallback() {
   return <div className="route-fallback" aria-label="loading page" />;
@@ -31,6 +32,7 @@ export const routes: RouteObject[] = [
     element: <App />,
     children: [
       { index: true, element: <WorkspacesHome /> },
+      { path: "tokens", element: page(Tokens), handle: { page: "tokens" } },
       { path: "ws/:ws", element: <AppsPage />, handle: { page: "apps" } },
       { path: "ws/:ws/app/:app", element: <Leaderboard />, handle: { page: "experiments", wide: true } },
       { path: "ws/:ws/app/:app/run/:verstr", element: page(Run), handle: { page: "run" } },

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-""":class:`ControlPlaneStore` on Postgres (tables from migration 0002_identity)."""
+""":class:`ControlPlaneStore` on Postgres (tables from migrations 0002_identity, 0003_audit)."""
 import threading
 
 from vmn_exp.ui import migrations
-from vmn_exp.ui.control_plane import _TABLES, ControlPlaneStore
+from vmn_exp.ui.control_plane import _NON_EXPIRING, _TABLES, ControlPlaneStore
 
 
 class PostgresControlPlane(ControlPlaneStore):
@@ -16,7 +16,7 @@ class PostgresControlPlane(ControlPlaneStore):
 
     def put(self, kind, key, doc, expires_at=None):
         table, cols, args = _TABLES[kind], ["id", "doc"], [key, self._jsonb(doc)]
-        if kind != "token":
+        if kind not in _NON_EXPIRING:
             cols, args = cols + ["expires_at"], args + [expires_at or 0]
         updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols[1:])
         sql = (
@@ -49,7 +49,7 @@ class PostgresControlPlane(ControlPlaneStore):
     def _get(self, kind, key, now):
         sql = f"SELECT doc FROM {_TABLES[kind]} WHERE id = %s"
         args = [key]
-        if kind != "token" and now is not None:
+        if kind not in _NON_EXPIRING and now is not None:
             sql += " AND expires_at > %s"
             args.append(now)
         row = self._db.execute(sql, args).fetchone()
