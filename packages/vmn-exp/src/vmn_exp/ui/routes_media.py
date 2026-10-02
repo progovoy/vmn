@@ -20,6 +20,8 @@ import json
 
 from fastapi import HTTPException, Request
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.tables import table_page
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui.http_params import clamp_page
@@ -51,8 +53,7 @@ def register(app, prefix, storage_for, segment):
 
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/table/{path:path}"
-    )
+        "/experiments/{verstr}/table/{path:path}", dependencies=[require(VIEWER)])
     def experiment_table(
         request: Request,
         ws_name: str,
@@ -78,8 +79,7 @@ def register(app, prefix, storage_for, segment):
 
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/histograms/{name:path}"
-    )
+        "/experiments/{verstr}/histograms/{name:path}", dependencies=[require(VIEWER)])
     def experiment_histogram(request: Request, ws_name: str, app_tag: str, verstr: str, name: str):
         storage, app_name = storage_for(ws_name, app_tag)[:2]
         segment(verstr)

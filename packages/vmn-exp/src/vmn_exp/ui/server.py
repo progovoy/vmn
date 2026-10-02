@@ -12,6 +12,8 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from vmn_exp.ui.auth.authz import require, require_action
+from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.ui import (
@@ -61,13 +63,15 @@ def create_app(
     allowed_hosts=None,
     background_refresh=False,
     auth=None,
+    role_mappings=(),
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
     the latest snapshot at once, up to about a second behind storage;
     without it each request refreshes the index first, seeing every write
     made before it. *auth* is an ``AuthenticatorChain`` tried after the
-    static *token*; with neither the API is open."""
+    static *token*; with neither the API is open. *role_mappings* map OIDC
+    groups to roles (``{group, workspace or "*", role}``)."""
     from vmn_exp.ui.jobs import JobRunner, build_command
 
     app = FastAPI(
@@ -78,8 +82,10 @@ def create_app(
     )
     app.state.manager = manager
     app.state.read_only = read_only
+    app.state.role_mappings = list(role_mappings)
     jobs = JobRunner()
     chain = build_chain(token, auth.authenticators if auth else ())
+    app.state.auth_enabled = bool(chain)
     guard = RequestGuard.build(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )
@@ -169,17 +175,17 @@ def create_app(
         """The workspace's experiment storage, local checkout or store."""
         return _exp_storage_for(ws) or source.workspace_index(ws).storage
 
-    @app.get(f"{API_PREFIX}/meta")
+    @app.get(f"{API_PREFIX}/meta", dependencies=[require(VIEWER)])
     def meta():
         from version_stamp.api import version as version_mod
 
         return {"version": version_mod.version, "read_only": read_only}
 
-    @app.get(f"{API_PREFIX}/workspaces")
+    @app.get(f"{API_PREFIX}/workspaces", dependencies=[require(VIEWER)])
     def list_workspaces():
         return [ws.to_public_dict() for ws in manager.list()]
 
-    @app.post(f"{API_PREFIX}/workspaces", status_code=201)
+    @app.post(f"{API_PREFIX}/workspaces", status_code=201, dependencies=[require(ADMIN)])
     def add_workspace(body: dict):
         if read_only:
             raise HTTPException(403, "Server is read-only")
@@ -196,7 +202,7 @@ def create_app(
             raise HTTPException(400, str(e))
         return ws.to_public_dict()
 
-    @app.delete(f"{API_PREFIX}/workspaces/{{ws_name}}", status_code=204)
+    @app.delete(f"{API_PREFIX}/workspaces/{{ws_name}}", status_code=204, dependencies=[require(ADMIN)])
     def remove_workspace(ws_name: str):
         if read_only:
             raise HTTPException(403, "Server is read-only")
@@ -209,7 +215,7 @@ def create_app(
         app_lists.pop(ws_name)
         store_storages.pop(ws_name, None)
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps", dependencies=[require(VIEWER)])
     def list_apps(ws_name: str):
         ws = _experiment_workspace(ws_name)
         store_storage = _exp_storage_for(ws)
@@ -238,8 +244,7 @@ def create_app(
         return source.detail_options(ws, source.snapshot(ws, app_name, _exp_storage_for(ws)))
 
     @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}"
-    )
+        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}", dependencies=[require(VIEWER)])
     def get_experiment(
         request: Request,
         ws_name: str,
@@ -272,8 +277,7 @@ def create_app(
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/log"
-    )
+        "/experiments/{verstr}/log", dependencies=[require(VIEWER)])
     def experiment_log(
         request: Request,
         ws_name: str,
@@ -306,8 +310,7 @@ def create_app(
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/artifacts/{filename:path}"
-    )
+        "/experiments/{verstr}/artifacts/{filename:path}", dependencies=[require(VIEWER)])
     def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
@@ -338,19 +341,18 @@ def create_app(
             raise HTTPException(404, f"Artifact {filename} not found")
         return FileResponse(path, filename=download_name)
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema", dependencies=[require(VIEWER)])
     def app_metrics_schema(ws_name: str, app_tag: str):
         return _leaderboard_inputs(ws_name, app_tag)[1]
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions", dependencies=[require(VIEWER)])
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
         return source.workspace_index(ws).list_versions(_app_name(app_tag))
 
     @app.post(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",
-        status_code=202,
-    )
+        status_code=202, dependencies=[require_action()])
     def run_action(ws_name: str, app_tag: str, action: str, body: dict = None):
         if read_only:
             raise HTTPException(403, "Server is read-only")
@@ -364,14 +366,14 @@ def create_app(
             raise HTTPException(409, err)
         return job
 
-    @app.get(f"{API_PREFIX}/jobs/{{job_id}}")
+    @app.get(f"{API_PREFIX}/jobs/{{job_id}}", dependencies=[require(VIEWER)])
     def get_job(job_id: str):
         job = jobs.get(job_id)
         if job is None:
             raise HTTPException(404, "Job not found")
         return job
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff", dependencies=[require(VIEWER)])
     def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
@@ -391,7 +393,7 @@ def create_app(
             raise HTTPException(404, err)
         return result
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog", dependencies=[require(VIEWER)])
     def version_changelog(
         ws_name: str,
         app_tag: str,
@@ -409,7 +411,7 @@ def create_app(
             raise HTTPException(404, err)
         return result
 
-    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/config")
+    @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/config", dependencies=[require(VIEWER)])
     def app_config(ws_name: str, app_tag: str, v: str = None):
         ws = _git_workspace(ws_name)
         payload, err = config_reader.app_conf_payload(

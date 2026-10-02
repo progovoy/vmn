@@ -142,7 +142,7 @@ class OIDCAuthenticator:
         groups = claims.get(self.config.groups_claim) or []
         name = claims.get("name") or claims.get("email") or claims["sub"]
         roles = roles_for_groups(groups, self.config.role_mappings)
-        return Principal(f"oidc:{claims['sub']}", name, roles)
+        return Principal(f"oidc:{claims['sub']}", name, roles, tuple(groups))
 
     def router(self):
         from vmn_exp.ui.auth.oidc_routes import oidc_router

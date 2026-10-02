@@ -5,6 +5,8 @@ does (a trial's own, else its nested runs'). Rows come from the app's index
 snapshot — the sweep's subtree only; the spec from the sweep run's metadata."""
 from fastapi import HTTPException, Request
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, parse_spec
 from vmn_exp.core.sweep.summary import snapshot_trials
@@ -25,7 +27,7 @@ def register(app, prefix, sweep_inputs, segment):
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
     a URL verstr or raises a 400."""
 
-    @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/sweep")
+    @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/sweep", dependencies=[require(VIEWER)])
     def experiment_sweep(request: Request, ws_name: str, app_tag: str, verstr: str):
         segment(verstr)
         app_name, snapshot_for, storage = sweep_inputs(ws_name, app_tag)

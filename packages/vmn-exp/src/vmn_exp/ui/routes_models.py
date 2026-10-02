@@ -6,6 +6,8 @@ needed).  Origin / read-only guards run in the shared middleware layer.
 """
 from fastapi import HTTPException
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.jobs_models import (
     validate_alias_body,
     validate_register_body,
@@ -43,14 +45,14 @@ def register(app, api_prefix, any_exp_storage):
     # Read routes
     # ------------------------------------------------------------------
 
-    @app.get(f"{base}")
+    @app.get(f"{base}", dependencies=[require(VIEWER)])
     def list_models_route(ws_name: str, kind: str = None):
         if kind is not None and kind not in KINDS:
             raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
         storage = any_exp_storage(ws_name)
         return list_models_response(storage, kind=kind)
 
-    @app.get(f"{base}/{{model_name}}")
+    @app.get(f"{base}/{{model_name}}", dependencies=[require(VIEWER)])
     def get_model_route(ws_name: str, model_name: str):
         _valid_model(model_name)
         storage = any_exp_storage(ws_name)
@@ -63,7 +65,7 @@ def register(app, api_prefix, any_exp_storage):
     # Mutation routes
     # ------------------------------------------------------------------
 
-    @app.post(f"{base}/{{model_name}}/versions", status_code=201)
+    @app.post(f"{base}/{{model_name}}/versions", status_code=201, dependencies=[require(EDITOR)])
     def register_version_route(ws_name: str, model_name: str, body: dict = None):
         _require_rw()
         _valid_model(model_name)
@@ -94,7 +96,7 @@ def register(app, api_prefix, any_exp_storage):
 
         return {"version": n}
 
-    @app.post(f"{base}/{{model_name}}/aliases", status_code=200)
+    @app.post(f"{base}/{{model_name}}/aliases", status_code=200, dependencies=[require(EDITOR)])
     def move_alias_route(ws_name: str, model_name: str, body: dict = None):
         _require_rw()
         _valid_model(model_name)
@@ -117,7 +119,7 @@ def register(app, api_prefix, any_exp_storage):
             raise HTTPException(409, str(exc))
         return {}
 
-    @app.delete(f"{base}/{{model_name}}/aliases/{{alias}}", status_code=200)
+    @app.delete(f"{base}/{{model_name}}/aliases/{{alias}}", status_code=200, dependencies=[require(EDITOR)])
     def remove_alias_route(ws_name: str, model_name: str, alias: str):
         _require_rw()
         _valid_model(model_name)
@@ -129,7 +131,7 @@ def register(app, api_prefix, any_exp_storage):
             raise HTTPException(400, str(exc))
         return {}
 
-    @app.post(f"{base}/{{model_name}}/versions/{{version_n}}/status", status_code=200)
+    @app.post(f"{base}/{{model_name}}/versions/{{version_n}}/status", status_code=200, dependencies=[require(EDITOR)])
     def set_status_route(ws_name: str, model_name: str, version_n: int, body: dict = None):
         _require_rw()
         _valid_model(model_name)

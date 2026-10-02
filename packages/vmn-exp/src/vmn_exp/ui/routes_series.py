@@ -19,6 +19,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, Request
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import series as series_reader
 from vmn_exp.ui.responses import json_response
@@ -89,7 +91,7 @@ def register(app, prefix, storage_for, max_series_points):
     """Add the route; *storage_for(ws_name, app_tag)* → ``(storage, app_name,
     metrics schema)``."""
 
-    @app.post(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/series")
+    @app.post(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/series", dependencies=[require(VIEWER)])
     def experiment_series(ws_name: str, app_tag: str, body: dict, request: Request):
         storage, app_name, schema = storage_for(ws_name, app_tag)
         verstrs, keys, max_points, x = parse_body(body, max_series_points)

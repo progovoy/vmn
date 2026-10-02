@@ -28,6 +28,7 @@ class Principal:
     id: str
     name: str
     roles: dict = field(default_factory=dict)
+    groups: tuple = ()
 
     def role_in(self, workspace):
         """The role in *workspace*: its own entry, else the ``*`` one."""

@@ -12,6 +12,8 @@ import weakref
 
 from fastapi import HTTPException, Request
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex
 from vmn_exp.core.status import derive_status
 from vmn_exp.registry.lineage import run_lineage, version_lineage
@@ -65,7 +67,7 @@ def register(app, prefix, lineage_inputs, segment):
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
     a URL verstr or raises a 400."""
 
-    @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/lineage")
+    @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/lineage", dependencies=[require(VIEWER)])
     def experiment_lineage(
         request: Request,
         ws_name: str,
@@ -92,7 +94,7 @@ def register_version_lineage(app, prefix, workspace_inputs):
     """Add ``GET .../models/{name}/versions/{n}/lineage``; *workspace_inputs(ws_name)*
     → ``(snapshot_for(app_name), storage)``."""
 
-    @app.get(f"{prefix}/workspaces/{{ws_name}}/models/{{model_name}}/versions/{{n}}/lineage")
+    @app.get(f"{prefix}/workspaces/{{ws_name}}/models/{{model_name}}/versions/{{n}}/lineage", dependencies=[require(VIEWER)])
     def version_lineage_route(request: Request, ws_name: str, model_name: str, n: int):
         if not valid_model_name(model_name):
             raise HTTPException(400, f"Invalid model name {model_name!r}")
