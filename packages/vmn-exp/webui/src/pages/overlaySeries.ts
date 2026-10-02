@@ -47,9 +47,9 @@ function toRun(key: string, series: Series, status?: Partial<RunStatus> | null):
   };
 }
 
-async function loadBatch(ws: string, app: string, runs: string[]): Promise<OverlayData> {
+async function loadBatch(ws: string, app: string, runs: string[], maxPoints: number): Promise<OverlayData> {
   const [batch, statuses] = await Promise.all([
-    fetchSeriesBatch(ws, app, runs, null, OVERLAY_POINTS),
+    fetchSeriesBatch(ws, app, runs, null, maxPoints),
     // Status only drives polling and the relative-time origin: best effort.
     fetchRunStatuses(ws, app, runs).catch(() => ({} as Record<string, Partial<RunStatus>>)),
   ]);
@@ -68,11 +68,12 @@ function pollInterval(runs: OverlayRunData[]): number | null {
   return pollIntervalMs(beats.length ? Math.min(...beats) : null);
 }
 
-export function useOverlaySeries(ws: string, app: string, runs: string[]) {
+/** Callers asking for the same runs and budget share one request. */
+export function useOverlaySeries(ws: string, app: string, runs: string[], maxPoints = OVERLAY_POINTS) {
   const client = useQueryClient();
   const query = useQuery<OverlayData>({
-    queryKey: ["overlay", ws, app, runs],
-    queryFn: ({ signal }) => withSignal(signal, () => loadBatch(ws, app, runs)),
+    queryKey: ["overlay", ws, app, runs, maxPoints],
+    queryFn: ({ signal }) => withSignal(signal, () => loadBatch(ws, app, runs, maxPoints)),
     enabled: runs.length > 0,
   }, client);
   const data = query.data ?? null;
