@@ -31,13 +31,19 @@ CREATE TABLE IF NOT EXISTS vmn_workspaces (
     id TEXT PRIMARY KEY, doc TEXT NOT NULL
 );
 """
+# Migration 0003_audit: who did what through the server (plan 11 §6.2).
+_AUDIT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS vmn_audit (
+    id TEXT PRIMARY KEY, doc TEXT NOT NULL
+);
+"""
 _TABLES = {"token": "vmn_api_tokens", "session": "vmn_sessions", "login": "vmn_login_states",
-           "workspace": "vmn_workspaces"}
-_NON_EXPIRING = ("token", "workspace")
+           "workspace": "vmn_workspaces", "audit": "vmn_audit"}
+_NON_EXPIRING = ("token", "workspace", "audit")
 
 
 class ControlPlaneStore:
-    """Key/document storage per kind (``token``, ``session``, ``login``, ``workspace``)."""
+    """Key/document storage per kind (``token``, ``session``, ``login``, ``workspace``, ``audit``)."""
 
     def put(self, kind, key, doc, expires_at=None):
         raise NotImplementedError
@@ -62,7 +68,7 @@ class SQLiteControlPlane(ControlPlaneStore):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self._db.executescript(_IDENTITY_SCHEMA + _WORKSPACES_SCHEMA)
+        self._db.executescript(_IDENTITY_SCHEMA + _WORKSPACES_SCHEMA + _AUDIT_SCHEMA)
 
     @classmethod
     def in_data_dir(cls, data_dir):

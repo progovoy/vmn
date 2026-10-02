@@ -13,6 +13,8 @@ import RegisterModelDialog from "../components/RegisterModelDialog";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
+import Comments from "../components/Comments";
+import { commentTarget } from "../apiReports";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunLineage from "../components/RunLineage";
@@ -163,6 +165,10 @@ export default function Run() {
       </div>
 
       {detail ? <RunBody ws={ws} app={app} appName={appName} detail={detail} /> : <Skeleton />}
+      <aside className="card run-comments" aria-label="Comments">
+        <div className="eyebrow">Comments</div>
+        <Comments ws={ws} target={commentTarget.run(appName, summary.verstr)} />
+      </aside>
     </>
   );
 }

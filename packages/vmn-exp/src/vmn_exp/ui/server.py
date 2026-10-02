@@ -12,15 +12,20 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
+from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.auth.authz import require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.ui import (
+    routes_admin,
     routes_leaderboard,
     routes_lineage,
     routes_media,
+    routes_comments,
     routes_models,
+    routes_reports,
     routes_series,
     routes_sweep,
     routes_tree,
@@ -65,6 +70,7 @@ def create_app(
     background_refresh=False,
     auth=None,
     role_mappings=(),
+    control_plane=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -72,8 +78,15 @@ def create_app(
     without it each request refreshes the index first, seeing every write
     made before it. *auth* is an ``AuthenticatorChain`` tried after the
     static *token*; with neither the API is open. *role_mappings* map OIDC
-    groups to roles (``{group, workspace or "*", role}``)."""
+    groups to roles (``{group, workspace or "*", role}``). A *control_plane*
+    enables API tokens (``vmnx_...`` bearer tokens, managed under
+    ``/api/v1/tokens``) and the audit log."""
+    from vmn_exp.storage.areas import RUNS
+    from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
+    from vmn_exp.ui.jobs_store import build_store_action
+    from vmn_exp.ui import storage_access
+    from vmn_exp.ui.storage_access import EDIT, READ
 
     app = FastAPI(
         title="vmn-exp ui",
@@ -85,7 +98,12 @@ def create_app(
     app.state.read_only = read_only
     app.state.role_mappings = list(role_mappings)
     jobs = JobRunner()
-    chain = build_chain(token, auth.authenticators if auth else ())
+    app.state.control_plane = control_plane
+    app.state.audit = AuditLog(control_plane) if control_plane else None
+    extra = list(auth.authenticators) if auth else []
+    if control_plane:
+        extra.append(ApiTokenAuthenticator(TokenService(control_plane)))
+    chain = build_chain(token, extra)
     app.state.auth_chain = chain
     app.state.auth_enabled = bool(chain)
     guard = RequestGuard.build(
@@ -100,9 +118,12 @@ def create_app(
     # One client per store workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
     store_storages = {}
+    edit_storages = {}
 
     for router in chain.routers():
         app.include_router(router)
+
+    install_audit_middleware(app)
 
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
@@ -221,6 +242,7 @@ def create_app(
         source.forget(ws_name)
         app_lists.pop(ws_name)
         store_storages.pop(ws_name, None)
+        edit_storages.pop(ws_name, None)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps", dependencies=[require(VIEWER)])
     def list_apps(ws_name: str):
@@ -376,12 +398,44 @@ def create_app(
     def run_action(ws_name: str, app_tag: str, action: str, body: dict = None):
         if read_only:
             raise HTTPException(403, "Server is read-only")
-        ws = _git_workspace(ws_name)
+        ws = _workspace(ws_name)
         app_name = _app_name(app_tag)
+        if ws.kind == "store":
+            return _submit_store_action(ws, app_name, action, body)
         command, err = build_command(action, app_name, body)
         if err:
             raise HTTPException(400, err)
         job, err = jobs.submit(ws_name, ws.path, command)
+        if err:
+            raise HTTPException(409, err)
+        return job
+
+    def _capabilities(ws):
+        if ws.capabilities is not None:
+            return ws.capabilities
+        capabilities = storage_access.probe_store(ws.store).capabilities
+        if READ in capabilities:  # an unreachable store is re-probed next time
+            manager.set_capabilities(ws.name, capabilities)
+        return capabilities
+
+    def _edit_storage(ws):
+        if ws.name not in edit_storages:
+            edit_storages[ws.name] = open_storage(ws.store, area=RUNS, buffer_logs=True)
+        return edit_storages[ws.name]
+
+    def _submit_store_action(ws, app_name, action, body):
+        store_action, err = build_store_action(action, app_name, body)
+        if err:
+            raise HTTPException(400, err)
+        if EDIT not in _capabilities(ws):
+            raise HTTPException(403, "The server has no edit access to this store")
+        storage, reads = _edit_storage(ws), _exp_storage_for(ws)
+
+        def hint(app, verstr):
+            source.touched(ws, app, reads)
+
+        job, err = jobs.submit_call(
+            ws.name, store_action.command, lambda: store_action.run(storage, hint))
         if err:
             raise HTTPException(409, err)
         return job
@@ -456,6 +510,7 @@ def create_app(
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
+    routes_admin.register(app, API_PREFIX)
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
@@ -463,10 +518,12 @@ def create_app(
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
-    routes_models.register(
-        app, API_PREFIX,
-        lambda ws_name: _any_exp_storage(_experiment_workspace(ws_name)),
-    )
+    def _ws_storage(ws_name):
+        return _any_exp_storage(_experiment_workspace(ws_name))
+
+    routes_models.register(app, API_PREFIX, _ws_storage)
+    routes_reports.register(app, API_PREFIX, _ws_storage)
+    routes_comments.register(app, API_PREFIX, _ws_storage)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
