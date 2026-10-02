@@ -47,6 +47,11 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
     )
 
 
+def refresh_app(storage, app_name, cache_path):
+    """Refresh the shared index now, so a server edit shows at once."""
+    experiment_index.shared_index(storage, app_name, cache_path).refresh()
+
+
 def _snapshot_of(index_of, storage, app_name, refresher, schema=None, journal=None,
                  reconcile_sec=None):
     try:

@@ -14,6 +14,12 @@ from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal
 ADMIN_ROUTES = {
     ("POST", "/api/v1/workspaces"),
     ("DELETE", "/api/v1/workspaces/{ws_name}"),
+    ("GET", "/api/v1/tokens"),
+    ("POST", "/api/v1/tokens"),
+    ("DELETE", "/api/v1/tokens/{token_id}"),
+    ("GET", "/api/v1/audit"),
+    ("GET", "/api/v1/audit/export"),
+    ("DELETE", "/api/v1/workspaces/{ws_name}/reports/{rid}"),
 }
 READ_POSTS = {"/api/v1/workspaces/{ws_name}/apps/{app_tag}/series"}
 RANK = {VIEWER: 0, EDITOR: 1, ADMIN: 2}
@@ -72,7 +78,7 @@ def _all_routes():
 
 def _concrete(path):
     for name in ("app_tag", "verstr", "model_name", "alias", "version_n", "n",
-                 "action", "job_id", "filename:path", "path:path", "name:path"):
+                 "action", "job_id", "token_id", "filename:path", "path:path", "name:path"):
         path = path.replace("{" + name + "}", "x")
     return path.replace("{ws_name}", "ws")
 

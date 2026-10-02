@@ -130,8 +130,16 @@ export default function App() {
             <NavLink to={`/ws/${ws}/models`}>
               <NavIcon name="models" /> Models
             </NavLink>
+            <NavLink to={`/ws/${ws}/reports`}>
+              <NavIcon name="reports" /> Reports
+            </NavLink>
           </nav>
         )}
+        <nav className="sb-nav">
+          <NavLink to="/tokens">
+            <NavIcon name="tokens" /> API tokens
+          </NavLink>
+        </nav>
 
         {appBase && (
           <nav className="sb-nav">

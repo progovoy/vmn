@@ -2,7 +2,7 @@
 
 ``vmn-exp create app`` / ``vmn-exp run app -- cmd`` run experiment actions;
 ``vmn-exp model ...``, ``vmn-exp sweep ...`` and ``vmn-exp ui`` reach the other commands;
-``vmn-exp skill`` prints/installs the AI-agent skill block. It runs on vmn's CLI machinery (repo lock, app resolution)
+``vmn-exp skill`` prints/installs the AI-agent skill block; ``vmn-exp login`` gets a server API token. It runs on vmn's CLI machinery (repo lock, app resolution)
 through ``version_stamp.api``, with only its own commands registered.
 """
 import sys
@@ -10,7 +10,7 @@ import sys
 from version_stamp.api import VMN_ARGS, vmn_run
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 
-OWN_COMMANDS = ("exp", "experiment", "model", "sweep", "ui")
+OWN_COMMANDS = ("exp", "experiment", "model", "report", "comment", "comments", "sweep", "ui")
 
 
 def _to_vmn_argv(argv):
@@ -26,6 +26,14 @@ def vmn_exp_run(argv):
         from vmn_exp.cli.skill import run_skill
 
         return run_skill(argv[1:]), None
+    if argv and argv[0] == "migrate":
+        from vmn_exp.cli.migrate import run_migrate
+
+        return run_migrate(argv[1:]), None
+    if argv and argv[0] == "login":
+        from vmn_exp.cli.login import run_login
+
+        return run_login(argv[1:]), None
     register_all()
     if argv and argv[0] in VMN_ARGS and argv[0] not in EXPERIMENT_ACTIONS:
         print(

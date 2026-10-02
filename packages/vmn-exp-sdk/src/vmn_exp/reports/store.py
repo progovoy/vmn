@@ -94,6 +94,15 @@ def list_reports(storage):
     return [report for report in reports if report is not None]
 
 
+def revisions(storage, rid):
+    """``[{rev, author, created_at, message}]`` of every claimed revision."""
+    area = reports_area(storage)
+    numbers = sorted(filter(None, map(_revision_number, area.list_record_names(rid))))
+    found = ((n, area.load_metadata(rid, f"v{n}")) for n in numbers)
+    keys = ("author", "created_at", "message")
+    return [{"rev": n, **{k: meta.get(k) for k in keys}} for n, meta in found if meta]
+
+
 def delete(storage, rid):
     """Delete every record of report *rid* (header last: it marks the report)."""
     area = reports_area(storage)

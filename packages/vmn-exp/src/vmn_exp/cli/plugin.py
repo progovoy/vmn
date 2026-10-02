@@ -397,3 +397,23 @@ def register_all() -> None:
         read_only_actions=frozenset({"list", "show", "resolve"}),
         run_without_repo=model_run_without_repo,
     ))
+    _register_reports()
+
+
+def _register_reports():
+    from vmn_exp.cli import comment, report
+
+    for names, add_parser, run, read_only in (
+        (("report",), report.add_report_parser, report.report_run_without_repo,
+         {"list", "show", "export"}),
+        (("comment",), comment.add_comment_parser, comment.comment_run_without_repo, set()),
+        (("comments",), comment.add_comments_parser, comment.comments_run_without_repo, set()),
+    ):
+        _register(CommandSpec(
+            names=names,
+            add_parser=add_parser,
+            handle=lambda ctx, run=run: run(ctx.args),
+            access="local",
+            read_only_actions=frozenset(read_only),
+            run_without_repo=run,
+        ))

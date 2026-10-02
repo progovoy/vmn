@@ -123,10 +123,11 @@ class OIDCAuthenticator:
             tokens = self.http.post_form(self.metadata()["token_endpoint"], form)
         except Exception as exc:
             raise OIDCError("token exchange failed") from exc
-        claims = self._checked_claims(tokens.get("id_token"), pending["nonce"])
-        return self.sessions.open(self._principal(claims))
+        claims = self.checked_claims(tokens.get("id_token"), pending["nonce"])
+        return self.sessions.open(self.principal_for(claims))
 
-    def _checked_claims(self, id_token, nonce):
+    def checked_claims(self, id_token, nonce=None):
+        """*id_token*'s claims; *nonce* is checked unless ``None`` (device flow)."""
         claims = jwt_claims(id_token)
         aud = claims.get("aud")
         auds = aud if isinstance(aud, list) else [aud]
@@ -134,11 +135,12 @@ class OIDCAuthenticator:
             raise OIDCError("id_token issuer/audience mismatch")
         if not isinstance(claims.get("exp"), (int, float)) or claims["exp"] <= self.clock():
             raise OIDCError("id_token expired")
-        if claims.get("nonce") != nonce or not claims.get("sub"):
+        nonce_ok = nonce is None or claims.get("nonce") == nonce
+        if not nonce_ok or not claims.get("sub"):
             raise OIDCError("id_token nonce mismatch")
         return claims
 
-    def _principal(self, claims):
+    def principal_for(self, claims):
         groups = claims.get(self.config.groups_claim) or []
         name = claims.get("name") or claims.get("email") or claims["sub"]
         roles = roles_for_groups(groups, self.config.role_mappings)
