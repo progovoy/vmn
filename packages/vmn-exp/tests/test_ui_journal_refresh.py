@@ -154,3 +154,20 @@ def test_the_refresher_shows_a_new_run_through_the_journal(tmp_path):
         assert names == []
     finally:
         refresher.stop()
+
+
+def test_a_tick_with_no_new_entries_does_not_rewrite_the_cursor(store, lists):
+    _, list_fn = lists
+    cache = SqliteStore(":memory:")
+    puts = []
+    real_put = cache.kv_put
+    cache.kv_put = lambda *a: (puts.append(a), real_put(*a))
+    journal = _journal(list_fn, cache)
+    journal.watch(FakeIndex("app"))
+    _write(store, "app", "1.0.0-dev.a")
+    journal.tick()
+    written = len(puts)
+    journal.tick()
+    journal.tick()
+    assert written >= 1
+    assert len(puts) == written

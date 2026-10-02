@@ -50,6 +50,7 @@ class WorkspaceJournal:
                 del self._indexes[scope]
 
     def tick(self):
+        before = self._reader.cursor
         result = self._reader.tick()
         with self._lock:
             indexes = dict(self._indexes)
@@ -60,4 +61,5 @@ class WorkspaceJournal:
         for scope in result.overflow:
             if scope in indexes:
                 indexes[scope].reconcile()
-        self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
+        if self._reader.cursor != before:
+            self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
