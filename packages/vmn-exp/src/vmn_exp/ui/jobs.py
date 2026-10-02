@@ -218,19 +218,36 @@ class JobRunner:
 
     def submit(self, workspace_name, cwd, command):
         """Start a job. Returns (job_dict, error_message_or_None)."""
+        return self._start(workspace_name, Job(uuid.uuid4().hex, command, cwd), self._run)
+
+    def submit_call(self, workspace_name, command, call):
+        """Start an in-process job: *call()* returns its log text; raising
+        fails the job with the exception's message as its log."""
+        job = Job(uuid.uuid4().hex, command, None)
+        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, call))
+
+    def _start(self, workspace_name, job, target):
         with self._lock:
             if workspace_name in self._active_workspaces:
                 return None, "Another action is already running in this workspace"
-            job = Job(uuid.uuid4().hex, command, cwd)
             self._jobs[job.id] = job
             self._evict_finished()
             self._active_workspaces.add(workspace_name)
 
-        thread = threading.Thread(
-            target=self._run, args=(workspace_name, job), daemon=True
-        )
+        thread = threading.Thread(target=target, args=(workspace_name, job), daemon=True)
         thread.start()
         return job.to_dict(), None
+
+    def _call(self, workspace_name, job, call):
+        try:
+            job.log = _tail(str(call() or ""))
+            job.exit_code, job.status = 0, "succeeded"
+        except Exception as e:
+            job.log = _tail(str(e))
+            job.exit_code, job.status = 1, "failed"
+        finally:
+            with self._lock:
+                self._active_workspaces.discard(workspace_name)
 
     def _run(self, workspace_name, job):
         # Prefer the real console script (faithful to the CLI equivalent

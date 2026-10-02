@@ -85,6 +85,10 @@ class ExperimentSource:
             )
         return self.workspace_index(ws).snapshot(app_name, self.refresher, schema)
 
+    def touched(self, ws, app_name, s3_storage):
+        """A server edit changed *app_name* in the store workspace *ws*."""
+        ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
+
     def metrics_schema(self, ws, app_name):
         """The git workspace app's metrics schema, parsed once per conf change."""
         return self._schemas.get(ws.path, app_name)
