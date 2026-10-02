@@ -1,7 +1,7 @@
 """Import rules for the three-distribution split (see docs/packaging.md).
 
 vmn          -> version_stamp
-vmn-exp-sdk  -> vmn_exp.{sdk,storage,core,registry,integrations,_base}
+vmn-exp-sdk  -> vmn_exp.{sdk,storage,core,registry,integrations,_base,reports}
 vmn-exp      -> vmn_exp.{cli,ui,snapshot,importers,gitmode}
 """
 import ast
