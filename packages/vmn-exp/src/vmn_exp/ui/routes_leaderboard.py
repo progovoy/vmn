@@ -15,6 +15,8 @@ Archived rows are left out of all of them unless the request passes
 """
 from fastapi import HTTPException, Request
 
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui.http_params import clamp_page, key_list
 from vmn_exp.ui.memo import LRU
@@ -31,7 +33,7 @@ def register(app, api_prefix, inputs, cache):
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
     bodies = LRU(ENCODED_BODIES)
 
-    @app.get(f"{base}/experiments")
+    @app.get(f"{base}/experiments", dependencies=[require(VIEWER)])
     def list_experiments(
         request: Request,
         ws_name: str,
@@ -54,7 +56,7 @@ def register(app, api_prefix, inputs, cache):
         )
         return _answer(request, cache.page, snapshot, schema, params)
 
-    @app.get(f"{base}/experiments-columns")
+    @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])
     def experiment_columns(
         request: Request,
         ws_name: str,
@@ -75,7 +77,7 @@ def register(app, api_prefix, inputs, cache):
         )
         return _answer(request, cache.columns, snapshot, schema, params, route="columns")
 
-    @app.get(f"{base}/experiments-importance")
+    @app.get(f"{base}/experiments-importance", dependencies=[require(VIEWER)])
     def experiment_importance(
         request: Request,
         ws_name: str,
@@ -89,7 +91,7 @@ def register(app, api_prefix, inputs, cache):
         params = dict(metric=metric, status=status, query=q, archived=archived)
         return _answer(request, cache.importance, snapshot, schema, params, route="importance")
 
-    @app.get(f"{base}/experiments-facets")
+    @app.get(f"{base}/experiments-facets", dependencies=[require(VIEWER)])
     def experiment_facets(
         request: Request, ws_name: str, app_tag: str, archived: bool = False
     ):
