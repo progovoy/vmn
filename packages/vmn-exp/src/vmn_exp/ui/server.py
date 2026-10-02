@@ -10,6 +10,7 @@ import os
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import valid_artifact_path
@@ -26,7 +27,7 @@ from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
-from vmn_exp.ui.middleware import SelectiveGZipMiddleware, bearer_matches
+from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
@@ -39,6 +40,7 @@ from vmn_exp.ui.responses import (
     SafeJSONResponse,
     json_response,
 )
+from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
 from vmn_exp.ui.static_files import mount_static
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
@@ -58,12 +60,14 @@ def create_app(
     bind_host=None,
     allowed_hosts=None,
     background_refresh=False,
+    auth=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
     the latest snapshot at once, up to about a second behind storage;
     without it each request refreshes the index first, seeing every write
-    made before it."""
+    made before it. *auth* is an ``AuthenticatorChain`` tried after the
+    static *token*; with neither the API is open."""
     from vmn_exp.ui.jobs import JobRunner, build_command
 
     app = FastAPI(
@@ -75,8 +79,9 @@ def create_app(
     app.state.manager = manager
     app.state.read_only = read_only
     jobs = JobRunner()
+    chain = build_chain(token, auth.authenticators if auth else ())
     guard = RequestGuard.build(
-        bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(token)
+        bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )
 
     refresher = Refresher() if background_refresh else InlineRefresher()
@@ -88,14 +93,17 @@ def create_app(
     # prefix probes are worth keeping across requests.
     store_storages = {}
 
-    if token:
+    for router in chain.routers():
+        app.include_router(router)
 
-        @app.middleware("http")
-        async def _token_auth(request: Request, call_next):
-            if request.url.path.startswith("/api"):
-                if not bearer_matches(request.headers.get("Authorization"), token):
-                    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-            return await call_next(request)
+    @app.middleware("http")
+    async def _authenticate(request: Request, call_next):
+        # Off the event loop: API token checks run scrypt and hit the control plane.
+        principal = await run_in_threadpool(chain.authenticate, request) if chain else None
+        request.state.principal = principal
+        if chain and principal is None and request.url.path.startswith("/api"):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
 
     # Registered after the token check, so it runs first: a rebound or
     # cross-site request is refused before anything else looks at it.
