@@ -1,8 +1,7 @@
 """The local record store: ``.vmn/store/<kind>/<app-key>/<safe verstr>/``.
 
 *kind* is ``snapshots``, ``runs`` or ``code``; the app key is the tag
-form (``/`` -> ``-``). The ``code`` kind is addressed with ``code_app(app)``
-names and keys them by the app they belong to.
+form (``/`` -> ``-``).
 
 Writes the same bytes as ``vmn_exp.storage.local.LocalSnapshotStorage``: patch
 files, ``deps/<safe dep>/`` patch files, then ``metadata.yml``
@@ -32,7 +31,7 @@ from version_stamp.core.utils import (
     valid_app_path,
     yaml_safe_load,
 )
-from version_stamp.snapshot.code_store import CODE_APP, resolve_code
+from version_stamp.snapshot.code_store import resolve_code
 from version_stamp.snapshot.identity import safe_dep_name, safe_verstr, unsafe_verstr
 from version_stamp.snapshot.record import METADATA_FILE, PATCH_FILES
 
@@ -83,14 +82,9 @@ def _read_dep_patches(record_dir):
     return found
 
 
-def _app_key(kind, app_name):
+def _app_key(app_name):
     if not valid_app_path(app_name):
         raise ValueError(f"Invalid app name: {app_name!r}")
-    if kind == "code":
-        prefix = f"{CODE_APP}/"
-        if not app_name.startswith(prefix):
-            raise ValueError(f"Not a code app name: {app_name!r}")
-        return app_name[len(prefix):].replace("~", "-")
     return app_name.replace("/", "-")
 
 
@@ -104,7 +98,7 @@ class LocalRecordStore:
         return os.path.join(self.vmn_root_path, ".vmn", "store")
 
     def _base_dir(self, app_name):
-        return os.path.join(self._store_root(), self.kind, _app_key(self.kind, app_name))
+        return os.path.join(self._store_root(), self.kind, _app_key(app_name))
 
     def _record_dir(self, app_name, verstr):
         return os.path.join(self._base_dir(app_name), safe_verstr(verstr))

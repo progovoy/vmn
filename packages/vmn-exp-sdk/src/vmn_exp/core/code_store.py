@@ -2,9 +2,10 @@
 
 The patches and untracked tarball of a dirty tree are the same for every run
 of that tree, so they live in one *code object* rather than in each run
-record. Code objects are records of a reserved pseudo-app of the same store
-(``vmn-code/<app>``), so every backend stores, syncs, lists and deletes them
-with the machinery it already has, and they never show up as runs or apps.
+record. Code objects are records of the store root's ``code`` area, scoped
+by app (``code/<app-key>/``), so every backend stores, syncs, lists and
+deletes them with the machinery it already has, and they never show up as
+runs or apps.
 
 A code object is keyed ``<code_verstr>.<full diff hash>``: the code verstr
 ties it to its runs by name (prune matches a code's runs and objects by that

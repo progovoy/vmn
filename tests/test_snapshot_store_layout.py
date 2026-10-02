@@ -3,7 +3,6 @@ import os
 
 import pytest
 
-from version_stamp.snapshot.code_store import code_app
 from version_stamp.snapshot.stores import local_snapshot_stores
 
 
@@ -11,7 +10,7 @@ from version_stamp.snapshot.stores import local_snapshot_stores
 def test_records_and_code_use_store_layout(tmp_path, app, key):
     stores = local_snapshot_stores(str(tmp_path))
     stores.records.save(app, "0.0.1-dev.abc", {"verstr": "0.0.1-dev.abc"}, {})
-    stores.code.save(code_app(app), "0.0.1-dev.abc.ff", {"verstr": "k"}, {})
+    stores.code.save(app, "0.0.1-dev.abc.ff", {"verstr": "k"}, {})
     store = tmp_path / ".vmn" / "store"
     assert (store / "snapshots" / key / "0.0.1-dev.abc" / "metadata.yml").is_file()
     assert (store / "code" / key / "0.0.1-dev.abc.ff" / "metadata.yml").is_file()

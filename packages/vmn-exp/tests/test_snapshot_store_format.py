@@ -95,7 +95,7 @@ def test_code_object_written_by_vmn_is_stored_code_for_exp(tmp_path):
     root = str(tmp_path)
     key = vmn_code.code_key(VERSTR, "f" * 64)
     summary = {"has_working_tree_patch": True, "has_untracked_files": True}
-    vmn_code.store_code(LocalRecordStore(root, "experiments"), APP, key, PATCHES, summary)
+    vmn_code.store_code(LocalRecordStore(root, "code"), APP, key, PATCHES, summary)
 
     sdk = _sdk(root, "runs")
     assert sdk_code.stored_code(sdk, APP, key) == summary
@@ -109,7 +109,7 @@ def test_code_object_written_by_exp_resolves_in_vmn(tmp_path):
     sdk_code.store_code(_sdk(root, "runs"), APP, key, PATCHES, {})
     _sdk(root, "snapshots").save(APP, VERSTR, _metadata(code=key), {})
 
-    code = LocalRecordStore(root, "experiments")
+    code = LocalRecordStore(root, "code")
     records = LocalRecordStore(root, "snapshots", code_store=code)
     assert vmn_code.stored_code(code, APP, key) == {}
     metadata, patches = records.load(APP, VERSTR)
@@ -119,7 +119,7 @@ def test_code_object_written_by_exp_resolves_in_vmn(tmp_path):
 
 def test_missing_code_object_is_flagged(tmp_path):
     root = str(tmp_path)
-    records = LocalRecordStore(root, "snapshots", code_store=LocalRecordStore(root, "experiments"))
+    records = LocalRecordStore(root, "snapshots", code_store=LocalRecordStore(root, "code"))
     records.save(APP, VERSTR, _metadata(code="nope.x"), {})
     metadata, patches = records.load(APP, VERSTR)
     assert metadata[vmn_code.CODE_MISSING] is True

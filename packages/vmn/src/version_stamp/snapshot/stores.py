@@ -3,7 +3,7 @@
 ``SnapshotStores(records, code, where, runs=None)``: *records* holds snapshot
 records, *code* the code objects they reference, *where* names the store for
 messages (``"local"`` or a store URI), *runs* the experiment runs that may
-reference code too (None: they live in *code*'s store).
+reference code too (None: no runs are scanned).
 
 ``open_snapshot_stores(vcs, params) -> SnapshotStores``: unless
 ``params["local"]``, the opener registered through

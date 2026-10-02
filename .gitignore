@@ -30,5 +30,5 @@ packages/vmn-exp/webui/tsconfig.tsbuildinfo
 .DS_Store
 
 # generated CI reports (pipeline output)
-reports/
+/reports/
 packages/*/src/*.egg-info/

@@ -124,16 +124,16 @@ vmn snapshot delete my_app -v @1
 A snapshot is a thin record referencing a content-addressed *code object*:
 
 ```text
-.vmn/<app>/snapshots/<verstr>/metadata.yml
+.vmn/store/snapshots/<app-key>/<verstr>/metadata.yml
     # verstr, base version and commit, timestamp, note, user_meta,
     # dirty states, dep changesets, dep_base_commits, diff_hash,
     # code_verstr, and code: <key>
-.vmn/vmn-code/<app>/experiments/<code_verstr>.<diff hash>/
+.vmn/store/code/<app-key>/<code_verstr>.<diff hash>/
     # the code object: working_tree.patch, local_commits.patch,
     # untracked_files.tar.gz, deps/<dep>/..., metadata.yml written last
 ```
 
-(`/` in a root app's name becomes `~` in the `vmn-code` path.) Snapshots of
+(`<app-key>` is the app name with `/` replaced by `-`.) Snapshots of
 the same tree share one code object, and `delete` removes it only when nothing
 else references it. Dependency state feeds into the content hash, so two
 snapshots differing only inside a dep get different version strings; so do

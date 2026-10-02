@@ -1074,8 +1074,8 @@ backends are built.
   shows its live status.
 - **Code stored once per code identity**: a run's patches and untracked
   tarball live in one *code object* per identity — a record
-  `<code_verstr>.<diff hash>` of the reserved `vmn-code/<app>` pseudo-app in
-  the same store (`.vmn/vmn-code/<app>/experiments/…` locally) — and the run's
+  `<code_verstr>.<diff hash>` in the store's `code` area
+  (`.vmn/store/code/<app-key>/…` locally, shared with `vmn snapshot`) — and the run's
   `metadata.yml` names it as `code:`. The object's `metadata.yml`, written
   last, marks it complete. A run of already-stored code uploads nothing but
   its own record. When the object is missing or incomplete,

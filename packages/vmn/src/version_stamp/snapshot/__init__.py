@@ -2,7 +2,7 @@
 
 A snapshot record (``.vmn/store/snapshots/<app-key>/<verstr>/metadata.yml``) references
 its code — patches and untracked tarball — by a ``code:`` key into the shared
-code store (``vmn-code/<app~>`` records, stored under ``.vmn/store/code/<app-key>/``), the
+code store (``.vmn/store/code/<app-key>/<code_verstr>.<diff hash>/``), the
 same objects experiment runs use. The on-disk format is byte-compatible with
 vmn-exp-sdk (``vmn_exp.storage.local`` / ``vmn_exp.core.code_store``), which
 ``version_stamp`` may never import; ``tests/test_snapshot_store_format.py``

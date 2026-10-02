@@ -11,14 +11,13 @@ Public: ``open_configured_snapshot_stores(vcs, params) -> ConfiguredStores | Non
 """
 from dataclasses import dataclass
 
-from vmn_exp.core.code_store import resolve_code
+from vmn_exp.core.code_store import code_storage, resolve_code
 from vmn_exp.core.storage_resolve import (
     _get_experiment_storage,
     drop_remote_if_offline,
     store_uri,
 )
 from vmn_exp.core.writer import STORAGE_ENV, merge_conf_into_params
-from vmn_exp.snapshot.core_code import CoreCodeStore
 from vmn_exp.storage.areas import SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 
@@ -30,6 +29,7 @@ class ConfiguredStores:
     records: object
     code: object
     where: str
+    runs: object
 
 
 class RecordsWithCode:
@@ -58,6 +58,6 @@ def open_configured_snapshot_stores(vcs, params):
     where = store_uri(storage_params)
     if where is None:
         return None
-    code = _get_experiment_storage(vcs, storage_params)
+    runs = _get_experiment_storage(vcs, storage_params)
     records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS)
-    return ConfiguredStores(RecordsWithCode(records, code), CoreCodeStore(code), where)
+    return ConfiguredStores(RecordsWithCode(records, runs), code_storage(runs), where, runs)
