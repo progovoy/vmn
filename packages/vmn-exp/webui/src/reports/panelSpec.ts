@@ -89,7 +89,7 @@ export function validate(raw: unknown): ValidateResult {
   if (missing.length) return { ok: false, error: `missing field(s): ${missing.join(", ")}` };
   if (spec.v !== 1) return { ok: false, error: `unsupported panel spec version ${String(spec.v)}` };
   const type = spec.type as PanelType;
-  if (!(type in TYPE_REQUIRED)) return { ok: false, error: `unknown panel type ${String(spec.type)}` };
+  if (!Object.prototype.hasOwnProperty.call(TYPE_REQUIRED, type)) return { ok: false, error: `unknown panel type ${String(spec.type)}` };
   const absent = TYPE_REQUIRED[type].filter((k) => !(k in spec));
   if (absent.length) return { ok: false, error: `${type} panel needs field(s): ${absent.join(", ")}` };
   const error = runsError(spec.runs, SINGLE_RUN.has(type));

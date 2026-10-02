@@ -154,7 +154,7 @@ def _check(spec):
     if spec["v"] != SPEC_VERSION or isinstance(spec["v"], bool):
         raise _Invalid(f"unsupported panel spec version {spec['v']!r}")
     kind = spec["type"]
-    if kind not in PANEL_TYPES:
+    if not isinstance(kind, str) or kind not in PANEL_TYPES:
         raise _Invalid(f"unknown panel type {kind!r}")
     fields, required, single = PANEL_TYPES[kind]
     _check_fields(spec, {**_COMMON, **fields}, "")

@@ -143,3 +143,10 @@ def test_schema_file_matches_generated():
 def test_schema_lists_every_type():
     kinds = {b["properties"]["type"]["const"] for b in json_schema()["oneOf"]}
     assert kinds == set(PANEL_TYPES)
+
+
+@pytest.mark.parametrize("bad_type", [["curves"], {"a": 1}, 3])
+def test_non_string_type_is_error_result(bad_type):
+    result = validate_panel({"v": 1, "id": "p", "type": bad_type, "app": "a",
+                             "runs": {"verstrs": ["x"]}})
+    assert not result.ok and "unknown panel type" in result.error

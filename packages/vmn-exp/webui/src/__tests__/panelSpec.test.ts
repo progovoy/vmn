@@ -12,6 +12,10 @@ describe("panelSpec.validate", () => {
     const r = validate({ ...base, type: "sankey", runs: { verstrs: ["a"] } });
     expect(r).toEqual({ ok: false, error: "unknown panel type sankey" });
   });
+  it("rejects prototype keys as types", () => {
+    const r = validate({ ...base, type: "toString", runs: { verstrs: ["a"] } });
+    expect(r).toEqual({ ok: false, error: "unknown panel type toString" });
+  });
   it("requires type-specific fields", () => {
     expect(validate({ ...base, type: "scatter", runs: { verstrs: ["a"] }, x: "lr" }).ok).toBe(false);
   });
