@@ -139,3 +139,24 @@ def test_server_uses_index_transparently(app_layout, capfd):
 
     vurl = f"/api/v1/workspaces/main/apps/{app_layout.app_name}/versions"
     assert indexed_client.get(vurl).json() == direct_client.get(vurl).json()
+
+
+@pytest.mark.parametrize("persisted", [True, False])
+def test_index_versions_cached_through_cache_store_kv(app_layout, capfd, monkeypatch, persisted):
+    """Version rows live in the CacheStore kv table, persisted or in memory."""
+    from vmn_exp.core.index_store import SqliteStore
+    from vmn_exp.ui.index import WorkspaceIndex
+    from vmn_exp.ui.readers import versions as ver_reader
+
+    _seed(app_layout, capfd, n=1)
+    db_dir = os.path.join(app_layout.base_dir, "ui_data", "index") if persisted else None
+    idx = WorkspaceIndex(app_layout.repo_path, db_dir=db_dir)
+    puts = []
+    real_put = SqliteStore.kv_put
+    monkeypatch.setattr(
+        SqliteStore, "kv_put", lambda self, *a: (puts.append(a[0]), real_put(self, *a))
+    )
+    first = idx.list_versions(app_layout.app_name)
+    monkeypatch.setattr(ver_reader, "list_versions", lambda *a: pytest.fail("not cached"))
+    assert idx.list_versions(app_layout.app_name) == first
+    assert puts == [f"ver:{app_layout.app_name}"]

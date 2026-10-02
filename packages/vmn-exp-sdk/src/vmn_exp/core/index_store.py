@@ -8,17 +8,22 @@ time. Several processes (the CLI, the SDK, a ``vmn-exp ui`` server) may share on
 database: WAL, a busy timeout and one short transaction per refresh.
 
 A record's run state lives in its own table: a heartbeat rewrites one small
-row, never the record's folded log.
+row, never the record's folded log. Each save bumps the scope generation (see
+:mod:`vmn_exp.core.cache_store`); removals leave tombstones for
+:meth:`SqliteStore.load_since`, trimmed after :data:`TOMBSTONE_TTL_SEC`.
 """
 import json
 import logging
 import os
 import sqlite3
+import time
 
-# Bump whenever a record's shape or the fold's semantics change: records
-# written by another version are dropped rather than trusted.
-SCHEMA_VERSION = "exp-index-9"
+from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
+from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
+
 _BUSY_TIMEOUT_MS = 5000
+TOMBSTONE_TTL_SEC = 600
+_now = time.time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,24 +35,7 @@ def _connect(path):
         conn.execute("PRAGMA journal_mode=WAL")
     except sqlite3.DatabaseError:
         pass  # e.g. a filesystem without shared memory: the default journal works
-    conn.execute("CREATE TABLE IF NOT EXISTS exp_index_meta (k TEXT PRIMARY KEY, v TEXT)")
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS exp_index ("
-        " app TEXT, key TEXT, data TEXT, PRIMARY KEY (app, key))"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS exp_index_state ("
-        " app TEXT, key TEXT, data TEXT, PRIMARY KEY (app, key))"
-    )
-    row = conn.execute("SELECT v FROM exp_index_meta WHERE k = 'schema'").fetchone()
-    if not row or row[0] != SCHEMA_VERSION:
-        conn.execute("DELETE FROM exp_index")
-        conn.execute("DELETE FROM exp_index_state")
-        conn.execute(
-            "INSERT OR REPLACE INTO exp_index_meta (k, v) VALUES ('schema', ?)",
-            (SCHEMA_VERSION,),
-        )
-    conn.commit()
+    ensure_schema(conn)
     return conn
 
 
@@ -59,8 +47,8 @@ def _remove_database(path):
             pass
 
 
-class IndexStore:
-    """Per-app record rows in one SQLite file; a no-op when *path* is None."""
+class SqliteStore:
+    """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
 
     def __init__(self, path):
         self._conn = None
@@ -106,17 +94,24 @@ class IndexStore:
     def load(self, app_name):
         """``{key: record}`` persisted for *app_name*, each with its
         ``rs_sig``/``run_state``; ``{}`` when unavailable."""
+        return self._read(lambda: self._records(app_name), {})
+
+    def _records(self, app_name, keys=None):
+        records = {
+            key: dict(_state_of({}), **json.loads(data))
+            for key, data in self._select("exp_index", app_name)
+            if keys is None or key in keys
+        }
+        for key, data in self._select("exp_index_state", app_name):
+            if key in records:
+                records[key].update(json.loads(data))
+        return records
+
+    def _read(self, query, default):
         if self._conn is None:
-            return {}
+            return default
         try:
-            records = {
-                key: dict(_state_of({}), **json.loads(data))
-                for key, data in self._select("exp_index", app_name)
-            }
-            for key, data in self._select("exp_index_state", app_name):
-                if key in records:
-                    records[key].update(json.loads(data))
-            return records
+            return query()
         except (sqlite3.Error, ValueError) as exc:
             if type(exc) is sqlite3.DatabaseError:
                 # File corruption detected on a read (e.g. file was replaced
@@ -128,7 +123,43 @@ class IndexStore:
                 self._reset()
             else:
                 _LOGGER.debug("Could not read the experiment index", exc_info=True)
-            return {}
+            return default
+
+    def generation(self, app_name):
+        """The scope's generation; 0 before its first save or when unavailable."""
+        return self._read(lambda: self._gen_row(app_name)[0], 0)
+
+    def _gen_row(self, app_name):
+        row = self._conn.execute(
+            "SELECT gen, horizon FROM exp_index_gen WHERE app = ?", (app_name,)
+        ).fetchone()
+        return row or (0, 0)
+
+    def load_since(self, app_name, generation):
+        """``(changed, removed, new_gen)`` since *generation*; *removed* is
+        :data:`FULL_LOAD` (and *changed* everything) past the tombstone horizon."""
+        return self._read(lambda: self._delta(app_name, generation), ({}, set(), 0))
+
+    def _delta(self, app_name, generation):
+        gen, horizon = self._gen_row(app_name)
+        if generation < horizon:
+            return self._records(app_name), FULL_LOAD, gen
+        keys = {
+            key
+            for table in ("exp_index", "exp_index_state")
+            for (key,) in self._conn.execute(
+                f"SELECT key FROM {table} WHERE app = ? AND seq > ?",
+                (app_name, generation),
+            )
+        }
+        removed = {
+            key for (key,) in self._conn.execute(
+                "SELECT key FROM exp_index_tombstones WHERE app = ? AND seq > ?",
+                (app_name, generation),
+            )
+        }
+        changed = self._records(app_name, keys) if keys else {}
+        return changed, removed, gen
 
     def _select(self, table, app_name):
         return self._conn.execute(
@@ -142,32 +173,90 @@ class IndexStore:
         states = states or {}
         if self._conn is None or not (changed or removed or states):
             return
-        records = [
-            (app_name, key, json.dumps(_without_state(record), default=str))
-            for key, record in changed.items()
-        ]
-        run_states = [
-            (app_name, key, json.dumps(_state_of(record), default=str))
-            for key, record in states.items()
-        ]
-        gone = [(app_name, key) for key in removed]
         try:
             with self._conn:
-                self._upsert("exp_index", records)
-                self._upsert("exp_index_state", run_states)
-                for table in ("exp_index", "exp_index_state"):
-                    self._conn.executemany(
-                        f"DELETE FROM {table} WHERE app = ? AND key = ?", gone
-                    )
+                seq = self._bump_generation(app_name)
+                self._upsert("exp_index", app_name, seq, changed, _without_state)
+                self._upsert("exp_index_state", app_name, seq, states, _state_of)
+                self._forget(app_name, seq, removed)
+                self._conn.executemany(
+                    "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
+                    [(app_name, key) for key in changed],
+                )
+                self._trim_tombstones(app_name)
         except sqlite3.Error:
             # Locked by another process past the timeout, read-only, full disk:
             # the next refresh recomputes whatever did not get persisted.
             _LOGGER.debug("Could not persist the experiment index", exc_info=True)
 
-    def _upsert(self, table, rows):
-        self._conn.executemany(
-            f"INSERT OR REPLACE INTO {table} (app, key, data) VALUES (?, ?, ?)", rows
+    def _bump_generation(self, app_name):
+        gen, horizon = self._gen_row(app_name)
+        self._conn.execute(
+            "INSERT OR REPLACE INTO exp_index_gen (app, gen, horizon) VALUES (?, ?, ?)",
+            (app_name, gen + 1, horizon),
         )
+        return gen + 1
+
+    def _upsert(self, table, app_name, seq, records, shape):
+        self._conn.executemany(
+            f"INSERT OR REPLACE INTO {table} (app, key, data, seq) VALUES (?, ?, ?, ?)",
+            [
+                (app_name, key, json.dumps(shape(record), default=str), seq)
+                for key, record in records.items()
+            ],
+        )
+
+    def _forget(self, app_name, seq, removed):
+        gone = [(app_name, key) for key in removed]
+        for table in ("exp_index", "exp_index_state"):
+            self._conn.executemany(f"DELETE FROM {table} WHERE app = ? AND key = ?", gone)
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO exp_index_tombstones (app, key, seq, ts)"
+            " VALUES (?, ?, ?, ?)",
+            [(app_name, key, seq, _now()) for key in removed],
+        )
+
+    def _trim_tombstones(self, app_name):
+        cutoff = (app_name, _now() - TOMBSTONE_TTL_SEC)
+        (newest,) = self._conn.execute(
+            "SELECT MAX(seq) FROM exp_index_tombstones WHERE app = ? AND ts < ?", cutoff
+        ).fetchone()
+        if newest is None:
+            return
+        self._conn.execute(
+            "DELETE FROM exp_index_tombstones WHERE app = ? AND ts < ?", cutoff
+        )
+        self._conn.execute(
+            "UPDATE exp_index_gen SET horizon = MAX(horizon, ?) WHERE app = ?",
+            (newest, app_name),
+        )
+
+    def kv_get(self, scope, fingerprint):
+        """The payload under *scope* when stored with *fingerprint*, else None."""
+        return self._read(lambda: self._kv_payload(scope, fingerprint), None)
+
+    def _kv_payload(self, scope, fingerprint):
+        row = self._conn.execute(
+            "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
+        ).fetchone()
+        return json.loads(row[1]) if row and row[0] == fingerprint else None
+
+    def kv_put(self, scope, fingerprint, payload):
+        """Store *payload* under *scope* — best effort."""
+        if self._conn is None:
+            return
+        try:
+            with self._conn:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload)"
+                    " VALUES (?, ?, ?)",
+                    (scope, fingerprint, json.dumps(payload)),
+                )
+        except sqlite3.Error:
+            _LOGGER.debug("Could not persist a cache entry", exc_info=True)
+
+
+IndexStore = SqliteStore
 
 
 _STATE_KEYS = ("rs_sig", "run_state")
