@@ -77,7 +77,8 @@ def create_app(
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
-    from vmn_exp.ui.storage_access import EDIT, probe_store
+    from vmn_exp.ui import storage_access
+    from vmn_exp.ui.storage_access import EDIT, READ
 
     app = FastAPI(
         title="vmn-exp ui",
@@ -395,9 +396,12 @@ def create_app(
         return job
 
     def _capabilities(ws):
-        if ws.capabilities is None:
-            manager.set_capabilities(ws.name, probe_store(ws.store).capabilities)
-        return ws.capabilities
+        if ws.capabilities is not None:
+            return ws.capabilities
+        capabilities = storage_access.probe_store(ws.store).capabilities
+        if READ in capabilities:  # an unreachable store is re-probed next time
+            manager.set_capabilities(ws.name, capabilities)
+        return capabilities
 
     def _edit_storage(ws):
         if ws.name not in edit_storages:

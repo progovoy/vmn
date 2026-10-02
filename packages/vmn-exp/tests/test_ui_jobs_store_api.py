@@ -61,3 +61,15 @@ def test_git_actions_are_refused_on_a_store_workspace(tmp_path):
     client, _ = _setup(tmp_path, capabilities=["read", "edit"])
     r = client.post(f"{BASE}/actions/prune", json={"keep": 1})
     assert r.status_code == 400
+
+
+def test_a_failed_read_probe_is_not_kept(tmp_path, monkeypatch):
+    import vmn_exp.ui.storage_access as access
+    from vmn_exp.ui.storage_access import Probe
+
+    client, manager = _setup(tmp_path)
+    monkeypatch.setattr(access, "probe_store",
+                        lambda uri, **kw: Probe(warnings=["cannot read"]))
+    r = client.post(f"{BASE}/actions/exp_tag", json={"verstr": V, "set": {"k": "v"}})
+    assert r.status_code == 403
+    assert manager.get("ws").capabilities is None
