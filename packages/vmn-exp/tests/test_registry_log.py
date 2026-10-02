@@ -10,7 +10,6 @@ import pytest
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import (
-    REGISTRY_APP,
     read_entries,
     remove_alias,
     set_alias,
@@ -28,7 +27,7 @@ def _local(tmp_path):
 
 def _make_model(storage, model):
     """Seed the model record so append_log_entry has a directory to write into."""
-    storage.save(REGISTRY_APP, model, {"verstr": model}, {})
+    storage.save(model, "header", {"verstr": "header"}, {})
 
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,6 @@ import yaml
 from vmn_exp._base import parse_record_metadata
 from vmn_exp.core.code_store import resolve_code
 from vmn_exp.core.record_format import readable
-from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
@@ -69,11 +68,8 @@ class SnapshotStorage(ABC):
         return [m["verstr"] for m in self.list_snapshots(app_name)]
 
     def list_apps(self):
-        """The names of the apps with records here, sorted; reserved
-        pseudo-apps (the model registry, sweep claims) are left out."""
-        return sorted(
-            {self._app_name_of(key) for key in self._app_keys() if not is_reserved_app(key)}
-        )
+        """The names of the apps (scopes) with records here, sorted."""
+        return sorted({self._app_name_of(key) for key in self._app_keys()})
 
     def _app_keys(self):
         """The raw per-app keys this backend stores records under."""

@@ -9,7 +9,6 @@ import os
 
 from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.reserved import is_reserved_app
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
@@ -47,14 +46,12 @@ def list_apps(root_path):
                 continue
             if parts[-1] in ("snapshots", "experiments", "root_snapshots"):
                 name = os.sep.join(parts[:-1]).replace(os.sep, "/")
-                if not is_reserved_app(name):
-                    apps.add(name)
+                apps.add(name)
                 dirnames[:] = []
                 continue
             if "conf.yml" in filenames:
                 name = rel.replace(os.sep, "/")
-                if not is_reserved_app(name):
-                    apps.add(name)
+                apps.add(name)
 
     rows = []
     storage = experiment_storage(root_path)

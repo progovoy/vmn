@@ -29,17 +29,18 @@ import weakref
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.names import (
-    REGISTRY_APP,
+    HEADER_RECORD,
     parse_ref,
     parse_version_record,
-    valid_model_name,
 )
 from vmn_exp.registry.store import (
     get_version,
     header_kind,
     list_models,
+    load_header,
     list_versions,
     model_kind,
+    registry_storage,
     run_of,
 )
 
@@ -65,7 +66,7 @@ def model_state(storage, model: str) -> dict:
             "audit":    [entries ordered by (ts, writer, pos)],
         }
     """
-    header, _ = storage.load(REGISTRY_APP, model)
+    header = load_header(storage, model)
 
     entries = read_entries(storage, model)
     fold = fold_registry(entries)
@@ -167,10 +168,12 @@ def _run_models(storage):
 
     The key holds only the records the scan reads (model headers and
     versions): a write to any other record, like a usage log, is no rescan."""
+    reg = registry_storage(storage)
     listing = {
-        name: files
-        for name, files in storage.list_files(REGISTRY_APP).items()
-        if valid_model_name(name) or parse_version_record(name)
+        (model, name): files
+        for model in reg.list_apps()
+        for name, files in reg.list_files(model).items()
+        if name == HEADER_RECORD or parse_version_record(name)
     }
     with _RUN_MODELS_LOCK:
         cached = _RUN_MODELS.get(storage)

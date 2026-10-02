@@ -1,10 +1,11 @@
-"""Tests for C5: artifact_uri per backend and vmn-registry filtering in app listings."""
+"""Tests for C5: artifact_uri per backend and the registry area never showing in app listings."""
 import os
 
 import boto3
 import pytest
 from moto import mock_aws
 
+from vmn_exp.registry.store import ensure_model
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
@@ -53,62 +54,36 @@ def test_artifact_uri_s3():
 
 
 # ---------------------------------------------------------------------------
-# vmn-registry hidden from the local storage's app listing
+# registry scopes (model names) never listed as apps
 # ---------------------------------------------------------------------------
 
 
 def test_local_list_apps_ignores_registry(tmp_path):
     root = str(tmp_path)
-    # Create a real app and the reserved registry pseudo-app
-    for app in ("myapp", "vmn-registry"):
-        exp_dir = os.path.join(root, ".vmn", "store", "runs", app)
-        os.makedirs(exp_dir)
-
-    apps = open_storage(root=local_store_root(root), area="runs").list_apps()
-    assert "myapp" in apps
-    assert "vmn-registry" not in apps
-
-
-# ---------------------------------------------------------------------------
-# vmn-registry hidden from UI app listing (local)
-# ---------------------------------------------------------------------------
+    storage = open_storage(root=local_store_root(root), area="runs")
+    storage.save("myapp", "0.0.1", {"verstr": "0.0.1"}, {})
+    ensure_model(storage, "resnet")
+    assert storage.list_apps() == ["myapp"]
 
 
 def test_ui_list_apps_ignores_registry(tmp_path):
     root = str(tmp_path)
-    # Seed local app structure — conf.yml is enough to register an app
-    for app in ("myapp", "vmn-registry"):
-        app_dir = os.path.join(root, ".vmn", app)
-        os.makedirs(app_dir)
-        with open(os.path.join(app_dir, "conf.yml"), "w") as f:
-            f.write("{}\n")
-
-    rows = list_apps(root)
-    names = [r["name"] for r in rows]
+    app_dir = os.path.join(root, ".vmn", "myapp")
+    os.makedirs(app_dir)
+    with open(os.path.join(app_dir, "conf.yml"), "w") as f:
+        f.write("{}\n")
+    ensure_model(open_storage(root=local_store_root(root), area="runs"), "resnet")
+    names = [r["name"] for r in list_apps(root)]
     assert "myapp" in names
-    assert "vmn-registry" not in names
-
-
-# ---------------------------------------------------------------------------
-# vmn-registry hidden from UI app listing (S3)
-# ---------------------------------------------------------------------------
+    assert "resnet" not in names
 
 
 def test_ui_list_apps_from_storage_ignores_registry():
     with mock_aws():
         boto3.client("s3").create_bucket(Bucket=BUCKET)
-        # Seed two apps in S3: a real one and the reserved one
-        s3 = boto3.client("s3")
-        for app_key in ("myapp", "vmn-registry"):
-            s3.put_object(
-                Bucket=BUCKET,
-                Key=f"{PREFIX}/{app_key}/0.0.1/metadata.yml",
-                Body=b"verstr: '0.0.1'\n",
-            )
         storage = S3SnapshotStorage(BUCKET, prefix=PREFIX)
+        storage.save("myapp", "0.0.1", {"verstr": "0.0.1"}, {})
+        ensure_model(storage, "resnet")
         rows = list_apps_from_storage(storage)
     names = [r["name"] for r in rows]
-    assert "myapp" in names
-    assert "vmn-registry" not in names
-    # tag_name_to_app_name converts "-" → "/"; ensure neither form appears
-    assert "vmn/registry" not in names
+    assert names == ["myapp"]
