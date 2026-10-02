@@ -1,6 +1,6 @@
 """Registry data model for datasets and recorded usage (plan 06).
 
-Covers: registry URIs, the ``<model>-uses`` sibling record and its fold,
+Covers: registry URIs, the ``uses`` record of the model's scope and its fold,
 header ``kind``, reference versions (no ``run_ref``), ``list_models(kind=)``,
 and the ``kind`` field of ``models_for_run``.
 """

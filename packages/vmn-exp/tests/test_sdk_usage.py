@@ -2,7 +2,7 @@
 
 A use is an ordinary ``input`` entry on the consuming run (named
 ``<name>@<N>``, URI ``vmn://`` of the producer artifact) plus a ``use`` entry
-in the registry's ``<name>-uses`` record.
+in the registry's ``uses`` record.
 """
 import hashlib
 import logging

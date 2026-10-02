@@ -5,7 +5,7 @@
   ``vmn-registry://`` inputs in ``datasets`` and the versions registered
   from it in ``models``.
 * :func:`version_lineage` — a version's producer run (its ``run_ref``) and
-  the runs recorded using it (the ``<name>-uses`` record), each a lineage
+  the runs recorded using it (the ``uses`` record), each a lineage
   node whose ``found`` says whether the run is still there.
 
 *index_for(app)* returns an app's :class:`~vmn_exp.core.lineage.LineageIndex`;
