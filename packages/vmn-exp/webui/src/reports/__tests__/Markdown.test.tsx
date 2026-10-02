@@ -71,4 +71,18 @@ describe("Markdown", () => {
     const { container } = render(<Markdown source={"| a | b |\n|---|---|\n| 1 | 2 |"} />);
     expect(container.querySelector("table")).not.toBeNull();
   });
+
+  it("anchors setext headings and keeps later slugs aligned", () => {
+    const { container } = render(<Markdown source={"Intro\n=====\n\n## Next\n\nSub\n---\n\n# Last"} />);
+    expect(container.querySelector("h1#intro")).not.toBeNull();
+    expect(container.querySelector("h2#next")).not.toBeNull();
+    expect(container.querySelector("h2#sub")).not.toBeNull();
+    expect(container.querySelector("h1#last")).not.toBeNull();
+    expect(screen.getByRole("navigation", { name: "Table of contents" })).toBeInTheDocument();
+  });
+
+  it("keeps in-page anchor links in the same tab", () => {
+    render(<Markdown source="[jump](#intro)" />);
+    expect(screen.getByRole("link", { name: "jump" })).not.toHaveAttribute("target");
+  });
 });

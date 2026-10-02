@@ -90,7 +90,8 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
 
 function buildComponents(props: MarkdownProps): Components {
   return {
-    a: ({ node: _n, ...rest }) => <a {...rest} target="_blank" rel="noopener noreferrer" />,
+    a: ({ node: _n, ...rest }) =>
+      rest.href?.startsWith("#") ? <a {...rest} /> : <a {...rest} target="_blank" rel="noopener noreferrer" />,
     img: ({ src, alt }) => {
       if (src?.startsWith("vmn://") && props.resolveMedia) {
         return <img src={props.resolveMedia(src)} alt={alt ?? ""} />;
