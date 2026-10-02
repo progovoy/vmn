@@ -7,7 +7,7 @@ A use writes two things:
   backed by a run artifact gets the ``vmn://`` URI ``run.use_artifact`` would
   record, with the producer output's digest, so lineage links the consumer to
   its producer run; a reference dataset gets ``vmn-registry://<name>@<N>``.
-* a ``use`` entry in the registry's ``<name>-uses`` record — best-effort: a
+* a ``use`` entry in the registry's ``uses`` record — best-effort: a
   failed registry write is warned about, never raised.
 
 Refs are always pinned to the resolved number, never an alias. Resolving a

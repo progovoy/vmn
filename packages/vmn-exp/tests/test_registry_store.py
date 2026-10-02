@@ -9,7 +9,6 @@ import threading
 import pytest
 
 from vmn_exp.registry.store import (
-    REGISTRY_APP,
     ensure_model,
     get_version,
     list_models,
@@ -215,9 +214,8 @@ def test_abandoned_s3_claim_is_skipped(s3_env):
     ensure_model(storage, "abandoned_model")
 
     # Manually plant an abandoned claim for version 1: put .claim but not metadata.yml
-    # S3 key format: {prefix}/{app_key}/{safe_verstr}/{CLAIM_FILE}
-    # app_key for "vmn-registry" is "vmn-registry"; safe_verstr("abandoned_model.v1") = "abandoned_model.v1"
-    claim_key = "reg/vmn-registry/abandoned_model.v1/.claim"
+    # The storage prefix "reg" is an area; its sibling registry area is "registry".
+    claim_key = "registry/abandoned_model/v1/.claim"
     boto3.client("s3").put_object(Bucket="vmn-test", Key=claim_key, Body=b"")
 
     # register_version should skip v1 (abandoned) and return 2

@@ -21,7 +21,7 @@ Version status change::
     {"type": "status", "version": <int>, "status": "active"|"deprecated"|"deleted",
      "ts": <iso>, "writer": <str>, "pos": <int>, "actor": {...}}
 
-Version use (in the sibling ``<model>-uses`` record, see ``fold_uses``)::
+Version use (in the model scope's ``uses`` record, see ``fold_uses``)::
 
     {"type": "use", "version": <int>, "run": {"app", "verstr"},
      "ts": <iso>, "writer": <str>, "pos": <int>, "actor": {...}}

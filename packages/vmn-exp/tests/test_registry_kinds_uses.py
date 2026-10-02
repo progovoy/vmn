@@ -1,6 +1,6 @@
 """Registry data model for datasets and recorded usage (plan 06).
 
-Covers: registry URIs, the ``<model>-uses`` sibling record and its fold,
+Covers: registry URIs, the ``uses`` record of the model's scope and its fold,
 header ``kind``, reference versions (no ``run_ref``), ``list_models(kind=)``,
 and the ``kind`` field of ``models_for_run``.
 """
@@ -11,18 +11,20 @@ import pytest
 from vmn_exp.registry.fold import fold_registry, fold_uses
 from vmn_exp.registry.log import read_entries, read_uses, record_use
 from vmn_exp.registry.names import (
-    REGISTRY_APP,
+    HEADER_RECORD,
+    USES_RECORD,
     parse_registry_uri,
+    parse_version_record,
     registry_uri,
-    uses_record_name,
-    valid_model_name,
 )
 from vmn_exp.registry.store import (
     ensure_model,
     get_version,
     list_models,
+    load_header,
     model_kind,
     register_version,
+    registry_storage,
 )
 from vmn_exp.registry.view import models_for_run, registered_runs
 from vmn_exp.registry import view
@@ -54,9 +56,9 @@ def test_parse_registry_uri_rejects_other_schemes_and_bad_numbers(uri):
     assert parse_registry_uri(uri) is None
 
 
-def test_uses_record_name_is_not_a_valid_model_name():
-    assert uses_record_name("resnet") == "resnet-uses"
-    assert not valid_model_name(uses_record_name("resnet"))
+def test_header_and_uses_records_are_never_version_records():
+    assert parse_version_record(USES_RECORD) is None
+    assert parse_version_record(HEADER_RECORD) is None
 
 
 # -- fold_uses ----------------------------------------------------------------
@@ -112,7 +114,7 @@ def test_record_use_same_run_twice_writes_one_entry(tmp_path):
     n = register_version(storage, "resnet", {"app": "a", "verstr": "0.1"})
     record_use(storage, "resnet", n, "consumer", "0.9")
     record_use(storage, "resnet", n, "consumer", "0.9")
-    assert len(read_entries(storage, uses_record_name("resnet"))) == 1
+    assert len(read_entries(storage, "resnet", USES_RECORD)) == 1
 
 
 def test_use_entry_does_not_invalidate_run_models_cache(tmp_path, monkeypatch):
@@ -136,7 +138,7 @@ def test_ensure_model_writes_kind_default_model(tmp_path):
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     ensure_model(storage, "imagenet", kind="dataset")
-    assert storage.load(REGISTRY_APP, "resnet")[0]["kind"] == "model"
+    assert load_header(storage, "resnet")["kind"] == "model"
     assert model_kind(storage, "resnet") == "model"
     assert model_kind(storage, "imagenet") == "dataset"
     assert model_kind(storage, "absent") is None
@@ -157,7 +159,9 @@ def test_ensure_model_rejects_unknown_kind(tmp_path):
 
 def test_legacy_header_kind_is_model(tmp_path):
     storage = _storage(tmp_path)
-    storage.create_exclusive(REGISTRY_APP, "old", {"model": "old", "type": "model_header"}, {})
+    registry_storage(storage).create_exclusive(
+        "old", HEADER_RECORD, {"model": "old", "type": "model_header"}, {}
+    )
     assert model_kind(storage, "old") == "model"
     ensure_model(storage, "old")  # no mismatch
     with pytest.raises(ValueError):

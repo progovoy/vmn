@@ -15,7 +15,8 @@ import subprocess
 from vmn_exp.core.writer import flush_log, get_writer_id
 from vmn_exp.core.record_format import stamped
 from vmn_exp.registry.fold import fold_registry, fold_uses, now_iso as _reg_ts, next_ts
-from vmn_exp.registry.names import REGISTRY_APP, uses_record_name
+from vmn_exp.registry.names import HEADER_RECORD, USES_RECORD
+from vmn_exp.registry.store import registry_storage
 
 
 # ---------------------------------------------------------------------------
@@ -65,9 +66,10 @@ def _os_user() -> str:
 # Reading entries
 # ---------------------------------------------------------------------------
 
-def read_entries(storage, model: str) -> list:
-    """Return all registry log entries for *model*, merged across all writers."""
-    return storage.load_merged_log(REGISTRY_APP, model)
+def read_entries(storage, model: str, record: str = HEADER_RECORD) -> list:
+    """Return all log entries of *model*'s *record* (its audit log by
+    default, ``uses`` for its usage log), merged across all writers."""
+    return registry_storage(storage).load_merged_log(model, record)
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +107,11 @@ def _build_entry(
     }
 
 
-def _append_entry(storage, model: str, entry: dict) -> None:
-    """Append *entry* to model's log and flush to remote so readers see it."""
-    storage.append_log_entry(REGISTRY_APP, model, entry["writer"], entry)
-    flush_log(storage, REGISTRY_APP, model)
+def _append_entry(storage, model: str, entry: dict, record: str = HEADER_RECORD) -> None:
+    """Append *entry* to *model*'s *record* log and flush to remote so readers see it."""
+    reg = registry_storage(storage)
+    reg.append_log_entry(model, record, entry["writer"], entry)
+    flush_log(reg, model, record)
 
 
 # ---------------------------------------------------------------------------
@@ -188,25 +191,25 @@ def record_use(
 ) -> None:
     """Record that run *verstr* of *app* used *version* of *model*.
 
-    Appends to the sibling record ``<model>-uses``, never to the model's own
+    Appends to the model's ``uses`` record, never to the model's own
     log, so the model's audit and the registry's run-models cache stay put.
     A run already recorded for *version* writes nothing.
     """
-    record = uses_record_name(model)
-    entries = read_entries(storage, record)
+    entries = read_entries(storage, model, USES_RECORD)
     if not entries:  # a log needs its record: create it on the first use
         header = {"model": model, "type": "uses_header", "timestamp": _reg_ts()}
-        storage.create_exclusive(REGISTRY_APP, record, stamped(header), {})
+        registry_storage(storage).create_exclusive(model, USES_RECORD, stamped(header), {})
     run = {"app": app, "verstr": verstr}
     if any(e.get("type") == "use" and e.get("version") == version and e.get("run") == run
            for e in entries):
         return
-    _append_entry(storage, record, _build_entry(entries, "use", actor, version=version, run=run))
+    entry = _build_entry(entries, "use", actor, version=version, run=run)
+    _append_entry(storage, model, entry, USES_RECORD)
 
 
 def read_uses(storage, model: str) -> dict:
     """``{version: [{app, verstr, ts}]}`` of the runs recorded using *model*."""
-    return fold_uses(read_entries(storage, uses_record_name(model)))
+    return fold_uses(read_entries(storage, model, USES_RECORD))
 
 
 # ---------------------------------------------------------------------------

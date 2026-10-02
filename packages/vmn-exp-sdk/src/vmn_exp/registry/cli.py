@@ -1,7 +1,7 @@
 """CLI handlers for the ``vmn-exp model`` command (C7).
 
 All model actions are git-free: the registry lives in experiment storage
-(under the reserved pseudo-app ``vmn-registry``) and never needs a git repo.
+(its ``registry`` area) and never needs a git repo.
 ``model_run_without_repo`` is registered as the ``run_without_repo`` hook of
 the CommandSpec so every action short-circuits before the repo lock.
 

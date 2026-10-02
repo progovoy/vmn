@@ -6,7 +6,9 @@ import logging
 from test_cli_model import _invoke, _register_run, _storage
 
 from vmn_exp.registry.log import record_use
-from vmn_exp.registry.store import ensure_model, get_version, list_versions, register_version
+from vmn_exp.registry.store import (
+    ensure_model, get_version, list_versions, load_header, register_version,
+)
 
 
 def _register(tmp_path, **kwargs):
@@ -20,7 +22,7 @@ def test_register_kind_dataset_with_uri(tmp_path, capsys):
     meta = get_version(storage, "imagenet", 1)
     assert (meta["uri"], meta["digest"]) == ("s3://data/imagenet/", "sha256:ab")
     assert "run_ref" not in meta
-    assert storage.load("vmn-registry", "imagenet")[0]["kind"] == "dataset"
+    assert load_header(storage, "imagenet")["kind"] == "dataset"
     assert "imagenet version 1" in capsys.readouterr().out
 
 

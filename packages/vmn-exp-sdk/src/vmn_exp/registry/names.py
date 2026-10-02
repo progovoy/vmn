@@ -8,9 +8,11 @@ Model name rules
 * Must not contain a hyphen (-).  Hyphens appear in storage keys when app
   names with slashes are normalised (``/`` → ``-``); allowing them in model
   names would make keys ambiguous.
-* Must not end with ``.v`` followed only by ASCII digits.  Version records are
-  stored as ``<model>.v<N>``; the ``.v<digits>`` suffix must be unambiguous so
-  ``parse_version_record`` is well-defined.
+* Must not end with ``.v`` followed only by ASCII digits (kept from the
+  pre-area layout, so names stay valid in both).
+
+Records live in the store's ``registry`` area, one scope per model:
+``header`` (header + audit log), ``v<N>`` (versions) and ``uses`` (usage log).
 
 Alias name rules
 ----------------
@@ -24,14 +26,14 @@ from __future__ import annotations
 
 import re
 
-# Reserved pseudo-app name for all registry records.
-REGISTRY_APP = "vmn-registry"
+HEADER_RECORD = "header"
+USES_RECORD = "uses"
 
 # First char must be letter/digit/underscore — dot and hyphen excluded from the
 # lead, which also rejects empty strings (requires at least one character).
 _MODEL_CHARS_RE = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.]*$')
 _VERSION_SUFFIX_RE = re.compile(r'\.v\d+$')
-_VERSION_RECORD_RE = re.compile(r'^(.+)\.v(\d+)$')
+_VERSION_RECORD_RE = re.compile(r'^v([1-9]\d*)$')
 _ALIAS_CHARS_RE = re.compile(r'^[A-Za-z0-9_.\-]+$')
 
 
@@ -55,26 +57,15 @@ def valid_alias_name(name: str) -> bool:
     return True
 
 
-def version_record_name(model: str, n: int) -> str:
-    """Return the storage record name for version *n* of *model*.
-
-    Example::
-
-        >>> version_record_name('resnet', 3)
-        'resnet.v3'
-    """
-    return f"{model}.v{n}"
+def version_record_name(n: int) -> str:
+    """Record name of version *n* within its model's scope (``v3``)."""
+    return f"v{n}"
 
 
-def parse_version_record(name: str) -> tuple[str, int] | None:
-    """Parse *name* as a version record name and return *(model, n)*.
-
-    Returns ``None`` if *name* does not match the ``<model>.v<N>`` pattern.
-    """
+def parse_version_record(name: str) -> int | None:
+    """The version number of a ``v<N>`` record name, else None."""
     m = _VERSION_RECORD_RE.match(name)
-    if m is None:
-        return None
-    return m.group(1), int(m.group(2))
+    return int(m.group(1)) if m else None
 
 
 def parse_ref(ref: str) -> tuple[str, str, object]:
@@ -102,17 +93,13 @@ def parse_ref(ref: str) -> tuple[str, str, object]:
 
 
 # ---------------------------------------------------------------------------
-# Kinds, registry URIs and the usage record
+# Kinds and registry URIs
 # ---------------------------------------------------------------------------
 
 KINDS = ("model", "dataset")
 
 REGISTRY_SCHEME = "vmn-registry://"
 _REGISTRY_URI_RE = re.compile(r'^(.+)@([1-9]\d*)$')
-
-# A model's usage log lives in the sibling record ``<model>-uses``; model
-# names never contain ``-``, so it can never collide with a model.
-_USES_SUFFIX = "-uses"
 
 
 def registry_uri(name: str, n: int) -> str:
@@ -128,9 +115,4 @@ def parse_registry_uri(uri) -> tuple[str, int] | None:
     if m is None or not valid_model_name(m.group(1)):
         return None
     return m.group(1), int(m.group(2))
-
-
-def uses_record_name(model: str) -> str:
-    """Record name of *model*'s usage log."""
-    return f"{model}{_USES_SUFFIX}"
 

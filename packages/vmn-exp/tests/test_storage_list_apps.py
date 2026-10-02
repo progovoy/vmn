@@ -1,18 +1,17 @@
 """``SnapshotStorage.list_apps()``: every backend names the apps it holds,
-the reserved model-registry pseudo-app filtered out once, in
-the storage layer — and a ``file://`` store workspace lists its apps."""
+never the model registry (its own store area) — and a ``file://`` store workspace lists its apps."""
 import os
 
 import boto3
 import pytest
 from moto import mock_aws
 
+from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 
 REAL_APPS = ["my_app", "root/svc"]
-RESERVED = ["vmn-registry"]
 
 
 def _record(storage, app, verstr="0.0.1-dev.abc"):
@@ -20,11 +19,13 @@ def _record(storage, app, verstr="0.0.1-dev.abc"):
 
 
 def _fill(storage):
-    for app in REAL_APPS + RESERVED:
+    for app in REAL_APPS:
         _record(storage, app)
+    ensure_model(storage, "resnet")
+    register_version(storage, "resnet", {"app": "my_app", "verstr": "0.0.1-dev.abc"})
 
 
-def test_local_storage_lists_its_apps_without_reserved(tmp_path):
+def test_local_storage_lists_its_apps_without_registry(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     _fill(storage)
     assert storage.list_apps() == REAL_APPS
@@ -45,7 +46,7 @@ def bucket(monkeypatch):
         yield "apps-bkt"
 
 
-def test_s3_storage_lists_its_apps_without_reserved(bucket):
+def test_s3_storage_lists_its_apps_without_registry(bucket):
     storage = S3SnapshotStorage(bucket, prefix="exps")
     _fill(storage)
     assert storage.list_apps() == REAL_APPS

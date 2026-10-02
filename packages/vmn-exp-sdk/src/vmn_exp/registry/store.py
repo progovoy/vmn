@@ -1,11 +1,12 @@
 """Registry record storage: models and their version claims.
 
-Records live in experiment storage under the reserved pseudo-app ``vmn-registry``.
+Records live in the store's ``registry`` area, one scope per model
+(``registry/<model>/``):
 
-Model header record:  ``<model>``       — one per model, carries description/actor.
-Version record:       ``<model>.v<N>``  — immutable; claimed atomically via
-                                          ``create_exclusive``; numbers never reused
-                                          (abandoned claims keep their slot).
+Model header record:  ``header``  — one per model, carries description/actor.
+Version record:       ``v<N>``    — immutable; claimed atomically via
+                                    ``create_exclusive``; numbers never reused
+                                    (abandoned claims keep their slot).
 
 Public surface
 --------------
@@ -24,15 +25,21 @@ from __future__ import annotations
 
 from vmn_exp.core.record_format import readable, stamped
 from vmn_exp.registry.fold import now_iso
+from vmn_exp.storage.areas import REGISTRY
 from vmn_exp.registry.names import (
+    HEADER_RECORD,
     KINDS,
-    REGISTRY_APP,
     parse_version_record,
     valid_model_name,
     version_record_name,
 )
 
 _MAX_REGISTER_RETRIES = 200
+
+
+def registry_storage(storage):
+    """The ``registry`` area of *storage*'s root (one scope per model)."""
+    return storage.in_area(REGISTRY)
 
 
 def ensure_model(storage, model, description=None, actor=None, kind="model"):
@@ -50,7 +57,7 @@ def ensure_model(storage, model, description=None, actor=None, kind="model"):
         metadata["description"] = description
     if actor is not None:
         metadata["actor"] = actor
-    if storage.create_exclusive(REGISTRY_APP, model, stamped(metadata), {}):
+    if registry_storage(storage).create_exclusive(model, HEADER_RECORD, stamped(metadata), {}):
         return
     existing = model_kind(storage, model)
     if existing is not None and existing != kind:
@@ -59,7 +66,12 @@ def ensure_model(storage, model, description=None, actor=None, kind="model"):
 
 def model_kind(storage, model) -> str | None:
     """``model``/``dataset`` of *model*'s header; None when it has none."""
-    return header_kind(storage.load(REGISTRY_APP, model)[0])
+    return header_kind(load_header(storage, model))
+
+
+def load_header(storage, model):
+    """*model*'s header metadata, or None."""
+    return registry_storage(storage).load(model, HEADER_RECORD)[0]
 
 
 def header_kind(header) -> str | None:
@@ -94,8 +106,8 @@ def register_version(
 
     Algorithm
     ---------
-    1. List all record names under ``vmn-registry``.
-    2. Collect all taken ``N`` values for ``<model>.v<N>`` — includes
+    1. List the record names of the model's scope.
+    2. Collect all taken ``N`` values for ``v<N>`` — includes
        abandoned (partial) claims so their numbers are never reused.
     3. Start at ``max(taken) + 1`` (or 1 when *taken* is empty).
     4. Attempt ``create_exclusive``; on collision re-read the listing and
@@ -107,8 +119,8 @@ def register_version(
     Raises ``RuntimeError`` after too many collisions (should not happen
     unless more than 200 concurrent writers race on the same model).
     """
-    all_names = list(storage.list_record_names(REGISTRY_APP))
-    n = max(_taken_version_numbers(all_names, model), default=0) + 1
+    reg = registry_storage(storage)
+    n = max(_taken_version_numbers(reg, model), default=0) + 1
 
     metadata_base = stamped(_version_metadata(
         model, run_ref=run_ref, artifact_path=artifact_path,
@@ -118,12 +130,10 @@ def register_version(
 
     attempts = 0
     while attempts < _MAX_REGISTER_RETRIES:
-        record_name = version_record_name(model, n)
-        if storage.create_exclusive(REGISTRY_APP, record_name, dict(metadata_base, n=n), {}):
+        if reg.create_exclusive(model, version_record_name(n), dict(metadata_base, n=n), {}):
             return n
         # Collision: re-read and jump to the new max+1.
-        all_names = list(storage.list_record_names(REGISTRY_APP))
-        taken = _taken_version_numbers(all_names, model)
+        taken = _taken_version_numbers(reg, model)
         n = max(max(taken, default=0) + 1, n + 1)
         attempts += 1
 
@@ -135,32 +145,28 @@ def register_version(
 
 def list_versions(storage, model) -> list:
     """Sorted list of version numbers for *model* that have complete records."""
-    all_names = list(storage.list_record_names(REGISTRY_APP))
+    reg = registry_storage(storage)
     return sorted(
-        n
-        for name, n in _version_names_for_model(all_names, model)
-        if storage.exists(REGISTRY_APP, name)
+        n for n in _taken_version_numbers(reg, model)
+        if reg.exists(model, version_record_name(n))
     )
 
 
 def list_models(storage, kind=None) -> list:
     """Sorted list of model names that have complete header records, only
     those of *kind* (``model``/``dataset``) when given."""
-    all_names = list(storage.list_record_names(REGISTRY_APP))
-    candidates = sorted(
-        name for name in all_names
-        if parse_version_record(name) is None and valid_model_name(name)
-    )
+    reg = registry_storage(storage)
+    candidates = [name for name in reg.list_apps() if valid_model_name(name)]
     if kind is None:
-        return [name for name in candidates if storage.exists(REGISTRY_APP, name)]
+        return [name for name in candidates if reg.exists(name, HEADER_RECORD)]
     return [name for name in candidates if model_kind(storage, name) == kind]
 
 
 def get_version(storage, model, n) -> dict | None:
     """Return the metadata dict for version *n* of *model*, or None."""
-    record_name = version_record_name(model, n)
-    metadata, _ = storage.load(REGISTRY_APP, record_name)
-    return readable(metadata, f"{REGISTRY_APP}/{record_name}", owner=storage)
+    record_name = version_record_name(n)
+    metadata, _ = registry_storage(storage).load(model, record_name)
+    return readable(metadata, f"{REGISTRY}/{model}/{record_name}", owner=storage)
 
 
 # ---------------------------------------------------------------------------
@@ -175,14 +181,7 @@ def _version_metadata(model, **fields):
     return metadata
 
 
-def _version_names_for_model(all_names, model):
-    """Yield ``(record_name, n)`` for every ``<model>.v<N>`` name in *all_names*."""
-    for name in all_names:
-        parsed = parse_version_record(name)
-        if parsed is not None and parsed[0] == model:
-            yield name, parsed[1]
-
-
-def _taken_version_numbers(all_names, model) -> set:
-    """Version numbers (int) in *all_names* for *model*, including abandoned claims."""
-    return {n for _, n in _version_names_for_model(all_names, model)}
+def _taken_version_numbers(reg, model) -> set:
+    """Version numbers of *model*'s ``v<N>`` records, including abandoned claims."""
+    numbers = (parse_version_record(name) for name in reg.list_record_names(model))
+    return {n for n in numbers if n is not None}

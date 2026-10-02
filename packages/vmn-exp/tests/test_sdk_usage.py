@@ -2,7 +2,7 @@
 
 A use is an ordinary ``input`` entry on the consuming run (named
 ``<name>@<N>``, URI ``vmn://`` of the producer artifact) plus a ``use`` entry
-in the registry's ``<name>-uses`` record.
+in the registry's ``uses`` record.
 """
 import hashlib
 import logging
@@ -16,8 +16,8 @@ from vmn_exp.core.lineage import artifact_ref_uri
 from vmn_exp.core.log import load_log
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.registry.log import read_entries, read_uses, set_alias
-from vmn_exp.registry.names import REGISTRY_APP, uses_record_name
-from vmn_exp.registry.store import ensure_model, register_version
+from vmn_exp.registry.names import USES_RECORD
+from vmn_exp.registry.store import ensure_model, register_version, registry_storage
 from vmn_exp.sdk.models import get_model_version, register_model
 from vmn_exp.sdk.usage import use_dataset, use_model
 from vmn_exp.storage.local import LocalSnapshotStorage
@@ -109,7 +109,7 @@ def test_use_model_appends_use_entry_to_uses_record(tmp_path):
     n, _ = _model(storage)
     run = FakeRun(storage, "serving", "1.0.0")
     use_model("resnet", run=run, storage=storage)
-    (entry,) = read_entries(storage, uses_record_name("resnet"))
+    (entry,) = read_entries(storage, "resnet", USES_RECORD)
     assert entry["type"] == "use"
     assert entry["version"] == n
     assert entry["run"] == {"app": "serving", "verstr": "1.0.0"}
@@ -122,7 +122,7 @@ def test_use_model_twice_records_once(tmp_path):
     run = FakeRun(storage, "serving", "1.0.0")
     use_model("resnet", run=run, storage=storage)
     use_model("resnet@1", run=run, storage=storage)
-    assert len(read_entries(storage, uses_record_name("resnet"))) == 1
+    assert len(read_entries(storage, "resnet", USES_RECORD)) == 1
     log = load_log(storage, "serving", "1.0.0")
     assert len([e for e in log if e.get("type") == "input"]) == 1
 
@@ -137,7 +137,7 @@ def test_use_model_without_run_resolves_and_records_nothing(tmp_path):
 def test_register_model_never_records_self_use(tmp_path):
     storage = _storage(tmp_path)
     _model(storage)
-    assert not storage.exists(REGISTRY_APP, uses_record_name("resnet"))
+    assert not registry_storage(storage).exists("resnet", USES_RECORD)
 
 
 def test_get_model_version_never_records(tmp_path, monkeypatch):

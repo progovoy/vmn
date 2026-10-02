@@ -95,11 +95,12 @@ def test_an_mlflow_import_is_stamped(tmp_path):
 
 
 def test_model_registry_records_are_stamped(tmp_path):
-    from vmn_exp.registry.names import REGISTRY_APP, version_record_name
-    from vmn_exp.registry.store import ensure_model, register_version
+    from vmn_exp.registry.names import HEADER_RECORD, version_record_name
+    from vmn_exp.registry.store import ensure_model, register_version, registry_storage
 
     storage = _local(tmp_path)
     ensure_model(storage, "resnet")
     n = register_version(storage, "resnet", {"app": "app", "verstr": "0.0.1"})
-    assert _format(storage, REGISTRY_APP, "resnet") == RECORD_FORMAT_VERSION
-    assert _format(storage, REGISTRY_APP, version_record_name("resnet", n)) == RECORD_FORMAT_VERSION
+    reg = registry_storage(storage)
+    assert _format(reg, "resnet", HEADER_RECORD) == RECORD_FORMAT_VERSION
+    assert _format(reg, "resnet", version_record_name(n)) == RECORD_FORMAT_VERSION

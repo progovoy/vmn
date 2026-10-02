@@ -103,17 +103,19 @@ def test_get_run_refuses_a_future_format_record(tmp_path):
 
 
 def test_the_registry_skips_a_future_format_version_record(tmp_path, warnings):
-    from vmn_exp.registry.names import REGISTRY_APP, version_record_name
-    from vmn_exp.registry.store import ensure_model, get_version, register_version
+    from vmn_exp.registry.names import version_record_name
+    from vmn_exp.registry.store import (
+        ensure_model, get_version, register_version, registry_storage,
+    )
 
     storage = _storage(tmp_path)
     ensure_model(storage, "resnet")
     n = register_version(storage, "resnet", {"app": "app", "verstr": "0.0.1"})
     assert get_version(storage, "resnet", n)["n"] == n
 
-    name = version_record_name("resnet", n)
-    meta, _ = storage.load(REGISTRY_APP, name)
-    storage.save(REGISTRY_APP, name, dict(meta, format_version=FUTURE), {})
+    reg, name = registry_storage(storage), version_record_name(n)
+    meta, _ = reg.load("resnet", name)
+    reg.save("resnet", name, dict(meta, format_version=FUTURE), {})
 
     assert get_version(storage, "resnet", n) is None
     assert warnings

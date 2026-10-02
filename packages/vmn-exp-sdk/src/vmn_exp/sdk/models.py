@@ -1,7 +1,7 @@
 """SDK helpers for the vmn-exp model registry.
 
 The registry lives in the same storage root as experiment runs (under the
-reserved pseudo-app ``vmn-registry``).  These functions provide a Python API
+store root's ``registry`` area).  These functions provide a Python API
 for registering model versions, managing aliases, and downloading artifacts.
 
 Usage::
