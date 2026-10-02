@@ -165,4 +165,4 @@ def workspace_storage(ws):
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
 
-    return open_storage(ws.store, area=RUNS)
+    return open_storage(ws.store, area=RUNS, writer=False)

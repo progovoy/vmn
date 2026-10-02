@@ -86,7 +86,7 @@ def test_s3_uri_with_a_root_is_cached_locally(s3, tmp_path):
 
 def test_endpoint_url_option_reaches_the_s3_client(s3):
     storage = open_storage(
-        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs"
+        f"s3://{BUCKET}/p?endpoint_url=http://localhost:1", area="runs", writer=False
     )
     assert _remote(storage).endpoint_url == "http://localhost:1"
 

@@ -354,6 +354,7 @@ def register_dev_version() -> None:
 
 def register_all() -> None:
     """Every command `vmn-exp` serves. Idempotent."""
+    from vmn_exp.cli.experiment import READ_ONLY_ACTIONS as EXP_READ_ONLY_ACTIONS
     from vmn_exp.registry.cli import add_model_parser, model_run_without_repo
 
     register_dev_version()
@@ -365,10 +366,7 @@ def register_all() -> None:
         ),
         handle=_handle_experiment,
         access="local",
-        read_only_actions=frozenset(
-            {"list", "show", "compare", "diff", "export", "import-mlflow", "watch",
-             "lineage", "importance"}
-        ),
+        read_only_actions=EXP_READ_ONLY_ACTIONS,
         split_after_double_dash=True,
         run_without_repo=_exp_run_without_repo,
     ))

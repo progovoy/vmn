@@ -9,17 +9,25 @@ from vmn_exp.storage.areas import SNAPSHOTS
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.registry import open_store
+from vmn_exp.storage.store_marker import check_store
 
 
-def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False):
+def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, writer=True):
     """*area*'s storage for *store* (a URI, or None) over the local store
     *root* (laid out ``<root>/<area>/...``).
 
     ``buffer_logs``: without a local root, still buffer logs locally (a
     private temp dir) and ship them as segments — for writers; a pure-remote
     reader has no use for it.
+
+    A *writer* checks each root's ``store.yml`` now (store_marker), creating
+    it when absent; readers check lazily (``store_marker.require_store``).
     """
     remote = open_store(store, area=area) if store else None
+    if writer and remote is not None:
+        check_store(remote, writer)
+    if writer and root and (remote is None or remote.is_remote()):
+        check_store(LocalSnapshotStorage(root, area), writer)
     if remote is not None and not remote.is_remote():
         return CachedSnapshotStorage(remote, None)
     if root:

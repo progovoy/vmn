@@ -64,7 +64,10 @@ def _repo_status(vcs):
 
 def _params(vmn_ctx):
     args = vmn_ctx.args
-    vmn_ctx.params.update(store=args.store, local=args.local, force=args.force)
+    from version_stamp.cli.constants import READ_ONLY_ACTIONS
+
+    vmn_ctx.params.update(store=args.store, local=args.local, force=args.force,
+                          read_only=args.action in READ_ONLY_ACTIONS["snapshot"])
     return vmn_ctx.params
 
 
@@ -129,7 +132,7 @@ def _open_stores(vcs, params):
 
     try:
         return open_snapshot_stores(vcs, params)
-    except SnapshotStoreError as exc:
+    except (SnapshotStoreError, ValueError) as exc:
         VMN_LOGGER.error(str(exc))
         return None
 

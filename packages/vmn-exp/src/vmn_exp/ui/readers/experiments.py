@@ -21,7 +21,7 @@ from vmn_exp.ui.readers.versions import version_counts
 
 
 def experiment_storage(root_path):
-    return open_storage(None, local_store_root(root_path), area=RUNS)
+    return open_storage(None, local_store_root(root_path), area=RUNS, writer=False)
 
 
 def metrics_schema(root_path, app_name):
