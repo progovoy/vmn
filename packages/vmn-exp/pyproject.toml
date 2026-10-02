@@ -24,6 +24,7 @@ s3 = ["vmn-exp-sdk[s3]"]
 gcs = ["vmn-exp-sdk[gcs]"]
 azure = ["vmn-exp-sdk[azure]"]
 mlflow = ["mlflow-skinny"]
+postgres = ["psycopg[binary]>=3"]
 
 [project.scripts]
 vmn-exp = "vmn_exp.cli.main:main"
@@ -40,3 +41,4 @@ namespaces = true  # vmn_exp is shared with vmn-exp-sdk (PEP 420)
 
 [tool.setuptools.package-data]
 "vmn_exp.ui" = ["static/*", "static/assets/*"]
+"vmn_exp.ui.migrations" = ["*.sql"]
