@@ -26,6 +26,10 @@ def vmn_exp_run(argv):
         from vmn_exp.cli.skill import run_skill
 
         return run_skill(argv[1:]), None
+    if argv and argv[0] == "migrate":
+        from vmn_exp.cli.migrate import run_migrate
+
+        return run_migrate(argv[1:]), None
     register_all()
     if argv and argv[0] in VMN_ARGS and argv[0] not in EXPERIMENT_ACTIONS:
         print(
