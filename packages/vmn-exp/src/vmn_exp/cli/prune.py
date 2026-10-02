@@ -24,10 +24,10 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.cli.prune_query import print_preview, query_candidates
 from vmn_exp.cli.views import metrics_schema
 from vmn_exp.core.code_store import drop_unused_code
-from vmn_exp.reports import comments
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
+from vmn_exp.reports import comments
 from vmn_exp.core.status import (
     RUNNING,
     STUCK,
