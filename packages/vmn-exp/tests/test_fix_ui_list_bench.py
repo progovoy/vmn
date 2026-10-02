@@ -29,7 +29,8 @@ def _seed(root):
         meta = {"verstr": verstr, "timestamp": f"2026-01-01T{i // 3600:02d}:{i // 60 % 60:02d}:{i % 60:02d}Z"}
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
             yaml.dump(meta, f)
-        with open(os.path.join(folder, "log.w.jsonl"), "w") as f:
+        os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
+        with open(os.path.join(folder, "log/w.jsonl"), "w") as f:
             f.write(json.dumps({"timestamp": "t", "type": "metrics", "values": {"loss": i}}) + "\n")
         with open(os.path.join(folder, "run_state.yml"), "w") as f:
             f.write("state: finished\nexit_code: 0\n")

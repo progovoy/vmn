@@ -96,13 +96,14 @@ def test_an_append_reads_only_the_new_bytes(tmp_path, reads):
     index = _index(storage, tmp_path)
     index.refresh()
 
-    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[2]), "log.w0.jsonl")
+    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[2]), "log/w0.jsonl")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
     before = os.path.getsize(log)
     storage.append_log_entry(APP, verstrs[2], "w0", _metric("2026-01-01T00:09:00Z", loss=0.01))
     reads.clear()
     index.refresh()
 
-    assert reads == [(verstrs[2], "log.w0.jsonl", before)]
+    assert reads == [(verstrs[2], "log/w0.jsonl", before)]
     assert index.rows() == _direct(storage)[0]
     assert index.rows()[2]["metrics"]["loss"] == 0.01
 
@@ -152,7 +153,8 @@ def test_a_rewritten_log_is_refolded_from_scratch(tmp_path):
     index = _index(storage, tmp_path)
     index.refresh()
 
-    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[1]), "log.w0.jsonl")
+    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[1]), "log/w0.jsonl")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
     with open(log, "w") as f:
         f.write('{"timestamp": "2026-01-01T00:00:01Z", "type": "metrics", "values": {"x": 1}}\n')
     index.refresh()
@@ -167,7 +169,8 @@ def test_a_partial_trailing_line_is_folded_once_it_completes(tmp_path):
     index = _index(storage, tmp_path)
     index.refresh()
 
-    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[0]), "log.w0.jsonl")
+    log = os.path.join(storage._local._snapshot_dir(APP, verstrs[0]), "log/w0.jsonl")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
     line = '{"timestamp": "2026-01-01T00:08:00Z", "type": "metrics", "values": {"loss": 0.2}}\n'
     with open(log, "a") as f:
         f.write(line[:30])
@@ -251,7 +254,8 @@ def test_legacy_log_yml_and_segments_fold_like_the_reader(tmp_path):
     folder = storage._local._snapshot_dir(APP, verstr)
     with open(os.path.join(folder, "log.yml"), "w") as f:
         f.write("- {timestamp: '2026-01-01T00:04:00Z', type: metrics, values: {loss: 0.9}}\n")
-    with open(os.path.join(folder, "log.w0@000001.jsonl"), "w") as f:
+    os.makedirs(os.path.dirname(os.path.join(folder, "log/w0@000001.jsonl")), exist_ok=True)
+    with open(os.path.join(folder, "log/w0@000001.jsonl"), "w") as f:
         f.write('{"timestamp": "2026-01-01T00:05:00Z", "type": "metrics", "values": {"acc": 1}}\n')
     index = _index(storage, tmp_path)
     index.refresh()

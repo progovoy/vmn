@@ -121,14 +121,14 @@ def test_save_run_state_without_updates_republishes_the_current_state():
 # ---------------------------------------------------------------------------
 
 
-def test_compute_artifact_info_reports_basename_size_and_sha256(tmp_path):
+def test_compute_artifact_info_reports_its_artifacts_path_size_and_sha256(tmp_path):
     path = tmp_path / "model.bin"
     path.write_bytes(b"weights")
 
     info = compute_artifact_info(str(path))
 
     assert info == {
-        "path": "model.bin",
+        "path": "artifacts/model.bin",
         "size": 7,
         "sha256": hashlib.sha256(b"weights").hexdigest(),
     }

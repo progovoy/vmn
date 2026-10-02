@@ -34,7 +34,7 @@ def _chain(app_layout, tmp_path):
     model.write_text("m")
     train = _create(app_layout, "--input", f"data=file:///mnt/data.csv#sha256:{sha}")
     _attach(app_layout, train, model)
-    uri = artifact_ref_uri(app_layout.app_name, train, "model.pkl")
+    uri = artifact_ref_uri(app_layout.app_name, train, "artifacts/model.pkl")
     evaluate = _create(app_layout, "--input", f"model={uri}")
     return prep, train, evaluate
 
@@ -65,8 +65,8 @@ def test_lineage_text(app_layout, capfd, tmp_path):
     assert rc == 0
     assert f"Lineage: {train}" in out
     upstream, downstream = out.split("Downstream")
-    assert prep in upstream and "data <- data.csv (digest)" in upstream
-    assert evaluate in downstream and "model <- model.pkl (uri)" in downstream
+    assert prep in upstream and "data <- artifacts/data.csv (digest)" in upstream
+    assert evaluate in downstream and "model <- artifacts/model.pkl (uri)" in downstream
 
 
 def test_lineage_no_links(app_layout, capfd, tmp_path):
@@ -93,14 +93,14 @@ def test_lineage_cli_prints_used_model_and_datasets(app_layout, capfd, tmp_path)
     storage = _storage(app_layout)
     ensure_model(storage, "clf")
     register_version(storage, "clf", {"app": app_layout.app_name, "verstr": train},
-                     artifact_path="model.pkl")
+                     artifact_path="artifacts/model.pkl")
     data = tmp_path / "ref.csv"
     data.write_text("x\n")
     register_dataset("ds", str(data), storage=storage)
-    uri = artifact_ref_uri(app_layout.app_name, train, "model.pkl")
+    uri = artifact_ref_uri(app_layout.app_name, train, "artifacts/model.pkl")
     serve = _create(app_layout, "--input", f"clf={uri}", "--input", f"ds={registry_uri('ds', 1)}")
 
     rc, out = _run(capfd, app_layout, version=serve)
     assert rc == 0
-    assert "clf <- model.pkl (uri)  model clf v1" in out
+    assert "clf <- artifacts/model.pkl (uri)  model clf v1" in out
     assert "Datasets:" in out and "ds v1  (input ds)" in out

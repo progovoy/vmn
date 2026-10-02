@@ -72,7 +72,7 @@ def test_gcs_and_azure_records_on_the_remote_are_written_through(tmp_path, make_
     _write_everything(host, tmp_path)
 
     assert remote.load_file(APP, X, RUN_STATE_FILE)
-    assert [a["name"] for a in remote.list_artifacts(APP, X)] == ["model.bin"]
+    assert [a["name"] for a in remote.list_artifacts(APP, X)] == ["artifacts/model.bin"]
     assert any(e["type"] == "tags" for e in remote.load_merged_log(APP, X))
 
 

@@ -35,7 +35,8 @@ from vmn_exp.core.png import array_to_png, png_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.media_uploads import staging_dir
-from vmn_exp.sdk.run_artifacts import checked_artifact_name
+from vmn_exp.sdk.run_artifacts import checked_stored_path
+from vmn_exp.storage.files import OUTPUTS_DIR
 
 _LOGGER = logging.getLogger("vmn_exp.sdk")
 
@@ -130,7 +131,7 @@ class RunMedia:
         tmp = staging_dir()
         try:
             written = produce(os.path.join(tmp, os.path.basename(path)))
-            stored = checked_artifact_name(
+            stored = checked_stored_path(
                 path[: -len(os.path.basename(path))] + os.path.basename(written)
             )
             with open(written, "rb") as f:
@@ -150,7 +151,7 @@ class RunMedia:
     def log_table(self, name, data, columns=None, step=None):
         doc, total = table_document(data, columns=columns)
         step = self._media_step("table", name, step)
-        path = checked_artifact_name(f"tables/{name}/{step}.json")
+        path = checked_stored_path(f"{OUTPUTS_DIR}/tables/{name}/{step}.json")
         if doc["truncated"]:
             _LOGGER.warning(
                 "Table %r has %d rows: truncated to the first %d", name, total, MAX_TABLE_ROWS
@@ -169,7 +170,7 @@ class RunMedia:
 
     def log_image(self, name, image, step=None, caption=None):
         step = self._media_step("image", name, step)
-        path = checked_artifact_name(f"media/{name}/{step}.png")
+        path = checked_stored_path(f"{OUTPUTS_DIR}/media/{name}/{step}.png")
         self._store(
             "image", name, step, path, lambda dest: write_image(image, dest), caption=caption,
         )

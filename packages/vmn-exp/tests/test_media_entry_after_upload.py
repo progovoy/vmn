@@ -22,7 +22,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 APP = "trainer"
 VERSTR = "0.0.1-dev.abc1234.def5678"
 PNG = encode_png(bytes(3 * 2 * 2), 2, 2, 3)
-PNG_PATH = "media/pic/3.png"
+PNG_PATH = "outputs/media/pic/3.png"
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ class _GatedStore(LocalSnapshotStorage):
         self.gate, self.stored, self.fail = threading.Event(), threading.Event(), fail
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
-        if name and name.startswith(("media/", "tables/")):
+        if name and name.startswith(("outputs/media/", "outputs/tables/")):
             self.gate.wait(10)
             if self.fail:
                 raise OSError("disk full")
@@ -168,7 +168,7 @@ _KILLED_CHILD = textwrap.dedent("""
 
     class Hung(LocalSnapshotStorage):
         def save_artifact_file(self, app_name, verstr, src_path, name=None):
-            if name and name.startswith("media/"):
+            if name and name.startswith("outputs/media/"):
                 time.sleep(600)
             return super().save_artifact_file(app_name, verstr, src_path, name=name)
 

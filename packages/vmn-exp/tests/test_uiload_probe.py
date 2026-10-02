@@ -26,13 +26,15 @@ def _iso(t):
 
 
 def _write(folder, name, data):
+    os.makedirs(os.path.dirname(os.path.join(folder, name)), exist_ok=True)
     with open(os.path.join(folder, name), "w") as f:
         f.write(data)
 
 
 def _append_metrics(folder, step, values):
     entry = {"timestamp": _iso(time.time()), "type": "metrics", "step": step, "values": values}
-    with open(os.path.join(folder, "log.w.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
+    with open(os.path.join(folder, "log/w.jsonl"), "a") as f:
         f.write(json.dumps(entry) + "\n")
 
 
@@ -55,7 +57,7 @@ def _seed(root):
             meta = {"verstr": verstr, "name": name, "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z"}
             _write(folder, "metadata.yml", yaml.dump(meta))
             params = {"type": "params", "timestamp": _iso(time.time()), "params": {"lr": 0.001 * (i + 1), "opt": "adam"}}
-            _write(folder, "log.w.jsonl", json.dumps(params) + "\n")
+            _write(folder, "log/w.jsonl", json.dumps(params) + "\n")
             for step in range(5):
                 _append_metrics(folder, step, {"loss": 1.0 / (i + step + 1), "acc": 0.1 * step, "probe_ts": time.time()})
             if live:

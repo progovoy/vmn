@@ -37,7 +37,7 @@ def _log_gets(storage):
     real = client.get_object
 
     def get_object(**kwargs):
-        if "/log." in kwargs.get("Key", ""):
+        if "/log/" in kwargs.get("Key", ""):
             calls.append(kwargs["Key"])
         return real(**kwargs)
 
@@ -90,6 +90,6 @@ def test_sync_reads_only_the_bytes_past_what_it_shipped(s3, tmp_path):
     host.append_log_entry("app", V, "w", _entry(1))
     host.sync_log_to_remote("app", V, "w")
 
-    assert "log.w.jsonl" not in whole_reads
+    assert "log/w.jsonl" not in whole_reads
     fresh = _host(tmp_path, "c")
     assert [e["values"]["i"] for e in fresh.load_merged_log("app", V)] == [0, 1]

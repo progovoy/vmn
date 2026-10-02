@@ -271,7 +271,7 @@ export interface RunRewind {
 
 export interface MediaItem {
   step: number;
-  /** Artifact path of the image (`media/<key>/<step>.png`). */
+  /** Record path of the image (`outputs/media/<key>/<step>.png`). */
   path: string;
   caption?: string | null;
   width?: number | null;

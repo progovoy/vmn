@@ -48,11 +48,11 @@ async function fetchPage(
 /** Inverse of appTag: the real app name behind a URL tag. */
 export const appName = (tag: string) => tag.replaceAll("-", "/");
 
-/** Download URL of a run's artifact; nested names keep their `/`s, each
- *  component encoded on its own. */
+/** Download URL of a run's stored file, named by its record path
+ *  (`artifacts/…` or `outputs/…`); each component is encoded on its own. */
 export const artifactUrl = (ws: string, app: string, verstr: string, name: string) =>
   `${BASE}/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}` +
-  `/artifacts/${name.split("/").map(encodeURIComponent).join("/")}`;
+  `/${name.split("/").map(encodeURIComponent).join("/")}`;
 
 export const api = {
   meta: () => get<Meta>("/meta"),

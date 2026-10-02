@@ -6,12 +6,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from vmn_exp.ui.responses import GZIP_LEVEL, GZIP_MIN_BYTES
 
-ARTIFACT_SEGMENT = "/artifacts/"
+# A run's stored files: its user artifacts and vmn's outputs.
+FILE_SEGMENTS = ("/artifacts/", "/outputs/")
 
 
 def is_artifact_download(path):
-    """Artifacts are served as stored: often already compressed, often huge."""
-    return path.startswith("/api/") and ARTIFACT_SEGMENT in path
+    """Stored files are served as stored: often already compressed, often huge."""
+    return path.startswith("/api/") and any(s in path for s in FILE_SEGMENTS)
 
 
 class SelectiveGZipMiddleware(GZipMiddleware):

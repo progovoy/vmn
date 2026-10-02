@@ -51,7 +51,8 @@ class Store:
         return verstr
 
     def log(self, verstr, value):
-        with open(os.path.join(self.base, verstr, "log.w.jsonl"), "a") as f:
+        os.makedirs(os.path.dirname(os.path.join(self.base, verstr, "log/w.jsonl")), exist_ok=True)
+        with open(os.path.join(self.base, verstr, "log/w.jsonl"), "a") as f:
             f.write(json.dumps({"timestamp": _now_iso(), "type": "metrics",
                                 "values": {"loss": value}}) + "\n")
 

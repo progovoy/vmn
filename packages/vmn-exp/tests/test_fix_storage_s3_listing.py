@@ -45,10 +45,14 @@ def test_list_files_for_keys_lists_only_those_records(tmp_path):
     files = s3.list_files("app", keys=["v1", "v3"])
 
     assert set(files) == {"v1", "v3"}
-    assert {"metadata.yml", "log.w.jsonl"} <= set(files["v1"])
-    assert not any("/" in name for names in files.values() for name in names)
+    assert {"metadata.yml", "log/w.jsonl"} <= set(files["v1"])
+    nested = {name for names in files.values() for name in names if "/" in name}
+    assert nested == {"log/w.jsonl"}  # a log, never an artifact or dep
     prefixes = sorted(p["Prefix"] for op, p in calls if op == "ListObjectsV2")
-    assert prefixes == [f"{PREFIX}/runs/app/v1/", f"{PREFIX}/runs/app/v3/"]
+    assert prefixes == [
+        f"{PREFIX}/runs/app/v1/", f"{PREFIX}/runs/app/v1/log/",
+        f"{PREFIX}/runs/app/v3/", f"{PREFIX}/runs/app/v3/log/",
+    ]
     assert all(p.get("Delimiter") == "/" for op, p in calls if op == "ListObjectsV2")
 
 

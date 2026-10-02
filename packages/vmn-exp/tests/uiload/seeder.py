@@ -64,6 +64,7 @@ def run_state_yaml(state):
 
 
 def _write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         f.write(text)
 
@@ -75,7 +76,7 @@ def write_run(base, i, plan):
     os.mkdir(folder)
     _write(os.path.join(folder, "metadata.yml"), metadata_yaml(plan["app"], meta))
     writer = f"node-{i % 16:02d}"
-    _write(os.path.join(folder, f"log.{writer}.jsonl"),
+    _write(os.path.join(folder, f"log/{writer}.jsonl"),
            "".join(json.dumps(e) + "\n" for e in entries))
     if state is not None:
         path = os.path.join(folder, "run_state.yml")

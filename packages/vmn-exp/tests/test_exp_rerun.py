@@ -99,7 +99,7 @@ def test_rerun_refuses_code_missing(app_layout):
 
 
 def _output(app_layout, verstr):
-    path = _storage(app_layout).artifact_local_path(app_layout.app_name, verstr, "output.log")
+    path = _storage(app_layout).artifact_local_path(app_layout.app_name, verstr, "outputs/output.log")
     with open(path) as f:
         return f.read()
 

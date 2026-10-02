@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from vmn_exp.core.metric_schema import effective_schema
-from vmn_exp.storage.files import valid_artifact_path
+from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.ui import (
     routes_leaderboard,
     routes_lineage,
@@ -304,15 +304,11 @@ def create_app(
             raise HTTPException(404, err)
         return json_response(page, request=request)
 
-    @app.get(
-        f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
-        "/experiments/{verstr}/artifacts/{filename:path}"
-    )
     def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         _segment(verstr)
-        # Nested artifacts are relative paths (a/b/c.txt), each part one segment.
+        # Record-relative paths (artifacts/a/b/c.txt), each part one segment.
         if not valid_artifact_path(filename):
             raise HTTPException(400, f"Invalid artifact name '{filename}'")
         download_name = filename.rsplit("/", 1)[-1]
@@ -337,6 +333,21 @@ def create_app(
         if not path or not os.path.isfile(path):
             raise HTTPException(404, f"Artifact {filename} not found")
         return FileResponse(path, filename=download_name)
+
+    # A stored file's URL is its record path: .../experiments/{v}/artifacts/…
+    # for the user's artifacts, .../experiments/{v}/outputs/… for vmn's own.
+    def _download_route(tree):
+        def download_from(ws_name: str, app_tag: str, verstr: str, path: str):
+            return download_artifact(ws_name, app_tag, verstr, f"{tree}/{path}")
+
+        app.get(
+            f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+            f"/experiments/{{verstr}}/{tree}/{{path:path}}",
+            name=f"download_{tree}",
+        )(download_from)
+
+    for tree in FILE_TREES:
+        _download_route(tree)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema")
     def app_metrics_schema(ws_name: str, app_tag: str):

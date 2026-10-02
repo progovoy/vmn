@@ -154,7 +154,7 @@ def test_keras_log_models_attaches_the_native_keras_file(app_layout):
     )
 
     assert len(row["artifacts"]) == 1
-    assert row["artifacts"][0]["name"] == "keras_Sequential.keras"
+    assert row["artifacts"][0]["name"] == "artifacts/keras_Sequential.keras"
     assert row["artifacts"][0]["size"] > 0
 
 
@@ -367,7 +367,7 @@ def test_lightning_log_models_attaches_a_checkpoint(app_layout):
     )
 
     assert len(row["artifacts"]) == 1
-    assert row["artifacts"][0]["name"] == "lightning_LitMLP.ckpt"
+    assert row["artifacts"][0]["name"] == "artifacts/lightning_LitMLP.ckpt"
     assert row["artifacts"][0]["size"] > 0
 
 

@@ -37,7 +37,8 @@ def _write_run(app_layout, verstr, log, parent=None, name=None, run_state=None):
     if run_state:
         with open(os.path.join(path, "run_state.yml"), "w") as f:
             yaml.dump(run_state, f)
-    with open(os.path.join(path, "log.w0.jsonl"), "w") as f:
+    os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
+    with open(os.path.join(path, "log/w0.jsonl"), "w") as f:
         for entry in log:
             f.write(json.dumps(entry) + "\n")
 

@@ -37,6 +37,7 @@ def _dir(root, verstr):
 
 
 def _write(root, verstr, name, text):
+    os.makedirs(os.path.dirname(os.path.join(_dir(root, verstr), name)), exist_ok=True)
     with open(os.path.join(_dir(root, verstr), name), "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -60,15 +61,15 @@ def _seed(root):
         if i % 2:
             storage.save_file(APP, verstr, "run_state.yml", f"state: finished\nexit_code: {i % 3}\n")
     # NaN / Infinity tokens, big ints, non-ASCII, corrupt and non-object lines.
-    _write(root, "0.0.1-dev.abc.r0", "log.w1.jsonl",
+    _write(root, "0.0.1-dev.abc.r0", "log/w1.jsonl",
            '{"timestamp": "2026-01-01T00:01:00Z", "type": "metrics", "values": {"loss": NaN, "acc": Infinity}}\n'
            '{"type": "metrics", "values": {"seed": 123456789012345678901234567890}}\n'
            '{"type": "params", "params": {"name": "café ☃"}}\n'
            'not json\n[1, 2]\n{"a": 1} {"b": 2}\n﻿{"type": "metrics", "values": {"x": 1}}\n'
            '   {"type": "metrics", "values": {"y": -Infinity}}   \n\n')
     # Segments of a second writer and an unterminated last line.
-    _write(root, "0.0.1-dev.abc.r1", "log.w2@000001.jsonl", '{"type": "metrics", "values": {"s": 1}}\n')
-    _write(root, "0.0.1-dev.abc.r1", "log.w2@000002.jsonl", '{"type": "metrics", "values": {"s": 2}}')
+    _write(root, "0.0.1-dev.abc.r1", "log/w2@000001.jsonl", '{"type": "metrics", "values": {"s": 1}}\n')
+    _write(root, "0.0.1-dev.abc.r1", "log/w2@000002.jsonl", '{"type": "metrics", "values": {"s": 2}}')
     # The legacy log.yml, next to a JSONL writer.
     _write(root, "0.0.1-dev.abc.r2", "log.yml", yaml.safe_dump(
         [{"timestamp": "2025-12-31T00:00:00Z", "type": "create", "note": "legacy",
@@ -80,7 +81,7 @@ def _seed(root):
     os.makedirs(_dir(root, "legacy_verinfo"))
     _write(root, "legacy_verinfo", "metadata.yml", "stamping: {}\n")
     os.makedirs(_dir(root, "claim_without_metadata"))
-    _write(root, "claim_without_metadata", "log.w.jsonl", '{"type": "metrics"}\n')
+    _write(root, "claim_without_metadata", "log/w.jsonl", '{"type": "metrics"}\n')
     return storage
 
 

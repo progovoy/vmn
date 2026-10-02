@@ -91,7 +91,7 @@ class GCSSnapshotStorage(S3SnapshotStorage):
         """Streamed, never buffered: a GCS read is one whole-object download."""
         if not valid_artifact_path(name):
             return None
-        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        key = f"{self._record_prefix(app_name, verstr)}/{name}"
         return self._s3.stream(key, _ARTIFACT_CHUNK)
 
 

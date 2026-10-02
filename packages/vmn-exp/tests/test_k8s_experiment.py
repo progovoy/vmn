@@ -58,7 +58,8 @@ def test_append_log_creates_jsonl_file(exp_storage):
     exp_storage.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-1", entry)
 
     snap_dir = exp_storage._snapshot_dir("app", "1.0.0-dev.aaa.bbb")
-    log_path = os.path.join(snap_dir, "log.pod-1.jsonl")
+    log_path = os.path.join(snap_dir, "log/pod-1.jsonl")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     assert os.path.isfile(log_path)
     with open(log_path) as f:
         lines = f.read().strip().split("\n")
@@ -74,7 +75,8 @@ def test_append_log_multiple_entries_same_writer(exp_storage):
     exp_storage.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-1", e2)
 
     snap_dir = exp_storage._snapshot_dir("app", "1.0.0-dev.aaa.bbb")
-    log_path = os.path.join(snap_dir, "log.pod-1.jsonl")
+    log_path = os.path.join(snap_dir, "log/pod-1.jsonl")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path) as f:
         lines = [l for l in f.read().strip().split("\n") if l.strip()]
     assert len(lines) == 2
@@ -144,7 +146,8 @@ def test_load_merged_log_empty(exp_storage):
 def test_load_merged_log_ignores_malformed_jsonl_lines(exp_storage):
     _save_exp(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     snap_dir = exp_storage._snapshot_dir("app", "1.0.0-dev.aaa.bbb")
-    log_path = os.path.join(snap_dir, "log.pod-1.jsonl")
+    log_path = os.path.join(snap_dir, "log/pod-1.jsonl")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "w") as f:
         f.write(json.dumps({"timestamp": "t1", "type": "metrics"}) + "\n")
         f.write("NOT VALID JSON\n")
@@ -171,7 +174,7 @@ def test_s3_append_log_entry():
 
     resp = s3.get_object(
         Bucket="test-bucket",
-        Key="exp/app/1.0.0-dev.aaa.bbb/log.writer.jsonl",
+        Key="exp/app/1.0.0-dev.aaa.bbb/log/writer.jsonl",
     )
     content = resp["Body"].read().decode("utf-8")
     lines = [l for l in content.strip().split("\n") if l.strip()]
@@ -193,7 +196,7 @@ def test_s3_append_log_entry_appends_to_existing():
 
     resp = s3.get_object(
         Bucket="test-bucket",
-        Key="exp/app/1.0.0-dev.aaa.bbb/log.writer.jsonl",
+        Key="exp/app/1.0.0-dev.aaa.bbb/log/writer.jsonl",
     )
     content = resp["Body"].read().decode("utf-8")
     lines = [l for l in content.strip().split("\n") if l.strip()]
@@ -314,7 +317,7 @@ def test_cached_sync_log_to_remote(tmp_path):
 
     remote.save_file.assert_called_once()
     call_args = remote.save_file.call_args
-    assert call_args[0][2] == "log.pod-1.jsonl"
+    assert call_args[0][2] == "log/pod-1.jsonl"
 
 
 def test_cached_sync_log_to_remote_noop_without_remote(tmp_path):

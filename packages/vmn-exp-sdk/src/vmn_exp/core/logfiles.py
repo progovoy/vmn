@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Names and lines of an experiment's log files — the one definition.
 
-A record's log is the legacy ``log.yml`` plus, per writer, ``log.<writer>.jsonl``
-and its segments ``log.<writer>@<seq>.jsonl``. Compaction merges a writer's
-files up to segment N into ``log.<writer>@000000-<N>.jsonl``, which supersedes
+A record's log is the legacy ``log.yml`` plus, per writer, ``log/<writer>.jsonl``
+and its segments ``log/<writer>@<seq>.jsonl``. Compaction merges a writer's
+files up to segment N into ``log/<writer>@000000-<N>.jsonl``, which supersedes
 every file it covers — so a reader that lists the merged object next to the
 files it replaced (before they are deleted) still counts each entry once.
 
@@ -15,16 +15,23 @@ Pure: no I/O.
 import json
 
 LEGACY_LOG_FILE = "log.yml"
+# The record's folder of log files; the names below are record-relative paths.
+LOG_DIR = "log"
+_PREFIX = LOG_DIR + "/"
 
 
 def is_log_file(name):
     """Whether *name* is a per-writer JSONL log file or segment."""
-    return name.startswith("log.") and name.endswith(".jsonl")
+    return (
+        name.startswith(_PREFIX)
+        and name.endswith(".jsonl")
+        and "/" not in name[len(_PREFIX):]
+    )
 
 
 def _writer_and_span(name):
     """``(writer, (first seq, last seq))`` a log file covers."""
-    stem = name[len("log.") : -len(".jsonl")]
+    stem = name[len(_PREFIX) : -len(".jsonl")]
     writer, _, seq = stem.partition("@")
     first, _, last = seq.partition("-")
     if first.isdigit() and last.isdigit():
@@ -34,19 +41,19 @@ def _writer_and_span(name):
 
 
 def log_writer_and_seq(name):
-    """``log.w.jsonl`` → ``("w", 0)``; segment ``log.w@000003.jsonl`` → ``("w", 3)``;
-    a compacted ``log.w@000000-000005.jsonl`` → ``("w", 5)``, its last seq."""
+    """``log/w.jsonl`` → ``("w", 0)``; segment ``log/w@000003.jsonl`` → ``("w", 3)``;
+    a compacted ``log/w@000000-000005.jsonl`` → ``("w", 5)``, its last seq."""
     writer, (_, last) = _writer_and_span(name)
     return writer, last
 
 
 def log_object_name(writer, seq=0):
-    return f"log.{writer}.jsonl" if not seq else f"log.{writer}@{seq:06d}.jsonl"
+    return f"{_PREFIX}{writer}.jsonl" if not seq else f"{_PREFIX}{writer}@{seq:06d}.jsonl"
 
 
 def compacted_log_name(writer, last_seq):
     """The object merging *writer*'s files up to segment *last_seq*."""
-    return f"log.{writer}@{0:06d}-{last_seq:06d}.jsonl"
+    return f"{_PREFIX}{writer}@{0:06d}-{last_seq:06d}.jsonl"
 
 
 def _visible(spans):

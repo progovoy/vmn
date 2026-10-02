@@ -110,7 +110,7 @@ def test_s3_batch_is_one_put(bucket):
 
     storage.append_log_entries("app", V, "w", _entries(30))
 
-    puts = [p["Key"] for op, p in calls if op == "PutObject" and "/log." in p["Key"]]
+    puts = [p["Key"] for op, p in calls if op == "PutObject" and "/log/" in p["Key"]]
     assert len(puts) == 1
     assert _values(storage) == list(range(30))
 

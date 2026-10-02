@@ -2,8 +2,9 @@
 
 ``update_metadata`` rewrites ``metadata.yml`` the way ``update_note`` always
 has — atomically on disk, under the ETag on S3 — for any field; a None value
-drops the field. Artifact names may be nested relative paths (``a/b/c.txt``),
-never absolute, ``..``, backslashed, NUL-carrying or with empty components.
+drops the field. Stored files are named by record-relative path under
+``artifacts/`` or ``outputs/``, nested (``artifacts/a/b/c.txt``), never absolute,
+``..``, backslashed, NUL-carrying or with empty components.
 """
 import os
 
@@ -30,6 +31,12 @@ BAD_PATHS = [
     ".",
     "./a",
     "a/./b",
+    "c.txt",
+    "a/b/c.txt",
+    "log/w.jsonl",
+    "artifacts",
+    "artifacts/",
+    "artifacts/../x",
 ]
 
 
@@ -109,18 +116,21 @@ def test_unsafe_artifact_paths_are_rejected(bad):
     assert not valid_artifact_path(bad)
 
 
-@pytest.mark.parametrize("good", ["c.txt", "a/b/c.txt", "plots/loss curve.png"])
+@pytest.mark.parametrize(
+    "good", ["artifacts/c.txt", "outputs/a/b/c.txt", "artifacts/plots/loss curve.png"]
+)
 def test_relative_artifact_paths_are_accepted(good):
     assert valid_artifact_path(good)
 
 
 def test_local_nested_artifact_round_trip(local, tmp_path):
-    assert local.save_artifact_file("app", V, _src(tmp_path), name="a/b/c.txt")
+    assert local.save_artifact_file("app", V, _src(tmp_path), name="artifacts/a/b/c.txt")
     local.save_artifact_file("app", V, _src(tmp_path, "top.txt"))
+    local.save_artifact_file("app", V, _src(tmp_path), name="outputs/output.log")
 
     names = [a["name"] for a in local.list_artifacts("app", V)]
-    assert names == ["a/b/c.txt", "top.txt"]
-    with open(local.artifact_local_path("app", V, "a/b/c.txt"), "rb") as f:
+    assert names == ["artifacts/a/b/c.txt", "artifacts/top.txt", "outputs/output.log"]
+    with open(local.artifact_local_path("app", V, "artifacts/a/b/c.txt"), "rb") as f:
         assert f.read() == b"hello"
 
 
@@ -134,19 +144,22 @@ def test_local_refuses_to_store_outside_the_run(local, tmp_path, bad):
 def test_cached_nested_artifacts_list_through(tmp_path):
     cached = CachedSnapshotStorage(LocalSnapshotStorage(str(tmp_path), "runs"))
     cached.save("app", V, meta(V), {})
-    cached.save_artifact_file("app", V, _src(tmp_path), name="x/y.txt")
-    assert [a["name"] for a in cached.list_artifacts("app", V)] == ["x/y.txt"]
+    cached.save_artifact_file("app", V, _src(tmp_path), name="artifacts/x/y.txt")
+    assert [a["name"] for a in cached.list_artifacts("app", V)] == ["artifacts/x/y.txt"]
 
 
 def test_s3_nested_artifact_round_trip(bucket, tmp_path):
     storage = s3_storage()
     storage.save("app", V, meta(V), {})
-    storage.save_artifact_file("app", V, _src(tmp_path), name="a/b/c.txt")
+    storage.save_artifact_file("app", V, _src(tmp_path), name="artifacts/a/b/c.txt")
+    storage.save_artifact_file("app", V, _src(tmp_path), name="outputs/media/x/0.png")
 
-    assert [a["name"] for a in storage.list_artifacts("app", V)] == ["a/b/c.txt"]
-    chunks, size = storage.open_artifact("app", V, "a/b/c.txt")
+    assert [a["name"] for a in storage.list_artifacts("app", V)] == [
+        "artifacts/a/b/c.txt", "outputs/media/x/0.png",
+    ]
+    chunks, size = storage.open_artifact("app", V, "artifacts/a/b/c.txt")
     assert (b"".join(chunks), size) == (b"hello", 5)
-    path = storage.artifact_local_path("app", V, "a/b/c.txt")
+    path = storage.artifact_local_path("app", V, "artifacts/a/b/c.txt")
     assert open(path, "rb").read() == b"hello"
     assert storage.open_artifact("app", V, "../c.txt") is None
 
@@ -158,6 +171,7 @@ def test_s3_refuses_an_unsafe_name(bucket, tmp_path):
         storage.save_artifact_file("app", V, _src(tmp_path), name="../c.txt")
 
 
-def test_default_name_is_still_the_basename(local, tmp_path):
+def test_default_name_is_the_basename_under_artifacts(local, tmp_path):
     local.save_artifact_file("app", V, _src(tmp_path, "w.bin"))
-    assert os.path.basename(local.artifact_local_path("app", V, "w.bin")) == "w.bin"
+    path = local.artifact_local_path("app", V, "artifacts/w.bin")
+    assert path.endswith(os.path.join("artifacts", "w.bin"))

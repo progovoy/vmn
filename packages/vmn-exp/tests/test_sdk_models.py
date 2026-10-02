@@ -73,7 +73,7 @@ def test_register_from_finished_run_returns_v1_with_run_ref_and_artifact_uri(app
     meta = register_model(
         "resnet",
         run=run,
-        artifact_path="model/weights.pkl",
+        artifact_path="artifacts/model/weights.pkl",
         description="first model",
         storage=storage,
     )
@@ -82,7 +82,7 @@ def test_register_from_finished_run_returns_v1_with_run_ref_and_artifact_uri(app
     assert isinstance(meta["run_ref"], dict)
     assert meta["run_ref"]["app"] == run_app
     assert meta["run_ref"]["verstr"] == run_verstr
-    assert meta["artifact_path"] == "model/weights.pkl"
+    assert meta["artifact_path"] == "artifacts/model/weights.pkl"
     assert meta.get("description") == "first model"
 
     # Second register → v2
@@ -170,7 +170,7 @@ def test_download_model_returns_path_with_artifact_contents_local(app_layout):
     register_model(
         "gpt",
         run=run,
-        artifact_path="weights.pkl",
+        artifact_path="artifacts/weights.pkl",
         storage=storage,
     )
 
@@ -214,7 +214,7 @@ def test_download_model_s3(_aws_env):
         from vmn_exp.registry.store import ensure_model, register_version
         ensure_model(storage, "vgg")
         register_version(
-            storage, "vgg", run_ref=run_ref, artifact_path="model.bin"
+            storage, "vgg", run_ref=run_ref, artifact_path="artifacts/model.bin"
         )
 
         path = download_model("vgg@latest", storage=storage)
@@ -243,7 +243,7 @@ def test_run_register_model_inside_start_run(app_layout):
             run.log_artifact(artifact_file.name, name="ckpt.pkl")
             meta = run.register_model(
                 "efficientnet",
-                artifact_path="ckpt.pkl",
+                artifact_path="artifacts/ckpt.pkl",
                 alias="staging",
                 storage=storage,
             )

@@ -21,6 +21,7 @@ from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
     artifact_file_path,
+    FILE_TREES,
     artifact_name_for,
     valid_artifact_path,
 )
@@ -119,27 +120,28 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         name = artifact_name_for(src_path, name)
-        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        key = f"{self._record_prefix(app_name, verstr)}/{name}"
         # Multipart and streamed: checkpoints can be many GB.
         self._s3.upload_file(src_path, self.bucket, key)
         return True
 
-    def list_artifact_files(self, app_name, verstr):
+    def local_record_dir(self, app_name, verstr):
         return None
 
     def list_artifacts(self, app_name, verstr):
-        prefix = f"{self._record_prefix(app_name, verstr)}/artifacts/"
+        base = f"{self._record_prefix(app_name, verstr)}/"
         found = [
-            {"name": o["Key"][len(prefix) :], "size": o["Size"]}
-            for o in self._objects(prefix)
-            if valid_artifact_path(o["Key"][len(prefix) :])
+            {"name": o["Key"][len(base) :], "size": o["Size"]}
+            for tree in FILE_TREES
+            for o in self._objects(f"{base}{tree}/")
+            if valid_artifact_path(o["Key"][len(base) :])
         ]
         return sorted(found, key=lambda a: a["name"])
 
     def artifact_local_path(self, app_name, verstr, name):
         if not valid_artifact_path(name):
             return None
-        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        key = f"{self._record_prefix(app_name, verstr)}/{name}"
         try:
             size = self._s3.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
         except Exception:
@@ -163,7 +165,7 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         """
         if not valid_artifact_path(name):
             return None
-        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{name}"
+        key = f"{self._record_prefix(app_name, verstr)}/{name}"
         try:
             resp = self._s3.get_object(Bucket=self.bucket, Key=key)
         except Exception as e:
@@ -174,5 +176,5 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
 
     def artifact_uri(self, app_name, verstr, path):
         """Stable ``<scheme>://`` URI referencing artifact *path* for this record."""
-        key = f"{self._record_prefix(app_name, verstr)}/artifacts/{path}"
+        key = f"{self._record_prefix(app_name, verstr)}/{path}"
         return f"{self.scheme}://{self.bucket}/{key}"

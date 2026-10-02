@@ -297,8 +297,8 @@ class CachedSnapshotStorage(CachedLogs, SnapshotStorage):
                 raise
         return True
 
-    def list_artifact_files(self, app_name, verstr):
-        return self._local.list_artifact_files(app_name, verstr)
+    def local_record_dir(self, app_name, verstr):
+        return self._local.local_record_dir(app_name, verstr)
 
     def list_artifacts(self, app_name, verstr):
         found = self._local.list_artifacts(app_name, verstr)

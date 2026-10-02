@@ -24,7 +24,7 @@ from s3_helpers import (
 
 from vmn_exp.core.alerts.transitions import ALERTS_FILE, alert_transition
 from vmn_exp.core.manage import tag_run
-from vmn_exp.core.output_log import OUTPUT_LOG_NAME, OutputArtifact
+from vmn_exp.core.output_log import OUTPUT_LOG_PATH, OutputArtifact
 from vmn_exp.core.status import FAILED, RUN_STATE_FILE
 from vmn_exp.core.writer import append_to_log, flush_log, save_artifact, save_run_state
 from vmn_exp.sdk.media_uploads import MediaUploads, staging_dir
@@ -77,7 +77,7 @@ def test_artifact_on_local_only_run_stays_local(tmp_path):
     host = _local_only(tmp_path)
     save_artifact(host, APP, X, _artifact(tmp_path))
     assert _remote_keys_of(X) == []
-    assert host.artifact_local_path(APP, X, "model.bin")
+    assert host.artifact_local_path(APP, X, "artifacts/model.bin")
 
 
 def test_output_log_on_local_only_run_stays_local(tmp_path):
@@ -87,7 +87,7 @@ def test_output_log_on_local_only_run_stays_local(tmp_path):
     output.seal()
     assert output.upload()
     assert _remote_keys_of(X) == []
-    assert host.artifact_local_path(APP, X, OUTPUT_LOG_NAME)
+    assert host.artifact_local_path(APP, X, OUTPUT_LOG_PATH)
 
 
 def test_media_upload_on_local_only_run_stays_local(tmp_path):
@@ -98,7 +98,7 @@ def test_media_upload_on_local_only_run_stays_local(tmp_path):
     image = os.path.join(staged, "plot.png")
     with open(image, "wb") as f:
         f.write(b"png")
-    uploads.submit(staged, image, "media/plot.png", lambda: stored.append(True))
+    uploads.submit(staged, image, "outputs/media/plot.png", lambda: stored.append(True))
     assert uploads.close(10)
     assert stored == [True]
     assert _remote_keys_of(X) == []

@@ -31,7 +31,8 @@ def _seed(root):
         }
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
             yaml.dump(meta, f)
-        with open(os.path.join(folder, "log.w.jsonl"), "w") as f:
+        os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
+        with open(os.path.join(folder, "log/w.jsonl"), "w") as f:
             f.write(json.dumps({"timestamp": "2026-01-01T00:00:00Z", "type": "create",
                                 "params": {"lr": 0.1, "opt": "adam"}}) + "\n")
             f.writelines(json.dumps({"timestamp": f"2026-01-01T00:01:{step % 60:02d}Z",
@@ -83,7 +84,8 @@ def test_append_and_heartbeat_cost_a_fraction_of_the_cold_build(tmp_path):
     assert len(rows) == RUNS
 
     target = rows[RUNS // 2]["verstr"]
-    with open(os.path.join(base, target, "log.w.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(base, target, "log/w.jsonl")), exist_ok=True)
+    with open(os.path.join(base, target, "log/w.jsonl"), "a") as f:
         f.write(json.dumps({"timestamp": "2027-01-01T00:00:00Z", "type": "metrics",
                             "values": {"loss": 0.0001}}) + "\n")
     append, rows, _ = _refresh(index, counter)

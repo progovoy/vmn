@@ -4,7 +4,9 @@
 * :meth:`list_record_names` lists record prefixes by delimiter: one call per
   1000 runs, never a record's files.
 * :meth:`list_files` with *keys* lists just those records, delimited, so the
-  ``artifacts/`` and ``deps/`` subtrees are never paged through.
+  ``artifacts/``, ``outputs/`` and ``deps/`` subtrees are never paged through.
+  The ``log/`` folder is part of a record's files (``log/<name>``): it costs a
+  second, prefixed listing.
 
 A root app's records may live under the legacy ``root_svc`` key as well as the
 current ``root-svc`` one; every listing merges both, the current key winning.
@@ -21,8 +23,10 @@ import time
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import (
+    LOG_DIR,
     METADATA_FILE,
     checked_app_path,
+    is_log_file,
     safe_verstr,
     unsafe_verstr,
 )
@@ -38,8 +42,10 @@ def _signature(obj):
 
 
 def _is_record_file(name):
-    """A record's own file — not a subtree's, not a marker like ``.claim``."""
-    return bool(name) and "/" not in name and not name.startswith(".")
+    """A record's own file or log — not a subtree's, not a marker like ``.claim``."""
+    if not name or name.startswith("."):
+        return False
+    return "/" not in name or is_log_file(name)
 
 
 def _record_relpath(base, key):
@@ -48,7 +54,8 @@ def _record_relpath(base, key):
     ``artifacts/``, ``deps/``, or any other one) — else None."""
     verstr, _, name = key[len(base) :].partition("/")
     subdir, nested, _ = name.partition("/")
-    return verstr, name, (f"{base}{verstr}/{subdir}0" if nested else None)
+    skip = nested and subdir != LOG_DIR
+    return verstr, name, (f"{base}{verstr}/{subdir}0" if skip else None)
 
 
 class S3Listing:
@@ -246,13 +253,19 @@ class S3Listing:
         return self._merge_legacy(app_name, by_key)
 
     def _files_at(self, record_prefix):
-        """One record's own files, delimited: its subtrees are never listed."""
+        """One record's own files and logs, delimited: its other subtrees
+        are never listed."""
         files = {}
-        for page in self._pages(Prefix=record_prefix, Delimiter="/"):
-            for obj in page.get("Contents", []):
-                name = obj["Key"][len(record_prefix) :]
-                if _is_record_file(name):
-                    files[name] = _signature(obj)
+        listings = (
+            {"Prefix": record_prefix, "Delimiter": "/"},
+            {"Prefix": f"{record_prefix}{LOG_DIR}/", "Delimiter": "/"},
+        )
+        for params in listings:
+            for page in self._pages(**params):
+                for obj in page.get("Contents", []):
+                    name = obj["Key"][len(record_prefix) :]
+                    if _is_record_file(name):
+                        files[name] = _signature(obj)
         return files
 
     def record_files(self, app_name, verstr):

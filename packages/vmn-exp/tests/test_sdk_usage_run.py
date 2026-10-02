@@ -24,7 +24,7 @@ def _trained(app_layout, tmp_path):
     weights.write_text("w")
     with start_run(app_layout.app_name) as run:
         run.log_artifact(str(weights), name="weights.pkl")
-    register_model("gpt", run=run, artifact_path="weights.pkl", storage=storage)
+    register_model("gpt", run=run, artifact_path="artifacts/weights.pkl", storage=storage)
     return storage, run
 
 

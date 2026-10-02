@@ -1288,8 +1288,8 @@ def test_exp_run_tails_metrics_during_run(app_layout, capfd):
     via a poll loop over its own experiment's log files), then exits 0 —
     so a pass proves live tailing, not post-exit parsing.
 
-    It globs ``log.*`` rather than naming one file: appends land in the
-    per-writer ``log.<writer>.jsonl``, and which file holds an entry is a
+    It globs ``log/*`` rather than naming one file: appends land in the
+    per-writer ``log/<writer>.jsonl``, and which file holds an entry is a
     storage detail this test has no business pinning.
     """
     _run_vmn_init()
@@ -1306,7 +1306,7 @@ def test_exp_run_tails_metrics_during_run(app_layout, capfd):
         "    f.write('step=1 live=1.0\\n')\n"
         "deadline = time.time() + 30\n"
         "while time.time() < deadline:\n"
-        "    for path in glob.glob(os.path.join(exp_dir, 'log.*')):\n"
+        "    for path in glob.glob(os.path.join(exp_dir, 'log', '*')):\n"
         "        try:\n"
         "            if 'live' in open(path).read():\n"
         "                sys.exit(0)\n"

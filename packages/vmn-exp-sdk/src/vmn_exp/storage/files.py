@@ -10,6 +10,7 @@ from vmn_exp._base import valid_app_path, valid_path_component
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     LEGACY_LOG_FILE,
+    LOG_DIR,
     group_log_names,
     is_log_file,
     log_object_name,
@@ -56,27 +57,48 @@ def is_volatile_file(name):
     return name in VOLATILE_FILES or is_log_file(name)
 
 
-def valid_artifact_path(name):
-    """Whether *name* is a safe artifact path relative to the run's artifacts:
-    ``a/b/c.txt`` yes; absolute, ``..``, ``.``, empty components, backslashes
-    or NUL no."""
+# A record's stored files: the user's artifacts, and the outputs vmn writes
+# itself (``output.log``, logged media and tables). Each is named by its
+# record-relative path, ``artifacts/<user path>`` or ``outputs/<path>``, so a
+# user artifact can be named anything without colliding with vmn's.
+ARTIFACTS_DIR = "artifacts"
+OUTPUTS_DIR = "outputs"
+FILE_TREES = (ARTIFACTS_DIR, OUTPUTS_DIR)
+
+
+def valid_relative_path(name):
+    """Whether *name* is a safe relative ``a/b/c.txt`` path: absolute, ``..``,
+    ``.``, empty components, backslashes or NUL no."""
     if not isinstance(name, str):
         return False
     return all(valid_path_component(part) for part in name.split("/"))
 
 
+def valid_artifact_path(name):
+    """Whether *name* is a safe stored-file path: ``artifacts/…`` or ``outputs/…``."""
+    if not isinstance(name, str):
+        return False
+    tree, _, rest = name.partition("/")
+    return tree in FILE_TREES and valid_relative_path(rest)
+
+
+def user_artifact_path(name):
+    """The stored path of the user's artifact *name*."""
+    return f"{ARTIFACTS_DIR}/{name}"
+
+
 def artifact_name_for(src_path, name=None):
-    """The stored name of an artifact: *name*, else *src_path*'s basename.
-    ValueError for a name that would leave the run's artifacts."""
-    name = os.path.basename(src_path) if name is None else name
+    """The stored path of a file: *name*, else ``artifacts/<src_path's basename>``.
+    ValueError for a path outside the record's file trees."""
+    name = user_artifact_path(os.path.basename(src_path)) if name is None else name
     if not valid_artifact_path(name):
         raise ValueError(f"Invalid artifact name: {name!r}")
     return name
 
 
-def artifact_file_path(art_dir, name):
-    """The local path of artifact *name* (already validated) under *art_dir*."""
-    return os.path.join(art_dir, *name.split("/"))
+def artifact_file_path(base_dir, name):
+    """The local path of *name* (already validated) under *base_dir*."""
+    return os.path.join(base_dir, *name.split("/"))
 
 
 def list_artifact_tree(art_dir):
@@ -90,6 +112,18 @@ def list_artifact_tree(art_dir):
             path = os.path.join(dirpath, filename)
             if os.path.isfile(path):
                 found.append({"name": prefix + filename, "size": os.path.getsize(path)})
+    return sorted(found, key=lambda a: a["name"])
+
+
+def list_record_artifacts(record_dir):
+    """``[{"name", "size"}]`` of the files in *record_dir*'s ``artifacts/`` and
+    ``outputs/`` trees, named by record-relative path, name-ordered."""
+    found = []
+    for tree in FILE_TREES:
+        found.extend(
+            {"name": f"{tree}/{a['name']}", "size": a["size"]}
+            for a in list_artifact_tree(os.path.join(record_dir, tree))
+        )
     return sorted(found, key=lambda a: a["name"])
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A run's console output, kept as the size-capped ``output.log`` artifact.
+"""A run's console output, kept as the size-capped ``outputs/output.log``.
 
 Bytes in, bytes out: nothing is decoded, so no output can make capture fail,
 and non-UTF-8 bytes are stored exactly as written. Past the cap the first and
@@ -13,8 +13,11 @@ import threading
 import time
 
 from vmn_exp.core.writer import create_log_entry, save_artifact
+from vmn_exp.storage.files import OUTPUTS_DIR
 
 OUTPUT_LOG_NAME = "output.log"
+# Its record-relative path: a vmn output, never a user artifact.
+OUTPUT_LOG_PATH = f"{OUTPUTS_DIR}/{OUTPUT_LOG_NAME}"
 OUTPUT_CAP_ENV = "VMN_EXP_OUTPUT_CAP_MB"
 DEFAULT_OUTPUT_CAP_MB = 10
 _READ_CHUNK = 64 * 1024
@@ -93,14 +96,14 @@ class OutputLog:
 def _artifact_entry(data):
     return create_log_entry(
         "artifact",
-        path=OUTPUT_LOG_NAME,
+        path=OUTPUT_LOG_PATH,
         size=len(data),
         sha256=hashlib.sha256(data).hexdigest(),
     )
 
 
 class OutputArtifact:
-    """An :class:`OutputLog` stored as a run's ``output.log`` artifact.
+    """An :class:`OutputLog` stored as a run's ``outputs/output.log``.
 
     Periodic uploads are throttled to :data:`UPLOAD_BYTES_PER_SEC`; after
     :meth:`seal` the final log uploads on the next call, unthrottled.
@@ -156,7 +159,7 @@ class OutputArtifact:
             with open(path, "wb") as f:
                 f.write(data)
             save_artifact(
-                self._storage, self._app_name, self._verstr, path, OUTPUT_LOG_NAME
+                self._storage, self._app_name, self._verstr, path, OUTPUT_LOG_PATH
             )
 
 

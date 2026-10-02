@@ -12,7 +12,7 @@ Usage::
     with start_run("my_app") as run:
         # ... training ...
         run.log_artifact("model.pkl")
-        version = run.register_model("my_model", artifact_path="model.pkl")
+        version = run.register_model("my_model", artifact_path="artifacts/model.pkl")
 
     path = download_model("my_model@production")
 """

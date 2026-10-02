@@ -31,7 +31,7 @@ def _aws_env(monkeypatch):
 
 def test_artifact_uri_local(tmp_path):
     storage = open_storage(root=local_store_root(str(tmp_path)), area="runs")
-    uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "model.pkl")
+    uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "artifacts/model.pkl")
     assert uri.startswith("file://")
     assert "myapp" in uri
     assert "0.0.1-dev.abc" in uri
@@ -48,7 +48,7 @@ def test_artifact_uri_s3():
     with mock_aws():
         boto3.client("s3").create_bucket(Bucket=BUCKET)
         storage = S3SnapshotStorage(BUCKET, prefix=PREFIX)
-        uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "model.pkl")
+        uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "artifacts/model.pkl")
     assert uri == f"s3://{BUCKET}/{PREFIX}/myapp/0.0.1-dev.abc/artifacts/model.pkl"
 
 

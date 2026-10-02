@@ -55,9 +55,9 @@ def test_log_table_stores_a_columnar_artifact_and_a_small_entry(run, storage):
     run.finish()
     (entry,) = _entries(storage, "table")
     assert entry["name"] == "preds" and entry["step"] == 3
-    assert entry["path"] == "tables/preds/3.json"
+    assert entry["path"] == "outputs/tables/preds/3.json"
     assert entry["rows"] == 2 and entry["columns"] == ["y", "label"]
-    doc = json.loads(_artifact(storage, "tables/preds/3.json"))
+    doc = json.loads(_artifact(storage, "outputs/tables/preds/3.json"))
     assert doc["data"] == [[1, 0], ["a", "b"]]
     assert doc["columns"][0] == {"name": "y", "type": "number"}
     assert not _entries(storage, "artifact")  # one entry per table, not two
@@ -91,9 +91,9 @@ def test_log_image_from_numpy_writes_a_png(run, storage):
     run.log_image("samples", np.zeros((4, 6, 3), dtype=np.uint8), step=2, caption="c")
     run.finish()
     (entry,) = _entries(storage, "image")
-    assert entry["path"] == "media/samples/2.png"
+    assert entry["path"] == "outputs/media/samples/2.png"
     assert (entry["width"], entry["height"], entry["caption"]) == (6, 4, "c")
-    data = _artifact(storage, "media/samples/2.png")
+    data = _artifact(storage, "outputs/media/samples/2.png")
     assert data[:8] == b"\x89PNG\r\n\x1a\n" and png_size(data) == (6, 4)
 
 
@@ -103,7 +103,7 @@ def test_log_image_from_numpy_without_pil(run, storage, monkeypatch):
     monkeypatch.setitem(sys.modules, "PIL.Image", None)
     run.log_image("gray", np.full((2, 3), 0.5))
     run.finish()
-    data = _artifact(storage, "media/gray/0.png")
+    data = _artifact(storage, "outputs/media/gray/0.png")
     assert png_size(data) == (3, 2)
 
 
@@ -112,7 +112,7 @@ def test_log_image_from_a_png_path(run, storage, tmp_path):
     src.write_bytes(encode_png(bytes(3 * 2 * 2), 2, 2, 3))
     run.log_image("pic", str(src))
     run.finish()
-    assert _artifact(storage, "media/pic/0.png") == src.read_bytes()
+    assert _artifact(storage, "outputs/media/pic/0.png") == src.read_bytes()
     assert _entries(storage, "image")[0]["width"] == 2
 
 
@@ -126,7 +126,7 @@ def test_media_files_are_outputs_recorded_by_their_own_entry(run, storage, tmp_p
     run.finish()
     assert not _entries(storage, "artifact")
     outputs = reader.get_run(APP, VERSTR, storage=storage)["outputs"]
-    assert set(outputs) == {"media/pic/0.png", "tables/t/0.json"}
+    assert set(outputs) == {"outputs/media/pic/0.png", "outputs/tables/t/0.json"}
 
 
 def test_a_non_png_image_without_pil_keeps_its_extension(run, storage, tmp_path, monkeypatch):
@@ -137,16 +137,16 @@ def test_a_non_png_image_without_pil_keeps_its_extension(run, storage, tmp_path,
     run.log_image("gif", str(src))
     run.finish()
     (entry,) = _entries(storage, "image")
-    assert entry["path"] == "media/gif/0.gif"
+    assert entry["path"] == "outputs/media/gif/0.gif"
     assert (entry["width"], entry["height"]) == (None, None)
-    assert _artifact(storage, "media/gif/0.gif") == b"GIF89a"
+    assert _artifact(storage, "outputs/media/gif/0.gif") == b"GIF89a"
 
 
 def test_log_image_from_a_pil_image(run, storage):
     image_mod = pytest.importorskip("PIL.Image")
     run.log_image("pil", image_mod.new("RGB", (5, 3)), step=1)
     run.finish()
-    assert png_size(_artifact(storage, "media/pil/1.png")) == (5, 3)
+    assert png_size(_artifact(storage, "outputs/media/pil/1.png")) == (5, 3)
 
 
 def test_log_image_from_a_jpeg_path_converts_with_pil(run, storage, tmp_path):
@@ -155,7 +155,7 @@ def test_log_image_from_a_jpeg_path_converts_with_pil(run, storage, tmp_path):
     image_mod.new("RGB", (4, 4)).save(str(src), format="JPEG")
     run.log_image("jpg", str(src))
     run.finish()
-    assert png_size(_artifact(storage, "media/jpg/0.png")) == (4, 4)
+    assert png_size(_artifact(storage, "outputs/media/jpg/0.png")) == (4, 4)
 
 
 class _FakeFigure:
@@ -168,7 +168,7 @@ class _FakeFigure:
 def test_log_image_from_a_figure(run, storage):
     run.log_image("fig", _FakeFigure())
     run.finish()
-    assert png_size(_artifact(storage, "media/fig/0.png")) == (3, 3)
+    assert png_size(_artifact(storage, "outputs/media/fig/0.png")) == (3, 3)
 
 
 def test_log_image_rejects_other_objects(run):
@@ -224,14 +224,14 @@ def test_noop_run_ignores_rich_logging():
 
 def _img(name, step, caption=None):
     return {"type": "image", "name": name, "step": step,
-            "path": f"media/{name}/{step}.png", "caption": caption,
+            "path": f"outputs/media/{name}/{step}.png", "caption": caption,
             "width": 1, "height": 1}
 
 
 def test_media_index_groups_by_name_and_step():
     log = [
         _img("a", 1), _img("a", 0), _img("b", 0, "hi"), _img("a", 1, "again"),
-        {"type": "table", "name": "t", "step": 0, "path": "tables/t/0.json",
+        {"type": "table", "name": "t", "step": 0, "path": "outputs/tables/t/0.json",
          "rows": 2, "columns": ["x"]},
         {"type": "histogram", "name": "h", "step": 0, "bins": [0, 1], "counts": [2]},
         {"type": "metrics", "values": {"loss": 1}},
@@ -274,7 +274,7 @@ def test_reader_get_run_exposes_the_media_indexes(run, storage):
     run.log_histogram("h", [1, 2, 3], bins=2)
     run.finish()
     got = reader.get_run(APP, VERSTR, storage=storage)
-    assert got["tables"]["t"][0]["path"] == "tables/t/0.json"
+    assert got["tables"]["t"][0]["path"] == "outputs/tables/t/0.json"
     assert got["histograms"]["h"][0]["counts"] == [1, 2]
     assert got["media"] == {}
 
@@ -285,7 +285,7 @@ def test_png_roundtrip_through_pil_when_logged(run, storage):
     arr = np.arange(12, dtype=np.uint8).reshape(2, 2, 3)
     run.log_image("rt", arr)
     run.finish()
-    img = image_mod.open(io.BytesIO(_artifact(storage, "media/rt/0.png")))
+    img = image_mod.open(io.BytesIO(_artifact(storage, "outputs/media/rt/0.png")))
     assert np.array_equal(np.asarray(img), arr)
 
 

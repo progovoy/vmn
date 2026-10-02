@@ -53,5 +53,5 @@ def test_log_image_and_log_table_return_without_waiting_on_the_store(
 
     run.finish()
     assert threading.main_thread().name not in storage.uploading_threads
-    for name in ("media/s/0.png", "tables/t/0.json"):
+    for name in ("outputs/media/s/0.png", "outputs/tables/t/0.json"):
         assert storage.artifact_local_path(APP, VERSTR, name) is not None

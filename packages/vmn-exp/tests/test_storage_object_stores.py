@@ -107,9 +107,9 @@ def test_update_metadata_merges_under_a_precondition(store):
 
 def test_ranged_reads_return_only_new_bytes(store):
     store.create_exclusive(APP, V1, _meta(V1), {})
-    store.save_file(APP, V1, "log.w.jsonl", b"0123456789")
-    assert store.read_file_from(APP, V1, "log.w.jsonl", 4) == b"456789"
-    assert store.read_file_from(APP, V1, "log.w.jsonl", 10) == b""
+    store.save_file(APP, V1, "log/w.jsonl", b"0123456789")
+    assert store.read_file_from(APP, V1, "log/w.jsonl", 4) == b"456789"
+    assert store.read_file_from(APP, V1, "log/w.jsonl", 10) == b""
     assert store.read_file_from(APP, V1, "missing", 3) is None
     assert store.load_file(APP, V1, "missing") is None
 
@@ -134,15 +134,15 @@ def test_artifacts_round_trip(store, tmp_path):
     store.create_exclusive(APP, V1, _meta(V1), {})
     src = tmp_path / "w.bin"
     src.write_bytes(b"weights-bytes")
-    store.save_artifact_file(APP, V1, str(src), name="model/w.bin")
+    store.save_artifact_file(APP, V1, str(src), name="artifacts/model/w.bin")
 
-    assert store.list_artifacts(APP, V1) == [{"name": "model/w.bin", "size": 13}]
-    with open(store.artifact_local_path(APP, V1, "model/w.bin"), "rb") as f:
+    assert store.list_artifacts(APP, V1) == [{"name": "artifacts/model/w.bin", "size": 13}]
+    with open(store.artifact_local_path(APP, V1, "artifacts/model/w.bin"), "rb") as f:
         assert f.read() == b"weights-bytes"
-    chunks, size = store.open_artifact(APP, V1, "model/w.bin")
+    chunks, size = store.open_artifact(APP, V1, "artifacts/model/w.bin")
     assert size == 13 and b"".join(chunks) == b"weights-bytes"
     assert store.open_artifact(APP, V1, "nope") is None
-    assert store.artifact_uri(APP, V1, "model/w.bin").startswith(
+    assert store.artifact_uri(APP, V1, "artifacts/model/w.bin").startswith(
         f"{store.scheme}://bkt/p/"
     )
 

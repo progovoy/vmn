@@ -101,8 +101,8 @@ def test_repush_ships_only_new_lines(local, target, tmp_path):
     add_lines(local, X, [line(3)])
     calls = record_calls(target._s3)
     assert push_run(local, target, APP, X).status == UPDATE
-    shipped = [p["Key"].rsplit("/", 1)[1] for op, p in calls
-               if op == "PutObject" and "/log." in p["Key"]]
+    shipped = ["/".join(p["Key"].rsplit("/", 2)[1:]) for op, p in calls
+               if op == "PutObject" and "/log/" in p["Key"]]
     assert shipped == [log_object_name(WRITER, 1)]
     assert target.load_file(APP, X, shipped[0]) == line(3).encode()
     assert remote_log(target) == local_log(local)
@@ -133,11 +133,11 @@ def test_output_log_and_media_are_pushed(local, target, tmp_path):
     make_run(local, tmp_path)
     src = tmp_path / "out"
     src.write_bytes(b"stdout")
-    local.save_artifact_file(APP, X, str(src), name="output.log")
-    local.save_artifact_file(APP, X, str(src), name="media/img/0.png")
+    local.save_artifact_file(APP, X, str(src), name="outputs/output.log")
+    local.save_artifact_file(APP, X, str(src), name="outputs/media/img/0.png")
     push_run(local, target, APP, X)
     names = {a["name"] for a in target.list_artifacts(APP, X)}
-    assert {"output.log", "media/img/0.png"} <= names
+    assert {"outputs/output.log", "outputs/media/img/0.png"} <= names
 
 
 def test_push_resumes_after_artifact_upload_failure(local, target, tmp_path, monkeypatch):

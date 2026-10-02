@@ -70,7 +70,7 @@ def test_experiment_detail_includes_structured_artifacts(tmp_path):
     assert len(artifacts) == 2
 
     names = sorted(a["name"] for a in artifacts)
-    assert names == ["config.json", "model.pt"]
+    assert names == ["artifacts/config.json", "artifacts/model.pt"]
 
     for a in artifacts:
         assert "name" in a
@@ -106,7 +106,7 @@ def test_experiment_from_storage_includes_structured_artifacts(tmp_path):
     assert err is None
     assert "artifacts" in result
     assert len(result["artifacts"]) == 1
-    assert result["artifacts"][0]["name"] == "weights.bin"
+    assert result["artifacts"][0]["name"] == "artifacts/weights.bin"
     assert result["artifacts"][0]["size"] == 50
 
 
@@ -161,3 +161,20 @@ def test_artifact_download_not_found(tmp_path):
     )
 
     assert r.status_code == 404
+
+
+@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
+def test_a_vmn_output_downloads_from_its_record_path(tmp_path):
+    """GET .../outputs/{path} serves vmn's own files, apart from user artifacts."""
+    storage = LocalSnapshotStorage(local_store_root(str(tmp_path)), area="runs")
+    _save_exp(storage, "myapp", "1.0.0-dev.aaa.bbb")
+    _create_artifact(storage, "myapp", "1.0.0-dev.aaa.bbb", "output.log", "mine")
+    out_dir = os.path.join(storage._snapshot_dir("myapp", "1.0.0-dev.aaa.bbb"), "outputs")
+    os.makedirs(out_dir)
+    with open(os.path.join(out_dir, "output.log"), "w") as f:
+        f.write("console")
+
+    client = _make_client(tmp_path)
+    base = "/api/v1/workspaces/test/apps/myapp/experiments/1.0.0-dev.aaa.bbb"
+    assert client.get(f"{base}/outputs/output.log").text == "console"
+    assert client.get(f"{base}/artifacts/output.log").text == "mine"

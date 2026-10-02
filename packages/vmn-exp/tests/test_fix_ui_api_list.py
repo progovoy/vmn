@@ -139,6 +139,6 @@ def test_s3_artifacts_are_listed_and_downloadable(s3_client, tmp_path):
     got = client.get(f"{BASE}/{verstr}/artifacts/model.bin")
     missing = client.get(f"{BASE}/{verstr}/artifacts/nope.bin")
 
-    assert [a["name"] for a in detail["artifacts"]] == ["model.bin"]
+    assert [a["name"] for a in detail["artifacts"]] == ["artifacts/model.bin"]
     assert got.status_code == 200 and got.content == b"weights" * 100
     assert missing.status_code == 404

@@ -55,7 +55,8 @@ def _write_experiment(
 
 
 def _append_metrics(app_layout, verstr, ts, values, writer="w0"):
-    path = os.path.join(_exp_dir(app_layout, verstr), f"log.{writer}.jsonl")
+    path = os.path.join(_exp_dir(app_layout, verstr), f"log/{writer}.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a") as f:
         f.write(json.dumps({"timestamp": ts, "type": "metrics", "values": values}) + "\n")
 
@@ -205,7 +206,8 @@ def test_detail_endpoint_reports_status_and_keeps_existing_keys(app_layout):
 
 
 def _write_create_params(app_layout, verstr, params):
-    path = os.path.join(_exp_dir(app_layout, verstr), "log.w0.jsonl")
+    path = os.path.join(_exp_dir(app_layout, verstr), "log/w0.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     entry = {"timestamp": "2026-09-21T12:00:00Z", "type": "create", "params": params}
     with open(path, "a") as f:
         f.write(json.dumps(entry) + "\n")

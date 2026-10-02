@@ -9,7 +9,7 @@ import subprocess
 
 from exp_helpers import _PY, _SRC_PATH, _bootstrap, _storage
 
-from vmn_exp.core.output_log import OUTPUT_LOG_NAME
+from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 
 
 def _run_python(app_layout, body):
@@ -32,7 +32,7 @@ def _run_python(app_layout, body):
 
 def _output_log(app_layout, verstr):
     path = _storage(app_layout).artifact_local_path(
-        app_layout.app_name, verstr, OUTPUT_LOG_NAME
+        app_layout.app_name, verstr, OUTPUT_LOG_PATH
     )
     if path is None:
         return None
@@ -98,7 +98,7 @@ def test_output_log_is_uploaded_before_the_run_finishes(app_layout, tmp_path):
         "deadline = time.time() + 30\n"
         "art = None\n"
         "while time.time() < deadline:\n"
-        "    art = run._storage.artifact_local_path(APP, run.id, 'output.log')\n"
+        "    art = run._storage.artifact_local_path(APP, run.id, 'outputs/output.log')\n"
         "    if art and b'mid-run' in open(art, 'rb').read():\n"
         "        break\n"
         "    time.sleep(0.2)\n"

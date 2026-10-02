@@ -107,7 +107,7 @@ def test_long_series_exist_for_downsampling(tmp_path):
     logs = []
     base = os.path.join(root, ".vmn", "store", "runs", APP)
     for verstr in os.listdir(base):
-        folder = os.path.join(base, verstr)
+        folder = os.path.join(base, verstr, "log")
         if os.path.isdir(folder):
             logs.append(sum(sum(1 for _ in open(os.path.join(folder, f)))
                             for f in os.listdir(folder) if f.endswith(".jsonl")))

@@ -56,7 +56,7 @@ def test_detail_carries_the_media_indexes(run, client, tmp_path):
     run.finish()
     got = client.get(BASE).json()
     assert got["media"]["samples"] == [
-        {"step": 0, "path": "media/samples/0.png", "caption": "first",
+        {"step": 0, "path": "outputs/media/samples/0.png", "caption": "first",
          "width": 2, "height": 2}
     ]
     assert got["tables"]["preds"][0]["rows"] == 1
@@ -92,7 +92,7 @@ def test_a_run_without_media_has_empty_indexes(run, client):
 def test_a_logged_image_downloads_as_png(run, client, tmp_path):
     run.log_image("s", _png(tmp_path))
     run.finish()
-    got = client.get(f"{BASE}/artifacts/media/s/0.png")
+    got = client.get(f"{BASE}/outputs/media/s/0.png")
     assert got.status_code == 200
     assert got.headers["content-type"] == "image/png"
 
@@ -100,7 +100,7 @@ def test_a_logged_image_downloads_as_png(run, client, tmp_path):
 def test_table_endpoint_pages_rows(run, client):
     run.log_table("t", [{"n": i, "s": str(i)} for i in range(10)], step=0)
     run.finish()
-    got = client.get(f"{BASE}/table/tables/t/0.json", params={"offset": 2, "limit": 3})
+    got = client.get(f"{BASE}/table/outputs/tables/t/0.json", params={"offset": 2, "limit": 3})
     assert got.status_code == 200
     body = got.json()
     assert body["total"] == 10 and body["offset"] == 2
@@ -112,7 +112,7 @@ def test_table_endpoint_sorts_server_side(run, client):
     run.log_table("t", [{"n": 2}, {"n": 9}, {"n": 5}], step=0)
     run.finish()
     body = client.get(
-        f"{BASE}/table/tables/t/0.json", params={"sort": "n", "order": "desc"}
+        f"{BASE}/table/outputs/tables/t/0.json", params={"sort": "n", "order": "desc"}
     ).json()
     assert [r[0] for r in body["rows"]] == [9, 5, 2]
 
@@ -121,16 +121,16 @@ def test_table_endpoint_errors(run, client, tmp_path):
     run.log_table("t", [{"n": 1}], step=0)
     run.log_image("s", _png(tmp_path))
     run.finish()
-    assert client.get(f"{BASE}/table/tables/t/9.json").status_code == 404
+    assert client.get(f"{BASE}/table/outputs/tables/t/9.json").status_code == 404
     assert client.get(f"{BASE}/table/media/s/0.png").status_code == 400
-    assert client.get(f"{BASE}/table/tables/t/0.json", params={"sort": "x"}).status_code == 400
+    assert client.get(f"{BASE}/table/outputs/tables/t/0.json", params={"sort": "x"}).status_code == 400
     assert client.get(f"{BASE}/table/a/%2E%2E/b.json").status_code in (400, 404)
     unsafe = BASE.replace(f"/experiments/{V}", "/experiments/a%5Cb")
-    assert client.get(f"{unsafe}/table/tables/t/0.json").status_code == 400
+    assert client.get(f"{unsafe}/table/outputs/tables/t/0.json").status_code == 400
 
 
 def test_streamed_artifacts_get_a_guessed_content_type():
     from vmn_exp.ui.http_params import media_type
 
-    assert media_type("media/s/0.png") == "image/png"
+    assert media_type("outputs/media/s/0.png") == "image/png"
     assert media_type("model.weird_ext") == "application/octet-stream"

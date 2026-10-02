@@ -24,8 +24,8 @@ def _log_gets(host):
     real = client.get_object
 
     def get_object(**kwargs):
-        if "/log." in kwargs["Key"]:
-            keys.append(kwargs["Key"].rsplit("/", 1)[1])
+        if "/log/" in kwargs["Key"]:
+            keys.append("/".join(kwargs["Key"].rsplit("/", 2)[1:]))
         return real(**kwargs)
 
     client.get_object = get_object
@@ -42,7 +42,7 @@ def _local_reads(host):
         return real_from(app, verstr, name, offset)
 
     def load_file(app, verstr, name):
-        if name.startswith("log."):
+        if name.startswith("log/"):
             reads.append((name, 0))
         return real_load(app, verstr, name)
 
@@ -71,7 +71,7 @@ def test_a_new_remote_segment_is_the_only_remote_log_read(tmp_path):
     b.append_log_entry(APP, "v", "wb", entry(2))
     b.sync_log_to_remote(APP, "v", "wb")
     index.refresh()
-    assert gets == ["log.wb@000001.jsonl"]
+    assert gets == ["log/wb@000001.jsonl"]
     assert index.rows()[0]["metrics"] == {"i": 2}
 
 
@@ -82,7 +82,7 @@ def test_local_growth_reads_only_the_new_bytes(tmp_path):
     a.append_log_entry(APP, "v", "wa", entry(3))
     index.refresh()
     assert gets == []
-    assert len(reads) == 1 and reads[0][0] == "log.wa.jsonl" and reads[0][1] > 0
+    assert len(reads) == 1 and reads[0][0] == "log/wa.jsonl" and reads[0][1] > 0
     assert index.rows()[0]["metrics"] == {"i": 3}
 
 

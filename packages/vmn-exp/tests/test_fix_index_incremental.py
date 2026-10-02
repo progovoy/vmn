@@ -259,7 +259,8 @@ def test_by_default_every_refresh_is_a_full_listing(st, listed, clock):
     assert index.full_sweep_sec == 0
     index.refresh()
     folder = st._snapshot_dir(APP, verstr)
-    with open(os.path.join(folder, "log.w.jsonl"), "a") as f:
+    os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
+    with open(os.path.join(folder, "log/w.jsonl"), "a") as f:
         f.write('{"timestamp": "u", "type": "metrics", "values": {"loss": 0.5}}\n')
     index.refresh()
     assert listed == [None, None]
