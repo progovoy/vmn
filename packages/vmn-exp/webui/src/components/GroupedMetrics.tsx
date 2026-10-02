@@ -63,8 +63,9 @@ function computeGroups(
   return result;
 }
 
-function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
+function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
   rows: ExperimentRow[];
+  initialGroup?: string;
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
@@ -74,7 +75,7 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema }: {
     [paramCols],
   );
 
-  const [groupKey, setGroupKey] = useState("branch");
+  const [groupKey, setGroupKey] = useState(initialGroup ?? "branch");
   const [chartMetric, setChartMetric] = useState(metricCols[0] ?? "");
 
   const groups = useMemo(
