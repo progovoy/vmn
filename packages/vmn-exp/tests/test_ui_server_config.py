@@ -125,3 +125,10 @@ def test_token_from_static_token_env(tmp_path):
 
 def test_no_config_no_db_is_none():
     assert resolve_config(_args(), env={}) is None
+
+
+def test_data_dir_expands_user(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = _write(tmp_path, "data_dir: ~/vmn-data\n")
+    cfg = resolve_config(_args(config=path), env={})
+    assert cfg.data_dir == str(tmp_path / "vmn-data")

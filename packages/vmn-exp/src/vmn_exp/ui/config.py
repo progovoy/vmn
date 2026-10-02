@@ -189,6 +189,8 @@ def resolve_config(args, env=None):
         cfg,
         server=server,
         db=db or cfg.db,
-        data_dir=_flag(args, "data_dir") or env.get(ENV_DATA_DIR) or cfg.data_dir,
+        data_dir=os.path.expanduser(
+            _flag(args, "data_dir") or env.get(ENV_DATA_DIR) or cfg.data_dir
+        ),
         _flag_token=getattr(args, "token", None),
     )
