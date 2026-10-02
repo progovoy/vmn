@@ -124,3 +124,10 @@ def test_disabled_store_never_raises():
     assert store.load_since(APP, 0) == ({}, set(), 0)
     store.kv_put("s", "f", 1)
     assert store.kv_get("s", "f") is None
+
+
+def test_kv_get_never_raises_on_undecodable_payload(cache_store):
+    cache_store._conn.execute(
+        "INSERT INTO exp_index_kv (scope, fingerprint, payload) VALUES ('s', 'f', '{bad')"
+    )
+    assert cache_store.kv_get("s", "f") is None

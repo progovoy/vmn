@@ -233,15 +233,13 @@ class SqliteStore:
 
     def kv_get(self, scope, fingerprint):
         """The payload under *scope* when stored with *fingerprint*, else None."""
-        row = self._read(
-            lambda: self._conn.execute(
-                "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
-            ).fetchone(),
-            None,
-        )
-        if row and row[0] == fingerprint:
-            return json.loads(row[1])
-        return None
+        return self._read(lambda: self._kv_payload(scope, fingerprint), None)
+
+    def _kv_payload(self, scope, fingerprint):
+        row = self._conn.execute(
+            "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
+        ).fetchone()
+        return json.loads(row[1]) if row and row[0] == fingerprint else None
 
     def kv_put(self, scope, fingerprint, payload):
         """Store *payload* under *scope* — best effort."""
