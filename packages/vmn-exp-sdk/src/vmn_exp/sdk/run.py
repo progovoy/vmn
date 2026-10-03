@@ -58,6 +58,7 @@ from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
+from vmn_exp.sdk.run_compact import compact_by
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
@@ -424,6 +425,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+        if not compact_by(self._storage, self.app_name, self.id, get_writer_id(), deadline):
+            _LOGGER.warning(f"vmn: run {self.id}'s metrics stay uncompacted (vmn-exp compact)")
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
