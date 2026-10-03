@@ -132,3 +132,38 @@ def test_a_refused_append_reports_false_and_keeps_the_points():
     s.append_metric_block = FakeStorage.append_metric_block.__get__(s)
     assert w.flush()
     assert list(_keys(s)["loss"].values) == [0.5]
+
+
+def test_ts_us_is_recorded_exactly():
+    s = FakeStorage()
+    w = _writer(s)
+    w.add("x", 1.0, step=0, ts_us=1_759_406_400_123_457)
+    w.flush()
+    assert list(_keys(s)["x"].ts) == [1_759_406_400_123_457]
+
+
+def test_a_block_orders_each_keys_points_by_timestamp_stably():
+    s = FakeStorage()
+    w = _writer(s)
+    w.add("x", 1.0, step=5, ts=3.0)
+    w.add("x", 2.0, step=6, ts=1.0)
+    w.add("x", 3.0, step=7, ts=1.0)
+    w.flush()
+    keys = _keys(s)
+    assert list(keys["x"].values) == [2.0, 3.0, 1.0]
+    assert list(keys["x"].steps) == [6, 7, 5]
+
+
+def test_an_inherited_flush_marks_its_block():
+    s = FakeStorage()
+    w = _writer(s)
+    w.add("x", 1.0, step=0)
+    w.flush(inherited=True)
+    assert next(decode_blocks(s.blocks[0][3])).inherited
+
+
+def test_base_key_strips_the_stepless_twin_suffix():
+    from vmn_exp.core.metric_stream import base_key
+
+    assert base_key(stepless_twin("loss")) == "loss"
+    assert base_key("loss") == "loss"
