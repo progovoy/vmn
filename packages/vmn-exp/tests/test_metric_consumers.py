@@ -18,7 +18,6 @@ _ENTRY_KIND = re.compile(r"\b(type|kind|etype)\b")
 # file (relative to packages/) -> why it still reads metric entries
 ALLOW_LIST = {
     "vmn-exp-sdk/src/vmn_exp/core/values.py": "write-side sanitizing, not a reader",
-    "vmn-exp-sdk/src/vmn_exp/core/log.py": "metric_series: becomes a SeriesReader wrapper",
     "vmn-exp-sdk/src/vmn_exp/core/fold.py": "fold: moves to block/footer summaries (2b)",
     "vmn-exp-sdk/src/vmn_exp/core/sweep/peer_points.py": "sweep median stopping",
     "vmn-exp-sdk/src/vmn_exp/sdk/steps.py": "step seeding on resume",

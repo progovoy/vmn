@@ -99,6 +99,26 @@ def read_headers(source):
         yield json.loads(header)
 
 
+def header_at(read, offset, size):
+    """``(header, block length)`` of the block at *offset* of an object of
+    *size* bytes, reading its prefix and header only — None when no whole
+    block starts there. *read* is ``read(offset, length)``; the body (and
+    so the CRC) is not read: a fold of headers skips it."""
+    if offset + _PREFIX.size > size:
+        return None
+    prefix = read(offset, _PREFIX.size) or b""
+    if len(prefix) < _PREFIX.size:
+        return None
+    magic, version, header_len, body_len, _ = _PREFIX.unpack(prefix)
+    length = _PREFIX.size + header_len + body_len
+    if magic != MAGIC or version != VERSION or offset + length > size:
+        return None
+    header = read(offset + _PREFIX.size, header_len) or b""
+    if len(header) < header_len:
+        return None
+    return json.loads(header), length
+
+
 def decode_blocks(source):
     """Every intact :class:`Block` of *source* (bytes or a binary file)."""
     for _, header, body in _frames(source):

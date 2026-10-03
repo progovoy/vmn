@@ -15,8 +15,9 @@ waits ``_COARSE_SETTLED_NS``; one with sub-second digits comes from a finer
 filesystem (whose clock may still tick every few ms) and waits
 ``_FINE_SETTLED_NS``. A file gone behind an unchanged
 signature, or no longer a regular file, sends the record back to a scan.
-A record's ``log/`` folder counts as part of it: its files list as
-``log/<name>`` and its own ``(mtime, inode)`` joins the record's signature.
+A record's ``log/`` and ``metrics/`` folders count as part of it: their files
+list as ``log/<name>``/``metrics/<name>`` and their own ``(mtime, inode)``
+join the record's signature.
 
 A listing of at least ``PARALLEL_MIN_DIRS`` directories spreads them over
 threads (:func:`map_dirs`): every scandir/stat releases the GIL, so their
@@ -28,11 +29,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.logfiles import LOG_DIR
+from vmn_exp.core.metric_files import METRICS_DIR
 
 _COARSE_SETTLED_NS = 2 * 10**9  # FAT's mtime granularity
 _FINE_SETTLED_NS = 10**8  # well past exFAT's 10ms and a coarse kernel clock tick
 PARALLEL_MIN_DIRS = 2000
 _THREADS = 16
+_SUBDIRS = (LOG_DIR, METRICS_DIR)
 
 
 def map_dirs(fn, items):
@@ -57,21 +60,27 @@ def _scan_files(path, prefix=""):
 
 def files_in(path):
     """``{filename: (size, mtime_ns)}`` of the regular, non-hidden files in
-    *path* and in its ``log/`` folder (named ``log/<file>``)."""
+    *path* and in its ``log/`` and ``metrics/`` folders (named ``log/<file>``,
+    ``metrics/<file>``)."""
     files = _scan_files(path)
-    try:
-        files.update(_scan_files(os.path.join(path, LOG_DIR), LOG_DIR + "/"))
-    except (FileNotFoundError, NotADirectoryError):
-        pass
+    for sub in _SUBDIRS:
+        try:
+            files.update(_scan_files(os.path.join(path, sub), sub + "/"))
+        except (FileNotFoundError, NotADirectoryError):
+            pass
     return files
 
 
-def _log_dir_sig(path):
+def _dir_sig(path):
     try:
-        st = os.stat(os.path.join(path, LOG_DIR))
+        st = os.stat(path)
     except FileNotFoundError:
         return None
     return st.st_mtime_ns, st.st_ino
+
+
+def _sub_sigs(path):
+    return tuple(_dir_sig(os.path.join(path, sub)) for sub in _SUBDIRS)
 
 
 def _settle_ns(mtime_ns):
@@ -115,14 +124,14 @@ class RecordListings:
         if scan is not files_in:
             return scan(entry.path)
         st = entry.stat()  # before the scan: a change racing it moves the sig
-        log_sig = _log_dir_sig(entry.path)
-        sig = (st.st_mtime_ns, st.st_ino, log_sig)
+        sub_sigs = _sub_sigs(entry.path)
+        sig = (st.st_mtime_ns, st.st_ino, sub_sigs)
         known = self._settled.get(entry.path)
         files = _stat_again(entry.path, known[1]) if known and known[0] == sig else None
         if files is None:
             scanned_at = time.time_ns()
             files = files_in(entry.path)
-            mtime_ns = max(st.st_mtime_ns, log_sig[0] if log_sig else 0)
+            mtime_ns = max([st.st_mtime_ns] + [sub[0] for sub in sub_sigs if sub])
             if mtime_ns > scanned_at - _settle_ns(mtime_ns):
                 return files
         settled[entry.path] = (sig, list(files))
