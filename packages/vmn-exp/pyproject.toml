@@ -25,6 +25,7 @@ gcs = ["vmn-exp-sdk[gcs]"]
 azure = ["vmn-exp-sdk[azure]"]
 mlflow = ["mlflow-skinny"]
 postgres = ["psycopg[binary]>=3"]
+parquet = ["pyarrow"]
 
 [project.scripts]
 vmn-exp = "vmn_exp.cli.main:main"

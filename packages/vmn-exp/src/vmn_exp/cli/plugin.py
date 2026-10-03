@@ -38,6 +38,7 @@ EXPERIMENT_ACTIONS = [
     "rerun",
     "push",
     "compact",
+    "export-metrics",
 ]
 
 
@@ -163,6 +164,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "default 1d)")
     pexp.add_argument("--compact", action="store_true", default=False,
                       help="watch: also compact the metrics of failed/stuck runs")
+    pexp.add_argument("--keys", nargs="+", default=None,
+                      help="export-metrics: only these metric keys")
+    pexp.add_argument("--format", dest="metrics_format", default=None,
+                      choices=("parquet", "csv"),
+                      help="export-metrics: output format (default: from -o, else parquet)")
     pexp.add_argument("--all-finished", action="store_true", default=False,
                       help="compact: every succeeded or failed run")
     pexp.add_argument("--depth", type=int, default=1,
