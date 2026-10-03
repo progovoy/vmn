@@ -81,7 +81,9 @@ export default function Report() {
   return (
     <>
       <Link className="back-link" to={`/ws/${ws}/reports`}>← reports</Link>
-      <div className="page-head"><h1>{query.data.title || rid}</h1></div>
+      <div className="page-head"><h1>{query.data.title || rid}</h1>
+        {query.data.can_edit && <Link className="btn" to={`/ws/${ws}/reports/${encodeURIComponent(rid)}/edit`}>Edit</Link>}
+      </div>
       <ReportBody ws={ws} report={query.data} />
     </>
   );

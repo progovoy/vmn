@@ -1,5 +1,22 @@
 // Source-level edits of ```vmn-panel blocks in a report's markdown.
-import { stringify } from "yaml";
+
+const PLAIN = /^[A-Za-z_][\w.\-/ ]*$/;
+const RESERVED = /^(true|false|null|yes|no|on|off|~)$/i;
+
+function scalar(value: unknown): string {
+  if (typeof value !== "string") return JSON.stringify(value);
+  const plain = PLAIN.test(value) && !RESERVED.test(value) && !value.endsWith(" ");
+  return plain ? value : JSON.stringify(value);
+}
+
+/** YAML for a panel spec: block mappings, flow lists, quoted scalars when needed. */
+function stringify(spec: Record<string, unknown>, indent = ""): string {
+  return Object.entries(spec).map(([k, v]) => {
+    if (Array.isArray(v)) return `${indent}${k}: [${v.map(scalar).join(", ")}]\n`;
+    if (v && typeof v === "object") return `${indent}${k}:\n${stringify(v as Record<string, unknown>, indent + "  ")}`;
+    return `${indent}${k}: ${scalar(v)}\n`;
+  }).join("");
+}
 
 export interface PanelBlock {
   /** Offsets of the whole fenced block (fences included). */

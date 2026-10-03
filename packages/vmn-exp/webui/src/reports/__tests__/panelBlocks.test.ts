@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parse } from "yaml";
+import { parseYamlLite as parse } from "../yamlLite";
 import { findPanelBlocks, insertPanelBlock, replacePanelBlock, specToBlock, queryProblem } from "../panelBlocks";
 
 const SRC = "# T\n\n```vmn-panel\nv: 1\nid: a\n```\n\ntext\n\n```vmn-panel\nv: 1\nid: b\n```\n";
@@ -14,6 +14,11 @@ describe("panelBlocks", () => {
     expect(block.startsWith("```vmn-panel\n")).toBe(true);
     expect(block.endsWith("```\n")).toBe(true);
     expect(parse(block.slice(13, -4))).toMatchObject({ id: "x", runs: { query: "status = succeeded" } });
+  });
+
+  it("round-trips scalars that need quoting and lists", () => {
+    const spec = { v: 1, id: "1", app: "a: b", keys: ["loss", "true", "x # y"], runs: { query: 'n = "x"' }, step: "last" };
+    expect(parse(specToBlock(spec).slice(13, -4))).toEqual(spec);
   });
 
   it("inserts a block at the caret on its own lines", () => {
