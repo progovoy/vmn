@@ -71,8 +71,34 @@ def point(cols, i):
     return [cols.values[i], step, cols.ts[i]]
 
 
+def add_exact(partials, value):
+    """Shewchuk's non-overlapping *partials* (the ``math.fsum`` recipe) with
+    *value* added: their exact sum, so a mean does not depend on the order
+    values are added in. A handful of floats at most in practice."""
+    out = []
+    for other in partials:
+        if abs(value) < abs(other):
+            value, other = other, value
+        high = value + other
+        low = other - (high - value)
+        if low:
+            out.append(low)
+        value = high
+    out.append(value)
+    return tuple(out)
+
+
+def exact_parts(values):
+    """The partials of the exact sum of *values* (see :func:`add_exact`)."""
+    parts = ()
+    for value in values:
+        parts = add_exact(parts, value)
+    return list(parts)
+
+
 def finite_summary(cols):
-    """``{n, sum, min, max}`` over the finite values; min/max are the first
+    """``{n, sum, parts, min, max}`` over the finite values (*parts*: the
+    exact sum's partials, so folds of blocks add up exactly); min/max are the first
     of equals as ``[value, step, ts]`` (``None`` without finite values)."""
     lo = hi = None
     finite = []
@@ -87,6 +113,7 @@ def finite_summary(cols):
     return {
         "n": len(finite),
         "sum": math.fsum(finite),
+        "parts": exact_parts(finite),
         "min": None if lo is None else point(cols, lo),
         "max": None if hi is None else point(cols, hi),
     }

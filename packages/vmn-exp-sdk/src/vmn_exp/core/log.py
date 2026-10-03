@@ -17,6 +17,7 @@ import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.storage.files import list_record_artifacts
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
@@ -55,24 +56,33 @@ def summary_metrics(log, schema=None):
     return fold_metrics(fold_log(log), schema)[0]
 
 
-def metric_series(log):
-    """Fold a log into per-metric point lists for charting.
+def metric_series(source):
+    """Per-metric point lists for charting:
+    ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in series order.
 
-    Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order (join them on an x metric with
-    :func:`~vmn_exp.core.step_metric.join_all`). *log* is a merged log, which
-    already leaves out what a rewind hides (``load_log`` /
-    :func:`~vmn_exp.storage.files.flatten_logs`).
+    *source* is a :class:`~vmn_exp.core.series_reader.SeriesReader`, or a
+    merged log whose ``metrics`` entries are read as one (they already leave
+    out what a rewind hides). Join them on an x metric with
+    :func:`~vmn_exp.core.step_metric.join_all`.
     """
-    series = {}
-    for entry in log:
-        if entry.get("type") != "metrics":
-            continue
-        step = entry.get("step")
-        ts = entry.get("timestamp")
-        for key, value in (entry.get("values") or {}).items():
-            series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series
+    reader = source if isinstance(source, SeriesReader) else SeriesReader.from_entries(source)
+    return {key: reader.series(key) for key in reader.keys()}
+
+
+def history_points(source, metric, step_range=None, max_points=None):
+    """*metric*'s points like :func:`metric_series`'s, within *step_range*
+    (``(lo, hi)``, inclusive) and min/max-thinned to about *max_points*."""
+    reader = source if isinstance(source, SeriesReader) else SeriesReader.from_entries(source)
+    if max_points is None:
+        return reader.series(metric, step_range)
+    return reader.thinned(metric, max_points, step_range)
+
+
+def merged_log_view(log, offset=0, limit=None):
+    """``{"entries", "total"}``: a page of the merged log (metric points back
+    as ``metrics`` entries, see ``storage.files.merged_log``), oldest first."""
+    end = None if limit is None else offset + limit
+    return {"entries": log[offset:end], "total": len(log)}
 
 
 def last_metric_at(log):

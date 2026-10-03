@@ -16,8 +16,6 @@ import threading
 from collections import OrderedDict
 from itertools import islice
 
-from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.storage.files import flatten_logs
 from vmn_exp.core.fold import (
     fold_definitions,
     fold_last_metric_at,
@@ -26,14 +24,25 @@ from vmn_exp.core.fold import (
     fold_rewinds,
     fold_values,
 )
+from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.logfiles import group_log_names, is_log_file
 from vmn_exp.core.media import MediaIndex
+from vmn_exp.core.metric_files import (
+    INDEXED_SUFFIX,
+    is_indexed_file,
+    is_metric_file,
+    is_stream_file,
+    metric_writer,
+)
 from vmn_exp.core.metric_schema import hidden_metrics
 from vmn_exp.core.rewind import REWIND
-from vmn_exp.core.logfiles import group_log_names, is_log_file
-from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
+from vmn_exp.core.series_reader import indexed_entries, stream_entries
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
+from vmn_exp.storage.files import flatten_logs
 from vmn_exp.ui.readers.series import SeriesThinner, downsample
+
+from vmn_exp.snapshot import LocalSnapshotStorage
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_MAX_ENTRIES = 128
@@ -183,7 +192,8 @@ def _log_files(storage, app_name, verstr):
     files = record_files(app_name, verstr) if record_files else None
     if files is None:
         return None
-    return {n: tuple(sig) for n, sig in files.items() if is_log_file(n)}
+    return {n: tuple(sig) for n, sig in files.items()
+            if is_log_file(n) or is_metric_file(n)}
 
 
 def _read_complete_lines(local, app_name, verstr, name, offset, writer):
@@ -203,11 +213,23 @@ def _read_complete_lines(local, app_name, verstr, name, offset, writer):
     return entries, offset + used
 
 
+def _read_stream(local, app_name, verstr, name, start, size):
+    """``(metrics entries, new offset)`` of a stream's intact new blocks."""
+    data = local.read_range(app_name, verstr, name, start, size - start)
+    entries, used = stream_entries(data or b"")
+    return entries, start + used
+
+
 def _read_growth(local, app_name, verstr, files, offsets):
     """``{writer: new entries}`` and the new offsets, or None when not pure growth."""
     if any(name not in files or files[name][0] < end for name, end in offsets.items()):
         return None
-    grown = [n for n in files if files[n][0] > offsets.get(n, 0)]
+    indexed = [n for n in files if n.endswith(INDEXED_SUFFIX) and n not in offsets]
+    if offsets and indexed:
+        return None  # sealed since: the streams it replaced restart from 0
+    if _superseded_listed(files):
+        return None  # mid-compaction: let the grouped full read pick
+    grown = [n for n in files if files[n][0] > offsets.get(n, 0) and n not in indexed]
     new_offsets, by_writer = dict(offsets), {}
     for writer, names in group_log_names(grown).items():
         for name in names:
@@ -215,7 +237,23 @@ def _read_growth(local, app_name, verstr, files, offsets):
                 local, app_name, verstr, name, offsets.get(name, 0), writer
             )
             by_writer.setdefault(writer, []).extend(entries)
+    for name in sorted(indexed):  # after the logs, as load_log
+        writer = metric_writer(name)
+        entries = indexed_entries(local, app_name, verstr, name, files[name][0])
+        by_writer.setdefault(writer, []).extend(dict(e, _writer=writer) for e in entries)
+        new_offsets[name] = files[name][0]
+    for name in (n for n in grown if is_stream_file(n)):
+        writer = metric_writer(name)
+        entries, new_offsets[name] = _read_stream(local, app_name, verstr, name,
+                                                  offsets.get(name, 0), files[name][0])
+        by_writer.setdefault(writer, []).extend(dict(e, _writer=writer) for e in entries)
     return by_writer, new_offsets
+
+
+def _superseded_listed(files):
+    final = {metric_writer(n) for n in files if is_indexed_file(n)}
+    return any(not is_indexed_file(n) and is_metric_file(n) and metric_writer(n) in final
+               for n in files)
 
 
 def _appends_in_order(entries, new_entries):

@@ -8,6 +8,7 @@ sent again.
 """
 import time
 
+from vmn_exp.cli.compact import DEAD, compact_runs, runs_with_status
 from vmn_exp.cli.prune import _parse_duration
 from vmn_exp.core.alerts import Alerter, load_alert_config, watch_app
 from vmn_exp.core.app_conf import experiment_conf
@@ -23,7 +24,8 @@ def experiment_watch(vcs, storage, app_name, args):
         VMN_LOGGER.error(str(exc))
         return 1
     alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs)))
-    if not alerter.wants("failed") and not alerter.wants("stuck"):
+    compact = getattr(args, "compact", False)
+    if not compact and not alerter.wants("failed") and not alerter.wants("stuck"):
         VMN_LOGGER.error(
             "No alert sink is configured for 'failed' or 'stuck': set "
             "experiment.alerts in conf.yml, or VMN_EXP_ALERT_* and VMN_EXP_ALERT_ON."
@@ -32,6 +34,8 @@ def experiment_watch(vcs, storage, app_name, args):
     while True:
         for verstr, status in watch_app(storage, app_name, alerter, within_sec):
             print(f"{verstr} {status}")
+        if compact:
+            compact_runs(storage, app_name, runs_with_status(storage, app_name, DEAD))
         if not args.interval:
             return 0
         time.sleep(args.interval)

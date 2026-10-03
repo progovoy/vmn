@@ -8,7 +8,7 @@ newest trimmed tombstone's seq — a follower behind it needs a full load).
 
 # Bump whenever a record's shape, the fold's semantics or these tables change:
 # records written by another version are dropped rather than trusted.
-SCHEMA_VERSION = "exp-index-10"
+SCHEMA_VERSION = "exp-index-11"
 
 _TABLES = {
     "exp_index": "app TEXT, key TEXT, data TEXT, seq INTEGER, PRIMARY KEY (app, key)",

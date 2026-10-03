@@ -56,15 +56,21 @@ class Body:
         return (data[i:i + chunk_size] for i in range(0, len(data), chunk_size))
 
 
-def _range_start(header):
-    return int(header[len("bytes="):].rstrip("-")) if header else 0
+def _parse_range(header):
+    """``bytes=a-`` / ``bytes=a-b`` as ``(offset, length or None)``."""
+    if not header:
+        return 0, None
+    first, _, last = header[len("bytes="):].partition("-")
+    start = int(first)
+    return start, (int(last) - start + 1 if last else None)
 
 
 class ObjectClient:
     """Subclasses implement:
 
     - ``_stat(key)`` -> ``{"Key","Size","LastModified","ETag"}`` or None
-    - ``_get(key, offset)`` -> ``get_object``-shaped dict (raises MISSING/BAD_RANGE)
+    - ``_get(key, offset, length)`` -> ``get_object``-shaped dict (raises
+      MISSING/BAD_RANGE); *length* None reads to the end
     - ``_put(key, body, if_none_match, if_match)`` (raises TAKEN on a failed condition)
     - ``_iter(prefix, delimiter, start_after)`` -> object dicts and, with a
       delimiter, common-prefix strings; only names after *start_after*
@@ -91,7 +97,7 @@ class ObjectClient:
 
     def get_object(self, Bucket, Key, Range=None):
         with translated_errors():
-            return self._get(Key, _range_start(Range))
+            return self._get(Key, *_parse_range(Range))
 
     def put_object(self, Bucket, Key, Body, IfNoneMatch=None, IfMatch=None):
         with translated_errors():

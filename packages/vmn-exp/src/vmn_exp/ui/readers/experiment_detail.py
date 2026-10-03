@@ -17,6 +17,7 @@ from vmn_exp.snapshot import _resolve_verstr
 from vmn_exp.core.fold import fold_inputs_dict, fold_outputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
+from vmn_exp.core.metric_compact import record_compacted
 from vmn_exp.core.refs import placement_snapshot
 from vmn_exp.core.status import (
     load_run_state,
@@ -233,6 +234,7 @@ def experiment_detail(
         "forked_from": metadata.get("forked_from"),
         "rerun_of": metadata.get("rerun_of"),
         "rewinds": snapshot.rewinds(),
+        "compacted": record_compacted(storage, app_name, verstr),
     }, None
 
 

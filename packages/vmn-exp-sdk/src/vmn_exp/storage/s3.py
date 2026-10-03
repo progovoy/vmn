@@ -35,12 +35,15 @@ from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
 )
 from vmn_exp.storage.s3_listing import S3Listing
 from vmn_exp.storage.s3_logs import S3Logs
+from vmn_exp.storage.s3_metrics import S3Metrics
 from vmn_exp.storage.s3_records import S3Records
 
 _ARTIFACT_CHUNK = 1 << 20
 
 
-class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
+class S3SnapshotStorage(
+    S3Listing, S3Records, S3Logs, S3Metrics, S3Base, SnapshotStorage
+):
     def exists(self, app_name, verstr):
         try:
             prefix = self._record_prefix(app_name, verstr)

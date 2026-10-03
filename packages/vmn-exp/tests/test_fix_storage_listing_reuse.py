@@ -140,7 +140,8 @@ def test_a_fine_grained_mtime_settles_well_before_a_coarse_one(storage, scans):
 
     storage.list_files(APP)
 
-    # A record's log/ folder is scanned with it.
-    records = [os.path.dirname(p) if os.path.basename(p) == "log" else p for p in scans[1:]]
+    # A record's log/ and metrics/ folders are scanned with it.
+    records = [os.path.dirname(p) if os.path.basename(p) in ("log", "metrics") else p
+               for p in scans[1:]]
     scanned = {os.path.basename(p) for p in records}
     assert scanned == {"0.0.1-dev.abc.r1"}  # its log/ folder with it

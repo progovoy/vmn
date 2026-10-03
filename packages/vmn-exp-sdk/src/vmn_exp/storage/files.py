@@ -8,6 +8,7 @@ from vmn_exp._base import valid_app_path, valid_path_component
 
 # Log file naming and parsing live in core, shared with the experiment index.
 from vmn_exp.core.rewind import drop_rewound
+from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     LOG_DIR,
     group_log_names,
@@ -154,6 +155,16 @@ def flatten_logs(logs_by_writer):
         entries.extend(logs_by_writer[writer])
     entries.sort(key=lambda e: e.get("timestamp", ""))
     return drop_rewound(entries)
+
+
+def merged_log(storage, app_name, verstr, logs_by_writer):
+    """:func:`flatten_logs` of *logs_by_writer* with each writer's metric
+    points back as ``metrics`` entries (plan 12 §5.5) — the log view."""
+    logs = {w: list(entries or []) for w, entries in logs_by_writer.items()}
+    metrics = SeriesReader.from_storage(storage, app_name, verstr, rewinds=())
+    for writer, entries in metrics.entries_by_writer().items():
+        logs.setdefault(writer, []).extend(dict(e, _writer=writer) for e in entries)
+    return flatten_logs(logs)
 
 
 def _current_umask():

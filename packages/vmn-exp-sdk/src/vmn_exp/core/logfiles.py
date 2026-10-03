@@ -28,9 +28,10 @@ def is_log_file(name):
     )
 
 
-def _writer_and_span(name):
-    """``(writer, (first seq, last seq))`` a log file covers."""
-    stem = name[len(_PREFIX) : -len(".jsonl")]
+def writer_and_span(name, prefix=_PREFIX, suffix=".jsonl"):
+    """``(writer, (first seq, last seq))`` a log file (or another per-writer
+    object under *prefix* with *suffix*) covers."""
+    stem = name[len(prefix) : -len(suffix)]
     writer, _, seq = stem.partition("@")
     first, _, last = seq.partition("-")
     if first.isdigit() and last.isdigit():
@@ -42,7 +43,7 @@ def _writer_and_span(name):
 def log_writer_and_seq(name):
     """``log/w.jsonl`` → ``("w", 0)``; segment ``log/w@000003.jsonl`` → ``("w", 3)``;
     a compacted ``log/w@000000-000005.jsonl`` → ``("w", 5)``, its last seq."""
-    writer, (_, last) = _writer_and_span(name)
+    writer, (_, last) = writer_and_span(name)
     return writer, last
 
 
@@ -55,7 +56,7 @@ def compacted_log_name(writer, last_seq):
     return f"{_PREFIX}{writer}@{0:06d}-{last_seq:06d}.jsonl"
 
 
-def _visible(spans):
+def visible_spans(spans):
     """*spans* ``[((first, last), name)]`` minus the files a merged one covers."""
     merged = max((s for s in spans if s[0][0] < s[0][1]), default=None)
     if merged is None:
@@ -71,9 +72,9 @@ def group_log_names(names):
     groups = {}
     for name in names:
         if is_log_file(name):
-            writer, span = _writer_and_span(name)
+            writer, span = writer_and_span(name)
             groups.setdefault(writer, []).append((span, name))
-    return {w: [n for _, n in _visible(spans)] for w, spans in groups.items()}
+    return {w: [n for _, n in visible_spans(spans)] for w, spans in groups.items()}
 
 
 # json.loads minus its per-call Python layers: the C scanner at offset 0 of a

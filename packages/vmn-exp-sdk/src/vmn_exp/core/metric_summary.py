@@ -25,6 +25,7 @@ Pure: no storage, no clock beyond an entry's timestamp.
 """
 import math
 
+from vmn_exp.core.metric_columns import add_exact as _add_exact
 from vmn_exp.core.step_metric import lookup
 from vmn_exp.core.values import is_finite_number
 
@@ -56,23 +57,6 @@ def _policy_of(definition):
 
 
 _EMPTY = (None, None, 0)
-
-
-def _add_exact(partials, value):
-    """Shewchuk's non-overlapping *partials* (the ``math.fsum`` recipe) with
-    *value* added: their exact sum, so the mean does not depend on the order
-    writers fold in. A handful of floats at most in practice."""
-    out = []
-    for other in partials:
-        if abs(value) < abs(other):
-            value, other = other, value
-        high = value + other
-        low = other - (high - value)
-        if low:
-            out.append(low)
-        value = high
-    out.append(value)
-    return tuple(out)
 
 
 def _widen(seen, value):
@@ -134,6 +118,39 @@ def track_extrema(fold, name, value, key):
         seen = _widen(_EMPTY, seen)
     _keep_first(firsts, name, value, key)
     extrema[name] = _widen(tuple(seen), value)
+
+
+def track_block(fold, name, first, first_key, finite):
+    """Widen *name*'s ``extrema`` by a whole block of at least two points
+    (plan 12 §5.3): its earliest value *first* at *first_key* and its
+    *finite* ``{n, sum, parts, min, max}`` summary — what
+    :func:`track_extrema` point by point would give, exactly."""
+    extrema = fold.setdefault("extrema", {})
+    firsts = fold.setdefault("firsts", {})
+    seen = extrema.get(name)
+    if seen is None:
+        seen = _EMPTY
+    elif not _repeated(seen):
+        if name not in firsts:
+            firsts[name] = (seen,) + _key_of(fold, name)
+        seen = _widen(_EMPTY, seen)
+    _keep_first(firsts, name, first, first_key)
+    extrema[name] = _widen_by_summary(tuple(seen), finite)
+
+
+def _widen_by_summary(seen, finite):
+    if not finite.get("n"):
+        return seen
+    low, high, n = seen[:3]
+    block_low, block_high = finite["min"][0], finite["max"][0]
+    partials = seen[3:]
+    for part in finite.get("parts") or [finite["sum"]]:
+        partials = _add_exact(partials, part)
+    return (
+        block_low if low is None or block_low < low else low,
+        block_high if high is None or block_high > high else high,
+        n + finite["n"],
+    ) + partials
 
 
 def note_param(fold, name, key):

@@ -5,7 +5,7 @@ import threading
 import pytest
 from s3_helpers import mocked_bucket, s3_storage
 
-from vmn_exp.core.record_format import FORMAT_VERSION_KEY
+from vmn_exp.core.record_format import FORMAT_VERSION_KEY, RECORD_FORMAT_VERSION
 from vmn_exp.reports import log as rlog
 from vmn_exp.reports import store as rstore
 from vmn_exp.storage.areas import REPORTS
@@ -28,10 +28,11 @@ def test_create_claims_header_and_v1(storage, tmp_path):
     assert re.fullmatch(r"r[a-z2-7]{12}", rid)
     reports = storage.in_area(REPORTS)
     header = reports.load_metadata(rid, "header")
-    assert header["type"] == "report_header" and header[FORMAT_VERSION_KEY] == 1
+    assert header["type"] == "report_header"
+    assert header[FORMAT_VERSION_KEY] == RECORD_FORMAT_VERSION
     v1 = reports.load_metadata(rid, "v1")
     assert v1["type"] == "report_revision" and v1["base"] == 0
-    assert v1[FORMAT_VERSION_KEY] == 1
+    assert v1[FORMAT_VERSION_KEY] == RECORD_FORMAT_VERSION
     assert (tmp_path / "store" / "reports" / rid / "v1" / "report.md").read_text() == "# hi"
     report = rstore.get(storage, rid)
     assert report["title"] == "My report"

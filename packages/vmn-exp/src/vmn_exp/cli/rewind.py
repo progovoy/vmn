@@ -7,6 +7,7 @@ run that is not reopened: it appends the same ``rewind`` marker (see
 """
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.fork import resolve_run, rewind_run
+from vmn_exp.core.metric_compact import rebuild_compacted
 from vmn_exp.core.rewind import count_hidden
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.writer import flush_log
@@ -34,5 +35,6 @@ def experiment_rewind(storage, app_name, args):
         return 1
     # One-shot command: no heartbeat will ship the marker to a remote later.
     flush_log(storage, app_name, verstr)
+    rebuild_compacted(storage, app_name, verstr)
     print(f"rewound {verstr} to step {step} (hid {hidden} entries)")
     return 0

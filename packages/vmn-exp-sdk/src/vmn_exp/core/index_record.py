@@ -7,7 +7,7 @@ same code as the index (:mod:`experiment_index_workers`) and hand it back.
 """
 from vmn_exp._base import parse_record_metadata
 from vmn_exp.core.fold import new_fold
-from vmn_exp.core.index_logs import log_signatures, update_logs
+from vmn_exp.core.index_logs import log_signatures, record_signatures, update_logs
 from vmn_exp.core.index_sweep import METADATA_FILE
 from vmn_exp.core.record_format import readable
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
@@ -62,7 +62,7 @@ def listed_unchanged(record, names):
     return (
         record["meta_sig"] == _sig(names[METADATA_FILE])
         and record["rs_sig"] == _sig(names.get(RUN_STATE_FILE))
-        and {n: state["sig"] for n, state in record["logs"].items()} == log_signatures(names)
+        and record_signatures(record) == log_signatures(names)
     )
 
 

@@ -25,13 +25,17 @@ from vmn_exp.cli.supervisor import (
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
+from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
+    append_entries_to_log,
     append_to_log,
     create_log_entry,
     get_writer_id,
     save_run_state,
+    sync_to_remote,
 )
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
 
@@ -86,18 +90,17 @@ class _MetricsTailer(MetricsTailer):
 
 
 def _ingest_metric_records(storage, app_name, verstr, records):
-    """Append one metrics log entry per parsed (step, values) record.
-
-    Strictly append-only, into this writer's own JSONL file. Reading the merged
-    log and rewriting ``log.yml`` instead would copy every entry already held in
-    a per-writer file into the shared one — duplicating them once per flush —
-    and would clobber anything another writer appended meanwhile.
-    """
+    """Record the parsed (step, values) records as one block of this writer's
+    metric stream (plan 12 §4.1) — append-only, never a rewrite."""
+    entries = []
     for step, values in records:
-        entry = create_log_entry("metrics", values=values)
-        if step is not None:
-            entry["step"] = step
-        append_to_log(storage, app_name, verstr, entry)
+        entry = sanitize_entry(create_log_entry("metrics", values=values))
+        if entry is not None:
+            if step is not None:
+                entry["step"] = step
+            entries.append(entry)
+    if entries:
+        append_entries_to_log(storage, app_name, verstr, entries)
 
 
 def _safe_unlink(path):
@@ -429,6 +432,8 @@ class _Supervision:
             ),
         )
         self.sync.final(_FINAL_SYNC_TIMEOUT_SEC)
+        self.guard("metric compaction", compact_by, self.storage, self.app_name,
+                   self.verstr, self.writer_id, time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC)
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
@@ -493,7 +498,8 @@ class _Supervision:
         # The log first: a slow output PUT must not hold back liveness data.
         self.guard(
             "remote sync",
-            self.storage.sync_log_to_remote,
+            sync_to_remote,
+            self.storage,
             self.app_name,
             self.verstr,
             self.writer_id,

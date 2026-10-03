@@ -59,6 +59,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flush_interval_sec = flush_interval_sec
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
+        self._metrics_flushed_at = {}
 
     def _open_area(self, name):
         return BufferedRemoteStorage(self._remote.in_area(name), name, self._flush_interval_sec)
@@ -138,6 +139,25 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         if self._run_finished(app_name, verstr):
             self._cleanup_buffer()
 
+    # -- metric streams ---------------------------------------------------------
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        if not super().append_metric_block(app_name, verstr, writer_id, data):
+            return False
+        key = (app_name, verstr, writer_id)
+        last = self._metrics_flushed_at.get(key)
+        _PENDING.add(self)
+        if last is None or time.monotonic() - last >= self._flush_interval_sec:
+            try:
+                self.sync_metrics_to_remote(app_name, verstr, writer_id)
+            except Exception:
+                VMN_LOGGER.debug("Eager metric ship failed; retrying later", exc_info=True)
+        return True
+
+    def sync_metrics_to_remote(self, app_name, verstr, writer_id):
+        self._metrics_flushed_at[(app_name, verstr, writer_id)] = time.monotonic()
+        super().sync_metrics_to_remote(app_name, verstr, writer_id)
+
     def _cleanup_buffer(self):
         """Drop the buffer dir. Idempotent: ``rmtree`` on an already-gone
         directory is a safe no-op, so a later call (``close()``, or another
@@ -163,6 +183,16 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
                     f"Experiment {verstr}: could not ship the last log lines"
                 )
                 VMN_LOGGER.debug("Final log flush failed", exc_info=True)
+        for app_name, verstr, writer_id in list(self._metrics_flushed_at):
+            try:
+                self.sync_metrics_to_remote(app_name, verstr, writer_id)
+            except Exception:
+                VMN_LOGGER.warning(
+                    f"Experiment {verstr}: could not ship the last metric blocks"
+                )
+                VMN_LOGGER.debug("Final metric flush failed", exc_info=True)
+        self._metrics_flushed_at.clear()
+        self._metric_state()["synced"].clear()
         # A later append starts a fresh buffer, shipped from its first byte.
         self._flushed_at.clear()
         self._unshipped.clear()

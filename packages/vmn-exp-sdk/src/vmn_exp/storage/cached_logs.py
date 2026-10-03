@@ -14,11 +14,11 @@ import threading
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.status import run_finished
 from vmn_exp.storage.files import (
-    flatten_logs,
     is_log_file,
     log_object_name,
     log_sizes_of,
     log_writer_and_seq,
+    merged_log,
 )
 
 LOCAL, REMOTE = "local", "remote"
@@ -124,7 +124,7 @@ class CachedLogs:
     def load_merged_log(self, app_name, verstr):
         """The merged log for display: best effort when the remote fails."""
         local_logs = self._local_logs(app_name, verstr)
-        if not any(local_logs.values()):
+        if not any(local_logs.values()) and not self._local_metrics(app_name, verstr):
             return (
                 self._remote.load_merged_log(app_name, verstr) if self._remote else []
             )
@@ -134,7 +134,10 @@ class CachedLogs:
             VMN_LOGGER.debug(
                 "Remote log read failed; showing the local log", exc_info=True
             )
-        return flatten_logs(local_logs)
+        return merged_log(self, app_name, verstr, local_logs)
+
+    def _local_metrics(self, app_name, verstr):
+        return self._local_is_replica and self._local.metric_objects(app_name, verstr)
 
     def _with_newer_remote_writers(self, app_name, verstr, local_logs):
         """*local_logs* plus each writer whose remote copy is the bigger one:

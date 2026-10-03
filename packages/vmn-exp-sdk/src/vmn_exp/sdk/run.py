@@ -24,6 +24,7 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.metric_compact import compact_by, reopen_writer
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
@@ -35,6 +36,7 @@ from vmn_exp.core.writer import (
     create_tags_entry,
     get_writer_id,
     save_artifact,
+    sync_to_remote,
 )
 from vmn_exp.sdk import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
@@ -186,6 +188,8 @@ def start_run(
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
+        # Its new metric blocks must not hide behind the finished run's .vmx.
+        _reopen_metrics(storage, app_name, verstr)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
@@ -222,6 +226,14 @@ def start_run(
     if tags:
         run.set_tags(tags)
     return run
+
+
+def _reopen_metrics(storage, app_name, verstr):
+    try:
+        reopen_writer(storage, app_name, verstr, get_writer_id())
+    except Exception:
+        _LOGGER.warning(f"vmn: could not reopen run {verstr}'s compacted metrics",
+                        exc_info=True)
 
 
 def _record_resume_inputs(run, note, params):
@@ -291,7 +303,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             functools.partial(
                 self._chore_guard,
                 "experiment log sync",
-                storage.sync_log_to_remote,
+                sync_to_remote,
+                storage,
                 app_name,
                 verstr,
             ),
@@ -422,6 +435,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+        compact_by(self._storage, self.app_name, self.id, get_writer_id(), deadline)
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)

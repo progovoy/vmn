@@ -37,6 +37,7 @@ EXPERIMENT_ACTIONS = [
     "rewind",
     "rerun",
     "push",
+    "compact",
 ]
 
 
@@ -160,6 +161,10 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--within", default=None,
                       help="watch: only alert transitions newer than this (e.g. 6h, 1d; "
                            "default 1d)")
+    pexp.add_argument("--compact", action="store_true", default=False,
+                      help="watch: also compact the metrics of failed/stuck runs")
+    pexp.add_argument("--all-finished", action="store_true", default=False,
+                      help="compact: every succeeded or failed run")
     pexp.add_argument("--depth", type=int, default=1,
                       help="lineage: follow links this many hops (default: 1)")
     pexp.add_argument("--parent", default=None,

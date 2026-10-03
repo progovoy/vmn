@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Callable, List
 
 from vmn_exp.core.fork import rewind_run
+from vmn_exp.core.metric_compact import rebuild_compacted
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
@@ -109,6 +110,7 @@ def _rewind(app_name, body):
         rewind_run(storage, app_name, verstr, step,
                    load_run_state(storage, app_name, verstr) or {})
         flush_log(storage, app_name, verstr)
+        rebuild_compacted(storage, app_name, verstr)
         hint(app_name, verstr)
         return f"rewound {verstr} to step {step}"
 

@@ -75,16 +75,17 @@ def test_failing_metric_ingestion_does_not_kill_the_supervisor(
     app_layout, capfd, monkeypatch
 ):
     _bootstrap(app_layout)
-    real = LocalSnapshotStorage.append_log_entry
+    # Metrics reach storage as metric-stream blocks (plan 12 §4.1).
+    real = LocalSnapshotStorage.append_metric_block
     raised = []
 
-    def flaky(self, app_name, verstr, writer_id, entry):
-        if entry.get("type") == "metrics" and not raised:
-            raised.append(entry)
+    def flaky(self, app_name, verstr, writer_id, data):
+        if not raised:
+            raised.append(data)
             raise OSError("disk full")
-        return real(self, app_name, verstr, writer_id, entry)
+        return real(self, app_name, verstr, writer_id, data)
 
-    monkeypatch.setattr(LocalSnapshotStorage, "append_log_entry", flaky)
+    monkeypatch.setattr(LocalSnapshotStorage, "append_metric_block", flaky)
     script = (
         "import os, time\n"
         "p = os.environ['VMN_METRICS_FILE']\n"

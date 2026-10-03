@@ -2,7 +2,7 @@
 
 :func:`journaled` turns a backend into a :class:`JournaledStorage` of the same
 type: each write that changes what a reader sees (claim, metadata, a log batch
-or segment, a file or artifact, the final ``run_state.yml``, a delete) runs on
+or segment, a metric block or ``.vmx``, a file or artifact, the final ``run_state.yml``, a delete) runs on
 the backend first and then puts one empty journal entry naming the record.
 Heartbeat-only ``run_state.yml`` rewrites put none. A put that still fails
 after its retries stays queued and goes out with the next write (or
@@ -115,6 +115,10 @@ class JournaledStorage:
     append_log_entry = _journaled_write("append_log_entry")
     append_log_entries = _journaled_write("append_log_entries")
     put_log_segment = _journaled_write("put_log_segment")
+    append_metric_block = _journaled_write("append_metric_block", lambda r, a: bool(r))
+    put_metric_segment = _journaled_write("put_metric_segment")
+    put_indexed = _journaled_write("put_indexed", lambda r, a: bool(r))
+    drop_indexed = _journaled_write("drop_indexed")
     delete = _journaled_write("delete")
 
     @property
