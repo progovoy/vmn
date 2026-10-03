@@ -42,14 +42,14 @@ class _StreamSource:
             cols = block.keys.get(name)
             for i in range(len(cols) if cols is not None else 0):
                 step = cols.steps[i] if cols.has_step else None
-                yield cols.ts[i], step, cols.values[i]
+                yield cols.ts[i], step, cols.values[i], None
 
     def entries(self):
         out = []
         for block in self.blocks:
             points = [(ts, step, base_key(name), value)
                       for name, cols in block.keys.items()
-                      for ts, step, value in _StreamSource([block]).points(name)]
+                      for ts, step, value, _ in _StreamSource([block]).points(name)]
             out.extend(points_to_entries(sorted(points, key=lambda p: p[0]), block.inherited))
         return out
 
@@ -63,11 +63,11 @@ class _IndexedSource:
 
     def points(self, name):
         for p in self.reader.points(name):
-            yield p["ts"], p["step"], p["value"]
+            yield p["ts"], p["step"], p["value"], None
 
     def entries(self):
         points = [(ts, step, base_key(name), value)
-                  for name in self.reader.keys() for ts, step, value in self.points(name)]
+                  for name in self.reader.keys() for ts, step, value, _ in self.points(name)]
         return points_to_entries(sorted(points, key=lambda p: p[0]))
 
 
@@ -88,7 +88,8 @@ class _EntrySource:
         for entry in self._entries:
             values = entry.get("values") or {}
             if name in values:
-                yield iso_to_us(entry.get("timestamp")) or 0, entry.get("step"), values[name]
+                ts = entry.get("timestamp")
+                yield iso_to_us(ts) or 0, entry.get("step"), values[name], ts
 
     def entries(self):
         return list(self._entries)
@@ -171,11 +172,11 @@ class SeriesReader:
         return {k: n for k, n in counts.items() if n}
 
     def _merged(self, key):
-        """``[(ts, rank, step, value)]`` of *key* in series order."""
+        """``[(ts, rank, step, value, logged ts or None)]`` of *key* in series order."""
         per_rank = {}
         for rank, source, name, _ in self._raw_names().get(key, ()):
             per_rank.setdefault(rank, []).extend(
-                (ts, rank, step, value) for ts, step, value in source.points(name)
+                (ts, rank, step, value, iso) for ts, step, value, iso in source.points(name)
                 if not _hidden(self._rewinds, ts, step))
         lists = [sorted(points, key=lambda p: p[0]) for points in per_rank.values()]
         return list(heapq.merge(*lists, key=lambda p: (p[0], p[1])))
@@ -190,10 +191,11 @@ class SeriesReader:
         return self.points(key)
 
     def series(self, key, step_range=None):
-        """``[{"step", "ts": iso, "value"}]`` of *key*."""
-        cols = self.points(key, step_range)
-        return [{"step": s, "ts": us_to_iso(t), "value": v}
-                for s, t, v in zip(cols.steps, cols.ts, cols.values)]
+        """``[{"step", "ts": iso, "value"}]`` of *key* (a v1 entry's own
+        timestamp kept verbatim)."""
+        return [{"step": p[2], "ts": p[4] if p[4] is not None else us_to_iso(p[0]),
+                 "value": p[3]}
+                for p in self._merged(key) if _within(p[2], step_range)]
 
     def thinned(self, key, max_points, step_range=None):
         """At most about *max_points* min/max-thinned points, first and last kept."""
