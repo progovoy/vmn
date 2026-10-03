@@ -231,6 +231,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
 | `POST` | `ws/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
+| `GET` | `.../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
 | `GET` | `ws/{ws}/apps/{app}/metrics-schema` | The [effective metrics schema](#paging-sorting-and-order) |
 | `POST` | `ws/{ws}/apps/{app}/actions/{action}` | Start a [job](#actions) |
 | `GET` | `/jobs/{id}` | A job's status and log |
@@ -381,7 +382,8 @@ with an ETag:
 `GET .../experiments/{verstr}` costs the same however long the run logged.
 Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 (only those series), `series=0` (no series), `include_log=1` (whole log),
-`x=<metric>` ([custom x axis](#custom-x-axis)).
+`x=<metric>` ([custom x axis](#custom-x-axis)), `step_min`/`step_max`
+([zoom](#zoom-and-many-keys)).
 
 | Field | Meaning |
 |---|---|
@@ -398,6 +400,7 @@ Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 | `patches` | which patch kinds the snapshot holds |
 | `media` / `tables` / `histograms` | logged images, tables, histograms per name, one item per step ([Media](#media)); `histograms` is `{}` once they would serve more than 100 steps in all |
 | `histograms_total` | `{name: steps logged}` for every histogram name |
+| `compacted` | whether every metrics writer of the run has its compacted `.vmx` (the UI shows a "not compacted" badge otherwise) |
 
 Page older entries with `.../log`. A live run's poll parses only the log bytes
 appended since the last one. Detail and log carry an `ETag` and
@@ -419,6 +422,20 @@ curl -X POST -H "Content-Type: application/json" \
 every metric; the runs share the 200,000-point cap. It is a read (allowed with
 `--read-only`), but as a POST it needs `Content-Type: application/json` and a
 same-site `Origin`.
+
+### Zoom and many keys
+
+Both series endpoints take `step_min`/`step_max` (query params on run detail,
+body fields on the batch; either may be omitted, neither combines with `x`).
+The range is read straight from the metric files: on a compacted `.vmx` that is
+the level-of-detail slice covering it, so a zoom into a 1M-step run reads a few
+small byte ranges, not the run. The UI refetches on a chart zoom (debounced)
+and keeps the coarse series drawn meanwhile.
+
+`GET .../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` →
+`{"keys": [{"name", "count"}], "total", "offset", "limit"}` pages a run's
+metric names (sorted; `prefix` filters), for runs with thousands of keys; the
+run page's key picker uses it.
 
 ### Custom x axis
 
