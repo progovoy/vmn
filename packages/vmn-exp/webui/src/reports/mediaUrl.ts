@@ -5,6 +5,6 @@ import { artifactUrl } from "../api";
 
 export type MediaUrl = (ws: string, app: string, verstr: string, path: string) => string;
 
-export const MediaUrlContext = createContext<MediaUrl>(artifactUrl);
+export const MediaUrlContext = createContext<MediaUrl>((ws, app, verstr, path) => artifactUrl(ws, app, verstr, path));
 
 export const useMediaUrl = () => useContext(MediaUrlContext);
