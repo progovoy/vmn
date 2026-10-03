@@ -93,3 +93,29 @@ def test_gcs_and_azure_stores_migrate(kind):
     assert raw.keys() == {f"team/{k}" for k in expected_v2_keys(v1_records())} | {
         "team/store.yml"}
     assert migrate_objects(raw.client, "bkt", "team") == 0
+
+
+def test_s3_shared_prefix_keeps_snapshots_with_code_verstr(s3):
+    """v1 snapshot records carry ``code_verstr`` too (a dirty one, and one of
+    the run's own tree): they stay snapshots; a created-only run stays a run."""
+    snap = {"app_name": "my/app", "code_verstr": "c1", "diff_hash": "abc",
+            "dirty_states": ["modified"], "code": "c1.abc"}
+    snaps = {"c1": dict(snap, verstr="c1"), "c2": dict(snap, verstr="c2", code_verstr="c2")}
+    for rec, meta in snaps.items():
+        s3.put(f"team/my-app/{rec}/metadata.yml", yaml.safe_dump(meta).encode())
+    s3.put("team/my-app/c1.r2/metadata.yml", yaml.safe_dump(
+        {"verstr": "c1.r2", "code_verstr": "c1", "app_name": "my/app",
+         "format_version": 1}).encode())
+    s3.put("team/my-app/c1.r2/log.w1.jsonl", b'{"type": "create"}\n')
+    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    keys = s3.keys()
+    assert {f"team/snapshots/my-app/{r}/metadata.yml" for r in snaps} <= keys
+    assert not any(k.startswith(("team/runs/my-app/c1/", "team/runs/my-app/c2/"))
+                   for k in keys)
+    assert "team/runs/my-app/c1.r2/metadata.yml" in keys
+
+    from vmn_exp.storage.open import open_storage
+
+    store = open_storage("s3://bkt/team", None, area="snapshots", writer=False)
+    assert set(store.list_verstrs("my/app")) == set(snaps)
+    assert store.load_metadata("my/app", "c2")["dirty_states"] == ["modified"]

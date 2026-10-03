@@ -8,6 +8,10 @@ files, ``deps/<safe dep>/`` patch files, then ``metadata.yml``
 (``yaml.dump(sort_keys=True)``) last — it is what makes a record exist. The
 ``.vmn/store/`` carries one ``.gitignore`` of ``*``. Every write is atomic.
 
+The v1 layout's snapshots (``.vmn/<app>/snapshots/``) and code objects
+(``.vmn/vmn-code/<app~>/experiments/``) move here on first use of an app
+(docs/plans/14-store-layout.md §4); runs are left to ``vmn-exp migrate``.
+
 ``LocalRecordStore(vmn_root_path, kind="snapshots", code_store=None)``:
   - ``save(app, verstr, metadata, patches)``
   - ``load_record(app, verstr) -> (metadata, patches) | (None, None)``
@@ -93,17 +97,61 @@ def _app_key(app_name):
     return app_name.replace("/", "-")
 
 
+def _v1_parts(kind, app_name):
+    if kind == "snapshots":
+        return [*app_name.split("/"), "snapshots"]
+    if kind == "code":
+        return ["vmn-code", app_name.replace("/", "~"), "experiments"]
+    return None
+
+
+def _move_v1_record(src, dst):
+    raw = _read_file(os.path.join(src, METADATA_FILE))
+    if raw is None or os.path.lexists(dst):
+        return
+    os.rename(src, dst)
+    metadata = yaml_safe_load(raw)
+    if isinstance(metadata, dict) and "format_version" not in metadata:
+        _write_metadata(dst, metadata)
+
+
+def _drop_v1_dir(old):
+    ignore = os.path.join(old, ".gitignore")
+    if os.path.isfile(ignore) and os.listdir(old) == [".gitignore"]:
+        os.unlink(ignore)
+    try:
+        os.removedirs(old)
+    except OSError:
+        pass
+
+
 class LocalRecordStore:
     def __init__(self, vmn_root_path, kind="snapshots", code_store=None):
         self.vmn_root_path = vmn_root_path
         self.kind = kind
         self.code_store = self if code_store is None else code_store
+        self._adopted = set()
 
     def _store_root(self):
         return os.path.join(self.vmn_root_path, ".vmn", "store")
 
     def _base_dir(self, app_name):
-        return os.path.join(self._store_root(), self.kind, _app_key(app_name))
+        base = os.path.join(self._store_root(), self.kind, _app_key(app_name))
+        if app_name not in self._adopted:
+            self._adopted.add(app_name)
+            self._adopt_v1(app_name, base)
+        return base
+
+    def _adopt_v1(self, app_name, base):
+        parts = _v1_parts(self.kind, app_name)
+        old = parts and os.path.join(self.vmn_root_path, ".vmn", *parts)
+        if not old or not os.path.isdir(old):
+            return
+        self._ensure_base_dir(app_name)
+        for entry in os.scandir(old):
+            if entry.is_dir() and not entry.name.startswith("."):
+                _move_v1_record(entry.path, os.path.join(base, entry.name))
+        _drop_v1_dir(old)
 
     def _record_dir(self, app_name, verstr):
         return os.path.join(self._base_dir(app_name), safe_verstr(verstr))

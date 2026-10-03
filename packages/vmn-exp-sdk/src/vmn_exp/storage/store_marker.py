@@ -1,14 +1,16 @@
 """``store.yml``: the marker at a store root (docs/plans/14-store-layout.md §2.3).
 
 The first writer creates it with a create-if-absent put (``O_EXCL``-style
-link locally, ``If-None-Match`` on object stores). Writers and readers refuse
-a root of an unknown ``layout`` and a v1 root (vmn records, no marker);
+link locally, a plain ``O_EXCL`` create without hard links, ``If-None-Match``
+on object stores). Writers and readers refuse a root of an unknown ``layout``
+and a v1 root (vmn records, no marker, also in the v1 places outside the root);
 writers also refuse while ``migrating`` is set.
 """
 import datetime
 import os
 import tempfile
 import threading
+import time
 
 import yaml
 
@@ -18,6 +20,9 @@ MARKER = "store.yml"
 LAYOUT = 2
 _AREAS = {areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas.REGISTRY,
           areas.REPORTS, areas.COMMENTS, areas.JOURNAL}
+
+_V1_CONTAINERS = ("experiments", "snapshots")
+_V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
 
 _checked = set()
 _lock = threading.Lock()
@@ -40,6 +45,21 @@ def new_marker():
     now = datetime.datetime.now(datetime.timezone.utc)
     return {"layout": LAYOUT, "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "journal": {"partition": "minute"}}
+
+
+def _create_exclusive(path, text, wait_sec=2.0):
+    """Create *path* holding *text* unless it exists — for filesystems
+    without hard links. A loser waits for the winner's content to land."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        deadline = time.monotonic() + wait_sec
+        while os.path.getsize(path) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return
+    with os.fdopen(fd, "w") as f:
+        os.fchmod(f.fileno(), 0o644)
+        f.write(text)
 
 
 class LocalRoot:
@@ -67,6 +87,8 @@ class LocalRoot:
             os.link(tmp, self._path())
         except FileExistsError:
             pass
+        except OSError:
+            _create_exclusive(self._path(), text)
         finally:
             os.unlink(tmp)
 
@@ -78,6 +100,33 @@ class LocalRoot:
 
     def dirs(self):
         return {n for n in self.entries() if os.path.isdir(os.path.join(self.root, n))}
+
+    def _v1_dirs(self):
+        """The ``.vmn`` dirs v1 kept this root's records in: ``<root>/.vmn``
+        (``--dir``/``file://``) and, for the repo-local ``.vmn/store``, its parent."""
+        root = os.path.abspath(self.root)
+        parent = os.path.dirname(root)
+        found = [os.path.join(root, ".vmn")]
+        if os.path.basename(root) == "store" and os.path.basename(parent) == ".vmn":
+            found.append(parent)
+        return found
+
+    def has_v1_records(self):
+        skip = os.path.abspath(self.root)
+        return any(_v1_local_record(d, skip) for d in self._v1_dirs())
+
+
+def _v1_local_record(vmn_dir, skip):
+    """Whether *vmn_dir* holds a v1 record: ``<app path>/{experiments,snapshots}/<rec>/metadata.yml``."""
+    for path, dirs, _files in os.walk(vmn_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")
+                   and os.path.join(path, d) != skip]
+        if path == vmn_dir or os.path.basename(path) not in _V1_CONTAINERS:
+            continue
+        if any(os.path.isfile(os.path.join(path, d, "metadata.yml")) for d in dirs):
+            return True
+        dirs[:] = []
+    return False
 
 
 class ObjectRoot:
@@ -125,6 +174,14 @@ class ObjectRoot:
         page = page or self._page()
         return self._names(p["Prefix"] for p in page.get("CommonPrefixes", []))
 
+    def has_v1_records(self):
+        """A path-less URI's v1 records were under the default v1 prefixes."""
+        if self.prefix != areas.DEFAULT_ROOT:
+            return False
+        return any(self.client.list_objects_v2(
+            Bucket=self.bucket, Prefix=f"{p}/", MaxKeys=1).get("Contents")
+            for p in _V1_PREFIXES)
+
 
 def root_of(storage):
     """The marker location of a backend storage, or None (unknown backend)."""
@@ -138,9 +195,12 @@ def root_of(storage):
 
 
 def _has_records(where):
-    """v1 records live in ``<root>/<app>/<verstr>/``: a top-level directory
-    that is no area. Stray files beside the store are not records."""
-    return any(n not in _AREAS and not n.startswith(".") for n in where.dirs())
+    """v1 records live in ``<root>/<app>/<verstr>/`` (a top-level directory
+    that is no area; stray files beside the store are not records) or in the
+    v1 places outside the root (``where.has_v1_records``)."""
+    if any(n not in _AREAS and not n.startswith(".") for n in where.dirs()):
+        return True
+    return where.has_v1_records()
 
 
 def _parse(text):

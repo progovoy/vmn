@@ -4,8 +4,8 @@ v1 repo-local / ``file://`` / ``--dir``: ``.vmn/<app path>/{experiments,snapshot
 pseudo-apps ``.vmn/vmn-code/<app~>/``, ``.vmn/vmn-sweeps/<app~>~<sweep>/`` and
 ``.vmn/vmn-registry/`` (records in their ``experiments/``).
 v1 object stores: ``<prefix>/<app key>/<rec>/`` — the prefixes ``vmn-experiments``
-and ``vmn-snapshots``, or one shared URI path (runs carry ``code_verstr``,
-snapshots don't); pseudo-apps ``vmn-code-<app~>``, ``vmn-sweeps-<app~>~<sweep>``,
+and ``vmn-snapshots``, or one shared URI path (runs carry a log, ``run_state.yml`` or
+``format_version``; snapshots none of them, though they have ``code_verstr``); pseudo-apps ``vmn-code-<app~>``, ``vmn-sweeps-<app~>~<sweep>``,
 ``vmn-registry``.
 """
 from dataclasses import dataclass
@@ -118,7 +118,8 @@ def classify(record, metadata_text):
     meta = yaml.safe_load(metadata_text) if metadata_text else None
     meta = meta if isinstance(meta, dict) else {}
     if record.area is None:
-        is_run = "code_verstr" in meta or any(n.startswith("log") for n in record.names)
+        is_run = "format_version" in meta or any(
+            n.startswith("log") or n == "run_state.yml" for n in record.names)
         record.area = areas.RUNS if is_run else areas.SNAPSHOTS
     if record.area in (areas.RUNS, areas.SNAPSHOTS) and meta.get("app_name"):
         record.scope = areas.app_key(meta["app_name"])
