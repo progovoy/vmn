@@ -66,7 +66,7 @@ stamps a `0.0.0` baseline, so it needs a git identity (`user.name`,
 
 | Where | Set | Good for |
 |---|---|---|
-| This checkout (default) | nothing: `.vmn/<app>/experiments/`, git-ignored | one developer |
+| This checkout (default) | nothing: `.vmn/store/`, git-ignored | one developer |
 | A shared directory (NFS, EFS, FSx) | `uri: file:///mnt/shared` | a team or cluster with a common mount |
 | An object store | `uri: s3://...`, `gs://...`, `az://...` | no shared filesystem |
 
@@ -103,7 +103,7 @@ every 30 s and at exit; one without records straight to the store.
 
 Many people and pods can write to the same store at once. Each new run claims
 its verstr atomically (two hosts on the same commit get `...` and `....r2`),
-and each writer appends to its own `log.<writer>.jsonl`, so there is no lock
+and each writer appends to its own `log/<writer>.jsonl`, so there is no lock
 and nothing to merge. The writer id defaults to the hostname; set
 `VMN_WRITER_ID` (or `--writer-id`, or conf `experiment.storage.writer_id`)
 to also put it in new run names. Details:

@@ -443,8 +443,9 @@ gets 429), and the text is capped at 2 MB (`truncated: true`). A record with no
 base commit (a git-free run) answers `diff: null` with the reason in
 `diff_unavailable`.
 
-`GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact (`path`
-may be nested, `a/b/c.txt`; `..`, `.`, empty parts and backslashes are a 400)
+`GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact, and
+`.../outputs/{path}` one of vmn's own outputs (`output.log`, media, tables;
+`path` may be nested, `a/b/c.txt`; `..`, `.`, empty parts and backslashes are a 400)
 from local and remote stores alike; a remote object streams straight through.
 Downloads are never gzipped, carry a `Content-Type` guessed from the name, and
 an RFC 5987 `filename*`.
@@ -458,7 +459,7 @@ What `run.log_image` / `log_table` / `log_histogram` recorded (see
 per key, with an *over time* view stacking every step.
 
 - Images download through the artifact route
-  (`.../artifacts/media/<name>/<step>.png`, `image/png`).
+  (`.../outputs/media/<name>/<step>.png`, `image/png`).
 - `GET .../table/{path}?offset=0&limit=100&sort=<column>&order=asc|desc`
   answers `{"columns": [{"name", "type"}], "rows": [[...]], "total", "offset",
   "truncated"}`. Sorting covers the whole table (missing cells last); `limit`
