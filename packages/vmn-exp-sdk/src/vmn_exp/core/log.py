@@ -17,6 +17,7 @@ import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.storage.files import list_record_artifacts
 from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
@@ -55,24 +56,17 @@ def summary_metrics(log, schema=None):
     return fold_metrics(fold_log(log), schema)[0]
 
 
-def metric_series(log):
-    """Fold a log into per-metric point lists for charting.
+def metric_series(source):
+    """Per-metric point lists for charting:
+    ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in series order.
 
-    Returns ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in
-    log order (join them on an x metric with
-    :func:`~vmn_exp.core.step_metric.join_all`). *log* is a merged log, which
-    already leaves out what a rewind hides (``load_log`` /
-    :func:`~vmn_exp.storage.files.flatten_logs`).
+    *source* is a :class:`~vmn_exp.core.series_reader.SeriesReader`, or a
+    merged log whose ``metrics`` entries are read as one (they already leave
+    out what a rewind hides). Join them on an x metric with
+    :func:`~vmn_exp.core.step_metric.join_all`.
     """
-    series = {}
-    for entry in log:
-        if entry.get("type") != "metrics":
-            continue
-        step = entry.get("step")
-        ts = entry.get("timestamp")
-        for key, value in (entry.get("values") or {}).items():
-            series.setdefault(key, []).append({"step": step, "ts": ts, "value": value})
-    return series
+    reader = source if isinstance(source, SeriesReader) else SeriesReader.from_entries(source)
+    return {key: reader.series(key) for key in reader.keys()}
 
 
 def last_metric_at(log):
