@@ -30,10 +30,12 @@ from vmn_exp.ui.responses import json_response, memoized_json_response
 ENCODED_BODIES = 64
 
 
-def register(app, api_prefix, inputs, cache, comments_of):
+def register(app, api_prefix, inputs, cache, comments_of=None):
     """*inputs(ws_name, app_tag)* -> ``(snapshot, metrics schema)``, raising
     the route's HTTP errors for a bad workspace or app; *comments_of(ws_name,
-    app_tag)* -> ``({verstr: {total, unresolved}}, generation)``."""
+    app_tag)* -> ``({verstr: {total, unresolved}}, generation)``; without it
+    rows carry no comment counts."""
+    comments_of = comments_of or (lambda ws_name, app_tag: ({}, 0))
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
     bodies = LRU(ENCODED_BODIES)
 

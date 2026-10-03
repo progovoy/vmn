@@ -10,6 +10,7 @@ import os
 from version_stamp.api import get_repo_lock, resolve_root_path
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.writer import create_run, merge_conf_into_params
+from vmn_exp.core.code_store import code_storage
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
 from vmn_exp.sdk import _resolve_app_name
@@ -51,7 +52,7 @@ def create_in_checkout(
     # subprocess probing), and store the code there too: it is keyed by
     # content, so it needs no lock.
     env = _maybe_capture_env(vcs, capture_env, python_exe=python_exe)
-    code = capture.ensure_code(storage, vcs, captured)
+    code = capture.ensure_code(code_storage(storage), vcs, captured)
 
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
