@@ -46,16 +46,23 @@ def record_metric_entries(writer, entries, inherited=False):
 
 def points_to_entries(points, inherited=False):
     """``metrics`` entries of ``(ts_us, step, key, value)`` *points* (in
-    series order): one per ``(step, ts)``, keys in first-logged order."""
-    grouped = {}
+    series order): one per ``(step, ts)``, keys in first-logged order, and a
+    new one whenever a key repeats there, so no point is merged away."""
+    open_entries = {}
+    out = []
     for ts_us, step, key, value in points:
-        entry = grouped.get((ts_us, step))
-        if entry is None:
-            entry = grouped[(ts_us, step)] = {"timestamp": us_to_iso(ts_us), "type": METRICS,
-                                              "values": {}}
-            if step is not None:
-                entry["step"] = step
-            if inherited:
-                entry["inherited"] = True
+        entry = open_entries.get((ts_us, step))
+        if entry is None or key in entry["values"]:
+            entry = open_entries[(ts_us, step)] = _new_entry(ts_us, step, inherited)
+            out.append(entry)
         entry["values"][key] = value
-    return sorted(grouped.values(), key=lambda e: iso_to_us(e["timestamp"]))
+    return sorted(out, key=lambda e: iso_to_us(e["timestamp"]))
+
+
+def _new_entry(ts_us, step, inherited):
+    entry = {"timestamp": us_to_iso(ts_us), "type": METRICS, "values": {}}
+    if step is not None:
+        entry["step"] = step
+    if inherited:
+        entry["inherited"] = True
+    return entry
