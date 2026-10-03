@@ -218,7 +218,10 @@ def test_s3_load_merged_log_reads_jsonl_files():
     storage.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-2", e2)
 
     merged = storage.load_merged_log("app", "1.0.0-dev.aaa.bbb")
-    assert [e["type"] for e in merged] == ["metrics"]
+    assert len(merged) == 2
+    types = [e["type"] for e in merged]
+    assert "create" in types
+    assert "metrics" in types
 
 
 @mock_aws

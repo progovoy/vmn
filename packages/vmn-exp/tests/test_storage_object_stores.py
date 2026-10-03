@@ -26,7 +26,7 @@ V3 = "1.2.0-dev.abc1234.0000003"
 
 
 def _meta(verstr, **extra):
-    return dict({"verstr": verstr, "app": APP}, **extra)
+    return dict({"verstr": verstr, "app": APP, "format_version": 1}, **extra)
 
 
 @pytest.fixture(params=["s3", "gs", "az"])
