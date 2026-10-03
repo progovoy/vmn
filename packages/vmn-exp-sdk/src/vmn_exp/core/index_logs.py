@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Keep one experiment's folded log current, reading as little as possible.
 
-A record's log is the legacy ``log.yml`` (writer ``""``) plus, per writer,
-``log.<writer>.jsonl`` and its segments ``log.<writer>@<seq>.jsonl``. JSONL
+A record's log is, per writer, ``log/<writer>.jsonl`` and its segments
+``log/<writer>@<seq>.jsonl``. JSONL
 files only ever grow at the end and segments only ever get added after the
 last one, so when that is all that changed only the new bytes are read and
-folded. Anything else — a rewritten ``log.yml``, a shrunk or vanished file, a
+folded. Anything else — a shrunk or vanished file, a
 file that grew *before* a later segment — refolds the record from scratch.
 
 Local-first storage with a remote reads per file too: its listing takes each
@@ -14,12 +14,8 @@ reads that same copy, so only new local bytes and new remote segments are read.
 A file that vanishes mid-read refolds the record through the storage's
 ``load_logs_by_writer``.
 """
-from vmn_exp._base import yaml_safe_load
 from vmn_exp.core.fold import apply_entries, fold_rewinds, needs_refold, new_fold
 from vmn_exp.core.jsonl_tail import read_complete_lines
-from vmn_exp.core.logfiles import (
-    LEGACY_LOG_FILE as LEGACY_LOG,
-)
 from vmn_exp.core.logfiles import (
     group_log_names,
     log_writer_and_seq,
@@ -32,15 +28,11 @@ def log_signatures(names):
     from the signatures the moment the merged object appears, which refolds
     the record instead of folding the merged copy on top of its parts."""
     visible = {n for group in group_log_names(names).values() for n in group}
-    if LEGACY_LOG in names:
-        visible.add(LEGACY_LOG)
     return {n: list(sig) for n, sig in names.items() if n in visible}
 
 
 def _appends_only(old, new):
     """Whether *new* is *old* with bytes appended / segments added at the end."""
-    if old.get(LEGACY_LOG, {}).get("sig") != new.get(LEGACY_LOG):
-        return False
     if any(name not in new for name in old):
         return False
     for names in group_log_names(new).values():
@@ -71,12 +63,6 @@ def _read_tail(fold, counts, direct, where, name, state):
 
 def _refold_direct(record, storage, direct, where, sigs, rewinds=()):
     fold, counts, logs = new_fold(rewinds), {}, {}
-    if LEGACY_LOG in sigs:
-        raw = storage.load_file(*where, LEGACY_LOG)
-        legacy = yaml_safe_load(raw) if raw else None
-        if isinstance(legacy, list):
-            apply_entries(fold, "", 0, legacy)
-        logs[LEGACY_LOG] = {"sig": sigs[LEGACY_LOG], "consumed": 0}
     for names in group_log_names(sigs).values():
         for name in names:
             logs[name] = {"sig": sigs[name], "consumed": 0}

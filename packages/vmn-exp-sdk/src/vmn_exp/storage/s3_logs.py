@@ -11,11 +11,9 @@ listing it next to not-yet-deleted segments never count an entry twice.
 
 import json
 
-from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.logfiles import compacted_log_name
 from vmn_exp.storage.files import (
-    LEGACY_LOG_FILE,
     flatten_logs,
     group_log_names,
     log_object_name,
@@ -34,9 +32,9 @@ def _wanted(writer, writers):
 
 class S3Logs:
     def _log_names(self, prefix):
-        """The log object names (``log.yml`` included) under record *prefix*/."""
+        """The log object names under record *prefix*/."""
         return {
-            o["Key"][len(prefix) :]: o["Size"] for o in self._objects(prefix + "log")
+            o["Key"][len(prefix) :]: o["Size"] for o in self._objects(prefix + "log/")
         }
 
     def log_objects(self, app_name, verstr, writer_id):
@@ -107,7 +105,7 @@ class S3Logs:
         return log_sizes_of(self._log_names(prefix).items())
 
     def load_logs_by_writer(self, app_name, verstr, writers=None):
-        """``{writer: entries}``; only *writers* (``""`` = log.yml) when given.
+        """``{writer: entries}``; only *writers* when given.
 
         Objects are fetched concurrently; a failed fetch raises rather than
         passing for an empty object.
@@ -120,17 +118,10 @@ class S3Logs:
             if _wanted(w, writers)
         }
         fetch = [n for group in groups.values() for n in group]
-        if LEGACY_LOG_FILE in names and _wanted("", writers):
-            fetch.append(LEGACY_LOG_FILE)
         bodies = dict(
             zip(fetch, parallel_map(self._get_or_raise, [prefix + n for n in fetch]))
         )
         logs = {}
-        legacy = bodies.get(LEGACY_LOG_FILE)
-        if legacy:
-            loaded = _base.yaml_safe_load(legacy)
-            if isinstance(loaded, list):
-                logs[""] = loaded
         for writer, group in groups.items():
             entries = logs.setdefault(writer, [])
             for name in group:

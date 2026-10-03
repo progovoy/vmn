@@ -15,7 +15,6 @@ from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
 from vmn_exp.storage import host_dirs
 from vmn_exp.storage.files import (
-    LEGACY_LOG_FILE,
     METADATA_FILE,
     apply_metadata_updates,
     artifact_file_path,
@@ -353,12 +352,6 @@ class LocalSnapshotStorage(SnapshotStorage):
     def load_logs_by_writer(self, app_name, verstr):
         snap_dir = self._snapshot_dir(app_name, verstr)
         logs = {}
-        legacy_path = os.path.join(snap_dir, LEGACY_LOG_FILE)
-        if os.path.isfile(legacy_path):
-            with open(legacy_path, "rb") as f:
-                data = _base.yaml_safe_load(f)
-            if isinstance(data, list):
-                logs[""] = data
         if os.path.isdir(snap_dir):
             for writer, names in group_log_names(files_in(snap_dir)).items():
                 entries = logs.setdefault(writer, [])

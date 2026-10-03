@@ -163,14 +163,6 @@ def test_finished_run_segments_compacted(local, target, tmp_path):
     assert remote_log(target) == local_log(local)
 
 
-def test_legacy_log_yml_pushed(local, target, tmp_path):
-    make_run(local, tmp_path)
-    legacy = yaml.dump([{"timestamp": "2025-01-01T00:00:00Z", "type": "note"}])
-    local.save_file(APP, X, "log.yml", legacy)
-    push_run(local, target, APP, X)
-    assert target.load_file(APP, X, "log.yml") == legacy.encode()
-
-
 # -- backends ----------------------------------------------------------------
 
 

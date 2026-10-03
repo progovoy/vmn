@@ -21,13 +21,10 @@ def push_logs(local, target, app_name, verstr, shipped=None, finished=False):
     """Ship each local writer's new complete lines; returns ``{writer: bytes
     the remote now holds}`` (the ledger's ``log_bytes``). *shipped* is the
     previous ``log_bytes``. With *finished*, a writer's remote objects are
-    compacted into one. The legacy ``log.yml`` is a plain file, not shipped
-    here. Raises :class:`LogPrefixMismatch`."""
+    compacted into one. Raises :class:`LogPrefixMismatch`."""
     shipped = shipped or {}
     sizes = {}
     for writer in sorted(local.log_sizes(app_name, verstr)):
-        if writer == "":
-            continue
         pusher = _WriterLog(local, target, app_name, verstr, writer)
         sizes[writer] = pusher.push(shipped.get(writer), finished)
     return sizes

@@ -123,7 +123,7 @@ def test_load_merged_log_multiple_writers(exp_storage):
     assert merged[1]["values"]["acc"] == 0.9
 
 
-def test_load_merged_log_backward_compat_legacy_log_yml(exp_storage):
+def test_load_merged_log_ignores_a_v1_log_yml(exp_storage):
     _save_exp(exp_storage, "app", "1.0.0-dev.aaa.bbb")
     snap_dir = exp_storage._snapshot_dir("app", "1.0.0-dev.aaa.bbb")
     legacy_entries = [
@@ -132,9 +132,7 @@ def test_load_merged_log_backward_compat_legacy_log_yml(exp_storage):
     with open(os.path.join(snap_dir, "log.yml"), "w") as f:
         yaml.dump(legacy_entries, f)
 
-    merged = exp_storage.load_merged_log("app", "1.0.0-dev.aaa.bbb")
-    assert len(merged) == 1
-    assert merged[0]["note"] == "legacy"
+    assert exp_storage.load_merged_log("app", "1.0.0-dev.aaa.bbb") == []
 
 
 def test_load_merged_log_empty(exp_storage):
@@ -220,20 +218,17 @@ def test_s3_load_merged_log_reads_jsonl_files():
     storage.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-2", e2)
 
     merged = storage.load_merged_log("app", "1.0.0-dev.aaa.bbb")
-    assert len(merged) == 2
-    types = [e["type"] for e in merged]
-    assert "create" in types
-    assert "metrics" in types
+    assert [e["type"] for e in merged] == ["metrics"]
 
 
 @mock_aws
-def test_s3_load_merged_log_with_legacy_log_yml():
+def test_s3_load_merged_log_ignores_a_v1_log_yml():
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket="test-bucket")
     storage = S3SnapshotStorage("test-bucket", prefix="exp")
     _save_exp(storage, "app", "1.0.0-dev.aaa.bbb")
 
-    # Write legacy log.yml
+    # A v1 log.yml (vmn-exp migrate converts it) is not read
     legacy = [{"timestamp": "2025-01-01T00:00:00Z", "type": "create", "note": "legacy"}]
     storage.save_file(
         "app", "1.0.0-dev.aaa.bbb", "log.yml", yaml.dump(legacy, sort_keys=False)
@@ -247,10 +242,7 @@ def test_s3_load_merged_log_with_legacy_log_yml():
     storage.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod", e)
 
     merged = storage.load_merged_log("app", "1.0.0-dev.aaa.bbb")
-    assert len(merged) == 2
-    types = [e["type"] for e in merged]
-    assert "create" in types
-    assert "metrics" in types
+    assert [e["type"] for e in merged] == ["metrics"]
 
 
 # =========================================================================

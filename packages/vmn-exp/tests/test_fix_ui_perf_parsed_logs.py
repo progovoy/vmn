@@ -161,13 +161,15 @@ def test_a_rewritten_or_shrunk_log_is_re_read(storage):
     _assert_matches_full_parse(cache.get(storage, APP, V, load_log), storage)
 
 
-def test_a_legacy_log_yml_still_reads_correctly(storage):
+def test_a_v1_log_yml_is_ignored(storage):
     cache = ParsedLogs()
     storage.save_file(APP, V, "log.yml", "- {timestamp: '0', type: metrics, values: {x: 1}}\n")
     _append(storage, 1, 3)
     _assert_matches_full_parse(cache.get(storage, APP, V, load_log), storage)
     _append(storage, 3, 5)
-    _assert_matches_full_parse(cache.get(storage, APP, V, load_log), storage)
+    snap = cache.get(storage, APP, V, load_log)
+    _assert_matches_full_parse(snap, storage)
+    assert all(e.get("values", {}).get("x") != 1 for e in load_log(storage, APP, V))
 
 
 def test_the_cache_is_bounded_by_bytes(storage):

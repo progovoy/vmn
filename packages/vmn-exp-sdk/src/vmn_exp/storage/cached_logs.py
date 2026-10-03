@@ -14,7 +14,6 @@ import threading
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.status import run_finished
 from vmn_exp.storage.files import (
-    LEGACY_LOG_FILE,
     flatten_logs,
     is_log_file,
     log_object_name,
@@ -26,25 +25,23 @@ LOCAL, REMOTE = "local", "remote"
 
 
 def is_any_log(name):
-    return name == LEGACY_LOG_FILE or is_log_file(name)
+    return is_log_file(name)
 
 
 def log_writer(name):
-    return "" if name == LEGACY_LOG_FILE else log_writer_and_seq(name)[0]
+    return log_writer_and_seq(name)[0]
 
 
 def pick_log_sources(remote_sizes, local_sizes):
     """``{writer: LOCAL | REMOTE}``: the copy of each writer's log to read.
 
     The bigger copy is the newer one; a tie goes to the local copy (no
-    download). The legacy ``log.yml`` is read local-first, like any file.
+    download).
     """
     sources = {}
     for writer in set(remote_sizes) | set(local_sizes):
         size = local_sizes.get(writer)
-        newest = size is not None and (
-            writer == "" or size >= remote_sizes.get(writer, 0)
-        )
+        newest = size is not None and size >= remote_sizes.get(writer, 0)
         sources[writer] = LOCAL if newest else REMOTE
     return sources
 

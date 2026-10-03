@@ -42,21 +42,7 @@ def test_merged_log_injects_writer_for_jsonl_entries():
         assert all(e["_writer"] == "gpu0" for e in merged)
 
 
-def test_merged_log_omits_writer_for_legacy_log_yml():
-    with tempfile.TemporaryDirectory() as tmp:
-        storage, snap_dir = _make_storage(tmp, "myapp", "0.0.1-exp.2")
-        legacy = [
-            {"timestamp": "2026-01-01T00:00:00Z", "type": "create"},
-        ]
-        with open(os.path.join(snap_dir, "log.yml"), "w") as f:
-            yaml.dump(legacy, f)
-
-        merged = storage.load_merged_log("myapp", "0.0.1-exp.2")
-        assert len(merged) == 1
-        assert "_writer" not in merged[0]
-
-
-def test_merged_log_mixed_legacy_and_writer():
+def test_merged_log_ignores_a_v1_log_yml():
     with tempfile.TemporaryDirectory() as tmp:
         storage, snap_dir = _make_storage(tmp, "myapp", "0.0.1-exp.3")
         legacy = [
@@ -77,6 +63,5 @@ def test_merged_log_mixed_legacy_and_writer():
                 f.write(json.dumps(e) + "\n")
 
         merged = storage.load_merged_log("myapp", "0.0.1-exp.3")
-        assert len(merged) == 2
-        assert "_writer" not in merged[0]  # legacy entry
-        assert merged[1]["_writer"] == "worker1"  # jsonl entry
+        assert len(merged) == 1
+        assert merged[0]["_writer"] == "worker1"
