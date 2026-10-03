@@ -15,6 +15,7 @@ import time
 import pytest
 from exp_helpers import _SRC_PATH, _PY
 
+from vmn_exp.core.metric_block import read_headers
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
@@ -30,7 +31,12 @@ class _CountingStorage(CachedSnapshotStorage):
     def __init__(self, root):
         super().__init__(LocalSnapshotStorage(root, area="runs"))
         self.batches = []
+        self.blocks = []  # points per metric-stream block (plan 12 §4.1)
         self.single_appends = 0
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        self.blocks.append(sum(e["n"] for h in read_headers(data) for e in h["keys"]))
+        return super().append_metric_block(app_name, verstr, writer_id, data)
 
     def append_log_entries(self, app_name, verstr, writer_id, entries):
         self.batches.append(len(entries))
@@ -67,8 +73,9 @@ def test_many_metrics_reach_storage_in_a_few_batches(storage):
     run.finish()
 
     assert storage.single_appends == 0
-    assert sum(storage.batches) == 5001  # the metrics and the final `run` entry
-    assert len(storage.batches) <= 1 + 5000 // log_buffer.MAX_PENDING_ENTRIES + 2
+    assert sum(storage.batches) == 1  # the final `run` entry; metrics are blocks
+    assert sum(storage.blocks) == 5000
+    assert len(storage.blocks) <= 5000 // log_buffer.MAX_PENDING_ENTRIES + 2
     assert _logged_steps(storage) == list(range(5000))
 
 
@@ -125,6 +132,7 @@ def test_a_finished_run_still_accepts_writes(storage):
 
 _SCRIPT = """
 import os, sys, time
+from vmn_exp.core.metric_block import read_headers
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
