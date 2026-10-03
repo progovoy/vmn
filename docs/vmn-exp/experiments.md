@@ -1243,7 +1243,9 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   `file://` (rsync instead) and no remote are refused.
 - **Same name, parents first**: the code object (if the remote lacks it), the
   claim, other top-level files, each writer's log from where the remote copy
-  ends, and missing or resized artifacts. `archived`/`note` merge three-way
+  ends, each writer's missing or resized metric objects (`metrics/<w>.vmx`
+  via `put_indexed`, which drops remote stream objects it supersedes, else
+  its `.vms` stream), and missing or resized artifacts. `archived`/`note` merge three-way
   against what was last pushed; on conflict the remote wins, with a warning.
 - **Resumable**: a per-host ledger per remote (user state dir,
   `$XDG_STATE_HOME/vmn-exp/push/...`, or under `$VMN_EXP_CACHE_DIR`) records

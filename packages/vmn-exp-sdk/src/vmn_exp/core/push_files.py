@@ -1,5 +1,6 @@
 """A run's files other than its logs, for ``vmn exp push``.
 
+- Metric objects go by :mod:`vmn_exp.core.push_metrics`, not here.
 - Top-level files (``env.yml``, ``run_state.yml``, ``alerts_sent.yml``, ...) go by sha256 against the ledger. ``run_state.yml``
   is never clobbered when the remote copy changed since this host last pushed
   it (its ETag differs from the ledger's); ``alerts_sent.yml`` is merged as a
@@ -13,6 +14,7 @@
 import hashlib
 
 from vmn_exp.core.alerts.transitions import ALERTS_FILE, load_sent, save_sent
+from vmn_exp.core.metric_files import is_metric_file
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES, is_log_file
 
@@ -30,6 +32,7 @@ def pushable_files(local, app_name, verstr):
     return sorted(
         name for name in local.record_files(app_name, verstr)
         if name not in _BODY_FILES and not is_log_file(name)
+        and not is_metric_file(name)
     )
 
 

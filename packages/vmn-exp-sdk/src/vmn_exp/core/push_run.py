@@ -8,7 +8,8 @@ Steps, each resumable (a failed push is simply run again):
    re-check the code object (a remote prune may have raced step 1);
 3. the other top-level files by sha (:mod:`vmn_exp.core.push_files`);
 4. the logs per writer from the remote offset (:mod:`vmn_exp.core.push_logs`);
-5. artifacts missing remotely or of another size;
+5. metric objects and artifacts missing remotely or of another size
+   (:mod:`vmn_exp.core.push_metrics`);
 6. the three-way merge of ``archived``/``note``;
 7. a final LIST for the ETags, then the ledger entry.
 
@@ -25,13 +26,14 @@ from vmn_exp.core.push_files import merge_fields, push_artifacts, push_files
 from vmn_exp.core.push_identity import record_fingerprint, run_identity
 from vmn_exp.core.push_ledger import PushLedger
 from vmn_exp.core.push_logs import push_logs
+from vmn_exp.core.push_metrics import push_metrics
 from vmn_exp.core.status import run_finished
 
 NEW, UPDATE, UP_TO_DATE, COLLISION, FAILED = (
     "new", "update", "up-to-date", "collision", "failed",
 )
 _REQUIRED = ("put_log_segment", "log_objects", "list_artifacts", "record_files",
-             "compact_log_segments")
+             "compact_log_segments", "metric_objects", "put_indexed")
 
 
 class _Collision(Exception):
@@ -159,6 +161,7 @@ class _RunPush:
             *at, self._base.get("log_bytes"),
             finished=run_finished(self._local, self._app, self._verstr),
         )
+        push_metrics(*at)
         push_artifacts(*at)
         fields, warnings = merge_fields(
             *at, self._meta, remote_meta, self._base.get("fields")
