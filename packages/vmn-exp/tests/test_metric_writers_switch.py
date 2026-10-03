@@ -100,3 +100,39 @@ def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):
     assert "metrics" not in _jsonl_types(storage)
     assert _stream_values(storage, "loss") == [0.5, 0.25]
     assert [e["step"] for e in _merged_metrics(storage)] == [0, 1]
+
+
+def test_mlflow_import_records_metrics_as_a_stream(tmp_path):
+    from mlflow_fixtures import MlflowFixtureBuilder
+
+    from vmn_exp.importers.import_records import import_run, run_verstr
+    from vmn_exp.importers.mlflow_filestore import iter_runs
+
+    builder = MlflowFixtureBuilder(tmp_path / "mlruns")
+    builder.add_experiment("1", "exp_one")
+    run_id = "a" * 36
+    builder.add_run("1", run_id, metrics={"loss": [(1700000001000, 0.5, 0)]})
+    storage = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
+    import_run(storage, APP, next(iter_runs(tmp_path / "mlruns")))
+    verstr = run_verstr(run_id)
+    assert storage.metric_objects(APP, verstr)
+    log = storage.load_merged_log(APP, verstr)
+    assert [e["values"] for e in log if e.get("type") == "metrics"] == [{"loss": 0.5}]
+
+
+def test_a_fork_copies_points_as_inherited_blocks(tmp_path):
+    from vmn_exp.core.fork import seed_fork
+
+    storage = _storage(tmp_path)
+    fork = "0.0.1-dev.aaaaaaa.ccccccc"
+    storage.save(APP, fork, {"verstr": fork, "timestamp": "2026-01-01T00:00:01Z"}, {})
+    for step in range(4):
+        append_to_log(storage, APP, V, create_log_entry("metrics", values={"x": step}, step=step))
+    assert seed_fork(storage, APP, fork, V, step=1) == {"verstr": V, "step": 1}
+    objects = storage.metric_objects(APP, fork)
+    (name, size), = next(iter(objects.values()))
+    blocks = list(decode_blocks(storage.read_range(APP, fork, name, 0, size)))
+    assert [b.inherited for b in blocks] == [True]
+    assert list(blocks[0].keys["x"].steps) == [0, 1]
+    merged = [e for e in storage.load_merged_log(APP, fork) if e.get("type") == "metrics"]
+    assert all(e["inherited"] for e in merged)
