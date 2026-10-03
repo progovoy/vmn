@@ -52,7 +52,7 @@ def _publish_locked(path, tmp, wait_sec=30.0):
     links. An exclusive ``mkdir`` elects the one creator, which publishes with
     an atomic rename, so no reader ever sees a partial marker; a loser waits
     for the winner's marker to appear."""
-    lock = path + ".lock"
+    lock = os.path.join(os.path.dirname(path), f".{os.path.basename(path)}.lock")
     try:
         os.mkdir(lock)
     except FileExistsError:

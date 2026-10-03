@@ -219,6 +219,10 @@ def test_slow_creator_without_hard_links_never_exposes_an_empty_marker(tmp_path,
         open_storage(None, root, area="runs")
         seen.append(_read_local(root)["created_at"])
 
-    _race(open_one, n=4)
-    assert len(set(seen)) == 1
+    first = threading.Thread(target=open_one)
+    first.start()
+    time.sleep(0.5)  # the first creator now holds the lock, still publishing
+    _race(open_one, n=3)
+    first.join()
+    assert len(seen) == 4 and len(set(seen)) == 1
     assert os.listdir(root) == ["store.yml"]

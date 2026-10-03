@@ -33,17 +33,34 @@ def _wait_ready(psycopg, dsn, timeout=60):
             time.sleep(0.5)
 
 
-def _start_container():
+def _published_port(cid, timeout=10):
+    """The host port of *cid*'s 5432, or None if it never shows (a container
+    that exited at start under load is gone: ``--rm``)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            return _docker("port", cid, "5432/tcp").splitlines()[0].rsplit(":", 1)[1]
+        except (subprocess.CalledProcessError, IndexError):
+            time.sleep(0.5)
+    return None
+
+
+def _start_container(attempts=3):
     if shutil.which("docker") is None:
         pytest.skip("docker unavailable")
-    try:
-        cid = _docker(
-            "run", "-d", "--rm", "-p", "0:5432", "-e", f"POSTGRES_PASSWORD={_PASSWORD}", _IMAGE
-        )
-    except subprocess.CalledProcessError as exc:
-        pytest.skip(f"cannot start postgres container: {exc.stderr}")
-    port = _docker("port", cid, "5432/tcp").splitlines()[0].rsplit(":", 1)[1]
-    return cid, f"postgresql://postgres:{_PASSWORD}@127.0.0.1:{port}/postgres"
+    for _ in range(attempts):
+        try:
+            cid = _docker(
+                "run", "-d", "--rm", "-p", "0:5432", "-e", f"POSTGRES_PASSWORD={_PASSWORD}",
+                _IMAGE,
+            )
+        except subprocess.CalledProcessError as exc:
+            pytest.skip(f"cannot start postgres container: {exc.stderr}")
+        port = _published_port(cid)
+        if port:
+            return cid, f"postgresql://postgres:{_PASSWORD}@127.0.0.1:{port}/postgres"
+        subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
+    pytest.fail(f"postgres container never published 5432 in {attempts} attempts")
 
 
 @pytest.fixture(scope="session")
