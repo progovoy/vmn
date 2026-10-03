@@ -187,9 +187,6 @@ class SeriesReader:
                 if _within(p[2], step_range) and _within(p[0], ts_range)]
         return Columns([p[2] for p in kept], [p[0] for p in kept], [p[3] for p in kept])
 
-    def columns(self, key):
-        return self.points(key)
-
     def series(self, key, step_range=None):
         """``[{"step", "ts": iso, "value"}]`` of *key* (a v1 entry's own
         timestamp kept verbatim)."""

@@ -8,6 +8,8 @@ instead of JSONL lines. :func:`points_to_entries` goes the other way for
 display — points of one ``(step, ts)`` become one entry again, so log views
 read as they always did. Pure: no storage.
 """
+import time
+
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 
 METRICS = "metrics"
@@ -24,8 +26,11 @@ def split_metric_entries(entries):
 
 
 def add_metric_entry(writer, entry):
-    """Buffer *entry*'s values as points of *writer*."""
+    """Buffer *entry*'s values as points of *writer*, all at its timestamp
+    (now, for an entry without one)."""
     ts_us = iso_to_us(entry.get("timestamp"))
+    if ts_us is None:
+        ts_us = int(time.time() * 1_000_000)
     step = entry.get("step")
     step = None if isinstance(step, bool) or not isinstance(step, (int, float)) else step
     for key, value in (entry.get("values") or {}).items():

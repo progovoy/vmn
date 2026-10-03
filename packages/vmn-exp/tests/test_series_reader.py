@@ -96,7 +96,7 @@ def test_golden_indexed_writer_matches_its_stream(tmp_path):
     _write(storage, "w", entries)
     streamed = metric_series(SeriesReader.from_storage(storage, APP, V))
     reader = SeriesReader.from_storage(storage, APP, V)
-    keys = {k: reader.columns(k) for k in reader.keys()}
+    keys = {k: reader.points(k) for k in reader.keys()}
     fd, path = tempfile.mkstemp(dir=tmp_path)
     os.write(fd, build_index("w", keys))
     os.close(fd)

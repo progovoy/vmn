@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from vmn_exp.core.log import latest_metrics, sort_by_metric
+from vmn_exp.core.series_reader import stream_entries
 from vmn_exp.core.writer import append_to_log
 
 
@@ -23,6 +24,11 @@ class _Storage:
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         # Round-trip through JSON the way the real storages do.
         self.entries.append(json.loads(json.dumps(entry, default=str)))
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        # Metrics reach storage as metric-stream blocks (plan 12 §4.1).
+        self.entries.extend(stream_entries(data)[0])
+        return True
 
 
 class _TensorLike:

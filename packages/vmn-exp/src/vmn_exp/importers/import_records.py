@@ -31,11 +31,11 @@ from vmn_exp.core.metric_entries import record_metric_entries, split_metric_entr
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.core.writer import (
-    sync_to_remote,
     claim_record,
     create_tags_entry,
     flush_log,
     save_run_state,
+    sync_to_remote,
 )
 from version_stamp.api import now_iso
 
