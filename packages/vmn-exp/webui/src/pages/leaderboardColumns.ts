@@ -64,10 +64,15 @@ export interface ColumnCell {
 export const cellId = (cell: ColumnCell) => `${cell.kind === "metric" ? "m" : "p"}:${cell.key}`;
 
 /** Column ids in order: check, #, status, experiment, fleet…, *cells*
- *  (metric/param ids), [tags], note, when. Ids use the `hide=` prefixes
+ *  (metric/param ids), [tags], [comments], note, when. Ids use the `hide=` prefixes
  *  (`c:`, `m:`, `p:`), so `c:tags` is the tags column. */
-export function columnIds(fleet: readonly string[], cells: readonly string[], tags: boolean): string[] {
-  return [...PINNED_COLS, ...fleet.map((c) => `c:${c}`), ...cells, ...(tags ? ["c:tags"] : []), "note", "when"];
+export function columnIds(
+  fleet: readonly string[], cells: readonly string[], tags: boolean, comments = false,
+): string[] {
+  return [
+    ...PINNED_COLS, ...fleet.map((c) => `c:${c}`), ...cells, ...(tags ? ["c:tags"] : []),
+    ...(comments ? ["c:comments"] : []), "note", "when",
+  ];
 }
 
 /** Column ids in their default order: metrics before params. */
@@ -167,6 +172,11 @@ export function paramKey(
 /** Whether any row carries a tag — the tags column only exists then. */
 export function anyTags(rows: readonly ExperimentRow[] | undefined): boolean {
   return Boolean(rows?.some((r) => r.tags && Object.keys(r.tags).length > 0));
+}
+
+/** Whether any row carries comment counts — the comments column only exists then. */
+export function anyComments(rows: readonly ExperimentRow[] | undefined): boolean {
+  return Boolean(rows?.some((r) => r.comments));
 }
 
 /** Metric columns: the schema's order first, then any other metric the rows
