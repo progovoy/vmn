@@ -13,6 +13,7 @@ from vmn_exp.reports import published, store
 from vmn_exp.reports.log import set_archived, set_pinned, set_title
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER
+from vmn_exp.ui.security import safe_app_name
 from vmn_exp.ui.reports_publish import validate_publish
 from vmn_exp.ui.request_author import author_of
 
@@ -27,8 +28,9 @@ def _check_patch(body):
         raise HTTPException(400, "archived and pinned must be booleans")
 
 
-def register(app, api_prefix, any_exp_storage):
-    """*any_exp_storage(ws_name)* returns the workspace's experiment storage."""
+def register(app, api_prefix, any_exp_storage, report_index):
+    """*any_exp_storage(ws_name)* returns the workspace's experiment storage,
+    *report_index(ws_name)* its refreshed :class:`ReportIndex`."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/reports"
 
     def _require_rw():
@@ -53,9 +55,19 @@ def register(app, api_prefix, any_exp_storage):
 
     @app.get(base, dependencies=[require(VIEWER)])
     def list_reports_route(ws_name: str, archived: bool = False):
-        reports = store.list_reports(any_exp_storage(ws_name))
-        rows = [{k: v for k, v in r.items() if k != "body"} for r in reports]
+        rows = report_index(ws_name).reports()
         return {"reports": [r for r in rows if bool(r.get("archived")) == archived]}
+
+    @app.get(f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/reports",
+             dependencies=[require(VIEWER)])
+    def reports_using_route(ws_name: str, app_tag: str, verstr: str = None):
+        """Reports whose panels show the app (or, with *verstr*, that run)."""
+        app_name = safe_app_name(app_tag)
+        if app_name is None:
+            raise HTTPException(400, f"Invalid app name {app_tag!r}")
+        index = report_index(ws_name)
+        rids = set(index.using(app_name, verstr))
+        return {"reports": [r for r in index.reports() if r["rid"] in rids]}
 
     @app.post(base, status_code=201, dependencies=[require(EDITOR)])
     def create_report_route(ws_name: str, request: Request, body: dict = None):

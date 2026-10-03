@@ -101,6 +101,7 @@ function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: stri
   }
   if (id === "check") return { label: "", sort: null };
   if (id === "c:tags") return { label: "tags", sort: null };
+  if (id === "c:comments") return { label: "comments", sort: null };
   return { label: id.includes(":") ? name : id, sort: null };
 }
 
@@ -108,7 +109,7 @@ const HEAD_CLASS: Record<string, string> = {
   check: "check-cell", idx: "num", experiment: "exp-head", when: "num when-head",
 };
 const headClass = (id: string) =>
-  HEAD_CLASS[id] ?? (id.startsWith("c:") && id !== "c:tags" ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
+  HEAD_CLASS[id] ?? (id.startsWith("c:") && id !== "c:tags" && id !== "c:comments" ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
 
 function Head({ layout, sort: s, edits }: { layout: RowLayout; sort: SortState; edits?: ColumnEdits }) {
   const headStyles = layout.styles.map(headStyle);
