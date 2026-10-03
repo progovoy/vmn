@@ -7,7 +7,7 @@ prefix carries the header length, the body is never read (unless a known
 rewind may hide some of the block's points). A ``.vmx`` is folded from its
 footer, as is a sealed part. Anything but growth — an object gone or
 shrunk (a part sealing the streams), a ``.vmx`` replacing streams already
-folded — asks the caller to refold the record.
+folded, a ``.vmx`` or part rewritten at another size — asks the caller to refold the record.
 """
 from vmn_exp.core.fold_blocks import (
     apply_block_points,
@@ -64,17 +64,22 @@ def _objects(storage, where):
 def _grew_only(state, objects):
     sizes = {name: size for objs in objects.values() for name, size in objs}
     for name, consumed in state["objects"].items():
-        if sizes.get(name, -1) < consumed:
+        if sizes.get(name, -1) < consumed or (_whole_file(name) and sizes[name] != consumed):
             return False
         if not is_indexed_file(name) and _newly_sealed(state, objects, metric_writer(name)):
             return False
     return True
 
 
+def _whole_file(name):
+    """A ``.vmx`` or sealed part: rewritten whole, never appended to."""
+    return is_indexed_file(name) or is_part_file(name)
+
+
 def _newly_sealed(state, objects, writer):
     """Whether a ``.vmx`` or part not yet folded replaced *writer*'s streams
     (a stream may since have restarted under its old name)."""
-    return any((is_indexed_file(n) or is_part_file(n)) and n not in state["objects"]
+    return any(_whole_file(n) and n not in state["objects"]
                for n, _ in objects.get(writer, ()))
 
 
@@ -93,7 +98,7 @@ def _fold_object(fold, state, storage, where, writer, name, size):
     if consumed >= size:
         return
     read = lambda off, n: storage.read_range(*where, name, off, n)  # noqa: E731
-    if is_indexed_file(name) or is_part_file(name):
+    if _whole_file(name):
         _fold_indexed(fold, state, writer, MetricIndexReader(read, size))
         state["objects"][name] = size
         return
