@@ -44,7 +44,7 @@ def handle_onboarding(args):
         VMN_LOGGER.error("onboarding needs --store s3://<bucket>/<prefix>")
         return 1
     bucket, prefix = target
-    origins = list(args.origin or [])
+    origins = args.origin or []
     fmt = args.onboarding_format
     if fmt == "json":
         print(_json_doc(bucket, prefix, args, origins))

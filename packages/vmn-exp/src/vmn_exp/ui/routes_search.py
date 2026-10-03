@@ -12,7 +12,7 @@ them off its lean rows), so a query reading ``outputs`` is answered in Python. O
 from fastapi import HTTPException, Request
 
 from vmn_exp.core.log import filter_archived
-from vmn_exp.core.query import QueryError, parse_query
+from vmn_exp.core.query import QueryError, query_roots
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
@@ -46,20 +46,10 @@ def _python_search(scopes, text, limit, archived):
     return found
 
 
-def _reads_outputs(node):
-    kind = node[0]
-    if kind in ("or", "and"):
-        return any(_reads_outputs(term) for term in node[1])
-    if kind == "not":
-        return _reads_outputs(node[1])
-    field = node[1]
-    return field[0] == "path" and field[1][0] == "outputs"
-
-
 def references_outputs(text):
     """Whether query *text* reads a run's ``outputs`` (False when it doesn't parse)."""
     try:
-        return _reads_outputs(parse_query(text))
+        return bool(text and text.strip()) and "outputs" in query_roots(text)
     except QueryError:
         return False
 

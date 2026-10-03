@@ -108,19 +108,11 @@ def postgres_dsn(cfg):
     return cfg.db if cfg is not None and is_postgres_dsn(cfg.db) else None
 
 
-def _enable_tenancy(cfg):
+def _enable_tenancy(cfg, control_plane):
     """Row-level security on, for ``tenancy: multi`` on Postgres."""
-    dsn = postgres_dsn(cfg)
-    if cfg.server.tenancy != "multi" or dsn is None:
+    if cfg.server.tenancy != "multi" or postgres_dsn(cfg) is None:
         return
-    from vmn_exp.ui import migrations
-    from vmn_exp.ui.tenancy import enable_rls
-
-    conn = migrations.connect(dsn)
-    try:
-        enable_rls(conn)
-    finally:
-        conn.close()
+    control_plane.enable_rls()
 
 
 def seed_workspaces(manager, seeds):
@@ -141,7 +133,7 @@ def build_server(args, env=None):
     if cfg is None:
         return build_manager(args), None, None
     control_plane = open_control_plane(cfg)
-    _enable_tenancy(cfg)
+    _enable_tenancy(cfg, control_plane)
     manager = WorkspaceManager(
         cfg.data_dir, registry=DbWorkspaceRegistry(control_plane),
         tenancy=cfg.server.tenancy, endpoint_allowlist=cfg.server.endpoint_allowlist,

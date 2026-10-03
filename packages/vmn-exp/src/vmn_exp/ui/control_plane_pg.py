@@ -9,7 +9,7 @@ import threading
 
 from vmn_exp.ui import migrations
 from vmn_exp.ui.control_plane import _NON_EXPIRING, _TABLES, ControlPlaneStore
-from vmn_exp.ui.tenancy import bind_org, effective_org
+from vmn_exp.ui.tenancy import bind_org, effective_org, enable_rls
 
 
 class PostgresControlPlane(ControlPlaneStore):
@@ -30,6 +30,11 @@ class PostgresControlPlane(ControlPlaneStore):
         with self._lock, self._db.transaction():
             bind_org(self._db, self._org)
             yield
+
+    def enable_rls(self):
+        """Turn the tenancy row-level security policies on (``tenancy: multi``)."""
+        with self._lock:
+            enable_rls(self._db)
 
     def put(self, kind, key, doc, expires_at=None):
         table, cols = _TABLES[kind], ["org_id", "id", "doc"]
