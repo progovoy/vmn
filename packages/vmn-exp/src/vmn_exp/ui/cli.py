@@ -165,6 +165,13 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
 
 
 def handle_ui(args):
+    if getattr(args, "ui_args", None):
+        if args.ui_args[0] != "cache":
+            VMN_LOGGER.error(f"Unknown ui action {args.ui_args[0]!r} (use: cache)")
+            return 2
+        from vmn_exp.ui.cache_cli import handle_cache
+
+        return handle_cache(args)
     try:
         import uvicorn  # noqa: F401
 
