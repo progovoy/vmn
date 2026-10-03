@@ -29,14 +29,14 @@ def experiments_dir(root, app):
     return os.path.join(root, ".vmn", "store", "runs", app)
 
 
-def metadata_yaml(app, meta):
+def metadata_yaml(app, meta, format_version=1):
     """``metadata.yml`` as yaml.dump writes it (sorted keys) for a from-snapshot run."""
     lines = [f"app_name: {app}"]
     if meta["archived"]:
         lines.append("archived: true")
     lines += [f"base_commit: {meta['commit']}", f"base_version: {seed_records.BASE_VERSION}",
               "branch: main", f"code_verstr: {meta['code_verstr']}", "dirty_states:",
-              "- modified", "format_version: 1", "from_snapshot: true", "has_dep_patches: false",
+              "- modified", f"format_version: {format_version}", "from_snapshot: true", "has_dep_patches: false",
               "has_local_commits_patch: false", "has_untracked_files: false",
               "has_working_tree_patch: false", f"name: {meta['name']}", "note: null"]
     if meta["parent"]:
