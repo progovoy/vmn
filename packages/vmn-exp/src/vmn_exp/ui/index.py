@@ -25,7 +25,8 @@ _LOGGER = logging.getLogger(__name__)
 _INLINE = InlineRefresher()
 
 
-def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None):
+def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None,
+                 journal=None, reconcile_sec=None):
     """The app's :class:`IndexSnapshot`, from the shared index at *cache_path*.
 
     A :class:`~vmn_exp.ui.refresher.Refresher` keeps the index fresh in
@@ -41,6 +42,8 @@ def app_snapshot(storage, app_name, cache_path, refresher=_INLINE, schema=None):
         app_name,
         refresher,
         schema,
+        journal,
+        reconcile_sec,
     )
 
 
@@ -49,12 +52,15 @@ def refresh_app(storage, app_name, cache_path):
     experiment_index.shared_index(storage, app_name, cache_path).refresh()
 
 
-def _snapshot_of(index_of, storage, app_name, refresher, schema=None):
+def _snapshot_of(index_of, storage, app_name, refresher, schema=None, journal=None,
+                 reconcile_sec=None):
     try:
         index = index_of()
         if refresher.full_sweep_sec is not None:
-            index.full_sweep_sec = refresher.full_sweep_sec
-        return refresher.snapshot(index).summarized(schema)
+            index.full_sweep_sec = reconcile_sec or refresher.full_sweep_sec
+        if journal is None:
+            return refresher.snapshot(index).summarized(schema)
+        return refresher.snapshot(index, journal).summarized(schema)
     except Exception:
         _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
         return experiment_index.direct_snapshot(storage, app_name, schema)
@@ -88,6 +94,21 @@ class WorkspaceIndex:
         self._in_memory = {}  # app name -> unpersisted ExperimentIndex
         self._cache = SqliteStore(self._db_path or ":memory:")
         self._storage = exp_reader.experiment_storage(root_path)
+
+    @property
+    def db_path(self):
+        return self._db_path
+
+    def index_of(self, app_name):
+        """The index :meth:`snapshot` serves *app_name* from."""
+        if self._db_path:
+            return experiment_index.shared_index(self._storage, app_name, self._db_path)
+        return self._in_memory_index(app_name)
+
+    def reopen(self):
+        """Reconnect the versions cache (a rebuild swapped the file)."""
+        with self._lock:
+            self._cache = SqliteStore(self._db_path or ":memory:")
 
     @property
     def storage(self):

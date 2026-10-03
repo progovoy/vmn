@@ -73,12 +73,13 @@ class ExperimentIndex:
     """Incrementally maintained rows for one app of one storage backend."""
 
     def __init__(
-        self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC
+        self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC,
+        cache_store=None,
     ):
         self._storage = storage
         self.app_name = app_name
         self._cache_path = cache_path
-        self._store = IndexStore(cache_path)
+        self._store = cache_store or IndexStore(cache_path)
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
@@ -109,6 +110,43 @@ class ExperimentIndex:
     @full_sweep_sec.setter
     def full_sweep_sec(self, value):
         self._sweep.full_sweep_sec = value
+
+    @property
+    def journaled(self):
+        """True: refreshes list only hinted and live records (plan 11 §5.2)."""
+        return self._sweep.journaled
+
+    @journaled.setter
+    def journaled(self, value):
+        self._sweep.journaled = value
+
+    def hint(self, name):
+        """The store's journal named *name*: the next refresh re-reads it (and
+        loads it, if new) without listing anything else."""
+        self._sweep.hint(name)
+
+    @property
+    def drift(self):
+        """Records the consistency check found changed with no journal entry."""
+        return self._sweep.drift
+
+    @property
+    def last_reconcile_at(self):
+        """Wall time the last full listing or consistency round began."""
+        return self._sweep.last_reconcile_at
+
+    @property
+    def records(self):
+        """A copy of ``{key: record}`` as last refreshed."""
+        return dict(self._records or {})
+
+    @property
+    def record_count(self):
+        return len(self._records or ())
+
+    def reconcile(self):
+        """Make the next refresh a full listing."""
+        self._sweep.request_full()
 
     # -- refresh -------------------------------------------------------------
 
@@ -163,6 +201,22 @@ class ExperimentIndex:
                 self._io = None
                 self._sweep.watch = ListingWatch(self._storage, self.app_name)
                 self._sweep.reset()
+
+    def adopt(self, other, store=None):
+        """Serve *other*'s records (a rebuild of the same app) from now on,
+        persisting into *store* (default: *other*'s). Hints not yet listed
+        carry over; an I/O helper is stopped (refreshes run in-process)."""
+        with self._lock:
+            if self._io is not None:
+                self._io.close()
+                self._io = None
+            for key in self._sweep._take_hints():
+                other._sweep.hint(key)
+            self._records, self._order, self._stamps = other._records, other._order, other._stamps
+            self._rows, self._sweep = other._rows, other._sweep
+            self._store = store or other._store
+            self.generation += 1
+            self._snapshot = self._build_snapshot()
 
     def _refresh_locked(self):
         started = _monotonic()

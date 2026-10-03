@@ -30,21 +30,26 @@ class TickResult:
 class JournalReader:
     def __init__(self, list_fn: ListFn, clock: Callable[[], float],
                  skew_window_sec: float = 300, max_per_scope: int = 10_000,
-                 last_seen_ms: Optional[int] = None):
+                 last_seen_ms: Optional[int] = None, boundary: Iterable[str] = ()):
         self._list = list_fn
         self._clock = clock
         self._skew_ms = int(skew_window_sec * 1000)
         self._max = max_per_scope
         self._last_seen_ms = last_seen_ms
-        self._seen: Dict[str, int] = {}
+        # Keys at exactly last_seen_ms survive a resume: the next window
+        # starts at that ms, so they would be read again.
+        self._seen: Dict[str, int] = {k: last_seen_ms for k in boundary}
 
     @classmethod
     def from_cursor(cls, cursor: dict, list_fn: ListFn, clock, **kw):
-        return cls(list_fn, clock, last_seen_ms=cursor.get("last_seen_ms"), **kw)
+        return cls(list_fn, clock, last_seen_ms=cursor.get("last_seen_ms"),
+                   boundary=cursor.get("boundary", ()), **kw)
 
     @property
     def cursor(self) -> dict:
-        return {"last_seen_ms": self._last_seen_ms}
+        boundary = sorted(k for k, ms in self._seen.items() if ms >= (self._last_seen_ms or 0))
+        cursor = {"last_seen_ms": self._last_seen_ms}
+        return {**cursor, "boundary": boundary} if boundary else cursor
 
     def tick(self) -> TickResult:
         now_ms = int(self._clock() * 1000)
