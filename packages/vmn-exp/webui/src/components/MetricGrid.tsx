@@ -4,6 +4,8 @@ import type { XMode } from "../util/chartData";
 import { withSmoothing } from "../util/curveOptions";
 import { toXY } from "../util/seriesArrays";
 import { chartPoints, xMetricLabel, type XMap } from "../util/xMetric";
+import { spliceZoom } from "../util/zoomSeries";
+import { useZoomRefetch, type FetchRange } from "../hooks/useZoomRefetch";
 import CurveChart from "./CurveChart";
 import LazyMount from "./LazyMount";
 
@@ -18,7 +20,9 @@ export interface GridView {
   markStep?: number | null;
 }
 
-const MetricCell = memo(function MetricCell({ name, points, xMetric, color, view, height }: {
+const MetricCell = memo(function MetricCell({
+  name, points: coarse, xMetric, color, view, height, fetchRange,
+}: {
   name: string;
   points: SeriesPoint[];
   /** Plot against this metric (the points carry `x`) instead of the step. */
@@ -26,9 +30,14 @@ const MetricCell = memo(function MetricCell({ name, points, xMetric, color, view
   color: string;
   view: GridView;
   height: number;
+  /** Refetches a drag-zoomed step range at full resolution. */
+  fetchRange?: FetchRange;
 }) {
   const { origin, alpha, logY } = view;
   const xMode = xMetric ? "metric" : view.xMode;
+  const zoomable = xMode === "step" && Boolean(fetchRange);
+  const { zoom, onXRange } = useZoomRefetch(name, zoomable ? fetchRange : undefined);
+  const points = useMemo(() => (zoomable ? spliceZoom(coarse, zoom) : coarse), [coarse, zoom, zoomable]);
   const markStep = xMode === "step" ? view.markStep ?? null : null;
   const formatX = useMemo(() => (xMetric ? xMetricLabel(xMetric) : undefined), [xMetric]);
   const curves = useMemo(() => {
@@ -43,6 +52,7 @@ const MetricCell = memo(function MetricCell({ name, points, xMetric, color, view
       <LazyMount height={height}>
         <CurveChart
           series={curves} xMode={xMode} logY={logY} height={height} formatX={formatX} markX={markStep}
+          onXRange={zoomable ? onXRange : undefined}
         />
       </LazyMount>
     </div>
@@ -56,6 +66,7 @@ const NO_JOINS: XMap = {};
  *  against their x metric once it has arrived. */
 function MetricGrid({
   metrics, series, colorOf, view, height = 180, minWidth = 320, joined = null, xMap = NO_JOINS,
+  fetchRange,
 }: {
   metrics: string[];
   series: Record<string, SeriesPoint[]>;
@@ -65,6 +76,7 @@ function MetricGrid({
   view: GridView;
   height?: number;
   minWidth?: number;
+  fetchRange?: FetchRange;
 }) {
   return (
     <div style={{
@@ -75,7 +87,7 @@ function MetricGrid({
         return (
           <MetricCell
             key={m} name={m} points={points} xMetric={xMetric}
-            color={colorOf(m)} view={view} height={height}
+            color={colorOf(m)} view={view} height={height} fetchRange={fetchRange}
           />
         );
       })}

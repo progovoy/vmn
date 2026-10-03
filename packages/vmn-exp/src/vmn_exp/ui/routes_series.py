@@ -6,14 +6,19 @@ request per run would carry each run's log tail, artifacts and tree status
 along. The body names the runs::
 
     {"verstrs": ["1.0.0-dev.a", ...], "keys": ["loss"] | null, "max_points": 2000,
-     "x": "epoch" | {"val_loss": "epoch"} | null}
+     "x": "epoch" | {"val_loss": "epoch"} | null, "step_min": 0, "step_max": 5000}
 
 and the answer is ``{"series": {verstr: {metric: [points]}}, "series_total":
 {verstr: {metric: n}}, "step_metrics": {verstr: {metric: x metric}},
 "missing": [verstr, ...]}`` with points shaped like the detail endpoint's.
 *x* joins every other metric (a name) or the mapped ones (a map) on an x
-metric: their points carry ``x`` and those without one are dropped. It is a read, so a read-only server serves it too; as a
-POST it still passes the JSON Content-Type / same-origin guard.
+metric: their points carry ``x`` and those without one are dropped.
+``step_min``/``step_max`` (either optional, not with *x*) keep a step range —
+a chart zoom — read straight from the metric objects
+(:mod:`~vmn_exp.ui.readers.range_series`). It is a read, so a read-only
+server serves it too; as a POST it still passes the JSON Content-Type /
+same-origin guard. ``GET .../experiments/{verstr}/metric-keys`` pages a run's
+metric names (``prefix``, ``offset``, ``limit``).
 """
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,7 +26,9 @@ from fastapi import HTTPException, Request
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
+from vmn_exp.ui.http_params import MAX_PAGE, clamp_page
 from vmn_exp.ui.readers import experiment_detail as detail_reader
+from vmn_exp.ui.readers import range_series
 from vmn_exp.ui.readers import series as series_reader
 from vmn_exp.ui.responses import json_response
 from vmn_exp.ui.security import safe_segment
@@ -48,8 +55,26 @@ def _parse_x(x):
     raise HTTPException(400, "x must be a metric name or a {metric: x metric} object")
 
 
+def _bound(value, name):
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise HTTPException(400, f"{name} must be a number")
+    return value
+
+
+def step_range(step_min, step_max, x=None):
+    """``(lo, hi)`` of a request's range, None without one, 400 when bad."""
+    lo, hi = _bound(step_min, "step_min"), _bound(step_max, "step_max")
+    if lo is None and hi is None:
+        return None
+    if x is not None:
+        raise HTTPException(400, "x cannot be combined with step_min/step_max")
+    return lo, hi
+
+
 def parse_body(body, max_series_points):
-    """``(verstrs, keys, max_points, x)`` from a request body, or a 400."""
+    """``(verstrs, keys, max_points, x, step range)`` from a request body, or a 400."""
     if not isinstance(body, dict):
         raise HTTPException(400, "body must be a JSON object")
     verstrs = _string_list(body.get("verstrs"), "verstrs", MAX_RUNS)
@@ -63,15 +88,22 @@ def parse_body(body, max_series_points):
     if not isinstance(max_points, int) or isinstance(max_points, bool):
         raise HTTPException(400, "max_points must be an integer")
     max_points = max(2, min(max_points, max_series_points))
-    return list(dict.fromkeys(verstrs)), keys, max_points, _parse_x(body.get("x"))
+    x = _parse_x(body.get("x"))
+    bounds = step_range(body.get("step_min"), body.get("step_max"), x)
+    return list(dict.fromkeys(verstrs)), keys, max_points, x, bounds
 
 
-def batch_series(storage, app_name, verstrs, keys, max_points, x=None, schema=None):
+def batch_series(storage, app_name, verstrs, keys, max_points, x=None, schema=None,
+                 bounds=None):
     """The response payload; runs are read concurrently on a bounded pool and
     share the per-response points cap."""
     budget = max(series_reader.MAX_TOTAL_POINTS // max(len(verstrs), 1), 2)
 
     def one(verstr):
+        if bounds is not None:
+            return range_series.range_series(
+                storage, app_name, verstr, keys, max_points, budget, bounds, schema
+            )
         return detail_reader.run_series(
             storage, app_name, verstr, keys, max_points, budget, x=x, schema=schema
         )
@@ -94,6 +126,19 @@ def register(app, prefix, storage_for, max_series_points):
     @app.post(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/series", dependencies=[require(VIEWER)])
     def experiment_series(ws_name: str, app_tag: str, body: dict, request: Request):
         storage, app_name, schema = storage_for(ws_name, app_tag)
-        verstrs, keys, max_points, x = parse_body(body, max_series_points)
-        payload = batch_series(storage, app_name, verstrs, keys, max_points, x, schema)
+        verstrs, keys, max_points, x, bounds = parse_body(body, max_series_points)
+        payload = batch_series(storage, app_name, verstrs, keys, max_points, x, schema, bounds)
         return json_response(payload, request=request)
+
+    @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/metric-keys",
+             dependencies=[require(VIEWER)])
+    def experiment_metric_keys(ws_name: str, app_tag: str, verstr: str, request: Request,
+                               prefix: str = "", offset: int = 0, limit: int = MAX_PAGE):
+        if not safe_segment(verstr):
+            raise HTTPException(400, f"Invalid version '{verstr}'")
+        storage, app_name, _ = storage_for(ws_name, app_tag)
+        offset, limit = clamp_page(offset, limit)
+        page = range_series.metric_keys(storage, app_name, verstr, prefix, offset, limit)
+        if page is None:
+            raise HTTPException(404, f"Experiment {verstr} not found")
+        return json_response(page, request=request)

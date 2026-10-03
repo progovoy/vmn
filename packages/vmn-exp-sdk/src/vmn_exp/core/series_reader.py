@@ -250,7 +250,13 @@ class SeriesReader:
                 for p in self._merged(key) if _within(p[2], step_range)]
 
     def thinned(self, key, max_points, step_range=None):
-        """At most about *max_points* min/max-thinned points, first and last kept."""
+        """At most about *max_points* min/max-thinned points, first and last kept.
+        A key of one ``.vmx`` alone reads only the LOD slice or raw chunks the
+        range needs (plan 12 §3.2)."""
+        indexed = self._indexed_only(key, step_range)
+        if indexed is not None:
+            lo, hi = step_range or (None, None)
+            return [_iso(p) for p in indexed.series(key, max_points, lo, hi)]
         cols = self.points(key, step_range)
         max_points = max(int(max_points), 2)
         if len(cols) <= max_points:
@@ -270,6 +276,19 @@ class SeriesReader:
         for key in sorted(self.keys()) if keys is None else keys:
             for ts, rank, step, value, _ in self._merged(key):
                 yield self._sources[rank][0], key, step, ts, value
+
+    def _indexed_only(self, key, step_range):
+        """The :class:`MetricIndexReader` holding all of *key*, when nothing
+        else (another writer, a twin, a rewind it may not reflect) applies."""
+        raws = self._raw_names().get(key, ())
+        if len(raws) != 1 or raws[0][2] != key or not isinstance(raws[0][1], _IndexedSource):
+            return None
+        reader = raws[0][1].reader
+        if self._rewinds and not reader.footer.get("rewinds_applied"):
+            return None
+        if step_range is not None and not reader.footer["keys"][key]["has_step"]:
+            return None
+        return reader
 
     def entries_by_writer(self):
         """``{writer: metrics entries}`` for log views (rewinds not applied)."""

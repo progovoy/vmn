@@ -1,4 +1,5 @@
 import { memo, useMemo, useRef, useState } from "react";
+import type uPlot from "uplot";
 import type { XMode } from "../util/chartData";
 import { chartTheme } from "../util/cssColor";
 import { useThemeVersion } from "../hooks/useTheme";
@@ -7,6 +8,7 @@ import {
 } from "../util/curveOptions";
 import { tooltipRows } from "../util/seriesArrays";
 import { withStepMarker } from "../util/chartMarkers";
+import { isFullRange, type StepRange } from "../util/zoomSeries";
 import CurveTooltip from "./CurveTooltip";
 import UPlotChart, { type CursorInfo } from "./UPlotChart";
 
@@ -20,7 +22,7 @@ const stepLabel = (x: number) => `step ${x}`;
  *  changes; new values for the same curves are swapped in place. */
 function CurveChart({
   series, xMode, logY = false, height = 280, hidden, focused = null,
-  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, hideX = false, formatX, markX = null,
+  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, hideX = false, formatX, markX = null, onXRange,
 }: {
   series: CurveSeries[];
   xMode: XMode;
@@ -35,16 +37,22 @@ function CurveChart({
   formatX?: (x: number) => string;
   /** Step axes only: mark this x with a dashed line (a fork point). */
   markX?: number | null;
+  /** Step axes only: the visible x range after a drag-zoom, null once reset
+   *  to the whole data. The zoom then survives new data. */
+  onXRange?: (range: StepRange | null) => void;
 }) {
   // Keyed on the curves' identity, not their arrays: fresh values for the
   // same curves (a poll) must not rebuild the plot.
   const shape = series.map((s) => `${s.key}|${s.color}|${s.faded ? 1 : 0}`).join(",");
   const themeVersion = useThemeVersion();
+  const zoomable = xMode === "step" && Boolean(onXRange);
+  const zoom = useXZoom(series, onXRange);
   const options = useMemo(() => {
     const theme = chartTheme();
     const opts = curveOptions(series, { xMode, logY, height, hideX, theme });
-    return withStepMarker(opts, xMode === "step" ? markX : null, theme.axis);
-  }, [shape, xMode, logY, height, hideX, themeVersion, markX]);
+    const marked = withStepMarker(opts, xMode === "step" ? markX : null, theme.axis);
+    return zoomable ? withScaleHook(marked, zoom.onScale) : marked;
+  }, [shape, xMode, logY, height, hideX, themeVersion, markX, zoomable]);
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);
@@ -68,6 +76,7 @@ function CurveChart({
         hidden={hiddenFlags}
         focus={focus}
         onCursor={setCursor}
+        keepX={zoomable ? zoom.range : undefined}
       />
       {cursor && rows.length > 0 && (
         <CurveTooltip
@@ -80,6 +89,43 @@ function CurveChart({
       )}
     </div>
   );
+}
+
+type Options = ReturnType<typeof curveOptions>;
+
+function withScaleHook(opts: Options, onScale: (u: uPlot, key: string) => void): Options {
+  const hooks = opts.hooks ?? {};
+  return { ...opts, hooks: { ...hooks, setScale: [...(hooks.setScale ?? []), onScale] } };
+}
+
+function extentOf(series: CurveSeries[]): StepRange {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const s of series) {
+    for (const x of s.xs) {
+      if (x < lo) lo = x;
+      if (x > hi) hi = x;
+    }
+  }
+  return [lo, hi];
+}
+
+/** Tracks the zoomed x range (null: whole data) from uPlot's setScale hook
+ *  and reports changes to *onXRange*. */
+function useXZoom(series: CurveSeries[], onXRange?: (range: StepRange | null) => void) {
+  const range = useRef<StepRange | null>(null);
+  const extent = useRef<StepRange>([0, 0]);
+  extent.current = useMemo(() => extentOf(series), [series]);
+  const report = useRef(onXRange);
+  report.current = onXRange;
+  const onScale = useMemo(() => (u: uPlot, key: string) => {
+    const { min, max } = u.scales[key] ?? {};
+    if (key !== "x" || min == null || max == null) return;
+    const next: StepRange | null = isFullRange([min, max], extent.current) ? null : [min, max];
+    range.current = next;
+    report.current?.(next);
+  }, []);
+  return { range, onScale };
 }
 
 export default memo(CurveChart);

@@ -20,6 +20,8 @@ interface Props {
   /** Curve index to highlight, dimming the others. */
   focus?: number | null;
   onCursor?: (c: CursorInfo | null) => void;
+  /** An x range (min, max) to keep across data swaps: a user's zoom. */
+  keepX?: { current: [number, number] | null };
 }
 
 /** uPlot needs a real canvas; jsdom and very old browsers get an empty frame. */
@@ -37,7 +39,7 @@ function emitCursor(u: uPlot, cb?: (c: CursorInfo | null) => void) {
 
 /** Thin lifecycle wrapper: create on mount (lazily loading uPlot), resize
  *  with the container, swap data in place, destroy on unmount. */
-function UPlotChart({ options, data, hidden, focus = null, onCursor }: Props) {
+function UPlotChart({ options, data, hidden, focus = null, onCursor, keepX }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
   const dataRef = useRef(data);
@@ -81,7 +83,12 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor }: Props) {
   }, [options]);
 
   useEffect(() => {
-    plotRef.current?.setData(data);
+    const u = plotRef.current;
+    if (!u) return;
+    const kept = keepX?.current;
+    // Without a scale reset, so the zoom is never reported as undone.
+    u.setData(data, !kept);
+    if (kept) u.setScale("x", { min: kept[0], max: kept[1] });
   }, [data]);
 
   // Only the curves whose visibility changed: each setSeries resets scales.

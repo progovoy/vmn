@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName, artifactUrl } from "../api";
-import { fetchSeriesBatch } from "../apiSeries";
+import { fetchSeriesBatch, fetchSeriesRange } from "../apiSeries";
+import { metricKeys, type MetricKeysQuery } from "../apiRun";
 import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useMeta } from "../queries";
 import type { ExperimentDetail } from "../types";
 import { pollIntervalMs, runHref } from "../util";
@@ -60,6 +61,14 @@ function RunBody({ ws, app, appName, detail }: {
       .then((b) => b.series[verstr] ?? {}),
     [ws, app, verstr],
   );
+  const fetchRange = useCallback(
+    (metric: string, lo: number, hi: number) =>
+      fetchSeriesRange(ws, app, verstr, metric, lo, hi, RUN_POINTS),
+    [ws, app, verstr],
+  );
+  const fetchKeys = useCallback(
+    (q: MetricKeysQuery) => metricKeys(ws, app, verstr, q), [ws, app, verstr],
+  );
   const logTail = detail.log_tail ?? detail.log ?? [];
   const logTotal = detail.log_total ?? logTail.length;
   return (
@@ -67,6 +76,7 @@ function RunBody({ ws, app, appName, detail }: {
       <TrainingCurves
         series={detail.series} seriesTotal={detail.series_total} startedAt={detail.status?.started_at}
         stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
+        fetchRange={fetchRange} fetchKeys={fetchKeys}
         markStep={detail.forked_from?.step} hiddenMetrics={detail.hidden_metrics}
       />
       <RunMediaSection ws={ws} app={app} detail={detail} />

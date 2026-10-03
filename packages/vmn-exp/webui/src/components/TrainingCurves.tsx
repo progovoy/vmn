@@ -9,8 +9,16 @@ import { useCurveControls, type CurveControlProps } from "../hooks/useCurveContr
 import { LogToggle, MetricSearch, XMetricSelect, XModeToggle } from "./ChartControls";
 import MetricGrid, { type GridView } from "./MetricGrid";
 import SmoothingSlider from "./SmoothingSlider";
+import MetricKeyPicker from "./MetricKeyPicker";
+import type { FetchRange } from "../hooks/useZoomRefetch";
+import type { MetricKeysPage, MetricKeysQuery } from "../apiRun";
 
 type Series = Record<string, SeriesPoint[]>;
+
+/** Above this many training metrics, charts are picked from a key list. */
+export const MANY_KEYS = 100;
+/** Metrics charted at first when they are picked. */
+export const SHOWN_BY_DEFAULT = 12;
 
 /** The Run page charts: one small chart per training metric (a loss around
  *  0.1 and an accuracy around 0.9 never share a y axis), plus `sys_*` host
@@ -19,9 +27,13 @@ type Series = Record<string, SeriesPoint[]>;
  *  picked, is drawn from *fetchJoined*'s series against that metric.
  *  *markStep* (a fork point) is marked on every step chart. *hiddenMetrics*
  *  (`define_metric(hidden=True)` or conf.yml) get a collapsed section too.
- *  Smoothing, x mode, x metric and log scale follow *controls* when given. */
+ *  Smoothing, x mode, x metric and log scale follow *controls* when given.
+ *  *fetchRange* refetches a drag-zoomed step range at full resolution; with
+ *  more than MANY_KEYS metrics and *fetchKeys*, the charted ones are picked
+ *  from a paged, searchable key list. */
 function TrainingCurves({
-  series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics, ...control
+  series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics,
+  fetchRange, fetchKeys, ...control
 }: CurveControlProps & {
   series: Series;
   seriesTotal?: Record<string, number>;
@@ -30,6 +42,8 @@ function TrainingCurves({
   fetchJoined?: (xMap: XMap) => Promise<Series>;
   markStep?: number | null;
   hiddenMetrics?: string[];
+  fetchRange?: FetchRange;
+  fetchKeys?: (q: MetricKeysQuery) => Promise<MetricKeysPage>;
 }) {
   const {
     smoothing: alpha, setSmoothing: setAlpha, xMode, setXMode, x: xChoice, setX: setXChoice, logY, setLogY,
@@ -42,11 +56,18 @@ function TrainingCurves({
     [series],
   );
   const hasTimestamps = useMemo(() => allTimestamped(series), [series]);
+  const picking = Boolean(fetchKeys) && training.length > MANY_KEYS;
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const selected = useMemo(() => picked ?? training.slice(0, SHOWN_BY_DEFAULT), [picked, training]);
+  const toggle = (name: string) => setPicked(
+    selected.includes(name) ? selected.filter((m) => m !== name) : [...selected, name],
+  );
   const [shownTraining, shownHidden] = useMemo(() => {
     const hidden = new Set(hiddenMetrics ?? []);
-    const matching = filterMetrics(training, query);
+    const chosen = new Set(selected);
+    const matching = filterMetrics(picking ? training.filter((m) => chosen.has(m)) : training, query);
     return [matching.filter((m) => !hidden.has(m)), matching.filter((m) => hidden.has(m))];
-  }, [training, query, hiddenMetrics]);
+  }, [training, query, hiddenMetrics, picking, selected]);
   const shownSystem = useMemo(() => filterMetrics(system, query), [system, query]);
   const xOptions = useMemo(() => xMetricOptions(series), [series]);
   const xMap = useMemo(
@@ -89,17 +110,18 @@ function TrainingCurves({
         </div>
       </div>
       {joinError && <div className="error">{joinError.message}</div>}
+      {picking && <MetricKeyPicker fetchPage={fetchKeys!} selected={selected} onToggle={toggle} />}
       {training.length > 0 && shownTraining.length + shownHidden.length === 0 && (
         <div style={{ color: "var(--text-3)", fontSize: 12 }}>No metric matches “{query}”.</div>
       )}
       <MetricGrid
         metrics={shownTraining} series={series} colorOf={trainColor} view={view}
-        joined={joined} xMap={xMap}
+        joined={joined} xMap={xMap} fetchRange={fetchRange}
       />
       <Collapsible label="hidden metrics" count={shownHidden.length}>
         <MetricGrid
           metrics={shownHidden} series={series} colorOf={trainColor} view={view}
-          joined={joined} xMap={xMap}
+          joined={joined} xMap={xMap} fetchRange={fetchRange}
         />
       </Collapsible>
       <Collapsible label="system metrics" count={system.length}>

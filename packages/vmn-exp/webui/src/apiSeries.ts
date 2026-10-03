@@ -26,6 +26,16 @@ export function fetchSeriesBatch(
   });
 }
 
+/** One run's *metric* over steps *lo*..*hi* at up to *maxPoints* (a zoom). */
+export function fetchSeriesRange(
+  ws: string, app: string, verstr: string, metric: string, lo: number, hi: number,
+  maxPoints: number,
+): Promise<SeriesPoint[]> {
+  return post<SeriesBatch>(`/workspaces/${ws}/apps/${appTag(app)}/series`, {
+    verstrs: [verstr], keys: [metric], max_points: maxPoints, step_min: lo, step_max: hi,
+  }).then((b) => b.series[verstr]?.[metric] ?? []);
+}
+
 /** Status fields (running? started when?) of just *verstrs*, by verstr. */
 export async function fetchRunStatuses(
   ws: string, app: string, verstrs: string[],

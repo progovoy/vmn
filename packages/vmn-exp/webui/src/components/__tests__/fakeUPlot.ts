@@ -4,7 +4,10 @@
 import { vi } from "vitest";
 
 type Opts = {
-  hooks?: { setCursor?: ((u: FakeUPlot) => void)[] };
+  hooks?: {
+    setCursor?: ((u: FakeUPlot) => void)[];
+    setScale?: ((u: FakeUPlot, key: string) => void)[];
+  };
   [k: string]: unknown;
 };
 
@@ -19,6 +22,10 @@ export default class FakeUPlot {
   setData = vi.fn();
   setSize = vi.fn();
   setSeries = vi.fn();
+  scales: Record<string, { min?: number; max?: number }> = { x: {} };
+  setScale = vi.fn((key: string, range: { min: number; max: number }) => {
+    this.scales[key] = range;
+  });
 
   constructor(opts: Opts, data: unknown, el: HTMLElement) {
     this.opts = opts;
@@ -34,6 +41,12 @@ export default class FakeUPlot {
 
   destroy() {
     this.destroyed = true;
+  }
+
+  /** What a drag-zoom (or a double-click reset) on the x axis does. */
+  zoomX(min: number, max: number) {
+    this.scales.x = { min, max };
+    for (const h of this.opts.hooks?.setScale ?? []) h(this, "x");
   }
 
   moveCursor(left: number, top: number) {
