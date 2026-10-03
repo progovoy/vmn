@@ -19,6 +19,9 @@ LAYOUT = 2
 _AREAS = {areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas.REGISTRY,
           areas.REPORTS, areas.COMMENTS, areas.JOURNAL}
 
+_V1_CONTAINERS = ("experiments", "snapshots")
+_V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
+
 _checked = set()
 _lock = threading.Lock()
 
@@ -79,6 +82,33 @@ class LocalRoot:
     def dirs(self):
         return {n for n in self.entries() if os.path.isdir(os.path.join(self.root, n))}
 
+    def _v1_dirs(self):
+        """The ``.vmn`` dirs v1 kept this root's records in: ``<root>/.vmn``
+        (``--dir``/``file://``) and, for the repo-local ``.vmn/store``, its parent."""
+        root = os.path.abspath(self.root)
+        parent = os.path.dirname(root)
+        found = [os.path.join(root, ".vmn")]
+        if os.path.basename(root) == "store" and os.path.basename(parent) == ".vmn":
+            found.append(parent)
+        return found
+
+    def has_v1_records(self):
+        skip = os.path.abspath(self.root)
+        return any(_v1_local_record(d, skip) for d in self._v1_dirs())
+
+
+def _v1_local_record(vmn_dir, skip):
+    """Whether *vmn_dir* holds a v1 record: ``<app path>/{experiments,snapshots}/<rec>/metadata.yml``."""
+    for path, dirs, _files in os.walk(vmn_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".")
+                   and os.path.join(path, d) != skip]
+        if path == vmn_dir or os.path.basename(path) not in _V1_CONTAINERS:
+            continue
+        if any(os.path.isfile(os.path.join(path, d, "metadata.yml")) for d in dirs):
+            return True
+        dirs[:] = []
+    return False
+
 
 class ObjectRoot:
     def __init__(self, client, bucket, prefix, endpoint_url=None):
@@ -125,6 +155,14 @@ class ObjectRoot:
         page = page or self._page()
         return self._names(p["Prefix"] for p in page.get("CommonPrefixes", []))
 
+    def has_v1_records(self):
+        """A path-less URI's v1 records were under the default v1 prefixes."""
+        if self.prefix != areas.DEFAULT_ROOT:
+            return False
+        return any(self.client.list_objects_v2(
+            Bucket=self.bucket, Prefix=f"{p}/", MaxKeys=1).get("Contents")
+            for p in _V1_PREFIXES)
+
 
 def root_of(storage):
     """The marker location of a backend storage, or None (unknown backend)."""
@@ -138,9 +176,12 @@ def root_of(storage):
 
 
 def _has_records(where):
-    """v1 records live in ``<root>/<app>/<verstr>/``: a top-level directory
-    that is no area. Stray files beside the store are not records."""
-    return any(n not in _AREAS and not n.startswith(".") for n in where.dirs())
+    """v1 records live in ``<root>/<app>/<verstr>/`` (a top-level directory
+    that is no area; stray files beside the store are not records) or in the
+    v1 places outside the root (``where.has_v1_records``)."""
+    if any(n not in _AREAS and not n.startswith(".") for n in where.dirs()):
+        return True
+    return where.has_v1_records()
 
 
 def _parse(text):
