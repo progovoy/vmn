@@ -59,17 +59,37 @@ function PublishedBody({ ws, spec, published }: { ws: string; spec: PanelSpec; p
     queryFn: () => apiReports.getPanelData(ws, published.rid, published.rev, id),
     staleTime: Infinity,
   });
-  const client = useMemo(() => (q.data ? frozenClient(q.data as PanelPayload) : null), [q.data]);
-  if (q.error) return <div className="muted">No published data for this panel</div>;
-  if (!client) return <div className="muted">Loading…</div>;
+  if (q.error) return <NoData />;
+  if (!q.data) return <div className="muted">Loading…</div>;
+  return <FrozenBody ws={ws} spec={spec} payload={q.data as PanelPayload} />;
+}
+
+const NoData = () => <div className="muted">No published data for this panel</div>;
+
+function FrozenBody({ ws, spec, payload }: { ws: string; spec: PanelSpec; payload: PanelPayload }) {
+  const client = useMemo(() => frozenClient(payload), [payload]);
   return <QueryClientProvider client={client}>{body(ws, spec)}</QueryClientProvider>;
 }
 
-function LiveBody({ ws, spec }: { ws: string; spec: PanelSpec }) {
-  return <LivePanelScope id={String(spec.id ?? "")} app={spec.app}>{body(ws, spec)}</LivePanelScope>;
+/** An exported panel: renders from its inlined payload (null = none). */
+function InlinedBody({ spec, payload }: { spec: PanelSpec; payload: PanelPayload | null }) {
+  return payload ? <FrozenBody ws={payload.ws ?? ""} spec={spec} payload={payload} /> : <NoData />;
 }
 
-export default function Panel({ ws, spec, published }: { ws: string; spec: unknown; published?: PublishedRef }) {
+function LiveBody({ ws, spec }: { ws: string; spec: PanelSpec }) {
+  return <LivePanelScope id={String(spec.id ?? "")} ws={ws} app={spec.app}>{body(ws, spec)}</LivePanelScope>;
+}
+
+function PanelBody({ ws, spec, published, payload }: {
+  ws: string; spec: PanelSpec; published?: PublishedRef; payload?: PanelPayload | null;
+}) {
+  if (payload !== undefined) return <InlinedBody spec={spec} payload={payload} />;
+  return published ? <PublishedBody ws={ws} spec={spec} published={published} /> : <LiveBody ws={ws} spec={spec} />;
+}
+
+export default function Panel({ ws, spec, published, payload }: {
+  ws: string; spec: unknown; published?: PublishedRef; payload?: PanelPayload | null;
+}) {
   const result = validate(spec);
   if (!result.ok) return <PanelError message={result.error} />;
   const s = result.spec;
@@ -77,7 +97,7 @@ export default function Panel({ ws, spec, published }: { ws: string; spec: unkno
     <div className="md-panel" data-panel-id={s.id}>
       {s.title && <div className="eyebrow">{s.title}</div>}
       <LazyMount height={s.height ?? DEFAULT_HEIGHT}>
-        {published ? <PublishedBody ws={ws} spec={s} published={published} /> : <LiveBody ws={ws} spec={s} />}
+        <PanelBody ws={ws} spec={s} published={published} payload={payload} />
       </LazyMount>
     </div>
   );

@@ -40,5 +40,5 @@ where = ["src"]
 namespaces = true  # vmn_exp is shared with vmn-exp-sdk (PEP 420)
 
 [tool.setuptools.package-data]
-"vmn_exp.ui" = ["static/*", "static/assets/*"]
+"vmn_exp.ui" = ["static/*", "static/assets/*", "export_bundle/*"]
 "vmn_exp.ui.migrations" = ["*.sql"]

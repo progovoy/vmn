@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider, type QueryClientConfig, type QueryKey
 import { createQueryClient } from "../queryClient";
 
 export interface PanelPayload {
+  /** Workspace the panel fetched from: its query keys embed it. */
+  ws?: string;
   app: string;
   /** The runs the panel showed (the server checks they exist). */
   verstrs: string[];
@@ -16,7 +18,7 @@ export interface PanelPayload {
 }
 
 export interface PanelCapture {
-  register: (id: string, app: string, client: QueryClient) => () => void;
+  register: (id: string, ws: string, app: string, client: QueryClient) => () => void;
   collect: () => Record<string, PanelPayload>;
 }
 
@@ -24,20 +26,20 @@ const CaptureContext = createContext<PanelCapture | null>(null);
 
 export const usePanelCapture = () => useContext(CaptureContext);
 
-type Entry = { app: string; client: QueryClient };
+type Entry = { ws: string; app: string; client: QueryClient };
 
 export function PanelCaptureProvider({ children }: { children: ReactNode }) {
   const capture = useMemo<PanelCapture>(() => {
     const panels = new Map<string, Entry>();
     return {
-      register: (id, app, client) => {
-        panels.set(id, { app, client });
+      register: (id, ws, app, client) => {
+        panels.set(id, { ws, app, client });
         return () => { if (panels.get(id)?.client === client) panels.delete(id); };
       },
       collect: () => {
         const out: Record<string, PanelPayload> = {};
-        for (const [id, { app, client }] of panels) {
-          const payload = snapshot(app, client);
+        for (const [id, { ws, app, client }] of panels) {
+          const payload = { ws, ...snapshot(app, client) };
           if (payload.queries.length) out[id] = payload;
         }
         return out;
@@ -105,10 +107,12 @@ export function frozenClient(payload: PanelPayload): QueryClient {
 }
 
 /** A live panel's own cache, registered for Publish when a capture is open. */
-export function LivePanelScope({ id, app, children }: { id: string; app: string; children: ReactNode }) {
+export function LivePanelScope({ id, ws, app, children }: {
+  id: string; ws: string; app: string; children: ReactNode;
+}) {
   const capture = usePanelCapture();
   const [client] = useState(createQueryClient);
-  useEffect(() => (capture && id ? capture.register(id, app, client) : undefined), [capture, id, app, client]);
+  useEffect(() => (capture && id ? capture.register(id, ws, app, client) : undefined), [capture, id, ws, app, client]);
   if (!capture) return <>{children}</>;
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

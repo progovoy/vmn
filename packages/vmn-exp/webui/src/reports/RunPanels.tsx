@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { appTag, artifactUrl } from "../api";
+import { appTag } from "../api";
 import { runLineage } from "../apiRun";
 import type { HttpError } from "../http";
 import type { ExperimentDetail } from "../types";
@@ -14,6 +14,7 @@ import { LineageView } from "../components/RunLineage";
 import StatusPill from "../components/StatusPill";
 import type { PanelSpec } from "./panelSpec";
 import { useRunDetail } from "./panelData";
+import { useMediaUrl, type MediaUrl } from "./mediaUrl";
 
 export type RunSpec = Extract<PanelSpec, { type: "media" | "table" | "histogram" | "lineage" | "run" }>;
 export const RUN_TYPES = new Set(["media", "table", "histogram", "lineage", "run"]);
@@ -59,7 +60,7 @@ function RunCard({ ws, app, detail }: { ws: string; app: string; detail: Experim
   );
 }
 
-function render(ws: string, spec: RunSpec, d: ExperimentDetail): ReactNode {
+function render(ws: string, spec: RunSpec, d: ExperimentDetail, mediaUrl: MediaUrl): ReactNode {
   const { app } = spec;
   const verstr = d.metadata.verstr;
   switch (spec.type) {
@@ -67,7 +68,7 @@ function render(ws: string, spec: RunSpec, d: ExperimentDetail): ReactNode {
       const items = d.media?.[spec.key] ?? [];
       const step = spec.step ?? "last";
       const shown = step === "last" ? items : items.filter((i) => i.step === step);
-      return <MediaImages media={{ [spec.key]: shown }} url={(p) => artifactUrl(ws, app, verstr, p)} />;
+      return <MediaImages media={{ [spec.key]: shown }} url={(p) => mediaUrl(ws, app, verstr, p)} />;
     }
     case "table": {
       const entry = Object.entries(d.tables ?? {}).find(([, items]) => items.some((i) => i.path === spec.path));
@@ -90,7 +91,8 @@ function render(ws: string, spec: RunSpec, d: ExperimentDetail): ReactNode {
 }
 
 export function RunPanel({ ws, spec }: { ws: string; spec: RunSpec }) {
+  const mediaUrl = useMediaUrl();
   const verstr = spec.runs.verstrs[0];
   if (spec.type === "lineage") return <Lineage ws={ws} app={spec.app} verstr={verstr} depth={spec.depth ?? 1} />;
-  return <WithDetail ws={ws} app={spec.app} verstr={verstr}>{(d) => render(ws, spec, d)}</WithDetail>;
+  return <WithDetail ws={ws} app={spec.app} verstr={verstr}>{(d) => render(ws, spec, d, mediaUrl)}</WithDetail>;
 }
