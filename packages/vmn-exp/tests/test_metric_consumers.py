@@ -19,9 +19,6 @@ _ENTRY_KIND = re.compile(r"\b(type|kind|etype)\b")
 ALLOW_LIST = {
     "vmn-exp-sdk/src/vmn_exp/core/values.py": "write-side sanitizing, not a reader",
     "vmn-exp-sdk/src/vmn_exp/core/fold.py": "fold: moves to block/footer summaries (2b)",
-    "vmn-exp-sdk/src/vmn_exp/core/sweep/peer_points.py": "sweep median stopping",
-    "vmn-exp-sdk/src/vmn_exp/sdk/steps.py": "step seeding on resume",
-    "vmn-exp/src/vmn_exp/cli/experiment.py": "vmn-exp show log view (merged_log_view)",
 }
 
 
