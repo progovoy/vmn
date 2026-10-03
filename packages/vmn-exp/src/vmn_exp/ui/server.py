@@ -26,6 +26,7 @@ from vmn_exp.ui import (
     routes_comments,
     routes_models,
     routes_reports,
+    routes_search,
     routes_series,
     routes_sweep,
     routes_tree,
@@ -71,6 +72,7 @@ def create_app(
     auth=None,
     role_mappings=(),
     control_plane=None,
+    search_dsn=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -80,7 +82,8 @@ def create_app(
     static *token*; with neither the API is open. *role_mappings* map OIDC
     groups to roles (``{group, workspace or "*", role}``). A *control_plane*
     enables API tokens (``vmnx_...`` bearer tokens, managed under
-    ``/api/v1/tokens``) and the audit log."""
+    ``/api/v1/tokens``) and the audit log. A Postgres *search_dsn* answers
+    ``/api/v1/search`` in SQL."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
@@ -524,6 +527,21 @@ def create_app(
     routes_models.register(app, API_PREFIX, _ws_storage)
     routes_reports.register(app, API_PREFIX, _ws_storage)
     routes_comments.register(app, API_PREFIX, _ws_storage)
+
+    def _search_scopes(ws_names):
+        for ws_name in ws_names:
+            ws = _workspace(ws_name)
+            for row in sorted(list_apps(ws_name), key=lambda r: r["name"]):
+                name = row["name"]
+                schema = _app_schema(ws, name)
+                yield ws_name, name, source.snapshot(ws, name, _exp_storage_for(ws), schema)
+
+    search_sql = None
+    if search_dsn:
+        from vmn_exp.ui.search_pg import PgRowSearch
+
+        search_sql = PgRowSearch(search_dsn)
+    routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
